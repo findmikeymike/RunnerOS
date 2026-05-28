@@ -168,3 +168,6 @@ export const CONCIERGE_SLUG = 'concierge';
 
 /** Built-in social channel execution agent slug. */
 export const SOCIAL_PUBLISHER_SLUG = 'social-publisher';
+
+/** Built-in Canva design agent slug. */
+export const CANVA_AGENT_SLUG = 'canva-agent';

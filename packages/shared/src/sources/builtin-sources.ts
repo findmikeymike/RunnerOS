@@ -15,6 +15,39 @@ const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
 const HYPERMOTION_SLUG = 'hypermotion';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
+const CANVA_SLUG = 'canva';
+
+/**
+ * Canva Connect API client credentials.
+ *
+ * Resolution order (first hit wins):
+ *   1. CANVA_CLIENT_ID / CANVA_CLIENT_SECRET env vars
+ *   2. ~/.config/runneros/canva/integration.json — JSON `{ clientId, clientSecret }`
+ *
+ * These are integration-level credentials (not per-user). Each user still
+ * performs their own OAuth login. The file lives outside the repo so the
+ * secret never gets committed; the desktop app writes it on first install
+ * or the user drops it in manually.
+ */
+function loadCanvaIntegrationCreds(): { clientId: string; clientSecret: string } {
+  const envId = process.env.CANVA_CLIENT_ID?.trim();
+  const envSecret = process.env.CANVA_CLIENT_SECRET?.trim();
+  if (envId && envSecret) return { clientId: envId, clientSecret: envSecret };
+
+  const localPath = join(homedir(), '.config', 'runneros', 'canva', 'integration.json');
+  if (existsSync(localPath)) {
+    try {
+      const parsed = JSON.parse(readFileSync(localPath, 'utf8')) as { clientId?: string; clientSecret?: string };
+      if (parsed.clientId && parsed.clientSecret) {
+        return { clientId: parsed.clientId, clientSecret: parsed.clientSecret };
+      }
+    } catch {
+      // Fall through to empty creds — source will report needs_auth.
+    }
+  }
+
+  return { clientId: envId || '', clientSecret: envSecret || '' };
+}
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -150,6 +183,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getHypermotionSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
+    getCanvaSource(workspaceId, workspaceRootPath),
   ];
 }
 
@@ -487,6 +521,101 @@ export function getYouTubeResearchSource(workspaceId: string, workspaceRootPath:
 }
 
 /**
+ * Built-in source for the Canva Connect API.
+ *
+ * Uses generic OAuth 2.0 with PKCE. The integration's client_id and
+ * client_secret are bundled with RunnerOS so every user gets the same
+ * connector, but each user still performs their own Canva login to grant
+ * access to their designs/assets.
+ *
+ * Scopes cover the full creative workflow: read/write designs, assets,
+ * brand templates, folders, and comments.
+ */
+export function getCanvaSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const { clientId, clientSecret } = loadCanvaIntegrationCreds();
+  const hasCreds = Boolean(clientId && clientSecret);
+
+  const config: FolderSourceConfig = {
+    id: 'builtin-canva',
+    name: 'Canva',
+    slug: CANVA_SLUG,
+    enabled: true,
+    provider: 'canva',
+    type: 'api',
+    api: {
+      baseUrl: 'https://api.canva.com/rest/v1',
+      authType: 'oauth',
+      oauth: {
+        authorizationUrl: 'https://www.canva.com/api/oauth/authorize',
+        tokenUrl: 'https://api.canva.com/rest/v1/oauth/token',
+        clientId,
+        clientSecret,
+        scopes: [
+          'asset:read',
+          'asset:write',
+          'brandtemplate:content:read',
+          'brandtemplate:meta:read',
+          'comment:read',
+          'comment:write',
+          'design:content:read',
+          'design:content:write',
+          'design:meta:read',
+          'folder:read',
+          'folder:write',
+          'profile:read',
+        ],
+      },
+    },
+    tagline: 'Create, edit, autofill, and export Canva designs through the Connect API.',
+    icon: '🎨',
+    isAuthenticated: false,
+    connectionStatus: hasCreds ? 'needs_auth' : 'failed',
+    connectionError: hasCreds
+      ? undefined
+      : 'Canva integration credentials missing. Set CANVA_CLIENT_ID/CANVA_CLIENT_SECRET env vars, or create ~/.config/runneros/canva/integration.json with { "clientId": "...", "clientSecret": "..." }.',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Canva',
+        '',
+        'Use this source to create, edit, autofill, and export Canva designs through the Connect API.',
+        '',
+        'Auth:',
+        '- OAuth 2.0 with PKCE. The user must click Connect on the Canva source to log in once.',
+        '- Tokens auto-refresh. If a call returns 401, the source needs reconnection.',
+        '',
+        'Core endpoints (use the `api_canva` tool with these paths):',
+        '- `GET  /designs` — list the user\'s designs.',
+        '- `POST /designs` — create a new design (preset like presentation/doc/whiteboard, custom dimensions, or from an asset).',
+        '- `GET  /designs/{designId}` — fetch design metadata.',
+        '- `POST /exports` — start an export job (PDF, PNG, JPG, PPTX, MP4, GIF).',
+        '- `GET  /exports/{exportId}` — poll export job until `status: success`, then download from the returned URL.',
+        '- `POST /asset-uploads` — upload an image/video asset.',
+        '- `GET  /brand-templates` — list brand templates (Enterprise plan).',
+        '- `POST /autofills` — autofill a brand template with field values, returns a job id.',
+        '- `GET  /autofills/{jobId}` — poll autofill job until ready.',
+        '- `POST /designs/{designId}/comments` — add a comment.',
+        '- `GET  /folders` / `POST /folders` — list and create folders.',
+        '',
+        'Workflow patterns:',
+        '1. Create or autofill — pick the right entry point: preset design, custom dimensions, copy of existing design, or brand-template autofill.',
+        '2. Export — start an export job, poll, then download the file URL. Return the URL or downloaded path to the user.',
+        '3. Resize — for repurposing across platforms, use the resize endpoint (`POST /designs/{designId}/resizes`).',
+        '',
+        'Do not paste OAuth tokens or client secrets into chat. Treat all writes (design create/edit, autofill, upload, comment, folder mutation) as user-visible actions; confirm before bulk operations.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Get the built-in Runner docs source.
  *
  * @deprecated docs are now provided by an optional configured MCP server
@@ -535,5 +664,6 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === PRINTING_PRESS_SOCIAL_SLUG
     || slug === HYPERMOTION_SLUG
     || slug === GOOGLE_ADS_SLUG
-    || slug === YOUTUBE_RESEARCH_SLUG;
+    || slug === YOUTUBE_RESEARCH_SLUG
+    || slug === CANVA_SLUG;
 }
