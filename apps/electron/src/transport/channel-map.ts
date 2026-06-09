@@ -438,6 +438,23 @@ export const CHANNEL_MAP = {
   setWorkflowActive: invoke(RPC_CHANNELS.workflows.SET_ACTIVE),
   onWorkflowsChanged: listener(RPC_CHANNELS.workflows.CHANGED),
 
+  // Teams (global library)
+  listAllTeams: invoke(RPC_CHANNELS.teams.LIST_ALL),
+  getTeam: invoke(RPC_CHANNELS.teams.GET),
+  upsertTeam: invoke(RPC_CHANNELS.teams.UPSERT),
+  deleteTeam: invoke(RPC_CHANNELS.teams.DELETE),
+  onTeamsChanged: listener(RPC_CHANNELS.teams.CHANGED),
+
+  // Team runs
+  startTeamRun: invoke(RPC_CHANNELS.teamRuns.START),
+  getTeamRun: invoke(RPC_CHANNELS.teamRuns.GET),
+  listTeamRuns: invoke(RPC_CHANNELS.teamRuns.LIST),
+  deleteTeamRun: invoke(RPC_CHANNELS.teamRuns.DELETE),
+  createTeamTask: invoke(RPC_CHANNELS.teamRuns.CREATE_TASK),
+  updateTeamTask: invoke(RPC_CHANNELS.teamRuns.UPDATE_TASK),
+  sendTeamMessage: invoke(RPC_CHANNELS.teamRuns.SEND_MESSAGE),
+  onTeamRunUpdated: listener(RPC_CHANNELS.teamRuns.UPDATED),
+
   // Workflow runs
   startWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.START),
   getWorkflowRun: invoke(RPC_CHANNELS.workflowRuns.GET),

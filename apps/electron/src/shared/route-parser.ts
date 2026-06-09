@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'settings'
+export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'workflows' | 'workflowRun' | 'teams' | 'deepResearchRun' | 'outputs' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -50,6 +50,8 @@ export interface ParsedCompoundRoute {
   workflowsKind?: 'list' | 'workflow' | 'workflow-edit' | 'recent-runs'
   /** Run id for workflowRun navigator. */
   runId?: string
+  /** Sub-page kind for teams navigator. */
+  teamsKind?: 'list' | 'team'
   /** Output id for outputs navigator. */
   outputId?: string
   /** Details page info (null for empty state) */
@@ -67,7 +69,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'deep-research', 'outputs', 'settings'
+  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'workflows', 'runs', 'teams', 'deep-research', 'outputs', 'settings'
 ]
 
 /**
@@ -254,6 +256,22 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     return { navigator: 'workflowRun', runId, details: null }
   }
 
+  // Teams navigator
+  if (first === 'teams') {
+    if (segments.length === 1) {
+      return { navigator: 'teams', teamsKind: 'list', details: null }
+    }
+    const slug = segments[1]
+    if (slug) {
+      return {
+        navigator: 'teams',
+        teamsKind: 'team',
+        details: { type: 'team', id: slug },
+      }
+    }
+    return null
+  }
+
   if (first === 'deep-research') {
     const runId = segments[1]
     if (!runId) return null
@@ -389,6 +407,11 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'workflowRun') {
     return parsed.runId ? `runs/${parsed.runId}` : 'workflows/runs'
+  }
+
+  if (parsed.navigator === 'teams') {
+    if (parsed.teamsKind === 'team' && parsed.details) return `teams/${parsed.details.id}`
+    return 'teams'
   }
 
   if (parsed.navigator === 'deepResearchRun') {
@@ -549,6 +572,13 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
 
   if (compound.navigator === 'workflowRun') {
     return { type: 'view', name: 'workflow-run', id: compound.runId, params: {} }
+  }
+
+  if (compound.navigator === 'teams') {
+    if (compound.teamsKind === 'team' && compound.details) {
+      return { type: 'view', name: 'team-info', id: compound.details.id, params: {} }
+    }
+    return { type: 'view', name: 'teams', params: {} }
   }
 
   if (compound.navigator === 'deepResearchRun') {
@@ -727,6 +757,13 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     return { navigator: 'workflowRun', runId: compound.runId ?? '' }
   }
 
+  if (compound.navigator === 'teams') {
+    if (compound.teamsKind === 'team' && compound.details) {
+      return { navigator: 'teams', details: { type: 'team', teamSlug: compound.details.id } }
+    }
+    return { navigator: 'teams', details: { type: 'list' } }
+  }
+
   if (compound.navigator === 'deepResearchRun') {
     return { navigator: 'deepResearchRun', runId: compound.runId ?? '' }
   }
@@ -844,6 +881,11 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
     case 'workflow-run':
       if (parsed.id) return { navigator: 'workflowRun', runId: parsed.id }
       return { navigator: 'workflows', details: { type: 'recent-runs' } }
+    case 'teams':
+      return { navigator: 'teams', details: { type: 'list' } }
+    case 'team-info':
+      if (parsed.id) return { navigator: 'teams', details: { type: 'team', teamSlug: parsed.id } }
+      return { navigator: 'teams', details: { type: 'list' } }
     case 'deep-research-run':
       if (parsed.id) return { navigator: 'deepResearchRun', runId: parsed.id }
       return { navigator: 'workflows', details: { type: 'recent-runs' } }
@@ -986,6 +1028,16 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
 
   if (state.navigator === 'workflowRun') {
     return { navigator: 'workflowRun', runId: state.runId, details: null }
+  }
+
+  if (state.navigator === 'teams') {
+    switch (state.details.type) {
+      case 'team':
+        return { navigator: 'teams', teamsKind: 'team', details: { type: 'team', id: state.details.teamSlug } }
+      case 'list':
+      default:
+        return { navigator: 'teams', teamsKind: 'list', details: null }
+    }
   }
 
   if (state.navigator === 'deepResearchRun') {

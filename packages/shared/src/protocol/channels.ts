@@ -471,6 +471,28 @@ export const RPC_CHANNELS = {
     /** Push event when the global library or a workspace's activation changed. */
     CHANGED: 'workflows:changed',
   },
+  teams: {
+    /** Every team in the global library. */
+    LIST_ALL: 'teams:list-all',
+    /** Load a single team by slug. */
+    GET: 'teams:get',
+    /** Create or update a team in the global library. */
+    UPSERT: 'teams:upsert',
+    /** Delete a team from the global library. */
+    DELETE: 'teams:delete',
+    /** Push event when the global team library changed. */
+    CHANGED: 'teams:changed',
+  },
+  teamRuns: {
+    START: 'team-runs:start',
+    GET: 'team-runs:get',
+    LIST: 'team-runs:list',
+    DELETE: 'team-runs:delete',
+    CREATE_TASK: 'team-runs:create-task',
+    UPDATE_TASK: 'team-runs:update-task',
+    SEND_MESSAGE: 'team-runs:send-message',
+    UPDATED: 'team-runs:updated',
+  },
   workflowRuns: {
     START: 'workflow-runs:start',
     GET: 'workflow-runs:get',

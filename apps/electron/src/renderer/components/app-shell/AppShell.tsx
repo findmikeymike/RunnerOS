@@ -26,6 +26,7 @@ import {
   Layers,
   ListTodo,
   Bot,
+  Users,
   MessageSquare,
   Workflow as WorkflowIcon,
 } from "lucide-react"
@@ -104,6 +105,7 @@ import {
   isAgentsNavigation,
   isAutomationsNavigation,
   isWorkspaceContextNavigation,
+  isTeamsNavigation,
   isOutputsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
@@ -2044,10 +2046,13 @@ function AppShellContent({
     // 2. Agents
     result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
 
-    // 3. Workflows
+    // 3. Teams
+    result.push({ id: 'nav:teams', type: 'nav', action: () => navigate(routes.view.teams()) })
+
+    // 4. Workflows
     result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
 
-    // 4. Automations and Sessions
+    // 5. Automations and Sessions
     result.push({ id: 'nav:automations', type: 'nav', action: handleAutomationsClick })
     result.push({ id: 'nav:sessions', type: 'nav', action: handleSessionsNavClick })
     result.push({ id: 'nav:settings', type: 'nav', action: () => handleSettingsClick('app') })
@@ -2288,6 +2293,7 @@ function AppShellContent({
     if (effectiveSidebarAndNavigatorHidden) return false
     if (isSessionsNavigation(navState)) return false
     if (isAgentsNavigation(navState)) return false
+    if (isTeamsNavigation(navState)) return false
     if (isWorkflowsNavigation(navState)) return false
     if (isSourcesNavigation(navState)) return false
     if (isSkillsNavigation(navState)) return false
@@ -2377,6 +2383,14 @@ function AppShellContent({
                       icon: Bot,
                       variant: isAgentsNavigation(navState) ? "default" : "ghost",
                       onClick: handleAgentsClick,
+                    },
+                    // --- Teams ---
+                    {
+                      id: "nav:teams",
+                      title: 'Teams',
+                      icon: Users,
+                      variant: isTeamsNavigation(navState) ? "default" : "ghost",
+                      onClick: () => navigate(routes.view.teams()),
                     },
                     // --- Workflows (top-level — see docs/workflows/03-ux.md) ---
                     {

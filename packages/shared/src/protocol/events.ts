@@ -12,6 +12,7 @@ import type { LoadedSource } from '../sources/types'
 import type { LoadedSkill } from '../skills/types'
 import type { LoadedContextDoc } from '../workspace-context/types'
 import type { LoadedWorkflow, WorkflowRunSnapshot } from '../workflows'
+import type { LoadedTeam, TeamRunDetail } from '../teams'
 import { RPC_CHANNELS } from './channels'
 import type {
   SessionEvent,
@@ -39,6 +40,8 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.workspaceContext.CHANGED]: [workspaceId: string, docs: LoadedContextDoc[]]
   [RPC_CHANNELS.memory.CHANGED]: [scope: 'agent' | 'user', agentSlug: string | null]
   [RPC_CHANNELS.workflows.CHANGED]: [workspaceId: string | null, workflows: LoadedWorkflow[]]
+  [RPC_CHANNELS.teams.CHANGED]: [teams: LoadedTeam[]]
+  [RPC_CHANNELS.teamRuns.UPDATED]: [workspaceId: string, run: TeamRunDetail, eventType: 'created' | 'updated' | 'completed']
   [RPC_CHANNELS.workflowRuns.UPDATED]: [
     workspaceId: string,
     run: WorkflowRunSnapshot,

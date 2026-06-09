@@ -460,6 +460,23 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workflows.SET_ACTIVE,
   RPC_CHANNELS.workflows.CHANGED,
 
+  // teams — global library, runs on workspace server
+  RPC_CHANNELS.teams.LIST_ALL,
+  RPC_CHANNELS.teams.GET,
+  RPC_CHANNELS.teams.UPSERT,
+  RPC_CHANNELS.teams.DELETE,
+  RPC_CHANNELS.teams.CHANGED,
+
+  // team runs — workspace-local run/task/message state
+  RPC_CHANNELS.teamRuns.START,
+  RPC_CHANNELS.teamRuns.GET,
+  RPC_CHANNELS.teamRuns.LIST,
+  RPC_CHANNELS.teamRuns.DELETE,
+  RPC_CHANNELS.teamRuns.CREATE_TASK,
+  RPC_CHANNELS.teamRuns.UPDATE_TASK,
+  RPC_CHANNELS.teamRuns.SEND_MESSAGE,
+  RPC_CHANNELS.teamRuns.UPDATED,
+
   // workflow runs — execute on workspace server
   RPC_CHANNELS.workflowRuns.START,
   RPC_CHANNELS.workflowRuns.GET,

@@ -34,6 +34,7 @@ import {
   isAgentsNavigation,
   isAutomationsNavigation,
   isWorkspaceContextNavigation,
+  isTeamsNavigation,
   isOutputsNavigation,
 } from '@/contexts/NavigationContext'
 import { isDeepResearchRunNavigation, isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
@@ -50,6 +51,7 @@ import WorkflowsListPage from '@/pages/WorkflowsListPage'
 import WorkflowInfoPage from '@/pages/WorkflowInfoPage'
 import WorkflowEditPage from '@/pages/WorkflowEditPage'
 import WorkflowRunPage from '@/pages/WorkflowRunPage'
+import TeamsListPage from '@/pages/TeamsListPage'
 import DeepResearchRunPage from '@/pages/DeepResearchRunPage'
 import RecentRunsPage from '@/pages/RecentRunsPage'
 import OutputDetailPage from '@/pages/OutputDetailPage'
@@ -419,6 +421,17 @@ export function MainContentPanel({
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
         <WorkflowRunPage runId={navState.runId} workspaceId={activeWorkspaceId || ''} />
+      </Panel>
+    )
+  }
+
+  if (isTeamsNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <TeamsListPage
+          workspaceId={activeWorkspaceId || ''}
+          teamSlug={navState.details.type === 'team' ? navState.details.teamSlug : undefined}
+        />
       </Panel>
     )
   }

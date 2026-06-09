@@ -202,6 +202,12 @@ export const routes = {
     /** Workflow run page (per-run pipeline view) */
     workflowRun: (runId: string) => `runs/${runId}` as const,
 
+    /** Teams list */
+    teams: () => 'teams' as const,
+
+    /** Team detail page */
+    team: (slug: string) => `teams/${slug}` as const,
+
     /** Deep Research run page */
     deepResearchRun: (runId: string) => `deep-research/${runId}` as const,
 

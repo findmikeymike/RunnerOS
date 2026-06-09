@@ -7,6 +7,8 @@ import { registerAgentDefinitionsHandlers } from './agent-definitions'
 import { registerWorkspaceContextHandlers } from './workspace-context'
 import { registerMemoryHandlers } from './memory'
 import { registerWorkflowsHandlers } from './workflows'
+import { registerTeamsHandlers } from './teams'
+import { registerTeamRunsHandlers } from './team-runs'
 import { registerWorkflowRunsHandlers } from './workflow-runs'
 import { registerDeepResearchHandlers } from './deep-research'
 import { registerFilesHandlers } from './files'
@@ -44,6 +46,8 @@ export function registerCoreRpcHandlers(
   registerWorkspaceContextHandlers(server, deps)
   registerMemoryHandlers(server, deps)
   registerWorkflowsHandlers(server, deps)
+  registerTeamsHandlers(server, deps)
+  registerTeamRunsHandlers(server, deps)
   registerWorkflowRunsHandlers(server, deps)
   registerDeepResearchHandlers(server, deps)
   registerFilesHandlers(server, deps)

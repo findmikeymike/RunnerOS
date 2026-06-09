@@ -127,6 +127,30 @@ import type {
 } from '@craft-agent/shared/workflows/run-types';
 export type { WorkflowDTO, WorkflowMetadataDTO, WorkflowRunDTO, WorkflowRunState, WorkflowRunStep, WorkflowRunStepState };
 
+// Teams — saved groups of agents with one lead and specialist members.
+import type {
+  LoadedTeam as TeamDTO,
+  TeamMetadata as TeamMetadataDTO,
+} from '@craft-agent/shared/teams/types';
+import type {
+  CreateTeamTaskInput,
+  SendTeamMessageInput,
+  StartTeamRunInput,
+  TeamRunDetail,
+  TeamRunSnapshot,
+  UpdateTeamTaskInput,
+} from '@craft-agent/shared/teams/run-types';
+export type {
+  CreateTeamTaskInput,
+  SendTeamMessageInput,
+  StartTeamRunInput,
+  TeamDTO,
+  TeamMetadataDTO,
+  TeamRunDetail,
+  TeamRunSnapshot,
+  UpdateTeamTaskInput,
+};
+
 import type {
   DeepResearchRunSnapshot as DeepResearchRunDTO,
   ReviseDeepResearchPlanInput,
@@ -858,6 +882,29 @@ export interface ElectronAPI {
   setWorkflowActive(workspaceId: string, slug: string, active: boolean): Promise<{ active: string[] }>
   onWorkflowsChanged(callback: (workspaceId: string | null, workflows: WorkflowDTO[]) => void): () => void
 
+  // Teams (global library)
+  listAllTeams(): Promise<TeamDTO[]>
+  getTeam(slug: string): Promise<TeamDTO | null>
+  upsertTeam(payload: {
+    slug: string
+    metadata: TeamMetadataDTO
+    body: string
+  }): Promise<TeamDTO>
+  deleteTeam(slug: string): Promise<boolean>
+  onTeamsChanged(callback: (teams: TeamDTO[]) => void): () => void
+
+  // Team runs (workspace-local runtime state)
+  startTeamRun(workspaceId: string, input: StartTeamRunInput): Promise<TeamRunDetail>
+  getTeamRun(workspaceId: string, runId: string): Promise<TeamRunDetail | null>
+  listTeamRuns(workspaceId: string): Promise<TeamRunSnapshot[]>
+  deleteTeamRun(workspaceId: string, runId: string): Promise<boolean>
+  createTeamTask(workspaceId: string, runId: string, input: CreateTeamTaskInput): Promise<TeamRunDetail>
+  updateTeamTask(workspaceId: string, runId: string, taskId: string, patch: UpdateTeamTaskInput): Promise<TeamRunDetail>
+  sendTeamMessage(workspaceId: string, runId: string, input: SendTeamMessageInput): Promise<TeamRunDetail>
+  onTeamRunUpdated(
+    callback: (workspaceId: string, run: TeamRunDetail, eventType: 'created' | 'updated' | 'completed') => void,
+  ): () => void
+
   // Workflow runs
   startWorkflowRun(workspaceId: string, workflowSlug: string, triggerInputs: Record<string, unknown>): Promise<WorkflowRunDTO>
   getWorkflowRun(workspaceId: string, runId: string): Promise<WorkflowRunDTO | null>
@@ -1131,6 +1178,16 @@ export interface WorkflowRunNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export type TeamsDetails =
+  | { type: 'list' }
+  | { type: 'team'; teamSlug: string }
+
+export interface TeamsNavigationState {
+  navigator: 'teams'
+  details: TeamsDetails
+  rightSidebar?: RightSidebarPanel
+}
+
 export interface DeepResearchRunNavigationState {
   navigator: 'deepResearchRun'
   runId: string
@@ -1156,6 +1213,7 @@ export type NavigationState =
   | WorkspaceContextNavigationState
   | WorkflowsNavigationState
   | WorkflowRunNavigationState
+  | TeamsNavigationState
   | DeepResearchRunNavigationState
   | OutputsNavigationState
 
@@ -1194,6 +1252,10 @@ export const isWorkflowsNavigation = (
 export const isWorkflowRunNavigation = (
   state: NavigationState
 ): state is WorkflowRunNavigationState => state.navigator === 'workflowRun'
+
+export const isTeamsNavigation = (
+  state: NavigationState
+): state is TeamsNavigationState => state.navigator === 'teams'
 
 export const isDeepResearchRunNavigation = (
   state: NavigationState
@@ -1247,6 +1309,12 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'workflowRun') {
     return `runs/${state.runId}`
+  }
+  if (state.navigator === 'teams') {
+    switch (state.details.type) {
+      case 'team': return `teams/${state.details.teamSlug}`
+      case 'list': return 'teams'
+    }
   }
   if (state.navigator === 'deepResearchRun') {
     return `deep-research/${state.runId}`
@@ -1330,6 +1398,14 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
     const runId = key.slice('runs/'.length)
     if (runId) return { navigator: 'workflowRun', runId }
   }
+
+  // Handle teams
+  if (key === 'teams') return { navigator: 'teams', details: { type: 'list' } }
+  if (key.startsWith('teams/')) {
+    const teamSlug = key.slice('teams/'.length)
+    if (teamSlug) return { navigator: 'teams', details: { type: 'team', teamSlug } }
+  }
+
   if (key.startsWith('deep-research/')) {
     const runId = key.slice('deep-research/'.length)
     if (runId) return { navigator: 'deepResearchRun', runId }
