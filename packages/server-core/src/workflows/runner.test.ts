@@ -205,6 +205,14 @@ function lastCompleted(events: WorkflowRunEvent[]): WorkflowRunSnapshot | undefi
   return undefined;
 }
 
+function lastUpdated(events: WorkflowRunEvent[]): WorkflowRunSnapshot | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (e.type === 'run.updated') return e.run;
+  }
+  return undefined;
+}
+
 function findUpdatedDetail(
   events: WorkflowRunEvent[],
   kind: WorkflowRunEventDetail['kind'],
@@ -261,7 +269,7 @@ describe('WorkflowRunner', () => {
     expect(onDisk!.steps[1]!.output).toBe('STEP_TWO_OUT');
   });
 
-  test('team step launches a team run and records run evidence', async () => {
+  test('team step launches a team run and pauses until team output is accepted', async () => {
     const h = makeHarness();
     const runner = new WorkflowRunner(h.deps);
 
@@ -275,10 +283,12 @@ describe('WorkflowRunner', () => {
       triggerInputs: { topic: 'new product' },
     });
 
-    await waitFor(() => lastCompleted(h.events) !== undefined);
+    await waitFor(() => lastUpdated(h.events)?.state === 'paused');
 
-    const completed = lastCompleted(h.events)!;
-    expect(completed.state).toBe('succeeded');
+    const paused = lastUpdated(h.events)!;
+    expect(paused.state).toBe('paused');
+    expect(paused.resumeFromStepId).toBe('team-launch');
+    expect(lastCompleted(h.events)).toBeUndefined();
     expect(h.sessions.size).toBe(0);
     expect(h.teamRunsStarted).toEqual([{
       workspaceId: WORKSPACE_ID,
@@ -290,8 +300,8 @@ describe('WorkflowRunner', () => {
         'Prepare new product launch.',
       ].join('\n'),
     }]);
-    expect(completed.steps[0]).toMatchObject({
-      state: 'succeeded',
+    expect(paused.steps[0]).toMatchObject({
+      state: 'awaiting-team',
       teamRunId: 'team-run-1',
       teamSlug: 'commerce-launch-team',
       output: {
@@ -301,10 +311,12 @@ describe('WorkflowRunner', () => {
         leadSessionId: 'team-lead-1',
       },
       completion: {
-        satisfied: true,
+        satisfied: false,
       },
     });
-    expect(readRun(workspaceRoot, completed.id)!.steps[0]!.teamRunId).toBe('team-run-1');
+    const persisted = readRun(workspaceRoot, paused.id)!;
+    expect(persisted.state).toBe('paused');
+    expect(persisted.steps[0]!.teamRunId).toBe('team-run-1');
   });
 
   test('creates a default output from the final succeeded workflow step', async () => {

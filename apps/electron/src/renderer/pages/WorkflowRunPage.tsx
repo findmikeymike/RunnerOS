@@ -533,6 +533,7 @@ function StepIcon({ state }: { state: WorkflowRunStepState }) {
     case 'skipped':
       return <span className="h-2 w-2 rounded-full border border-zinc-400" />
     case 'awaiting-human':
+    case 'awaiting-team':
       return <span className="text-[11px]">⏸</span>
     case 'queued':
     default:
@@ -616,6 +617,8 @@ function stepBorder(state: WorkflowRunStepState): string {
     case 'failed': return 'border-red-500/30 bg-red-500/[0.03]'
     case 'interrupted': return 'border-orange-500/30 bg-orange-500/[0.03]'
     case 'skipped': return 'border-white/[0.07] bg-white/[0.02] opacity-70'
+    case 'awaiting-human':
+    case 'awaiting-team': return 'border-amber-500/30 bg-amber-500/[0.03]'
     default: return 'border-white/[0.07] bg-white/[0.035]'
   }
 }

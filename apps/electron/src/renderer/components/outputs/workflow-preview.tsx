@@ -1,7 +1,7 @@
 import * as React from 'react'
 import type { OutputPreviewSettledHandler } from './OutputInlinePreview'
 
-export type WorkflowNodeState = 'queued' | 'running' | 'succeeded' | 'failed' | 'interrupted' | 'skipped' | 'awaiting-human' | 'unknown'
+export type WorkflowNodeState = 'queued' | 'running' | 'succeeded' | 'failed' | 'interrupted' | 'skipped' | 'awaiting-human' | 'awaiting-team' | 'unknown'
 
 export interface WorkflowGraphNode {
   id: string
@@ -36,6 +36,7 @@ const STATE_STYLES: Record<WorkflowNodeState, { fill: string; stroke: string; te
   interrupted: { fill: '#431407', stroke: '#fb923c', text: '#ffedd5' },
   skipped: { fill: '#18181b', stroke: '#71717a', text: '#a1a1aa' },
   'awaiting-human': { fill: '#422006', stroke: '#fbbf24', text: '#fef3c7' },
+  'awaiting-team': { fill: '#422006', stroke: '#fbbf24', text: '#fef3c7' },
   unknown: { fill: '#18181b', stroke: '#52525b', text: '#d4d4d8' },
 }
 
@@ -217,7 +218,7 @@ function readRunStepAgent(step: Record<string, unknown>): string | undefined {
 
 function normalizeState(value: unknown): WorkflowNodeState {
   const state = typeof value === 'string' ? value : 'unknown'
-  if (state === 'queued' || state === 'running' || state === 'succeeded' || state === 'failed' || state === 'interrupted' || state === 'skipped' || state === 'awaiting-human') return state
+  if (state === 'queued' || state === 'running' || state === 'succeeded' || state === 'failed' || state === 'interrupted' || state === 'skipped' || state === 'awaiting-human' || state === 'awaiting-team') return state
   return 'unknown'
 }
 

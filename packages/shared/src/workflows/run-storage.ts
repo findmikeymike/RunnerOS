@@ -46,6 +46,7 @@ const STEP_STATES: ReadonlySet<WorkflowRunStepState> = new Set([
   'interrupted',
   'skipped',
   'awaiting-human',
+  'awaiting-team',
 ]);
 
 export function isValidWorkflowRunId(runId: string): boolean {

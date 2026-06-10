@@ -6,7 +6,7 @@
  * in `@craft-agent/server-core/src/workflows/runner.ts`.
  *
  * Phase 1 only exercises a subset of these states/fields — `paused`,
- * `skipped`, `awaiting-human`, and the `attempts` counter are declared
+ * `skipped`, `awaiting-human`, `awaiting-team`, and the `attempts` counter are declared
  * for forward-compat with Phase 2/3 features (humanCheckpoint, retries,
  * `when`). See `docs/workflows/02-runtime.md` for the full state diagram.
  */
@@ -65,7 +65,9 @@ export type WorkflowRunStepState =
   /** Phase 2 — `when` skipped this step. Declared for forward compat. */
   | 'skipped'
   /** Phase 3 — `humanCheckpoint`. Declared for forward compat. */
-  | 'awaiting-human';
+  | 'awaiting-human'
+  /** Team step launched and is waiting for the Team run to produce accepted output. */
+  | 'awaiting-team';
 
 /** Per-step record persisted in run.json. */
 export interface WorkflowRunStep {

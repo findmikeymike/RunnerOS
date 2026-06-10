@@ -35,6 +35,7 @@ import {
   type WorkflowStep,
   type WorkflowRunSnapshot,
   type WorkflowRunStep,
+  type WorkflowRunStepState,
   type WorkflowStepExecutionReceipt,
 } from '@craft-agent/shared/workflows';
 import { OutputService } from '../outputs/OutputService';
@@ -464,6 +465,7 @@ export class WorkflowRunner {
     const runStartedAt = active.snapshot.createdAt;
     const workflow = active.snapshot.workflowSnapshot;
     let failed = false;
+    let paused = false;
 
     for (let i = active.startIndex; i < workflow.metadata.steps.length; i++) {
       if (active.abort.signal.aborted) break;
@@ -520,6 +522,14 @@ export class WorkflowRunner {
         try {
           await this.executeStepAttempt(active, stepDef, resolved.output);
           if (active.abort.signal.aborted) break;
+          const stateAfterAttempt = stepRecord.state as WorkflowRunStepState;
+          if (stateAfterAttempt === 'awaiting-team') {
+            paused = true;
+            active.currentSessionId = undefined;
+            this.touch(active);
+            lastError = undefined;
+            break;
+          }
 
           stepRecord.state = 'succeeded';
           stepRecord.completedAt = new Date().toISOString();
@@ -548,6 +558,7 @@ export class WorkflowRunner {
       }
 
       if (active.abort.signal.aborted) break;
+      if (paused) break;
       if (lastError !== undefined) {
         const onFailure = stepDef.onFailure ?? 'stop';
         const error = this.stepError(lastError);
@@ -571,6 +582,14 @@ export class WorkflowRunner {
     }
 
     // Final state.
+    if (paused) {
+      active.snapshot.state = 'paused';
+      active.snapshot.resumeFromStepId = active.snapshot.steps.find((step) => step.state === 'awaiting-team')?.id;
+      this.touch(active);
+      this.releaseActiveRun(active);
+      return;
+    }
+
     if (active.abort.signal.aborted) {
       active.snapshot.state = 'cancelled';
     } else if (failed) {
@@ -691,7 +710,7 @@ export class WorkflowRunner {
     stepRecord.teamSlug = stepDef.team;
     stepRecord.completion = {
       outputChars: userRequest.length,
-      satisfied: true,
+      satisfied: false,
     };
     stepRecord.output = {
       type: 'team-run',
@@ -699,6 +718,7 @@ export class WorkflowRunner {
       runId: detail.id,
       leadSessionId: detail.leadSessionId,
     };
+    stepRecord.state = 'awaiting-team';
   }
 
   private buildExecutionReceipt(
