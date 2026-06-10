@@ -327,6 +327,7 @@ const EXPECTED_CHANNELS: string[] = [
   "team-runs:delete",
   "team-runs:get",
   "team-runs:list",
+  "team-runs:mark-messages-read",
   "team-runs:send-message",
   "team-runs:start",
   "team-runs:update-task",

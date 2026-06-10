@@ -23,7 +23,7 @@ interface TeamLibraryStats {
 export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPageProps) {
   const { navigate } = useNavigation()
   const { allTeams, loading, error, upsert, remove } = useTeams()
-  const { runs, detailsById, get, start, createTask, updateTask, sendMessage } = useTeamRuns(workspaceId)
+  const { runs, detailsById, get, start, createTask, updateTask, sendMessage, markMessagesRead } = useTeamRuns(workspaceId)
   const [selectedRunIdByTeam, setSelectedRunIdByTeam] = React.useState<Record<string, string>>({})
   const requestedCardRunDetailsRef = React.useRef(new Set<string>())
   const selectedTeam = React.useMemo(
@@ -252,6 +252,15 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
     }
   }
 
+  const handleMarkMessagesRead = async (run: TeamRunSnapshot, readerAgentSlug: string) => {
+    try {
+      await markMessagesRead(run.id, readerAgentSlug)
+      toast.success('Messages marked read')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const handleApprovalDecision = async (run: TeamRunSnapshot, task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => {
     if (!task.approval) return
     const note = decision === 'rejected' ? window.prompt('Reason for rejection?') ?? undefined : undefined
@@ -345,6 +354,7 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 onCompleteTask={activeRun ? (taskId) => void handleCompleteTask(activeRun, taskId) : undefined}
                 onDecideApproval={activeRun ? (task, decision) => void handleApprovalDecision(activeRun, task, decision) : undefined}
                 onSendMessage={activeRun ? (input) => void handleSendMessage(activeRun, input) : undefined}
+                onMarkMessagesRead={activeRun ? (readerAgentSlug) => void handleMarkMessagesRead(activeRun, readerAgentSlug) : undefined}
               />
             ) : null}
           </div>
@@ -508,6 +518,7 @@ function TeamDetailPanel({
   onCompleteTask,
   onDecideApproval,
   onSendMessage,
+  onMarkMessagesRead,
 }: {
   team: TeamDTO
   runs: TeamRunSnapshot[]
@@ -523,6 +534,7 @@ function TeamDetailPanel({
   onCompleteTask?: (taskId: string) => void
   onDecideApproval?: (task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => void
   onSendMessage?: (input: { toAgentSlug: string; body: string; kind: 'note' | 'question' }) => void
+  onMarkMessagesRead?: (readerAgentSlug: string) => void
 }) {
   const verification = team.metadata.verification
   const approvalTasks = selectedDetail?.tasks.filter((task) => task.approval?.status === 'requested') ?? []
@@ -650,6 +662,7 @@ function TeamDetailPanel({
               team={team}
               messages={selectedDetail.messages}
               onSendMessage={onSendMessage}
+              onMarkMessagesRead={onMarkMessagesRead}
             />
           ) : (
             <p className="text-[12px] text-white/45">Start a run to use the team mailbox.</p>
@@ -738,12 +751,15 @@ function TeamMailbox({
   team,
   messages,
   onSendMessage,
+  onMarkMessagesRead,
 }: {
   team: TeamDTO
   messages: TeamRunDetail['messages']
   onSendMessage?: (input: { toAgentSlug: string; body: string; kind: 'note' | 'question' }) => void
+  onMarkMessagesRead?: (readerAgentSlug: string) => void
 }) {
   const [toAgentSlug, setToAgentSlug] = React.useState('lead')
+  const [readerAgentSlug, setReaderAgentSlug] = React.useState('lead')
   const [kind, setKind] = React.useState<'note' | 'question'>('note')
   const [body, setBody] = React.useState('')
   const recipients = React.useMemo(
@@ -754,6 +770,9 @@ function TeamMailbox({
     ],
     [team.metadata.lead, team.metadata.members],
   )
+  const unreadCount = messages.filter((message) => (
+    !message.readAt && (message.toAgentSlug === readerAgentSlug || message.toAgentSlug === 'all')
+  )).length
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault()
@@ -765,6 +784,31 @@ function TeamMailbox({
 
   return (
     <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <TeamPill>{unreadCount} unread</TeamPill>
+        <select
+          value={readerAgentSlug}
+          onChange={(event) => setReaderAgentSlug(event.target.value)}
+          className="h-7 min-w-0 flex-1 rounded-[8px] border border-white/[0.08] bg-black/20 px-2 text-[11px] text-white/70 outline-none focus:border-[#38bdf8]/35"
+        >
+          {recipients.map((recipient) => (
+            <option key={recipient.slug} value={recipient.slug} className="bg-[#111827] text-white">
+              {recipient.label}
+            </option>
+          ))}
+        </select>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={!unreadCount || !onMarkMessagesRead}
+          className="h-7 px-2 text-white/52 hover:text-white"
+          onClick={() => onMarkMessagesRead?.(readerAgentSlug)}
+        >
+          Mark read
+        </Button>
+      </div>
+
       <form className="space-y-2" onSubmit={submit}>
         <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-2">
           <select
@@ -806,7 +850,7 @@ function TeamMailbox({
             <div key={message.id} className="rounded-[10px] border border-white/[0.07] bg-black/10 px-3 py-2">
               <div className="flex items-center justify-between gap-2 text-[11px] text-white/42">
                 <span>{message.fromAgentSlug} {'->'} {message.toAgentSlug}</span>
-                <span>{message.kind}</span>
+                <span>{message.readAt ? message.kind : `${message.kind} · unread`}</span>
               </div>
               <p className="mt-1 text-[12px] leading-[17px] text-white/70">{message.body}</p>
             </div>

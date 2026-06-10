@@ -144,4 +144,26 @@ describe('team run RPC handlers', () => {
     expect(completed.state).toBe('done')
     expect(completed.tasks[0]!.output).toBe('Done')
   })
+
+  it('marks team messages read and broadcasts the updated detail', async () => {
+    const { handlers, server, deps, pushCalls } = createHarness()
+    const { registerTeamRunsHandlers } = await import('./team-runs')
+    registerTeamRunsHandlers(server, deps)
+
+    const started = await handlers.get(RPC_CHANNELS.teamRuns.START)!({} as any, 'workspace-1', {
+      teamSlug: 'engineering-ship-team',
+      userRequest: 'Coordinate work.',
+    })
+    await handlers.get(RPC_CHANNELS.teamRuns.SEND_MESSAGE)!({} as any, 'workspace-1', started.id, {
+      fromAgentSlug: 'system-architect',
+      toAgentSlug: 'coder',
+      kind: 'assignment',
+      body: 'Take this task.',
+    })
+
+    const updated = await handlers.get(RPC_CHANNELS.teamRuns.MARK_MESSAGES_READ)!({} as any, 'workspace-1', started.id, 'coder')
+    expect(updated.messages[0]!.readAt).toBeString()
+    expect(pushCalls.at(-1)?.channel).toBe(RPC_CHANNELS.teamRuns.UPDATED)
+    expect(pushCalls.at(-1)?.args[2]).toBe('updated')
+  })
 })

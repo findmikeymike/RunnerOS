@@ -71,6 +71,7 @@ export {
   listTeamRunEvents,
   listTeamRuns,
   listTeamTasks,
+  markTeamMessagesRead,
   readTeamRun,
   readTeamRunDetail,
   sendTeamMessage,

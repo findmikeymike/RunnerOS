@@ -491,6 +491,7 @@ export const RPC_CHANNELS = {
     CREATE_TASK: 'team-runs:create-task',
     UPDATE_TASK: 'team-runs:update-task',
     SEND_MESSAGE: 'team-runs:send-message',
+    MARK_MESSAGES_READ: 'team-runs:mark-messages-read',
     UPDATED: 'team-runs:updated',
   },
   workflowRuns: {

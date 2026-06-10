@@ -901,6 +901,7 @@ export interface ElectronAPI {
   createTeamTask(workspaceId: string, runId: string, input: CreateTeamTaskInput): Promise<TeamRunDetail>
   updateTeamTask(workspaceId: string, runId: string, taskId: string, patch: UpdateTeamTaskInput): Promise<TeamRunDetail>
   sendTeamMessage(workspaceId: string, runId: string, input: SendTeamMessageInput): Promise<TeamRunDetail>
+  markTeamMessagesRead(workspaceId: string, runId: string, readerAgentSlug: string): Promise<TeamRunDetail>
   onTeamRunUpdated(
     callback: (workspaceId: string, run: TeamRunDetail, eventType: 'created' | 'updated' | 'completed') => void,
   ): () => void

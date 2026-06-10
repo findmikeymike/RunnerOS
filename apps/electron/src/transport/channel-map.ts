@@ -453,6 +453,7 @@ export const CHANNEL_MAP = {
   createTeamTask: invoke(RPC_CHANNELS.teamRuns.CREATE_TASK),
   updateTeamTask: invoke(RPC_CHANNELS.teamRuns.UPDATE_TASK),
   sendTeamMessage: invoke(RPC_CHANNELS.teamRuns.SEND_MESSAGE),
+  markTeamMessagesRead: invoke(RPC_CHANNELS.teamRuns.MARK_MESSAGES_READ),
   onTeamRunUpdated: listener(RPC_CHANNELS.teamRuns.UPDATED),
 
   // Workflow runs

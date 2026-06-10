@@ -14,6 +14,7 @@ export interface UseTeamRunsResult {
   createTask: (runId: string, input: CreateTeamTaskInput) => Promise<TeamRunDetail>
   updateTask: (runId: string, taskId: string, patch: UpdateTeamTaskInput) => Promise<TeamRunDetail>
   sendMessage: (runId: string, input: SendTeamMessageInput) => Promise<TeamRunDetail>
+  markMessagesRead: (runId: string, readerAgentSlug: string) => Promise<TeamRunDetail>
   remove: (runId: string) => Promise<boolean>
 }
 
@@ -158,6 +159,13 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
     return detail
   }, [setState, workspaceId])
 
+  const markMessagesRead = useCallback(async (runId: string, readerAgentSlug: string): Promise<TeamRunDetail> => {
+    if (!workspaceId) throw new Error('Workspace is required to mark team messages read.')
+    const detail = await window.electronAPI.markTeamMessagesRead(workspaceId, runId, readerAgentSlug)
+    setState((prev) => upsertDetail(prev, detail))
+    return detail
+  }, [setState, workspaceId])
+
   const remove = useCallback(async (runId: string) => {
     if (!workspaceId) return false
     const ok = await window.electronAPI.deleteTeamRun(workspaceId, runId)
@@ -186,6 +194,7 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
     createTask,
     updateTask,
     sendMessage,
+    markMessagesRead,
     remove,
   }
 }

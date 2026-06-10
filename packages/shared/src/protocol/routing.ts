@@ -475,6 +475,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.teamRuns.CREATE_TASK,
   RPC_CHANNELS.teamRuns.UPDATE_TASK,
   RPC_CHANNELS.teamRuns.SEND_MESSAGE,
+  RPC_CHANNELS.teamRuns.MARK_MESSAGES_READ,
   RPC_CHANNELS.teamRuns.UPDATED,
 
   // workflow runs — execute on workspace server

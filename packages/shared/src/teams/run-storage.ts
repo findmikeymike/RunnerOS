@@ -392,6 +392,30 @@ export function sendTeamMessage(workspaceRootPath: string, runId: string, input:
   return message;
 }
 
+export function markTeamMessagesRead(
+  workspaceRootPath: string,
+  runId: string,
+  readerAgentSlug: TeamMessageTarget,
+): TeamMessage[] {
+  if (!readTeamRun(workspaceRootPath, runId)) throw new Error(`Team run not found: ${runId}`);
+  if (!isTarget(readerAgentSlug)) throw new Error(`Invalid message reader: ${readerAgentSlug}`);
+  const messages = listTeamMessages(workspaceRootPath, runId);
+  const now = new Date().toISOString();
+  let changed = false;
+  const next = messages.map((message) => {
+    if (message.readAt) return message;
+    const addressedToReader = message.toAgentSlug === readerAgentSlug || message.toAgentSlug === 'all';
+    if (!addressedToReader) return message;
+    changed = true;
+    return { ...message, readAt: now };
+  });
+  if (!changed) return messages;
+  writeJsonl(join(getTeamRunDir(workspaceRootPath, runId), MESSAGES_FILE), next);
+  const run = readTeamRun(workspaceRootPath, runId);
+  if (run) touchTeamRun(workspaceRootPath, run);
+  return next;
+}
+
 export function listTeamRunEvents(workspaceRootPath: string, runId: string): TeamRunEvent[] {
   const dir = resolveRunDir(workspaceRootPath, runId);
   if (!dir) return [];

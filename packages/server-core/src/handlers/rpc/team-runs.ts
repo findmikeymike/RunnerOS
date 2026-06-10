@@ -6,6 +6,7 @@ import {
   deleteTeamRun,
   listTeamRuns,
   loadGlobalTeam,
+  markTeamMessagesRead,
   readTeamRun,
   readTeamRunDetail,
   sendTeamMessage,
@@ -30,6 +31,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.teamRuns.CREATE_TASK,
   RPC_CHANNELS.teamRuns.UPDATE_TASK,
   RPC_CHANNELS.teamRuns.SEND_MESSAGE,
+  RPC_CHANNELS.teamRuns.MARK_MESSAGES_READ,
 ] as const
 
 function resolveRootPath(deps: HandlerDeps, workspaceId: string): string {
@@ -191,6 +193,18 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
     async (_ctx, workspaceId: string, runId: string, input: SendTeamMessageInput): Promise<TeamRunDetail> => {
       const rootPath = resolveRootPath(deps, workspaceId)
       sendTeamMessage(rootPath, runId, input)
+      const detail = readTeamRunDetail(rootPath, runId)
+      if (!detail) throw new Error(`Team run not found: ${runId}`)
+      broadcastUpdated(deps, workspaceId, detail, 'updated')
+      return detail
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.teamRuns.MARK_MESSAGES_READ,
+    async (_ctx, workspaceId: string, runId: string, readerAgentSlug: string): Promise<TeamRunDetail> => {
+      const rootPath = resolveRootPath(deps, workspaceId)
+      markTeamMessagesRead(rootPath, runId, readerAgentSlug)
       const detail = readTeamRunDetail(rootPath, runId)
       if (!detail) throw new Error(`Team run not found: ${runId}`)
       broadcastUpdated(deps, workspaceId, detail, 'updated')

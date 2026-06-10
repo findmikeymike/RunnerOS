@@ -9,6 +9,7 @@ import {
   linkTeamRunMemberSession,
   listTeamRuns,
   readTeamRunDetail,
+  markTeamMessagesRead,
   sendTeamMessage,
   updateTeamTask,
   writeTeamRun,
@@ -104,6 +105,34 @@ describe('team run storage', () => {
       'message.sent',
       'task.updated',
     ]);
+  });
+
+  test('marks unread messages for a recipient without changing other messages', () => {
+    writeTeamRun(workspace, sampleRun());
+    const direct = sendTeamMessage(workspace, RUN_ID, {
+      fromAgentSlug: 'system-architect',
+      toAgentSlug: 'coder',
+      kind: 'question',
+      body: 'Can you handle this?',
+    });
+    const broadcast = sendTeamMessage(workspace, RUN_ID, {
+      fromAgentSlug: 'system-architect',
+      toAgentSlug: 'all',
+      kind: 'note',
+      body: 'Team update.',
+    });
+    const other = sendTeamMessage(workspace, RUN_ID, {
+      fromAgentSlug: 'system-architect',
+      toAgentSlug: 'reviewer',
+      kind: 'review',
+      body: 'Please review.',
+    });
+
+    const next = markTeamMessagesRead(workspace, RUN_ID, 'coder');
+    expect(next.find((message) => message.id === direct.id)?.readAt).toBeString();
+    expect(next.find((message) => message.id === broadcast.id)?.readAt).toBeString();
+    expect(next.find((message) => message.id === other.id)?.readAt).toBeUndefined();
+    expect(readTeamRunDetail(workspace, RUN_ID)?.messages.filter((message) => message.readAt)).toHaveLength(2);
   });
 
   test('skips malformed jsonl records while preserving valid records', () => {
