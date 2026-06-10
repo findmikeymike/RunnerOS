@@ -66,6 +66,7 @@ export {
   getTeamRunFile,
   getTeamRunsDir,
   isValidTeamRunId,
+  linkTeamRunMemberSession,
   listTeamMessages,
   listTeamRunEvents,
   listTeamRuns,

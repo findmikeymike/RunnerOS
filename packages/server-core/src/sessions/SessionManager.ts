@@ -112,6 +112,21 @@ import {
   writeGlobalWorkflow,
 } from '@craft-agent/shared/workflows'
 import {
+  appendTeamRunEvent,
+  createTeamTask,
+  linkTeamRunMemberSession,
+  listTeamMessages,
+  listTeamTasks,
+  readTeamRunDetail,
+  sendTeamMessage,
+  updateTeamTask,
+  type CreateTeamTaskInput,
+  type SendTeamMessageInput,
+  type TeamRunDetail,
+  type TeamTask,
+  type UpdateTeamTaskInput,
+} from '@craft-agent/shared/teams'
+import {
   appendMemoryEvent,
   deleteMemoryEntry,
   listAgentMemoryEntries,
@@ -3211,6 +3226,124 @@ user a clickable link to where the thing now lives.`
     managed.messagesLoaded = true
   }
 
+  private readManagedTeamRun(managed: ManagedSession, runId: string): TeamRunDetail {
+    const detail = readTeamRunDetail(managed.workspace.rootPath, runId)
+    if (!detail) throw new Error(`Team run not found: ${runId}`)
+    if (detail.workspaceId !== managed.workspace.id) {
+      throw new Error(`Team run "${runId}" does not belong to this workspace.`)
+    }
+    return detail
+  }
+
+  private emitTeamRunUpdated(managed: ManagedSession, runId: string, eventType: 'created' | 'updated' | 'completed' = 'updated'): TeamRunDetail {
+    const detail = this.readManagedTeamRun(managed, runId)
+    this.eventSink?.(
+      RPC_CHANNELS.teamRuns.UPDATED,
+      { to: 'workspace', workspaceId: managed.workspace.id },
+      managed.workspace.id,
+      detail,
+      eventType,
+    )
+    return detail
+  }
+
+  private resolveTeamActor(managed: ManagedSession, run: TeamRunDetail): string {
+    return managed.spawnedFromAgent?.agentSlug ?? run.teamSnapshot.metadata.lead
+  }
+
+  private assertTeamMember(run: TeamRunDetail, agentSlug: string): void {
+    const memberSlugs = new Set([
+      run.teamSnapshot.metadata.lead,
+      ...run.teamSnapshot.metadata.members.map((member) => member.slug),
+    ])
+    if (!memberSlugs.has(agentSlug)) {
+      throw new Error(`Agent "${agentSlug}" is not on team "${run.teamSlug}". Dynamic member spawning is not enabled yet.`)
+    }
+  }
+
+  private resolveReviewer(run: TeamRunDetail, task: TeamTask, requestedReviewer?: string): string {
+    if (requestedReviewer) return requestedReviewer
+    if (task.reviewerAgentSlug) return task.reviewerAgentSlug
+    const reviewer = run.teamSnapshot.metadata.members.find((member) => (
+      member.slug.includes('review') || member.role.toLowerCase().includes('review') || member.role.toLowerCase().includes('qa')
+    ))
+    if (reviewer) return reviewer.slug
+    throw new Error(`No reviewer found for team "${run.teamSlug}". Pass reviewerAgentSlug explicitly.`)
+  }
+
+  private buildTeamMemberPrompt(run: TeamRunDetail, agentSlug: string, task?: TeamTask, extraPrompt?: string): string {
+    const member = run.teamSnapshot.metadata.members.find((candidate) => candidate.slug === agentSlug)
+    const role = agentSlug === run.teamSnapshot.metadata.lead ? 'Lead' : (member?.role ?? 'Team member')
+    const openTasks = run.tasks
+      .filter((candidate) => candidate.ownerAgentSlug === agentSlug && candidate.status !== 'done' && candidate.status !== 'failed')
+      .map((candidate) => `- ${candidate.id}: ${candidate.title} [${candidate.status}]`)
+      .join('\n')
+    return [
+      `You are @${agentSlug} in RunnerOS team "${run.teamSnapshot.metadata.name}" (${run.teamSlug}).`,
+      `Team run id: ${run.id}`,
+      `Role: ${role}`,
+      '',
+      'Team operating rules:',
+      '- Use team tools to update tasks, send results, and request review.',
+      '- Do not mark review-required work done until review passes.',
+      '- Use request_user_approval before risky external actions.',
+      '',
+      task ? [
+        'Assigned task:',
+        `- id: ${task.id}`,
+        `- title: ${task.title}`,
+        `- status: ${task.status}`,
+        `- priority: ${task.priority}`,
+        `- description: ${task.description || '(none)'}`,
+      ].join('\n') : `Open tasks:\n${openTasks || '- none'}`,
+      extraPrompt ? `\nExtra instructions:\n${extraPrompt}` : '',
+    ].filter(Boolean).join('\n')
+  }
+
+  private async spawnOrWakeTeamMember(
+    managed: ManagedSession,
+    runId: string,
+    agentSlug: string,
+    task?: TeamTask,
+    extraPrompt?: string,
+  ): Promise<{ sessionId: string; status: 'created' | 'resumed'; detail: TeamRunDetail }> {
+    let detail = this.readManagedTeamRun(managed, runId)
+    this.assertTeamMember(detail, agentSlug)
+
+    const existingSessionId = agentSlug === detail.teamSnapshot.metadata.lead
+      ? detail.leadSessionId
+      : detail.memberSessionIds?.[agentSlug]
+    const prompt = this.buildTeamMemberPrompt(detail, agentSlug, task, extraPrompt)
+
+    if (existingSessionId) {
+      if (existingSessionId !== managed.id) {
+        await this.sendMessage(existingSessionId, prompt)
+      }
+      return { sessionId: existingSessionId, status: 'resumed', detail: this.emitTeamRunUpdated(managed, runId) }
+    }
+
+    const agentOptions = await this.resolveAgentSessionOptions(managed.workspace.id, agentSlug, { referenceMode: 'lenient' })
+    const session = await this.createSession(managed.workspace.id, {
+      ...agentOptions,
+      name: `${detail.teamSnapshot.metadata.name} / ${agentSlug}`,
+      permissionMode: detail.permissionMode ?? agentOptions.permissionMode,
+      spawnedFromAgent: {
+        agentSlug,
+        agentName: agentSlug,
+        timestamp: Date.now(),
+      },
+      customSystemPrompt: [
+        agentOptions.customSystemPrompt,
+        `You are a member of RunnerOS team "${detail.teamSnapshot.metadata.name}" (${detail.teamSlug}). Coordinate through team tools and keep the task board current.`,
+      ].filter(Boolean).join('\n\n'),
+    })
+
+    linkTeamRunMemberSession(managed.workspace.rootPath, runId, agentSlug, session.id)
+    await this.sendMessage(session.id, prompt)
+    detail = this.emitTeamRunUpdated(managed, runId)
+    return { sessionId: session.id, status: 'created', detail }
+  }
+
   /**
    * Get the filesystem path to a session's folder
    */
@@ -4960,6 +5093,191 @@ user a clickable link to where the thing now lives.`
         },
         cancelWorkflowRunFn: async (runId: string) => {
           return this.workflowRunner.cancel(managed.workspace.id, runId)
+        },
+        listTeamTasksFn: (runId: string) => {
+          this.readManagedTeamRun(managed, runId)
+          return listTeamTasks(managed.workspace.rootPath, runId)
+        },
+        listTeamMessagesFn: (runId: string) => {
+          this.readManagedTeamRun(managed, runId)
+          return listTeamMessages(managed.workspace.rootPath, runId)
+        },
+        createTeamTaskFn: async (input) => {
+          const run = this.readManagedTeamRun(managed, input.runId)
+          const actor = this.resolveTeamActor(managed, run)
+          if (actor !== run.teamSnapshot.metadata.lead) {
+            throw new Error('Only the team lead can create team tasks.')
+          }
+          this.assertTeamMember(run, input.ownerAgentSlug)
+          if (input.reviewerAgentSlug) this.assertTeamMember(run, input.reviewerAgentSlug)
+          const riskAction = typeof input.inputs?.riskAction === 'string' ? input.inputs.riskAction : undefined
+          const reviewRequired = input.reviewRequired ?? (
+            run.teamSnapshot.metadata.verification?.default === 'blocking'
+            || Boolean(riskAction && run.teamSnapshot.metadata.verification?.requiredFor?.includes(riskAction as never))
+          )
+          const task = createTeamTask(managed.workspace.rootPath, input.runId, {
+            title: input.title,
+            description: input.description,
+            ownerAgentSlug: input.ownerAgentSlug,
+            priority: input.priority,
+            inputs: input.inputs,
+            approvalRequired: input.approvalRequired,
+            reviewRequired,
+            reviewerAgentSlug: input.reviewerAgentSlug,
+          } satisfies CreateTeamTaskInput)
+          sendTeamMessage(managed.workspace.rootPath, input.runId, {
+            fromAgentSlug: actor,
+            toAgentSlug: input.ownerAgentSlug,
+            taskId: task.id,
+            kind: 'assignment',
+            body: task.description || task.title,
+          } satisfies SendTeamMessageInput)
+          const wake = await this.spawnOrWakeTeamMember(managed, input.runId, input.ownerAgentSlug, task)
+          return {
+            task,
+            ownerSessionId: wake.sessionId,
+            ownerSessionStatus: wake.status,
+            run: wake.detail,
+          }
+        },
+        updateTeamTaskFn: async (input) => {
+          const run = this.readManagedTeamRun(managed, input.runId)
+          const task = run.tasks.find((candidate) => candidate.id === input.taskId)
+          if (!task) throw new Error(`Team task not found: ${input.taskId}`)
+          const actor = this.resolveTeamActor(managed, run)
+          const reviewerSlug = task.reviewerAgentSlug ?? task.review?.reviewerAgentSlug
+          const canUpdate = actor === run.teamSnapshot.metadata.lead || actor === task.ownerAgentSlug || actor === reviewerSlug
+          if (!canUpdate) throw new Error(`Agent "${actor}" cannot update task "${task.id}".`)
+
+          const patch: UpdateTeamTaskInput = {
+            title: input.title,
+            description: input.description,
+            ownerAgentSlug: input.ownerAgentSlug,
+            status: input.status,
+            priority: input.priority,
+            inputs: input.inputs,
+            output: input.output,
+            evidence: input.evidence,
+            approvalRequired: input.approvalRequired,
+            blockedReason: input.blockedReason,
+          }
+          if (input.reviewStatus) {
+            if (actor !== run.teamSnapshot.metadata.lead && actor !== reviewerSlug) {
+              throw new Error(`Agent "${actor}" cannot set review result for task "${task.id}".`)
+            }
+            patch.review = {
+              requestedAt: task.review?.requestedAt ?? new Date().toISOString(),
+              reviewerAgentSlug: reviewerSlug ?? actor,
+              status: input.reviewStatus,
+              findings: input.reviewFindings,
+              reviewedAt: new Date().toISOString(),
+            }
+            if (input.reviewStatus === 'passed' && !input.status) patch.status = 'done'
+            if (input.reviewStatus === 'failed' && !input.status) patch.status = 'blocked'
+          }
+          const updated = updateTeamTask(managed.workspace.rootPath, input.runId, input.taskId, patch)
+          const nextRun = this.readManagedTeamRun(managed, input.runId)
+          return {
+            task: updated,
+            run: this.emitTeamRunUpdated(managed, input.runId, nextRun.state === 'done' ? 'completed' : 'updated'),
+          }
+        },
+        sendTeamMessageFn: async (input) => {
+          const run = this.readManagedTeamRun(managed, input.runId)
+          const actor = this.resolveTeamActor(managed, run)
+          const message = sendTeamMessage(managed.workspace.rootPath, input.runId, {
+            fromAgentSlug: actor,
+            toAgentSlug: input.toAgentSlug,
+            taskId: input.taskId,
+            kind: input.kind,
+            body: input.body,
+          } satisfies SendTeamMessageInput)
+          if (input.toAgentSlug !== 'all' && input.toAgentSlug !== 'lead') {
+            await this.spawnOrWakeTeamMember(managed, input.runId, input.toAgentSlug, undefined, input.body)
+          }
+          return {
+            message,
+            run: this.emitTeamRunUpdated(managed, input.runId),
+          }
+        },
+        requestTeamReviewFn: async (input) => {
+          const run = this.readManagedTeamRun(managed, input.runId)
+          const task = run.tasks.find((candidate) => candidate.id === input.taskId)
+          if (!task) throw new Error(`Team task not found: ${input.taskId}`)
+          const reviewerAgentSlug = this.resolveReviewer(run, task, input.reviewerAgentSlug)
+          this.assertTeamMember(run, reviewerAgentSlug)
+          const updated = updateTeamTask(managed.workspace.rootPath, input.runId, input.taskId, {
+            status: 'review',
+            reviewRequired: true,
+            reviewerAgentSlug,
+            review: {
+              requestedAt: new Date().toISOString(),
+              reviewerAgentSlug,
+              status: 'requested',
+              findings: input.instructions,
+            },
+          })
+          sendTeamMessage(managed.workspace.rootPath, input.runId, {
+            fromAgentSlug: this.resolveTeamActor(managed, run),
+            toAgentSlug: reviewerAgentSlug,
+            taskId: input.taskId,
+            kind: 'review',
+            body: input.instructions || `Please review task ${input.taskId}: ${task.title}`,
+          })
+          appendTeamRunEvent(managed.workspace.rootPath, input.runId, { kind: 'review.requested', actorAgentSlug: this.resolveTeamActor(managed, run), taskId: input.taskId, body: reviewerAgentSlug })
+          const wake = await this.spawnOrWakeTeamMember(managed, input.runId, reviewerAgentSlug, updated, input.instructions)
+          return {
+            task: updated,
+            reviewerSessionId: wake.sessionId,
+            reviewerSessionStatus: wake.status,
+            run: wake.detail,
+          }
+        },
+        requestUserApprovalFn: async (input) => {
+          const run = this.readManagedTeamRun(managed, input.runId)
+          const actor = this.resolveTeamActor(managed, run)
+          const updated = updateTeamTask(managed.workspace.rootPath, input.runId, input.taskId, {
+            status: 'blocked',
+            approvalRequired: true,
+            approval: {
+              requestedAt: new Date().toISOString(),
+              requestedByAgentSlug: actor,
+              reason: input.reason,
+              status: 'requested',
+            },
+            blockedReason: `Awaiting user approval: ${input.reason}`,
+          })
+          appendTeamRunEvent(managed.workspace.rootPath, input.runId, { kind: 'approval.requested', actorAgentSlug: actor, taskId: input.taskId, body: input.reason })
+          return {
+            task: updated,
+            run: this.emitTeamRunUpdated(managed, input.runId),
+          }
+        },
+        spawnTeamMemberFn: async (input) => {
+          const run = this.readManagedTeamRun(managed, input.runId)
+          const task = input.taskId ? run.tasks.find((candidate) => candidate.id === input.taskId) : undefined
+          if (input.taskId && !task) throw new Error(`Team task not found: ${input.taskId}`)
+          const wake = await this.spawnOrWakeTeamMember(managed, input.runId, input.agentSlug, task, input.prompt)
+          return {
+            sessionId: wake.sessionId,
+            status: wake.status,
+            run: wake.detail,
+          }
+        },
+        summarizeTeamRunFn: (runId: string) => {
+          const run = this.readManagedTeamRun(managed, runId)
+          return {
+            id: run.id,
+            teamSlug: run.teamSlug,
+            state: run.state,
+            leadSessionId: run.leadSessionId,
+            memberSessionIds: run.memberSessionIds ?? {},
+            openTasks: run.tasks.filter((task) => !['done', 'failed'].includes(task.status)),
+            blockedTasks: run.tasks.filter((task) => task.status === 'blocked'),
+            reviewTasks: run.tasks.filter((task) => task.status === 'review' || task.reviewRequired),
+            approvalsNeeded: run.tasks.filter((task) => task.approval?.status === 'requested'),
+            recentMessages: run.messages.slice(-10),
+          }
         },
         resolveLabelsFn: (labels: string[]) => {
           const labelConfig = loadLabelConfig(managed.workspace.rootPath)

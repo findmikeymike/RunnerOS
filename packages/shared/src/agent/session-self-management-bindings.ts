@@ -127,6 +127,78 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'listTeamTasks', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listTeamTasksFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'createTeamTask', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.createTeamTaskFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'updateTeamTask', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.updateTeamTaskFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'listTeamMessages', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listTeamMessagesFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'sendTeamMessage', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.sendTeamMessageFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'requestTeamReview', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.requestTeamReviewFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'requestUserApproval', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.requestUserApprovalFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'spawnTeamMember', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.spawnTeamMemberFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'summarizeTeamRun', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.summarizeTeamRunFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'resolveLabels', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.resolveLabelsFn;

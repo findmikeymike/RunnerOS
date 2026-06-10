@@ -73,6 +73,24 @@ export interface SessionScopedToolCallbacks {
   getWorkflowRunFn?: (runId: string) => unknown | null;
   /** Cancel workflow run. */
   cancelWorkflowRunFn?: (runId: string) => Promise<unknown>;
+  /** List tasks for a team run. */
+  listTeamTasksFn?: (runId: string) => unknown[];
+  /** Create a task in a team run and optionally wake its owner. */
+  createTeamTaskFn?: (input: import('@craft-agent/session-tools-core').CreateTeamTaskToolInput) => Promise<unknown>;
+  /** Update a task in a team run. */
+  updateTeamTaskFn?: (input: import('@craft-agent/session-tools-core').UpdateTeamTaskToolInput) => Promise<unknown>;
+  /** List internal messages for a team run. */
+  listTeamMessagesFn?: (runId: string) => unknown[];
+  /** Send an internal team message. */
+  sendTeamMessageFn?: (input: import('@craft-agent/session-tools-core').SendTeamMessageToolInput) => Promise<unknown>;
+  /** Request reviewer verification for a task. */
+  requestTeamReviewFn?: (input: import('@craft-agent/session-tools-core').RequestTeamReviewToolInput) => Promise<unknown>;
+  /** Record user approval needed for a task. */
+  requestUserApprovalFn?: (input: import('@craft-agent/session-tools-core').RequestUserApprovalToolInput) => Promise<unknown>;
+  /** Create or resume a team member session. */
+  spawnTeamMemberFn?: (input: import('@craft-agent/session-tools-core').SpawnTeamMemberToolInput) => Promise<unknown>;
+  /** Summarize team run state. */
+  summarizeTeamRunFn?: (runId: string) => unknown;
   /** Resolve label display names to IDs. */
   resolveLabelsFn?: (labels: string[]) => import('@craft-agent/session-tools-core').ResolvedLabelsResult;
   /** Resolve a status display name to its ID. */

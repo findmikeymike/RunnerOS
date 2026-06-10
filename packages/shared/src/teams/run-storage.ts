@@ -41,7 +41,18 @@ const RUN_STATES: ReadonlySet<TeamRunState> = new Set(['created', 'running', 'bl
 const TASK_STATUSES: ReadonlySet<TeamTaskStatus> = new Set(['todo', 'in_progress', 'blocked', 'review', 'done', 'failed']);
 const TASK_PRIORITIES: ReadonlySet<TeamTaskPriority> = new Set(['low', 'normal', 'high']);
 const MESSAGE_KINDS: ReadonlySet<TeamMessageKind> = new Set(['assignment', 'question', 'result', 'review', 'note']);
-const EVENT_KINDS: ReadonlySet<TeamRunEventKind> = new Set(['run.created', 'run.updated', 'task.created', 'task.updated', 'message.sent', 'session.linked']);
+const EVENT_KINDS: ReadonlySet<TeamRunEventKind> = new Set([
+  'run.created',
+  'run.updated',
+  'task.created',
+  'task.updated',
+  'message.sent',
+  'session.linked',
+  'review.requested',
+  'approval.requested',
+]);
+const REVIEW_STATUSES: ReadonlySet<string> = new Set(['requested', 'passed', 'failed']);
+const APPROVAL_STATUSES: ReadonlySet<string> = new Set(['requested', 'approved', 'rejected']);
 
 export function isValidTeamRunId(runId: string): boolean {
   return TEAM_RUN_ID_REGEX.test(runId);
@@ -118,6 +129,10 @@ function isTeamRunSnapshot(value: unknown, expectedRunId: string): value is Team
   if (typeof value.userRequest !== 'string' || !value.userRequest.trim()) return false;
   if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
   if (value.leadSessionId !== undefined && typeof value.leadSessionId !== 'string') return false;
+  if (value.memberSessionIds !== undefined) {
+    if (!isRecord(value.memberSessionIds)) return false;
+    if (!Object.entries(value.memberSessionIds).every(([agentSlug, sessionId]) => AGENT_SLUG_REGEX.test(agentSlug) && typeof sessionId === 'string' && sessionId)) return false;
+  }
   if (value.permissionMode !== undefined && !['safe', 'ask', 'allow-all'].includes(String(value.permissionMode))) return false;
   if (value.completedAt !== undefined && typeof value.completedAt !== 'string') return false;
   if (!isRecord(value.teamSnapshot) || !isRecord(value.teamSnapshot.metadata) || typeof value.teamSnapshot.body !== 'string') return false;
@@ -135,6 +150,26 @@ function isTeamTask(value: unknown): value is TeamTask {
   if (typeof value.priority !== 'string' || !TASK_PRIORITIES.has(value.priority as TeamTaskPriority)) return false;
   if (!isRecord(value.inputs)) return false;
   if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
+  if (value.reviewRequired !== undefined && typeof value.reviewRequired !== 'boolean') return false;
+  if (value.reviewerAgentSlug !== undefined && (typeof value.reviewerAgentSlug !== 'string' || !AGENT_SLUG_REGEX.test(value.reviewerAgentSlug))) return false;
+  if (value.review !== undefined) {
+    if (!isRecord(value.review)) return false;
+    if (typeof value.review.requestedAt !== 'string') return false;
+    if (typeof value.review.reviewerAgentSlug !== 'string' || !AGENT_SLUG_REGEX.test(value.review.reviewerAgentSlug)) return false;
+    if (typeof value.review.status !== 'string' || !REVIEW_STATUSES.has(value.review.status)) return false;
+    if (value.review.findings !== undefined && typeof value.review.findings !== 'string') return false;
+    if (value.review.reviewedAt !== undefined && typeof value.review.reviewedAt !== 'string') return false;
+  }
+  if (value.approvalRequired !== undefined && typeof value.approvalRequired !== 'boolean') return false;
+  if (value.approval !== undefined) {
+    if (!isRecord(value.approval)) return false;
+    if (typeof value.approval.requestedAt !== 'string') return false;
+    if (!isActor(value.approval.requestedByAgentSlug)) return false;
+    if (typeof value.approval.reason !== 'string' || !value.approval.reason.trim()) return false;
+    if (typeof value.approval.status !== 'string' || !APPROVAL_STATUSES.has(value.approval.status)) return false;
+    if (value.approval.decidedAt !== undefined && typeof value.approval.decidedAt !== 'string') return false;
+    if (value.approval.decisionNote !== undefined && typeof value.approval.decisionNote !== 'string') return false;
+  }
   return true;
 }
 
@@ -249,6 +284,7 @@ export function createTeamTask(workspaceRootPath: string, runId: string, input: 
   if (!run) throw new Error(`Team run not found: ${runId}`);
   if (!input.title.trim()) throw new Error('Task title is required.');
   if (!AGENT_SLUG_REGEX.test(input.ownerAgentSlug)) throw new Error(`Invalid task owner: ${input.ownerAgentSlug}`);
+  if (input.reviewerAgentSlug !== undefined && !AGENT_SLUG_REGEX.test(input.reviewerAgentSlug)) throw new Error(`Invalid task reviewer: ${input.reviewerAgentSlug}`);
   const priority = input.priority ?? 'normal';
   if (!TASK_PRIORITIES.has(priority)) throw new Error(`Invalid task priority: ${priority}`);
   const now = new Date().toISOString();
@@ -262,6 +298,8 @@ export function createTeamTask(workspaceRootPath: string, runId: string, input: 
     priority,
     inputs: input.inputs ?? {},
     approvalRequired: input.approvalRequired,
+    reviewRequired: input.reviewRequired,
+    reviewerAgentSlug: input.reviewerAgentSlug,
     createdAt: now,
     updatedAt: now,
   };
@@ -281,6 +319,7 @@ export function updateTeamTask(workspaceRootPath: string, runId: string, taskId:
   if (!TASK_STATUSES.has(status)) throw new Error(`Invalid task status: ${status}`);
   if (!TASK_PRIORITIES.has(priority)) throw new Error(`Invalid task priority: ${priority}`);
   if (patch.ownerAgentSlug !== undefined && !AGENT_SLUG_REGEX.test(patch.ownerAgentSlug)) throw new Error(`Invalid task owner: ${patch.ownerAgentSlug}`);
+  if (patch.reviewerAgentSlug !== undefined && !AGENT_SLUG_REGEX.test(patch.reviewerAgentSlug)) throw new Error(`Invalid task reviewer: ${patch.reviewerAgentSlug}`);
   const next: TeamTask = {
     ...current,
     ...patch,
@@ -291,11 +330,35 @@ export function updateTeamTask(workspaceRootPath: string, runId: string, taskId:
     updatedAt: new Date().toISOString(),
   };
   if (!next.title) throw new Error('Task title is required.');
+  if (next.status === 'done' && next.reviewRequired && next.review?.status !== 'passed') {
+    throw new Error(`Task "${taskId}" requires a passed review before it can be marked done.`);
+  }
   tasks[index] = next;
   writeJsonl(join(getTeamRunDir(workspaceRootPath, runId), TASKS_FILE), tasks);
   appendTeamRunEvent(workspaceRootPath, runId, { kind: 'task.updated', taskId: next.id, actorAgentSlug: 'system', body: next.status });
   const run = readTeamRun(workspaceRootPath, runId);
   if (run) touchTeamRun(workspaceRootPath, deriveRunState(run, tasks));
+  return next;
+}
+
+export function linkTeamRunMemberSession(
+  workspaceRootPath: string,
+  runId: string,
+  agentSlug: string,
+  sessionId: string,
+): TeamRunSnapshot {
+  if (!AGENT_SLUG_REGEX.test(agentSlug)) throw new Error(`Invalid team member agent: ${agentSlug}`);
+  if (!sessionId.trim()) throw new Error('Member session id is required.');
+  const run = readTeamRun(workspaceRootPath, runId);
+  if (!run) throw new Error(`Team run not found: ${runId}`);
+  const next = touchTeamRun(workspaceRootPath, {
+    ...run,
+    memberSessionIds: {
+      ...(run.memberSessionIds ?? {}),
+      [agentSlug]: sessionId,
+    },
+  });
+  appendTeamRunEvent(workspaceRootPath, runId, { kind: 'session.linked', actorAgentSlug: agentSlug, body: sessionId });
   return next;
 }
 

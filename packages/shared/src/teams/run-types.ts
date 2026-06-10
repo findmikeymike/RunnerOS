@@ -7,12 +7,37 @@ export type TeamTaskPriority = 'low' | 'normal' | 'high';
 export type TeamMessageActor = string | 'user' | 'system';
 export type TeamMessageTarget = string | 'lead' | 'all';
 export type TeamMessageKind = 'assignment' | 'question' | 'result' | 'review' | 'note';
-export type TeamRunEventKind = 'run.created' | 'run.updated' | 'task.created' | 'task.updated' | 'message.sent' | 'session.linked';
+export type TeamRunEventKind =
+  | 'run.created'
+  | 'run.updated'
+  | 'task.created'
+  | 'task.updated'
+  | 'message.sent'
+  | 'session.linked'
+  | 'review.requested'
+  | 'approval.requested';
 
 export interface TeamTaskEvidence {
   type: 'text' | 'file' | 'url' | 'output';
   label: string;
   value: string;
+}
+
+export interface TeamTaskReview {
+  requestedAt: string;
+  reviewerAgentSlug: string;
+  status: 'requested' | 'passed' | 'failed';
+  findings?: string;
+  reviewedAt?: string;
+}
+
+export interface TeamTaskApproval {
+  requestedAt: string;
+  requestedByAgentSlug: TeamMessageActor;
+  reason: string;
+  status: 'requested' | 'approved' | 'rejected';
+  decidedAt?: string;
+  decisionNote?: string;
 }
 
 export interface TeamTask {
@@ -27,6 +52,10 @@ export interface TeamTask {
   output?: string;
   evidence?: TeamTaskEvidence[];
   approvalRequired?: boolean;
+  approval?: TeamTaskApproval;
+  reviewRequired?: boolean;
+  reviewerAgentSlug?: string;
+  review?: TeamTaskReview;
   blockedReason?: string;
   createdAt: string;
   updatedAt: string;
@@ -62,6 +91,7 @@ export interface TeamRunSnapshot {
   state: TeamRunState;
   userRequest: string;
   leadSessionId?: string;
+  memberSessionIds?: Record<string, string>;
   teamSnapshot: {
     metadata: TeamMetadata;
     body: string;
@@ -90,6 +120,8 @@ export interface CreateTeamTaskInput {
   priority?: TeamTaskPriority;
   inputs?: Record<string, unknown>;
   approvalRequired?: boolean;
+  reviewRequired?: boolean;
+  reviewerAgentSlug?: string;
 }
 
 export interface UpdateTeamTaskInput {
@@ -102,6 +134,10 @@ export interface UpdateTeamTaskInput {
   output?: string;
   evidence?: TeamTaskEvidence[];
   approvalRequired?: boolean;
+  approval?: TeamTaskApproval;
+  reviewRequired?: boolean;
+  reviewerAgentSlug?: string;
+  review?: TeamTaskReview;
   blockedReason?: string;
 }
 

@@ -62,6 +62,17 @@ import {
   handleGetWorkflowRun,
   handleCancelWorkflowRun,
 } from './handlers/workflows.ts';
+import {
+  handleCreateTeamTask,
+  handleListTeamMessages,
+  handleListTeamTasks,
+  handleRequestTeamReview,
+  handleRequestUserApproval,
+  handleSendTeamMessage,
+  handleSpawnTeamMember,
+  handleSummarizeTeamRun,
+  handleUpdateTeamTask,
+} from './handlers/teams.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -488,6 +499,79 @@ export const VisualSurfaceSchema = z.object({
 
 export const VisualSurfaceStateSchema = z.object({});
 
+export const ListTeamTasksSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+});
+
+export const CreateTeamTaskSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  title: z.string().describe('Short task title'),
+  description: z.string().describe('Detailed task instructions'),
+  ownerAgentSlug: z.string().describe('Agent slug responsible for the task'),
+  priority: z.enum(['low', 'normal', 'high']).optional().describe('Task priority'),
+  inputs: z.record(z.string(), z.unknown()).optional().describe('Structured inputs for the task'),
+  approvalRequired: z.boolean().optional().describe('Whether this task needs user approval before risky work'),
+  reviewRequired: z.boolean().optional().describe('Whether this task must pass reviewer verification before done'),
+  reviewerAgentSlug: z.string().optional().describe('Reviewer agent slug, if known'),
+});
+
+export const UpdateTeamTaskSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  taskId: z.string().describe('Task ID'),
+  title: z.string().optional(),
+  description: z.string().optional(),
+  ownerAgentSlug: z.string().optional(),
+  status: z.enum(['todo', 'in_progress', 'blocked', 'review', 'done', 'failed']).optional(),
+  priority: z.enum(['low', 'normal', 'high']).optional(),
+  inputs: z.record(z.string(), z.unknown()).optional(),
+  output: z.string().optional().describe('Task result or current output'),
+  evidence: z.array(z.object({
+    type: z.enum(['text', 'file', 'url', 'output']),
+    label: z.string(),
+    value: z.string(),
+  })).optional(),
+  approvalRequired: z.boolean().optional(),
+  blockedReason: z.string().optional(),
+  reviewStatus: z.enum(['passed', 'failed']).optional().describe('Reviewer result. Only reviewers/lead should set this.'),
+  reviewFindings: z.string().optional().describe('Reviewer findings when setting reviewStatus'),
+});
+
+export const ListTeamMessagesSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+});
+
+export const SendTeamMessageSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  toAgentSlug: z.string().describe('Recipient agent slug, "lead", or "all"'),
+  taskId: z.string().optional().describe('Related task ID'),
+  kind: z.enum(['assignment', 'question', 'result', 'review', 'note']).optional(),
+  body: z.string().describe('Message body'),
+});
+
+export const RequestTeamReviewSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  taskId: z.string().describe('Task ID to review'),
+  reviewerAgentSlug: z.string().optional().describe('Reviewer agent slug. Defaults to task reviewer or first reviewer-like team member.'),
+  instructions: z.string().optional().describe('Review instructions or concerns'),
+});
+
+export const RequestUserApprovalSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  taskId: z.string().describe('Task needing approval'),
+  reason: z.string().describe('Exact reason approval is needed'),
+});
+
+export const SpawnTeamMemberSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  agentSlug: z.string().describe('Member agent slug to create/resume'),
+  taskId: z.string().optional().describe('Optional task ID to inject'),
+  prompt: z.string().optional().describe('Optional extra instructions'),
+});
+
+export const SummarizeTeamRunSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+});
+
 // ============================================================
 // Canonical Tool Descriptions (base — no DOC_REFS)
 // ============================================================
@@ -784,6 +868,42 @@ Use this to inspect progress, step outputs, errors, and final state.`,
 
 Use this only when the user asks to stop/cancel a workflow run.`,
 
+  list_team_tasks: `List durable tasks for a RunnerOS team run.
+
+Use this before assigning, updating, or reporting team work so the task board remains the source of truth.`,
+
+  create_team_task: `Create a durable team task owned by one agent.
+
+Use this when the team lead assigns work. The runtime records the task, sends an assignment message, and can wake or create the owner member session with the task context.`,
+
+  update_team_task: `Update a team task's status, owner, output, evidence, or block reason.
+
+Tasks with reviewRequired cannot be marked done until a reviewer has passed them through request_team_review.`,
+
+  list_team_messages: `List internal team messages for a team run.
+
+Use this to inspect assignments, questions, results, review notes, and approval requests.`,
+
+  send_team_message: `Send an internal team message to the lead, a member, or the whole team.
+
+Use this for coordination tied to a team run. For assignments, prefer create_team_task so ownership is durable.`,
+
+  request_team_review: `Request reviewer verification for a task.
+
+Use this before marking important work done. The runtime moves the task into review, records reviewer metadata, and wakes the reviewer when possible.`,
+
+  request_user_approval: `Record that a task needs user approval before risky external action.
+
+Use this for publishing, spending, customer messages, deleting, refunding, deploying, or production mutation. This does not approve the action; it blocks the task for user decision.`,
+
+  spawn_team_member: `Create or resume a team member session for a run.
+
+Use this to wake a member with run context, roster, and an optional task. Fixed-roster members are allowed; dynamic members may be rejected by the workspace policy.`,
+
+  summarize_team_run: `Summarize a team run's current state.
+
+Returns run state, lead/member session links, open tasks, blocked/review tasks, approvals, and recent messages.`,
+
   send_agent_message: `Send a message to another session. The message is delivered with your session ID so the target can reply back.
 
 Use this to coordinate with spawned sessions, send follow-up instructions, or relay information between sessions.
@@ -1051,6 +1171,15 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'start_workflow', description: TOOL_DESCRIPTIONS.start_workflow, inputSchema: StartWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleStartWorkflow },
   { name: 'get_workflow_run', description: TOOL_DESCRIPTIONS.get_workflow_run, inputSchema: GetWorkflowRunSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWorkflowRun },
   { name: 'cancel_workflow_run', description: TOOL_DESCRIPTIONS.cancel_workflow_run, inputSchema: CancelWorkflowRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCancelWorkflowRun },
+  { name: 'list_team_tasks', description: TOOL_DESCRIPTIONS.list_team_tasks, inputSchema: ListTeamTasksSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListTeamTasks },
+  { name: 'create_team_task', description: TOOL_DESCRIPTIONS.create_team_task, inputSchema: CreateTeamTaskSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateTeamTask },
+  { name: 'update_team_task', description: TOOL_DESCRIPTIONS.update_team_task, inputSchema: UpdateTeamTaskSchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateTeamTask },
+  { name: 'list_team_messages', description: TOOL_DESCRIPTIONS.list_team_messages, inputSchema: ListTeamMessagesSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListTeamMessages },
+  { name: 'send_team_message', description: TOOL_DESCRIPTIONS.send_team_message, inputSchema: SendTeamMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendTeamMessage },
+  { name: 'request_team_review', description: TOOL_DESCRIPTIONS.request_team_review, inputSchema: RequestTeamReviewSchema, executionMode: 'registry', safeMode: 'block', handler: handleRequestTeamReview },
+  { name: 'request_user_approval', description: TOOL_DESCRIPTIONS.request_user_approval, inputSchema: RequestUserApprovalSchema, executionMode: 'registry', safeMode: 'block', handler: handleRequestUserApproval },
+  { name: 'spawn_team_member', description: TOOL_DESCRIPTIONS.spawn_team_member, inputSchema: SpawnTeamMemberSchema, executionMode: 'registry', safeMode: 'block', handler: handleSpawnTeamMember },
+  { name: 'summarize_team_run', description: TOOL_DESCRIPTIONS.summarize_team_run, inputSchema: SummarizeTeamRunSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSummarizeTeamRun },
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
   // Messaging gateway tools

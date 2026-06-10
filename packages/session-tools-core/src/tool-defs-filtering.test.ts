@@ -118,4 +118,32 @@ describe('session tool filtering helpers', () => {
     });
     expect(invalidThinking.success).toBe(false);
   });
+
+  it('registers team runtime tools with expected safe-mode split', () => {
+    const names = getSessionToolNames();
+    for (const name of [
+      'create_team_task',
+      'update_team_task',
+      'list_team_tasks',
+      'send_team_message',
+      'list_team_messages',
+      'request_team_review',
+      'request_user_approval',
+      'spawn_team_member',
+      'summarize_team_run',
+    ]) {
+      expect(names.has(name)).toBe(true);
+    }
+
+    const allowed = getSessionSafeAllowedToolNames();
+    const blocked = getSessionSafeBlockedToolNames();
+    expect(allowed.has('list_team_tasks')).toBe(true);
+    expect(allowed.has('list_team_messages')).toBe(true);
+    expect(allowed.has('summarize_team_run')).toBe(true);
+    expect(blocked.has('create_team_task')).toBe(true);
+    expect(blocked.has('update_team_task')).toBe(true);
+    expect(blocked.has('request_team_review')).toBe(true);
+    expect(blocked.has('request_user_approval')).toBe(true);
+    expect(blocked.has('spawn_team_member')).toBe(true);
+  });
 });

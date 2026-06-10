@@ -91,6 +91,27 @@ export type {
   CancelWorkflowRunArgs,
 } from './workflows.ts';
 
+// Teams
+export {
+  handleCreateTeamTask,
+  handleListTeamMessages,
+  handleListTeamTasks,
+  handleRequestTeamReview,
+  handleRequestUserApproval,
+  handleSendTeamMessage,
+  handleSpawnTeamMember,
+  handleSummarizeTeamRun,
+  handleUpdateTeamTask,
+} from './teams.ts';
+export type {
+  CreateTeamTaskToolInput,
+  RequestTeamReviewToolInput,
+  RequestUserApprovalToolInput,
+  SendTeamMessageToolInput,
+  SpawnTeamMemberToolInput,
+  UpdateTeamTaskToolInput,
+} from './teams.ts';
+
 // Create Agent (agent-creator skill)
 export { handleCreateAgent } from './create-agent.ts';
 export type {

@@ -6,6 +6,7 @@ import {
   createTeamTask,
   getTeamRunFile,
   isValidTeamRunId,
+  linkTeamRunMemberSession,
   listTeamRuns,
   readTeamRunDetail,
   sendTeamMessage,
@@ -115,5 +116,34 @@ describe('team run storage', () => {
     writeFileSync(join(workspace, '.runneros', 'teams', 'runs', RUN_ID, 'tasks.jsonl'), '{"bad": true}\n', { flag: 'a' });
 
     expect(readTeamRunDetail(workspace, RUN_ID)?.tasks).toHaveLength(1);
+  });
+
+  test('blocks review-required tasks from finishing until review passes and links member sessions', () => {
+    writeTeamRun(workspace, sampleRun());
+    const task = createTeamTask(workspace, RUN_ID, {
+      title: 'Change production code',
+      description: 'Implement and verify the change',
+      ownerAgentSlug: 'coder',
+      reviewRequired: true,
+      reviewerAgentSlug: 'reviewer',
+    });
+
+    expect(() => updateTeamTask(workspace, RUN_ID, task.id, { status: 'done' })).toThrow('requires a passed review');
+
+    updateTeamTask(workspace, RUN_ID, task.id, {
+      status: 'review',
+      review: {
+        requestedAt: '2026-01-01T00:01:00.000Z',
+        reviewerAgentSlug: 'reviewer',
+        status: 'passed',
+        findings: 'Looks good',
+        reviewedAt: '2026-01-01T00:02:00.000Z',
+      },
+    });
+    const done = updateTeamTask(workspace, RUN_ID, task.id, { status: 'done' });
+    expect(done.status).toBe('done');
+
+    linkTeamRunMemberSession(workspace, RUN_ID, 'coder', 'session_coder');
+    expect(readTeamRunDetail(workspace, RUN_ID)?.memberSessionIds?.coder).toBe('session_coder');
   });
 });

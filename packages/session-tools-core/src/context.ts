@@ -346,6 +346,33 @@ export interface SessionToolContext {
   /** Cancel a workflow run by run ID. Injected by backend. */
   cancelWorkflowRun?(runId: string): Promise<unknown>;
 
+  /** List tasks for a team run. Injected by backend. */
+  listTeamTasks?(runId: string): unknown[];
+
+  /** Create a task in a team run and optionally wake the owner. Injected by backend. */
+  createTeamTask?(input: import('./handlers/teams.ts').CreateTeamTaskToolInput): Promise<unknown>;
+
+  /** Update a task in a team run. Injected by backend. */
+  updateTeamTask?(input: import('./handlers/teams.ts').UpdateTeamTaskToolInput): Promise<unknown>;
+
+  /** List internal messages for a team run. Injected by backend. */
+  listTeamMessages?(runId: string): unknown[];
+
+  /** Send an internal team message. Injected by backend. */
+  sendTeamMessage?(input: import('./handlers/teams.ts').SendTeamMessageToolInput): Promise<unknown>;
+
+  /** Request reviewer verification for a team task. Injected by backend. */
+  requestTeamReview?(input: import('./handlers/teams.ts').RequestTeamReviewToolInput): Promise<unknown>;
+
+  /** Record an approval-needed state for a team task. Injected by backend. */
+  requestUserApproval?(input: import('./handlers/teams.ts').RequestUserApprovalToolInput): Promise<unknown>;
+
+  /** Create or resume a team member session. Injected by backend. */
+  spawnTeamMember?(input: import('./handlers/teams.ts').SpawnTeamMemberToolInput): Promise<unknown>;
+
+  /** Summarize a team run. Injected by backend. */
+  summarizeTeamRun?(runId: string): unknown;
+
   /** Resolve label display names to IDs against configured labels. Injected by backend. */
   resolveLabels?(labels: string[]): ResolvedLabelsResult;
 
