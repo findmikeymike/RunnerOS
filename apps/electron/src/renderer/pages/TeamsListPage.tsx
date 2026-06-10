@@ -1,13 +1,13 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Check, ExternalLink, Play, Plus, ShieldCheck, Trash2, Users, X } from 'lucide-react'
+import { Archive, Check, Copy, ExternalLink, Pencil, Play, Plus, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { useTeams } from '@/hooks/useTeams'
 import { useTeamRuns } from '@/hooks/useTeamRuns'
 import { routes } from '../../shared/routes'
-import type { TeamDTO, TeamRunDetail, TeamRunSnapshot } from '../../shared/types'
+import type { TeamDTO, TeamMetadataDTO, TeamRunDetail, TeamRunSnapshot } from '../../shared/types'
 
 interface TeamsListPageProps {
   workspaceId: string
@@ -16,19 +16,126 @@ interface TeamsListPageProps {
 
 export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPageProps) {
   const { navigate } = useNavigation()
-  const { allTeams, loading, error, remove } = useTeams()
+  const { allTeams, loading, error, upsert, remove } = useTeams()
   const { runs, detailsById, start, createTask, updateTask } = useTeamRuns(workspaceId)
   const selectedTeam = React.useMemo(
     () => allTeams.find((team) => team.slug === teamSlug) ?? null,
     [allTeams, teamSlug],
   )
-  const selectedRuntimeTeam = selectedTeam ?? allTeams[0] ?? null
+  const activeTeams = React.useMemo(() => allTeams.filter((team) => !team.metadata.archived), [allTeams])
+  const archivedTeams = React.useMemo(() => allTeams.filter((team) => team.metadata.archived), [allTeams])
+  const selectedRuntimeTeam = selectedTeam ?? activeTeams[0] ?? allTeams[0] ?? null
   const selectedRuns = React.useMemo(
     () => selectedRuntimeTeam ? runs.filter((run) => run.teamSlug === selectedRuntimeTeam.slug) : [],
     [runs, selectedRuntimeTeam],
   )
   const latestRun = selectedRuns[0] ?? null
   const latestDetail = latestRun ? detailsById[latestRun.id] : undefined
+
+  const handleCreateTeam = async () => {
+    const name = window.prompt('Team name')
+    if (!name?.trim()) return
+    const slug = window.prompt('Team slug', toSlug(name))
+    if (!slug?.trim()) return
+    const description = window.prompt('Description', 'Coordinates a reusable team of agents.') ?? ''
+    const lead = window.prompt('Lead agent slug', 'orchestrator')
+    if (!lead?.trim()) return
+    const membersText = window.prompt('Members as slug: role, one per line', 'reviewer: Verification')
+    const members = parseMembers(membersText ?? '')
+    if (members.length === 0) {
+      toast.error('Add at least one member as slug: role')
+      return
+    }
+    try {
+      const saved = await upsert({
+        slug: slug.trim(),
+        metadata: {
+          name: name.trim(),
+          description: description.trim() || 'Coordinates a reusable team of agents.',
+          lead: lead.trim(),
+          members,
+          standing: true,
+          permissionMode: 'ask',
+          verification: { default: 'advisory', requiredFor: ['code_change', 'deploy', 'publish', 'spend'] },
+        },
+        body: `# ${name.trim()}\n\nUse this team for coordinated work with explicit task ownership.`,
+      })
+      toast.success(`Created ${saved.metadata.name}`)
+      navigate(routes.view.team(saved.slug))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleEditTeam = async (team: TeamDTO) => {
+    const name = window.prompt('Team name', team.metadata.name)
+    if (!name?.trim()) return
+    const description = window.prompt('Description', team.metadata.description)
+    if (description == null) return
+    const lead = window.prompt('Lead agent slug', team.metadata.lead)
+    if (!lead?.trim()) return
+    const membersText = window.prompt('Members as slug: role, one per line', formatMembers(team.metadata.members))
+    if (membersText == null) return
+    const members = parseMembers(membersText)
+    if (members.length === 0) {
+      toast.error('Add at least one member as slug: role')
+      return
+    }
+    try {
+      const saved = await upsert({
+        slug: team.slug,
+        metadata: {
+          ...team.metadata,
+          name: name.trim(),
+          description: description.trim(),
+          lead: lead.trim(),
+          members,
+        },
+        body: team.body,
+      })
+      toast.success(`Updated ${saved.metadata.name}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleDuplicateTeam = async (team: TeamDTO) => {
+    const name = window.prompt('New team name', `${team.metadata.name} Copy`)
+    if (!name?.trim()) return
+    const slug = window.prompt('New team slug', uniqueTeamSlug(toSlug(name), allTeams))
+    if (!slug?.trim()) return
+    try {
+      const saved = await upsert({
+        slug: slug.trim(),
+        metadata: {
+          ...team.metadata,
+          name: name.trim(),
+          archived: false,
+        },
+        body: team.body,
+      })
+      toast.success(`Duplicated ${saved.metadata.name}`)
+      navigate(routes.view.team(saved.slug))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleArchiveTeam = async (team: TeamDTO) => {
+    try {
+      const saved = await upsert({
+        slug: team.slug,
+        metadata: {
+          ...team.metadata,
+          archived: !team.metadata.archived,
+        },
+        body: team.body,
+      })
+      toast.success(saved.metadata.archived ? 'Team archived' : 'Team unarchived')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   const handleDelete = async (team: TeamDTO) => {
     if (!window.confirm(`Delete ${team.metadata.name}?`)) return
@@ -112,9 +219,20 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
               Saved groups of agents with one lead, specialist members, and a verification policy.
             </p>
           </div>
-          <Badge variant="secondary" className="shrink-0 border-white/[0.08] bg-white/[0.055] text-white/70">
-            {allTeams.length} saved
-          </Badge>
+          <div className="flex shrink-0 items-center gap-2">
+            <Badge variant="secondary" className="border-white/[0.08] bg-white/[0.055] text-white/70">
+              {activeTeams.length} active
+            </Badge>
+            {archivedTeams.length ? (
+              <Badge variant="secondary" className="border-white/[0.08] bg-white/[0.035] text-white/45">
+                {archivedTeams.length} archived
+              </Badge>
+            ) : null}
+            <Button size="sm" className="h-8 bg-[#38bdf8]/18 text-white hover:bg-[#38bdf8]/26" onClick={handleCreateTeam}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              New
+            </Button>
+          </div>
         </div>
 
         {loading ? (
@@ -139,6 +257,9 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                   selected={team.slug === teamSlug}
                   onOpen={() => navigate(routes.view.team(team.slug))}
                   onStart={() => void handleStartRun(team)}
+                  onEdit={() => void handleEditTeam(team)}
+                  onDuplicate={() => void handleDuplicateTeam(team)}
+                  onArchive={() => void handleArchiveTeam(team)}
                   onDelete={() => void handleDelete(team)}
                 />
               ))}
@@ -150,6 +271,9 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 runs={selectedRuns}
                 latestDetail={latestDetail}
                 onStart={() => void handleStartRun(selectedRuntimeTeam)}
+                onEdit={() => void handleEditTeam(selectedRuntimeTeam)}
+                onDuplicate={() => void handleDuplicateTeam(selectedRuntimeTeam)}
+                onArchive={() => void handleArchiveTeam(selectedRuntimeTeam)}
                 onOpenLead={(sessionId) => navigate(routes.view.allSessions(sessionId), { newPanel: true })}
                 onCreateTask={latestRun ? () => void handleCreateTask(latestRun, selectedRuntimeTeam) : undefined}
                 onCompleteTask={latestRun ? (taskId) => void handleCompleteTask(latestRun, taskId) : undefined}
@@ -168,12 +292,18 @@ function TeamCard({
   selected,
   onOpen,
   onStart,
+  onEdit,
+  onDuplicate,
+  onArchive,
   onDelete,
 }: {
   team: TeamDTO
   selected: boolean
   onOpen: () => void
   onStart: () => void
+  onEdit: () => void
+  onDuplicate: () => void
+  onArchive: () => void
   onDelete: () => void
 }) {
   const verification = team.metadata.verification?.default ?? 'off'
@@ -209,7 +339,7 @@ function TeamCard({
         <span
           className="rounded-[7px] border border-white/[0.08] bg-white/[0.045] px-2 py-0.5 text-[10px] uppercase tracking-[0.08em] text-white/50"
         >
-          {team.metadata.standing ? 'Standing' : 'Ad hoc'}
+          {team.metadata.archived ? 'Archived' : team.metadata.standing ? 'Standing' : 'Ad hoc'}
         </span>
       </div>
 
@@ -238,6 +368,42 @@ function TeamCard({
           type="button"
           size="sm"
           variant="ghost"
+          className="h-7 px-2 text-white/50 hover:text-white"
+          onClick={(event) => {
+            event.stopPropagation()
+            onEdit()
+          }}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-white/50 hover:text-white"
+          onClick={(event) => {
+            event.stopPropagation()
+            onDuplicate()
+          }}
+        >
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-7 px-2 text-white/45 hover:text-white"
+          onClick={(event) => {
+            event.stopPropagation()
+            onArchive()
+          }}
+        >
+          <Archive className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
           className="h-7 px-2 text-white/45 hover:text-red-200"
           onClick={(event) => {
             event.stopPropagation()
@@ -256,6 +422,9 @@ function TeamDetailPanel({
   runs,
   latestDetail,
   onStart,
+  onEdit,
+  onDuplicate,
+  onArchive,
   onOpenLead,
   onCreateTask,
   onCompleteTask,
@@ -265,6 +434,9 @@ function TeamDetailPanel({
   runs: TeamRunSnapshot[]
   latestDetail?: TeamRunDetail
   onStart: () => void
+  onEdit: () => void
+  onDuplicate: () => void
+  onArchive: () => void
   onOpenLead: (sessionId: string) => void
   onCreateTask?: () => void
   onCompleteTask?: (taskId: string) => void
@@ -291,6 +463,15 @@ function TeamDetailPanel({
           <Button size="sm" className="h-8 flex-1 bg-[#38bdf8]/18 text-white hover:bg-[#38bdf8]/26" onClick={onStart}>
             <Play className="mr-1.5 h-3.5 w-3.5" />
             Start run
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={onEdit}>
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={onDuplicate}>
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+          <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={onArchive}>
+            <Archive className="h-3.5 w-3.5" />
           </Button>
           {latestRun?.leadSessionId ? (
             <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={() => onOpenLead(latestRun.leadSessionId!)}>
@@ -441,4 +622,44 @@ function TeamPill({ children }: { children: React.ReactNode }) {
       {children}
     </span>
   )
+}
+
+function toSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || 'new-team'
+}
+
+function uniqueTeamSlug(base: string, teams: TeamDTO[]): string {
+  const taken = new Set(teams.map((team) => team.slug))
+  if (!taken.has(base)) return base
+  for (let i = 2; i < 1000; i += 1) {
+    const candidate = `${base}-${i}`
+    if (!taken.has(candidate)) return candidate
+  }
+  return `${base}-${Date.now()}`
+}
+
+function parseMembers(value: string): TeamMetadataDTO['members'] {
+  const members: TeamMetadataDTO['members'] = []
+  const seen = new Set<string>()
+  for (const rawLine of value.split('\n')) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const parts = line.includes(':') ? line.split(':') : line.split(/\s+-\s+/)
+    const [rawSlug, ...roleParts] = parts
+    const slug = rawSlug?.trim()
+    const role = roleParts.join(':').trim()
+    if (!slug || !role || seen.has(slug)) continue
+    members.push({ slug, role })
+    seen.add(slug)
+  }
+  return members
+}
+
+function formatMembers(members: TeamMetadataDTO['members']): string {
+  return members.map((member) => `${member.slug}: ${member.role}`).join('\n')
 }

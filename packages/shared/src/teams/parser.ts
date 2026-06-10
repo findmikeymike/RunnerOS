@@ -30,6 +30,7 @@ const KNOWN_FIELDS = new Set([
   'lead',
   'members',
   'standing',
+  'archived',
   'permissionMode',
   'verification',
 ]);
@@ -170,6 +171,15 @@ export function parseTeamFile(
     }
   }
 
+  let archived: boolean | undefined;
+  if (data.archived !== undefined) {
+    if (typeof data.archived === 'boolean') {
+      archived = data.archived;
+    } else {
+      warnings.push(warning('archived', 'invalid-archived', 'archived must be a boolean.'));
+    }
+  }
+
   const permissionMode = coercePermissionMode(data.permissionMode, warnings);
   const verification = coerceVerification(data.verification, warnings);
   if (verification === null) return null;
@@ -182,6 +192,7 @@ export function parseTeamFile(
       lead,
       members,
       standing,
+      archived,
       permissionMode,
       verification,
     },
@@ -206,6 +217,7 @@ export function serializeTeam(metadata: TeamMetadata, body: string): string {
   };
   if (metadata.avatar) data.avatar = metadata.avatar;
   if (metadata.standing !== undefined) data.standing = metadata.standing;
+  if (metadata.archived !== undefined) data.archived = metadata.archived;
   if (metadata.permissionMode) data.permissionMode = metadata.permissionMode;
   if (metadata.verification) data.verification = metadata.verification;
   return matter.stringify(body.trimEnd() + '\n', data);
@@ -238,4 +250,3 @@ function validateSerializableTeamMetadata(metadata: TeamMetadata): void {
     }
   }
 }
-

@@ -47,6 +47,7 @@ describe('parseTeamFile', () => {
       'description: Launch products with checks.',
       'lead: head-of-biz',
       'standing: true',
+      'archived: true',
       'permissionMode: ask',
       'verification:',
       '  default: advisory',
@@ -67,6 +68,7 @@ describe('parseTeamFile', () => {
     expect(parsed).not.toBeNull();
     expect(parsed!.metadata.name).toBe('Commerce Launch Team');
     expect(parsed!.metadata.lead).toBe('head-of-biz');
+    expect(parsed!.metadata.archived).toBe(true);
     expect(parsed!.metadata.members).toHaveLength(2);
     expect(parsed!.metadata.members[0]!.requiredSources).toEqual(['shopify']);
     expect(parsed!.metadata.verification?.requiredFor).toEqual(['publish', 'spend']);
@@ -138,6 +140,7 @@ describe('serializeTeam', () => {
   test('round-trips team metadata', () => {
     const metadata = minimalMeta({
       standing: true,
+      archived: true,
       permissionMode: 'ask',
       verification: { default: 'blocking', requiredFor: ['code_change'] },
     });

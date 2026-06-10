@@ -46,6 +46,8 @@ export interface TeamMetadata {
   members: TeamMemberDefinition[];
   /** Reusable long-lived team. */
   standing?: boolean;
+  /** Hidden from normal active use without deleting the definition. */
+  archived?: boolean;
   /** Default permission mode for team-launched sessions. */
   permissionMode?: PermissionMode;
   verification?: TeamVerificationPolicy;
@@ -54,6 +56,7 @@ export interface TeamMetadata {
 export type TeamParseWarningCode =
   | 'invalid-avatar'
   | 'invalid-standing'
+  | 'invalid-archived'
   | 'invalid-permission-mode'
   | 'invalid-member-sources'
   | 'invalid-verification'
@@ -79,4 +82,3 @@ export interface LoadedTeam {
 
 export const TEAM_SLUG_REGEX = AGENT_SLUG_REGEX;
 export const TEAM_FILE = 'TEAM.md';
-
