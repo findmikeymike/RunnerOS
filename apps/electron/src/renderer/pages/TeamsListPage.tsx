@@ -14,11 +14,18 @@ interface TeamsListPageProps {
   teamSlug?: string
 }
 
+interface TeamLibraryStats {
+  activeTasks: number
+  blockedTasks: number
+  lastActivityIso?: string
+}
+
 export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPageProps) {
   const { navigate } = useNavigation()
   const { allTeams, loading, error, upsert, remove } = useTeams()
   const { runs, detailsById, get, start, createTask, updateTask, sendMessage } = useTeamRuns(workspaceId)
   const [selectedRunIdByTeam, setSelectedRunIdByTeam] = React.useState<Record<string, string>>({})
+  const requestedCardRunDetailsRef = React.useRef(new Set<string>())
   const selectedTeam = React.useMemo(
     () => allTeams.find((team) => team.slug === teamSlug) ?? null,
     [allTeams, teamSlug],
@@ -33,6 +40,25 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
   const selectedRunId = selectedRuntimeTeam ? selectedRunIdByTeam[selectedRuntimeTeam.slug] : undefined
   const activeRun = selectedRuns.find((run) => run.id === selectedRunId) ?? selectedRuns[0] ?? null
   const activeDetail = activeRun ? detailsById[activeRun.id] : undefined
+  const teamStatsBySlug = React.useMemo(() => {
+    const out = new Map<string, TeamLibraryStats>()
+    for (const team of allTeams) {
+      const teamRuns = runs.filter((run) => run.teamSlug === team.slug)
+      const details = teamRuns.map((run) => detailsById[run.id]).filter((detail): detail is TeamRunDetail => Boolean(detail))
+      const activeTasks = details.reduce((count, detail) => {
+        return count + detail.tasks.filter((task) => task.status === 'todo' || task.status === 'in_progress' || task.status === 'review').length
+      }, 0)
+      const blockedTasks = details.reduce((count, detail) => {
+        return count + detail.tasks.filter((task) => task.status === 'blocked').length
+      }, 0)
+      const lastActivityIso = teamRuns
+        .map((run) => run.updatedAt || run.createdAt)
+        .sort()
+        .at(-1)
+      out.set(team.slug, { activeTasks, blockedTasks, lastActivityIso })
+    }
+    return out
+  }, [allTeams, detailsById, runs])
 
   React.useEffect(() => {
     if (!activeRun || detailsById[activeRun.id]) return
@@ -40,6 +66,20 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
       toast.error(err instanceof Error ? err.message : String(err))
     })
   }, [activeRun, detailsById, get])
+
+  React.useEffect(() => {
+    for (const team of allTeams) {
+      const latestRun = runs.find((run) => run.teamSlug === team.slug)
+      if (!latestRun || detailsById[latestRun.id]) continue
+      const requestKey = `${workspaceId}:${latestRun.id}`
+      if (requestedCardRunDetailsRef.current.has(requestKey)) continue
+      requestedCardRunDetailsRef.current.add(requestKey)
+      void get(latestRun.id).catch((err) => {
+        requestedCardRunDetailsRef.current.delete(requestKey)
+        toast.error(err instanceof Error ? err.message : String(err))
+      })
+    }
+  }, [allTeams, detailsById, get, runs, workspaceId])
 
   const handleCreateTeam = async () => {
     const name = window.prompt('Team name')
@@ -277,6 +317,7 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 <TeamCard
                   key={team.slug}
                   team={team}
+                  stats={teamStatsBySlug.get(team.slug)}
                   selected={team.slug === teamSlug}
                   onOpen={() => navigate(routes.view.team(team.slug))}
                   onStart={() => void handleStartRun(team)}
@@ -315,6 +356,7 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
 
 function TeamCard({
   team,
+  stats,
   selected,
   onOpen,
   onStart,
@@ -324,6 +366,7 @@ function TeamCard({
   onDelete,
 }: {
   team: TeamDTO
+  stats?: TeamLibraryStats
   selected: boolean
   onOpen: () => void
   onStart: () => void
@@ -333,6 +376,7 @@ function TeamCard({
   onDelete: () => void
 }) {
   const verification = team.metadata.verification?.default ?? 'off'
+  const lastActivity = stats?.lastActivityIso ? formatRelativeTime(stats.lastActivityIso) : 'No activity'
 
   return (
     <article
@@ -375,6 +419,12 @@ function TeamCard({
         <TeamPill>Lead: {team.metadata.lead}</TeamPill>
         <TeamPill>{team.metadata.members.length} members</TeamPill>
         <TeamPill>Verify: {verification}</TeamPill>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <TeamStat label="Active" value={stats?.activeTasks ?? 0} />
+        <TeamStat label="Blocked" value={stats?.blockedTasks ?? 0} tone={(stats?.blockedTasks ?? 0) > 0 ? 'warning' : 'normal'} />
+        <TeamStat label="Activity" value={lastActivity} compact />
       </div>
 
       <div className="mt-4 flex justify-end">
@@ -777,6 +827,32 @@ function TeamPill({ children }: { children: React.ReactNode }) {
   )
 }
 
+function TeamStat({
+  label,
+  value,
+  tone = 'normal',
+  compact,
+}: {
+  label: string
+  value: React.ReactNode
+  tone?: 'normal' | 'warning'
+  compact?: boolean
+}) {
+  return (
+    <div className="min-w-0 rounded-[9px] border border-white/[0.07] bg-black/10 px-2 py-1.5">
+      <div className="truncate text-[10px] uppercase tracking-[0.08em] text-white/32">{label}</div>
+      <div className={[
+        'mt-0.5 truncate font-medium',
+        compact ? 'text-[11px]' : 'text-[13px]',
+        tone === 'warning' ? 'text-amber-100/85' : 'text-white/78',
+      ].join(' ')}
+      >
+        {value}
+      </div>
+    </div>
+  )
+}
+
 function toSlug(value: string): string {
   return value
     .trim()
@@ -784,6 +860,20 @@ function toSlug(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 64) || 'new-team'
+}
+
+function formatRelativeTime(value: string): string {
+  const time = new Date(value).getTime()
+  if (!Number.isFinite(time)) return 'Unknown'
+  const diffMs = Date.now() - time
+  if (diffMs < 60_000) return 'Now'
+  const minutes = Math.floor(diffMs / 60_000)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 30) return `${days}d ago`
+  return new Date(value).toLocaleDateString()
 }
 
 function uniqueTeamSlug(base: string, teams: TeamDTO[]): string {
