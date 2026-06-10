@@ -2,14 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   appendTeamRunEvent,
-  createTeamTask,
   deleteTeamRun,
   listTeamRuns,
   loadGlobalTeam,
-  markTeamMessagesRead,
   readTeamRun,
   readTeamRunDetail,
-  sendTeamMessage,
   touchTeamRun,
   updateTeamTask,
   writeTeamRun,
@@ -79,6 +76,23 @@ function buildLeadPrompt(teamSlug: string, input: StartTeamRunInput, run: TeamRu
     'User request:',
     input.userRequest.trim(),
   ].join('\n')
+}
+
+function assertUserApprovalPatch(current: TeamRunDetail['tasks'][number], patch: UpdateTeamTaskInput): void {
+  if (!current.approval || current.approval.status !== 'requested') {
+    throw new Error('Only requested user approval tasks can be updated from the Teams UI.')
+  }
+  const keys = Object.keys(patch).sort()
+  const allowed = new Set(['approval', 'blockedReason', 'status'])
+  if (keys.some((key) => !allowed.has(key))) {
+    throw new Error('Teams UI can only decide user approval requests. Use team tools for task work.')
+  }
+  if (!patch.approval || (patch.approval.status !== 'approved' && patch.approval.status !== 'rejected')) {
+    throw new Error('Teams UI approval updates must approve or reject the request.')
+  }
+  if (patch.status !== (patch.approval.status === 'approved' ? 'in_progress' : 'blocked')) {
+    throw new Error('Teams UI approval status does not match the task status transition.')
+  }
 }
 
 export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): void {
@@ -167,12 +181,10 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(
     RPC_CHANNELS.teamRuns.CREATE_TASK,
     async (_ctx, workspaceId: string, runId: string, input: CreateTeamTaskInput): Promise<TeamRunDetail> => {
-      const rootPath = resolveRootPath(deps, workspaceId)
-      createTeamTask(rootPath, runId, input)
-      const detail = readTeamRunDetail(rootPath, runId)
-      if (!detail) throw new Error(`Team run not found: ${runId}`)
-      broadcastUpdated(deps, workspaceId, detail, 'updated')
-      return detail
+      void workspaceId
+      void runId
+      void input
+      throw new Error('Team tasks must be created by the lead through team tools.')
     },
   )
 
@@ -180,6 +192,11 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
     RPC_CHANNELS.teamRuns.UPDATE_TASK,
     async (_ctx, workspaceId: string, runId: string, taskId: string, patch: UpdateTeamTaskInput): Promise<TeamRunDetail> => {
       const rootPath = resolveRootPath(deps, workspaceId)
+      const before = readTeamRunDetail(rootPath, runId)
+      if (!before) throw new Error(`Team run not found: ${runId}`)
+      const current = before.tasks.find((task) => task.id === taskId)
+      if (!current) throw new Error(`Team task not found: ${taskId}`)
+      assertUserApprovalPatch(current, patch)
       updateTeamTask(rootPath, runId, taskId, patch)
       const detail = readTeamRunDetail(rootPath, runId)
       if (!detail) throw new Error(`Team run not found: ${runId}`)
@@ -191,24 +208,20 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(
     RPC_CHANNELS.teamRuns.SEND_MESSAGE,
     async (_ctx, workspaceId: string, runId: string, input: SendTeamMessageInput): Promise<TeamRunDetail> => {
-      const rootPath = resolveRootPath(deps, workspaceId)
-      sendTeamMessage(rootPath, runId, input)
-      const detail = readTeamRunDetail(rootPath, runId)
-      if (!detail) throw new Error(`Team run not found: ${runId}`)
-      broadcastUpdated(deps, workspaceId, detail, 'updated')
-      return detail
+      void workspaceId
+      void runId
+      void input
+      throw new Error('Team messages are internal. Talk to the lead session instead.')
     },
   )
 
   server.handle(
     RPC_CHANNELS.teamRuns.MARK_MESSAGES_READ,
     async (_ctx, workspaceId: string, runId: string, readerAgentSlug: string): Promise<TeamRunDetail> => {
-      const rootPath = resolveRootPath(deps, workspaceId)
-      markTeamMessagesRead(rootPath, runId, readerAgentSlug)
-      const detail = readTeamRunDetail(rootPath, runId)
-      if (!detail) throw new Error(`Team run not found: ${runId}`)
-      broadcastUpdated(deps, workspaceId, detail, 'updated')
-      return detail
+      void workspaceId
+      void runId
+      void readerAgentSlug
+      throw new Error('Team message read state belongs to team agents, not the operator UI.')
     },
   )
 }

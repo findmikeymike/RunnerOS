@@ -120,7 +120,7 @@ describe('team run RPC handlers', () => {
     expect(pushCalls.at(-1)?.channel).toBe(RPC_CHANNELS.teamRuns.UPDATED)
   })
 
-  it('creates and updates tasks through run detail responses', async () => {
+  it('blocks raw task work but allows user approval decisions', async () => {
     const { handlers, server, deps } = createHarness()
     const { registerTeamRunsHandlers } = await import('./team-runs')
     registerTeamRunsHandlers(server, deps)
@@ -130,23 +130,49 @@ describe('team run RPC handlers', () => {
       userRequest: 'Build a thing.',
     })
 
-    const withTask = await handlers.get(RPC_CHANNELS.teamRuns.CREATE_TASK)!({} as any, 'workspace-1', started.id, {
+    await expect(handlers.get(RPC_CHANNELS.teamRuns.CREATE_TASK)!({} as any, 'workspace-1', started.id, {
       title: 'Implement',
       description: 'Code it',
       ownerAgentSlug: 'coder',
-    })
-    expect(withTask.tasks).toHaveLength(1)
+    })).rejects.toThrow('Team tasks must be created by the lead')
 
-    const completed = await handlers.get(RPC_CHANNELS.teamRuns.UPDATE_TASK)!({} as any, 'workspace-1', started.id, withTask.tasks[0]!.id, {
+    const task = runStorage.createTeamTask(workspaceRoot, started.id, {
+      title: 'Publish',
+      description: 'Publish customer-facing update',
+      ownerAgentSlug: 'coder',
+      approvalRequired: true,
+    })
+    runStorage.updateTeamTask(workspaceRoot, started.id, task.id, {
+      status: 'blocked',
+      approval: {
+        requestedAt: '2026-01-01T00:00:00.000Z',
+        requestedByAgentSlug: 'coder',
+        reason: 'Publish customer-facing update',
+        status: 'requested',
+      },
+      blockedReason: 'Awaiting approval',
+    })
+
+    await expect(handlers.get(RPC_CHANNELS.teamRuns.UPDATE_TASK)!({} as any, 'workspace-1', started.id, task.id, {
       status: 'done',
       output: 'Done',
+    })).rejects.toThrow('Teams UI can only decide user approval requests')
+
+    const approved = await handlers.get(RPC_CHANNELS.teamRuns.UPDATE_TASK)!({} as any, 'workspace-1', started.id, task.id, {
+      status: 'in_progress',
+      approval: {
+        requestedAt: '2026-01-01T00:00:00.000Z',
+        requestedByAgentSlug: 'coder',
+        reason: 'Publish customer-facing update',
+        status: 'approved',
+        decidedAt: '2026-01-01T00:01:00.000Z',
+      },
     })
-    expect(completed.state).toBe('done')
-    expect(completed.tasks[0]!.output).toBe('Done')
+    expect(approved.tasks[0]!.approval?.status).toBe('approved')
   })
 
-  it('marks team messages read and broadcasts the updated detail', async () => {
-    const { handlers, server, deps, pushCalls } = createHarness()
+  it('blocks raw internal message spoofing from the UI RPC surface', async () => {
+    const { handlers, server, deps } = createHarness()
     const { registerTeamRunsHandlers } = await import('./team-runs')
     registerTeamRunsHandlers(server, deps)
 
@@ -154,16 +180,15 @@ describe('team run RPC handlers', () => {
       teamSlug: 'engineering-ship-team',
       userRequest: 'Coordinate work.',
     })
-    await handlers.get(RPC_CHANNELS.teamRuns.SEND_MESSAGE)!({} as any, 'workspace-1', started.id, {
+
+    await expect(handlers.get(RPC_CHANNELS.teamRuns.SEND_MESSAGE)!({} as any, 'workspace-1', started.id, {
       fromAgentSlug: 'system-architect',
       toAgentSlug: 'coder',
       kind: 'assignment',
       body: 'Take this task.',
-    })
+    })).rejects.toThrow('Team messages are internal')
 
-    const updated = await handlers.get(RPC_CHANNELS.teamRuns.MARK_MESSAGES_READ)!({} as any, 'workspace-1', started.id, 'coder')
-    expect(updated.messages[0]!.readAt).toBeString()
-    expect(pushCalls.at(-1)?.channel).toBe(RPC_CHANNELS.teamRuns.UPDATED)
-    expect(pushCalls.at(-1)?.args[2]).toBe('updated')
+    await expect(handlers.get(RPC_CHANNELS.teamRuns.MARK_MESSAGES_READ)!({} as any, 'workspace-1', started.id, 'coder'))
+      .rejects.toThrow('read state belongs to team agents')
   })
 })

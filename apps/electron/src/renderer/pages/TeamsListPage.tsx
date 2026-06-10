@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Archive, Check, Copy, ExternalLink, MessageSquare, Pencil, Play, Plus, ShieldCheck, Trash2, Users, X } from 'lucide-react'
+import { Archive, Check, Copy, ExternalLink, Pencil, Play, Plus, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useNavigation } from '@/contexts/NavigationContext'
@@ -24,7 +24,7 @@ interface TeamLibraryStats {
 export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPageProps) {
   const { navigate } = useNavigation()
   const { allTeams, loading, error, upsert, remove } = useTeams()
-  const { runs, detailsById, get, start, createTask, updateTask, sendMessage, markMessagesRead } = useTeamRuns(workspaceId)
+  const { runs, detailsById, get, start, updateTask } = useTeamRuns(workspaceId)
   const [selectedRunIdByTeam, setSelectedRunIdByTeam] = React.useState<Record<string, string>>({})
   const requestedCardRunDetailsRef = React.useRef(new Set<string>())
   const selectedTeam = React.useMemo(
@@ -244,55 +244,6 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
     }
   }
 
-  const handleCreateTask = async (run: TeamRunSnapshot, team: TeamDTO) => {
-    const title = window.prompt('Task title')
-    if (!title?.trim()) return
-    const owner = window.prompt('Owner agent slug', team.metadata.members[0]?.slug ?? team.metadata.lead)
-    if (!owner?.trim()) return
-    try {
-      await createTask(run.id, {
-        title,
-        description: '',
-        ownerAgentSlug: owner.trim(),
-      })
-      toast.success('Task created')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const handleCompleteTask = async (run: TeamRunSnapshot, taskId: string) => {
-    try {
-      await updateTask(run.id, taskId, { status: 'done' })
-      toast.success('Task marked done')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const handleSendMessage = async (run: TeamRunSnapshot, input: { toAgentSlug: string; body: string; kind: 'note' | 'question' }) => {
-    try {
-      await sendMessage(run.id, {
-        fromAgentSlug: 'user',
-        toAgentSlug: input.toAgentSlug,
-        kind: input.kind,
-        body: input.body,
-      })
-      toast.success('Message sent')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const handleMarkMessagesRead = async (run: TeamRunSnapshot, readerAgentSlug: string) => {
-    try {
-      await markMessagesRead(run.id, readerAgentSlug)
-      toast.success('Messages marked read')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
   const handleApprovalDecision = async (run: TeamRunSnapshot, task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => {
     if (!task.approval) return
     const note = decision === 'rejected' ? window.prompt('Reason for rejection?') ?? undefined : undefined
@@ -308,78 +259,6 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
         blockedReason: decision === 'rejected' ? (note || 'User rejected approval request') : undefined,
       })
       toast.success(decision === 'approved' ? 'Approval granted' : 'Approval rejected')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const handleReviewDecision = async (
-    run: TeamRunSnapshot,
-    team: TeamDTO,
-    task: TeamRunDetail['tasks'][number],
-    status: 'passed' | 'failed',
-  ) => {
-    const findings = window.prompt(status === 'passed' ? 'Review findings (optional)' : 'Why did review fail?') ?? undefined
-    const reviewerAgentSlug = task.review?.reviewerAgentSlug
-      ?? task.reviewerAgentSlug
-      ?? team.metadata.members.find((member) => (
-        member.slug.includes('review') || member.role.toLowerCase().includes('review') || member.role.toLowerCase().includes('qa')
-      ))?.slug
-      ?? team.metadata.lead
-    const now = new Date().toISOString()
-    try {
-      await updateTask(run.id, task.id, {
-        status: status === 'passed' ? 'review' : 'blocked',
-        reviewRequired: true,
-        reviewerAgentSlug,
-        review: {
-          requestedAt: task.review?.requestedAt ?? now,
-          reviewerAgentSlug,
-          status,
-          findings: findings?.trim() || undefined,
-          reviewedAt: now,
-        },
-        blockedReason: status === 'failed' ? (findings?.trim() || 'Review failed') : undefined,
-      })
-      toast.success(status === 'passed' ? 'Review passed' : 'Review failed')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const handleAcceptReview = async (run: TeamRunSnapshot, task: TeamRunDetail['tasks'][number]) => {
-    try {
-      await updateTask(run.id, task.id, { status: 'done' })
-      toast.success('Reviewed task accepted')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const handleReopenReview = async (
-    run: TeamRunSnapshot,
-    team: TeamDTO,
-    task: TeamRunDetail['tasks'][number],
-  ) => {
-    const reviewerAgentSlug = task.review?.reviewerAgentSlug
-      ?? task.reviewerAgentSlug
-      ?? team.metadata.members.find((member) => (
-        member.slug.includes('review') || member.role.toLowerCase().includes('review') || member.role.toLowerCase().includes('qa')
-      ))?.slug
-      ?? team.metadata.lead
-    try {
-      await updateTask(run.id, task.id, {
-        status: 'in_progress',
-        reviewRequired: true,
-        reviewerAgentSlug,
-        review: {
-          requestedAt: new Date().toISOString(),
-          reviewerAgentSlug,
-          status: 'requested',
-        },
-        blockedReason: undefined,
-      })
-      toast.success('Task reopened')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
@@ -458,14 +337,7 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 onDuplicate={() => void handleDuplicateTeam(selectedRuntimeTeam)}
                 onArchive={() => void handleArchiveTeam(selectedRuntimeTeam)}
                 onOpenLead={(sessionId) => navigate(routes.view.allSessions(sessionId), { newPanel: true })}
-                onCreateTask={activeRun ? () => void handleCreateTask(activeRun, selectedRuntimeTeam) : undefined}
-                onCompleteTask={activeRun ? (taskId) => void handleCompleteTask(activeRun, taskId) : undefined}
                 onDecideApproval={activeRun ? (task, decision) => void handleApprovalDecision(activeRun, task, decision) : undefined}
-                onReviewDecision={activeRun ? (task, status) => void handleReviewDecision(activeRun, selectedRuntimeTeam, task, status) : undefined}
-                onReopenReview={activeRun ? (task) => void handleReopenReview(activeRun, selectedRuntimeTeam, task) : undefined}
-                onAcceptReview={activeRun ? (task) => void handleAcceptReview(activeRun, task) : undefined}
-                onSendMessage={activeRun ? (input) => void handleSendMessage(activeRun, input) : undefined}
-                onMarkMessagesRead={activeRun ? (readerAgentSlug) => void handleMarkMessagesRead(activeRun, readerAgentSlug) : undefined}
               />
             ) : null}
           </div>
@@ -625,14 +497,7 @@ function TeamDetailPanel({
   onDuplicate,
   onArchive,
   onOpenLead,
-  onCreateTask,
-  onCompleteTask,
   onDecideApproval,
-  onReviewDecision,
-  onReopenReview,
-  onAcceptReview,
-  onSendMessage,
-  onMarkMessagesRead,
 }: {
   team: TeamDTO
   runs: TeamRunSnapshot[]
@@ -644,14 +509,7 @@ function TeamDetailPanel({
   onDuplicate: () => void
   onArchive: () => void
   onOpenLead: (sessionId: string) => void
-  onCreateTask?: () => void
-  onCompleteTask?: (taskId: string) => void
   onDecideApproval?: (task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => void
-  onReviewDecision?: (task: TeamRunDetail['tasks'][number], status: 'passed' | 'failed') => void
-  onReopenReview?: (task: TeamRunDetail['tasks'][number]) => void
-  onAcceptReview?: (task: TeamRunDetail['tasks'][number]) => void
-  onSendMessage?: (input: { toAgentSlug: string; body: string; kind: 'note' | 'question' }) => void
-  onMarkMessagesRead?: (readerAgentSlug: string) => void
 }) {
   const verification = team.metadata.verification
   const approvalTasks = selectedDetail?.tasks.filter((task) => task.approval?.status === 'requested') ?? []
@@ -736,18 +594,9 @@ function TeamDetailPanel({
         <DetailBlock title="Task board">
           {selectedDetail ? (
             <div className="space-y-2">
-              <div className="flex justify-end">
-                {onCreateTask ? (
-                  <Button size="sm" variant="ghost" className="h-7 px-2 text-white/56 hover:text-white" onClick={onCreateTask}>
-                    <Plus className="mr-1 h-3.5 w-3.5" />
-                    Task
-                  </Button>
-                ) : null}
-              </div>
               {selectedDetail.tasks.length === 0 ? (
                 <p className="text-[12px] text-white/45">No tasks created yet.</p>
               ) : selectedDetail.tasks.map((task) => {
-                const hasReviewMaterial = Boolean(task.output?.trim() || task.evidence?.length)
                 return (
                   <div key={task.id} className="rounded-[10px] border border-white/[0.07] bg-black/10 px-3 py-2">
                     <div className="flex items-start justify-between gap-2">
@@ -757,11 +606,6 @@ function TeamDetailPanel({
                       </div>
                       <TeamPill>{task.status}</TeamPill>
                     </div>
-                    {task.status !== 'done' && onCompleteTask && !task.reviewRequired && (!task.approvalRequired || task.approval?.status === 'approved') ? (
-                      <Button size="sm" variant="ghost" className="mt-2 h-7 px-2 text-white/50 hover:text-white" onClick={() => onCompleteTask(task.id)}>
-                        Mark done
-                      </Button>
-                    ) : null}
                     {(task.reviewRequired || task.review || task.status === 'review') ? (
                       <div className="mt-2 rounded-[8px] border border-[#38bdf8]/20 bg-[#38bdf8]/10 px-2 py-1.5 text-[11px] leading-[16px] text-sky-100/78">
                         <div className="flex items-center justify-between gap-2">
@@ -785,40 +629,6 @@ function TeamDetailPanel({
                         ) : (
                           <p className="mt-1 text-white/38">No output or evidence yet.</p>
                         )}
-                        {onReviewDecision && task.review?.status !== 'passed' ? (
-                          <div className="mt-2 flex gap-2">
-                            <Button
-                              size="sm"
-                              disabled={!hasReviewMaterial}
-                              className="h-7 flex-1 bg-emerald-400/16 text-emerald-50 hover:bg-emerald-400/24 disabled:opacity-40"
-                              onClick={() => onReviewDecision(task, 'passed')}
-                            >
-                              <Check className="mr-1 h-3.5 w-3.5" />
-                              Pass
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={!hasReviewMaterial}
-                              className="h-7 flex-1 text-red-100/72 hover:text-red-50 disabled:opacity-40"
-                              onClick={() => onReviewDecision(task, 'failed')}
-                            >
-                              <X className="mr-1 h-3.5 w-3.5" />
-                              Fail
-                            </Button>
-                          </div>
-                        ) : null}
-                        {onAcceptReview && task.review?.status === 'passed' && task.status !== 'done' ? (
-                          <Button size="sm" className="mt-2 h-7 w-full bg-emerald-400/16 text-emerald-50 hover:bg-emerald-400/24" onClick={() => onAcceptReview(task)}>
-                            <Check className="mr-1 h-3.5 w-3.5" />
-                            Accept
-                          </Button>
-                        ) : null}
-                        {onReopenReview && task.review && task.review.status !== 'requested' ? (
-                          <Button size="sm" variant="ghost" className="mt-2 h-7 w-full px-2 text-white/56 hover:text-white" onClick={() => onReopenReview(task)}>
-                            Reopen
-                          </Button>
-                        ) : null}
                       </div>
                     ) : null}
                     {task.output && !task.reviewRequired ? (
@@ -858,12 +668,7 @@ function TeamDetailPanel({
 
         <DetailBlock title="Internal messages">
           {selectedDetail ? (
-            <TeamMailbox
-              team={team}
-              messages={selectedDetail.messages}
-              onSendMessage={onSendMessage}
-              onMarkMessagesRead={onMarkMessagesRead}
-            />
+            <TeamMailbox messages={selectedDetail.messages} />
           ) : (
             <p className="text-[12px] text-white/45">Start a run to use the team mailbox.</p>
           )}
@@ -960,101 +765,18 @@ function DetailBlock({ title, children }: { title: string; children: React.React
 }
 
 function TeamMailbox({
-  team,
   messages,
-  onSendMessage,
-  onMarkMessagesRead,
 }: {
-  team: TeamDTO
   messages: TeamRunDetail['messages']
-  onSendMessage?: (input: { toAgentSlug: string; body: string; kind: 'note' | 'question' }) => void
-  onMarkMessagesRead?: (readerAgentSlug: string) => void
 }) {
-  const [toAgentSlug, setToAgentSlug] = React.useState('lead')
-  const [readerAgentSlug, setReaderAgentSlug] = React.useState('lead')
-  const [kind, setKind] = React.useState<'note' | 'question'>('note')
-  const [body, setBody] = React.useState('')
-  const recipients = React.useMemo(
-    () => [
-      { slug: 'lead', label: `Lead: ${team.metadata.lead}` },
-      { slug: 'all', label: 'All members' },
-      ...team.metadata.members.map((member) => ({ slug: member.slug, label: `${member.slug} - ${member.role}` })),
-    ],
-    [team.metadata.lead, team.metadata.members],
-  )
-  const unreadCount = messages.filter((message) => (
-    !message.readAt && (message.toAgentSlug === readerAgentSlug || message.toAgentSlug === 'all')
-  )).length
-
-  const submit = (event: React.FormEvent) => {
-    event.preventDefault()
-    const trimmed = body.trim()
-    if (!trimmed || !onSendMessage) return
-    onSendMessage({ toAgentSlug, kind, body: trimmed })
-    setBody('')
-  }
+  const unreadCount = messages.filter((message) => !message.readAt).length
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
         <TeamPill>{unreadCount} unread</TeamPill>
-        <select
-          value={readerAgentSlug}
-          onChange={(event) => setReaderAgentSlug(event.target.value)}
-          className="h-7 min-w-0 flex-1 rounded-[8px] border border-white/[0.08] bg-black/20 px-2 text-[11px] text-white/70 outline-none focus:border-[#38bdf8]/35"
-        >
-          {recipients.map((recipient) => (
-            <option key={recipient.slug} value={recipient.slug} className="bg-[#111827] text-white">
-              {recipient.label}
-            </option>
-          ))}
-        </select>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={!unreadCount || !onMarkMessagesRead}
-          className="h-7 px-2 text-white/52 hover:text-white"
-          onClick={() => onMarkMessagesRead?.(readerAgentSlug)}
-        >
-          Mark read
-        </Button>
+        <span className="text-[11px] text-white/38">Internal agent mailbox</span>
       </div>
-
-      <form className="space-y-2" onSubmit={submit}>
-        <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-2">
-          <select
-            value={toAgentSlug}
-            onChange={(event) => setToAgentSlug(event.target.value)}
-            className="h-8 rounded-[8px] border border-white/[0.08] bg-black/20 px-2 text-[12px] text-white/78 outline-none focus:border-[#38bdf8]/35"
-          >
-            {recipients.map((recipient) => (
-              <option key={recipient.slug} value={recipient.slug} className="bg-[#111827] text-white">
-                {recipient.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={kind}
-            onChange={(event) => setKind(event.target.value as 'note' | 'question')}
-            className="h-8 rounded-[8px] border border-white/[0.08] bg-black/20 px-2 text-[12px] text-white/78 outline-none focus:border-[#38bdf8]/35"
-          >
-            <option value="note" className="bg-[#111827] text-white">Note</option>
-            <option value="question" className="bg-[#111827] text-white">Question</option>
-          </select>
-        </div>
-        <textarea
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          rows={3}
-          placeholder="Message the team..."
-          className="w-full resize-none rounded-[10px] border border-white/[0.08] bg-black/20 px-3 py-2 text-[12px] leading-[17px] text-white/80 outline-none placeholder:text-white/28 focus:border-[#38bdf8]/35"
-        />
-        <Button type="submit" size="sm" disabled={!body.trim() || !onSendMessage} className="h-8 w-full bg-[#38bdf8]/18 text-white hover:bg-[#38bdf8]/26">
-          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-          Send message
-        </Button>
-      </form>
 
       {messages.length ? (
         <div className="space-y-2">
