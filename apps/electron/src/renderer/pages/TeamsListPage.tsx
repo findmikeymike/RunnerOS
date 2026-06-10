@@ -873,7 +873,19 @@ function TeamDetailPanel({
           <div className="space-y-2">
             {team.metadata.members.map((member) => (
               <div key={member.slug} className="rounded-[10px] border border-white/[0.07] bg-black/10 px-3 py-2">
-                <div className="text-[12px] font-medium text-white/86">@{member.slug}</div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0 truncate text-[12px] font-medium text-white/86">@{member.slug}</div>
+                  {selectedDetail?.memberSessionIds?.[member.slug] ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 shrink-0 px-2 text-white/52 hover:text-white"
+                      onClick={() => onOpenLead(selectedDetail.memberSessionIds![member.slug]!)}
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : null}
+                </div>
                 <div className="mt-0.5 text-[11px] leading-[16px] text-white/50">{member.role}</div>
               </div>
             ))}
