@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAtom } from 'jotai'
 import { teamRunsStateAtomFamily, type TeamRunsState } from '@/atoms/team-runs'
-import type { CreateTeamTaskInput, StartTeamRunInput, TeamRunDetail, TeamRunSnapshot, UpdateTeamTaskInput } from '../../shared/types'
+import type { CreateTeamTaskInput, SendTeamMessageInput, StartTeamRunInput, TeamRunDetail, TeamRunSnapshot, UpdateTeamTaskInput } from '../../shared/types'
 
 export interface UseTeamRunsResult {
   runs: TeamRunSnapshot[]
@@ -9,9 +9,11 @@ export interface UseTeamRunsResult {
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
+  get: (runId: string) => Promise<TeamRunDetail | null>
   start: (input: StartTeamRunInput) => Promise<TeamRunDetail>
   createTask: (runId: string, input: CreateTeamTaskInput) => Promise<TeamRunDetail>
   updateTask: (runId: string, taskId: string, patch: UpdateTeamTaskInput) => Promise<TeamRunDetail>
+  sendMessage: (runId: string, input: SendTeamMessageInput) => Promise<TeamRunDetail>
   remove: (runId: string) => Promise<boolean>
 }
 
@@ -82,6 +84,13 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
     return run
   }, [setState, workspaceId, workspaceKey])
 
+  const get = useCallback(async (runId: string): Promise<TeamRunDetail | null> => {
+    if (!workspaceId) throw new Error('Workspace is required to load a team run.')
+    const detail = await window.electronAPI.getTeamRun(workspaceId, runId)
+    if (detail) setState((prev) => upsertDetail(prev, detail))
+    return detail
+  }, [setState, workspaceId])
+
   useEffect(() => {
     refreshersByWorkspaceKey.set(workspaceKey, refresh)
     return () => {
@@ -142,6 +151,13 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
     return detail
   }, [setState, workspaceId])
 
+  const sendMessage = useCallback(async (runId: string, input: SendTeamMessageInput): Promise<TeamRunDetail> => {
+    if (!workspaceId) throw new Error('Workspace is required to send a team message.')
+    const detail = await window.electronAPI.sendTeamMessage(workspaceId, runId, input)
+    setState((prev) => upsertDetail(prev, detail))
+    return detail
+  }, [setState, workspaceId])
+
   const remove = useCallback(async (runId: string) => {
     if (!workspaceId) return false
     const ok = await window.electronAPI.deleteTeamRun(workspaceId, runId)
@@ -165,9 +181,11 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
     loading: state.loading,
     error: state.error,
     refresh,
+    get,
     start,
     createTask,
     updateTask,
+    sendMessage,
     remove,
   }
 }

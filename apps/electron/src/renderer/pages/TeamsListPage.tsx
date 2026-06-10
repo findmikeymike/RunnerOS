@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Archive, Check, Copy, ExternalLink, Pencil, Play, Plus, ShieldCheck, Trash2, Users, X } from 'lucide-react'
+import { Archive, Check, Copy, ExternalLink, MessageSquare, Pencil, Play, Plus, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useNavigation } from '@/contexts/NavigationContext'
@@ -17,7 +17,8 @@ interface TeamsListPageProps {
 export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPageProps) {
   const { navigate } = useNavigation()
   const { allTeams, loading, error, upsert, remove } = useTeams()
-  const { runs, detailsById, start, createTask, updateTask } = useTeamRuns(workspaceId)
+  const { runs, detailsById, get, start, createTask, updateTask, sendMessage } = useTeamRuns(workspaceId)
+  const [selectedRunIdByTeam, setSelectedRunIdByTeam] = React.useState<Record<string, string>>({})
   const selectedTeam = React.useMemo(
     () => allTeams.find((team) => team.slug === teamSlug) ?? null,
     [allTeams, teamSlug],
@@ -29,8 +30,16 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
     () => selectedRuntimeTeam ? runs.filter((run) => run.teamSlug === selectedRuntimeTeam.slug) : [],
     [runs, selectedRuntimeTeam],
   )
-  const latestRun = selectedRuns[0] ?? null
-  const latestDetail = latestRun ? detailsById[latestRun.id] : undefined
+  const selectedRunId = selectedRuntimeTeam ? selectedRunIdByTeam[selectedRuntimeTeam.slug] : undefined
+  const activeRun = selectedRuns.find((run) => run.id === selectedRunId) ?? selectedRuns[0] ?? null
+  const activeDetail = activeRun ? detailsById[activeRun.id] : undefined
+
+  React.useEffect(() => {
+    if (!activeRun || detailsById[activeRun.id]) return
+    void get(activeRun.id).catch((err) => {
+      toast.error(err instanceof Error ? err.message : String(err))
+    })
+  }, [activeRun, detailsById, get])
 
   const handleCreateTeam = async () => {
     const name = window.prompt('Team name')
@@ -189,6 +198,20 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
     }
   }
 
+  const handleSendMessage = async (run: TeamRunSnapshot, input: { toAgentSlug: string; body: string; kind: 'note' | 'question' }) => {
+    try {
+      await sendMessage(run.id, {
+        fromAgentSlug: 'user',
+        toAgentSlug: input.toAgentSlug,
+        kind: input.kind,
+        body: input.body,
+      })
+      toast.success('Message sent')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const handleApprovalDecision = async (run: TeamRunSnapshot, task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => {
     if (!task.approval) return
     const note = decision === 'rejected' ? window.prompt('Reason for rejection?') ?? undefined : undefined
@@ -269,15 +292,18 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
               <TeamDetailPanel
                 team={selectedRuntimeTeam}
                 runs={selectedRuns}
-                latestDetail={latestDetail}
+                selectedRun={activeRun}
+                selectedDetail={activeDetail}
+                onSelectRun={(runId) => setSelectedRunIdByTeam((prev) => ({ ...prev, [selectedRuntimeTeam.slug]: runId }))}
                 onStart={() => void handleStartRun(selectedRuntimeTeam)}
                 onEdit={() => void handleEditTeam(selectedRuntimeTeam)}
                 onDuplicate={() => void handleDuplicateTeam(selectedRuntimeTeam)}
                 onArchive={() => void handleArchiveTeam(selectedRuntimeTeam)}
                 onOpenLead={(sessionId) => navigate(routes.view.allSessions(sessionId), { newPanel: true })}
-                onCreateTask={latestRun ? () => void handleCreateTask(latestRun, selectedRuntimeTeam) : undefined}
-                onCompleteTask={latestRun ? (taskId) => void handleCompleteTask(latestRun, taskId) : undefined}
-                onDecideApproval={latestRun ? (task, decision) => void handleApprovalDecision(latestRun, task, decision) : undefined}
+                onCreateTask={activeRun ? () => void handleCreateTask(activeRun, selectedRuntimeTeam) : undefined}
+                onCompleteTask={activeRun ? (taskId) => void handleCompleteTask(activeRun, taskId) : undefined}
+                onDecideApproval={activeRun ? (task, decision) => void handleApprovalDecision(activeRun, task, decision) : undefined}
+                onSendMessage={activeRun ? (input) => void handleSendMessage(activeRun, input) : undefined}
               />
             ) : null}
           </div>
@@ -420,7 +446,9 @@ function TeamCard({
 function TeamDetailPanel({
   team,
   runs,
-  latestDetail,
+  selectedRun,
+  selectedDetail,
+  onSelectRun,
   onStart,
   onEdit,
   onDuplicate,
@@ -429,10 +457,13 @@ function TeamDetailPanel({
   onCreateTask,
   onCompleteTask,
   onDecideApproval,
+  onSendMessage,
 }: {
   team: TeamDTO
   runs: TeamRunSnapshot[]
-  latestDetail?: TeamRunDetail
+  selectedRun?: TeamRunSnapshot | null
+  selectedDetail?: TeamRunDetail
+  onSelectRun: (runId: string) => void
   onStart: () => void
   onEdit: () => void
   onDuplicate: () => void
@@ -441,10 +472,10 @@ function TeamDetailPanel({
   onCreateTask?: () => void
   onCompleteTask?: (taskId: string) => void
   onDecideApproval?: (task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => void
+  onSendMessage?: (input: { toAgentSlug: string; body: string; kind: 'note' | 'question' }) => void
 }) {
   const verification = team.metadata.verification
-  const latestRun = runs[0]
-  const approvalTasks = latestDetail?.tasks.filter((task) => task.approval?.status === 'requested') ?? []
+  const approvalTasks = selectedDetail?.tasks.filter((task) => task.approval?.status === 'requested') ?? []
 
   return (
     <aside className="rounded-[14px] border border-white/[0.08] bg-white/[0.035] p-4">
@@ -473,8 +504,8 @@ function TeamDetailPanel({
           <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={onArchive}>
             <Archive className="h-3.5 w-3.5" />
           </Button>
-          {latestRun?.leadSessionId ? (
-            <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={() => onOpenLead(latestRun.leadSessionId!)}>
+          {selectedRun?.leadSessionId ? (
+            <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={() => onOpenLead(selectedRun.leadSessionId!)}>
               <ExternalLink className="h-3.5 w-3.5" />
             </Button>
           ) : null}
@@ -484,22 +515,47 @@ function TeamDetailPanel({
           <TeamPill>{team.metadata.lead}</TeamPill>
         </DetailBlock>
 
-        <DetailBlock title="Latest run">
-          {latestRun ? (
-            <div className="rounded-[10px] border border-white/[0.07] bg-black/10 px-3 py-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[12px] font-medium text-white/86">{latestRun.state}</span>
-                <span className="text-[10px] text-white/36">{new Date(latestRun.createdAt).toLocaleString()}</span>
-              </div>
-              <p className="mt-1 line-clamp-2 text-[11px] leading-[16px] text-white/50">{latestRun.userRequest}</p>
+        <DetailBlock title="Runs">
+          {runs.length ? (
+            <div className="space-y-2">
+              {runs.slice(0, 5).map((run) => (
+                <button
+                  key={run.id}
+                  type="button"
+                  onClick={() => onSelectRun(run.id)}
+                  className={[
+                    'w-full rounded-[10px] border px-3 py-2 text-left transition-colors',
+                    selectedRun?.id === run.id
+                      ? 'border-[#38bdf8]/30 bg-[#38bdf8]/10'
+                      : 'border-white/[0.07] bg-black/10 hover:bg-white/[0.045]',
+                  ].join(' ')}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[12px] font-medium text-white/86">{run.state}</span>
+                    <span className="text-[10px] text-white/36">{new Date(run.createdAt).toLocaleString()}</span>
+                  </div>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-[16px] text-white/50">{run.userRequest}</p>
+                </button>
+              ))}
             </div>
           ) : (
             <p className="text-[12px] text-white/45">No runs yet.</p>
           )}
         </DetailBlock>
 
+        <DetailBlock title="Lead conversation">
+          {selectedRun?.leadSessionId ? (
+            <Button size="sm" variant="ghost" className="h-8 w-full justify-start px-2 text-white/62 hover:text-white" onClick={() => onOpenLead(selectedRun.leadSessionId!)}>
+              <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+              Open lead session
+            </Button>
+          ) : (
+            <p className="text-[12px] text-white/45">Start a run to create the lead session.</p>
+          )}
+        </DetailBlock>
+
         <DetailBlock title="Task board">
-          {latestDetail ? (
+          {selectedDetail ? (
             <div className="space-y-2">
               <div className="flex justify-end">
                 {onCreateTask ? (
@@ -509,9 +565,9 @@ function TeamDetailPanel({
                   </Button>
                 ) : null}
               </div>
-              {latestDetail.tasks.length === 0 ? (
+              {selectedDetail.tasks.length === 0 ? (
                 <p className="text-[12px] text-white/45">No tasks created yet.</p>
-              ) : latestDetail.tasks.map((task) => (
+              ) : selectedDetail.tasks.map((task) => (
                 <div key={task.id} className="rounded-[10px] border border-white/[0.07] bg-black/10 px-3 py-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -535,6 +591,18 @@ function TeamDetailPanel({
             </div>
           ) : (
             <p className="text-[12px] text-white/45">Start a run to create tasks.</p>
+          )}
+        </DetailBlock>
+
+        <DetailBlock title="Internal messages">
+          {selectedDetail ? (
+            <TeamMailbox
+              team={team}
+              messages={selectedDetail.messages}
+              onSendMessage={onSendMessage}
+            />
+          ) : (
+            <p className="text-[12px] text-white/45">Start a run to use the team mailbox.</p>
           )}
         </DetailBlock>
 
@@ -589,9 +657,9 @@ function TeamDetailPanel({
         </DetailBlock>
 
         <DetailBlock title="Activity">
-          {latestDetail?.events.length ? (
+          {selectedDetail?.events.length ? (
             <div className="space-y-1.5">
-              {latestDetail.events.slice(-5).reverse().map((event) => (
+              {selectedDetail.events.slice(-8).reverse().map((event) => (
                 <div key={event.id} className="text-[11px] leading-[16px] text-white/45">
                   <span className="text-white/66">{event.kind}</span>
                   {event.body ? `: ${event.body}` : ''}
@@ -613,6 +681,91 @@ function DetailBlock({ title, children }: { title: string; children: React.React
       <h3 className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-white/36">{title}</h3>
       {children}
     </section>
+  )
+}
+
+function TeamMailbox({
+  team,
+  messages,
+  onSendMessage,
+}: {
+  team: TeamDTO
+  messages: TeamRunDetail['messages']
+  onSendMessage?: (input: { toAgentSlug: string; body: string; kind: 'note' | 'question' }) => void
+}) {
+  const [toAgentSlug, setToAgentSlug] = React.useState('lead')
+  const [kind, setKind] = React.useState<'note' | 'question'>('note')
+  const [body, setBody] = React.useState('')
+  const recipients = React.useMemo(
+    () => [
+      { slug: 'lead', label: `Lead: ${team.metadata.lead}` },
+      { slug: 'all', label: 'All members' },
+      ...team.metadata.members.map((member) => ({ slug: member.slug, label: `${member.slug} - ${member.role}` })),
+    ],
+    [team.metadata.lead, team.metadata.members],
+  )
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault()
+    const trimmed = body.trim()
+    if (!trimmed || !onSendMessage) return
+    onSendMessage({ toAgentSlug, kind, body: trimmed })
+    setBody('')
+  }
+
+  return (
+    <div className="space-y-3">
+      <form className="space-y-2" onSubmit={submit}>
+        <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-2">
+          <select
+            value={toAgentSlug}
+            onChange={(event) => setToAgentSlug(event.target.value)}
+            className="h-8 rounded-[8px] border border-white/[0.08] bg-black/20 px-2 text-[12px] text-white/78 outline-none focus:border-[#38bdf8]/35"
+          >
+            {recipients.map((recipient) => (
+              <option key={recipient.slug} value={recipient.slug} className="bg-[#111827] text-white">
+                {recipient.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={kind}
+            onChange={(event) => setKind(event.target.value as 'note' | 'question')}
+            className="h-8 rounded-[8px] border border-white/[0.08] bg-black/20 px-2 text-[12px] text-white/78 outline-none focus:border-[#38bdf8]/35"
+          >
+            <option value="note" className="bg-[#111827] text-white">Note</option>
+            <option value="question" className="bg-[#111827] text-white">Question</option>
+          </select>
+        </div>
+        <textarea
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          rows={3}
+          placeholder="Message the team..."
+          className="w-full resize-none rounded-[10px] border border-white/[0.08] bg-black/20 px-3 py-2 text-[12px] leading-[17px] text-white/80 outline-none placeholder:text-white/28 focus:border-[#38bdf8]/35"
+        />
+        <Button type="submit" size="sm" disabled={!body.trim() || !onSendMessage} className="h-8 w-full bg-[#38bdf8]/18 text-white hover:bg-[#38bdf8]/26">
+          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+          Send message
+        </Button>
+      </form>
+
+      {messages.length ? (
+        <div className="space-y-2">
+          {messages.slice(-6).reverse().map((message) => (
+            <div key={message.id} className="rounded-[10px] border border-white/[0.07] bg-black/10 px-3 py-2">
+              <div className="flex items-center justify-between gap-2 text-[11px] text-white/42">
+                <span>{message.fromAgentSlug} {'->'} {message.toAgentSlug}</span>
+                <span>{message.kind}</span>
+              </div>
+              <p className="mt-1 text-[12px] leading-[17px] text-white/70">{message.body}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[12px] text-white/45">No internal messages yet.</p>
+      )}
+    </div>
   )
 }
 
