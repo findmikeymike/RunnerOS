@@ -74,6 +74,10 @@ export interface WorkflowRunStep {
   state: WorkflowRunStepState;
   /** Session spawned to execute this step. Set once `running`. */
   sessionId?: string;
+  /** Team run launched by this step. Set for `team` workflow steps. */
+  teamRunId?: string;
+  /** Team slug launched by this step. Set for `team` workflow steps. */
+  teamSlug?: string;
   /** Compact receipt of the resolved agent bundle used for this step. */
   executionReceipt?: WorkflowStepExecutionReceipt;
   startedAt?: string;

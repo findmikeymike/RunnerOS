@@ -90,6 +90,16 @@ export interface WorkflowRunnerDeps {
     workspaceId: string,
     agentSlug: string,
   ) => Promise<void> | void;
+  /** Cheap preflight for team-step availability before a run is persisted. */
+  preflightStepTeam?: (
+    workspaceId: string,
+    teamSlug: string,
+  ) => Promise<void> | void;
+  /** Launch a Team run for a workflow `team` step. */
+  startTeamRun?: (
+    workspaceId: string,
+    input: { teamSlug: string; userRequest: string },
+  ) => Promise<{ id: string; leadSessionId?: string }>;
   /**
    * Send a message and wait for the LLM turn to complete. Mirrors
    * `SessionManager.sendMessage` — that method already returns when the
@@ -348,16 +358,29 @@ export class WorkflowRunner {
   }
 
   private async preflightStepAgents(workspaceId: string, steps: WorkflowStep[]): Promise<void> {
-    if (!this.deps.preflightStepAgent) return;
     const seen = new Set<string>();
     for (const step of steps) {
-      if (seen.has(step.agent)) continue;
-      seen.add(step.agent);
-      try {
-        await this.deps.preflightStepAgent(workspaceId, step.agent);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        throw new Error(`Workflow step "${step.id}" references unavailable agent "${step.agent}": ${message}`);
+      if (step.agent && this.deps.preflightStepAgent) {
+        const key = `agent:${step.agent}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        try {
+          await this.deps.preflightStepAgent(workspaceId, step.agent);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          throw new Error(`Workflow step "${step.id}" references unavailable agent "${step.agent}": ${message}`);
+        }
+      }
+      if (step.team && this.deps.preflightStepTeam) {
+        const key = `team:${step.team}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        try {
+          await this.deps.preflightStepTeam(workspaceId, step.team);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          throw new Error(`Workflow step "${step.id}" references unavailable team "${step.team}": ${message}`);
+        }
       }
     }
   }
@@ -488,6 +511,8 @@ export class WorkflowRunner {
         stepRecord.output = undefined;
         stepRecord.completion = undefined;
         stepRecord.sessionId = undefined;
+        stepRecord.teamRunId = undefined;
+        stepRecord.teamSlug = undefined;
         stepRecord.executionReceipt = undefined;
         stepRecord.completedAt = undefined;
         this.touch(active);
@@ -578,6 +603,11 @@ export class WorkflowRunner {
     const workflow = active.snapshot.workflowSnapshot;
     const stepRecord = active.snapshot.steps.find((s) => s.id === stepDef.id);
     if (!stepRecord) throw new StepAttemptError('step-record-missing', `Missing run step record for "${stepDef.id}".`);
+    if (stepDef.team) {
+      await this.executeTeamStepAttempt(active, stepDef, prompt);
+      return;
+    }
+    if (!stepDef.agent) throw new StepAttemptError('step-target-missing', `Workflow step "${stepDef.id}" has no agent or team target.`);
 
     const resolvedAgentOptions = await this.deps.resolveAgentSessionOptions?.(
       active.snapshot.workspaceId,
@@ -640,6 +670,37 @@ export class WorkflowRunner {
     stepRecord.output = parsed.value;
   }
 
+  private async executeTeamStepAttempt(
+    active: ActiveRun,
+    stepDef: WorkflowStep,
+    prompt: string,
+  ): Promise<void> {
+    if (!stepDef.team) throw new StepAttemptError('team-target-missing', `Workflow step "${stepDef.id}" has no team target.`);
+    if (!this.deps.startTeamRun) {
+      throw new StepAttemptError('team-runner-unavailable', 'Workflow runner is not configured to start team runs.');
+    }
+    const stepRecord = active.snapshot.steps.find((s) => s.id === stepDef.id);
+    if (!stepRecord) throw new StepAttemptError('step-record-missing', `Missing run step record for "${stepDef.id}".`);
+
+    const userRequest = this.buildTeamStepRequest(prompt, active.snapshot.workflowSnapshot.metadata.name, stepDef);
+    const detail = await this.deps.startTeamRun(active.snapshot.workspaceId, {
+      teamSlug: stepDef.team,
+      userRequest,
+    });
+    stepRecord.teamRunId = detail.id;
+    stepRecord.teamSlug = stepDef.team;
+    stepRecord.completion = {
+      outputChars: userRequest.length,
+      satisfied: true,
+    };
+    stepRecord.output = {
+      type: 'team-run',
+      teamSlug: stepDef.team,
+      runId: detail.id,
+      leadSessionId: detail.leadSessionId,
+    };
+  }
+
   private buildExecutionReceipt(
     stepDef: WorkflowStep,
     agentOptions: Partial<CreateSessionOptions>,
@@ -650,7 +711,7 @@ export class WorkflowRunner {
     return {
       createdAt: new Date().toISOString(),
       agent: {
-        slug: agentOptions.spawnedFromAgent?.agentSlug ?? receipt?.agent?.slug ?? stepDef.agent,
+        slug: agentOptions.spawnedFromAgent?.agentSlug ?? receipt?.agent?.slug ?? stepDef.agent ?? 'unknown',
         name: agentOptions.spawnedFromAgent?.agentName ?? receipt?.agent?.name,
       },
       config: {
@@ -699,6 +760,15 @@ export class WorkflowRunner {
     return stepDef.outputSchema
       ? appendOutputSchemaInstruction(withCompletionContract, stepDef.outputSchema)
       : withCompletionContract;
+  }
+
+  private buildTeamStepRequest(prompt: string, workflowName: string, stepDef: WorkflowStep): string {
+    return [
+      `Workflow "${workflowName}" launched this team step.`,
+      `Step: ${stepDef.id}`,
+      '',
+      prompt.trim(),
+    ].join('\n');
   }
 
   private validateCompletion(

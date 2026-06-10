@@ -3,6 +3,7 @@ import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
 import { isValidWorkflowOutputSchema } from './output-schema.ts';
 import { validateTemplateReferences } from './template.ts';
 import {
+  WORKFLOW_TEAM_SLUG_REGEX,
   WORKFLOW_SLUG_REGEX,
   type WorkflowMetadata,
   type WorkflowOutputContract,
@@ -180,6 +181,7 @@ function coerceOutputs(raw: unknown, warnings: WorkflowParseWarning[]): Workflow
 interface RawStep {
   id?: unknown;
   agent?: unknown;
+  team?: unknown;
   input?: unknown;
   description?: unknown;
   outputSchema?: unknown;
@@ -270,17 +272,22 @@ export function parseWorkflowFile(
     if (hasUnsupportedExecutionField(rawStep as Record<string, unknown>)) return null;
     const id = typeof rawStep.id === 'string' ? rawStep.id.trim() : '';
     const agent = typeof rawStep.agent === 'string' ? rawStep.agent.trim() : '';
+    const team = typeof rawStep.team === 'string' ? rawStep.team.trim() : '';
     const input = typeof rawStep.input === 'string' ? rawStep.input : '';
 
     if (!id || !WORKFLOW_SLUG_REGEX.test(id)) return null;
     if (seenIds.has(id)) return null;
-    if (!agent || !AGENT_SLUG_REGEX.test(agent)) return null;
+    if ((agent ? 1 : 0) + (team ? 1 : 0) !== 1) return null;
+    if (agent && !AGENT_SLUG_REGEX.test(agent)) return null;
+    if (team && !WORKFLOW_TEAM_SLUG_REGEX.test(team)) return null;
     if (!input) return null;
 
     const refErrors = validateTemplateReferences(input, previousIds, triggerInputNames);
     if (refErrors.length > 0) return null;
 
-    const step: WorkflowStep = { id, agent, input };
+    const step: WorkflowStep = { id, input };
+    if (agent) step.agent = agent;
+    if (team) step.team = team;
     if (typeof rawStep.description === 'string' && rawStep.description.trim()) {
       step.description = rawStep.description.trim();
     } else if (rawStep.description !== undefined && typeof rawStep.description !== 'string') {
@@ -372,7 +379,9 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
   if (metadata.outputs) data.outputs = metadata.outputs;
 
   data.steps = metadata.steps.map((s) => {
-    const out: Record<string, unknown> = { id: s.id, agent: s.agent, input: s.input };
+    const out: Record<string, unknown> = { id: s.id, input: s.input };
+    if (s.agent) out.agent = s.agent;
+    if (s.team) out.team = s.team;
     if (s.description) out.description = s.description;
     if (s.outputSchema) out.outputSchema = s.outputSchema;
     if (s.timeout !== undefined) out.timeout = s.timeout;

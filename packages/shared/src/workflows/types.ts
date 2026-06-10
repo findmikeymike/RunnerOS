@@ -18,6 +18,7 @@
  */
 
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
+import { TEAM_SLUG_REGEX } from '../teams/types.ts';
 import type { OutputKind } from '../outputs/types.ts';
 
 /** Where a workflow definition was loaded from. Phase 1: only `global`. */
@@ -85,7 +86,9 @@ export interface WorkflowStep {
   /** Unique slug within this workflow; referenced as `{{steps.<id>.output}}`. */
   id: string;
   /** Agent slug to run. Existence is checked at run time, not parse time. */
-  agent: string;
+  agent?: string;
+  /** Team slug to launch. Mutually exclusive with `agent`. */
+  team?: string;
   /** User-message template for the step's session. Supports `{{...}}`. */
   input: string;
   /** Optional human-readable note describing the step. UI hint only. */
@@ -145,6 +148,9 @@ export interface LoadedWorkflow {
 
 /** Same slug shape as agents/skills — keeps @-mentions uniform. */
 export const WORKFLOW_SLUG_REGEX = AGENT_SLUG_REGEX;
+
+/** Team step target slug shape. */
+export const WORKFLOW_TEAM_SLUG_REGEX = TEAM_SLUG_REGEX;
 
 /** Filename used inside each workflow's directory. */
 export const WORKFLOW_FILE = 'WORKFLOW.md';

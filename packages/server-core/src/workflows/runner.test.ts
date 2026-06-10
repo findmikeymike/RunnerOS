@@ -85,6 +85,7 @@ interface MockHarness {
   deps: WorkflowRunnerDeps;
   sessions: Map<string, SessionRecord>;
   promptsSent: Array<{ sessionId: string; prompt: string }>;
+  teamRunsStarted: Array<{ workspaceId: string; teamSlug: string; userRequest: string }>;
   events: WorkflowRunEvent[];
   /** Override what `sendMessage` does for a given step index. */
   setStepBehavior: (index: number, fn: (record: SessionRecord) => Promise<void>) => void;
@@ -97,6 +98,7 @@ function makeHarness(opts: {
 } = {}): MockHarness {
   const sessions = new Map<string, SessionRecord>();
   const promptsSent: Array<{ sessionId: string; prompt: string }> = [];
+  const teamRunsStarted: Array<{ workspaceId: string; teamSlug: string; userRequest: string }> = [];
   const events: WorkflowRunEvent[] = [];
   const stepBehaviors = new Map<number, (record: SessionRecord) => Promise<void>>();
   let stepCounter = 0;
@@ -143,6 +145,13 @@ function makeHarness(opts: {
         throw new Error(`Agent not found: ${agentSlug}`);
       }
     },
+    preflightStepTeam: async (_workspaceId, teamSlug) => {
+      if (teamSlug === 'missing-team') throw new Error(`Team not found: ${teamSlug}`);
+    },
+    startTeamRun: async (workspaceId, input) => {
+      teamRunsStarted.push({ workspaceId, ...input });
+      return { id: `team-run-${teamRunsStarted.length}`, leadSessionId: `team-lead-${teamRunsStarted.length}` };
+    },
     sendMessage: async (sessionId, prompt) => {
       const rec = sessions.get(sessionId);
       if (!rec) throw new Error(`unknown session ${sessionId}`);
@@ -173,6 +182,7 @@ function makeHarness(opts: {
     deps,
     sessions,
     promptsSent,
+    teamRunsStarted,
     events,
     setStepBehavior: (index, fn) => stepBehaviors.set(index, fn),
   };
@@ -249,6 +259,52 @@ describe('WorkflowRunner', () => {
     expect(onDisk).not.toBeNull();
     expect(onDisk!.state).toBe('succeeded');
     expect(onDisk!.steps[1]!.output).toBe('STEP_TWO_OUT');
+  });
+
+  test('team step launches a team run and records run evidence', async () => {
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [
+          { id: 'team-launch', team: 'commerce-launch-team', input: 'Prepare {{trigger.topic}} launch.' },
+        ],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'new product' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(h.sessions.size).toBe(0);
+    expect(h.teamRunsStarted).toEqual([{
+      workspaceId: WORKSPACE_ID,
+      teamSlug: 'commerce-launch-team',
+      userRequest: [
+        'Workflow "Test" launched this team step.',
+        'Step: team-launch',
+        '',
+        'Prepare new product launch.',
+      ].join('\n'),
+    }]);
+    expect(completed.steps[0]).toMatchObject({
+      state: 'succeeded',
+      teamRunId: 'team-run-1',
+      teamSlug: 'commerce-launch-team',
+      output: {
+        type: 'team-run',
+        teamSlug: 'commerce-launch-team',
+        runId: 'team-run-1',
+        leadSessionId: 'team-lead-1',
+      },
+      completion: {
+        satisfied: true,
+      },
+    });
+    expect(readRun(workspaceRoot, completed.id)!.steps[0]!.teamRunId).toBe('team-run-1');
   });
 
   test('creates a default output from the final succeeded workflow step', async () => {

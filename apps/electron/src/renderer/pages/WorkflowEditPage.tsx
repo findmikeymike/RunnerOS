@@ -77,6 +77,7 @@ export default function WorkflowEditPage({ workflowSlug, workspaceId }: Props) {
     if (agentsLoading || agentsError) return []
     if (!parsed) return []
     return parsed.metadata.steps.flatMap((step) => {
+      if (!step.agent) return []
       const agent = agentBySlug.get(step.agent)
       if (!agent) {
         return [{
@@ -221,10 +222,10 @@ function WorkflowAgentCapabilitiesPanel({
     <aside className="runneros-card p-3 text-xs">
       <div className="mb-3">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-white/45">
-          Agent capabilities
+          Step targets
         </h2>
         <p className="mt-1 text-[11px] leading-relaxed text-white/42">
-          Read-only hints from saved agents used by this workflow.
+          Read-only hints from saved agents and team steps used by this workflow.
         </p>
       </div>
 
@@ -246,8 +247,8 @@ function WorkflowAgentCapabilitiesPanel({
       {!loading && !error && parsed && steps.length > 0 && (
         <ol className="flex flex-col gap-2">
           {steps.map((step, index) => {
-            const agent = agentBySlug.get(step.agent)
-            const isActive = activeAgentSlugs.has(step.agent)
+            const agent = step.agent ? agentBySlug.get(step.agent) : undefined
+            const isActive = step.agent ? activeAgentSlugs.has(step.agent) : false
             return (
               <li key={step.id} className="rounded-[11px] border border-white/[0.07] bg-white/[0.035] p-2.5">
                 <div className="flex items-start gap-2">
@@ -255,12 +256,21 @@ function WorkflowAgentCapabilitiesPanel({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <code className="font-mono text-[11px] text-white/72">{step.id}</code>
-                      <code className="font-mono text-[11px] text-white/42">@{step.agent}</code>
-                      {!agent && <Info_Badge color="destructive">missing</Info_Badge>}
+                      {step.agent ? (
+                        <code className="font-mono text-[11px] text-white/42">@{step.agent}</code>
+                      ) : (
+                        <code className="font-mono text-[11px] text-white/42">team:{step.team}</code>
+                      )}
+                      {step.agent && !agent && <Info_Badge color="destructive">missing</Info_Badge>}
                       {agent && !isActive && <Info_Badge color="warning">inactive</Info_Badge>}
+                      {step.team && <Info_Badge color="muted">team</Info_Badge>}
                     </div>
                     {agent ? (
                       <AgentCapabilitySummary agent={agent} />
+                    ) : step.team ? (
+                      <p className="mt-2 text-[11px] leading-relaxed text-white/45">
+                        This step starts the saved team run and records the launched team run id in workflow output.
+                      </p>
                     ) : (
                       <p className="mt-2 text-[11px] leading-relaxed text-white/45">
                         Add this agent to the global library, or change the step to an existing active agent.

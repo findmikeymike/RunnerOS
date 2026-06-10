@@ -2585,6 +2585,15 @@ user a clickable link to where the thing now lives.`
         preflightStepAgent: async (wsId, agentSlug) => {
           await this.resolveAgentSessionOptions(wsId, agentSlug)
         },
+        preflightStepTeam: async (_wsId, teamSlug) => {
+          const team = loadGlobalTeam(teamSlug)
+          if (!team) throw new Error(`Team not found: ${teamSlug}`)
+          if (team.metadata.archived) throw new Error(`Team is archived: ${teamSlug}`)
+        },
+        startTeamRun: async (wsId, input) => {
+          const detail = await this.startManagedTeamRun(wsId, input)
+          return { id: detail.id, leadSessionId: detail.leadSessionId }
+        },
         sendMessage: (sessionId, prompt) => this.sendMessage(sessionId, prompt),
         getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
         getSessionToolUseCount: (sessionId) => {

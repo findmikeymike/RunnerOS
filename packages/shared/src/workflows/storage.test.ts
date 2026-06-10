@@ -115,6 +115,49 @@ describe('parseWorkflowFile', () => {
     expect(got!.body).toBe('body');
   });
 
+  test('parses team-targeted workflow steps', () => {
+    const text = [
+      '---',
+      'name: Team Flow',
+      'description: Uses a standing team.',
+      'steps:',
+      '  - id: launch',
+      '    team: commerce-launch-team',
+      '    input: prepare {{trigger.topic}}',
+      'trigger:',
+      '  type: manual',
+      '  inputs:',
+      '    - name: topic',
+      '      type: string',
+      '---',
+      'body',
+    ].join('\n');
+    const got = parseWorkflowFile(text);
+    expect(got).not.toBeNull();
+    expect(got!.metadata.steps[0]).toMatchObject({
+      id: 'launch',
+      team: 'commerce-launch-team',
+      input: 'prepare {{trigger.topic}}',
+    });
+    expect(got!.metadata.steps[0]!.agent).toBeUndefined();
+  });
+
+  test('returns null when a step has both agent and team targets', () => {
+    expect(
+      parseWorkflowFile([
+        '---',
+        'name: Bad Flow',
+        'description: Invalid target.',
+        'steps:',
+        '  - id: one',
+        '    agent: researcher',
+        '    team: commerce-launch-team',
+        '    input: hi',
+        '---',
+      ].join('\n')),
+    ).toBeNull();
+  });
+
   test('returns null when name is missing', () => {
     expect(
       parseWorkflowFile('---\ndescription: x\nsteps:\n  - id: a\n    agent: r\n    input: hi\n---\n'),
