@@ -281,6 +281,78 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
     }
   }
 
+  const handleReviewDecision = async (
+    run: TeamRunSnapshot,
+    team: TeamDTO,
+    task: TeamRunDetail['tasks'][number],
+    status: 'passed' | 'failed',
+  ) => {
+    const findings = window.prompt(status === 'passed' ? 'Review findings (optional)' : 'Why did review fail?') ?? undefined
+    const reviewerAgentSlug = task.review?.reviewerAgentSlug
+      ?? task.reviewerAgentSlug
+      ?? team.metadata.members.find((member) => (
+        member.slug.includes('review') || member.role.toLowerCase().includes('review') || member.role.toLowerCase().includes('qa')
+      ))?.slug
+      ?? team.metadata.lead
+    const now = new Date().toISOString()
+    try {
+      await updateTask(run.id, task.id, {
+        status: status === 'passed' ? 'review' : 'blocked',
+        reviewRequired: true,
+        reviewerAgentSlug,
+        review: {
+          requestedAt: task.review?.requestedAt ?? now,
+          reviewerAgentSlug,
+          status,
+          findings: findings?.trim() || undefined,
+          reviewedAt: now,
+        },
+        blockedReason: status === 'failed' ? (findings?.trim() || 'Review failed') : undefined,
+      })
+      toast.success(status === 'passed' ? 'Review passed' : 'Review failed')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleAcceptReview = async (run: TeamRunSnapshot, task: TeamRunDetail['tasks'][number]) => {
+    try {
+      await updateTask(run.id, task.id, { status: 'done' })
+      toast.success('Reviewed task accepted')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleReopenReview = async (
+    run: TeamRunSnapshot,
+    team: TeamDTO,
+    task: TeamRunDetail['tasks'][number],
+  ) => {
+    const reviewerAgentSlug = task.review?.reviewerAgentSlug
+      ?? task.reviewerAgentSlug
+      ?? team.metadata.members.find((member) => (
+        member.slug.includes('review') || member.role.toLowerCase().includes('review') || member.role.toLowerCase().includes('qa')
+      ))?.slug
+      ?? team.metadata.lead
+    try {
+      await updateTask(run.id, task.id, {
+        status: 'in_progress',
+        reviewRequired: true,
+        reviewerAgentSlug,
+        review: {
+          requestedAt: new Date().toISOString(),
+          reviewerAgentSlug,
+          status: 'requested',
+        },
+        blockedReason: undefined,
+      })
+      toast.success('Task reopened')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl px-7 py-7">
@@ -353,6 +425,9 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 onCreateTask={activeRun ? () => void handleCreateTask(activeRun, selectedRuntimeTeam) : undefined}
                 onCompleteTask={activeRun ? (taskId) => void handleCompleteTask(activeRun, taskId) : undefined}
                 onDecideApproval={activeRun ? (task, decision) => void handleApprovalDecision(activeRun, task, decision) : undefined}
+                onReviewDecision={activeRun ? (task, status) => void handleReviewDecision(activeRun, selectedRuntimeTeam, task, status) : undefined}
+                onReopenReview={activeRun ? (task) => void handleReopenReview(activeRun, selectedRuntimeTeam, task) : undefined}
+                onAcceptReview={activeRun ? (task) => void handleAcceptReview(activeRun, task) : undefined}
                 onSendMessage={activeRun ? (input) => void handleSendMessage(activeRun, input) : undefined}
                 onMarkMessagesRead={activeRun ? (readerAgentSlug) => void handleMarkMessagesRead(activeRun, readerAgentSlug) : undefined}
               />
@@ -517,6 +592,9 @@ function TeamDetailPanel({
   onCreateTask,
   onCompleteTask,
   onDecideApproval,
+  onReviewDecision,
+  onReopenReview,
+  onAcceptReview,
   onSendMessage,
   onMarkMessagesRead,
 }: {
@@ -533,6 +611,9 @@ function TeamDetailPanel({
   onCreateTask?: () => void
   onCompleteTask?: (taskId: string) => void
   onDecideApproval?: (task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => void
+  onReviewDecision?: (task: TeamRunDetail['tasks'][number], status: 'passed' | 'failed') => void
+  onReopenReview?: (task: TeamRunDetail['tasks'][number]) => void
+  onAcceptReview?: (task: TeamRunDetail['tasks'][number]) => void
   onSendMessage?: (input: { toAgentSlug: string; body: string; kind: 'note' | 'question' }) => void
   onMarkMessagesRead?: (readerAgentSlug: string) => void
 }) {
@@ -629,27 +710,101 @@ function TeamDetailPanel({
               </div>
               {selectedDetail.tasks.length === 0 ? (
                 <p className="text-[12px] text-white/45">No tasks created yet.</p>
-              ) : selectedDetail.tasks.map((task) => (
-                <div key={task.id} className="rounded-[10px] border border-white/[0.07] bg-black/10 px-3 py-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-[12px] font-medium text-white/86">{task.title}</div>
-                      <div className="mt-0.5 text-[11px] text-white/45">@{task.ownerAgentSlug}</div>
+              ) : selectedDetail.tasks.map((task) => {
+                const hasReviewMaterial = Boolean(task.output?.trim() || task.evidence?.length)
+                return (
+                  <div key={task.id} className="rounded-[10px] border border-white/[0.07] bg-black/10 px-3 py-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-[12px] font-medium text-white/86">{task.title}</div>
+                        <div className="mt-0.5 text-[11px] text-white/45">@{task.ownerAgentSlug}</div>
+                      </div>
+                      <TeamPill>{task.status}</TeamPill>
                     </div>
-                    <TeamPill>{task.status}</TeamPill>
+                    {task.status !== 'done' && onCompleteTask && !task.reviewRequired ? (
+                      <Button size="sm" variant="ghost" className="mt-2 h-7 px-2 text-white/50 hover:text-white" onClick={() => onCompleteTask(task.id)}>
+                        Mark done
+                      </Button>
+                    ) : null}
+                    {(task.reviewRequired || task.review || task.status === 'review') ? (
+                      <div className="mt-2 rounded-[8px] border border-[#38bdf8]/20 bg-[#38bdf8]/10 px-2 py-1.5 text-[11px] leading-[16px] text-sky-100/78">
+                        <div className="flex items-center justify-between gap-2">
+                          <span>Review: {task.review?.status ?? 'required'}</span>
+                          {task.reviewerAgentSlug || task.review?.reviewerAgentSlug ? (
+                            <span className="text-white/42">@{task.review?.reviewerAgentSlug ?? task.reviewerAgentSlug}</span>
+                          ) : null}
+                        </div>
+                        {task.review?.findings ? (
+                          <p className="mt-1 text-white/60">{task.review.findings}</p>
+                        ) : null}
+                        {task.output ? (
+                          <p className="mt-1 text-white/60"><span className="text-white/38">Output: </span>{task.output}</p>
+                        ) : null}
+                        {task.evidence?.length ? (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {task.evidence.map((item, index) => (
+                              <TeamPill key={`${task.id}:review:${item.type}:${index}`}>{item.label}: {item.value}</TeamPill>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-white/38">No output or evidence yet.</p>
+                        )}
+                        {onReviewDecision && task.review?.status !== 'passed' ? (
+                          <div className="mt-2 flex gap-2">
+                            <Button
+                              size="sm"
+                              disabled={!hasReviewMaterial}
+                              className="h-7 flex-1 bg-emerald-400/16 text-emerald-50 hover:bg-emerald-400/24 disabled:opacity-40"
+                              onClick={() => onReviewDecision(task, 'passed')}
+                            >
+                              <Check className="mr-1 h-3.5 w-3.5" />
+                              Pass
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={!hasReviewMaterial}
+                              className="h-7 flex-1 text-red-100/72 hover:text-red-50 disabled:opacity-40"
+                              onClick={() => onReviewDecision(task, 'failed')}
+                            >
+                              <X className="mr-1 h-3.5 w-3.5" />
+                              Fail
+                            </Button>
+                          </div>
+                        ) : null}
+                        {onAcceptReview && task.review?.status === 'passed' && task.status !== 'done' ? (
+                          <Button size="sm" className="mt-2 h-7 w-full bg-emerald-400/16 text-emerald-50 hover:bg-emerald-400/24" onClick={() => onAcceptReview(task)}>
+                            <Check className="mr-1 h-3.5 w-3.5" />
+                            Accept
+                          </Button>
+                        ) : null}
+                        {onReopenReview && task.review && task.review.status !== 'requested' ? (
+                          <Button size="sm" variant="ghost" className="mt-2 h-7 w-full px-2 text-white/56 hover:text-white" onClick={() => onReopenReview(task)}>
+                            Reopen
+                          </Button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {task.output && !task.reviewRequired ? (
+                      <div className="mt-2 rounded-[8px] border border-white/[0.07] bg-white/[0.035] px-2 py-1.5 text-[11px] leading-[16px] text-white/62">
+                        <span className="text-white/38">Output: </span>{task.output}
+                      </div>
+                    ) : null}
+                    {task.evidence?.length && !task.reviewRequired ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {task.evidence.map((item, index) => (
+                          <TeamPill key={`${task.id}:${item.type}:${index}`}>{item.label}: {item.value}</TeamPill>
+                        ))}
+                      </div>
+                    ) : null}
+                    {task.approval?.status === 'requested' ? (
+                      <div className="mt-2 rounded-[8px] border border-amber-400/20 bg-amber-400/10 px-2 py-1.5 text-[11px] leading-[16px] text-amber-100/80">
+                        Approval: {task.approval.reason}
+                      </div>
+                    ) : null}
                   </div>
-                  {task.status !== 'done' && onCompleteTask ? (
-                    <Button size="sm" variant="ghost" className="mt-2 h-7 px-2 text-white/50 hover:text-white" onClick={() => onCompleteTask(task.id)}>
-                      Mark done
-                    </Button>
-                  ) : null}
-                  {task.approval?.status === 'requested' ? (
-                    <div className="mt-2 rounded-[8px] border border-amber-400/20 bg-amber-400/10 px-2 py-1.5 text-[11px] leading-[16px] text-amber-100/80">
-                      Approval: {task.approval.reason}
-                    </div>
-                  ) : null}
-                </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <p className="text-[12px] text-white/45">Start a run to create tasks.</p>
