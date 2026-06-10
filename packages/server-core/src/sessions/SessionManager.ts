@@ -3272,6 +3272,35 @@ user a clickable link to where the thing now lives.`
     return detail
   }
 
+  private buildWorkflowTeamStepOutput(detail: TeamRunDetail): Record<string, unknown> {
+    const completedTasks = detail.tasks.filter((task) => task.status === 'done')
+    const summaryParts = completedTasks
+      .map((task) => task.output?.trim())
+      .filter((output): output is string => Boolean(output))
+    return {
+      type: 'team-run',
+      teamSlug: detail.teamSlug,
+      runId: detail.id,
+      leadSessionId: detail.leadSessionId,
+      state: detail.state,
+      summary: summaryParts.join('\n\n') || detail.userRequest,
+      tasks: detail.tasks.map((task) => ({
+        id: task.id,
+        title: task.title,
+        ownerAgentSlug: task.ownerAgentSlug,
+        status: task.status,
+        output: task.output,
+        evidence: task.evidence,
+      })),
+      messages: detail.messages.slice(-10).map((message) => ({
+        fromAgentSlug: message.fromAgentSlug,
+        toAgentSlug: message.toAgentSlug,
+        kind: message.kind,
+        body: message.body,
+      })),
+    }
+  }
+
   private resolveTeamActor(managed: ManagedSession, run: TeamRunDetail): string {
     return managed.spawnedFromAgent?.agentSlug ?? run.teamSnapshot.metadata.lead
   }
@@ -5288,9 +5317,21 @@ user a clickable link to where the thing now lives.`
           }
           const updated = updateTeamTask(managed.workspace.rootPath, input.runId, input.taskId, patch)
           const nextRun = this.readManagedTeamRun(managed, input.runId)
+          const emittedRun = this.emitTeamRunUpdated(managed, input.runId, nextRun.state === 'done' ? 'completed' : 'updated')
+          if (nextRun.state === 'done') {
+            try {
+              await this.workflowRunner.completeTeamStep({
+                workspaceId: managed.workspace.id,
+                teamRunId: input.runId,
+                output: this.buildWorkflowTeamStepOutput(nextRun),
+              })
+            } catch (err) {
+              console.error(`[SessionManager] failed to resume workflow for completed team run ${input.runId}:`, err)
+            }
+          }
           return {
             task: updated,
-            run: this.emitTeamRunUpdated(managed, input.runId, nextRun.state === 'done' ? 'completed' : 'updated'),
+            run: emittedRun,
           }
         },
         sendTeamMessageFn: async (input) => {

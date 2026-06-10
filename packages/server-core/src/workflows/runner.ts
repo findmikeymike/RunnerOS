@@ -26,6 +26,7 @@ import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
   appendOutputSchemaInstruction,
   assertValidWorkflowRunId,
+  listRuns,
   markRunningRunsInterrupted,
   parseStructuredStepOutput,
   readRun,
@@ -355,6 +356,50 @@ export class WorkflowRunner {
     this.emitEvent({ type: 'run.updated', run: this.cloneSnapshot(active.snapshot) });
     void this.runStepLoop(active);
 
+    return this.cloneSnapshot(active.snapshot);
+  }
+
+  async completeTeamStep(input: {
+    workspaceId: string;
+    teamRunId: string;
+    output: unknown;
+  }): Promise<WorkflowRunSnapshot | null> {
+    const root = this.deps.getWorkspaceRootPath(input.workspaceId);
+    const run = listRuns(root).find((candidate) => (
+      candidate.workspaceId === input.workspaceId
+      && candidate.state === 'paused'
+      && candidate.steps.some((step) => step.state === 'awaiting-team' && step.teamRunId === input.teamRunId)
+    ));
+    if (!run) return null;
+
+    const stepIndex = run.steps.findIndex((step) => step.state === 'awaiting-team' && step.teamRunId === input.teamRunId);
+    if (stepIndex < 0) return null;
+    const step = run.steps[stepIndex]!;
+    const key = concurrencyKey(input.workspaceId, run.workflowSlug);
+    if (this.activeByKey.has(key)) {
+      throw new Error(`Workflow "${run.workflowSlug}" already has an active run in workspace "${input.workspaceId}".`);
+    }
+
+    const now = new Date().toISOString();
+    step.state = 'succeeded';
+    step.completedAt = now;
+    step.error = undefined;
+    step.output = input.output;
+    step.completion = {
+      outputChars: JSON.stringify(input.output)?.length ?? 0,
+      satisfied: true,
+    };
+
+    run.state = 'running';
+    run.completedAt = undefined;
+    run.resumeFromStepId = undefined;
+    run.updatedAt = now;
+
+    const active: ActiveRun = { snapshot: run, abort: new AbortController(), startIndex: stepIndex + 1 };
+    this.active.set(run.id, active);
+    this.activeByKey.set(key, run.id);
+    this.touch(active);
+    void this.runStepLoop(active);
     return this.cloneSnapshot(active.snapshot);
   }
 

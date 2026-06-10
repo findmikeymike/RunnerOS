@@ -319,6 +319,57 @@ describe('WorkflowRunner', () => {
     expect(persisted.steps[0]!.teamRunId).toBe('team-run-1');
   });
 
+  test('completing a team step resumes the workflow from the next step', async () => {
+    const h = makeHarness({ stepOutputs: ['final workflow report'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [
+          { id: 'team-launch', team: 'commerce-launch-team', input: 'Prepare {{trigger.topic}} launch.' },
+          { id: 'wrap-up', agent: 'writer', input: 'Summarize team result: {{steps.team-launch.output.summary}}' },
+        ],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'new product' },
+    });
+
+    await waitFor(() => lastUpdated(h.events)?.state === 'paused');
+    const paused = lastUpdated(h.events)!;
+
+    const resumed = await runner.completeTeamStep({
+      workspaceId: WORKSPACE_ID,
+      teamRunId: 'team-run-1',
+      output: {
+        type: 'team-run',
+        teamSlug: 'commerce-launch-team',
+        runId: 'team-run-1',
+        leadSessionId: 'team-lead-1',
+        summary: 'Team produced the launch packet.',
+      },
+    });
+
+    expect(resumed?.id).toBe(paused.id);
+    expect(resumed?.state).toBe('running');
+    expect(resumed?.steps[0]).toMatchObject({
+      state: 'succeeded',
+      completion: { satisfied: true },
+      output: { summary: 'Team produced the launch packet.' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+    const completed = lastCompleted(h.events)!;
+    expect(completed.state).toBe('succeeded');
+    expect(completed.steps[1]!.output).toBe('final workflow report');
+    expect(h.promptsSent).toHaveLength(1);
+    expect(h.promptsSent[0]!.prompt).toStartWith('Summarize team result: Team produced the launch packet.');
+
+    const persisted = readRun(workspaceRoot, completed.id)!;
+    expect(persisted.state).toBe('succeeded');
+    expect(persisted.steps[0]!.state).toBe('succeeded');
+    expect(persisted.steps[1]!.state).toBe('succeeded');
+  });
+
   test('creates a default output from the final succeeded workflow step', async () => {
     const h = makeHarness({ stepOutputs: ['draft notes', '# Final report\n\nReady to ship.'] });
     const runner = new WorkflowRunner(h.deps);
