@@ -30,6 +30,13 @@ export type PulseDecisionAction =
       why: string;
       goalSlug?: string;
     }
+  | {
+      action: 'kick_team';
+      teamSlug: string;
+      userRequest: string;
+      why: string;
+      goalSlug?: string;
+    }
   | { action: 'ask_user'; question: string; goalSlug?: string };
 
 // ============================================================================
@@ -208,6 +215,8 @@ Only choose \`notify_user\` if a fact has changed that the user would
 genuinely benefit from knowing within the next hour.
 Only choose \`kick_workflow\` if a goal is stalled AND a workflow exists
 that would clearly advance it.
+Only choose \`kick_team\` if a standing team exists AND coordinated agent
+work would clearly advance the goal better than a single notification.
 Only choose \`ask_user\` if a goal is blocked on a question only the
 user can answer AND you haven't asked the same question in the last
 5 ticks (check the recent decisions log above).
@@ -252,6 +261,18 @@ export const PULSE_DECISION_OUTPUT_SCHEMA: JsonSchema = {
         action: { type: 'string', const: 'kick_workflow' },
         workflowSlug: { type: 'string' },
         inputs: { type: 'object' },
+        why: { type: 'string' },
+        goalSlug: { type: 'string' },
+      },
+    },
+    {
+      type: 'object',
+      required: ['action', 'teamSlug', 'userRequest', 'why'],
+      additionalProperties: false,
+      properties: {
+        action: { type: 'string', const: 'kick_team' },
+        teamSlug: { type: 'string' },
+        userRequest: { type: 'string' },
         why: { type: 'string' },
         goalSlug: { type: 'string' },
       },

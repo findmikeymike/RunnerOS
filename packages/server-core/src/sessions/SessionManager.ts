@@ -117,12 +117,17 @@ import {
   linkTeamRunMemberSession,
   listTeamMessages,
   listTeamTasks,
+  loadGlobalTeam,
   readTeamRunDetail,
   sendTeamMessage,
   updateTeamTask,
+  writeTeamRun,
+  touchTeamRun,
   type CreateTeamTaskInput,
   type SendTeamMessageInput,
+  type StartTeamRunInput,
   type TeamRunDetail,
+  type TeamRunSnapshot,
   type TeamTask,
   type UpdateTeamTaskInput,
 } from '@craft-agent/shared/teams'
@@ -1915,6 +1920,15 @@ export class SessionManager implements ISessionManager {
               return { error: err instanceof Error ? err.message : String(err) }
             }
           },
+          startTeamRun: async ({ teamSlug, userRequest }) => {
+            try {
+              const detail = await this.startManagedTeamRun(workspaceId, { teamSlug, userRequest })
+              return { runId: detail.id }
+            } catch (err) {
+              sessionLog.error('[Pulse] Failed to start team run:', err)
+              return { error: err instanceof Error ? err.message : String(err) }
+            }
+          },
           emitNotification: (n) => {
             sessionLog.info(`[Pulse] notification: pulse=${n.pulseId} urgency=${n.urgency} message=${n.message.slice(0, 100)}`)
             try {
@@ -1927,6 +1941,8 @@ export class SessionManager implements ISessionManager {
                 goalSlug: n.goalSlug,
                 workflowRunId: n.workflowRunId,
                 workflowSlug: n.workflowSlug,
+                teamRunId: n.teamRunId,
+                teamSlug: n.teamSlug,
                 awaitingResponse: n.awaitingResponse,
               })
             } catch (err) {
@@ -3298,6 +3314,89 @@ user a clickable link to where the thing now lives.`
       ].join('\n') : `Open tasks:\n${openTasks || '- none'}`,
       extraPrompt ? `\nExtra instructions:\n${extraPrompt}` : '',
     ].filter(Boolean).join('\n')
+  }
+
+  private buildTeamLeadPrompt(teamSlug: string, input: StartTeamRunInput, run: TeamRunSnapshot): string {
+    const team = run.teamSnapshot.metadata
+    const roster = team.members.map((member) => `- ${member.slug}: ${member.role}`).join('\n')
+    const verification = team.verification
+      ? `Verification default: ${team.verification.default}. Required for: ${(team.verification.requiredFor ?? []).join(', ') || 'none'}.`
+      : 'Verification default: off.'
+
+    return [
+      `You are the lead agent for @${teamSlug}.`,
+      '',
+      `Team run id: ${run.id}`,
+      `Lead: ${team.lead}`,
+      `Permission mode: ${run.permissionMode ?? 'workspace default'}`,
+      verification,
+      '',
+      'Roster:',
+      roster || '- No members configured',
+      '',
+      'Operating rules:',
+      '- Split the user request into owned team tasks before doing broad work.',
+      '- Use team run/task/message state as the durable record.',
+      '- Use create_team_task to assign members and wake their sessions.',
+      '- Use request_team_review before claiming review-required work is done.',
+      '- Risky external actions require request_user_approval before execution.',
+      '- Return one coherent lead-facing answer to the user.',
+      '',
+      'User request:',
+      input.userRequest.trim(),
+    ].join('\n')
+  }
+
+  private async startManagedTeamRun(workspaceId: string, input: StartTeamRunInput): Promise<TeamRunDetail> {
+    const team = loadGlobalTeam(input.teamSlug)
+    if (!team) throw new Error(`Team not found: ${input.teamSlug}`)
+    if (team.metadata.archived) throw new Error(`Team is archived: ${input.teamSlug}`)
+    if (!input.userRequest.trim()) throw new Error('Team run request is required.')
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+
+    const now = new Date().toISOString()
+    const run: TeamRunSnapshot = {
+      id: randomUUID(),
+      workspaceId,
+      teamSlug: team.slug,
+      state: 'created',
+      userRequest: input.userRequest.trim(),
+      teamSnapshot: {
+        metadata: team.metadata,
+        body: team.body,
+      },
+      permissionMode: team.metadata.permissionMode,
+      createdAt: now,
+      updatedAt: now,
+    }
+
+    writeTeamRun(workspace.rootPath, run)
+    appendTeamRunEvent(workspace.rootPath, run.id, { kind: 'run.created', actorAgentSlug: 'user', body: input.userRequest.trim() })
+
+    const leadOptions = await this.resolveAgentSessionOptions(workspaceId, team.metadata.lead, { referenceMode: 'lenient' })
+    const leadSession = await this.createSession(workspaceId, {
+      ...leadOptions,
+      name: team.metadata.name,
+      permissionMode: team.metadata.permissionMode ?? leadOptions.permissionMode,
+      spawnedFromAgent: {
+        agentSlug: team.metadata.lead,
+        agentName: team.metadata.lead,
+        timestamp: Date.now(),
+      },
+      customSystemPrompt: [
+        leadOptions.customSystemPrompt,
+        `You are leading RunnerOS team "${team.metadata.name}" (${team.slug}). Coordinate members through team tasks and messages.`,
+      ].filter(Boolean).join('\n\n'),
+    })
+
+    const next = touchTeamRun(workspace.rootPath, { ...run, leadSessionId: leadSession.id, state: 'running' })
+    appendTeamRunEvent(workspace.rootPath, run.id, { kind: 'session.linked', actorAgentSlug: team.metadata.lead, body: leadSession.id })
+    await this.sendMessage(leadSession.id, this.buildTeamLeadPrompt(team.slug, input, next))
+    const detail = readTeamRunDetail(workspace.rootPath, run.id)
+    if (!detail) throw new Error(`Failed to read team run after start: ${run.id}`)
+    this.eventSink?.(RPC_CHANNELS.teamRuns.UPDATED, { to: 'workspace', workspaceId }, workspaceId, detail, 'created')
+    return detail
   }
 
   private async spawnOrWakeTeamMember(

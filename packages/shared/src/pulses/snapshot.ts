@@ -310,6 +310,8 @@ function describeDecision(tick: PulseTickEntry): string {
       return d.message;
     case 'kick_workflow':
       return `${d.workflowSlug} — ${d.why}`;
+    case 'kick_team':
+      return `${d.teamSlug} — ${d.why}`;
     case 'ask_user':
       return d.question;
   }

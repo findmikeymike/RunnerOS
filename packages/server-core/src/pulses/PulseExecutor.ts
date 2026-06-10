@@ -44,6 +44,8 @@ export interface PulseNotificationPayload {
   awaitingResponse?: boolean;
   workflowRunId?: string;
   workflowSlug?: string;
+  teamRunId?: string;
+  teamSlug?: string;
   createdAt: string;
 }
 
@@ -70,6 +72,12 @@ export interface PulseExecutorDeps {
     workspaceId: string;
     workflowSlug: string;
     triggerInputs: Record<string, unknown>;
+  }) => Promise<{ runId: string } | { error: string } | null>;
+  /** Kick a team run when decision === kick_team. */
+  startTeamRun?: (params: {
+    workspaceId: string;
+    teamSlug: string;
+    userRequest: string;
   }) => Promise<{ runId: string } | { error: string } | null>;
   /** Emit a notification (bell / concierge / messaging). */
   emitNotification: (n: PulseNotificationPayload) => void;
@@ -409,6 +417,67 @@ export class PulseExecutor {
           awaitingResponse: false,
           workflowRunId: started.runId,
           workflowSlug: decision.workflowSlug,
+          createdAt: nowIso,
+        });
+        break;
+      }
+      case 'kick_team': {
+        if (!this.deps.startTeamRun) {
+          dispatched = {
+            action: 'notify_user',
+            message: `Pulse wanted to start team "${decision.teamSlug}" but team launch is not available. Original reason: ${decision.why}`,
+            urgency: 'normal',
+            goalSlug: decision.goalSlug,
+          };
+          this.deps.emitNotification({
+            workspaceId,
+            pulseId,
+            source: 'pulse',
+            message: dispatched.message,
+            urgency: 'normal',
+            goalSlug: decision.goalSlug,
+            awaitingResponse: false,
+            createdAt: nowIso,
+          });
+          break;
+        }
+        const started = await this.deps.startTeamRun({
+          workspaceId,
+          teamSlug: decision.teamSlug,
+          userRequest: decision.userRequest,
+        });
+        if (!started || 'error' in started) {
+          const reason = started && 'error' in started
+            ? started.error
+            : 'team run was no longer available at dispatch time';
+          dispatched = {
+            action: 'notify_user',
+            message: `Pulse failed to start team "${decision.teamSlug}": ${reason}. Original reason: ${decision.why}`,
+            urgency: 'normal',
+            goalSlug: decision.goalSlug,
+          };
+          this.deps.emitNotification({
+            workspaceId,
+            pulseId,
+            source: 'pulse',
+            message: dispatched.message,
+            urgency: 'normal',
+            goalSlug: decision.goalSlug,
+            awaitingResponse: false,
+            createdAt: nowIso,
+          });
+          break;
+        }
+        this.deps.emitNotification({
+          workspaceId,
+          pulseId,
+          source: 'pulse',
+          message: `Pulse started team "${decision.teamSlug}": ${decision.why}`,
+          urgency: 'low',
+          goalSlug: decision.goalSlug,
+          awaitingResponse: false,
+          teamRunId: started.runId,
+          teamSlug: decision.teamSlug,
           createdAt: nowIso,
         });
         break;

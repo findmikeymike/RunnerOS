@@ -145,6 +145,8 @@ export class NotificationService {
           existing.urgency = input.urgency;
           if (input.workflowRunId) existing.workflowRunId = input.workflowRunId;
           if (input.workflowSlug) existing.workflowSlug = input.workflowSlug;
+          if (input.teamRunId) existing.teamRunId = input.teamRunId;
+          if (input.teamSlug) existing.teamSlug = input.teamSlug;
         }
         this.writeAll(workspaceId, entries);
         return existing;

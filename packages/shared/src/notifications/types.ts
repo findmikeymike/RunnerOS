@@ -17,6 +17,8 @@ export interface NotificationEntry {
   goalSlug?: string;
   workflowRunId?: string;
   workflowSlug?: string;
+  teamRunId?: string;
+  teamSlug?: string;
   /** True when the entry asks for a user reply (Pulse `ask_user`). */
   awaitingResponse?: boolean;
   /** Populated when the user replied to an `awaitingResponse` entry. */

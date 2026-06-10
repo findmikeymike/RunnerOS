@@ -31,6 +31,7 @@ interface Harness {
   notifications: PulseNotificationPayload[];
   driverCalls: PulseExecutorRunDriverParams[];
   startWorkflowCalls: Array<{ workspaceId: string; workflowSlug: string; triggerInputs: Record<string, unknown> }>;
+  startTeamRunCalls: Array<{ workspaceId: string; teamSlug: string; userRequest: string }>;
   deps: PulseExecutorDeps;
 }
 
@@ -40,11 +41,13 @@ function makeHarness(opts?: {
   workflowExists?: boolean;
   startWorkflowReturnsNull?: boolean;
   startWorkflowError?: string;
+  startTeamRunError?: string;
 }): Harness {
   const workspaceRoot = mkdtempSync(join(tmpdir(), 'pulse-exec-'));
   const notifications: PulseNotificationPayload[] = [];
   const driverCalls: PulseExecutorRunDriverParams[] = [];
   const startWorkflowCalls: Harness['startWorkflowCalls'] = [];
+  const startTeamRunCalls: Harness['startTeamRunCalls'] = [];
 
   if (opts?.workflowExists) {
     const wfDir = join(workspaceRoot, '.craft', 'workflows', 'do-thing');
@@ -73,12 +76,17 @@ function makeHarness(opts?: {
       if (opts?.startWorkflowReturnsNull) return null;
       return { runId: 'run-xyz' };
     },
+    startTeamRun: async (params) => {
+      startTeamRunCalls.push(params);
+      if (opts?.startTeamRunError) return { error: opts.startTeamRunError };
+      return { runId: 'team-run-xyz' };
+    },
     emitNotification: (n) => {
       notifications.push(n);
     },
   };
 
-  return { workspaceRoot, notifications, driverCalls, startWorkflowCalls, deps };
+  return { workspaceRoot, notifications, driverCalls, startWorkflowCalls, startTeamRunCalls, deps };
 }
 
 const BASE_ACTION: PulseAction = { type: 'pulse' };
@@ -179,6 +187,37 @@ describe('PulseExecutor', () => {
     expect(entry.decision.action).toBe('notify_user');
     expect(h.startWorkflowCalls).toHaveLength(0);
     expect(h.notifications[0]?.message).toContain('does-not-exist');
+  });
+
+  it('starts a team run + low-urgency notification on kick_team', async () => {
+    const h = track(makeHarness({
+      driverReply: '{"action":"kick_team","teamSlug":"commerce-launch-team","userRequest":"Prepare the launch package","why":"launch goal is stale","goalSlug":"launch"}',
+    }));
+    const exec = new PulseExecutor(h.deps);
+    const entry = await exec.execute(BASE_INPUT());
+
+    expect(entry.decision.action).toBe('kick_team');
+    expect(h.startTeamRunCalls).toEqual([{
+      workspaceId: WORKSPACE_ID,
+      teamSlug: 'commerce-launch-team',
+      userRequest: 'Prepare the launch package',
+    }]);
+    const lowNote = h.notifications.find((n) => n.urgency === 'low');
+    expect(lowNote?.teamRunId).toBe('team-run-xyz');
+    expect(lowNote?.teamSlug).toBe('commerce-launch-team');
+  });
+
+  it('downgrades kick_team to notify_user when team launch fails', async () => {
+    const h = track(makeHarness({
+      driverReply: '{"action":"kick_team","teamSlug":"missing-team","userRequest":"Handle this","why":"goal stalled"}',
+      startTeamRunError: 'Team not found: missing-team',
+    }));
+    const exec = new PulseExecutor(h.deps);
+    const entry = await exec.execute(BASE_INPUT());
+
+    expect(entry.decision.action).toBe('notify_user');
+    expect(h.startTeamRunCalls).toHaveLength(1);
+    expect(h.notifications[0]?.message).toContain('Team not found');
   });
 
   it('reports the concrete workflow dispatch failure reason', async () => {
