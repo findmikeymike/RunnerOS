@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { ExternalLink, Play, Plus, ShieldCheck, Trash2, Users } from 'lucide-react'
+import { Check, ExternalLink, Play, Plus, ShieldCheck, Trash2, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useNavigation } from '@/contexts/NavigationContext'
@@ -82,6 +82,26 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
     }
   }
 
+  const handleApprovalDecision = async (run: TeamRunSnapshot, task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => {
+    if (!task.approval) return
+    const note = decision === 'rejected' ? window.prompt('Reason for rejection?') ?? undefined : undefined
+    try {
+      await updateTask(run.id, task.id, {
+        status: decision === 'approved' ? 'in_progress' : 'blocked',
+        approval: {
+          ...task.approval,
+          status: decision,
+          decidedAt: new Date().toISOString(),
+          decisionNote: note,
+        },
+        blockedReason: decision === 'rejected' ? (note || 'User rejected approval request') : undefined,
+      })
+      toast.success(decision === 'approved' ? 'Approval granted' : 'Approval rejected')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl px-7 py-7">
@@ -133,6 +153,7 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 onOpenLead={(sessionId) => navigate(routes.view.allSessions(sessionId), { newPanel: true })}
                 onCreateTask={latestRun ? () => void handleCreateTask(latestRun, selectedRuntimeTeam) : undefined}
                 onCompleteTask={latestRun ? (taskId) => void handleCompleteTask(latestRun, taskId) : undefined}
+                onDecideApproval={latestRun ? (task, decision) => void handleApprovalDecision(latestRun, task, decision) : undefined}
               />
             ) : null}
           </div>
@@ -238,6 +259,7 @@ function TeamDetailPanel({
   onOpenLead,
   onCreateTask,
   onCompleteTask,
+  onDecideApproval,
 }: {
   team: TeamDTO
   runs: TeamRunSnapshot[]
@@ -246,9 +268,11 @@ function TeamDetailPanel({
   onOpenLead: (sessionId: string) => void
   onCreateTask?: () => void
   onCompleteTask?: (taskId: string) => void
+  onDecideApproval?: (task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => void
 }) {
   const verification = team.metadata.verification
   const latestRun = runs[0]
+  const approvalTasks = latestDetail?.tasks.filter((task) => task.approval?.status === 'requested') ?? []
 
   return (
     <aside className="rounded-[14px] border border-white/[0.08] bg-white/[0.035] p-4">
@@ -320,6 +344,11 @@ function TeamDetailPanel({
                       Mark done
                     </Button>
                   ) : null}
+                  {task.approval?.status === 'requested' ? (
+                    <div className="mt-2 rounded-[8px] border border-amber-400/20 bg-amber-400/10 px-2 py-1.5 text-[11px] leading-[16px] text-amber-100/80">
+                      Approval: {task.approval.reason}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -351,6 +380,31 @@ function TeamDetailPanel({
               ))}
             </div>
           ) : null}
+        </DetailBlock>
+
+        <DetailBlock title="Approvals">
+          {approvalTasks.length ? (
+            <div className="space-y-2">
+              {approvalTasks.map((task) => (
+                <div key={task.id} className="rounded-[10px] border border-amber-400/20 bg-amber-400/10 px-3 py-2">
+                  <div className="text-[12px] font-medium text-white/86">{task.title}</div>
+                  <p className="mt-1 text-[11px] leading-[16px] text-amber-100/78">{task.approval?.reason}</p>
+                  <div className="mt-2 flex gap-2">
+                    <Button size="sm" className="h-7 flex-1 bg-emerald-400/16 text-emerald-50 hover:bg-emerald-400/24" onClick={() => onDecideApproval?.(task, 'approved')}>
+                      <Check className="mr-1 h-3.5 w-3.5" />
+                      Approve
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-7 flex-1 text-red-100/72 hover:text-red-50" onClick={() => onDecideApproval?.(task, 'rejected')}>
+                      <X className="mr-1 h-3.5 w-3.5" />
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-white/45">No approvals waiting.</p>
+          )}
         </DetailBlock>
 
         <DetailBlock title="Activity">
