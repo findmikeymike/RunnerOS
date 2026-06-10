@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { useTeams } from '@/hooks/useTeams'
 import { useTeamRuns } from '@/hooks/useTeamRuns'
+import { STARTER_TEAMS } from '@craft-agent/shared/teams'
 import { routes } from '../../shared/routes'
 import type { TeamDTO, TeamMetadataDTO, TeamRunDetail, TeamRunSnapshot } from '../../shared/types'
 
@@ -108,6 +109,37 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
           verification: { default: 'advisory', requiredFor: ['code_change', 'deploy', 'publish', 'spend'] },
         },
         body: `# ${name.trim()}\n\nUse this team for coordinated work with explicit task ownership.`,
+      })
+      toast.success(`Created ${saved.metadata.name}`)
+      navigate(routes.view.team(saved.slug))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleCreateFromTemplate = async () => {
+    const choices = STARTER_TEAMS.map((team, index) => `${index + 1}. ${team.metadata.name} (${team.slug})`).join('\n')
+    const selected = window.prompt(`Choose a team template:\n\n${choices}`, '1')
+    if (!selected?.trim()) return
+    const selectedIndex = Number.parseInt(selected.trim(), 10) - 1
+    const template = STARTER_TEAMS[selectedIndex]
+    if (!template) {
+      toast.error('Unknown team template')
+      return
+    }
+    const name = window.prompt('Team name', template.metadata.name)
+    if (!name?.trim()) return
+    const slug = window.prompt('Team slug', uniqueTeamSlug(template.slug, allTeams))
+    if (!slug?.trim()) return
+    try {
+      const saved = await upsert({
+        slug: slug.trim(),
+        metadata: {
+          ...template.metadata,
+          name: name.trim(),
+          archived: false,
+        },
+        body: template.body,
       })
       toast.success(`Created ${saved.metadata.name}`)
       navigate(routes.view.team(saved.slug))
@@ -375,6 +407,10 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
             <Button size="sm" className="h-8 bg-[#38bdf8]/18 text-white hover:bg-[#38bdf8]/26" onClick={handleCreateTeam}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               New
+            </Button>
+            <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={handleCreateFromTemplate}>
+              <Copy className="mr-1.5 h-3.5 w-3.5" />
+              Template
             </Button>
           </div>
         </div>
@@ -721,7 +757,7 @@ function TeamDetailPanel({
                       </div>
                       <TeamPill>{task.status}</TeamPill>
                     </div>
-                    {task.status !== 'done' && onCompleteTask && !task.reviewRequired ? (
+                    {task.status !== 'done' && onCompleteTask && !task.reviewRequired && (!task.approvalRequired || task.approval?.status === 'approved') ? (
                       <Button size="sm" variant="ghost" className="mt-2 h-7 px-2 text-white/50 hover:text-white" onClick={() => onCompleteTask(task.id)}>
                         Mark done
                       </Button>
@@ -797,9 +833,18 @@ function TeamDetailPanel({
                         ))}
                       </div>
                     ) : null}
-                    {task.approval?.status === 'requested' ? (
+                    {task.approval ? (
                       <div className="mt-2 rounded-[8px] border border-amber-400/20 bg-amber-400/10 px-2 py-1.5 text-[11px] leading-[16px] text-amber-100/80">
-                        Approval: {task.approval.reason}
+                        <div className="flex items-center justify-between gap-2">
+                          <span>Approval: {task.approval.status}</span>
+                          {task.approval.decidedAt ? (
+                            <span className="text-white/38">{new Date(task.approval.decidedAt).toLocaleString()}</span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-amber-100/70">{task.approval.reason}</p>
+                        {task.approval.decisionNote ? (
+                          <p className="mt-1 text-white/54">{task.approval.decisionNote}</p>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

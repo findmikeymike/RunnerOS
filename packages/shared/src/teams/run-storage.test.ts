@@ -175,4 +175,29 @@ describe('team run storage', () => {
     linkTeamRunMemberSession(workspace, RUN_ID, 'coder', 'session_coder');
     expect(readTeamRunDetail(workspace, RUN_ID)?.memberSessionIds?.coder).toBe('session_coder');
   });
+
+  test('blocks approval-required tasks from finishing until user approval passes', () => {
+    writeTeamRun(workspace, sampleRun());
+    const task = createTeamTask(workspace, RUN_ID, {
+      title: 'Publish customer message',
+      description: 'Prepare and publish the approved message',
+      ownerAgentSlug: 'coder',
+      approvalRequired: true,
+    });
+
+    expect(() => updateTeamTask(workspace, RUN_ID, task.id, { status: 'done' })).toThrow('requires user approval');
+
+    updateTeamTask(workspace, RUN_ID, task.id, {
+      approval: {
+        requestedAt: '2026-01-01T00:01:00.000Z',
+        requestedByAgentSlug: 'coder',
+        reason: 'Publish customer-facing message',
+        status: 'approved',
+        decidedAt: '2026-01-01T00:02:00.000Z',
+      },
+    });
+
+    const done = updateTeamTask(workspace, RUN_ID, task.id, { status: 'done' });
+    expect(done.status).toBe('done');
+  });
 });

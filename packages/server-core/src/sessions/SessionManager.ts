@@ -5223,13 +5223,16 @@ user a clickable link to where the thing now lives.`
             run.teamSnapshot.metadata.verification?.default === 'blocking'
             || Boolean(riskAction && run.teamSnapshot.metadata.verification?.requiredFor?.includes(riskAction as never))
           )
+          const approvalRequired = input.approvalRequired ?? Boolean(
+            riskAction && run.teamSnapshot.metadata.verification?.requiredFor?.includes(riskAction as never),
+          )
           const task = createTeamTask(managed.workspace.rootPath, input.runId, {
             title: input.title,
             description: input.description,
             ownerAgentSlug: input.ownerAgentSlug,
             priority: input.priority,
             inputs: input.inputs,
-            approvalRequired: input.approvalRequired,
+            approvalRequired,
             reviewRequired,
             reviewerAgentSlug: input.reviewerAgentSlug,
           } satisfies CreateTeamTaskInput)

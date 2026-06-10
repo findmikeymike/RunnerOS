@@ -330,6 +330,9 @@ export function updateTeamTask(workspaceRootPath: string, runId: string, taskId:
     updatedAt: new Date().toISOString(),
   };
   if (!next.title) throw new Error('Task title is required.');
+  if (next.status === 'done' && next.approvalRequired && next.approval?.status !== 'approved') {
+    throw new Error(`Task "${taskId}" requires user approval before it can be marked done.`);
+  }
   if (next.status === 'done' && next.reviewRequired && next.review?.status !== 'passed') {
     throw new Error(`Task "${taskId}" requires a passed review before it can be marked done.`);
   }
