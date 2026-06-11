@@ -1,12 +1,18 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Archive, Check, Copy, ExternalLink, Pencil, Play, Plus, ShieldCheck, Trash2, Users, X } from 'lucide-react'
+import { Archive, Check, Copy, ExternalLink, Pencil, Play, Plus, ShieldCheck, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { useTeams } from '@/hooks/useTeams'
 import { useTeamRuns } from '@/hooks/useTeamRuns'
-import { STARTER_TEAMS } from '@craft-agent/shared/teams'
+import { STARTER_TEAMS } from '@craft-agent/shared/teams/starter-templates'
 import { routes } from '../../shared/routes'
 import type { TeamDTO, TeamMetadataDTO, TeamRunDetail, TeamRunSnapshot } from '../../shared/types'
 
@@ -21,11 +27,40 @@ interface TeamLibraryStats {
   lastActivityIso?: string
 }
 
+type CreateTeamDialogInput = {
+  slug: string
+  metadata: TeamMetadataDTO
+  body: string
+}
+
+type TeamMemberDraft = {
+  id: string
+  slug: string
+  role: string
+}
+
+type TeamRiskActionDraft = NonNullable<NonNullable<TeamMetadataDTO['verification']>['requiredFor']>[number]
+
+const TEAM_RISK_ACTIONS = [
+  { id: 'code_change', label: 'Code changes' },
+  { id: 'deploy', label: 'Deploying' },
+  { id: 'publish', label: 'Publishing' },
+  { id: 'spend', label: 'Spending' },
+  { id: 'customer_message', label: 'Customer messages' },
+  { id: 'delete', label: 'Deleting' },
+  { id: 'refund', label: 'Refunds' },
+  { id: 'external_action', label: 'External actions' },
+] as const
+
+const TEAM_AGENT_SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
+
 export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPageProps) {
   const { navigate } = useNavigation()
   const { allTeams, loading, error, upsert, remove } = useTeams()
   const { runs, detailsById, get, start, updateTask } = useTeamRuns(workspaceId)
   const [selectedRunIdByTeam, setSelectedRunIdByTeam] = React.useState<Record<string, string>>({})
+  const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
+  const [createTemplateSlug, setCreateTemplateSlug] = React.useState<string | null>(null)
   const requestedCardRunDetailsRef = React.useRef(new Set<string>())
   const selectedTeam = React.useMemo(
     () => allTeams.find((team) => team.slug === teamSlug) ?? null,
@@ -33,7 +68,7 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
   )
   const activeTeams = React.useMemo(() => allTeams.filter((team) => !team.metadata.archived), [allTeams])
   const archivedTeams = React.useMemo(() => allTeams.filter((team) => team.metadata.archived), [allTeams])
-  const selectedRuntimeTeam = selectedTeam ?? activeTeams[0] ?? allTeams[0] ?? null
+  const selectedRuntimeTeam = selectedTeam
   const selectedRuns = React.useMemo(
     () => selectedRuntimeTeam ? runs.filter((run) => run.teamSlug === selectedRuntimeTeam.slug) : [],
     [runs, selectedRuntimeTeam],
@@ -82,70 +117,9 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
     }
   }, [allTeams, detailsById, get, runs, workspaceId])
 
-  const handleCreateTeam = async () => {
-    const name = window.prompt('Team name')
-    if (!name?.trim()) return
-    const slug = window.prompt('Team slug', toSlug(name))
-    if (!slug?.trim()) return
-    const description = window.prompt('Description', 'Coordinates a reusable team of agents.') ?? ''
-    const lead = window.prompt('Lead agent slug', 'orchestrator')
-    if (!lead?.trim()) return
-    const membersText = window.prompt('Members as slug: role, one per line', 'reviewer: Verification')
-    const members = parseMembers(membersText ?? '')
-    if (members.length === 0) {
-      toast.error('Add at least one member as slug: role')
-      return
-    }
-    try {
-      const saved = await upsert({
-        slug: slug.trim(),
-        metadata: {
-          name: name.trim(),
-          description: description.trim() || 'Coordinates a reusable team of agents.',
-          lead: lead.trim(),
-          members,
-          standing: true,
-          permissionMode: 'ask',
-          verification: { default: 'advisory', requiredFor: ['code_change', 'deploy', 'publish', 'spend'] },
-        },
-        body: `# ${name.trim()}\n\nUse this team for coordinated work with explicit task ownership.`,
-      })
-      toast.success(`Created ${saved.metadata.name}`)
-      navigate(routes.view.team(saved.slug))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const handleCreateFromTemplate = async () => {
-    const choices = STARTER_TEAMS.map((team, index) => `${index + 1}. ${team.metadata.name} (${team.slug})`).join('\n')
-    const selected = window.prompt(`Choose a team template:\n\n${choices}`, '1')
-    if (!selected?.trim()) return
-    const selectedIndex = Number.parseInt(selected.trim(), 10) - 1
-    const template = STARTER_TEAMS[selectedIndex]
-    if (!template) {
-      toast.error('Unknown team template')
-      return
-    }
-    const name = window.prompt('Team name', template.metadata.name)
-    if (!name?.trim()) return
-    const slug = window.prompt('Team slug', uniqueTeamSlug(template.slug, allTeams))
-    if (!slug?.trim()) return
-    try {
-      const saved = await upsert({
-        slug: slug.trim(),
-        metadata: {
-          ...template.metadata,
-          name: name.trim(),
-          archived: false,
-        },
-        body: template.body,
-      })
-      toast.success(`Created ${saved.metadata.name}`)
-      navigate(routes.view.team(saved.slug))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
+  const openCreateDialog = (templateSlug?: string) => {
+    setCreateTemplateSlug(templateSlug ?? null)
+    setCreateDialogOpen(true)
   }
 
   const handleEditTeam = async (team: TeamDTO) => {
@@ -246,7 +220,9 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
 
   const handleApprovalDecision = async (run: TeamRunSnapshot, task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => {
     if (!task.approval) return
-    const note = decision === 'rejected' ? window.prompt('Reason for rejection?') ?? undefined : undefined
+    const rejectionNote = decision === 'rejected' ? window.prompt('Reason for rejection?') : undefined
+    if (rejectionNote === null) return
+    const note = rejectionNote ?? undefined
     try {
       await updateTask(run.id, task.id, {
         status: decision === 'approved' ? 'in_progress' : 'blocked',
@@ -283,11 +259,11 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 {archivedTeams.length} archived
               </Badge>
             ) : null}
-            <Button size="sm" className="h-8 bg-[#38bdf8]/18 text-white hover:bg-[#38bdf8]/26" onClick={handleCreateTeam}>
+            <Button size="sm" className="h-8 bg-[#38bdf8]/18 text-white hover:bg-[#38bdf8]/26" onClick={() => openCreateDialog()}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               New
             </Button>
-            <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={handleCreateFromTemplate}>
+            <Button size="sm" variant="ghost" className="h-8 px-2 text-white/62 hover:text-white" onClick={() => openCreateDialog(STARTER_TEAMS[0]?.slug)}>
               <Copy className="mr-1.5 h-3.5 w-3.5" />
               Template
             </Button>
@@ -339,12 +315,478 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 onOpenLead={(sessionId) => navigate(routes.view.allSessions(sessionId), { newPanel: true })}
                 onDecideApproval={activeRun ? (task, decision) => void handleApprovalDecision(activeRun, task, decision) : undefined}
               />
-            ) : null}
+            ) : (
+              <div className="hidden min-h-[420px] items-center justify-center rounded-[14px] border border-white/[0.08] bg-white/[0.025] p-6 text-center text-sm text-white/46 xl:flex">
+                Select a team to see active runs.
+              </div>
+            )}
           </div>
         )}
       </div>
+      <CreateTeamDialog
+        open={createDialogOpen}
+        initialTemplateSlug={createTemplateSlug}
+        teams={allTeams}
+        onOpenChange={setCreateDialogOpen}
+        onCreate={async (input) => {
+          const saved = await upsert(input)
+          toast.success(`Created ${saved.metadata.name}`)
+          navigate(routes.view.team(saved.slug))
+        }}
+      />
     </div>
   )
+}
+
+function CreateTeamDialog({
+  open,
+  initialTemplateSlug,
+  teams,
+  onOpenChange,
+  onCreate,
+}: {
+  open: boolean
+  initialTemplateSlug: string | null
+  teams: TeamDTO[]
+  onOpenChange: (open: boolean) => void
+  onCreate: (input: CreateTeamDialogInput) => Promise<void>
+}) {
+  const [mode, setMode] = React.useState<'scratch' | 'template'>('scratch')
+  const [templateSlug, setTemplateSlug] = React.useState(STARTER_TEAMS[0]?.slug ?? '')
+  const [name, setName] = React.useState('')
+  const [slug, setSlug] = React.useState('')
+  const [slugTouched, setSlugTouched] = React.useState(false)
+  const [description, setDescription] = React.useState('')
+  const [avatar, setAvatar] = React.useState('')
+  const [lead, setLead] = React.useState('orchestrator')
+  const [standing, setStanding] = React.useState(true)
+  const [permissionMode, setPermissionMode] = React.useState<TeamMetadataDTO['permissionMode']>('ask')
+  const [verificationDefault, setVerificationDefault] = React.useState<'off' | 'advisory' | 'blocking'>('advisory')
+  const [requiredFor, setRequiredFor] = React.useState<TeamRiskActionDraft[]>(['code_change', 'deploy', 'publish', 'spend'])
+  const [members, setMembers] = React.useState<TeamMemberDraft[]>(() => [
+    { id: crypto.randomUUID(), slug: 'reviewer', role: 'Verification and final review' },
+  ])
+  const [body, setBody] = React.useState('')
+  const [submitting, setSubmitting] = React.useState(false)
+
+  const existingSlugs = React.useMemo(() => new Set(teams.map((team) => team.slug)), [teams])
+
+  const applyTemplate = React.useCallback((template?: typeof STARTER_TEAMS[number]) => {
+    if (!template) return
+    setName(template.metadata.name)
+    setSlug(uniqueTeamSlug(template.slug, teams))
+    setSlugTouched(false)
+    setDescription(template.metadata.description)
+    setAvatar(template.metadata.avatar ?? '')
+    setLead(template.metadata.lead)
+    setStanding(template.metadata.standing ?? true)
+    setPermissionMode(template.metadata.permissionMode ?? 'ask')
+    setVerificationDefault(template.metadata.verification?.default ?? 'advisory')
+    setRequiredFor([...(template.metadata.verification?.requiredFor ?? [])])
+    setMembers(template.metadata.members.map((member) => ({ id: crypto.randomUUID(), slug: member.slug, role: member.role })))
+    setBody(template.body)
+  }, [teams])
+
+  const resetScratch = React.useCallback(() => {
+    setName('')
+    setSlug('')
+    setSlugTouched(false)
+    setDescription('Coordinates a reusable team of agents.')
+    setAvatar('')
+    setLead('orchestrator')
+    setStanding(true)
+    setPermissionMode('ask')
+    setVerificationDefault('advisory')
+    setRequiredFor(['code_change', 'deploy', 'publish', 'spend'])
+    setMembers([{ id: crypto.randomUUID(), slug: 'reviewer', role: 'Verification and final review' }])
+    setBody('')
+  }, [])
+
+  const lastOpenKeyRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    if (!open) return
+    const openKey = initialTemplateSlug ? `template:${initialTemplateSlug}` : 'scratch'
+    if (lastOpenKeyRef.current === openKey) return
+    lastOpenKeyRef.current = openKey
+    if (initialTemplateSlug) {
+      const template = STARTER_TEAMS.find((team) => team.slug === initialTemplateSlug) ?? STARTER_TEAMS[0]
+      setMode('template')
+      setTemplateSlug(template?.slug ?? '')
+      applyTemplate(template)
+    } else {
+      setMode('scratch')
+      resetScratch()
+    }
+  }, [applyTemplate, initialTemplateSlug, open, resetScratch])
+  React.useEffect(() => {
+    if (!open) lastOpenKeyRef.current = null
+  }, [open])
+
+  const normalizedSlug = toSlug(slug || name)
+  const validMembers = members
+    .map((member) => ({ slug: member.slug.trim(), role: member.role.trim() }))
+    .filter((member) => member.slug && member.role)
+  const duplicateMember = new Set(validMembers.map((member) => member.slug)).size !== validMembers.length
+  const incompleteMember = members.some((member) => {
+    const hasSlug = Boolean(member.slug.trim())
+    const hasRole = Boolean(member.role.trim())
+    return hasSlug !== hasRole
+  })
+  const invalidLead = Boolean(lead.trim() && !TEAM_AGENT_SLUG_REGEX.test(lead.trim()))
+  const invalidMember = members.some((member) => Boolean(member.slug.trim()) && !TEAM_AGENT_SLUG_REGEX.test(member.slug.trim()))
+  const leadIsMember = validMembers.some((member) => member.slug === lead.trim())
+  const canSubmit = Boolean(
+    name.trim()
+    && normalizedSlug
+    && lead.trim()
+    && TEAM_AGENT_SLUG_REGEX.test(normalizedSlug)
+    && !invalidLead
+    && validMembers.length > 0
+    && !incompleteMember
+    && !invalidMember
+    && !duplicateMember
+    && !leadIsMember
+    && !existingSlugs.has(normalizedSlug),
+  )
+
+  const updateMember = (id: string, patch: Partial<TeamMemberDraft>) => {
+    setMembers((prev) => prev.map((member) => member.id === id ? { ...member, ...patch } : member))
+  }
+
+  const addMember = (draft?: Partial<TeamMemberDraft>) => {
+    setMembers((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        slug: draft?.slug ?? '',
+        role: draft?.role ?? '',
+      },
+    ])
+  }
+
+  const removeMember = (id: string) => {
+    setMembers((prev) => prev.length <= 1 ? prev : prev.filter((member) => member.id !== id))
+  }
+
+  const toggleRiskAction = (action: TeamRiskActionDraft) => {
+    setRequiredFor((prev) => prev.includes(action) ? prev.filter((item) => item !== action) : [...prev, action])
+  }
+
+  const handleSubmit = async () => {
+    if (!canSubmit) return
+    setSubmitting(true)
+    try {
+      const cleanName = name.trim()
+      await onCreate({
+        slug: normalizedSlug,
+        metadata: {
+          name: cleanName,
+          description: description.trim() || 'Coordinates a reusable team of agents.',
+          avatar: avatar.trim() || undefined,
+          lead: lead.trim(),
+          members: validMembers,
+          standing,
+          archived: false,
+          permissionMode,
+          verification: {
+            default: verificationDefault,
+            requiredFor,
+          },
+        },
+        body: body.trim() || `# ${cleanName}\n\nUse this team for coordinated work with explicit ownership, review, and approvals.\n`,
+      })
+      onOpenChange(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="!max-w-4xl !rounded-[18px] !border !border-white/[0.09] !bg-[#090a0d] p-0 !text-white shadow-middle">
+        <DialogHeader className="border-b border-white/[0.08] px-5 py-4">
+          <DialogTitle className="text-white">Create team</DialogTitle>
+          <DialogDescription className="text-white/48">
+            Set the lead, members, and guardrails before this team can run work.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid max-h-[72vh] grid-cols-1 overflow-hidden md:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="space-y-5 overflow-y-auto px-5 py-4">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('scratch')
+                  resetScratch()
+                }}
+                className={createModeClass(mode === 'scratch')}
+              >
+                <Plus className="h-4 w-4" />
+                <span>From scratch</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('template')
+                  applyTemplate(STARTER_TEAMS.find((team) => team.slug === templateSlug) ?? STARTER_TEAMS[0])
+                }}
+                className={createModeClass(mode === 'template')}
+              >
+                <Copy className="h-4 w-4" />
+                <span>Use template</span>
+              </button>
+            </div>
+
+            {mode === 'template' ? (
+              <Field label="Template">
+                <Select
+                  value={templateSlug}
+                  onValueChange={(value) => {
+                    setTemplateSlug(value)
+                    const template = STARTER_TEAMS.find((team) => team.slug === value)
+                    applyTemplate(template)
+                  }}
+                >
+                  <SelectTrigger className="border-white/[0.12] bg-white/[0.035] text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STARTER_TEAMS.map((team) => (
+                      <SelectItem key={team.slug} value={team.slug}>{team.metadata.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            ) : null}
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[72px_minmax(0,1fr)]">
+              <Field label="Icon">
+                <Input
+                  value={avatar}
+                  onChange={(event) => setAvatar(event.target.value.slice(0, 4))}
+                  placeholder="Icon"
+                  className="border-white/[0.12] bg-white/[0.035] text-center text-white"
+                />
+              </Field>
+              <Field label="Team name">
+                <Input
+                  value={name}
+                  onChange={(event) => {
+                    const next = event.target.value
+                    setName(next)
+                    if (!slugTouched) setSlug(toSlug(next))
+                  }}
+                  placeholder="Engineering Ship Team"
+                  className="border-white/[0.12] bg-white/[0.035] text-white"
+                />
+              </Field>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Slug">
+                <Input
+                  value={slug}
+                  onChange={(event) => {
+                    setSlugTouched(true)
+                    setSlug(event.target.value)
+                  }}
+                  onBlur={() => setSlug(normalizedSlug)}
+                  placeholder="engineering-ship-team"
+                  className="border-white/[0.12] bg-white/[0.035] font-mono text-white"
+                />
+                {existingSlugs.has(normalizedSlug) ? (
+                  <p className="mt-1 text-[11px] text-amber-200/78">That slug already exists.</p>
+                ) : slug && !TEAM_AGENT_SLUG_REGEX.test(normalizedSlug) ? (
+                  <p className="mt-1 text-[11px] text-amber-200/78">Use lowercase letters, numbers, and hyphens.</p>
+                ) : null}
+              </Field>
+              <Field label="Lead agent">
+                <Input
+                  value={lead}
+                  onChange={(event) => setLead(event.target.value)}
+                  placeholder="system-architect"
+                  className="border-white/[0.12] bg-white/[0.035] font-mono text-white"
+                />
+                {invalidLead ? (
+                  <p className="mt-1 text-[11px] text-amber-200/78">Use a valid agent slug.</p>
+                ) : leadIsMember ? (
+                  <p className="mt-1 text-[11px] text-amber-200/78">Lead cannot also be a member.</p>
+                ) : null}
+              </Field>
+            </div>
+
+            <Field label="Description">
+              <Textarea
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="What this team owns"
+                className="min-h-[74px] border-white/[0.12] bg-white/[0.035] text-white"
+              />
+            </Field>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Permission">
+                <Select value={permissionMode ?? 'ask'} onValueChange={(value) => setPermissionMode(value as TeamMetadataDTO['permissionMode'])}>
+                  <SelectTrigger className="border-white/[0.12] bg-white/[0.035] text-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ask">Ask first</SelectItem>
+                    <SelectItem value="safe">Safe</SelectItem>
+                    <SelectItem value="allow-all">Full access</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <div className="flex items-end">
+                <label className="flex h-9 w-full items-center justify-between rounded-md border border-white/[0.12] bg-white/[0.035] px-3 text-sm text-white/72">
+                  <span>Standing team</span>
+                  <Switch checked={standing} onCheckedChange={setStanding} />
+                </label>
+              </div>
+            </div>
+
+            <section>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-white/36">Members</h3>
+                <div className="flex gap-1.5">
+                  <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-white/62 hover:text-white" onClick={() => addMember({ slug: 'reviewer', role: 'Verification and review' })}>
+                    <ShieldCheck className="mr-1 h-3.5 w-3.5" />
+                    Reviewer
+                  </Button>
+                  <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-white/62 hover:text-white" onClick={() => addMember()}>
+                    <UserPlus className="mr-1 h-3.5 w-3.5" />
+                    Add
+                  </Button>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {members.map((member) => (
+                  <div key={member.id} className="grid grid-cols-[minmax(0,150px)_minmax(0,1fr)_32px] gap-2">
+                    <Input
+                      value={member.slug}
+                      onChange={(event) => updateMember(member.id, { slug: event.target.value })}
+                      placeholder="agent-slug"
+                      className="border-white/[0.12] bg-white/[0.035] font-mono text-white"
+                    />
+                    <Input
+                      value={member.role}
+                      onChange={(event) => updateMember(member.id, { role: event.target.value })}
+                      placeholder="Role in this team"
+                      className="border-white/[0.12] bg-white/[0.035] text-white"
+                    />
+                    <Button type="button" size="sm" variant="ghost" className="h-9 px-2 text-white/42 hover:text-red-100" onClick={() => removeMember(member.id)}>
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              {duplicateMember ? <p className="mt-1 text-[11px] text-amber-200/78">Member slugs must be unique.</p> : null}
+              {incompleteMember ? <p className="mt-1 text-[11px] text-amber-200/78">Each member needs both a slug and a role.</p> : null}
+              {invalidMember ? <p className="mt-1 text-[11px] text-amber-200/78">Member slugs must use lowercase letters, numbers, and hyphens.</p> : null}
+            </section>
+
+            <section>
+              <h3 className="mb-2 text-[11px] font-medium uppercase tracking-[0.08em] text-white/36">Guardrails</h3>
+              <div className="grid grid-cols-3 gap-2">
+                {(['off', 'advisory', 'blocking'] as const).map((modeOption) => (
+                  <button
+                    key={modeOption}
+                    type="button"
+                    onClick={() => setVerificationDefault(modeOption)}
+                    className={createModeClass(verificationDefault === modeOption)}
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    <span>{modeOption}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {TEAM_RISK_ACTIONS.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    onClick={() => toggleRiskAction(action.id)}
+                    className={[
+                      'rounded-[7px] border px-2 py-1 text-[11px] transition-colors',
+                      requiredFor.includes(action.id)
+                        ? 'border-[#38bdf8]/30 bg-[#38bdf8]/12 text-sky-100/88'
+                        : 'border-white/[0.08] bg-white/[0.035] text-white/48 hover:text-white/70',
+                    ].join(' ')}
+                  >
+                    {action.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+
+          <aside className="border-t border-white/[0.08] bg-white/[0.025] p-4 md:border-l md:border-t-0">
+            <h3 className="text-[11px] font-medium uppercase tracking-[0.08em] text-white/36">Preview</h3>
+            <div className="mt-3 rounded-[12px] border border-white/[0.08] bg-black/20 p-3">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-[10px] border border-white/[0.08] bg-white/[0.055] text-lg">
+                  {avatar || <Users className="h-4 w-4 text-white/58" />}
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-white">{name.trim() || 'New team'}</div>
+                  <div className="mt-0.5 truncate font-mono text-[11px] text-white/42">@{normalizedSlug || 'new-team'}</div>
+                </div>
+              </div>
+              <p className="mt-3 text-[12px] leading-[18px] text-white/58">{description.trim() || 'Coordinates a reusable team of agents.'}</p>
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                <TeamPill>Lead: {lead.trim() || 'unset'}</TeamPill>
+                <TeamPill>{validMembers.length} members</TeamPill>
+                <TeamPill>{verificationDefault} review</TeamPill>
+              </div>
+              <div className="mt-3 space-y-2">
+                {validMembers.slice(0, 5).map((member) => (
+                  <div key={member.slug} className="rounded-[8px] border border-white/[0.07] bg-white/[0.035] px-2 py-1.5">
+                    <div className="truncate font-mono text-[11px] text-white/78">@{member.slug}</div>
+                    <div className="mt-0.5 line-clamp-2 text-[11px] leading-[15px] text-white/45">{member.role}</div>
+                  </div>
+                ))}
+              </div>
+              {requiredFor.length ? (
+                <p className="mt-3 text-[11px] leading-[16px] text-white/42">
+                  Requires review for {requiredFor.length} risky action{requiredFor.length === 1 ? '' : 's'}.
+                </p>
+              ) : null}
+            </div>
+          </aside>
+        </div>
+
+        <DialogFooter className="border-t border-white/[0.08] px-5 py-4">
+          <Button type="button" variant="ghost" className="text-white/62 hover:text-white" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" className="bg-[#38bdf8]/18 text-white hover:bg-[#38bdf8]/26" disabled={!canSubmit || submitting} onClick={() => void handleSubmit()}>
+            Create team
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <Label className="mb-1.5 text-[11px] font-medium uppercase tracking-[0.08em] text-white/36">{label}</Label>
+      {children}
+    </div>
+  )
+}
+
+function createModeClass(active: boolean): string {
+  return [
+    'flex h-9 items-center justify-center gap-2 rounded-[9px] border px-3 text-sm transition-colors',
+    active
+      ? 'border-[#38bdf8]/32 bg-[#38bdf8]/12 text-white'
+      : 'border-white/[0.08] bg-white/[0.035] text-white/54 hover:text-white/78',
+  ].join(' ')
 }
 
 function TeamCard({

@@ -78,7 +78,7 @@ function buildLeadPrompt(teamSlug: string, input: StartTeamRunInput, run: TeamRu
   ].join('\n')
 }
 
-function assertUserApprovalPatch(current: TeamRunDetail['tasks'][number], patch: UpdateTeamTaskInput): void {
+function buildUserApprovalDecisionPatch(current: TeamRunDetail['tasks'][number], patch: UpdateTeamTaskInput): UpdateTeamTaskInput {
   if (!current.approval || current.approval.status !== 'requested') {
     throw new Error('Only requested user approval tasks can be updated from the Teams UI.')
   }
@@ -92,6 +92,16 @@ function assertUserApprovalPatch(current: TeamRunDetail['tasks'][number], patch:
   }
   if (patch.status !== (patch.approval.status === 'approved' ? 'in_progress' : 'blocked')) {
     throw new Error('Teams UI approval status does not match the task status transition.')
+  }
+  return {
+    status: patch.status,
+    blockedReason: patch.blockedReason,
+    approval: {
+      ...current.approval,
+      status: patch.approval.status,
+      decidedAt: new Date().toISOString(),
+      decisionNote: patch.approval.decisionNote,
+    },
   }
 }
 
@@ -171,8 +181,8 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
     async (_ctx, workspaceId: string, runId: string): Promise<boolean> => {
       const rootPath = resolveRootPath(deps, workspaceId)
       const existing = readTeamRun(rootPath, runId)
-      if (existing && existing.state === 'running') {
-        throw new Error(`Cannot delete team run "${runId}" while it is running.`)
+      if (existing && !['done', 'failed', 'cancelled'].includes(existing.state)) {
+        throw new Error(`Cannot delete team run "${runId}" while it is ${existing.state}.`)
       }
       return deleteTeamRun(rootPath, runId)
     },
@@ -196,8 +206,8 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
       if (!before) throw new Error(`Team run not found: ${runId}`)
       const current = before.tasks.find((task) => task.id === taskId)
       if (!current) throw new Error(`Team task not found: ${taskId}`)
-      assertUserApprovalPatch(current, patch)
-      updateTeamTask(rootPath, runId, taskId, patch)
+      const decisionPatch = buildUserApprovalDecisionPatch(current, patch)
+      updateTeamTask(rootPath, runId, taskId, decisionPatch)
       const detail = readTeamRunDetail(rootPath, runId)
       if (!detail) throw new Error(`Team run not found: ${runId}`)
       broadcastUpdated(deps, workspaceId, detail, detail.state === 'done' ? 'completed' : 'updated')

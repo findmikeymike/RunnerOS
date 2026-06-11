@@ -200,4 +200,30 @@ describe('team run storage', () => {
     const done = updateTeamTask(workspace, RUN_ID, task.id, { status: 'done' });
     expect(done.status).toBe('done');
   });
+
+  test('prevents approval and review gates from being cleared once active', () => {
+    writeTeamRun(workspace, sampleRun());
+    const approvalTask = createTeamTask(workspace, RUN_ID, {
+      title: 'Publish customer message',
+      description: 'Prepare and publish the approved message',
+      ownerAgentSlug: 'coder',
+      approvalRequired: true,
+    });
+    const reviewTask = createTeamTask(workspace, RUN_ID, {
+      title: 'Change production code',
+      description: 'Implement and verify the change',
+      ownerAgentSlug: 'coder',
+      reviewRequired: true,
+      reviewerAgentSlug: 'reviewer',
+    });
+
+    expect(() => updateTeamTask(workspace, RUN_ID, approvalTask.id, {
+      approvalRequired: false,
+      status: 'done',
+    })).toThrow('approval requirement cannot be cleared');
+    expect(() => updateTeamTask(workspace, RUN_ID, reviewTask.id, {
+      reviewRequired: false,
+      status: 'done',
+    })).toThrow('review requirement cannot be cleared');
+  });
 });

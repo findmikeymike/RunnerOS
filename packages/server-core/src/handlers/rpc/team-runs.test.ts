@@ -161,14 +161,20 @@ describe('team run RPC handlers', () => {
     const approved = await handlers.get(RPC_CHANNELS.teamRuns.UPDATE_TASK)!({} as any, 'workspace-1', started.id, task.id, {
       status: 'in_progress',
       approval: {
-        requestedAt: '2026-01-01T00:00:00.000Z',
-        requestedByAgentSlug: 'coder',
-        reason: 'Publish customer-facing update',
+        requestedAt: '2099-01-01T00:00:00.000Z',
+        requestedByAgentSlug: 'reviewer',
+        reason: 'tampered reason',
         status: 'approved',
-        decidedAt: '2026-01-01T00:01:00.000Z',
+        decidedAt: '2099-01-01T00:01:00.000Z',
+        decisionNote: 'Approved by operator.',
       },
     })
     expect(approved.tasks[0]!.approval?.status).toBe('approved')
+    expect(approved.tasks[0]!.approval?.requestedAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(approved.tasks[0]!.approval?.requestedByAgentSlug).toBe('coder')
+    expect(approved.tasks[0]!.approval?.reason).toBe('Publish customer-facing update')
+    expect(approved.tasks[0]!.approval?.decidedAt).not.toBe('2099-01-01T00:01:00.000Z')
+    expect(approved.tasks[0]!.approval?.decisionNote).toBe('Approved by operator.')
   })
 
   it('blocks raw internal message spoofing from the UI RPC surface', async () => {
@@ -190,5 +196,24 @@ describe('team run RPC handlers', () => {
 
     await expect(handlers.get(RPC_CHANNELS.teamRuns.MARK_MESSAGES_READ)!({} as any, 'workspace-1', started.id, 'coder'))
       .rejects.toThrow('read state belongs to team agents')
+  })
+
+  it('only deletes terminal team runs', async () => {
+    const { handlers, server, deps } = createHarness()
+    const { registerTeamRunsHandlers } = await import('./team-runs')
+    registerTeamRunsHandlers(server, deps)
+
+    const blockedRun = await handlers.get(RPC_CHANNELS.teamRuns.START)!({} as any, 'workspace-1', {
+      teamSlug: 'engineering-ship-team',
+      userRequest: 'Wait for approval.',
+    })
+    runStorage.touchTeamRun(workspaceRoot, { ...blockedRun, state: 'blocked' })
+
+    await expect(handlers.get(RPC_CHANNELS.teamRuns.DELETE)!({} as any, 'workspace-1', blockedRun.id))
+      .rejects.toThrow('while it is blocked')
+
+    runStorage.touchTeamRun(workspaceRoot, { ...blockedRun, state: 'done' })
+    await expect(handlers.get(RPC_CHANNELS.teamRuns.DELETE)!({} as any, 'workspace-1', blockedRun.id))
+      .resolves.toBe(true)
   })
 })

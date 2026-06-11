@@ -3302,7 +3302,15 @@ user a clickable link to where the thing now lives.`
   }
 
   private resolveTeamActor(managed: ManagedSession, run: TeamRunDetail): string {
-    return managed.spawnedFromAgent?.agentSlug ?? run.teamSnapshot.metadata.lead
+    if (run.leadSessionId && managed.id === run.leadSessionId) return run.teamSnapshot.metadata.lead
+    const memberSession = Object.entries(run.memberSessionIds ?? {})
+      .find(([, sessionId]) => sessionId === managed.id)
+    if (memberSession) {
+      const [agentSlug] = memberSession
+      this.assertTeamMember(run, agentSlug)
+      return agentSlug
+    }
+    throw new Error(`Session "${managed.id}" is not linked to team run "${run.id}".`)
   }
 
   private assertTeamMember(run: TeamRunDetail, agentSlug: string): void {
@@ -3323,6 +3331,23 @@ user a clickable link to where the thing now lives.`
     ))
     if (reviewer) return reviewer.slug
     throw new Error(`No reviewer found for team "${run.teamSlug}". Pass reviewerAgentSlug explicitly.`)
+  }
+
+  private assertDifferentReviewer(taskLabel: string, ownerAgentSlug: string, reviewerAgentSlug: string): void {
+    if (reviewerAgentSlug === ownerAgentSlug) {
+      throw new Error(`Task "${taskLabel}" must be reviewed by another team member.`)
+    }
+  }
+
+  private assertCanSpawnTeamMember(run: TeamRunDetail, actor: string, agentSlug: string, task?: TeamTask): void {
+    if (actor === run.teamSnapshot.metadata.lead) return
+    if (task && (actor === task.ownerAgentSlug || actor === task.reviewerAgentSlug || actor === task.review?.reviewerAgentSlug) && agentSlug === actor) return
+    throw new Error(`Only the team lead can wake other team members for run "${run.id}".`)
+  }
+
+  private assertCanRequestTaskGate(run: TeamRunDetail, actor: string, task: TeamTask, gate: 'review' | 'approval'): void {
+    if (actor === run.teamSnapshot.metadata.lead || actor === task.ownerAgentSlug) return
+    throw new Error(`Agent "${actor}" cannot request ${gate} for task "${task.id}".`)
   }
 
   private buildTeamMemberPrompt(run: TeamRunDetail, agentSlug: string, task?: TeamTask, extraPrompt?: string): string {
@@ -5232,11 +5257,13 @@ user a clickable link to where the thing now lives.`
           return this.workflowRunner.cancel(managed.workspace.id, runId)
         },
         listTeamTasksFn: (runId: string) => {
-          this.readManagedTeamRun(managed, runId)
+          const run = this.readManagedTeamRun(managed, runId)
+          this.resolveTeamActor(managed, run)
           return listTeamTasks(managed.workspace.rootPath, runId)
         },
         listTeamMessagesFn: (runId: string) => {
-          this.readManagedTeamRun(managed, runId)
+          const run = this.readManagedTeamRun(managed, runId)
+          this.resolveTeamActor(managed, run)
           return listTeamMessages(managed.workspace.rootPath, runId)
         },
         createTeamTaskFn: async (input) => {
@@ -5247,6 +5274,7 @@ user a clickable link to where the thing now lives.`
           }
           this.assertTeamMember(run, input.ownerAgentSlug)
           if (input.reviewerAgentSlug) this.assertTeamMember(run, input.reviewerAgentSlug)
+          if (input.reviewerAgentSlug) this.assertDifferentReviewer(input.title, input.ownerAgentSlug, input.reviewerAgentSlug)
           const riskAction = typeof input.inputs?.riskAction === 'string' ? input.inputs.riskAction : undefined
           const reviewRequired = input.reviewRequired ?? (
             run.teamSnapshot.metadata.verification?.default === 'blocking'
@@ -5288,6 +5316,16 @@ user a clickable link to where the thing now lives.`
           const reviewerSlug = task.reviewerAgentSlug ?? task.review?.reviewerAgentSlug
           const canUpdate = actor === run.teamSnapshot.metadata.lead || actor === task.ownerAgentSlug || actor === reviewerSlug
           if (!canUpdate) throw new Error(`Agent "${actor}" cannot update task "${task.id}".`)
+          if (input.ownerAgentSlug !== undefined) {
+            if (actor !== run.teamSnapshot.metadata.lead) {
+              throw new Error('Only the team lead can reassign team tasks.')
+            }
+            this.assertTeamMember(run, input.ownerAgentSlug)
+          }
+
+          if (input.approvalRequired === false && (task.approvalRequired || task.approval)) {
+            throw new Error(`Agent "${actor}" cannot clear approval requirement for task "${task.id}".`)
+          }
 
           const patch: UpdateTeamTaskInput = {
             title: input.title,
@@ -5298,13 +5336,14 @@ user a clickable link to where the thing now lives.`
             inputs: input.inputs,
             output: input.output,
             evidence: input.evidence,
-            approvalRequired: input.approvalRequired,
+            approvalRequired: input.approvalRequired === true ? true : undefined,
             blockedReason: input.blockedReason,
           }
           if (input.reviewStatus) {
             if (actor !== run.teamSnapshot.metadata.lead && actor !== reviewerSlug) {
               throw new Error(`Agent "${actor}" cannot set review result for task "${task.id}".`)
             }
+            this.assertDifferentReviewer(task.id, input.ownerAgentSlug ?? task.ownerAgentSlug, reviewerSlug ?? actor)
             patch.review = {
               requestedAt: task.review?.requestedAt ?? new Date().toISOString(),
               reviewerAgentSlug: reviewerSlug ?? actor,
@@ -5337,6 +5376,11 @@ user a clickable link to where the thing now lives.`
         sendTeamMessageFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
           const actor = this.resolveTeamActor(managed, run)
+          const task = input.taskId ? run.tasks.find((candidate) => candidate.id === input.taskId) : undefined
+          if (input.taskId && !task) throw new Error(`Team task not found: ${input.taskId}`)
+          if (input.toAgentSlug !== 'all' && input.toAgentSlug !== 'lead') {
+            this.assertCanSpawnTeamMember(run, actor, input.toAgentSlug, task)
+          }
           const message = sendTeamMessage(managed.workspace.rootPath, input.runId, {
             fromAgentSlug: actor,
             toAgentSlug: input.toAgentSlug,
@@ -5345,7 +5389,7 @@ user a clickable link to where the thing now lives.`
             body: input.body,
           } satisfies SendTeamMessageInput)
           if (input.toAgentSlug !== 'all' && input.toAgentSlug !== 'lead') {
-            await this.spawnOrWakeTeamMember(managed, input.runId, input.toAgentSlug, undefined, input.body)
+            await this.spawnOrWakeTeamMember(managed, input.runId, input.toAgentSlug, task, input.body)
           }
           return {
             message,
@@ -5354,10 +5398,13 @@ user a clickable link to where the thing now lives.`
         },
         requestTeamReviewFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
+          const actor = this.resolveTeamActor(managed, run)
           const task = run.tasks.find((candidate) => candidate.id === input.taskId)
           if (!task) throw new Error(`Team task not found: ${input.taskId}`)
+          this.assertCanRequestTaskGate(run, actor, task, 'review')
           const reviewerAgentSlug = this.resolveReviewer(run, task, input.reviewerAgentSlug)
           this.assertTeamMember(run, reviewerAgentSlug)
+          this.assertDifferentReviewer(task.id, task.ownerAgentSlug, reviewerAgentSlug)
           const updated = updateTeamTask(managed.workspace.rootPath, input.runId, input.taskId, {
             status: 'review',
             reviewRequired: true,
@@ -5370,13 +5417,13 @@ user a clickable link to where the thing now lives.`
             },
           })
           sendTeamMessage(managed.workspace.rootPath, input.runId, {
-            fromAgentSlug: this.resolveTeamActor(managed, run),
+            fromAgentSlug: actor,
             toAgentSlug: reviewerAgentSlug,
             taskId: input.taskId,
             kind: 'review',
             body: input.instructions || `Please review task ${input.taskId}: ${task.title}`,
           })
-          appendTeamRunEvent(managed.workspace.rootPath, input.runId, { kind: 'review.requested', actorAgentSlug: this.resolveTeamActor(managed, run), taskId: input.taskId, body: reviewerAgentSlug })
+          appendTeamRunEvent(managed.workspace.rootPath, input.runId, { kind: 'review.requested', actorAgentSlug: actor, taskId: input.taskId, body: reviewerAgentSlug })
           const wake = await this.spawnOrWakeTeamMember(managed, input.runId, reviewerAgentSlug, updated, input.instructions)
           return {
             task: updated,
@@ -5388,6 +5435,9 @@ user a clickable link to where the thing now lives.`
         requestUserApprovalFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
           const actor = this.resolveTeamActor(managed, run)
+          const task = run.tasks.find((candidate) => candidate.id === input.taskId)
+          if (!task) throw new Error(`Team task not found: ${input.taskId}`)
+          this.assertCanRequestTaskGate(run, actor, task, 'approval')
           const updated = updateTeamTask(managed.workspace.rootPath, input.runId, input.taskId, {
             status: 'blocked',
             approvalRequired: true,
@@ -5407,8 +5457,10 @@ user a clickable link to where the thing now lives.`
         },
         spawnTeamMemberFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
+          const actor = this.resolveTeamActor(managed, run)
           const task = input.taskId ? run.tasks.find((candidate) => candidate.id === input.taskId) : undefined
           if (input.taskId && !task) throw new Error(`Team task not found: ${input.taskId}`)
+          this.assertCanSpawnTeamMember(run, actor, input.agentSlug, task)
           const wake = await this.spawnOrWakeTeamMember(managed, input.runId, input.agentSlug, task, input.prompt)
           return {
             sessionId: wake.sessionId,
@@ -5418,6 +5470,7 @@ user a clickable link to where the thing now lives.`
         },
         summarizeTeamRunFn: (runId: string) => {
           const run = this.readManagedTeamRun(managed, runId)
+          this.resolveTeamActor(managed, run)
           return {
             id: run.id,
             teamSlug: run.teamSlug,

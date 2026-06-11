@@ -320,6 +320,12 @@ export function updateTeamTask(workspaceRootPath: string, runId: string, taskId:
   if (!TASK_PRIORITIES.has(priority)) throw new Error(`Invalid task priority: ${priority}`);
   if (patch.ownerAgentSlug !== undefined && !AGENT_SLUG_REGEX.test(patch.ownerAgentSlug)) throw new Error(`Invalid task owner: ${patch.ownerAgentSlug}`);
   if (patch.reviewerAgentSlug !== undefined && !AGENT_SLUG_REGEX.test(patch.reviewerAgentSlug)) throw new Error(`Invalid task reviewer: ${patch.reviewerAgentSlug}`);
+  if (patch.approvalRequired === false && (current.approvalRequired || current.approval)) {
+    throw new Error(`Task "${taskId}" approval requirement cannot be cleared once set.`);
+  }
+  if (patch.reviewRequired === false && (current.reviewRequired || current.review)) {
+    throw new Error(`Task "${taskId}" review requirement cannot be cleared once set.`);
+  }
   const next: TeamTask = {
     ...current,
     ...patch,
