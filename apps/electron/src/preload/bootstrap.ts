@@ -24,6 +24,7 @@ import { buildClientApi } from '../transport/build-api'
 import { CHANNEL_MAP } from '../transport/channel-map'
 import { createCallbackServer } from '@craft-agent/shared/auth/callback-server'
 import { CHATGPT_OAUTH_CONFIG } from '@craft-agent/shared/auth/chatgpt-oauth-config'
+import { classifyExternalUrl } from '@craft-agent/shared/utils/url-safety'
 import {
   CLIENT_OPEN_EXTERNAL,
   CLIENT_OPEN_PATH,
@@ -56,6 +57,17 @@ const webContentsId: number = ipcRenderer.sendSync('__get-web-contents-id')
 const isClientOnly = !!process.env.CRAFT_SERVER_URL
 
 let client: TransportClient
+
+async function openExternalFromPreload(rawUrl: string, options: { allowInternalDeepLink?: boolean } = {}): Promise<void> {
+  const classification = classifyExternalUrl(rawUrl)
+  if (classification.kind === 'dangerous') {
+    throw new Error(`Refused to open URL: ${classification.reason}`)
+  }
+  if (classification.kind === 'internal-deeplink' && !options.allowInternalDeepLink) {
+    throw new Error('Refused to open internal deep link from external browser flow')
+  }
+  await shell.openExternal(rawUrl)
+}
 
 if (isClientOnly) {
   // ── Thin-client mode ───────────────────────────────────────────────────
@@ -161,7 +173,7 @@ if (isClientOnly) {
 // Register client-side capability handlers (server can invoke these)
 // ---------------------------------------------------------------------------
 
-client.handleCapability(CLIENT_OPEN_EXTERNAL, (url: string) => shell.openExternal(url))
+client.handleCapability(CLIENT_OPEN_EXTERNAL, (url: string) => openExternalFromPreload(url, { allowInternalDeepLink: true }))
 
 client.handleCapability(CLIENT_OPEN_PATH, async (path: string) => {
   const error = await shell.openPath(path)
@@ -290,7 +302,7 @@ client.onConnectionStateChanged((state) => {
     state = startResult.state
 
     // 3. Open browser for user consent (local — must open on the user's machine, not remote server)
-    await shell.openExternal(startResult.authUrl)
+    await openExternalFromPreload(startResult.authUrl)
 
     // 4. Wait for OAuth provider to redirect to our callback server
     const callback = await callbackServer.promise
@@ -337,7 +349,7 @@ client.onConnectionStateChanged((state) => {
   try {
     const result = await client.invoke('onboarding:startClaudeOAuth')
     if (result.success && result.authUrl) {
-      await shell.openExternal(result.authUrl)
+      await openExternalFromPreload(result.authUrl)
     }
     return result
   } catch (err) {
@@ -373,7 +385,7 @@ client.onConnectionStateChanged((state) => {
     state = startResult.state
 
     // 3. Open browser for user consent
-    await shell.openExternal(startResult.authUrl)
+    await openExternalFromPreload(startResult.authUrl)
 
     // 4. Wait for OpenAI to redirect to our callback server
     const callback = await callbackServer.promise
