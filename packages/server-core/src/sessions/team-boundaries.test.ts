@@ -7,6 +7,7 @@ type TeamBoundaryHarness = {
   assertDifferentReviewer(taskLabel: string, ownerAgentSlug: string, reviewerAgentSlug: string): void
   assertCanSpawnTeamMember(run: TeamRunDetail, actor: string, agentSlug: string, task?: TeamTask): void
   assertCanRequestTaskGate(run: TeamRunDetail, actor: string, task: TeamTask, gate: 'review' | 'approval'): void
+  assertTeamRunMutable(run: TeamRunDetail): void
 }
 
 const task: TeamTask = {
@@ -91,5 +92,15 @@ describe('team session boundaries', () => {
     expect(() => sm.assertCanRequestTaskGate(run, 'coder', task, 'approval')).not.toThrow()
     expect(() => sm.assertCanRequestTaskGate(run, 'reviewer', task, 'review')).toThrow('cannot request review')
     expect(() => sm.assertCanRequestTaskGate(run, 'reviewer', task, 'approval')).toThrow('cannot request approval')
+  })
+
+  it('blocks mutating team tools while a run is paused or terminal', () => {
+    const sm = harness()
+
+    expect(() => sm.assertTeamRunMutable(run)).not.toThrow()
+    expect(() => sm.assertTeamRunMutable({ ...run, state: 'paused' })).toThrow('is paused')
+    expect(() => sm.assertTeamRunMutable({ ...run, state: 'cancelled' })).toThrow('is cancelled')
+    expect(() => sm.assertTeamRunMutable({ ...run, state: 'failed' })).toThrow('is failed')
+    expect(() => sm.assertTeamRunMutable({ ...run, state: 'done' })).toThrow('is done')
   })
 })

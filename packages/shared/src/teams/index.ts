@@ -18,6 +18,8 @@ export type {
 
 export type {
   CreateTeamTaskInput,
+  ClaimTeamTaskInput,
+  HeartbeatTeamTaskInput,
   SendTeamMessageInput,
   StartTeamRunInput,
   TeamMessage,
@@ -29,10 +31,12 @@ export type {
   TeamRunEventKind,
   TeamRunSnapshot,
   TeamRunState,
+  TeamRunSwarmPolicy,
   TeamTask,
   TeamTaskEvidence,
   TeamTaskPriority,
   TeamTaskStatus,
+  TeamRunControlInput,
   UpdateTeamTaskInput,
 } from './run-types.ts';
 
@@ -60,11 +64,15 @@ export {
 export {
   appendTeamRunEvent,
   assertValidTeamRunId,
+  claimTeamTask,
+  controlTeamRun,
   createTeamTask,
   deleteTeamRun,
+  expireStaleTeamTaskLeases,
   getTeamRunDir,
   getTeamRunFile,
   getTeamRunsDir,
+  heartbeatTeamTask,
   isValidTeamRunId,
   linkTeamRunMemberSession,
   listTeamMessages,
@@ -75,6 +83,7 @@ export {
   readTeamRun,
   readTeamRunDetail,
   sendTeamMessage,
+  normalizeTeamRunSwarmPolicy,
   touchTeamRun,
   updateTeamTask,
   writeTeamRun,

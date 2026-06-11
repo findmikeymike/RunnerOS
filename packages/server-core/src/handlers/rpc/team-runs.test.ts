@@ -216,4 +216,34 @@ describe('team run RPC handlers', () => {
     await expect(handlers.get(RPC_CHANNELS.teamRuns.DELETE)!({} as any, 'workspace-1', blockedRun.id))
       .resolves.toBe(true)
   })
+
+  it('lets the operator pause, resume, and cancel a run through the control channel', async () => {
+    const { handlers, server, deps, pushCalls } = createHarness()
+    const { registerTeamRunsHandlers } = await import('./team-runs')
+    registerTeamRunsHandlers(server, deps)
+
+    const started = await handlers.get(RPC_CHANNELS.teamRuns.START)!({} as any, 'workspace-1', {
+      teamSlug: 'engineering-ship-team',
+      userRequest: 'Coordinate a swarm.',
+    })
+
+    const paused = await handlers.get(RPC_CHANNELS.teamRuns.CONTROL)!({} as any, 'workspace-1', started.id, {
+      action: 'pause',
+      reason: 'Operator review',
+    })
+    expect(paused.state).toBe('paused')
+    expect(paused.swarm?.operatorPausedReason).toBe('Operator review')
+
+    const resumed = await handlers.get(RPC_CHANNELS.teamRuns.CONTROL)!({} as any, 'workspace-1', started.id, {
+      action: 'resume',
+    })
+    expect(resumed.state).toBe('running')
+
+    const cancelled = await handlers.get(RPC_CHANNELS.teamRuns.CONTROL)!({} as any, 'workspace-1', started.id, {
+      action: 'cancel',
+      reason: 'Stop swarm',
+    })
+    expect(cancelled.state).toBe('cancelled')
+    expect(pushCalls.at(-1)?.args.at(-1)).toBe('completed')
+  })
 })

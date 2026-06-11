@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Archive, Check, Copy, ExternalLink, Pencil, Play, Plus, ShieldCheck, Trash2, UserPlus, Users, X } from 'lucide-react'
+import { Archive, Check, Copy, ExternalLink, Pause, Pencil, Play, Plus, ShieldCheck, Square, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -57,7 +57,7 @@ const TEAM_AGENT_SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
 export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPageProps) {
   const { navigate } = useNavigation()
   const { allTeams, loading, error, upsert, remove } = useTeams()
-  const { runs, detailsById, get, start, updateTask } = useTeamRuns(workspaceId)
+  const { runs, detailsById, get, start, control, updateTask } = useTeamRuns(workspaceId)
   const [selectedRunIdByTeam, setSelectedRunIdByTeam] = React.useState<Record<string, string>>({})
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
   const [createTemplateSlug, setCreateTemplateSlug] = React.useState<string | null>(null)
@@ -240,6 +240,17 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
     }
   }
 
+  const handleRunControl = async (run: TeamRunSnapshot, action: 'pause' | 'resume' | 'cancel') => {
+    const reason = action === 'resume' ? undefined : window.prompt(action === 'pause' ? 'Pause reason?' : 'Cancel reason?')
+    if (reason === null) return
+    try {
+      await control(run.id, { action, reason: reason?.trim() || undefined })
+      toast.success(action === 'pause' ? 'Run paused' : action === 'resume' ? 'Run resumed' : 'Run cancelled')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl px-7 py-7">
@@ -312,9 +323,10 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 onEdit={() => void handleEditTeam(selectedRuntimeTeam)}
                 onDuplicate={() => void handleDuplicateTeam(selectedRuntimeTeam)}
                 onArchive={() => void handleArchiveTeam(selectedRuntimeTeam)}
-                onOpenLead={(sessionId) => navigate(routes.view.allSessions(sessionId), { newPanel: true })}
-                onDecideApproval={activeRun ? (task, decision) => void handleApprovalDecision(activeRun, task, decision) : undefined}
-              />
+              onOpenLead={(sessionId) => navigate(routes.view.allSessions(sessionId), { newPanel: true })}
+              onControlRun={(run, action) => void handleRunControl(run, action)}
+              onDecideApproval={activeRun ? (task, decision) => void handleApprovalDecision(activeRun, task, decision) : undefined}
+            />
             ) : (
               <div className="hidden min-h-[420px] items-center justify-center rounded-[14px] border border-white/[0.08] bg-white/[0.025] p-6 text-center text-sm text-white/46 xl:flex">
                 Select a team to see active runs.
@@ -939,6 +951,7 @@ function TeamDetailPanel({
   onDuplicate,
   onArchive,
   onOpenLead,
+  onControlRun,
   onDecideApproval,
 }: {
   team: TeamDTO
@@ -951,10 +964,12 @@ function TeamDetailPanel({
   onDuplicate: () => void
   onArchive: () => void
   onOpenLead: (sessionId: string) => void
+  onControlRun: (run: TeamRunSnapshot, action: 'pause' | 'resume' | 'cancel') => void
   onDecideApproval?: (task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => void
 }) {
   const verification = team.metadata.verification
   const approvalTasks = selectedDetail?.tasks.filter((task) => task.approval?.status === 'requested') ?? []
+  const runIsTerminal = selectedRun ? ['done', 'failed', 'cancelled'].includes(selectedRun.state) : false
 
   return (
     <aside className="rounded-[14px] border border-white/[0.08] bg-white/[0.035] p-4">
@@ -1032,6 +1047,35 @@ function TeamDetailPanel({
             <p className="text-[12px] text-white/45">Start a run to create the lead session.</p>
           )}
         </DetailBlock>
+
+        {selectedRun ? (
+          <DetailBlock title="Operator controls">
+            <div className="grid grid-cols-3 gap-2">
+              {selectedRun.state === 'paused' ? (
+                <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-white/70 hover:text-white" onClick={() => onControlRun(selectedRun, 'resume')}>
+                  <Play className="mr-1.5 h-3.5 w-3.5" />
+                  Resume
+                </Button>
+              ) : (
+                <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-white/70 hover:text-white" disabled={runIsTerminal} onClick={() => onControlRun(selectedRun, 'pause')}>
+                  <Pause className="mr-1.5 h-3.5 w-3.5" />
+                  Pause
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-white/70 hover:text-white" disabled={!selectedRun.leadSessionId} onClick={() => selectedRun.leadSessionId && onOpenLead(selectedRun.leadSessionId)}>
+                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                Lead
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-red-200/70 hover:text-red-100" disabled={runIsTerminal} onClick={() => onControlRun(selectedRun, 'cancel')}>
+                <Square className="mr-1.5 h-3.5 w-3.5" />
+                Cancel
+              </Button>
+            </div>
+            {selectedRun.swarm?.operatorPausedReason ? (
+              <p className="mt-2 text-[11px] leading-[16px] text-white/45">{selectedRun.swarm.operatorPausedReason}</p>
+            ) : null}
+          </DetailBlock>
+        ) : null}
 
         <DetailBlock title="Task board">
           {selectedDetail ? (

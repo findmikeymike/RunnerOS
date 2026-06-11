@@ -136,6 +136,7 @@ import type {
   CreateTeamTaskInput,
   SendTeamMessageInput,
   StartTeamRunInput,
+  TeamRunControlInput,
   TeamRunDetail,
   TeamRunSnapshot,
   UpdateTeamTaskInput,
@@ -144,6 +145,7 @@ export type {
   CreateTeamTaskInput,
   SendTeamMessageInput,
   StartTeamRunInput,
+  TeamRunControlInput,
   TeamDTO,
   TeamMetadataDTO,
   TeamRunDetail,
@@ -898,6 +900,7 @@ export interface ElectronAPI {
   getTeamRun(workspaceId: string, runId: string): Promise<TeamRunDetail | null>
   listTeamRuns(workspaceId: string): Promise<TeamRunSnapshot[]>
   deleteTeamRun(workspaceId: string, runId: string): Promise<boolean>
+  controlTeamRun(workspaceId: string, runId: string, input: TeamRunControlInput): Promise<TeamRunDetail>
   createTeamTask(workspaceId: string, runId: string, input: CreateTeamTaskInput): Promise<TeamRunDetail>
   updateTeamTask(workspaceId: string, runId: string, taskId: string, patch: UpdateTeamTaskInput): Promise<TeamRunDetail>
   sendTeamMessage(workspaceId: string, runId: string, input: SendTeamMessageInput): Promise<TeamRunDetail>

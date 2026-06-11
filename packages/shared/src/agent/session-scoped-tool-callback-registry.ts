@@ -79,6 +79,12 @@ export interface SessionScopedToolCallbacks {
   createTeamTaskFn?: (input: import('@craft-agent/session-tools-core').CreateTeamTaskToolInput) => Promise<unknown>;
   /** Update a task in a team run. */
   updateTeamTaskFn?: (input: import('@craft-agent/session-tools-core').UpdateTeamTaskToolInput) => Promise<unknown>;
+  /** Claim a task lease in a team run. */
+  claimTeamTaskFn?: (input: import('@craft-agent/session-tools-core').ClaimTeamTaskToolInput) => Promise<unknown>;
+  /** Renew a task lease in a team run. */
+  heartbeatTeamTaskFn?: (input: import('@craft-agent/session-tools-core').HeartbeatTeamTaskToolInput) => Promise<unknown>;
+  /** Expire stale task leases in a team run. */
+  expireStaleTeamTasksFn?: (runId: string) => Promise<unknown>;
   /** List internal messages for a team run. */
   listTeamMessagesFn?: (runId: string) => unknown[];
   /** Send an internal team message. */

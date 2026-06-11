@@ -323,6 +323,7 @@ const EXPECTED_CHANNELS: string[] = [
   "system:isDebugMode",
   "system:versions",
   "tasks:getOutput",
+  "team-runs:control",
   "team-runs:create-task",
   "team-runs:delete",
   "team-runs:get",

@@ -151,6 +151,30 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'claimTeamTask', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.claimTeamTaskFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'heartbeatTeamTask', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.heartbeatTeamTaskFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'expireStaleTeamTasks', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.expireStaleTeamTasksFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'listTeamMessages', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.listTeamMessagesFn;

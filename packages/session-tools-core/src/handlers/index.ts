@@ -94,6 +94,9 @@ export type {
 // Teams
 export {
   handleCreateTeamTask,
+  handleClaimTeamTask,
+  handleExpireStaleTeamTasks,
+  handleHeartbeatTeamTask,
   handleListTeamMessages,
   handleListTeamTasks,
   handleRequestTeamReview,
@@ -104,7 +107,9 @@ export {
   handleUpdateTeamTask,
 } from './teams.ts';
 export type {
+  ClaimTeamTaskToolInput,
   CreateTeamTaskToolInput,
+  HeartbeatTeamTaskToolInput,
   RequestTeamReviewToolInput,
   RequestUserApprovalToolInput,
   SendTeamMessageToolInput,

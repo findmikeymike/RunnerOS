@@ -450,6 +450,7 @@ export const CHANNEL_MAP = {
   getTeamRun: invoke(RPC_CHANNELS.teamRuns.GET),
   listTeamRuns: invoke(RPC_CHANNELS.teamRuns.LIST),
   deleteTeamRun: invoke(RPC_CHANNELS.teamRuns.DELETE),
+  controlTeamRun: invoke(RPC_CHANNELS.teamRuns.CONTROL),
   createTeamTask: invoke(RPC_CHANNELS.teamRuns.CREATE_TASK),
   updateTeamTask: invoke(RPC_CHANNELS.teamRuns.UPDATE_TASK),
   sendTeamMessage: invoke(RPC_CHANNELS.teamRuns.SEND_MESSAGE),

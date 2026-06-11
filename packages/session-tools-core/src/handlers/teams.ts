@@ -12,6 +12,7 @@ export interface CreateTeamTaskToolInput {
   approvalRequired?: boolean;
   reviewRequired?: boolean;
   reviewerAgentSlug?: string;
+  maxAttempts?: number;
 }
 
 export interface UpdateTeamTaskToolInput {
@@ -29,6 +30,19 @@ export interface UpdateTeamTaskToolInput {
   blockedReason?: string;
   reviewStatus?: 'passed' | 'failed';
   reviewFindings?: string;
+}
+
+export interface ClaimTeamTaskToolInput {
+  runId: string;
+  taskId?: string;
+  leaseTtlMs?: number;
+}
+
+export interface HeartbeatTeamTaskToolInput {
+  runId: string;
+  taskId: string;
+  leaseId: string;
+  leaseTtlMs?: number;
 }
 
 export interface SendTeamMessageToolInput {
@@ -92,6 +106,33 @@ export async function handleUpdateTeamTask(ctx: SessionToolContext, args: Update
     return successResponse(JSON.stringify(await ctx.updateTeamTask(args), null, 2));
   } catch (error) {
     return errorResponse(`Failed to update team task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function handleClaimTeamTask(ctx: SessionToolContext, args: ClaimTeamTaskToolInput): Promise<ToolResult> {
+  if (!ctx.claimTeamTask) return errorResponse('claim_team_task is not available in this context.');
+  try {
+    return successResponse(JSON.stringify(await ctx.claimTeamTask(args), null, 2));
+  } catch (error) {
+    return errorResponse(`Failed to claim team task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function handleHeartbeatTeamTask(ctx: SessionToolContext, args: HeartbeatTeamTaskToolInput): Promise<ToolResult> {
+  if (!ctx.heartbeatTeamTask) return errorResponse('heartbeat_team_task is not available in this context.');
+  try {
+    return successResponse(JSON.stringify(await ctx.heartbeatTeamTask(args), null, 2));
+  } catch (error) {
+    return errorResponse(`Failed to heartbeat team task: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function handleExpireStaleTeamTasks(ctx: SessionToolContext, args: { runId: string }): Promise<ToolResult> {
+  if (!ctx.expireStaleTeamTasks) return errorResponse('expire_stale_team_tasks is not available in this context.');
+  try {
+    return successResponse(JSON.stringify(await ctx.expireStaleTeamTasks(args.runId), null, 2));
+  } catch (error) {
+    return errorResponse(`Failed to expire stale team tasks: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

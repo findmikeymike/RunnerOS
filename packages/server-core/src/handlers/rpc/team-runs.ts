@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   appendTeamRunEvent,
+  controlTeamRun,
   deleteTeamRun,
   listTeamRuns,
   loadGlobalTeam,
+  normalizeTeamRunSwarmPolicy,
   readTeamRun,
   readTeamRunDetail,
   touchTeamRun,
@@ -13,6 +15,7 @@ import {
   type CreateTeamTaskInput,
   type SendTeamMessageInput,
   type StartTeamRunInput,
+  type TeamRunControlInput,
   type TeamRunDetail,
   type TeamRunSnapshot,
   type UpdateTeamTaskInput,
@@ -25,6 +28,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.teamRuns.GET,
   RPC_CHANNELS.teamRuns.LIST,
   RPC_CHANNELS.teamRuns.DELETE,
+  RPC_CHANNELS.teamRuns.CONTROL,
   RPC_CHANNELS.teamRuns.CREATE_TASK,
   RPC_CHANNELS.teamRuns.UPDATE_TASK,
   RPC_CHANNELS.teamRuns.SEND_MESSAGE,
@@ -70,6 +74,7 @@ function buildLeadPrompt(teamSlug: string, input: StartTeamRunInput, run: TeamRu
     'Operating rules:',
     '- Split the user request into owned team tasks before doing broad work.',
     '- Use team run/task/message state as the durable record.',
+    '- Members should claim_team_task before work and heartbeat_team_task during longer work.',
     '- Risky external actions require user approval before execution.',
     '- Return one coherent lead-facing answer to the user.',
     '',
@@ -126,6 +131,7 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
           body: team.body,
         },
         permissionMode: team.metadata.permissionMode,
+        swarm: normalizeTeamRunSwarmPolicy(input.swarm),
         createdAt: now,
         updatedAt: now,
       }
@@ -185,6 +191,18 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
         throw new Error(`Cannot delete team run "${runId}" while it is ${existing.state}.`)
       }
       return deleteTeamRun(rootPath, runId)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.teamRuns.CONTROL,
+    async (_ctx, workspaceId: string, runId: string, input: TeamRunControlInput): Promise<TeamRunDetail> => {
+      const rootPath = resolveRootPath(deps, workspaceId)
+      controlTeamRun(rootPath, runId, input.action, input.reason)
+      const detail = readTeamRunDetail(rootPath, runId)
+      if (!detail) throw new Error(`Team run not found: ${runId}`)
+      broadcastUpdated(deps, workspaceId, detail, detail.state === 'cancelled' ? 'completed' : 'updated')
+      return detail
     },
   )
 

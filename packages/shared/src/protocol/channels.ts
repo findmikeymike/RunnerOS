@@ -488,6 +488,7 @@ export const RPC_CHANNELS = {
     GET: 'team-runs:get',
     LIST: 'team-runs:list',
     DELETE: 'team-runs:delete',
+    CONTROL: 'team-runs:control',
     CREATE_TASK: 'team-runs:create-task',
     UPDATE_TASK: 'team-runs:update-task',
     SEND_MESSAGE: 'team-runs:send-message',

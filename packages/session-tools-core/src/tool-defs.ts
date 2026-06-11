@@ -64,6 +64,9 @@ import {
 } from './handlers/workflows.ts';
 import {
   handleCreateTeamTask,
+  handleClaimTeamTask,
+  handleExpireStaleTeamTasks,
+  handleHeartbeatTeamTask,
   handleListTeamMessages,
   handleListTeamTasks,
   handleRequestTeamReview,
@@ -513,6 +516,7 @@ export const CreateTeamTaskSchema = z.object({
   approvalRequired: z.boolean().optional().describe('Whether this task needs user approval before risky work'),
   reviewRequired: z.boolean().optional().describe('Whether this task must pass reviewer verification before done'),
   reviewerAgentSlug: z.string().optional().describe('Reviewer agent slug, if known'),
+  maxAttempts: z.number().int().positive().optional().describe('Optional per-task attempt limit before stale retries fail the task'),
 });
 
 export const UpdateTeamTaskSchema = z.object({
@@ -537,6 +541,23 @@ export const UpdateTeamTaskSchema = z.object({
 });
 
 export const ListTeamMessagesSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+});
+
+export const ClaimTeamTaskSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  taskId: z.string().optional().describe('Specific task to claim. Omit to claim the next task owned by this agent.'),
+  leaseTtlMs: z.number().int().positive().optional().describe('Optional lease duration override in milliseconds'),
+});
+
+export const HeartbeatTeamTaskSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  taskId: z.string().describe('Task ID whose lease is being renewed'),
+  leaseId: z.string().describe('Lease ID returned by claim_team_task'),
+  leaseTtlMs: z.number().int().positive().optional().describe('Optional lease duration override in milliseconds'),
+});
+
+export const ExpireStaleTeamTasksSchema = z.object({
   runId: z.string().describe('Team run ID'),
 });
 
@@ -880,6 +901,18 @@ Use this when the team lead assigns work. The runtime records the task, sends an
 
 Tasks with reviewRequired cannot be marked done until a reviewer has passed them through request_team_review.`,
 
+  claim_team_task: `Claim durable ownership of one team task before starting work.
+
+Use this before doing task work in a swarm. It records a lease, enforces run-level concurrency, and returns null when no owned task is available.`,
+
+  heartbeat_team_task: `Renew a claimed team task lease.
+
+Use this during longer work so the task is not treated as stale and picked up by another agent.`,
+
+  expire_stale_team_tasks: `Mark expired team task leases as retryable or failed.
+
+Use this from a lead/orchestrator pass before assigning more work, or after noticing a member has gone silent.`,
+
   list_team_messages: `List internal team messages for a team run.
 
 Use this to inspect assignments, questions, results, review notes, and approval requests.`,
@@ -1174,6 +1207,9 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'list_team_tasks', description: TOOL_DESCRIPTIONS.list_team_tasks, inputSchema: ListTeamTasksSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListTeamTasks },
   { name: 'create_team_task', description: TOOL_DESCRIPTIONS.create_team_task, inputSchema: CreateTeamTaskSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateTeamTask },
   { name: 'update_team_task', description: TOOL_DESCRIPTIONS.update_team_task, inputSchema: UpdateTeamTaskSchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateTeamTask },
+  { name: 'claim_team_task', description: TOOL_DESCRIPTIONS.claim_team_task, inputSchema: ClaimTeamTaskSchema, executionMode: 'registry', safeMode: 'block', handler: handleClaimTeamTask },
+  { name: 'heartbeat_team_task', description: TOOL_DESCRIPTIONS.heartbeat_team_task, inputSchema: HeartbeatTeamTaskSchema, executionMode: 'registry', safeMode: 'allow', handler: handleHeartbeatTeamTask },
+  { name: 'expire_stale_team_tasks', description: TOOL_DESCRIPTIONS.expire_stale_team_tasks, inputSchema: ExpireStaleTeamTasksSchema, executionMode: 'registry', safeMode: 'block', handler: handleExpireStaleTeamTasks },
   { name: 'list_team_messages', description: TOOL_DESCRIPTIONS.list_team_messages, inputSchema: ListTeamMessagesSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListTeamMessages },
   { name: 'send_team_message', description: TOOL_DESCRIPTIONS.send_team_message, inputSchema: SendTeamMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendTeamMessage },
   { name: 'request_team_review', description: TOOL_DESCRIPTIONS.request_team_review, inputSchema: RequestTeamReviewSchema, executionMode: 'registry', safeMode: 'block', handler: handleRequestTeamReview },

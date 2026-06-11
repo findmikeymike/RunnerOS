@@ -1,7 +1,7 @@
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { TeamMetadata } from './types.ts';
 
-export type TeamRunState = 'created' | 'running' | 'blocked' | 'review' | 'done' | 'failed' | 'cancelled';
+export type TeamRunState = 'created' | 'running' | 'paused' | 'blocked' | 'review' | 'done' | 'failed' | 'cancelled';
 export type TeamTaskStatus = 'todo' | 'in_progress' | 'blocked' | 'review' | 'done' | 'failed';
 export type TeamTaskPriority = 'low' | 'normal' | 'high';
 export type TeamMessageActor = string | 'user' | 'system';
@@ -15,7 +15,13 @@ export type TeamRunEventKind =
   | 'message.sent'
   | 'session.linked'
   | 'review.requested'
-  | 'approval.requested';
+  | 'approval.requested'
+  | 'task.leased'
+  | 'task.heartbeat'
+  | 'task.lease_expired'
+  | 'run.paused'
+  | 'run.resumed'
+  | 'run.cancelled';
 
 export interface TeamTaskEvidence {
   type: 'text' | 'file' | 'url' | 'output';
@@ -57,6 +63,17 @@ export interface TeamTask {
   reviewerAgentSlug?: string;
   review?: TeamTaskReview;
   blockedReason?: string;
+  attemptCount?: number;
+  maxAttempts?: number;
+  lease?: {
+    id: string;
+    ownerAgentSlug: string;
+    claimedAt: string;
+    heartbeatAt: string;
+    expiresAt: string;
+  };
+  lastError?: string;
+  nextAttemptAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -97,9 +114,21 @@ export interface TeamRunSnapshot {
     body: string;
   };
   permissionMode?: PermissionMode;
+  swarm?: TeamRunSwarmPolicy;
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
+}
+
+export interface TeamRunSwarmPolicy {
+  maxConcurrentTasks: number;
+  taskLeaseMs: number;
+  heartbeatIntervalMs: number;
+  staleAfterMs: number;
+  retryLimit: number;
+  retryBackoffMs: number;
+  operatorPausedAt?: string;
+  operatorPausedReason?: string;
 }
 
 export interface TeamRunDetail extends TeamRunSnapshot {
@@ -111,6 +140,7 @@ export interface TeamRunDetail extends TeamRunSnapshot {
 export interface StartTeamRunInput {
   teamSlug: string;
   userRequest: string;
+  swarm?: Partial<TeamRunSwarmPolicy>;
 }
 
 export interface CreateTeamTaskInput {
@@ -122,6 +152,7 @@ export interface CreateTeamTaskInput {
   approvalRequired?: boolean;
   reviewRequired?: boolean;
   reviewerAgentSlug?: string;
+  maxAttempts?: number;
 }
 
 export interface UpdateTeamTaskInput {
@@ -139,6 +170,26 @@ export interface UpdateTeamTaskInput {
   reviewerAgentSlug?: string;
   review?: TeamTaskReview;
   blockedReason?: string;
+  lastError?: string;
+  nextAttemptAt?: string;
+}
+
+export interface ClaimTeamTaskInput {
+  agentSlug: string;
+  taskId?: string;
+  leaseTtlMs?: number;
+}
+
+export interface HeartbeatTeamTaskInput {
+  agentSlug: string;
+  taskId: string;
+  leaseId: string;
+  leaseTtlMs?: number;
+}
+
+export interface TeamRunControlInput {
+  action: 'pause' | 'resume' | 'cancel';
+  reason?: string;
 }
 
 export interface SendTeamMessageInput {

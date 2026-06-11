@@ -355,6 +355,15 @@ export interface SessionToolContext {
   /** Update a task in a team run. Injected by backend. */
   updateTeamTask?(input: import('./handlers/teams.ts').UpdateTeamTaskToolInput): Promise<unknown>;
 
+  /** Claim a task lease in a team run. Injected by backend. */
+  claimTeamTask?(input: import('./handlers/teams.ts').ClaimTeamTaskToolInput): Promise<unknown>;
+
+  /** Renew a task lease in a team run. Injected by backend. */
+  heartbeatTeamTask?(input: import('./handlers/teams.ts').HeartbeatTeamTaskToolInput): Promise<unknown>;
+
+  /** Expire stale task leases in a team run. Injected by backend. */
+  expireStaleTeamTasks?(runId: string): Promise<unknown>;
+
   /** List internal messages for a team run. Injected by backend. */
   listTeamMessages?(runId: string): unknown[];
 

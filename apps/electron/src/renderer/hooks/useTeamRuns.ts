@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAtom } from 'jotai'
 import { teamRunsStateAtomFamily, type TeamRunsState } from '@/atoms/team-runs'
-import type { CreateTeamTaskInput, SendTeamMessageInput, StartTeamRunInput, TeamRunDetail, TeamRunSnapshot, UpdateTeamTaskInput } from '../../shared/types'
+import type { CreateTeamTaskInput, SendTeamMessageInput, StartTeamRunInput, TeamRunControlInput, TeamRunDetail, TeamRunSnapshot, UpdateTeamTaskInput } from '../../shared/types'
 
 export interface UseTeamRunsResult {
   runs: TeamRunSnapshot[]
@@ -11,6 +11,7 @@ export interface UseTeamRunsResult {
   refresh: () => Promise<void>
   get: (runId: string) => Promise<TeamRunDetail | null>
   start: (input: StartTeamRunInput) => Promise<TeamRunDetail>
+  control: (runId: string, input: TeamRunControlInput) => Promise<TeamRunDetail>
   createTask: (runId: string, input: CreateTeamTaskInput) => Promise<TeamRunDetail>
   updateTask: (runId: string, taskId: string, patch: UpdateTeamTaskInput) => Promise<TeamRunDetail>
   sendMessage: (runId: string, input: SendTeamMessageInput) => Promise<TeamRunDetail>
@@ -145,6 +146,13 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
     return detail
   }, [setState, workspaceId])
 
+  const control = useCallback(async (runId: string, input: TeamRunControlInput): Promise<TeamRunDetail> => {
+    if (!workspaceId) throw new Error('Workspace is required to control a team run.')
+    const detail = await window.electronAPI.controlTeamRun(workspaceId, runId, input)
+    setState((prev) => upsertDetail(prev, detail))
+    return detail
+  }, [setState, workspaceId])
+
   const updateTask = useCallback(async (runId: string, taskId: string, patch: UpdateTeamTaskInput): Promise<TeamRunDetail> => {
     if (!workspaceId) throw new Error('Workspace is required to update a team task.')
     const detail = await window.electronAPI.updateTeamTask(workspaceId, runId, taskId, patch)
@@ -191,6 +199,7 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
     refresh,
     get,
     start,
+    control,
     createTask,
     updateTask,
     sendMessage,

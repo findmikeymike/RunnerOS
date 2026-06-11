@@ -113,11 +113,15 @@ import {
 } from '@craft-agent/shared/workflows'
 import {
   appendTeamRunEvent,
+  claimTeamTask,
   createTeamTask,
+  expireStaleTeamTaskLeases,
+  heartbeatTeamTask,
   linkTeamRunMemberSession,
   listTeamMessages,
   listTeamTasks,
   loadGlobalTeam,
+  normalizeTeamRunSwarmPolicy,
   readTeamRunDetail,
   sendTeamMessage,
   updateTeamTask,
@@ -3350,6 +3354,13 @@ user a clickable link to where the thing now lives.`
     throw new Error(`Agent "${actor}" cannot request ${gate} for task "${task.id}".`)
   }
 
+  private assertTeamRunMutable(run: TeamRunDetail): void {
+    if (run.state === 'paused') throw new Error(`Team run "${run.id}" is paused.`)
+    if (run.state === 'done' || run.state === 'failed' || run.state === 'cancelled') {
+      throw new Error(`Team run "${run.id}" is ${run.state}.`)
+    }
+  }
+
   private buildTeamMemberPrompt(run: TeamRunDetail, agentSlug: string, task?: TeamTask, extraPrompt?: string): string {
     const member = run.teamSnapshot.metadata.members.find((candidate) => candidate.slug === agentSlug)
     const role = agentSlug === run.teamSnapshot.metadata.lead ? 'Lead' : (member?.role ?? 'Team member')
@@ -3401,6 +3412,7 @@ user a clickable link to where the thing now lives.`
       '- Split the user request into owned team tasks before doing broad work.',
       '- Use team run/task/message state as the durable record.',
       '- Use create_team_task to assign members and wake their sessions.',
+      '- Members should claim_team_task before work and heartbeat_team_task during longer work.',
       '- Use request_team_review before claiming review-required work is done.',
       '- Risky external actions require request_user_approval before execution.',
       '- Return one coherent lead-facing answer to the user.',
@@ -3430,6 +3442,7 @@ user a clickable link to where the thing now lives.`
         body: team.body,
       },
       permissionMode: team.metadata.permissionMode,
+      swarm: normalizeTeamRunSwarmPolicy(input.swarm),
       createdAt: now,
       updatedAt: now,
     }
@@ -3496,7 +3509,7 @@ user a clickable link to where the thing now lives.`
       },
       customSystemPrompt: [
         agentOptions.customSystemPrompt,
-        `You are a member of RunnerOS team "${detail.teamSnapshot.metadata.name}" (${detail.teamSlug}). Coordinate through team tools and keep the task board current.`,
+        `You are a member of RunnerOS team "${detail.teamSnapshot.metadata.name}" (${detail.teamSlug}). Claim your task with claim_team_task before work, heartbeat_team_task during longer work, and keep the task board current.`,
       ].filter(Boolean).join('\n\n'),
     })
 
@@ -5268,6 +5281,7 @@ user a clickable link to where the thing now lives.`
         },
         createTeamTaskFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
+          this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
           if (actor !== run.teamSnapshot.metadata.lead) {
             throw new Error('Only the team lead can create team tasks.')
@@ -5292,6 +5306,7 @@ user a clickable link to where the thing now lives.`
             approvalRequired,
             reviewRequired,
             reviewerAgentSlug: input.reviewerAgentSlug,
+            maxAttempts: input.maxAttempts,
           } satisfies CreateTeamTaskInput)
           sendTeamMessage(managed.workspace.rootPath, input.runId, {
             fromAgentSlug: actor,
@@ -5310,6 +5325,7 @@ user a clickable link to where the thing now lives.`
         },
         updateTeamTaskFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
+          this.assertTeamRunMutable(run)
           const task = run.tasks.find((candidate) => candidate.id === input.taskId)
           if (!task) throw new Error(`Team task not found: ${input.taskId}`)
           const actor = this.resolveTeamActor(managed, run)
@@ -5373,8 +5389,51 @@ user a clickable link to where the thing now lives.`
             run: emittedRun,
           }
         },
+        claimTeamTaskFn: async (input) => {
+          const run = this.readManagedTeamRun(managed, input.runId)
+          this.assertTeamRunMutable(run)
+          const actor = this.resolveTeamActor(managed, run)
+          const claimed = claimTeamTask(managed.workspace.rootPath, input.runId, {
+            agentSlug: actor,
+            taskId: input.taskId,
+            leaseTtlMs: input.leaseTtlMs,
+          })
+          return {
+            task: claimed,
+            run: this.emitTeamRunUpdated(managed, input.runId),
+          }
+        },
+        heartbeatTeamTaskFn: async (input) => {
+          const run = this.readManagedTeamRun(managed, input.runId)
+          this.assertTeamRunMutable(run)
+          const actor = this.resolveTeamActor(managed, run)
+          const task = heartbeatTeamTask(managed.workspace.rootPath, input.runId, {
+            agentSlug: actor,
+            taskId: input.taskId,
+            leaseId: input.leaseId,
+            leaseTtlMs: input.leaseTtlMs,
+          })
+          return {
+            task,
+            run: this.emitTeamRunUpdated(managed, input.runId),
+          }
+        },
+        expireStaleTeamTasksFn: async (runId: string) => {
+          const run = this.readManagedTeamRun(managed, runId)
+          this.assertTeamRunMutable(run)
+          const actor = this.resolveTeamActor(managed, run)
+          if (actor !== run.teamSnapshot.metadata.lead) {
+            throw new Error('Only the team lead can expire stale team task leases.')
+          }
+          const tasks = expireStaleTeamTaskLeases(managed.workspace.rootPath, runId)
+          return {
+            tasks,
+            run: this.emitTeamRunUpdated(managed, runId),
+          }
+        },
         sendTeamMessageFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
+          this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
           const task = input.taskId ? run.tasks.find((candidate) => candidate.id === input.taskId) : undefined
           if (input.taskId && !task) throw new Error(`Team task not found: ${input.taskId}`)
@@ -5398,6 +5457,7 @@ user a clickable link to where the thing now lives.`
         },
         requestTeamReviewFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
+          this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
           const task = run.tasks.find((candidate) => candidate.id === input.taskId)
           if (!task) throw new Error(`Team task not found: ${input.taskId}`)
@@ -5434,6 +5494,7 @@ user a clickable link to where the thing now lives.`
         },
         requestUserApprovalFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
+          this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
           const task = run.tasks.find((candidate) => candidate.id === input.taskId)
           if (!task) throw new Error(`Team task not found: ${input.taskId}`)
@@ -5457,6 +5518,7 @@ user a clickable link to where the thing now lives.`
         },
         spawnTeamMemberFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
+          this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
           const task = input.taskId ? run.tasks.find((candidate) => candidate.id === input.taskId) : undefined
           if (input.taskId && !task) throw new Error(`Team task not found: ${input.taskId}`)

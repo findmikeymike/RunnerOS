@@ -3,8 +3,12 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  claimTeamTask,
+  controlTeamRun,
   createTeamTask,
+  expireStaleTeamTaskLeases,
   getTeamRunFile,
+  heartbeatTeamTask,
   isValidTeamRunId,
   linkTeamRunMemberSession,
   listTeamRuns,
@@ -225,5 +229,120 @@ describe('team run storage', () => {
       reviewRequired: false,
       status: 'done',
     })).toThrow('review requirement cannot be cleared');
+  });
+
+  test('leases tasks to their owner, heartbeats them, and respects run concurrency', () => {
+    writeTeamRun(workspace, sampleRun({
+      swarm: {
+        maxConcurrentTasks: 1,
+        taskLeaseMs: 1000,
+        heartbeatIntervalMs: 250,
+        staleAfterMs: 2000,
+        retryLimit: 2,
+        retryBackoffMs: 500,
+      },
+    }));
+    const first = createTeamTask(workspace, RUN_ID, {
+      title: 'Implement first slice',
+      description: '',
+      ownerAgentSlug: 'coder',
+    });
+    createTeamTask(workspace, RUN_ID, {
+      title: 'Implement second slice',
+      description: '',
+      ownerAgentSlug: 'reviewer',
+    });
+
+    const claimed = claimTeamTask(workspace, RUN_ID, {
+      agentSlug: 'coder',
+      taskId: first.id,
+    }, new Date('2026-01-01T00:00:00.000Z'));
+    expect(claimed?.status).toBe('in_progress');
+    expect(claimed?.attemptCount).toBe(1);
+    expect(claimed?.lease?.ownerAgentSlug).toBe('coder');
+    expect(claimTeamTask(workspace, RUN_ID, { agentSlug: 'reviewer' }, new Date('2026-01-01T00:00:00.100Z'))).toBeNull();
+
+    const heartbeat = heartbeatTeamTask(workspace, RUN_ID, {
+      agentSlug: 'coder',
+      taskId: first.id,
+      leaseId: claimed!.lease!.id,
+      leaseTtlMs: 3000,
+    }, new Date('2026-01-01T00:00:00.500Z'));
+    expect(heartbeat.lease?.expiresAt).toBe('2026-01-01T00:00:03.500Z');
+    expect(readTeamRunDetail(workspace, RUN_ID)?.events.map((event) => event.kind)).toContain('task.heartbeat');
+  });
+
+  test('expires stale leases, backs off retry, and allows reclaim after retry window', () => {
+    writeTeamRun(workspace, sampleRun({
+      swarm: {
+        maxConcurrentTasks: 2,
+        taskLeaseMs: 1000,
+        heartbeatIntervalMs: 250,
+        staleAfterMs: 2000,
+        retryLimit: 2,
+        retryBackoffMs: 500,
+      },
+    }));
+    const task = createTeamTask(workspace, RUN_ID, {
+      title: 'Retryable task',
+      description: '',
+      ownerAgentSlug: 'coder',
+    });
+
+    const claimed = claimTeamTask(workspace, RUN_ID, {
+      agentSlug: 'coder',
+      taskId: task.id,
+    }, new Date('2026-01-01T00:00:00.000Z'));
+    expect(claimed?.lease?.expiresAt).toBe('2026-01-01T00:00:01.000Z');
+
+    const expired = expireStaleTeamTaskLeases(workspace, RUN_ID, new Date('2026-01-01T00:00:01.100Z'));
+    expect(expired).toHaveLength(1);
+    expect(expired[0]!.status).toBe('todo');
+    expect(expired[0]!.nextAttemptAt).toBe('2026-01-01T00:00:01.600Z');
+    expect(claimTeamTask(workspace, RUN_ID, { agentSlug: 'coder' }, new Date('2026-01-01T00:00:01.200Z'))).toBeNull();
+
+    const reclaimed = claimTeamTask(workspace, RUN_ID, { agentSlug: 'coder' }, new Date('2026-01-01T00:00:01.700Z'));
+    expect(reclaimed?.attemptCount).toBe(2);
+    expect(reclaimed?.lease?.ownerAgentSlug).toBe('coder');
+  });
+
+  test('operator controls pause, resume, and cancel swarm runs', () => {
+    writeTeamRun(workspace, sampleRun());
+    const task = createTeamTask(workspace, RUN_ID, {
+      title: 'Controlled task',
+      description: '',
+      ownerAgentSlug: 'coder',
+    });
+
+    const paused = controlTeamRun(workspace, RUN_ID, 'pause', 'Need operator review');
+    expect(paused.state).toBe('paused');
+    expect(paused.swarm?.operatorPausedReason).toBe('Need operator review');
+    expect(() => claimTeamTask(workspace, RUN_ID, { agentSlug: 'coder', taskId: task.id })).toThrow('paused');
+
+    const resumed = controlTeamRun(workspace, RUN_ID, 'resume');
+    expect(resumed.state).toBe('running');
+    expect(resumed.swarm?.operatorPausedAt).toBeUndefined();
+    expect(claimTeamTask(workspace, RUN_ID, { agentSlug: 'coder', taskId: task.id })).toBeTruthy();
+
+    const cancelled = controlTeamRun(workspace, RUN_ID, 'cancel', 'Stop work');
+    expect(cancelled.state).toBe('cancelled');
+    expect(() => controlTeamRun(workspace, RUN_ID, 'resume')).toThrow('cancelled');
+  });
+
+  test('preserves paused runs during task updates and fails runs when a task fails', () => {
+    writeTeamRun(workspace, sampleRun());
+    const task = createTeamTask(workspace, RUN_ID, {
+      title: 'Risky task',
+      description: '',
+      ownerAgentSlug: 'coder',
+    });
+
+    controlTeamRun(workspace, RUN_ID, 'pause', 'Hold work');
+    updateTeamTask(workspace, RUN_ID, task.id, { status: 'in_progress' });
+    expect(readTeamRunDetail(workspace, RUN_ID)?.state).toBe('paused');
+
+    controlTeamRun(workspace, RUN_ID, 'resume');
+    updateTeamTask(workspace, RUN_ID, task.id, { status: 'failed', lastError: 'Worker crashed' });
+    expect(readTeamRunDetail(workspace, RUN_ID)?.state).toBe('failed');
   });
 });
