@@ -29,6 +29,7 @@ const loadedWorkspaceKeys = new Set<string>()
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 const refreshersByWorkspaceKey = new Map<string, () => Promise<void>>()
+const setStateByWorkspaceKey = new Map<string, (updater: (prev: TeamRunsState) => TeamRunsState) => void>()
 let globalTeamRunCleanup: (() => void) | null = null
 
 function getWorkspaceKey(workspaceId: string | null | undefined): string {
@@ -100,12 +101,16 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
 
   useEffect(() => {
     refreshersByWorkspaceKey.set(workspaceKey, refresh)
+    setStateByWorkspaceKey.set(workspaceKey, setState)
     return () => {
       if (refreshersByWorkspaceKey.get(workspaceKey) === refresh) {
         refreshersByWorkspaceKey.delete(workspaceKey)
       }
+      if (setStateByWorkspaceKey.get(workspaceKey) === setState) {
+        setStateByWorkspaceKey.delete(workspaceKey)
+      }
     }
-  }, [refresh, workspaceKey])
+  }, [refresh, setState, workspaceKey])
 
   useEffect(() => {
     if (!loadedWorkspaceKeys.has(workspaceKey)) {
@@ -118,8 +123,9 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
     if (!globalTeamRunCleanup) {
       globalTeamRunCleanup = window.electronAPI.onTeamRunUpdated((changedWorkspaceId, run) => {
         const changedKey = getWorkspaceKey(changedWorkspaceId)
-        if (changedKey === workspaceKey) {
-          setState((prev) => upsertDetail(prev, run))
+        const setStateChanged = setStateByWorkspaceKey.get(changedKey)
+        if (setStateChanged) {
+          setStateChanged((prev) => upsertDetail(prev, run))
         }
         const refresher = refreshersByWorkspaceKey.get(changedKey)
         if (refresher) void refresher()
@@ -135,7 +141,7 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
         globalTeamRunCleanup = null
       }
     }
-  }, [setState, workspaceKey])
+  }, [workspaceKey])
 
   const start = useCallback(async (input: StartTeamRunInput): Promise<TeamRunDetail> => {
     if (!workspaceId) throw new Error('Workspace is required to start a team run.')

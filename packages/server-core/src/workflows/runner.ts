@@ -403,6 +403,48 @@ export class WorkflowRunner {
     return this.cloneSnapshot(active.snapshot);
   }
 
+  async cancelTeamStep(input: {
+    workspaceId: string;
+    teamRunId: string;
+    reason?: string;
+  }): Promise<WorkflowRunSnapshot | null> {
+    const root = this.deps.getWorkspaceRootPath(input.workspaceId);
+    const run = listRuns(root).find((candidate) => (
+      candidate.workspaceId === input.workspaceId
+      && candidate.state === 'paused'
+      && candidate.steps.some((step) => step.state === 'awaiting-team' && step.teamRunId === input.teamRunId)
+    ));
+    if (!run) return null;
+
+    const step = run.steps.find((candidate) => candidate.state === 'awaiting-team' && candidate.teamRunId === input.teamRunId);
+    if (!step) return null;
+
+    const now = new Date().toISOString();
+    step.state = 'failed';
+    step.completedAt = now;
+    step.error = {
+      code: 'team-run-cancelled',
+      message: input.reason?.trim()
+        ? `Team run was cancelled: ${input.reason.trim()}`
+        : 'Team run was cancelled.',
+    };
+    step.completion = {
+      outputChars: step.completion?.outputChars ?? 0,
+      toolUseCount: step.completion?.toolUseCount,
+      satisfied: false,
+    };
+    run.state = 'cancelled';
+    run.completedAt = now;
+    run.resumeFromStepId = undefined;
+    run.updatedAt = now;
+    writeRun(root, run);
+
+    const snapshot = this.cloneSnapshot(run);
+    this.emitEvent({ type: 'run.updated', run: snapshot });
+    this.emitEvent({ type: 'run.completed', run: snapshot });
+    return snapshot;
+  }
+
   private async preflightStepAgents(workspaceId: string, steps: WorkflowStep[]): Promise<void> {
     const seen = new Set<string>();
     for (const step of steps) {

@@ -370,6 +370,48 @@ describe('WorkflowRunner', () => {
     expect(persisted.steps[1]!.state).toBe('succeeded');
   });
 
+  test('canceling a team run cancels the paused workflow step waiting on it', async () => {
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [
+          { id: 'team-launch', team: 'commerce-launch-team', input: 'Prepare {{trigger.topic}} launch.' },
+          { id: 'wrap-up', agent: 'writer', input: 'Summarize team result.' },
+        ],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'new product' },
+    });
+
+    await waitFor(() => lastUpdated(h.events)?.state === 'paused');
+    const paused = lastUpdated(h.events)!;
+
+    const cancelled = await runner.cancelTeamStep({
+      workspaceId: WORKSPACE_ID,
+      teamRunId: 'team-run-1',
+      reason: 'operator stopped it',
+    });
+
+    expect(cancelled?.id).toBe(paused.id);
+    expect(cancelled?.state).toBe('cancelled');
+    expect(cancelled?.resumeFromStepId).toBeUndefined();
+    expect(cancelled?.steps[0]).toMatchObject({
+      state: 'failed',
+      error: {
+        code: 'team-run-cancelled',
+        message: 'Team run was cancelled: operator stopped it',
+      },
+    });
+    expect(cancelled?.steps[1]!.state).toBe('queued');
+    expect(lastCompleted(h.events)?.state).toBe('cancelled');
+
+    const persisted = readRun(workspaceRoot, paused.id)!;
+    expect(persisted.state).toBe('cancelled');
+    expect(persisted.steps[0]!.error?.code).toBe('team-run-cancelled');
+  });
+
   test('creates a default output from the final succeeded workflow step', async () => {
     const h = makeHarness({ stepOutputs: ['draft notes', '# Final report\n\nReady to ship.'] });
     const runner = new WorkflowRunner(h.deps);

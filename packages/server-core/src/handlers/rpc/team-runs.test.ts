@@ -54,6 +54,16 @@ function createHarness() {
     resolveAgentSessionOptions: mock(async () => ({ agentSkillSlugs: ['lead-skill'] })),
     createSession: mock(async () => ({ id: 'lead-session-1' })),
     sendMessage: mock(async () => undefined),
+    controlManagedTeamRun: mock(async (workspaceId: string, runId: string, input: any) => {
+      runStorage.controlTeamRun(workspaceRoot, runId, input.action, input.reason)
+      const detail = runStorage.readTeamRunDetail(workspaceRoot, runId)
+      if (detail) pushCalls.push({
+        channel: RPC_CHANNELS.teamRuns.UPDATED,
+        target: { to: 'workspace', workspaceId },
+        args: [workspaceId, detail, detail.state === 'cancelled' ? 'completed' : 'updated'],
+      })
+      return detail
+    }),
     completeManagedTeamRun: mock(async (_workspaceId: string, runId: string, input: any) => {
       runStorage.completeTeamRun(workspaceRoot, runId, input)
       return runStorage.readTeamRunDetail(workspaceRoot, runId)
@@ -234,7 +244,7 @@ describe('team run RPC handlers', () => {
   })
 
   it('lets the operator pause, resume, and cancel a run through the control channel', async () => {
-    const { handlers, server, deps, pushCalls } = createHarness()
+    const { handlers, server, deps, pushCalls, sessionManager } = createHarness()
     const { registerTeamRunsHandlers } = await import('./team-runs')
     registerTeamRunsHandlers(server, deps)
 
@@ -261,6 +271,7 @@ describe('team run RPC handlers', () => {
     })
     expect(cancelled.state).toBe('cancelled')
     expect(pushCalls.at(-1)?.args.at(-1)).toBe('completed')
+    expect(sessionManager.controlManagedTeamRun).toHaveBeenCalledTimes(3)
   })
 
   it('exposes safe operator command center actions', async () => {

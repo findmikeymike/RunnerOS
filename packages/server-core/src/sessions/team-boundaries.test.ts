@@ -1,5 +1,8 @@
 import { describe, expect, it, mock } from 'bun:test'
-import type { TeamRunDetail, TeamTask } from '@craft-agent/shared/teams'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { readTeamRunDetail, writeTeamRun, type TeamRunDetail, type TeamTask } from '@craft-agent/shared/teams'
 import { SessionManager } from './SessionManager.ts'
 
 type TeamBoundaryHarness = {
@@ -13,6 +16,10 @@ type TeamBoundaryHarness = {
   buildTeamLeadTaskUpdatePrompt(run: TeamRunDetail, actor: string, task: TeamTask): string
   buildTeamLeadMessagePrompt(run: TeamRunDetail, actor: string, message: string, task?: TeamTask): string
   notifyTeamLeadBestEffort(label: string, notify: () => Promise<void>): Promise<void>
+  spawnOrWakeTeamMember(managed: unknown, runId: string, agentSlug: string, task?: TeamTask, extraPrompt?: string): Promise<{ sessionId: string; status: 'created' | 'resumed'; detail: TeamRunDetail }>
+  resolveAgentSessionOptions: ReturnType<typeof mock>
+  createSession: ReturnType<typeof mock>
+  sendMessage: ReturnType<typeof mock>
 }
 
 const task: TeamTask = {
@@ -165,5 +172,34 @@ describe('team session boundaries', () => {
     expect(() => sm.assertTeamRunMutable({ ...run, state: 'cancelled' })).toThrow('is cancelled')
     expect(() => sm.assertTeamRunMutable({ ...run, state: 'failed' })).toThrow('is failed')
     expect(() => sm.assertTeamRunMutable({ ...run, state: 'done' })).toThrow('is done')
+  })
+
+  it('replaces stale member session links instead of dead-looping on restart', async () => {
+    const workspaceRoot = mkdtempSync(join(tmpdir(), 'team-stale-session-'))
+    const runId = '11111111-1111-4111-8111-111111111111'
+    try {
+      const { tasks: _tasks, messages: _messages, events: _events, ...snapshot } = run
+      writeTeamRun(workspaceRoot, {
+        ...snapshot,
+        id: runId,
+        memberSessionIds: { coder: 'stale-coder-session' },
+      })
+      const sm = harness()
+      sm.resolveAgentSessionOptions = mock(async () => ({}))
+      sm.createSession = mock(async () => ({ id: 'fresh-coder-session' }))
+      sm.sendMessage = mock(async () => undefined)
+
+      const result = await sm.spawnOrWakeTeamMember({
+        id: '__team_operator__',
+        workspace: { id: 'workspace-1', name: 'Workspace', rootPath: workspaceRoot },
+      }, runId, 'coder')
+
+      expect(result.status).toBe('created')
+      expect(result.sessionId).toBe('fresh-coder-session')
+      expect(readTeamRunDetail(workspaceRoot, runId)?.memberSessionIds?.coder).toBe('fresh-coder-session')
+      expect(sm.sendMessage).toHaveBeenCalledWith('fresh-coder-session', expect.stringContaining('Team run id:'))
+    } finally {
+      rmSync(workspaceRoot, { recursive: true, force: true })
+    }
   })
 })

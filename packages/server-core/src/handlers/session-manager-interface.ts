@@ -29,6 +29,7 @@ import type { LoadedSkill } from '@craft-agent/shared/skills'
 import type {
   CompleteTeamRunInput,
   RunTeamRunTickInput,
+  TeamRunControlInput,
   TeamRunDetail,
   TeamRunTick,
 } from '@craft-agent/shared/teams'
@@ -218,6 +219,7 @@ export interface ISessionManager {
   // Team Runs
   // ---------------------------------------------------------------------------
 
+  controlManagedTeamRun(workspaceId: string, runId: string, input: TeamRunControlInput): Promise<TeamRunDetail>
   completeManagedTeamRun(workspaceId: string, runId: string, input: CompleteTeamRunInput): Promise<TeamRunDetail>
   wakeManagedTeamRunAgent(
     workspaceId: string,

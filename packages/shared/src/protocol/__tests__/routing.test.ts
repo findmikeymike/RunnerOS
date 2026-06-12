@@ -61,6 +61,15 @@ describe('channel routing behavior', () => {
     }
   })
 
+  test('all team run runtime channels are REMOTE_ELIGIBLE', () => {
+    const teamRunChannels = Object.values(RPC_CHANNELS.teamRuns)
+    expect(teamRunChannels.length).toBeGreaterThan(0)
+
+    for (const ch of teamRunChannels) {
+      expect(REMOTE_ELIGIBLE_CHANNELS.has(ch)).toBe(true)
+    }
+  })
+
   test('no LOCAL_ONLY channel starts with server:', () => {
     for (const ch of LOCAL_ONLY_CHANNELS) {
       if (ch.startsWith('server:')) {

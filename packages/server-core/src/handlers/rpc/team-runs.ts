@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   appendTeamRunEvent,
-  controlTeamRun,
   deleteTeamRun,
   listTeamRuns,
   loadGlobalTeam,
@@ -204,12 +203,7 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
   server.handle(
     RPC_CHANNELS.teamRuns.CONTROL,
     async (_ctx, workspaceId: string, runId: string, input: TeamRunControlInput): Promise<TeamRunDetail> => {
-      const rootPath = resolveRootPath(deps, workspaceId)
-      controlTeamRun(rootPath, runId, input.action, input.reason)
-      const detail = readTeamRunDetail(rootPath, runId)
-      if (!detail) throw new Error(`Team run not found: ${runId}`)
-      broadcastUpdated(deps, workspaceId, detail, detail.state === 'cancelled' ? 'completed' : 'updated')
-      return detail
+      return deps.sessionManager.controlManagedTeamRun(workspaceId, runId, input)
     },
   )
 

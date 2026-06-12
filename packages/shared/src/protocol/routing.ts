@@ -202,6 +202,13 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.settings.GET_SERVER_CONFIG,
   RPC_CHANNELS.settings.SET_SERVER_CONFIG,
   RPC_CHANNELS.settings.GET_SERVER_STATUS,
+
+  // secrets — local app env vault/bootstrap
+  RPC_CHANNELS.secrets.LIST,
+  RPC_CHANNELS.secrets.SAVE,
+  RPC_CHANNELS.secrets.DELETE,
+  RPC_CHANNELS.secrets.ZERO_STATUS,
+  RPC_CHANNELS.secrets.INSTALL_ZERO,
 ])
 
 // ---------------------------------------------------------------------------
@@ -228,6 +235,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sessions.DELETE,
   RPC_CHANNELS.sessions.GET_MESSAGES,
   RPC_CHANNELS.sessions.SEND_MESSAGE,
+  RPC_CHANNELS.sessions.QUEUE_CANVAS_VISUAL_REVIEW,
   RPC_CHANNELS.sessions.CANCEL,
   RPC_CHANNELS.sessions.KILL_SHELL,
   RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION,
@@ -473,6 +481,10 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.teamRuns.LIST,
   RPC_CHANNELS.teamRuns.DELETE,
   RPC_CHANNELS.teamRuns.CONTROL,
+  RPC_CHANNELS.teamRuns.COMPLETE,
+  RPC_CHANNELS.teamRuns.TICK,
+  RPC_CHANNELS.teamRuns.LIST_TICKS,
+  RPC_CHANNELS.teamRuns.WAKE_AGENT,
   RPC_CHANNELS.teamRuns.CREATE_TASK,
   RPC_CHANNELS.teamRuns.UPDATE_TASK,
   RPC_CHANNELS.teamRuns.SEND_MESSAGE,

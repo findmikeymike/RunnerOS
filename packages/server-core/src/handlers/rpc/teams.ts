@@ -5,6 +5,7 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import {
   deleteGlobalTeam,
+  listTeamRuns,
   loadAllGlobalTeams,
   loadGlobalTeam,
   writeGlobalTeam,
@@ -39,6 +40,18 @@ function broadcastChanged(deps: HandlerDeps): void {
   wsServerLike.wsServer?.push?.(RPC_CHANNELS.teams.CHANGED, { to: 'all' }, loadAllGlobalTeams())
 }
 
+function assertNoActiveTeamRuns(deps: HandlerDeps, slug: string): void {
+  const activeStates = new Set(['created', 'running', 'paused', 'blocked', 'review'])
+  for (const workspace of deps.sessionManager.getWorkspaces()) {
+    const activeRun = listTeamRuns(workspace.rootPath).find((run) => (
+      run.teamSlug === slug && activeStates.has(run.state)
+    ))
+    if (activeRun) {
+      throw new Error(`Cannot delete team "${slug}" while run "${activeRun.id}" is ${activeRun.state}. Cancel or complete active runs first.`)
+    }
+  }
+}
+
 export function registerTeamsHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.teams.LIST_ALL, async (): Promise<LoadedTeam[]> => {
     return loadAllGlobalTeams()
@@ -62,10 +75,10 @@ export function registerTeamsHandlers(server: RpcServer, deps: HandlerDeps): voi
 
   server.handle(RPC_CHANNELS.teams.DELETE, async (_ctx, slug: string): Promise<boolean> => {
     return withLibraryMutex(async () => {
+      assertNoActiveTeamRuns(deps, slug)
       const ok = deleteGlobalTeam(slug)
       if (ok) broadcastChanged(deps)
       return ok
     })
   })
 }
-

@@ -115,6 +115,7 @@ import {
   appendTeamRunEvent,
   claimTeamTask,
   completeTeamRun,
+  controlTeamRun,
   createTeamTask,
   expireStaleTeamTaskLeases,
   heartbeatTeamTask,
@@ -136,6 +137,7 @@ import {
   type RunTeamRunTickInput,
   type SendTeamMessageInput,
   type StartTeamRunInput,
+  type TeamRunControlInput,
   type TeamRunDetail,
   type TeamRunSnapshot,
   type TeamRunTick,
@@ -1494,6 +1496,7 @@ export class SessionManager implements ISessionManager {
   /** Deep Research runner — bootstrapped during `initialize()`. */
   private deepResearchRunner!: DeepResearchRunner
   private teamRunLoopTimer: ReturnType<typeof setInterval> | null = null
+  private teamRunTicksInFlight = new Set<string>()
 
   /**
    * Centralized setter for session processing state.
@@ -2636,7 +2639,7 @@ user a clickable link to where the thing now lives.`
       if (recoveredWorkflowRuns.length > 0) {
         sessionLog.info(`Recovered ${recoveredWorkflowRuns.length} interrupted workflow run(s)`)
       }
-      this.startTeamRunLoop(workspaces)
+      this.startTeamRunLoop()
 
       this.deepResearchRunner = new DeepResearchRunner({
         createSession: (wsId, opts) => this.createSession(wsId, opts).then((s) => ({ id: s.id })),
@@ -3585,10 +3588,14 @@ user a clickable link to where the thing now lives.`
     const prompt = this.buildTeamMemberPrompt(detail, agentSlug, task, extraPrompt)
 
     if (existingSessionId) {
-      if (existingSessionId !== managed.id) {
+      if (this.sessions.has(existingSessionId) && existingSessionId !== managed.id) {
         await this.sendMessage(existingSessionId, prompt)
+        return { sessionId: existingSessionId, status: 'resumed', detail: this.emitTeamRunUpdated(managed, runId) }
       }
-      return { sessionId: existingSessionId, status: 'resumed', detail: this.emitTeamRunUpdated(managed, runId) }
+      if (this.sessions.has(existingSessionId)) {
+        return { sessionId: existingSessionId, status: 'resumed', detail: this.emitTeamRunUpdated(managed, runId) }
+      }
+      sessionLog.warn(`[teams] session link ${existingSessionId} for @${agentSlug} is stale; creating a replacement`)
     }
 
     const agentOptions = await this.resolveAgentSessionOptions(managed.workspace.id, agentSlug, { referenceMode: 'lenient' })
@@ -3607,7 +3614,13 @@ user a clickable link to where the thing now lives.`
       ].filter(Boolean).join('\n\n'),
     })
 
-    linkTeamRunMemberSession(managed.workspace.rootPath, runId, agentSlug, session.id)
+    if (agentSlug === detail.teamSnapshot.metadata.lead) {
+      const { tasks: _tasks, messages: _messages, events: _events, ...snapshot } = detail
+      touchTeamRun(managed.workspace.rootPath, { ...snapshot, leadSessionId: session.id })
+      appendTeamRunEvent(managed.workspace.rootPath, runId, { kind: 'session.linked', actorAgentSlug: agentSlug, body: session.id })
+    } else {
+      linkTeamRunMemberSession(managed.workspace.rootPath, runId, agentSlug, session.id)
+    }
     await this.sendMessage(session.id, prompt)
     detail = this.emitTeamRunUpdated(managed, runId)
     return { sessionId: session.id, status: 'created', detail }
@@ -3668,6 +3681,41 @@ user a clickable link to where the thing now lives.`
     return { sessionId: wake.sessionId, status: wake.status, run: wake.detail }
   }
 
+  async controlManagedTeamRun(workspaceId: string, runId: string, input: TeamRunControlInput): Promise<TeamRunDetail> {
+    const { managed } = this.getTeamRunOperatorManaged(workspaceId, runId)
+    const before = this.readManagedTeamRun(managed, runId)
+    controlTeamRun(managed.workspace.rootPath, runId, input.action, input.reason)
+    const detail = this.emitTeamRunUpdated(managed, runId, input.action === 'cancel' ? 'completed' : 'updated')
+    const sessionIds = [
+      before.leadSessionId,
+      ...Object.values(before.memberSessionIds ?? {}),
+    ].filter((sessionId): sessionId is string => Boolean(sessionId))
+
+    if (input.action === 'cancel') {
+      await Promise.all(sessionIds.map((sessionId) => this.cancelProcessing(sessionId, true)))
+      try {
+        await this.workflowRunner.cancelTeamStep({
+          workspaceId,
+          teamRunId: runId,
+          reason: input.reason,
+        })
+      } catch (err) {
+        console.error(`[SessionManager] failed to cancel workflow waiting on team run ${runId}:`, err)
+      }
+    } else if (input.action === 'pause') {
+      const message = [
+        `Team run ${runId} has been paused by the operator.`,
+        input.reason?.trim() ? `Reason: ${input.reason.trim()}` : '',
+        'Stop current team work and wait for the run to be resumed before taking further actions.',
+      ].filter(Boolean).join('\n')
+      await Promise.all(sessionIds.map(async (sessionId) => {
+        if (this.sessions.has(sessionId)) await this.sendMessage(sessionId, message)
+      }))
+    }
+
+    return detail
+  }
+
   listManagedTeamRunTicks(workspaceId: string, runId: string): TeamRunTick[] {
     const { managed } = this.getTeamRunOperatorManaged(workspaceId, runId)
     return listTeamRunTicks(managed.workspace.rootPath, runId)
@@ -3678,25 +3726,35 @@ user a clickable link to where the thing now lives.`
     runId: string,
     input: RunTeamRunTickInput = {},
   ): Promise<{ tick: TeamRunTick; run: TeamRunDetail }> {
-    const { managed } = this.getTeamRunOperatorManaged(workspaceId, runId)
-    const tick = runTeamRunTick(managed.workspace.rootPath, runId, input)
-    const latest = this.readManagedTeamRun(managed, runId)
-    for (const action of tick.actions) {
-      if (action.type === 'wake-lead') {
-        await this.spawnOrWakeTeamMember(managed, runId, latest.teamSnapshot.metadata.lead, action.taskId ? latest.tasks.find((task) => task.id === action.taskId) : undefined, action.message)
-      } else if (action.type === 'finalization-needed') {
-        await this.spawnOrWakeTeamMember(managed, runId, latest.teamSnapshot.metadata.lead, undefined, action.message)
-      } else if (action.type === 'wake-member' && action.agentSlug) {
-        await this.spawnOrWakeTeamMember(managed, runId, action.agentSlug, action.taskId ? latest.tasks.find((task) => task.id === action.taskId) : undefined, action.message)
-      }
+    const lockKey = `${workspaceId}:${runId}`
+    if (this.teamRunTicksInFlight.has(lockKey)) {
+      throw new Error(`Team run "${runId}" is already ticking.`)
     }
-    return { tick, run: this.emitTeamRunUpdated(managed, runId) }
+    this.teamRunTicksInFlight.add(lockKey)
+    try {
+      const { managed } = this.getTeamRunOperatorManaged(workspaceId, runId)
+      const tick = runTeamRunTick(managed.workspace.rootPath, runId, input)
+      const latest = this.readManagedTeamRun(managed, runId)
+      for (const action of tick.actions) {
+        if (action.type === 'wake-lead') {
+          await this.spawnOrWakeTeamMember(managed, runId, latest.teamSnapshot.metadata.lead, action.taskId ? latest.tasks.find((task) => task.id === action.taskId) : undefined, action.message)
+        } else if (action.type === 'finalization-needed') {
+          await this.spawnOrWakeTeamMember(managed, runId, latest.teamSnapshot.metadata.lead, undefined, action.message)
+        } else if (action.type === 'wake-member' && action.agentSlug) {
+          await this.spawnOrWakeTeamMember(managed, runId, action.agentSlug, action.taskId ? latest.tasks.find((task) => task.id === action.taskId) : undefined, action.message)
+        }
+      }
+      return { tick, run: this.emitTeamRunUpdated(managed, runId) }
+    } finally {
+      this.teamRunTicksInFlight.delete(lockKey)
+    }
   }
 
-  private startTeamRunLoop(workspaces: Workspace[]): void {
+  private startTeamRunLoop(): void {
     if (this.teamRunLoopTimer) clearInterval(this.teamRunLoopTimer)
 
     const tickAll = async () => {
+      const workspaces = getWorkspaces()
       for (const workspace of workspaces) {
         let runs: TeamRunSnapshot[]
         try {
@@ -5777,6 +5835,7 @@ user a clickable link to where the thing now lives.`
         },
         completeTeamRunFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
+          this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
           if (actor !== run.teamSnapshot.metadata.lead) {
             throw new Error('Only the team lead can complete a team run.')
