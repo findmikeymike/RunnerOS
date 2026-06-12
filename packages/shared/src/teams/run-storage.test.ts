@@ -168,6 +168,7 @@ describe('team run storage', () => {
 
     updateTeamTask(workspace, RUN_ID, task.id, {
       status: 'review',
+      evidence: [{ type: 'output', label: 'result', value: 'change applied and verified' }],
       review: {
         requestedAt: '2026-01-01T00:01:00.000Z',
         reviewerAgentSlug: 'reviewer',

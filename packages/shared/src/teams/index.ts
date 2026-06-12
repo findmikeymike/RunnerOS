@@ -43,6 +43,10 @@ export type {
   TeamTaskPriority,
   TeamTaskStatus,
   TeamRunControlInput,
+  TeamWakeEntry,
+  TeamWakeKind,
+  TeamWakeStatus,
+  EnqueueTeamWakeInput,
   UpdateTeamTaskInput,
 } from './run-types.ts';
 
@@ -97,7 +101,31 @@ export {
   touchTeamRun,
   updateTeamTask,
   writeTeamRun,
+  writeTeamRunGuarded,
+  StaleRunWriteError,
+  listTeamWakes,
+  listPendingTeamWakes,
+  enqueueTeamWake,
+  markTeamWakeDelivered,
+  markTeamWakeFailed,
+  markTeamWakeAcked,
+  ackTeamWakesForTarget,
+  listTeamDelegationReceipts,
+  appendTeamDelegationReceipt,
+  updateTeamDelegationReceipt,
 } from './run-storage.ts';
+
+export {
+  withRunMutationLock,
+  pendingRunMutationChains,
+} from './run-mutation-queue.ts';
+
+export {
+  emitTeamRunSignal,
+  onTeamRunSignal,
+  teamRunSignalListenerCount,
+  type TeamRunSignal,
+} from './run-signal.ts';
 
 export {
   COMMERCE_LAUNCH_TEAM_SLUG,

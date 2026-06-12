@@ -1,4 +1,5 @@
 import type { PermissionMode } from '../agent/mode-types.ts';
+import type { JsonSchema } from '../workflows/types.ts';
 import type { TeamMetadata } from './types.ts';
 
 export type TeamRunState = 'created' | 'running' | 'paused' | 'blocked' | 'review' | 'done' | 'failed' | 'cancelled';
@@ -23,7 +24,48 @@ export type TeamRunEventKind =
   | 'run.tick'
   | 'run.paused'
   | 'run.resumed'
-  | 'run.cancelled';
+  | 'run.cancelled'
+  | 'wake.enqueued'
+  | 'wake.delivered'
+  | 'wake.failed'
+  | 'wake.acked';
+
+/** Kind of durable wake queued in the run mailbox. */
+export type TeamWakeKind = 'wake-member' | 'wake-lead' | 'finalization';
+
+/**
+ * Delivery lifecycle of a mailbox wake.
+ * `pending` → `delivered` → `acked` on the happy path; `pending` → `failed`
+ * once delivery attempts exhaust the budget. A failed redelivery returns a
+ * `delivered` entry to `pending` for retry until the budget is spent.
+ */
+export type TeamWakeStatus = 'pending' | 'delivered' | 'acked' | 'failed';
+
+export interface TeamWakeEntry {
+  id: string;
+  runId: string;
+  /** Recipient agent slug (a team member, or the lead). */
+  targetAgentSlug: string;
+  taskId?: string;
+  kind: TeamWakeKind;
+  body: string;
+  status: TeamWakeStatus;
+  attempts: number;
+  maxAttempts: number;
+  createdAt: string;
+  updatedAt: string;
+  deliveredAt?: string;
+  ackedAt?: string;
+  lastError?: string;
+}
+
+export interface EnqueueTeamWakeInput {
+  targetAgentSlug: string;
+  taskId?: string;
+  kind: TeamWakeKind;
+  body: string;
+  maxAttempts?: number;
+}
 
 export interface TeamTaskEvidence {
   type: 'text' | 'file' | 'url' | 'output';
@@ -58,12 +100,28 @@ export interface TeamTask {
   priority: TeamTaskPriority;
   inputs: Record<string, unknown>;
   output?: string;
+  /**
+   * Optional JSON Schema the task's `output` must satisfy before the task can
+   * move to `review` or `done`. Enforced in {@link updateTeamTask}. Lets a lead
+   * demand a machine-readable result shape from a specialist instead of prose.
+   */
+  outputSchema?: JsonSchema;
   evidence?: TeamTaskEvidence[];
   approvalRequired?: boolean;
   approval?: TeamTaskApproval;
   reviewRequired?: boolean;
   reviewerAgentSlug?: string;
   review?: TeamTaskReview;
+  /** Number of times this task was reopened by a failed review (revise loop). */
+  revisionCount?: number;
+  /**
+   * Max failed-review reopens before the task is failed instead of reopened.
+   * Distinct from {@link maxAttempts} (claim/lease retry budget). Defaults to
+   * `swarm.retryLimit + 1` when absent.
+   */
+  maxRevisions?: number;
+  /** Findings from the most recent failed review, surfaced to the owner on reopen. */
+  reviseFindings?: string;
   blockedReason?: string;
   attemptCount?: number;
   maxAttempts?: number;
@@ -107,6 +165,13 @@ export interface TeamRunEvent {
 
 export interface TeamRunSnapshot {
   id: string;
+  /**
+   * Monotonic revision counter, incremented on every persisted mutation of the
+   * run snapshot. Used for optimistic-concurrency detection across processes
+   * (standalone server + Electron) via {@link writeTeamRunGuarded}. Absent on
+   * legacy runs written before versioning; treated as 0.
+   */
+  rev?: number;
   workspaceId: string;
   teamSlug: string;
   state: TeamRunState;
@@ -159,10 +224,12 @@ export interface CreateTeamTaskInput {
   ownerAgentSlug: string;
   priority?: TeamTaskPriority;
   inputs?: Record<string, unknown>;
+  outputSchema?: JsonSchema;
   approvalRequired?: boolean;
   reviewRequired?: boolean;
   reviewerAgentSlug?: string;
   maxAttempts?: number;
+  maxRevisions?: number;
 }
 
 export interface UpdateTeamTaskInput {
@@ -173,6 +240,7 @@ export interface UpdateTeamTaskInput {
   priority?: TeamTaskPriority;
   inputs?: Record<string, unknown>;
   output?: string;
+  outputSchema?: JsonSchema;
   evidence?: TeamTaskEvidence[];
   approvalRequired?: boolean;
   approval?: TeamTaskApproval;

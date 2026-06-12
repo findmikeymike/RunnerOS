@@ -10,6 +10,7 @@ import {
   readTeamRunDetail,
   touchTeamRun,
   updateTeamTask,
+  withRunMutationLock,
   writeTeamRun,
   type CreateTeamTaskInput,
   type CompleteTeamRunInput,
@@ -256,16 +257,18 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
     RPC_CHANNELS.teamRuns.UPDATE_TASK,
     async (_ctx, workspaceId: string, runId: string, taskId: string, patch: UpdateTeamTaskInput): Promise<TeamRunDetail> => {
       const rootPath = resolveRootPath(deps, workspaceId)
-      const before = readTeamRunDetail(rootPath, runId)
-      if (!before) throw new Error(`Team run not found: ${runId}`)
-      const current = before.tasks.find((task) => task.id === taskId)
-      if (!current) throw new Error(`Team task not found: ${taskId}`)
-      const decisionPatch = buildUserApprovalDecisionPatch(current, patch)
-      updateTeamTask(rootPath, runId, taskId, decisionPatch)
-      const detail = readTeamRunDetail(rootPath, runId)
-      if (!detail) throw new Error(`Team run not found: ${runId}`)
-      broadcastUpdated(deps, workspaceId, detail, detail.state === 'done' ? 'completed' : 'updated')
-      return detail
+      return withRunMutationLock(rootPath, runId, () => {
+        const before = readTeamRunDetail(rootPath, runId)
+        if (!before) throw new Error(`Team run not found: ${runId}`)
+        const current = before.tasks.find((task) => task.id === taskId)
+        if (!current) throw new Error(`Team task not found: ${taskId}`)
+        const decisionPatch = buildUserApprovalDecisionPatch(current, patch)
+        updateTeamTask(rootPath, runId, taskId, decisionPatch)
+        const detail = readTeamRunDetail(rootPath, runId)
+        if (!detail) throw new Error(`Team run not found: ${runId}`)
+        broadcastUpdated(deps, workspaceId, detail, detail.state === 'done' ? 'completed' : 'updated')
+        return detail
+      })
     },
   )
 

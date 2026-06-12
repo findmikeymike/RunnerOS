@@ -11,14 +11,20 @@ import {
 } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
+import { isDelegationReceipt } from '../delegation/receipt.ts';
+import type { DelegationReceipt } from '../delegation/types.ts';
+import { parseStructuredStepOutput } from '../workflows/output-schema.ts';
+import { emitTeamRunSignal } from './run-signal.ts';
 import { TEAM_SLUG_REGEX } from './types.ts';
 import type {
   CreateTeamTaskInput,
   ClaimTeamTaskInput,
   CompleteTeamRunInput,
+  EnqueueTeamWakeInput,
   HeartbeatTeamTaskInput,
   RunTeamRunTickInput,
   SendTeamMessageInput,
+  TeamWakeEntry,
   TeamMessage,
   TeamMessageActor,
   TeamMessageKind,
@@ -44,6 +50,8 @@ const TASKS_FILE = 'tasks.jsonl';
 const MESSAGES_FILE = 'messages.jsonl';
 const EVENTS_FILE = 'events.jsonl';
 const TICKS_FILE = 'ticks.jsonl';
+const MAILBOX_FILE = 'mailbox.jsonl';
+const DELEGATIONS_FILE = 'delegations.jsonl';
 const RUNS_DIR = join('.runneros', 'teams', 'runs');
 const TEAM_RUN_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -68,7 +76,17 @@ const EVENT_KINDS: ReadonlySet<TeamRunEventKind> = new Set([
   'run.paused',
   'run.resumed',
   'run.cancelled',
+  'wake.enqueued',
+  'wake.delivered',
+  'wake.failed',
+  'wake.acked',
 ]);
+const WAKE_KINDS: ReadonlySet<string> = new Set(['wake-member', 'wake-lead', 'finalization']);
+const WAKE_STATUSES: ReadonlySet<string> = new Set(['pending', 'delivered', 'acked', 'failed']);
+const DEFAULT_WAKE_MAX_ATTEMPTS = 5;
+// Cap retained terminal (acked/failed) wakes so a long run's mailbox.jsonl
+// stays bounded. Open wakes are always kept.
+const MAILBOX_TERMINAL_KEEP = 100;
 const REVIEW_STATUSES: ReadonlySet<string> = new Set(['requested', 'passed', 'failed']);
 const APPROVAL_STATUSES: ReadonlySet<string> = new Set(['requested', 'approved', 'rejected']);
 const TICK_REASONS: ReadonlySet<TeamRunTickReason> = new Set(['scheduled', 'manual', 'startup-recovery']);
@@ -176,6 +194,7 @@ function isTarget(value: unknown): value is TeamMessageTarget {
 function isTeamRunSnapshot(value: unknown, expectedRunId: string): value is TeamRunSnapshot {
   if (!isRecord(value)) return false;
   if (value.id !== expectedRunId || !isValidTeamRunId(expectedRunId)) return false;
+  if (value.rev !== undefined && (typeof value.rev !== 'number' || !Number.isInteger(value.rev) || value.rev < 0)) return false;
   if (typeof value.workspaceId !== 'string' || !value.workspaceId) return false;
   if (typeof value.teamSlug !== 'string' || !TEAM_SLUG_REGEX.test(value.teamSlug)) return false;
   if (typeof value.state !== 'string' || !RUN_STATES.has(value.state as TeamRunState)) return false;
@@ -209,6 +228,10 @@ function isTeamTask(value: unknown): value is TeamTask {
   if (typeof value.status !== 'string' || !TASK_STATUSES.has(value.status as TeamTaskStatus)) return false;
   if (typeof value.priority !== 'string' || !TASK_PRIORITIES.has(value.priority as TeamTaskPriority)) return false;
   if (!isRecord(value.inputs)) return false;
+  if (value.outputSchema !== undefined && !isRecord(value.outputSchema)) return false;
+  if (value.revisionCount !== undefined && (!isPositiveInteger(value.revisionCount) && value.revisionCount !== 0)) return false;
+  if (value.maxRevisions !== undefined && !isPositiveInteger(value.maxRevisions)) return false;
+  if (value.reviseFindings !== undefined && typeof value.reviseFindings !== 'string') return false;
   if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
   if (value.reviewRequired !== undefined && typeof value.reviewRequired !== 'boolean') return false;
   if (value.attemptCount !== undefined && (!isPositiveInteger(value.attemptCount) && value.attemptCount !== 0)) return false;
@@ -291,6 +314,24 @@ function isTeamRunTick(value: unknown): value is TeamRunTick {
   if (typeof value.startedAt !== 'string' || typeof value.completedAt !== 'string') return false;
   if (!Array.isArray(value.actions) || !value.actions.every(isTeamRunTickAction)) return false;
   if (value.error !== undefined && typeof value.error !== 'string') return false;
+  return true;
+}
+
+function isTeamWakeEntry(value: unknown): value is TeamWakeEntry {
+  if (!isRecord(value)) return false;
+  if (typeof value.id !== 'string' || !value.id) return false;
+  if (typeof value.runId !== 'string' || !isValidTeamRunId(value.runId)) return false;
+  if (typeof value.targetAgentSlug !== 'string' || !AGENT_SLUG_REGEX.test(value.targetAgentSlug)) return false;
+  if (value.taskId !== undefined && typeof value.taskId !== 'string') return false;
+  if (typeof value.kind !== 'string' || !WAKE_KINDS.has(value.kind)) return false;
+  if (typeof value.body !== 'string') return false;
+  if (typeof value.status !== 'string' || !WAKE_STATUSES.has(value.status)) return false;
+  if (!isPositiveInteger(value.attempts) && value.attempts !== 0) return false;
+  if (!isPositiveInteger(value.maxAttempts)) return false;
+  if (typeof value.createdAt !== 'string' || typeof value.updatedAt !== 'string') return false;
+  if (value.deliveredAt !== undefined && typeof value.deliveredAt !== 'string') return false;
+  if (value.ackedAt !== undefined && typeof value.ackedAt !== 'string') return false;
+  if (value.lastError !== undefined && typeof value.lastError !== 'string') return false;
   return true;
 }
 
@@ -412,6 +453,8 @@ export function createTeamTask(workspaceRootPath: string, runId: string, input: 
     status: 'todo',
     priority,
     inputs: input.inputs ?? {},
+    outputSchema: input.outputSchema,
+    maxRevisions: input.maxRevisions,
     approvalRequired: input.approvalRequired,
     reviewRequired: input.reviewRequired,
     reviewerAgentSlug: input.reviewerAgentSlug,
@@ -427,6 +470,8 @@ export function createTeamTask(workspaceRootPath: string, runId: string, input: 
 }
 
 export function updateTeamTask(workspaceRootPath: string, runId: string, taskId: string, patch: UpdateTeamTaskInput): TeamTask {
+  const run = readTeamRun(workspaceRootPath, runId);
+  if (!run) throw new Error(`Team run not found: ${runId}`);
   const tasks = listTeamTasks(workspaceRootPath, runId);
   const index = tasks.findIndex((task) => task.id === taskId);
   if (index < 0) throw new Error(`Team task not found: ${taskId}`);
@@ -437,6 +482,7 @@ export function updateTeamTask(workspaceRootPath: string, runId: string, taskId:
   if (!TASK_PRIORITIES.has(priority)) throw new Error(`Invalid task priority: ${priority}`);
   if (patch.ownerAgentSlug !== undefined && !AGENT_SLUG_REGEX.test(patch.ownerAgentSlug)) throw new Error(`Invalid task owner: ${patch.ownerAgentSlug}`);
   if (patch.reviewerAgentSlug !== undefined && !AGENT_SLUG_REGEX.test(patch.reviewerAgentSlug)) throw new Error(`Invalid task reviewer: ${patch.reviewerAgentSlug}`);
+  if (patch.outputSchema !== undefined && !isRecord(patch.outputSchema)) throw new Error(`Task "${taskId}" output schema must be a JSON Schema object.`);
   if (patch.approvalRequired === false && (current.approvalRequired || current.approval)) {
     throw new Error(`Task "${taskId}" approval requirement cannot be cleared once set.`);
   }
@@ -453,20 +499,67 @@ export function updateTeamTask(workspaceRootPath: string, runId: string, taskId:
     updatedAt: new Date().toISOString(),
   };
   if (!next.title) throw new Error('Task title is required.');
+
+  // U3: structured output contract. When the task carries an outputSchema, the
+  // owner cannot move it to review/done unless `output` parses and validates.
+  if (next.outputSchema && (next.status === 'review' || next.status === 'done')) {
+    if (next.output === undefined || next.output.trim() === '') {
+      throw new Error(`Task "${taskId}" has an output schema but no output to validate. Set "output" before requesting review or completion.`);
+    }
+    const parsed = parseStructuredStepOutput(next.output, next.outputSchema);
+    if (!parsed.ok) {
+      throw new Error(`Task "${taskId}" output does not satisfy its output schema (${parsed.code}): ${parsed.message}`);
+    }
+  }
+
+  // U3: evidence-gated review. A passing review must be backed by at least one
+  // evidence item so "passed" can never be a bare assertion.
+  const reviewNewlyPassed = next.review?.status === 'passed' && current.review?.status !== 'passed';
+  if (reviewNewlyPassed && (!next.evidence || next.evidence.length === 0)) {
+    throw new Error(`Task "${taskId}" cannot pass review without at least one evidence item.`);
+  }
+
   if (next.status === 'done' && next.approvalRequired && next.approval?.status !== 'approved') {
     throw new Error(`Task "${taskId}" requires user approval before it can be marked done.`);
   }
   if (next.status === 'done' && next.reviewRequired && next.review?.status !== 'passed') {
     throw new Error(`Task "${taskId}" requires a passed review before it can be marked done.`);
   }
+
+  // U3: auto-reopen revise loop. A newly-failed review sends the task back to
+  // its owner with the findings attached, instead of dead-ending in `review`.
+  // A revision budget prevents an infinite redo↔reject loop.
+  const reviewNewlyFailed = next.review?.status === 'failed' && current.review?.status !== 'failed';
+  if (reviewNewlyFailed && !isTerminalRunState(run.state)) {
+    const policy = normalizeTeamRunSwarmPolicy(run.swarm);
+    const findings = next.review?.findings ?? current.reviseFindings;
+    const revisionCount = (current.revisionCount ?? 0) + 1;
+    const maxRevisions = next.maxRevisions ?? policy.retryLimit + 1;
+    if (revisionCount > maxRevisions) {
+      next.status = 'failed';
+      next.revisionCount = revisionCount;
+      next.reviseFindings = findings;
+      next.lastError = `Task failed review ${revisionCount} time(s) and exhausted its revision budget.`;
+    } else {
+      // Reopen cleanly: drop the failed review object (findings preserved in
+      // reviseFindings) so the task is an unambiguous 'todo' for its owner —
+      // no contradictory todo+failed-review state, and the next review cycle
+      // starts fresh. The owner is woken via the normal todo wake-eligibility.
+      next.status = 'todo';
+      next.review = undefined;
+      next.revisionCount = revisionCount;
+      next.reviseFindings = findings;
+      next.nextAttemptAt = undefined;
+    }
+  }
+
   if (['todo', 'blocked', 'review', 'done', 'failed'].includes(next.status)) {
     next.lease = undefined;
   }
   tasks[index] = next;
   writeJsonl(join(getTeamRunDir(workspaceRootPath, runId), TASKS_FILE), tasks);
   appendTeamRunEvent(workspaceRootPath, runId, { kind: 'task.updated', taskId: next.id, actorAgentSlug: 'system', body: next.status });
-  const run = readTeamRun(workspaceRootPath, runId);
-  if (run) touchTeamRun(workspaceRootPath, deriveRunState(run, tasks));
+  touchTeamRun(workspaceRootPath, deriveRunState(run, tasks));
   return next;
 }
 
@@ -566,6 +659,9 @@ export function claimTeamTask(
   tasks[index] = next;
   writeJsonl(join(getTeamRunDir(workspaceRootPath, runId), TASKS_FILE), tasks);
   appendTeamRunEvent(workspaceRootPath, runId, { kind: stale ? 'task.lease_expired' : 'task.leased', taskId: next.id, actorAgentSlug: input.agentSlug, body: lease.id });
+  // Closing the wake loop: claiming the task acknowledges any open wakes that
+  // nudged this owner toward it, so the mailbox stops retrying them.
+  ackTeamWakesForTarget(workspaceRootPath, runId, input.agentSlug, next.id, now);
   touchTeamRun(workspaceRootPath, deriveRunState(run, tasks));
   return next;
 }
@@ -883,15 +979,293 @@ export function appendTeamRunEvent(
   return event;
 }
 
+// ---------------------------------------------------------------------------
+// Durable wake mailbox (U1b)
+//
+// Replaces fire-and-forget wake prompts. A wake is persisted before delivery,
+// so a delivery that fails (busy/dead session, crash) is retried on the next
+// drain instead of vanishing. Coalescing prevents duplicate wakes for the same
+// (target, task, kind) from piling up into spam.
+// ---------------------------------------------------------------------------
+
+export function listTeamWakes(workspaceRootPath: string, runId: string): TeamWakeEntry[] {
+  const dir = resolveRunDir(workspaceRootPath, runId);
+  if (!dir) return [];
+  return readJsonl(join(dir, MAILBOX_FILE), isTeamWakeEntry);
+}
+
+/** Wakes still awaiting delivery (pending with attempts left), oldest first. */
+export function listPendingTeamWakes(workspaceRootPath: string, runId: string): TeamWakeEntry[] {
+  return listTeamWakes(workspaceRootPath, runId)
+    .filter((wake) => wake.status === 'pending' && wake.attempts < wake.maxAttempts)
+    .sort((a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0));
+}
+
+function isOpenWake(wake: TeamWakeEntry): boolean {
+  return wake.status === 'pending' || wake.status === 'delivered';
+}
+
+/** Keep all open wakes + the most-recent MAILBOX_TERMINAL_KEEP terminal ones. */
+function pruneTerminalWakes(wakes: TeamWakeEntry[]): TeamWakeEntry[] {
+  const terminal = wakes.filter((wake) => wake.status === 'acked' || wake.status === 'failed');
+  if (terminal.length <= MAILBOX_TERMINAL_KEEP) return wakes;
+  const keep = new Set(
+    [...terminal]
+      .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0))
+      .slice(0, MAILBOX_TERMINAL_KEEP)
+      .map((wake) => wake.id),
+  );
+  return wakes.filter((wake) => isOpenWake(wake) || keep.has(wake.id));
+}
+
+/**
+ * Enqueue a durable wake. If an open (pending/delivered, not yet acked) wake for
+ * the same target + task + kind already exists, the existing one is returned
+ * instead of adding a duplicate — this is the anti-spam / anti-duplicate-wake
+ * guard. Returns the (existing or new) wake entry.
+ */
+export function enqueueTeamWake(
+  workspaceRootPath: string,
+  runId: string,
+  input: EnqueueTeamWakeInput,
+  now: Date = new Date(),
+): TeamWakeEntry {
+  if (!readTeamRun(workspaceRootPath, runId)) throw new Error(`Team run not found: ${runId}`);
+  if (!AGENT_SLUG_REGEX.test(input.targetAgentSlug)) throw new Error(`Invalid wake target: ${input.targetAgentSlug}`);
+  if (!WAKE_KINDS.has(input.kind)) throw new Error(`Invalid wake kind: ${input.kind}`);
+
+  const existing = listTeamWakes(workspaceRootPath, runId).find((wake) => (
+    isOpenWake(wake)
+    && wake.targetAgentSlug === input.targetAgentSlug
+    && wake.taskId === input.taskId
+    && wake.kind === input.kind
+  ));
+  if (existing) {
+    // Coalesced: keep one open wake per (target, task, kind) but refresh the
+    // body so the latest nudge content wins rather than being silently dropped.
+    // A delivered-but-unacked member wake is also made pending again on a fresh
+    // enqueue. Otherwise a member that received a prompt but never claimed the
+    // task could suppress future wake delivery forever.
+    if (existing.body !== input.body || existing.status === 'delivered') {
+      return rewriteMailbox(workspaceRootPath, runId, existing.id, (wake) => ({
+        ...wake,
+        body: input.body,
+        status: 'pending',
+        deliveredAt: undefined,
+        updatedAt: now.toISOString(),
+      })) ?? existing;
+    }
+    return existing;
+  }
+
+  const iso = now.toISOString();
+  const wake: TeamWakeEntry = {
+    id: `wake_${randomUUID().slice(0, 12)}`,
+    runId,
+    targetAgentSlug: input.targetAgentSlug,
+    taskId: input.taskId,
+    kind: input.kind,
+    body: input.body,
+    status: 'pending',
+    attempts: 0,
+    maxAttempts: isPositiveInteger(input.maxAttempts) ? input.maxAttempts : DEFAULT_WAKE_MAX_ATTEMPTS,
+    createdAt: iso,
+    updatedAt: iso,
+  };
+  if (!isTeamWakeEntry(wake)) throw new Error('Invalid wake entry.');
+  appendJsonl(join(getTeamRunDir(workspaceRootPath, runId), MAILBOX_FILE), wake);
+  appendTeamRunEvent(workspaceRootPath, runId, { kind: 'wake.enqueued', taskId: input.taskId, actorAgentSlug: 'system', body: `${input.kind}:${input.targetAgentSlug}` });
+  return wake;
+}
+
+function rewriteMailbox(
+  workspaceRootPath: string,
+  runId: string,
+  wakeId: string,
+  mutate: (wake: TeamWakeEntry) => TeamWakeEntry,
+): TeamWakeEntry | null {
+  const wakes = listTeamWakes(workspaceRootPath, runId);
+  const index = wakes.findIndex((wake) => wake.id === wakeId);
+  if (index < 0) return null;
+  const next = mutate(wakes[index]!);
+  wakes[index] = next;
+  writeJsonl(join(getTeamRunDir(workspaceRootPath, runId), MAILBOX_FILE), pruneTerminalWakes(wakes));
+  return next;
+}
+
+/** Mark a wake delivered (the recipient session received the prompt). */
+export function markTeamWakeDelivered(workspaceRootPath: string, runId: string, wakeId: string, now: Date = new Date()): TeamWakeEntry | null {
+  const next = rewriteMailbox(workspaceRootPath, runId, wakeId, (wake) => ({
+    ...wake,
+    status: 'delivered',
+    attempts: wake.attempts + 1,
+    deliveredAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  }));
+  if (next) appendTeamRunEvent(workspaceRootPath, runId, { kind: 'wake.delivered', taskId: next.taskId, actorAgentSlug: 'system', body: next.targetAgentSlug });
+  return next;
+}
+
+/**
+ * Record a failed delivery attempt. Returns the wake to `pending` for retry
+ * until the attempt budget is spent, then marks it `failed` so the slow-path
+ * tick can surface the stall instead of silently losing the wake.
+ */
+export function markTeamWakeFailed(workspaceRootPath: string, runId: string, wakeId: string, error: string, now: Date = new Date()): TeamWakeEntry | null {
+  const next = rewriteMailbox(workspaceRootPath, runId, wakeId, (wake) => {
+    const attempts = wake.attempts + 1;
+    return {
+      ...wake,
+      status: attempts >= wake.maxAttempts ? 'failed' : 'pending',
+      attempts,
+      lastError: error,
+      updatedAt: now.toISOString(),
+    };
+  });
+  if (next) appendTeamRunEvent(workspaceRootPath, runId, { kind: 'wake.failed', taskId: next.taskId, actorAgentSlug: 'system', body: `${next.targetAgentSlug}:${next.status}` });
+  return next;
+}
+
+/** Mark a wake acknowledged — the recipient acted on it (claimed/heartbeat). */
+export function markTeamWakeAcked(workspaceRootPath: string, runId: string, wakeId: string, now: Date = new Date()): TeamWakeEntry | null {
+  const next = rewriteMailbox(workspaceRootPath, runId, wakeId, (wake) => ({
+    ...wake,
+    status: 'acked',
+    ackedAt: now.toISOString(),
+    updatedAt: now.toISOString(),
+  }));
+  if (next) appendTeamRunEvent(workspaceRootPath, runId, { kind: 'wake.acked', taskId: next.taskId, actorAgentSlug: next.targetAgentSlug, body: next.targetAgentSlug });
+  return next;
+}
+
+/**
+ * Acknowledge every open wake addressed to `agentSlug` for `taskId` (or all of
+ * that agent's open wakes when no task is given). Called when a member claims
+ * or heartbeats a task, closing the delivery loop.
+ */
+export function ackTeamWakesForTarget(
+  workspaceRootPath: string,
+  runId: string,
+  agentSlug: string,
+  taskId?: string,
+  now: Date = new Date(),
+): TeamWakeEntry[] {
+  const wakes = listTeamWakes(workspaceRootPath, runId);
+  const acked: TeamWakeEntry[] = [];
+  const next = wakes.map((wake) => {
+    if (!isOpenWake(wake)) return wake;
+    if (wake.targetAgentSlug !== agentSlug) return wake;
+    if (taskId !== undefined && wake.taskId !== taskId) return wake;
+    const updated: TeamWakeEntry = { ...wake, status: 'acked', ackedAt: now.toISOString(), updatedAt: now.toISOString() };
+    acked.push(updated);
+    return updated;
+  });
+  if (acked.length === 0) return [];
+  writeJsonl(join(getTeamRunDir(workspaceRootPath, runId), MAILBOX_FILE), pruneTerminalWakes(next));
+  for (const wake of acked) {
+    appendTeamRunEvent(workspaceRootPath, runId, { kind: 'wake.acked', taskId: wake.taskId, actorAgentSlug: wake.targetAgentSlug, body: wake.targetAgentSlug });
+  }
+  return acked;
+}
+
+// ---------------------------------------------------------------------------
+// Delegation receipts (U2)
+//
+// Persists the canonical agent-to-agent delegation envelope per run. A team
+// lead waking a member to do a task records a DelegationReceipt linking the
+// parent (lead) → child (member session) → team task, with the structured
+// result and permission-inheritance record. This is the same contract the
+// agent-messaging `message_agent` tool produces, so the two converge on merge.
+// ---------------------------------------------------------------------------
+
+export function listTeamDelegationReceipts(workspaceRootPath: string, runId: string): DelegationReceipt[] {
+  const dir = resolveRunDir(workspaceRootPath, runId);
+  if (!dir) return [];
+  return readJsonl(join(dir, DELEGATIONS_FILE), isDelegationReceipt);
+}
+
+export function appendTeamDelegationReceipt(
+  workspaceRootPath: string,
+  runId: string,
+  receipt: DelegationReceipt,
+): DelegationReceipt {
+  if (!readTeamRun(workspaceRootPath, runId)) throw new Error(`Team run not found: ${runId}`);
+  if (!isDelegationReceipt(receipt)) throw new Error('Invalid delegation receipt.');
+  if (receipt.teamRunId && receipt.teamRunId !== runId) {
+    throw new Error(`Delegation receipt teamRunId "${receipt.teamRunId}" does not match run "${runId}".`);
+  }
+  appendJsonl(join(getTeamRunDir(workspaceRootPath, runId), DELEGATIONS_FILE), receipt);
+  return receipt;
+}
+
+/** Replace a delegation receipt by id (e.g. on completion). Returns null if absent. */
+export function updateTeamDelegationReceipt(
+  workspaceRootPath: string,
+  runId: string,
+  receipt: DelegationReceipt,
+): DelegationReceipt | null {
+  if (!isDelegationReceipt(receipt)) throw new Error('Invalid delegation receipt.');
+  const all = listTeamDelegationReceipts(workspaceRootPath, runId);
+  const index = all.findIndex((entry) => entry.id === receipt.id);
+  if (index < 0) return null;
+  all[index] = receipt;
+  writeJsonl(join(getTeamRunDir(workspaceRootPath, runId), DELEGATIONS_FILE), all);
+  return receipt;
+}
+
 export function touchTeamRun(workspaceRootPath: string, run: TeamRunSnapshot): TeamRunSnapshot {
   const terminal = run.state === 'done' || run.state === 'failed' || run.state === 'cancelled';
   const now = new Date().toISOString();
   const next: TeamRunSnapshot = {
     ...run,
+    rev: (run.rev ?? 0) + 1,
     updatedAt: now,
     completedAt: terminal ? (run.completedAt ?? now) : run.completedAt,
   };
   writeTeamRun(workspaceRootPath, next);
+  // Fast-path reactive signal: every persisted mutation funnels through here.
+  emitTeamRunSignal({ workspaceRootPath, runId: next.id, reason: next.state });
+  return next;
+}
+
+/**
+ * Thrown by {@link writeTeamRunGuarded} when the on-disk run was mutated by a
+ * concurrent writer since the caller last read it (optimistic-concurrency
+ * conflict). Callers should re-read and retry their mutation.
+ */
+export class StaleRunWriteError extends Error {
+  readonly runId: string;
+  readonly expectedRev: number;
+  readonly actualRev: number;
+  constructor(runId: string, expectedRev: number, actualRev: number) {
+    super(`Team run "${runId}" changed concurrently (expected rev ${expectedRev}, found ${actualRev}).`);
+    this.name = 'StaleRunWriteError';
+    this.runId = runId;
+    this.expectedRev = expectedRev;
+    this.actualRev = actualRev;
+  }
+}
+
+/**
+ * Persist a run snapshot only if the on-disk `rev` still matches `expectedRev`
+ * (the rev the caller read before computing `run`). Increments rev on success.
+ * Throws {@link StaleRunWriteError} on conflict so the caller can re-read and
+ * retry. Use for cross-process-safe read-modify-write of the run snapshot;
+ * in-process serialization is handled separately by the run mutation queue.
+ */
+export function writeTeamRunGuarded(
+  workspaceRootPath: string,
+  run: TeamRunSnapshot,
+  expectedRev: number,
+): TeamRunSnapshot {
+  const current = readTeamRun(workspaceRootPath, run.id);
+  const actualRev = current?.rev ?? 0;
+  if (actualRev !== expectedRev) {
+    throw new StaleRunWriteError(run.id, expectedRev, actualRev);
+  }
+  const next: TeamRunSnapshot = { ...run, rev: expectedRev + 1, updatedAt: new Date().toISOString() };
+  writeTeamRun(workspaceRootPath, next);
+  emitTeamRunSignal({ workspaceRootPath, runId: next.id, reason: next.state });
   return next;
 }
 

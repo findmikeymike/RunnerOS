@@ -112,6 +112,11 @@ import {
   writeGlobalWorkflow,
 } from '@craft-agent/shared/workflows'
 import {
+  createDelegationReceipt,
+  derivePermissionInheritance,
+  succeedDelegationReceipt,
+} from '@craft-agent/shared/delegation'
+import {
   appendTeamRunEvent,
   claimTeamTask,
   completeTeamRun,
@@ -132,6 +137,15 @@ import {
   updateTeamTask,
   writeTeamRun,
   touchTeamRun,
+  enqueueTeamWake,
+  listPendingTeamWakes,
+  markTeamWakeDelivered,
+  markTeamWakeFailed,
+  markTeamWakeAcked,
+  appendTeamDelegationReceipt,
+  onTeamRunSignal,
+  readTeamRun,
+  withRunMutationLock,
   type CompleteTeamRunInput,
   type CreateTeamTaskInput,
   type RunTeamRunTickInput,
@@ -1497,6 +1511,12 @@ export class SessionManager implements ISessionManager {
   private deepResearchRunner!: DeepResearchRunner
   private teamRunLoopTimer: ReturnType<typeof setInterval> | null = null
   private teamRunTicksInFlight = new Set<string>()
+  /** Unsubscribe handle for the reactive team-run signal listener (U1b). */
+  private teamRunSignalUnsub: (() => void) | null = null
+  /** Debounce timers for reactive ticks, keyed by `${workspaceId}:${runId}`. */
+  private reactiveTeamTickTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  /** Last reactive-tick wall-clock per run key, to throttle self-triggered cascades. */
+  private lastReactiveTeamTickAt = new Map<string, number>()
 
   /**
    * Centralized setter for session processing state.
@@ -2018,6 +2038,24 @@ export class SessionManager implements ISessionManager {
       if (m.role === 'assistant') return m.content ?? ''
     }
     return ''
+  }
+
+  private getCompletedToolSummaryForSession(sessionId: string): { toolUseCount: number; toolNames: string[] } {
+    const managed = this.sessions.get(sessionId)
+    if (!managed) return { toolUseCount: 0, toolNames: [] }
+    const names: string[] = []
+    for (const message of managed.messages) {
+      if (message.role !== 'tool' || message.toolStatus !== 'completed' || message.isError === true) continue
+      if (message.toolName) names.push(message.toolName)
+    }
+    return {
+      toolUseCount: managed.messages.filter((message) => (
+        message.role === 'tool' &&
+        message.toolStatus === 'completed' &&
+        message.isError !== true
+      )).length,
+      toolNames: [...new Set(names)],
+    }
   }
 
   /**
@@ -3415,7 +3453,13 @@ user a clickable link to where the thing now lives.`
         `- status: ${task.status}`,
         `- priority: ${task.priority}`,
         `- description: ${task.description || '(none)'}`,
-      ].join('\n') : `Open tasks:\n${openTasks || '- none'}`,
+        task.reviseFindings
+          ? `\nThis task was reopened for revision (attempt ${task.revisionCount ?? 1}). Address the reviewer's findings before resubmitting:\n${task.reviseFindings}`
+          : '',
+        task.outputSchema
+          ? `\nYour task output MUST be valid JSON matching this schema before you can move the task to review or done:\n${JSON.stringify(task.outputSchema, null, 2)}`
+          : '',
+      ].filter(Boolean).join('\n') : `Open tasks:\n${openTasks || '- none'}`,
       extraPrompt ? `\nExtra instructions:\n${extraPrompt}` : '',
     ].filter(Boolean).join('\n')
   }
@@ -3590,6 +3634,7 @@ user a clickable link to where the thing now lives.`
     if (existingSessionId) {
       if (this.sessions.has(existingSessionId) && existingSessionId !== managed.id) {
         await this.sendMessage(existingSessionId, prompt)
+        this.recordTeamDelegation(managed, detail, agentSlug, task, existingSessionId)
         return { sessionId: existingSessionId, status: 'resumed', detail: this.emitTeamRunUpdated(managed, runId) }
       }
       if (this.sessions.has(existingSessionId)) {
@@ -3622,8 +3667,68 @@ user a clickable link to where the thing now lives.`
       linkTeamRunMemberSession(managed.workspace.rootPath, runId, agentSlug, session.id)
     }
     await this.sendMessage(session.id, prompt)
+    this.recordTeamDelegation(managed, detail, agentSlug, task, session.id)
     detail = this.emitTeamRunUpdated(managed, runId)
     return { sessionId: session.id, status: 'created', detail }
+  }
+
+  /**
+   * Record a canonical delegation receipt for a lead→member task delegation
+   * (U2). Best-effort: a receipt-write failure must never break delivery. Only
+   * records when a concrete task is delegated to a non-lead member.
+   */
+  private recordTeamDelegation(
+    managed: ManagedSession,
+    detail: TeamRunDetail,
+    agentSlug: string,
+    task: TeamTask | undefined,
+    childSessionId: string,
+  ): void {
+    if (!task) return
+    if (agentSlug === detail.teamSnapshot.metadata.lead) return
+    try {
+      // Record the real modes: parent = lead session's effective mode (falling
+      // back to the run's), child = the member session's effective mode. The
+      // clamp is normally a no-op because team members are already constrained
+      // to the run's permission mode, but recording both faithfully keeps the
+      // inheritance trail honest (and catches any future divergence).
+      const parentMode = (detail.leadSessionId ? this.sessions.get(detail.leadSessionId)?.permissionMode : undefined)
+        ?? detail.permissionMode ?? 'ask'
+      const childMode = this.sessions.get(childSessionId)?.permissionMode
+        ?? detail.permissionMode ?? parentMode
+      const inheritance = derivePermissionInheritance(parentMode, childMode)
+      const effectiveMode = inheritance.effectiveMode
+      const runningReceipt = createDelegationReceipt({
+        workspaceId: detail.workspaceId,
+        targetAgentSlug: agentSlug,
+        task: task.title,
+        callerAgentSlug: detail.teamSnapshot.metadata.lead,
+        parentSessionId: detail.leadSessionId,
+        teamRunId: detail.id,
+        teamTaskId: task.id,
+        childSessionId,
+        policy: {
+          permissionMode: effectiveMode,
+          timeoutSeconds: 0,
+          maxTurns: 0,
+          maxDepth: 1,
+          depth: 1,
+        },
+        permissionInheritance: inheritance,
+        constraints: { outputSchema: task.outputSchema },
+      })
+      const output = this.getLastAssistantTextForSession(childSessionId)
+      const toolSummary = this.getCompletedToolSummaryForSession(childSessionId)
+      const receipt = succeedDelegationReceipt(runningReceipt, {
+        output,
+        summary: output.slice(0, 500),
+        toolUseCount: toolSummary.toolUseCount,
+        toolNames: toolSummary.toolNames,
+      }, childSessionId)
+      appendTeamDelegationReceipt(managed.workspace.rootPath, detail.id, receipt)
+    } catch (err) {
+      sessionLog.warn(`[teams] failed to record delegation receipt for @${agentSlug} on run ${detail.id}:`, err as Error)
+    }
   }
 
   private getTeamRunOperatorManaged(workspaceId: string, runId: string): { managed: ManagedSession; detail: TeamRunDetail } {
@@ -3650,20 +3755,30 @@ user a clickable link to where the thing now lives.`
     return { managed, detail }
   }
 
+  private withManagedTeamRunMutation<T>(
+    managed: ManagedSession,
+    runId: string,
+    fn: () => T | Promise<T>,
+  ): Promise<T> {
+    return withRunMutationLock(managed.workspace.rootPath, runId, fn)
+  }
+
   async completeManagedTeamRun(workspaceId: string, runId: string, input: CompleteTeamRunInput): Promise<TeamRunDetail> {
     const { managed } = this.getTeamRunOperatorManaged(workspaceId, runId)
-    completeTeamRun(managed.workspace.rootPath, runId, input)
-    const detail = this.emitTeamRunUpdated(managed, runId, 'completed')
-    try {
-      await this.workflowRunner.completeTeamStep({
-        workspaceId: managed.workspace.id,
-        teamRunId: runId,
-        output: this.buildWorkflowTeamStepOutput(detail),
-      })
-    } catch (err) {
-      console.error(`[SessionManager] failed to resume workflow for completed team run ${runId}:`, err)
-    }
-    return detail
+    return this.withManagedTeamRunMutation(managed, runId, async () => {
+      completeTeamRun(managed.workspace.rootPath, runId, input)
+      const detail = this.emitTeamRunUpdated(managed, runId, 'completed')
+      try {
+        await this.workflowRunner.completeTeamStep({
+          workspaceId: managed.workspace.id,
+          teamRunId: runId,
+          output: this.buildWorkflowTeamStepOutput(detail),
+        })
+      } catch (err) {
+        console.error(`[SessionManager] failed to resume workflow for completed team run ${runId}:`, err)
+      }
+      return detail
+    })
   }
 
   async wakeManagedTeamRunAgent(
@@ -3683,37 +3798,39 @@ user a clickable link to where the thing now lives.`
 
   async controlManagedTeamRun(workspaceId: string, runId: string, input: TeamRunControlInput): Promise<TeamRunDetail> {
     const { managed } = this.getTeamRunOperatorManaged(workspaceId, runId)
-    const before = this.readManagedTeamRun(managed, runId)
-    controlTeamRun(managed.workspace.rootPath, runId, input.action, input.reason)
-    const detail = this.emitTeamRunUpdated(managed, runId, input.action === 'cancel' ? 'completed' : 'updated')
-    const sessionIds = [
-      before.leadSessionId,
-      ...Object.values(before.memberSessionIds ?? {}),
-    ].filter((sessionId): sessionId is string => Boolean(sessionId))
+    return this.withManagedTeamRunMutation(managed, runId, async () => {
+      const before = this.readManagedTeamRun(managed, runId)
+      controlTeamRun(managed.workspace.rootPath, runId, input.action, input.reason)
+      const detail = this.emitTeamRunUpdated(managed, runId, input.action === 'cancel' ? 'completed' : 'updated')
+      const sessionIds = [
+        before.leadSessionId,
+        ...Object.values(before.memberSessionIds ?? {}),
+      ].filter((sessionId): sessionId is string => Boolean(sessionId))
 
-    if (input.action === 'cancel') {
-      await Promise.all(sessionIds.map((sessionId) => this.cancelProcessing(sessionId, true)))
-      try {
-        await this.workflowRunner.cancelTeamStep({
-          workspaceId,
-          teamRunId: runId,
-          reason: input.reason,
-        })
-      } catch (err) {
-        console.error(`[SessionManager] failed to cancel workflow waiting on team run ${runId}:`, err)
+      if (input.action === 'cancel') {
+        await Promise.all(sessionIds.map((sessionId) => this.cancelProcessing(sessionId, true)))
+        try {
+          await this.workflowRunner.cancelTeamStep({
+            workspaceId,
+            teamRunId: runId,
+            reason: input.reason,
+          })
+        } catch (err) {
+          console.error(`[SessionManager] failed to cancel workflow waiting on team run ${runId}:`, err)
+        }
+      } else if (input.action === 'pause') {
+        const message = [
+          `Team run ${runId} has been paused by the operator.`,
+          input.reason?.trim() ? `Reason: ${input.reason.trim()}` : '',
+          'Stop current team work and wait for the run to be resumed before taking further actions.',
+        ].filter(Boolean).join('\n')
+        await Promise.all(sessionIds.map(async (sessionId) => {
+          if (this.sessions.has(sessionId)) await this.sendMessage(sessionId, message)
+        }))
       }
-    } else if (input.action === 'pause') {
-      const message = [
-        `Team run ${runId} has been paused by the operator.`,
-        input.reason?.trim() ? `Reason: ${input.reason.trim()}` : '',
-        'Stop current team work and wait for the run to be resumed before taking further actions.',
-      ].filter(Boolean).join('\n')
-      await Promise.all(sessionIds.map(async (sessionId) => {
-        if (this.sessions.has(sessionId)) await this.sendMessage(sessionId, message)
-      }))
-    }
 
-    return detail
+      return detail
+    })
   }
 
   listManagedTeamRunTicks(workspaceId: string, runId: string): TeamRunTick[] {
@@ -3734,19 +3851,47 @@ user a clickable link to where the thing now lives.`
     try {
       const { managed } = this.getTeamRunOperatorManaged(workspaceId, runId)
       const tick = runTeamRunTick(managed.workspace.rootPath, runId, input)
-      const latest = this.readManagedTeamRun(managed, runId)
+      const root = managed.workspace.rootPath
+      const lead = this.readManagedTeamRun(managed, runId).teamSnapshot.metadata.lead
+      // U1b: turn tick actions into durable mailbox wakes (coalesced) instead of
+      // firing them once and forgetting. Delivery + retry happens in the drain.
       for (const action of tick.actions) {
         if (action.type === 'wake-lead') {
-          await this.spawnOrWakeTeamMember(managed, runId, latest.teamSnapshot.metadata.lead, action.taskId ? latest.tasks.find((task) => task.id === action.taskId) : undefined, action.message)
+          enqueueTeamWake(root, runId, { targetAgentSlug: lead, taskId: action.taskId, kind: 'wake-lead', body: action.message ?? '' })
         } else if (action.type === 'finalization-needed') {
-          await this.spawnOrWakeTeamMember(managed, runId, latest.teamSnapshot.metadata.lead, undefined, action.message)
+          enqueueTeamWake(root, runId, { targetAgentSlug: lead, kind: 'finalization', body: action.message ?? '' })
         } else if (action.type === 'wake-member' && action.agentSlug) {
-          await this.spawnOrWakeTeamMember(managed, runId, action.agentSlug, action.taskId ? latest.tasks.find((task) => task.id === action.taskId) : undefined, action.message)
+          enqueueTeamWake(root, runId, { targetAgentSlug: action.agentSlug, taskId: action.taskId, kind: 'wake-member', body: action.message ?? '' })
         }
       }
+      await this.drainTeamRunMailbox(managed, runId)
       return { tick, run: this.emitTeamRunUpdated(managed, runId) }
     } finally {
       this.teamRunTicksInFlight.delete(lockKey)
+    }
+  }
+
+  /**
+   * Deliver pending mailbox wakes (U1b). A delivery that throws is recorded as a
+   * failed attempt and retried on the next drain until the attempt budget is
+   * spent, so a busy/dead/transient session no longer silently loses a wakeup.
+   * Member wakes are acked when the member claims the task; lead-directed wakes
+   * are acked on delivery so future nudges (governed by tick cooldown) are not
+   * blocked by coalescing.
+   */
+  private async drainTeamRunMailbox(managed: ManagedSession, runId: string): Promise<void> {
+    const root = managed.workspace.rootPath
+    for (const wake of listPendingTeamWakes(root, runId)) {
+      const latest = this.readManagedTeamRun(managed, runId)
+      const task = wake.taskId ? latest.tasks.find((candidate) => candidate.id === wake.taskId) : undefined
+      try {
+        await this.spawnOrWakeTeamMember(managed, runId, wake.targetAgentSlug, task, wake.body || undefined)
+        markTeamWakeDelivered(root, runId, wake.id)
+        if (wake.kind !== 'wake-member') markTeamWakeAcked(root, runId, wake.id)
+      } catch (err) {
+        markTeamWakeFailed(root, runId, wake.id, err instanceof Error ? err.message : String(err))
+        sessionLog.warn(`[teams] wake delivery to @${wake.targetAgentSlug} on run ${runId} failed:`, err as Error)
+      }
     }
   }
 
@@ -3784,6 +3929,43 @@ user a clickable link to where the thing now lives.`
       void tickAll()
     }, 15_000)
     void tickAll()
+
+    // U1b fast path: react to mutation signals immediately (debounced) instead
+    // of waiting for the next 15s sweep. The interval above remains the safety
+    // net for lease expiry and anything no signal fired for.
+    this.teamRunSignalUnsub?.()
+    this.teamRunSignalUnsub = onTeamRunSignal((signal) => {
+      const workspace = getWorkspaces().find((ws) => ws.rootPath === signal.workspaceRootPath)
+      if (!workspace) return
+      const key = `${workspace.id}:${signal.runId}`
+      if (this.reactiveTeamTickTimers.has(key)) return
+      const timer = setTimeout(() => {
+        this.reactiveTeamTickTimers.delete(key)
+        void this.reactiveTeamTick(workspace.id, signal.runId, signal.workspaceRootPath)
+      }, 250)
+      this.reactiveTeamTickTimers.set(key, timer)
+    })
+  }
+
+  /** Reactive tick triggered by a run mutation signal (U1b fast path). */
+  private async reactiveTeamTick(workspaceId: string, runId: string, workspaceRootPath: string): Promise<void> {
+    const key = `${workspaceId}:${runId}`
+    if (this.teamRunTicksInFlight.has(key)) return
+    // Throttle self-triggered cascades: a reactive tick that changes state emits
+    // its own signal, which would schedule another tick. A short cooldown bounds
+    // this to ~1/sec per run; the 15s sweep remains the completeness guarantee.
+    const last = this.lastReactiveTeamTickAt.get(key) ?? 0
+    if (Date.now() - last < 1_000) return
+    const run = readTeamRun(workspaceRootPath, runId)
+    if (!run) return
+    if (!['created', 'running', 'blocked', 'review'].includes(run.state)) return
+    if (normalizeTeamRunSwarmPolicy(run.swarm).autoRun === false) return
+    this.lastReactiveTeamTickAt.set(key, Date.now())
+    try {
+      await this.tickManagedTeamRun(workspaceId, runId, { reason: 'scheduled' })
+    } catch (err) {
+      sessionLog.warn(`[teams] reactive tick failed for run ${runId}:`, err as Error)
+    }
   }
 
   /**
@@ -5547,6 +5729,7 @@ user a clickable link to where the thing now lives.`
           return listTeamMessages(managed.workspace.rootPath, runId)
         },
         createTeamTaskFn: async (input) => {
+          return this.withManagedTeamRunMutation(managed, input.runId, async () => {
           const run = this.readManagedTeamRun(managed, input.runId)
           this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
@@ -5570,10 +5753,12 @@ user a clickable link to where the thing now lives.`
             ownerAgentSlug: input.ownerAgentSlug,
             priority: input.priority,
             inputs: input.inputs,
+            outputSchema: input.outputSchema,
             approvalRequired,
             reviewRequired,
             reviewerAgentSlug: input.reviewerAgentSlug,
             maxAttempts: input.maxAttempts,
+            maxRevisions: input.maxRevisions,
           } satisfies CreateTeamTaskInput)
           sendTeamMessage(managed.workspace.rootPath, input.runId, {
             fromAgentSlug: actor,
@@ -5589,8 +5774,10 @@ user a clickable link to where the thing now lives.`
             ownerSessionStatus: wake.status,
             run: wake.detail,
           }
+          })
         },
         updateTeamTaskFn: async (input) => {
+          return this.withManagedTeamRunMutation(managed, input.runId, async () => {
           const run = this.readManagedTeamRun(managed, input.runId)
           this.assertTeamRunMutable(run)
           const task = run.tasks.find((candidate) => candidate.id === input.taskId)
@@ -5655,8 +5842,10 @@ user a clickable link to where the thing now lives.`
             task: updated,
             run: emittedRun,
           }
+          })
         },
         claimTeamTaskFn: async (input) => {
+          return this.withManagedTeamRunMutation(managed, input.runId, async () => {
           const run = this.readManagedTeamRun(managed, input.runId)
           this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
@@ -5669,8 +5858,10 @@ user a clickable link to where the thing now lives.`
             task: claimed,
             run: this.emitTeamRunUpdated(managed, input.runId),
           }
+          })
         },
         heartbeatTeamTaskFn: async (input) => {
+          return this.withManagedTeamRunMutation(managed, input.runId, async () => {
           const run = this.readManagedTeamRun(managed, input.runId)
           this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
@@ -5684,8 +5875,10 @@ user a clickable link to where the thing now lives.`
             task,
             run: this.emitTeamRunUpdated(managed, input.runId),
           }
+          })
         },
         expireStaleTeamTasksFn: async (runId: string) => {
+          return this.withManagedTeamRunMutation(managed, runId, async () => {
           const run = this.readManagedTeamRun(managed, runId)
           this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
@@ -5697,6 +5890,7 @@ user a clickable link to where the thing now lives.`
             tasks,
             run: this.emitTeamRunUpdated(managed, runId),
           }
+          })
         },
         listTeamTicksFn: (runId: string) => {
           const run = this.readManagedTeamRun(managed, runId)
@@ -5715,6 +5909,7 @@ user a clickable link to where the thing now lives.`
           })
         },
         sendTeamMessageFn: async (input) => {
+          return this.withManagedTeamRunMutation(managed, input.runId, async () => {
           const run = this.readManagedTeamRun(managed, input.runId)
           this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
@@ -5739,8 +5934,10 @@ user a clickable link to where the thing now lives.`
             message,
             run: this.emitTeamRunUpdated(managed, input.runId),
           }
+          })
         },
         requestTeamReviewFn: async (input) => {
+          return this.withManagedTeamRunMutation(managed, input.runId, async () => {
           const run = this.readManagedTeamRun(managed, input.runId)
           this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
@@ -5778,8 +5975,10 @@ user a clickable link to where the thing now lives.`
             reviewerSessionStatus: wake.status,
             run: wake.detail,
           }
+          })
         },
         requestUserApprovalFn: async (input) => {
+          return this.withManagedTeamRunMutation(managed, input.runId, async () => {
           const run = this.readManagedTeamRun(managed, input.runId)
           this.assertTeamRunMutable(run)
           const actor = this.resolveTeamActor(managed, run)
@@ -5802,6 +6001,7 @@ user a clickable link to where the thing now lives.`
             task: updated,
             run: this.emitTeamRunUpdated(managed, input.runId),
           }
+          })
         },
         spawnTeamMemberFn: async (input) => {
           const run = this.readManagedTeamRun(managed, input.runId)
@@ -10020,6 +10220,11 @@ user a clickable link to where the thing now lives.`
       clearInterval(this.teamRunLoopTimer)
       this.teamRunLoopTimer = null
     }
+    this.teamRunSignalUnsub?.()
+    this.teamRunSignalUnsub = null
+    for (const timer of this.reactiveTeamTickTimers.values()) clearTimeout(timer)
+    this.reactiveTeamTickTimers.clear()
+    this.lastReactiveTeamTickAt.clear()
 
     // Stop all ConfigWatchers (file system watchers)
     for (const [path, watcher] of this.configWatchers) {

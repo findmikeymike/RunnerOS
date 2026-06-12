@@ -75,6 +75,7 @@
     "./skills/system": "./src/skills/system.ts",
     "./skills/categories": "./src/skills/categories.ts",
     "./teams": "./src/teams/index.ts",
+    "./delegation": "./src/delegation/index.ts",
     "./teams/run-storage": "./src/teams/run-storage.ts",
     "./teams/run-types": "./src/teams/run-types.ts",
     "./teams/starter-templates": "./src/teams/starter-templates.ts",

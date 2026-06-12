@@ -9,10 +9,12 @@ export interface CreateTeamTaskToolInput {
   ownerAgentSlug: string;
   priority?: 'low' | 'normal' | 'high';
   inputs?: Record<string, unknown>;
+  outputSchema?: Record<string, unknown>;
   approvalRequired?: boolean;
   reviewRequired?: boolean;
   reviewerAgentSlug?: string;
   maxAttempts?: number;
+  maxRevisions?: number;
 }
 
 export interface UpdateTeamTaskToolInput {

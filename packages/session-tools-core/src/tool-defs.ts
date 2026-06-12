@@ -516,10 +516,12 @@ export const CreateTeamTaskSchema = z.object({
   ownerAgentSlug: z.string().describe('Agent slug responsible for the task'),
   priority: z.enum(['low', 'normal', 'high']).optional().describe('Task priority'),
   inputs: z.record(z.string(), z.unknown()).optional().describe('Structured inputs for the task'),
+  outputSchema: z.record(z.string(), z.unknown()).optional().describe('Optional JSON Schema the task output must satisfy before it can move to review or done. Use to demand a machine-readable result.'),
   approvalRequired: z.boolean().optional().describe('Whether this task needs user approval before risky work'),
   reviewRequired: z.boolean().optional().describe('Whether this task must pass reviewer verification before done'),
   reviewerAgentSlug: z.string().optional().describe('Reviewer agent slug, if known'),
   maxAttempts: z.number().int().positive().optional().describe('Optional per-task attempt limit before stale retries fail the task'),
+  maxRevisions: z.number().int().positive().optional().describe('Optional failed-review revision budget before the task fails instead of reopening again'),
 });
 
 export const UpdateTeamTaskSchema = z.object({
