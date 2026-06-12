@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { toast } from 'sonner'
-import { Archive, Check, Copy, ExternalLink, Pause, Pencil, Play, Plus, ShieldCheck, Square, Trash2, UserPlus, Users, X } from 'lucide-react'
+import { Archive, Bell, Check, CheckCircle2, Copy, ExternalLink, Pause, Pencil, Play, Plus, RefreshCw, ShieldCheck, Square, Trash2, UserPlus, Users, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -14,7 +14,7 @@ import { useTeams } from '@/hooks/useTeams'
 import { useTeamRuns } from '@/hooks/useTeamRuns'
 import { STARTER_TEAMS } from '@craft-agent/shared/teams/starter-templates'
 import { routes } from '../../shared/routes'
-import type { TeamDTO, TeamMetadataDTO, TeamRunDetail, TeamRunSnapshot } from '../../shared/types'
+import type { TeamDTO, TeamMetadataDTO, TeamRunDetail, TeamRunSnapshot, TeamRunTick } from '../../shared/types'
 
 interface TeamsListPageProps {
   workspaceId: string
@@ -57,7 +57,7 @@ const TEAM_AGENT_SLUG_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
 export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPageProps) {
   const { navigate } = useNavigation()
   const { allTeams, loading, error, upsert, remove } = useTeams()
-  const { runs, detailsById, get, start, control, updateTask } = useTeamRuns(workspaceId)
+  const { runs, detailsById, ticksByRunId, get, start, control, complete, tick, listTicks, wakeAgent, updateTask } = useTeamRuns(workspaceId)
   const [selectedRunIdByTeam, setSelectedRunIdByTeam] = React.useState<Record<string, string>>({})
   const [createDialogOpen, setCreateDialogOpen] = React.useState(false)
   const [createTemplateSlug, setCreateTemplateSlug] = React.useState<string | null>(null)
@@ -76,6 +76,7 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
   const selectedRunId = selectedRuntimeTeam ? selectedRunIdByTeam[selectedRuntimeTeam.slug] : undefined
   const activeRun = selectedRuns.find((run) => run.id === selectedRunId) ?? selectedRuns[0] ?? null
   const activeDetail = activeRun ? detailsById[activeRun.id] : undefined
+  const activeTicks = activeRun ? (ticksByRunId[activeRun.id] ?? []) : []
   const teamStatsBySlug = React.useMemo(() => {
     const out = new Map<string, TeamLibraryStats>()
     for (const team of allTeams) {
@@ -102,6 +103,13 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
       toast.error(err instanceof Error ? err.message : String(err))
     })
   }, [activeRun, detailsById, get])
+
+  React.useEffect(() => {
+    if (!activeRun || ticksByRunId[activeRun.id]) return
+    void listTicks(activeRun.id).catch((err) => {
+      toast.error(err instanceof Error ? err.message : String(err))
+    })
+  }, [activeRun, listTicks, ticksByRunId])
 
   React.useEffect(() => {
     for (const team of allTeams) {
@@ -251,6 +259,36 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
     }
   }
 
+  const handleRunTick = async (run: TeamRunSnapshot) => {
+    try {
+      const result = await tick(run.id, { reason: 'manual' })
+      const usefulActions = result.tick.actions.filter((action) => action.type !== 'no-op')
+      toast.success(usefulActions.length ? `Ran loop: ${usefulActions.map((action) => action.type).join(', ')}` : 'Run loop checked')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleWakeAgent = async (run: TeamRunSnapshot, agentSlug: string, taskId?: string) => {
+    try {
+      const result = await wakeAgent(run.id, agentSlug, taskId)
+      toast.success(`${result.status === 'created' ? 'Created' : 'Woke'} @${agentSlug}`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const handleCompleteRun = async (run: TeamRunSnapshot) => {
+    const summary = window.prompt('Final team summary?')
+    if (!summary?.trim()) return
+    try {
+      await complete(run.id, { summary: summary.trim() })
+      toast.success('Team run completed')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
       <div className="mx-auto max-w-6xl px-7 py-7">
@@ -318,15 +356,19 @@ export default function TeamsListPage({ workspaceId, teamSlug }: TeamsListPagePr
                 runs={selectedRuns}
                 selectedRun={activeRun}
                 selectedDetail={activeDetail}
+                ticks={activeTicks}
                 onSelectRun={(runId) => setSelectedRunIdByTeam((prev) => ({ ...prev, [selectedRuntimeTeam.slug]: runId }))}
                 onStart={() => void handleStartRun(selectedRuntimeTeam)}
                 onEdit={() => void handleEditTeam(selectedRuntimeTeam)}
                 onDuplicate={() => void handleDuplicateTeam(selectedRuntimeTeam)}
                 onArchive={() => void handleArchiveTeam(selectedRuntimeTeam)}
-              onOpenLead={(sessionId) => navigate(routes.view.allSessions(sessionId), { newPanel: true })}
-              onControlRun={(run, action) => void handleRunControl(run, action)}
-              onDecideApproval={activeRun ? (task, decision) => void handleApprovalDecision(activeRun, task, decision) : undefined}
-            />
+                onOpenLead={(sessionId) => navigate(routes.view.allSessions(sessionId), { newPanel: true })}
+                onControlRun={(run, action) => void handleRunControl(run, action)}
+                onTickRun={(run) => void handleRunTick(run)}
+                onWakeAgent={(run, agentSlug, taskId) => void handleWakeAgent(run, agentSlug, taskId)}
+                onCompleteRun={(run) => void handleCompleteRun(run)}
+                onDecideApproval={activeRun ? (task, decision) => void handleApprovalDecision(activeRun, task, decision) : undefined}
+              />
             ) : (
               <div className="hidden min-h-[420px] items-center justify-center rounded-[14px] border border-white/[0.08] bg-white/[0.025] p-6 text-center text-sm text-white/46 xl:flex">
                 Select a team to see active runs.
@@ -945,6 +987,7 @@ function TeamDetailPanel({
   runs,
   selectedRun,
   selectedDetail,
+  ticks,
   onSelectRun,
   onStart,
   onEdit,
@@ -952,12 +995,16 @@ function TeamDetailPanel({
   onArchive,
   onOpenLead,
   onControlRun,
+  onTickRun,
+  onWakeAgent,
+  onCompleteRun,
   onDecideApproval,
 }: {
   team: TeamDTO
   runs: TeamRunSnapshot[]
   selectedRun?: TeamRunSnapshot | null
   selectedDetail?: TeamRunDetail
+  ticks: TeamRunTick[]
   onSelectRun: (runId: string) => void
   onStart: () => void
   onEdit: () => void
@@ -965,11 +1012,15 @@ function TeamDetailPanel({
   onArchive: () => void
   onOpenLead: (sessionId: string) => void
   onControlRun: (run: TeamRunSnapshot, action: 'pause' | 'resume' | 'cancel') => void
+  onTickRun: (run: TeamRunSnapshot) => void
+  onWakeAgent: (run: TeamRunSnapshot, agentSlug: string, taskId?: string) => void
+  onCompleteRun: (run: TeamRunSnapshot) => void
   onDecideApproval?: (task: TeamRunDetail['tasks'][number], decision: 'approved' | 'rejected') => void
 }) {
   const verification = team.metadata.verification
   const approvalTasks = selectedDetail?.tasks.filter((task) => task.approval?.status === 'requested') ?? []
   const runIsTerminal = selectedRun ? ['done', 'failed', 'cancelled'].includes(selectedRun.state) : false
+  const allTasksDone = Boolean(selectedDetail?.tasks.length) && selectedDetail!.tasks.every((task) => task.status === 'done')
 
   return (
     <aside className="rounded-[14px] border border-white/[0.08] bg-white/[0.035] p-4">
@@ -1050,7 +1101,15 @@ function TeamDetailPanel({
 
         {selectedRun ? (
           <DetailBlock title="Operator controls">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-white/70 hover:text-white" disabled={runIsTerminal} onClick={() => onTickRun(selectedRun)}>
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                Tick
+              </Button>
+              <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-white/70 hover:text-white" disabled={runIsTerminal} onClick={() => onWakeAgent(selectedRun, team.metadata.lead)}>
+                <Bell className="mr-1.5 h-3.5 w-3.5" />
+                Lead
+              </Button>
               {selectedRun.state === 'paused' ? (
                 <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-white/70 hover:text-white" onClick={() => onControlRun(selectedRun, 'resume')}>
                   <Play className="mr-1.5 h-3.5 w-3.5" />
@@ -1062,17 +1121,20 @@ function TeamDetailPanel({
                   Pause
                 </Button>
               )}
-              <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-white/70 hover:text-white" disabled={!selectedRun.leadSessionId} onClick={() => selectedRun.leadSessionId && onOpenLead(selectedRun.leadSessionId)}>
-                <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
-                Lead
-              </Button>
               <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-red-200/70 hover:text-red-100" disabled={runIsTerminal} onClick={() => onControlRun(selectedRun, 'cancel')}>
                 <Square className="mr-1.5 h-3.5 w-3.5" />
                 Cancel
               </Button>
+              <Button size="sm" variant="ghost" className="h-8 justify-center px-2 text-emerald-100/72 hover:text-emerald-50" disabled={!allTasksDone || runIsTerminal} onClick={() => onCompleteRun(selectedRun)}>
+                <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                Complete
+              </Button>
             </div>
             {selectedRun.swarm?.operatorPausedReason ? (
               <p className="mt-2 text-[11px] leading-[16px] text-white/45">{selectedRun.swarm.operatorPausedReason}</p>
+            ) : null}
+            {selectedRun.finalSummary ? (
+              <p className="mt-2 text-[11px] leading-[16px] text-emerald-100/70">{selectedRun.finalSummary}</p>
             ) : null}
           </DetailBlock>
         ) : null}
@@ -1092,6 +1154,14 @@ function TeamDetailPanel({
                       </div>
                       <TeamPill>{task.status}</TeamPill>
                     </div>
+                    {selectedRun && !runIsTerminal && task.ownerAgentSlug !== team.metadata.lead ? (
+                      <div className="mt-2 flex justify-end">
+                        <Button size="sm" variant="ghost" className="h-7 px-2 text-white/50 hover:text-white" onClick={() => onWakeAgent(selectedRun, task.ownerAgentSlug, task.id)}>
+                          <Bell className="mr-1 h-3.5 w-3.5" />
+                          Wake
+                        </Button>
+                      </div>
+                    ) : null}
                     {(task.reviewRequired || task.review || task.status === 'review') ? (
                       <div className="mt-2 rounded-[8px] border border-[#38bdf8]/20 bg-[#38bdf8]/10 px-2 py-1.5 text-[11px] leading-[16px] text-sky-100/78">
                         <div className="flex items-center justify-between gap-2">
@@ -1160,6 +1230,28 @@ function TeamDetailPanel({
           )}
         </DetailBlock>
 
+        <DetailBlock title="Run loop">
+          {ticks.length ? (
+            <div className="space-y-2">
+              {ticks.slice(-5).reverse().map((item) => (
+                <div key={item.id} className="rounded-[10px] border border-white/[0.07] bg-black/10 px-3 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-medium text-white/70">{item.reason}</span>
+                    <span className="text-[10px] text-white/36">{new Date(item.completedAt).toLocaleTimeString()}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {item.actions.map((action, index) => (
+                      <TeamPill key={`${item.id}:${index}`}>{action.type}{action.agentSlug ? ` @${action.agentSlug}` : ''}</TeamPill>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[12px] text-white/45">No loop ticks yet.</p>
+          )}
+        </DetailBlock>
+
         <DetailBlock title="Members">
           <div className="space-y-2">
             {team.metadata.members.map((member) => (
@@ -1174,6 +1266,15 @@ function TeamDetailPanel({
                       onClick={() => onOpenLead(selectedDetail.memberSessionIds![member.slug]!)}
                     >
                       <ExternalLink className="h-3.5 w-3.5" />
+                    </Button>
+                  ) : selectedRun && !runIsTerminal ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 shrink-0 px-2 text-white/52 hover:text-white"
+                      onClick={() => onWakeAgent(selectedRun, member.slug)}
+                    >
+                      <Bell className="h-3.5 w-3.5" />
                     </Button>
                   ) : null}
                 </div>

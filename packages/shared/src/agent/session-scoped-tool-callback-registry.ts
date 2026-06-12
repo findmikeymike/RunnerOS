@@ -85,6 +85,10 @@ export interface SessionScopedToolCallbacks {
   heartbeatTeamTaskFn?: (input: import('@craft-agent/session-tools-core').HeartbeatTeamTaskToolInput) => Promise<unknown>;
   /** Expire stale task leases in a team run. */
   expireStaleTeamTasksFn?: (runId: string) => Promise<unknown>;
+  /** List durable team run loop ticks. */
+  listTeamTicksFn?: (runId: string) => unknown[];
+  /** Run one team run loop pass. */
+  tickTeamRunFn?: (input: import('@craft-agent/session-tools-core').TickTeamRunToolInput) => Promise<unknown>;
   /** List internal messages for a team run. */
   listTeamMessagesFn?: (runId: string) => unknown[];
   /** Send an internal team message. */
@@ -97,6 +101,8 @@ export interface SessionScopedToolCallbacks {
   spawnTeamMemberFn?: (input: import('@craft-agent/session-tools-core').SpawnTeamMemberToolInput) => Promise<unknown>;
   /** Summarize team run state. */
   summarizeTeamRunFn?: (runId: string) => unknown;
+  /** Complete a team run. */
+  completeTeamRunFn?: (input: import('@craft-agent/session-tools-core').CompleteTeamRunToolInput) => Promise<unknown>;
   /** Resolve label display names to IDs. */
   resolveLabelsFn?: (labels: string[]) => import('@craft-agent/session-tools-core').ResolvedLabelsResult;
   /** Resolve a status display name to its ID. */

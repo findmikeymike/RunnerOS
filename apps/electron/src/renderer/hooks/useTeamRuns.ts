@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAtom } from 'jotai'
 import { teamRunsStateAtomFamily, type TeamRunsState } from '@/atoms/team-runs'
-import type { CreateTeamTaskInput, SendTeamMessageInput, StartTeamRunInput, TeamRunControlInput, TeamRunDetail, TeamRunSnapshot, UpdateTeamTaskInput } from '../../shared/types'
+import type { CompleteTeamRunInput, CreateTeamTaskInput, RunTeamRunTickInput, SendTeamMessageInput, StartTeamRunInput, TeamRunControlInput, TeamRunDetail, TeamRunSnapshot, TeamRunTick, UpdateTeamTaskInput } from '../../shared/types'
 
 export interface UseTeamRunsResult {
   runs: TeamRunSnapshot[]
   detailsById: Record<string, TeamRunDetail>
+  ticksByRunId: Record<string, TeamRunTick[]>
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
   get: (runId: string) => Promise<TeamRunDetail | null>
   start: (input: StartTeamRunInput) => Promise<TeamRunDetail>
   control: (runId: string, input: TeamRunControlInput) => Promise<TeamRunDetail>
+  complete: (runId: string, input: CompleteTeamRunInput) => Promise<TeamRunDetail>
+  tick: (runId: string, input?: RunTeamRunTickInput) => Promise<{ tick: TeamRunTick; run: TeamRunDetail }>
+  listTicks: (runId: string) => Promise<TeamRunTick[]>
+  wakeAgent: (runId: string, agentSlug: string, taskId?: string, prompt?: string) => Promise<{ sessionId: string; status: 'created' | 'resumed'; run: TeamRunDetail }>
   createTask: (runId: string, input: CreateTeamTaskInput) => Promise<TeamRunDetail>
   updateTask: (runId: string, taskId: string, patch: UpdateTeamTaskInput) => Promise<TeamRunDetail>
   sendMessage: (runId: string, input: SendTeamMessageInput) => Promise<TeamRunDetail>
@@ -53,7 +58,7 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
 
   const refresh = useCallback(async () => {
     if (!workspaceId) {
-      setState({ runs: [], detailsById: {}, loading: false, error: null })
+      setState({ runs: [], detailsById: {}, ticksByRunId: {}, loading: false, error: null })
       return
     }
 
@@ -153,6 +158,43 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
     return detail
   }, [setState, workspaceId])
 
+  const complete = useCallback(async (runId: string, input: CompleteTeamRunInput): Promise<TeamRunDetail> => {
+    if (!workspaceId) throw new Error('Workspace is required to complete a team run.')
+    const detail = await window.electronAPI.completeTeamRun(workspaceId, runId, input)
+    setState((prev) => upsertDetail(prev, detail))
+    return detail
+  }, [setState, workspaceId])
+
+  const tick = useCallback(async (runId: string, input?: RunTeamRunTickInput): Promise<{ tick: TeamRunTick; run: TeamRunDetail }> => {
+    if (!workspaceId) throw new Error('Workspace is required to tick a team run.')
+    const result = await window.electronAPI.tickTeamRun(workspaceId, runId, input)
+    setState((prev) => ({
+      ...upsertDetail(prev, result.run),
+      ticksByRunId: {
+        ...prev.ticksByRunId,
+        [runId]: [...(prev.ticksByRunId[runId] ?? []), result.tick],
+      },
+    }))
+    return result
+  }, [setState, workspaceId])
+
+  const listTicks = useCallback(async (runId: string): Promise<TeamRunTick[]> => {
+    if (!workspaceId) throw new Error('Workspace is required to list team run ticks.')
+    const ticks = await window.electronAPI.listTeamRunTicks(workspaceId, runId)
+    setState((prev) => ({
+      ...prev,
+      ticksByRunId: { ...prev.ticksByRunId, [runId]: ticks },
+    }))
+    return ticks
+  }, [setState, workspaceId])
+
+  const wakeAgent = useCallback(async (runId: string, agentSlug: string, taskId?: string, prompt?: string): Promise<{ sessionId: string; status: 'created' | 'resumed'; run: TeamRunDetail }> => {
+    if (!workspaceId) throw new Error('Workspace is required to wake a team agent.')
+    const result = await window.electronAPI.wakeTeamRunAgent(workspaceId, runId, agentSlug, taskId, prompt)
+    setState((prev) => upsertDetail(prev, result.run))
+    return result
+  }, [setState, workspaceId])
+
   const updateTask = useCallback(async (runId: string, taskId: string, patch: UpdateTeamTaskInput): Promise<TeamRunDetail> => {
     if (!workspaceId) throw new Error('Workspace is required to update a team task.')
     const detail = await window.electronAPI.updateTeamTask(workspaceId, runId, taskId, patch)
@@ -194,12 +236,17 @@ export function useTeamRuns(workspaceId: string | null | undefined): UseTeamRuns
   return {
     runs: useMemo(() => state.runs, [state.runs]),
     detailsById: state.detailsById,
+    ticksByRunId: state.ticksByRunId,
     loading: state.loading,
     error: state.error,
     refresh,
     get,
     start,
     control,
+    complete,
+    tick,
+    listTicks,
+    wakeAgent,
     createTask,
     updateTask,
     sendMessage,

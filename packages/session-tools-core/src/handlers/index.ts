@@ -95,8 +95,10 @@ export type {
 export {
   handleCreateTeamTask,
   handleClaimTeamTask,
+  handleCompleteTeamRun,
   handleExpireStaleTeamTasks,
   handleHeartbeatTeamTask,
+  handleListTeamTicks,
   handleListTeamMessages,
   handleListTeamTasks,
   handleRequestTeamReview,
@@ -104,16 +106,19 @@ export {
   handleSendTeamMessage,
   handleSpawnTeamMember,
   handleSummarizeTeamRun,
+  handleTickTeamRun,
   handleUpdateTeamTask,
 } from './teams.ts';
 export type {
   ClaimTeamTaskToolInput,
+  CompleteTeamRunToolInput,
   CreateTeamTaskToolInput,
   HeartbeatTeamTaskToolInput,
   RequestTeamReviewToolInput,
   RequestUserApprovalToolInput,
   SendTeamMessageToolInput,
   SpawnTeamMemberToolInput,
+  TickTeamRunToolInput,
   UpdateTeamTaskToolInput,
 } from './teams.ts';
 

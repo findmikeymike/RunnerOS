@@ -65,8 +65,10 @@ import {
 import {
   handleCreateTeamTask,
   handleClaimTeamTask,
+  handleCompleteTeamRun,
   handleExpireStaleTeamTasks,
   handleHeartbeatTeamTask,
+  handleListTeamTicks,
   handleListTeamMessages,
   handleListTeamTasks,
   handleRequestTeamReview,
@@ -74,6 +76,7 @@ import {
   handleSendTeamMessage,
   handleSpawnTeamMember,
   handleSummarizeTeamRun,
+  handleTickTeamRun,
   handleUpdateTeamTask,
 } from './handlers/teams.ts';
 
@@ -522,6 +525,7 @@ export const CreateTeamTaskSchema = z.object({
 export const UpdateTeamTaskSchema = z.object({
   runId: z.string().describe('Team run ID'),
   taskId: z.string().describe('Task ID'),
+  leaseId: z.string().optional().describe('Lease ID returned by claim_team_task. Required for task-owner work updates.'),
   title: z.string().optional(),
   description: z.string().optional(),
   ownerAgentSlug: z.string().optional(),
@@ -561,6 +565,15 @@ export const ExpireStaleTeamTasksSchema = z.object({
   runId: z.string().describe('Team run ID'),
 });
 
+export const ListTeamTicksSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+});
+
+export const TickTeamRunSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  reason: z.enum(['scheduled', 'manual', 'startup-recovery']).optional().describe('Why this run-loop pass is being executed'),
+});
+
 export const SendTeamMessageSchema = z.object({
   runId: z.string().describe('Team run ID'),
   toAgentSlug: z.string().describe('Recipient agent slug, "lead", or "all"'),
@@ -591,6 +604,16 @@ export const SpawnTeamMemberSchema = z.object({
 
 export const SummarizeTeamRunSchema = z.object({
   runId: z.string().describe('Team run ID'),
+});
+
+export const CompleteTeamRunSchema = z.object({
+  runId: z.string().describe('Team run ID'),
+  summary: z.string().describe('Final lead summary of what the team completed'),
+  evidence: z.array(z.object({
+    type: z.enum(['text', 'file', 'url', 'output']),
+    label: z.string(),
+    value: z.string(),
+  })).optional().describe('Optional final evidence links, files, outputs, or notes'),
 });
 
 // ============================================================
@@ -899,6 +922,7 @@ Use this when the team lead assigns work. The runtime records the task, sends an
 
   update_team_task: `Update a team task's status, owner, output, evidence, or block reason.
 
+Task owners must pass the leaseId returned by claim_team_task when updating their assigned work.
 Tasks with reviewRequired cannot be marked done until a reviewer has passed them through request_team_review.`,
 
   claim_team_task: `Claim durable ownership of one team task before starting work.
@@ -912,6 +936,14 @@ Use this during longer work so the task is not treated as stale and picked up by
   expire_stale_team_tasks: `Mark expired team task leases as retryable or failed.
 
 Use this from a lead/orchestrator pass before assigning more work, or after noticing a member has gone silent.`,
+
+  list_team_ticks: `List durable run-loop ticks for a team run.
+
+Use this to see what the team loop last did: woke members, woke the lead, expired stale leases, or requested finalization.`,
+
+  tick_team_run: `Run one team-run loop pass.
+
+Use this from the lead/orchestrator to recover stale work, wake ready members, wake the lead for blockers/reviews, and detect when final completion is needed.`,
 
   list_team_messages: `List internal team messages for a team run.
 
@@ -936,6 +968,10 @@ Use this to wake a member with run context, roster, and an optional task. Fixed-
   summarize_team_run: `Summarize a team run's current state.
 
 Returns run state, lead/member session links, open tasks, blocked/review tasks, approvals, and recent messages.`,
+
+  complete_team_run: `Complete a team run after every task is done.
+
+Use this only as the lead once tasks are done, required approvals are approved, and required reviews passed. This records the final summary and resumes any waiting workflow step.`,
 
   send_agent_message: `Send a message to another session. The message is delivered with your session ID so the target can reply back.
 
@@ -1210,12 +1246,15 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'claim_team_task', description: TOOL_DESCRIPTIONS.claim_team_task, inputSchema: ClaimTeamTaskSchema, executionMode: 'registry', safeMode: 'block', handler: handleClaimTeamTask },
   { name: 'heartbeat_team_task', description: TOOL_DESCRIPTIONS.heartbeat_team_task, inputSchema: HeartbeatTeamTaskSchema, executionMode: 'registry', safeMode: 'allow', handler: handleHeartbeatTeamTask },
   { name: 'expire_stale_team_tasks', description: TOOL_DESCRIPTIONS.expire_stale_team_tasks, inputSchema: ExpireStaleTeamTasksSchema, executionMode: 'registry', safeMode: 'block', handler: handleExpireStaleTeamTasks },
+  { name: 'list_team_ticks', description: TOOL_DESCRIPTIONS.list_team_ticks, inputSchema: ListTeamTicksSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListTeamTicks },
+  { name: 'tick_team_run', description: TOOL_DESCRIPTIONS.tick_team_run, inputSchema: TickTeamRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleTickTeamRun },
   { name: 'list_team_messages', description: TOOL_DESCRIPTIONS.list_team_messages, inputSchema: ListTeamMessagesSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListTeamMessages },
   { name: 'send_team_message', description: TOOL_DESCRIPTIONS.send_team_message, inputSchema: SendTeamMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendTeamMessage },
   { name: 'request_team_review', description: TOOL_DESCRIPTIONS.request_team_review, inputSchema: RequestTeamReviewSchema, executionMode: 'registry', safeMode: 'block', handler: handleRequestTeamReview },
   { name: 'request_user_approval', description: TOOL_DESCRIPTIONS.request_user_approval, inputSchema: RequestUserApprovalSchema, executionMode: 'registry', safeMode: 'block', handler: handleRequestUserApproval },
   { name: 'spawn_team_member', description: TOOL_DESCRIPTIONS.spawn_team_member, inputSchema: SpawnTeamMemberSchema, executionMode: 'registry', safeMode: 'block', handler: handleSpawnTeamMember },
   { name: 'summarize_team_run', description: TOOL_DESCRIPTIONS.summarize_team_run, inputSchema: SummarizeTeamRunSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSummarizeTeamRun },
+  { name: 'complete_team_run', description: TOOL_DESCRIPTIONS.complete_team_run, inputSchema: CompleteTeamRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCompleteTeamRun },
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
   // Messaging gateway tools

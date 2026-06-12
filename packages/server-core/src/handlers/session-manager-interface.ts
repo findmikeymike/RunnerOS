@@ -26,6 +26,12 @@ import type {
 import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport/types.ts'
 import type { LoadedSkill } from '@craft-agent/shared/skills'
+import type {
+  CompleteTeamRunInput,
+  RunTeamRunTickInput,
+  TeamRunDetail,
+  TeamRunTick,
+} from '@craft-agent/shared/teams'
 
 export interface ISessionManager {
   // ---------------------------------------------------------------------------
@@ -207,6 +213,25 @@ export interface ISessionManager {
   refreshTitle(sessionId: string): Promise<{ success: boolean; title?: string; error?: string }>
   refreshBadge(): void
   getUnreadSummary(): UnreadSummary
+
+  // ---------------------------------------------------------------------------
+  // Team Runs
+  // ---------------------------------------------------------------------------
+
+  completeManagedTeamRun(workspaceId: string, runId: string, input: CompleteTeamRunInput): Promise<TeamRunDetail>
+  wakeManagedTeamRunAgent(
+    workspaceId: string,
+    runId: string,
+    agentSlug: string,
+    taskId?: string,
+    prompt?: string,
+  ): Promise<{ sessionId: string; status: 'created' | 'resumed'; run: TeamRunDetail }>
+  listManagedTeamRunTicks(workspaceId: string, runId: string): TeamRunTick[]
+  tickManagedTeamRun(
+    workspaceId: string,
+    runId: string,
+    input?: RunTeamRunTickInput,
+  ): Promise<{ tick: TeamRunTick; run: TeamRunDetail }>
 
   // ---------------------------------------------------------------------------
   // Workspace

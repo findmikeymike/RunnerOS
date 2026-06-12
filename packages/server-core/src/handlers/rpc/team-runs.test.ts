@@ -54,6 +54,22 @@ function createHarness() {
     resolveAgentSessionOptions: mock(async () => ({ agentSkillSlugs: ['lead-skill'] })),
     createSession: mock(async () => ({ id: 'lead-session-1' })),
     sendMessage: mock(async () => undefined),
+    completeManagedTeamRun: mock(async (_workspaceId: string, runId: string, input: any) => {
+      runStorage.completeTeamRun(workspaceRoot, runId, input)
+      return runStorage.readTeamRunDetail(workspaceRoot, runId)
+    }),
+    tickManagedTeamRun: mock(async (_workspaceId: string, runId: string, input?: any) => {
+      const tick = runStorage.runTeamRunTick(workspaceRoot, runId, input)
+      const run = runStorage.readTeamRunDetail(workspaceRoot, runId)
+      return { tick, run }
+    }),
+    listManagedTeamRunTicks: mock((_workspaceId: string, runId: string) => runStorage.listTeamRunTicks(workspaceRoot, runId)),
+    wakeManagedTeamRunAgent: mock(async (_workspaceId: string, runId: string, agentSlug: string, taskId?: string) => ({
+      sessionId: `${agentSlug}-session`,
+      status: 'resumed' as const,
+      run: runStorage.readTeamRunDetail(workspaceRoot, runId),
+      taskId,
+    })),
   }
 
   const deps = {
@@ -245,5 +261,37 @@ describe('team run RPC handlers', () => {
     })
     expect(cancelled.state).toBe('cancelled')
     expect(pushCalls.at(-1)?.args.at(-1)).toBe('completed')
+  })
+
+  it('exposes safe operator command center actions', async () => {
+    const { handlers, server, deps, sessionManager } = createHarness()
+    const { registerTeamRunsHandlers } = await import('./team-runs')
+    registerTeamRunsHandlers(server, deps)
+
+    const started = await handlers.get(RPC_CHANNELS.teamRuns.START)!({} as any, 'workspace-1', {
+      teamSlug: 'engineering-ship-team',
+      userRequest: 'Coordinate a command center.',
+    })
+    const task = runStorage.createTeamTask(workspaceRoot, started.id, {
+      title: 'Implement',
+      description: '',
+      ownerAgentSlug: 'coder',
+    })
+
+    const ticked = await handlers.get(RPC_CHANNELS.teamRuns.TICK)!({} as any, 'workspace-1', started.id, { reason: 'manual' })
+    expect(ticked.tick.actions.map((action: any) => action.type)).toContain('wake-member')
+
+    const ticks = await handlers.get(RPC_CHANNELS.teamRuns.LIST_TICKS)!({} as any, 'workspace-1', started.id)
+    expect(ticks).toHaveLength(1)
+
+    const wake = await handlers.get(RPC_CHANNELS.teamRuns.WAKE_AGENT)!({} as any, 'workspace-1', started.id, 'coder', task.id)
+    expect(wake.sessionId).toBe('coder-session')
+
+    runStorage.updateTeamTask(workspaceRoot, started.id, task.id, { status: 'done', output: 'Done.' })
+    const completed = await handlers.get(RPC_CHANNELS.teamRuns.COMPLETE)!({} as any, 'workspace-1', started.id, {
+      summary: 'All work done.',
+    })
+    expect(completed.state).toBe('done')
+    expect(sessionManager.completeManagedTeamRun).toHaveBeenCalled()
   })
 })

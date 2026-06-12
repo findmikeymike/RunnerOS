@@ -175,6 +175,22 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'listTeamTicks', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listTeamTicksFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'tickTeamRun', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.tickTeamRunFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'listTeamMessages', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.listTeamMessagesFn;
@@ -218,6 +234,14 @@ export function attachSessionSelfManagementBindings(
   Object.defineProperty(context, 'summarizeTeamRun', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.summarizeTeamRunFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'completeTeamRun', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.completeTeamRunFn;
     },
     configurable: true,
     enumerable: true,

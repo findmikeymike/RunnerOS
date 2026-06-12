@@ -19,6 +19,8 @@ export type TeamRunEventKind =
   | 'task.leased'
   | 'task.heartbeat'
   | 'task.lease_expired'
+  | 'run.completed'
+  | 'run.tick'
   | 'run.paused'
   | 'run.resumed'
   | 'run.cancelled';
@@ -74,6 +76,8 @@ export interface TeamTask {
   };
   lastError?: string;
   nextAttemptAt?: string;
+  lastWakeAt?: string;
+  lastWakeReason?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -115,6 +119,8 @@ export interface TeamRunSnapshot {
   };
   permissionMode?: PermissionMode;
   swarm?: TeamRunSwarmPolicy;
+  finalSummary?: string;
+  finalEvidence?: TeamTaskEvidence[];
   createdAt: string;
   updatedAt: string;
   completedAt?: string;
@@ -127,6 +133,10 @@ export interface TeamRunSwarmPolicy {
   staleAfterMs: number;
   retryLimit: number;
   retryBackoffMs: number;
+  autoRun?: boolean;
+  tickIntervalMs?: number;
+  leadWakeCooldownMs?: number;
+  memberWakeCooldownMs?: number;
   operatorPausedAt?: string;
   operatorPausedReason?: string;
 }
@@ -190,6 +200,43 @@ export interface HeartbeatTeamTaskInput {
 export interface TeamRunControlInput {
   action: 'pause' | 'resume' | 'cancel';
   reason?: string;
+}
+
+export type TeamRunTickReason = 'scheduled' | 'manual' | 'startup-recovery';
+export type TeamRunTickActionType =
+  | 'expired-lease'
+  | 'wake-lead'
+  | 'wake-member'
+  | 'no-op'
+  | 'finalization-needed'
+  | 'error';
+
+export interface TeamRunTickAction {
+  type: TeamRunTickActionType;
+  taskId?: string;
+  agentSlug?: string;
+  sessionId?: string;
+  message?: string;
+}
+
+export interface TeamRunTick {
+  id: string;
+  runId: string;
+  reason: TeamRunTickReason;
+  startedAt: string;
+  completedAt: string;
+  actions: TeamRunTickAction[];
+  error?: string;
+}
+
+export interface RunTeamRunTickInput {
+  reason?: TeamRunTickReason;
+  now?: Date;
+}
+
+export interface CompleteTeamRunInput {
+  summary: string;
+  evidence?: TeamTaskEvidence[];
 }
 
 export interface SendTeamMessageInput {

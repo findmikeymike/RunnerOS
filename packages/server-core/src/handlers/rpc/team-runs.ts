@@ -13,11 +13,14 @@ import {
   updateTeamTask,
   writeTeamRun,
   type CreateTeamTaskInput,
+  type CompleteTeamRunInput,
+  type RunTeamRunTickInput,
   type SendTeamMessageInput,
   type StartTeamRunInput,
   type TeamRunControlInput,
   type TeamRunDetail,
   type TeamRunSnapshot,
+  type TeamRunTick,
   type UpdateTeamTaskInput,
 } from '@craft-agent/shared/teams'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -29,6 +32,10 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.teamRuns.LIST,
   RPC_CHANNELS.teamRuns.DELETE,
   RPC_CHANNELS.teamRuns.CONTROL,
+  RPC_CHANNELS.teamRuns.COMPLETE,
+  RPC_CHANNELS.teamRuns.TICK,
+  RPC_CHANNELS.teamRuns.LIST_TICKS,
+  RPC_CHANNELS.teamRuns.WAKE_AGENT,
   RPC_CHANNELS.teamRuns.CREATE_TASK,
   RPC_CHANNELS.teamRuns.UPDATE_TASK,
   RPC_CHANNELS.teamRuns.SEND_MESSAGE,
@@ -203,6 +210,41 @@ export function registerTeamRunsHandlers(server: RpcServer, deps: HandlerDeps): 
       if (!detail) throw new Error(`Team run not found: ${runId}`)
       broadcastUpdated(deps, workspaceId, detail, detail.state === 'cancelled' ? 'completed' : 'updated')
       return detail
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.teamRuns.COMPLETE,
+    async (_ctx, workspaceId: string, runId: string, input: CompleteTeamRunInput): Promise<TeamRunDetail> => {
+      return deps.sessionManager.completeManagedTeamRun(workspaceId, runId, input)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.teamRuns.TICK,
+    async (_ctx, workspaceId: string, runId: string, input?: RunTeamRunTickInput): Promise<{ tick: TeamRunTick; run: TeamRunDetail }> => {
+      return deps.sessionManager.tickManagedTeamRun(workspaceId, runId, input)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.teamRuns.LIST_TICKS,
+    async (_ctx, workspaceId: string, runId: string): Promise<TeamRunTick[]> => {
+      return deps.sessionManager.listManagedTeamRunTicks(workspaceId, runId)
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.teamRuns.WAKE_AGENT,
+    async (
+      _ctx,
+      workspaceId: string,
+      runId: string,
+      agentSlug: string,
+      taskId?: string,
+      prompt?: string,
+    ): Promise<{ sessionId: string; status: 'created' | 'resumed'; run: TeamRunDetail }> => {
+      return deps.sessionManager.wakeManagedTeamRunAgent(workspaceId, runId, agentSlug, taskId, prompt)
     },
   )
 

@@ -18,6 +18,7 @@ export interface CreateTeamTaskToolInput {
 export interface UpdateTeamTaskToolInput {
   runId: string;
   taskId: string;
+  leaseId?: string;
   title?: string;
   description?: string;
   ownerAgentSlug?: string;
@@ -71,6 +72,17 @@ export interface SpawnTeamMemberToolInput {
   agentSlug: string;
   taskId?: string;
   prompt?: string;
+}
+
+export interface TickTeamRunToolInput {
+  runId: string;
+  reason?: 'scheduled' | 'manual' | 'startup-recovery';
+}
+
+export interface CompleteTeamRunToolInput {
+  runId: string;
+  summary: string;
+  evidence?: Array<{ type: 'text' | 'file' | 'url' | 'output'; label: string; value: string }>;
 }
 
 export async function handleListTeamTasks(ctx: SessionToolContext, args: { runId: string }): Promise<ToolResult> {
@@ -136,6 +148,24 @@ export async function handleExpireStaleTeamTasks(ctx: SessionToolContext, args: 
   }
 }
 
+export async function handleListTeamTicks(ctx: SessionToolContext, args: { runId: string }): Promise<ToolResult> {
+  if (!ctx.listTeamTicks) return errorResponse('list_team_ticks is not available in this context.');
+  try {
+    return successResponse(JSON.stringify(ctx.listTeamTicks(args.runId), null, 2));
+  } catch (error) {
+    return errorResponse(`Failed to list team ticks: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function handleTickTeamRun(ctx: SessionToolContext, args: TickTeamRunToolInput): Promise<ToolResult> {
+  if (!ctx.tickTeamRun) return errorResponse('tick_team_run is not available in this context.');
+  try {
+    return successResponse(JSON.stringify(await ctx.tickTeamRun(args), null, 2));
+  } catch (error) {
+    return errorResponse(`Failed to tick team run: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
 export async function handleSendTeamMessage(ctx: SessionToolContext, args: SendTeamMessageToolInput): Promise<ToolResult> {
   if (!ctx.sendTeamMessage) return errorResponse('send_team_message is not available in this context.');
   try {
@@ -178,5 +208,14 @@ export async function handleSummarizeTeamRun(ctx: SessionToolContext, args: { ru
     return successResponse(JSON.stringify(ctx.summarizeTeamRun(args.runId), null, 2));
   } catch (error) {
     return errorResponse(`Failed to summarize team run: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+export async function handleCompleteTeamRun(ctx: SessionToolContext, args: CompleteTeamRunToolInput): Promise<ToolResult> {
+  if (!ctx.completeTeamRun) return errorResponse('complete_team_run is not available in this context.');
+  try {
+    return successResponse(JSON.stringify(await ctx.completeTeamRun(args), null, 2));
+  } catch (error) {
+    return errorResponse(`Failed to complete team run: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }

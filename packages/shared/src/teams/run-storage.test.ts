@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   claimTeamTask,
+  completeTeamRun,
   controlTeamRun,
   createTeamTask,
   expireStaleTeamTaskLeases,
@@ -11,9 +12,11 @@ import {
   heartbeatTeamTask,
   isValidTeamRunId,
   linkTeamRunMemberSession,
+  listTeamRunTicks,
   listTeamRuns,
   readTeamRunDetail,
   markTeamMessagesRead,
+  runTeamRunTick,
   sendTeamMessage,
   updateTeamTask,
   writeTeamRun,
@@ -101,7 +104,7 @@ describe('team run storage', () => {
     expect(done.status).toBe('done');
 
     const detail = readTeamRunDetail(workspace, RUN_ID);
-    expect(detail?.state).toBe('done');
+    expect(detail?.state).toBe('review');
     expect(detail?.tasks).toHaveLength(1);
     expect(detail?.messages).toHaveLength(1);
     expect(detail?.events.map((event) => event.kind)).toEqual([
@@ -329,6 +332,23 @@ describe('team run storage', () => {
     expect(() => controlTeamRun(workspace, RUN_ID, 'resume')).toThrow('cancelled');
   });
 
+  test('resume restores the derived run state from current tasks', () => {
+    writeTeamRun(workspace, sampleRun());
+    const task = createTeamTask(workspace, RUN_ID, {
+      title: 'Blocked task',
+      description: '',
+      ownerAgentSlug: 'coder',
+    });
+    updateTeamTask(workspace, RUN_ID, task.id, { status: 'blocked', blockedReason: 'Needs input' });
+    expect(readTeamRunDetail(workspace, RUN_ID)?.state).toBe('blocked');
+
+    controlTeamRun(workspace, RUN_ID, 'pause', 'Hold work');
+    const resumed = controlTeamRun(workspace, RUN_ID, 'resume');
+
+    expect(resumed.state).toBe('blocked');
+    expect(resumed.swarm?.operatorPausedAt).toBeUndefined();
+  });
+
   test('preserves paused runs during task updates and fails runs when a task fails', () => {
     writeTeamRun(workspace, sampleRun());
     const task = createTeamTask(workspace, RUN_ID, {
@@ -344,5 +364,74 @@ describe('team run storage', () => {
     controlTeamRun(workspace, RUN_ID, 'resume');
     updateTeamTask(workspace, RUN_ID, task.id, { status: 'failed', lastError: 'Worker crashed' });
     expect(readTeamRunDetail(workspace, RUN_ID)?.state).toBe('failed');
+  });
+
+  test('ticks active runs, records durable actions, and respects cooldowns', () => {
+    writeTeamRun(workspace, sampleRun({
+      state: 'running',
+      leadSessionId: 'lead-session',
+      swarm: {
+        maxConcurrentTasks: 2,
+        taskLeaseMs: 1000,
+        heartbeatIntervalMs: 250,
+        staleAfterMs: 2000,
+        retryLimit: 2,
+        retryBackoffMs: 500,
+        leadWakeCooldownMs: 5000,
+        memberWakeCooldownMs: 5000,
+      },
+    }));
+    const stale = createTeamTask(workspace, RUN_ID, {
+      title: 'Stale task',
+      description: '',
+      ownerAgentSlug: 'coder',
+    });
+    const blocked = createTeamTask(workspace, RUN_ID, {
+      title: 'Blocked task',
+      description: '',
+      ownerAgentSlug: 'reviewer',
+    });
+    const claimed = claimTeamTask(workspace, RUN_ID, {
+      agentSlug: 'coder',
+      taskId: stale.id,
+      leaseTtlMs: 1000,
+    }, new Date('2026-01-01T00:00:00.000Z'));
+    updateTeamTask(workspace, RUN_ID, blocked.id, { status: 'blocked', blockedReason: 'Needs input' });
+
+    const tick = runTeamRunTick(workspace, RUN_ID, { reason: 'manual', now: new Date('2026-01-01T00:00:01.100Z') });
+    expect(tick.actions.map((action) => action.type)).toContain('expired-lease');
+    expect(tick.actions.some((action) => action.type === 'wake-lead' && action.taskId === blocked.id)).toBe(true);
+    expect(readTeamRunDetail(workspace, RUN_ID)?.tasks.find((task) => task.id === claimed!.id)?.status).toBe('todo');
+    expect(listTeamRunTicks(workspace, RUN_ID)).toHaveLength(1);
+
+    const second = runTeamRunTick(workspace, RUN_ID, { reason: 'manual', now: new Date('2026-01-01T00:00:02.000Z') });
+    expect(second.actions.some((action) => action.type === 'wake-lead' && action.taskId === blocked.id)).toBe(false);
+  });
+
+  test('ticks paused and terminal runs as no-op', () => {
+    writeTeamRun(workspace, sampleRun({ state: 'paused' }));
+
+    const tick = runTeamRunTick(workspace, RUN_ID, { reason: 'scheduled', now: new Date('2026-01-01T00:00:00.000Z') });
+
+    expect(tick.actions).toEqual([{ type: 'no-op', message: 'Run is paused.' }]);
+  });
+
+  test('requires explicit lead completion after tasks are done', () => {
+    writeTeamRun(workspace, sampleRun({ state: 'running' }));
+    const task = createTeamTask(workspace, RUN_ID, {
+      title: 'Finish me',
+      description: '',
+      ownerAgentSlug: 'coder',
+    });
+    updateTeamTask(workspace, RUN_ID, task.id, { status: 'done', output: 'Done' });
+    expect(readTeamRunDetail(workspace, RUN_ID)?.state).toBe('review');
+
+    const tick = runTeamRunTick(workspace, RUN_ID, { reason: 'manual', now: new Date('2026-01-01T00:00:00.000Z') });
+    expect(tick.actions.map((action) => action.type)).toContain('finalization-needed');
+
+    const completed = completeTeamRun(workspace, RUN_ID, { summary: 'All work finished.' });
+    expect(completed.state).toBe('done');
+    expect(completed.finalSummary).toBe('All work finished.');
+    expect(completed.completedAt).toBeString();
   });
 });

@@ -364,6 +364,12 @@ export interface SessionToolContext {
   /** Expire stale task leases in a team run. Injected by backend. */
   expireStaleTeamTasks?(runId: string): Promise<unknown>;
 
+  /** List run-loop tick history for a team run. Injected by backend. */
+  listTeamTicks?(runId: string): unknown[];
+
+  /** Run one team-run loop pass. Injected by backend. */
+  tickTeamRun?(input: import('./handlers/teams.ts').TickTeamRunToolInput): Promise<unknown>;
+
   /** List internal messages for a team run. Injected by backend. */
   listTeamMessages?(runId: string): unknown[];
 
@@ -381,6 +387,9 @@ export interface SessionToolContext {
 
   /** Summarize a team run. Injected by backend. */
   summarizeTeamRun?(runId: string): unknown;
+
+  /** Complete a team run after all tasks are done. Injected by backend. */
+  completeTeamRun?(input: import('./handlers/teams.ts').CompleteTeamRunToolInput): Promise<unknown>;
 
   /** Resolve label display names to IDs against configured labels. Injected by backend. */
   resolveLabels?(labels: string[]): ResolvedLabelsResult;

@@ -15,7 +15,9 @@ import { TEAM_SLUG_REGEX } from './types.ts';
 import type {
   CreateTeamTaskInput,
   ClaimTeamTaskInput,
+  CompleteTeamRunInput,
   HeartbeatTeamTaskInput,
+  RunTeamRunTickInput,
   SendTeamMessageInput,
   TeamMessage,
   TeamMessageActor,
@@ -27,6 +29,10 @@ import type {
   TeamRunSnapshot,
   TeamRunState,
   TeamRunSwarmPolicy,
+  TeamRunTick,
+  TeamRunTickAction,
+  TeamRunTickActionType,
+  TeamRunTickReason,
   TeamTask,
   TeamTaskPriority,
   TeamTaskStatus,
@@ -37,6 +43,7 @@ const RUN_FILE = 'run.json';
 const TASKS_FILE = 'tasks.jsonl';
 const MESSAGES_FILE = 'messages.jsonl';
 const EVENTS_FILE = 'events.jsonl';
+const TICKS_FILE = 'ticks.jsonl';
 const RUNS_DIR = join('.runneros', 'teams', 'runs');
 const TEAM_RUN_ID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -56,12 +63,16 @@ const EVENT_KINDS: ReadonlySet<TeamRunEventKind> = new Set([
   'task.leased',
   'task.heartbeat',
   'task.lease_expired',
+  'run.completed',
+  'run.tick',
   'run.paused',
   'run.resumed',
   'run.cancelled',
 ]);
 const REVIEW_STATUSES: ReadonlySet<string> = new Set(['requested', 'passed', 'failed']);
 const APPROVAL_STATUSES: ReadonlySet<string> = new Set(['requested', 'approved', 'rejected']);
+const TICK_REASONS: ReadonlySet<TeamRunTickReason> = new Set(['scheduled', 'manual', 'startup-recovery']);
+const TICK_ACTION_TYPES: ReadonlySet<TeamRunTickActionType> = new Set(['expired-lease', 'wake-lead', 'wake-member', 'no-op', 'finalization-needed', 'error']);
 const DEFAULT_SWARM_POLICY: TeamRunSwarmPolicy = {
   maxConcurrentTasks: 3,
   taskLeaseMs: 5 * 60 * 1000,
@@ -69,6 +80,10 @@ const DEFAULT_SWARM_POLICY: TeamRunSwarmPolicy = {
   staleAfterMs: 10 * 60 * 1000,
   retryLimit: 2,
   retryBackoffMs: 2 * 60 * 1000,
+  autoRun: true,
+  tickIntervalMs: 30 * 1000,
+  leadWakeCooldownMs: 2 * 60 * 1000,
+  memberWakeCooldownMs: 60 * 1000,
 };
 
 export function isValidTeamRunId(runId: string): boolean {
@@ -95,6 +110,10 @@ export function normalizeTeamRunSwarmPolicy(input?: Partial<TeamRunSwarmPolicy>)
     staleAfterMs: isPositiveInteger(input?.staleAfterMs) ? input.staleAfterMs : DEFAULT_SWARM_POLICY.staleAfterMs,
     retryLimit: isPositiveInteger(input?.retryLimit) ? input.retryLimit : DEFAULT_SWARM_POLICY.retryLimit,
     retryBackoffMs: isPositiveInteger(input?.retryBackoffMs) ? input.retryBackoffMs : DEFAULT_SWARM_POLICY.retryBackoffMs,
+    autoRun: input?.autoRun === false ? false : DEFAULT_SWARM_POLICY.autoRun,
+    tickIntervalMs: isPositiveInteger(input?.tickIntervalMs) ? input.tickIntervalMs : DEFAULT_SWARM_POLICY.tickIntervalMs,
+    leadWakeCooldownMs: isPositiveInteger(input?.leadWakeCooldownMs) ? input.leadWakeCooldownMs : DEFAULT_SWARM_POLICY.leadWakeCooldownMs,
+    memberWakeCooldownMs: isPositiveInteger(input?.memberWakeCooldownMs) ? input.memberWakeCooldownMs : DEFAULT_SWARM_POLICY.memberWakeCooldownMs,
     operatorPausedAt: typeof input?.operatorPausedAt === 'string' ? input.operatorPausedAt : undefined,
     operatorPausedReason: typeof input?.operatorPausedReason === 'string' ? input.operatorPausedReason : undefined,
   };
@@ -169,6 +188,8 @@ function isTeamRunSnapshot(value: unknown, expectedRunId: string): value is Team
   }
   if (value.permissionMode !== undefined && !['safe', 'ask', 'allow-all'].includes(String(value.permissionMode))) return false;
   if (value.completedAt !== undefined && typeof value.completedAt !== 'string') return false;
+  if (value.finalSummary !== undefined && typeof value.finalSummary !== 'string') return false;
+  if (value.finalEvidence !== undefined && !Array.isArray(value.finalEvidence)) return false;
   if (value.swarm !== undefined) {
     if (!isRecord(value.swarm)) return false;
     const swarm = normalizeTeamRunSwarmPolicy(value.swarm);
@@ -194,6 +215,8 @@ function isTeamTask(value: unknown): value is TeamTask {
   if (value.maxAttempts !== undefined && !isPositiveInteger(value.maxAttempts)) return false;
   if (value.lastError !== undefined && typeof value.lastError !== 'string') return false;
   if (value.nextAttemptAt !== undefined && typeof value.nextAttemptAt !== 'string') return false;
+  if (value.lastWakeAt !== undefined && typeof value.lastWakeAt !== 'string') return false;
+  if (value.lastWakeReason !== undefined && typeof value.lastWakeReason !== 'string') return false;
   if (value.lease !== undefined) {
     if (!isRecord(value.lease)) return false;
     if (typeof value.lease.id !== 'string' || !value.lease.id) return false;
@@ -250,6 +273,27 @@ function isTeamRunEvent(value: unknown): value is TeamRunEvent {
   return true;
 }
 
+function isTeamRunTickAction(value: unknown): value is TeamRunTickAction {
+  if (!isRecord(value)) return false;
+  if (typeof value.type !== 'string' || !TICK_ACTION_TYPES.has(value.type as TeamRunTickActionType)) return false;
+  if (value.taskId !== undefined && typeof value.taskId !== 'string') return false;
+  if (value.agentSlug !== undefined && (typeof value.agentSlug !== 'string' || !AGENT_SLUG_REGEX.test(value.agentSlug))) return false;
+  if (value.sessionId !== undefined && typeof value.sessionId !== 'string') return false;
+  if (value.message !== undefined && typeof value.message !== 'string') return false;
+  return true;
+}
+
+function isTeamRunTick(value: unknown): value is TeamRunTick {
+  if (!isRecord(value)) return false;
+  if (typeof value.id !== 'string' || !value.id) return false;
+  if (typeof value.runId !== 'string' || !isValidTeamRunId(value.runId)) return false;
+  if (typeof value.reason !== 'string' || !TICK_REASONS.has(value.reason as TeamRunTickReason)) return false;
+  if (typeof value.startedAt !== 'string' || typeof value.completedAt !== 'string') return false;
+  if (!Array.isArray(value.actions) || !value.actions.every(isTeamRunTickAction)) return false;
+  if (value.error !== undefined && typeof value.error !== 'string') return false;
+  return true;
+}
+
 export function getTeamRunsDir(workspaceRootPath: string): string {
   return join(workspaceRootPath, RUNS_DIR);
 }
@@ -296,6 +340,24 @@ export function readTeamRunDetail(workspaceRootPath: string, runId: string): Tea
     messages: listTeamMessages(workspaceRootPath, runId),
     events: listTeamRunEvents(workspaceRootPath, runId),
   };
+}
+
+export function listTeamRunTicks(workspaceRootPath: string, runId: string): TeamRunTick[] {
+  const dir = resolveRunDir(workspaceRootPath, runId);
+  if (!dir) return [];
+  return readJsonl(join(dir, TICKS_FILE), isTeamRunTick);
+}
+
+export function appendTeamRunTick(workspaceRootPath: string, runId: string, tick: Omit<TeamRunTick, 'id' | 'runId'>): TeamRunTick {
+  const next: TeamRunTick = {
+    id: `tick_${randomUUID().slice(0, 10)}`,
+    runId,
+    ...tick,
+  };
+  if (!isTeamRunTick(next)) throw new Error(`Invalid team run tick: ${runId}`);
+  appendJsonl(join(getTeamRunDir(workspaceRootPath, runId), TICKS_FILE), next);
+  appendTeamRunEvent(workspaceRootPath, runId, { kind: 'run.tick', actorAgentSlug: 'system', body: next.actions.map((action) => action.type).join(',') || 'no-op' });
+  return next;
 }
 
 export function listTeamRuns(workspaceRootPath: string): TeamRunSnapshot[] {
@@ -406,6 +468,17 @@ export function updateTeamTask(workspaceRootPath: string, runId: string, taskId:
   const run = readTeamRun(workspaceRootPath, runId);
   if (run) touchTeamRun(workspaceRootPath, deriveRunState(run, tasks));
   return next;
+}
+
+function hasRecentTickAction(ticks: TeamRunTick[], action: TeamRunTickAction, sinceMs: number): boolean {
+  return ticks.some((tick) => {
+    if (parseTime(tick.completedAt) < sinceMs) return false;
+    return tick.actions.some((candidate) => (
+      candidate.type === action.type
+      && candidate.taskId === action.taskId
+      && candidate.agentSlug === action.agentSlug
+    ));
+  });
 }
 
 function parseTime(value: string | undefined): number {
@@ -570,6 +643,105 @@ export function expireStaleTeamTaskLeases(
   return expired;
 }
 
+function isRunTickable(run: TeamRunSnapshot): boolean {
+  return run.state === 'created' || run.state === 'running' || run.state === 'blocked' || run.state === 'review';
+}
+
+function isTaskWakeEligible(task: TeamTask, nowMs: number): boolean {
+  if (task.status !== 'todo') return false;
+  if (task.nextAttemptAt && parseTime(task.nextAttemptAt) > nowMs) return false;
+  if (task.lease && parseTime(task.lease.expiresAt) > nowMs) return false;
+  return true;
+}
+
+export function runTeamRunTick(workspaceRootPath: string, runId: string, input: RunTeamRunTickInput = {}): TeamRunTick {
+  const startedAt = (input.now ?? new Date()).toISOString();
+  const now = input.now ?? new Date(startedAt);
+  const nowMs = now.getTime();
+  const reason = input.reason ?? 'scheduled';
+  const run = readTeamRun(workspaceRootPath, runId);
+  if (!run) throw new Error(`Team run not found: ${runId}`);
+  const policy = normalizeTeamRunSwarmPolicy(run.swarm);
+  const actions: TeamRunTickAction[] = [];
+
+  if (!isRunTickable(run) || policy.autoRun === false) {
+    actions.push({ type: 'no-op', message: `Run is ${run.state}.` });
+    return appendTeamRunTick(workspaceRootPath, runId, { reason, startedAt, completedAt: now.toISOString(), actions });
+  }
+
+  const beforeTasks = listTeamTasks(workspaceRootPath, runId);
+  const beforeLeased = new Map(beforeTasks.filter((task) => task.lease).map((task) => [task.id, task]));
+  const expired = expireStaleTeamTaskLeases(workspaceRootPath, runId, now);
+  for (const task of expired) {
+    actions.push({ type: 'expired-lease', taskId: task.id, agentSlug: task.ownerAgentSlug, message: task.status === 'failed' ? 'Task exceeded retry limit.' : 'Lease expired and task is retryable.' });
+  }
+
+  const detail = readTeamRunDetail(workspaceRootPath, runId);
+  const tasks = detail?.tasks ?? beforeTasks;
+  const ticks = listTeamRunTicks(workspaceRootPath, runId);
+  const leadCooldownSince = nowMs - (policy.leadWakeCooldownMs ?? DEFAULT_SWARM_POLICY.leadWakeCooldownMs ?? 0);
+  const memberCooldownSince = nowMs - (policy.memberWakeCooldownMs ?? DEFAULT_SWARM_POLICY.memberWakeCooldownMs ?? 0);
+
+  const leadWakeTasks = tasks.filter((task) => (
+    task.status === 'blocked'
+    || task.status === 'review'
+    || task.status === 'failed'
+  ));
+  const allDone = tasks.length > 0 && tasks.every((task) => task.status === 'done');
+  if (allDone && run.state !== 'done') {
+    const action: TeamRunTickAction = { type: 'finalization-needed', message: 'All tasks are done; lead must complete the team run.' };
+    if (!hasRecentTickAction(ticks, action, leadCooldownSince)) actions.push(action);
+  }
+  for (const task of leadWakeTasks) {
+    const action: TeamRunTickAction = { type: 'wake-lead', taskId: task.id, agentSlug: run.teamSnapshot.metadata.lead, message: `${task.title} is ${task.status}.` };
+    if (!hasRecentTickAction(ticks, action, leadCooldownSince)) actions.push(action);
+  }
+  if (expired.length > 0) {
+    const action: TeamRunTickAction = { type: 'wake-lead', agentSlug: run.teamSnapshot.metadata.lead, message: 'One or more task leases expired.' };
+    if (!hasRecentTickAction(ticks, action, leadCooldownSince)) actions.push(action);
+  }
+
+  let activeLeaseCount = tasks.filter((task) => task.status === 'in_progress' && task.lease && parseTime(task.lease.expiresAt) > nowMs).length;
+  for (const task of tasks) {
+    if (activeLeaseCount >= policy.maxConcurrentTasks) break;
+    if (!isTaskWakeEligible(task, nowMs)) continue;
+    const action: TeamRunTickAction = { type: 'wake-member', taskId: task.id, agentSlug: task.ownerAgentSlug, message: `Task ${task.id} is ready to claim.` };
+    if (hasRecentTickAction(ticks, action, memberCooldownSince)) continue;
+    if (beforeLeased.has(task.id) && expired.some((candidate) => candidate.id === task.id)) continue;
+    actions.push(action);
+    activeLeaseCount += 1;
+  }
+
+  if (actions.length === 0) actions.push({ type: 'no-op', message: 'No team run action needed.' });
+  return appendTeamRunTick(workspaceRootPath, runId, { reason, startedAt, completedAt: new Date().toISOString(), actions });
+}
+
+export function completeTeamRun(workspaceRootPath: string, runId: string, input: CompleteTeamRunInput): TeamRunSnapshot {
+  const run = readTeamRun(workspaceRootPath, runId);
+  if (!run) throw new Error(`Team run not found: ${runId}`);
+  if (run.state === 'paused') throw new Error(`Team run "${runId}" is paused.`);
+  if (isTerminalRunState(run.state)) throw new Error(`Team run "${runId}" is ${run.state}.`);
+  const summary = input.summary.trim();
+  if (!summary) throw new Error('Team run completion summary is required.');
+  const tasks = listTeamTasks(workspaceRootPath, runId);
+  if (tasks.length === 0) throw new Error(`Team run "${runId}" has no tasks to complete.`);
+  const unfinished = tasks.find((task) => task.status !== 'done');
+  if (unfinished) throw new Error(`Task "${unfinished.id}" is ${unfinished.status}. Complete all tasks before completing the run.`);
+  const unresolvedApproval = tasks.find((task) => task.approvalRequired && task.approval?.status !== 'approved');
+  if (unresolvedApproval) throw new Error(`Task "${unresolvedApproval.id}" still needs user approval.`);
+  const unresolvedReview = tasks.find((task) => task.reviewRequired && task.review?.status !== 'passed');
+  if (unresolvedReview) throw new Error(`Task "${unresolvedReview.id}" still needs passed review.`);
+  const next = touchTeamRun(workspaceRootPath, {
+    ...run,
+    state: 'done',
+    finalSummary: summary,
+    finalEvidence: input.evidence,
+    completedAt: new Date().toISOString(),
+  });
+  appendTeamRunEvent(workspaceRootPath, runId, { kind: 'run.completed', actorAgentSlug: run.teamSnapshot.metadata.lead, body: summary });
+  return next;
+}
+
 export function controlTeamRun(
   workspaceRootPath: string,
   runId: string,
@@ -596,7 +768,8 @@ export function controlTeamRun(
   if (action === 'resume') {
     if (run.state !== 'paused') throw new Error(`Team run "${runId}" is not paused.`);
     const policy = normalizeTeamRunSwarmPolicy(run.swarm);
-    const next = touchTeamRun(workspaceRootPath, {
+    const tasks = listTeamTasks(workspaceRootPath, runId);
+    const next = touchTeamRun(workspaceRootPath, deriveRunState({
       ...run,
       state: 'running',
       swarm: {
@@ -604,7 +777,7 @@ export function controlTeamRun(
         operatorPausedAt: undefined,
         operatorPausedReason: undefined,
       },
-    });
+    }, tasks));
     appendTeamRunEvent(workspaceRootPath, runId, { kind: 'run.resumed', actorAgentSlug: 'user', body: reason?.trim() });
     return next;
   }
@@ -728,6 +901,6 @@ function deriveRunState(run: TeamRunSnapshot, tasks: TeamTask[]): TeamRunSnapsho
   if (tasks.some((task) => task.status === 'failed')) return { ...run, state: 'failed' };
   if (tasks.some((task) => task.status === 'blocked')) return { ...run, state: 'blocked' };
   if (tasks.some((task) => task.status === 'review')) return { ...run, state: 'review' };
-  if (tasks.every((task) => task.status === 'done')) return { ...run, state: 'done' };
+  if (tasks.every((task) => task.status === 'done')) return { ...run, state: 'review' };
   return { ...run, state: 'running' };
 }

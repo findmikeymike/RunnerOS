@@ -134,15 +134,20 @@ import type {
 } from '@craft-agent/shared/teams/types';
 import type {
   CreateTeamTaskInput,
+  CompleteTeamRunInput,
+  RunTeamRunTickInput,
   SendTeamMessageInput,
   StartTeamRunInput,
   TeamRunControlInput,
   TeamRunDetail,
   TeamRunSnapshot,
+  TeamRunTick,
   UpdateTeamTaskInput,
 } from '@craft-agent/shared/teams/run-types';
 export type {
   CreateTeamTaskInput,
+  CompleteTeamRunInput,
+  RunTeamRunTickInput,
   SendTeamMessageInput,
   StartTeamRunInput,
   TeamRunControlInput,
@@ -150,6 +155,7 @@ export type {
   TeamMetadataDTO,
   TeamRunDetail,
   TeamRunSnapshot,
+  TeamRunTick,
   UpdateTeamTaskInput,
 };
 
@@ -901,6 +907,16 @@ export interface ElectronAPI {
   listTeamRuns(workspaceId: string): Promise<TeamRunSnapshot[]>
   deleteTeamRun(workspaceId: string, runId: string): Promise<boolean>
   controlTeamRun(workspaceId: string, runId: string, input: TeamRunControlInput): Promise<TeamRunDetail>
+  completeTeamRun(workspaceId: string, runId: string, input: CompleteTeamRunInput): Promise<TeamRunDetail>
+  tickTeamRun(workspaceId: string, runId: string, input?: RunTeamRunTickInput): Promise<{ tick: TeamRunTick; run: TeamRunDetail }>
+  listTeamRunTicks(workspaceId: string, runId: string): Promise<TeamRunTick[]>
+  wakeTeamRunAgent(
+    workspaceId: string,
+    runId: string,
+    agentSlug: string,
+    taskId?: string,
+    prompt?: string,
+  ): Promise<{ sessionId: string; status: 'created' | 'resumed'; run: TeamRunDetail }>
   createTeamTask(workspaceId: string, runId: string, input: CreateTeamTaskInput): Promise<TeamRunDetail>
   updateTeamTask(workspaceId: string, runId: string, taskId: string, patch: UpdateTeamTaskInput): Promise<TeamRunDetail>
   sendTeamMessage(workspaceId: string, runId: string, input: SendTeamMessageInput): Promise<TeamRunDetail>
