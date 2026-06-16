@@ -89,6 +89,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [undoStack, setUndoStack] = React.useState<VideoProject[]>([])
   const [redoStack, setRedoStack] = React.useState<VideoProject[]>([])
   const [externalReloadPending, setExternalReloadPending] = React.useState(false)
+  const [rawJsonDirty, setRawJsonDirty] = React.useState(false)
   const [showDeveloperDetails, setShowDeveloperDetails] = React.useState(false)
   const [agentPanelOpen, setAgentPanelOpen] = React.useState(false)
   const [agentPrompt, setAgentPrompt] = React.useState('')
@@ -116,6 +117,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       setProjectAsset(asset)
       setProject(parsed)
       setRawJson(JSON.stringify(parsed, null, 2))
+      setRawJsonDirty(false)
       setUndoStack([])
       setRedoStack([])
       setExternalReloadPending(false)
@@ -153,8 +155,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   }, [load, workspaceId])
 
   React.useEffect(() => {
-    hasLocalEditsRef.current = undoStack.length > 0 || redoStack.length > 0
-  }, [redoStack.length, undoStack.length])
+    hasLocalEditsRef.current = undoStack.length > 0 || redoStack.length > 0 || rawJsonDirty
+  }, [rawJsonDirty, redoStack.length, undoStack.length])
 
   React.useEffect(() => {
     timelineDragRef.current = timelineDrag
@@ -287,6 +289,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
         setRedoStack([])
       }
       setRawJson(JSON.stringify(next, null, 2))
+      setRawJsonDirty(false)
       return next
     })
   }, [])
@@ -294,6 +297,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const restoreProject = React.useCallback((next: VideoProject) => {
     setProject(next)
     setRawJson(JSON.stringify(next, null, 2))
+    setRawJsonDirty(false)
     const clipStillExists = selectedClipId && next.timeline?.tracks?.some((track) => track.clips?.some((clip) => clip.id === selectedClipId))
     if (!clipStillExists) {
       const firstClip = next.timeline?.tracks?.flatMap((track) => track.clips ?? [])[0]
@@ -748,7 +752,11 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   }, [canEditClip, playheadMs, project, selectedClipId, updateProject])
 
   const persistProject = async (summary = 'Edited in Video Studio') => {
-    if (!projectAsset) return
+    if (!projectAsset) return null
+    if (externalReloadPending) {
+      toast.error('Reload the external project update before saving or running agent actions.')
+      return null
+    }
     setSaving(true)
     try {
       const parsed = addUserEditVersion(JSON.parse(rawJson) as VideoProject, summary)
@@ -760,6 +768,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       )
       setProject(parsed)
       setRawJson(JSON.stringify(parsed, null, 2))
+      setRawJsonDirty(false)
       setUndoStack([])
       setRedoStack([])
       setExternalReloadPending(false)
@@ -773,7 +782,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   }
 
   const save = async () => {
-    await persistProject()
+    const saved = await persistProject()
+    if (!saved) return
     toast.success('Video project saved.')
   }
 
@@ -798,7 +808,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const exportProject = async () => {
     setExporting(true)
     try {
-      await persistProject('Saved before export')
+      const saved = await persistProject('Saved before export')
+      if (!saved) return
       const result = await (window.electronAPI as VideoStudioElectronAPI).exportVideoStudio?.(workspaceId, outputId, 'simple-mp4')
       if (!result) throw new Error('Video Studio export bridge is unavailable.')
       toast.success('Video export rendered.')
@@ -813,7 +824,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const runReport = async (command: 'inspect' | 'dry-run') => {
     setChecking(command)
     try {
-      await persistProject(command === 'inspect' ? 'Saved before inspect' : 'Saved before dry run')
+      const saved = await persistProject(command === 'inspect' ? 'Saved before inspect' : 'Saved before dry run')
+      if (!saved) return
       const api = window.electronAPI as VideoStudioElectronAPI
       const result = command === 'inspect'
         ? await api.inspectVideoStudio?.(workspaceId, outputId)
@@ -832,6 +844,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const runVideoAgent = async () => {
     const prompt = agentPrompt.trim()
     if (!prompt) return
+    const saved = await persistProject('Saved before video agent')
+    if (!saved) return
     setAgentRunning(true)
     try {
       const result = await (window.electronAPI as VideoStudioElectronAPI).runVideoStudioAgent?.(workspaceId, outputId, prompt)
@@ -968,7 +982,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
 
         {externalReloadPending && (
           <div className="flex h-9 items-center justify-between border-b border-[#f97316]/18 bg-[#3b220d]/35 px-3 text-[12px] text-[#ffd7a8]">
-            <span>Project changed outside this editor. Save your work or reload to sync.</span>
+            <span>Project changed outside this editor. Reload before saving or running agent actions.</span>
             <button type="button" onClick={() => void load()} className="rounded bg-[#f97316]/18 px-2 py-1 text-[#ffd7a8] hover:bg-[#f97316]/28">
               Reload
             </button>
@@ -1055,7 +1069,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                     placeholder="Make this a 9:16 punchy short..."
                     className="h-24 min-w-0 flex-1 resize-none rounded-md border border-white/[0.08] bg-black/40 p-2 text-xs text-white/78 outline-none placeholder:text-white/30 focus:border-[#18c7d4]/60"
                   />
-                  <button type="button" title="Send to Video Agent" onClick={runVideoAgent} disabled={agentRunning || !agentPrompt.trim()} className="flex h-24 w-12 shrink-0 items-center justify-center rounded-md bg-[#18c7d4] text-black disabled:cursor-not-allowed disabled:bg-white/[0.08] disabled:text-white/24">
+                  <button type="button" title="Send to Video Agent" onClick={runVideoAgent} disabled={agentRunning || isBusy || !agentPrompt.trim()} className="flex h-24 w-12 shrink-0 items-center justify-center rounded-md bg-[#18c7d4] text-black disabled:cursor-not-allowed disabled:bg-white/[0.08] disabled:text-white/24">
                     {agentRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                   </button>
                 </div>
@@ -1135,7 +1149,10 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 <PanelTitle title="Project JSON" value="editable" />
                 <textarea
                   value={rawJson}
-                  onChange={(event) => setRawJson(event.target.value)}
+                  onChange={(event) => {
+                    setRawJson(event.target.value)
+                    setRawJsonDirty(true)
+                  }}
                   spellCheck={false}
                   className="mt-2 h-56 w-full resize-none rounded-md border border-white/[0.08] bg-black/45 p-2 font-mono text-xs text-white/68 outline-none focus:border-[#f97316]/50"
                 />
