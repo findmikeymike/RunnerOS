@@ -88,6 +88,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [clipContextMenu, setClipContextMenu] = React.useState<ClipContextMenuState | null>(null)
   const [undoStack, setUndoStack] = React.useState<VideoProject[]>([])
   const [redoStack, setRedoStack] = React.useState<VideoProject[]>([])
+  const [externalReloadPending, setExternalReloadPending] = React.useState(false)
   const [showDeveloperDetails, setShowDeveloperDetails] = React.useState(false)
   const [agentPanelOpen, setAgentPanelOpen] = React.useState(false)
   const [agentPrompt, setAgentPrompt] = React.useState('')
@@ -97,6 +98,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const timelineScrubRef = React.useRef<HTMLDivElement | null>(null)
   const selectedClipRef = React.useRef<VideoClip | null>(null)
   const clipPreviewActiveRef = React.useRef(false)
+  const hasLocalEditsRef = React.useRef(false)
+  const timelineDragRef = React.useRef<TimelineDragState | null>(null)
   const timelineDurationMs = project?.timeline?.durationMs ?? 0
 
   const load = React.useCallback(async () => {
@@ -115,6 +118,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       setRawJson(JSON.stringify(parsed, null, 2))
       setUndoStack([])
       setRedoStack([])
+      setExternalReloadPending(false)
       const latestRender = findLatestVideoRenderAsset(loaded)
       if (latestRender) {
         const url = await window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, latestRender.id)
@@ -137,10 +141,24 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
 
   React.useEffect(() => {
     const cleanup = window.electronAPI.onOutputsUpdated?.((changedWorkspaceId) => {
-      if (changedWorkspaceId === workspaceId) void load()
+      if (changedWorkspaceId !== workspaceId) return
+      if (hasLocalEditsRef.current || timelineDragRef.current) {
+        setExternalReloadPending(true)
+        toast.info('Video project changed outside the editor. Save or reload when ready.')
+        return
+      }
+      void load()
     })
     return cleanup
   }, [load, workspaceId])
+
+  React.useEffect(() => {
+    hasLocalEditsRef.current = undoStack.length > 0 || redoStack.length > 0
+  }, [redoStack.length, undoStack.length])
+
+  React.useEffect(() => {
+    timelineDragRef.current = timelineDrag
+  }, [timelineDrag])
 
   React.useEffect(() => {
     if (!clipContextMenu) return
@@ -742,6 +760,9 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       )
       setProject(parsed)
       setRawJson(JSON.stringify(parsed, null, 2))
+      setUndoStack([])
+      setRedoStack([])
+      setExternalReloadPending(false)
       return parsed
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
@@ -860,7 +881,10 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
 
   return (
     <div className="h-full overflow-hidden bg-[#101010] text-white">
-      <div className="grid h-full min-h-0 grid-rows-[44px_minmax(0,1fr)_220px]">
+      <div
+        className="grid h-full min-h-0"
+        style={{ gridTemplateRows: externalReloadPending ? '44px 36px minmax(0,1fr) 220px' : '44px minmax(0,1fr) 220px' }}
+      >
         <header className="flex min-w-0 items-center justify-between gap-3 border-b border-white/[0.07] bg-[#171717] px-3">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-white/[0.06] text-white/58">
@@ -941,6 +965,15 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
             </DropdownMenu>
           </div>
         </header>
+
+        {externalReloadPending && (
+          <div className="flex h-9 items-center justify-between border-b border-[#f97316]/18 bg-[#3b220d]/35 px-3 text-[12px] text-[#ffd7a8]">
+            <span>Project changed outside this editor. Save your work or reload to sync.</span>
+            <button type="button" onClick={() => void load()} className="rounded bg-[#f97316]/18 px-2 py-1 text-[#ffd7a8] hover:bg-[#f97316]/28">
+              Reload
+            </button>
+          </div>
+        )}
 
         <div className="grid min-h-0 grid-cols-[220px_minmax(0,1fr)_460px] overflow-hidden">
           <aside className="min-h-0 border-r border-white/[0.07] bg-[#181818]">
@@ -1539,16 +1572,18 @@ function trimClipEndInProject(project: VideoProject, clipId: string, durationMs:
     const nextClip = ordered[clipIndex + 1]
     const maxDurationMs = !ripple && nextClip ? Math.max(MIN_CLIP_DURATION_MS, (nextClip.startMs ?? 0) - (clip.startMs ?? 0)) : Number.POSITIVE_INFINITY
     const nextDurationMs = clampNumber(Math.round(durationMs), MIN_CLIP_DURATION_MS, maxDurationMs)
-    const deltaMs = nextDurationMs - Math.max(MIN_CLIP_DURATION_MS, clip.durationMs ?? MIN_CLIP_DURATION_MS)
+    if (ripple) {
+      return {
+        ...track,
+        clips: rippleTrimEndClips(ordered, clipIndex, nextDurationMs),
+      }
+    }
     return {
       ...track,
-      clips: sortClipsByStart(ordered.map((item, index) => {
+      clips: ordered.map((item) => {
         if (item.id === clipId) return { ...item, durationMs: nextDurationMs }
-        if (ripple && index > clipIndex && deltaMs !== 0) {
-          return { ...item, startMs: Math.max(0, (item.startMs ?? 0) + deltaMs) }
-        }
         return item
-      })),
+      }),
     }
   })
   return {
@@ -1559,6 +1594,28 @@ function trimClipEndInProject(project: VideoProject, clipId: string, durationMs:
       tracks,
     },
   }
+}
+
+function rippleTrimEndClips(ordered: VideoClip[], clipIndex: number, nextDurationMs: number): VideoClip[] {
+  const targetClip = ordered[clipIndex]
+  if (!targetClip) return ordered
+  const deltaMs = nextDurationMs - Math.max(MIN_CLIP_DURATION_MS, targetClip.durationMs ?? MIN_CLIP_DURATION_MS)
+  let cursor = 0
+  return ordered.map((clip, index) => {
+    const clipDurationMs = Math.max(MIN_CLIP_DURATION_MS, clip.durationMs ?? MIN_CLIP_DURATION_MS)
+    if (index < clipIndex) {
+      cursor = Math.max(cursor, (clip.startMs ?? 0) + clipDurationMs)
+      return clip
+    }
+    if (index === clipIndex) {
+      const nextClip = { ...clip, durationMs: nextDurationMs }
+      cursor = Math.max(cursor, (clip.startMs ?? 0) + nextDurationMs)
+      return nextClip
+    }
+    const startMs = Math.max((clip.startMs ?? 0) + deltaMs, cursor)
+    cursor = startMs + clipDurationMs
+    return { ...clip, startMs }
+  })
 }
 
 function clampNumber(value: number, min: number, max: number): number {

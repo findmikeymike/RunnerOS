@@ -591,11 +591,21 @@ function rippleTrimEnd(track: VideoProject['timeline']['tracks'][number], clipId
   if (!clip) return null;
   const durationMs = Math.max(1, Math.round(nextDurationMs));
   const deltaMs = durationMs - Math.max(1, clip.durationMs);
-  track.clips = orderedClips(ordered.map((item, index) => {
-    if (item.id === clip.id) return { ...item, durationMs };
-    if (index > clipIndex && deltaMs !== 0) return { ...item, startMs: Math.max(0, item.startMs + deltaMs) };
-    return item;
-  }));
+  let cursor = 0;
+  track.clips = ordered.map((item, index) => {
+    if (index < clipIndex) {
+      cursor = Math.max(cursor, item.startMs + Math.max(1, item.durationMs));
+      return item;
+    }
+    if (item.id === clip.id) {
+      const nextClip = { ...item, durationMs };
+      cursor = Math.max(cursor, item.startMs + durationMs);
+      return nextClip;
+    }
+    const startMs = Math.max(item.startMs + deltaMs, cursor);
+    cursor = startMs + Math.max(1, item.durationMs);
+    return { ...item, startMs };
+  });
   return { startMs: clip.startMs, durationMs };
 }
 

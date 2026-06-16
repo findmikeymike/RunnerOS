@@ -305,10 +305,21 @@ function trimProjectClip(project, clipId, durationMs, sourceInMs, sourceOutMs, r
   const deltaMs = nextDurationMs - Math.max(1, clip.durationMs || 1);
   let editedClip = clip;
   if (ripple) {
+    let cursor = 0;
     track.clips = ordered.map((item, index) => {
-      if (item.id === clipId) return { ...item, durationMs: nextDurationMs };
-      if (index > clipIndex && deltaMs !== 0) return { ...item, startMs: Math.max(0, (item.startMs || 0) + deltaMs) };
-      return item;
+      const itemDuration = Math.max(1, item.durationMs || 1);
+      if (index < clipIndex) {
+        cursor = Math.max(cursor, (item.startMs || 0) + itemDuration);
+        return item;
+      }
+      if (item.id === clipId) {
+        const nextClip = { ...item, durationMs: nextDurationMs };
+        cursor = Math.max(cursor, (item.startMs || 0) + nextDurationMs);
+        return nextClip;
+      }
+      const startMs = Math.max((item.startMs || 0) + deltaMs, cursor);
+      cursor = startMs + itemDuration;
+      return { ...item, startMs };
     });
     editedClip = track.clips.find((item) => item.id === clipId) || clip;
   } else {

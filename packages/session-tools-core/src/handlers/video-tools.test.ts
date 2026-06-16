@@ -492,8 +492,17 @@ describe('video studio session tools', () => {
       durationMs: 1000,
       label: 'B',
     });
+    const third = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'C',
+      startMs: 4000,
+      durationMs: 1000,
+      label: 'C',
+    });
     const firstClipId = (first.structuredContent as { clipId: string }).clipId;
     const secondClipId = (second.structuredContent as { clipId: string }).clipId;
+    const thirdClipId = (third.structuredContent as { clipId: string }).clipId;
 
     let project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
       timeline: { tracks: Array<{ id: string; locked?: boolean; clips: Array<{ id: string; startMs: number; durationMs: number }> }> };
@@ -530,6 +539,26 @@ describe('video studio session tools', () => {
     project = JSON.parse(readFileSync(projectPath, 'utf-8')) as typeof project;
     expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)).toMatchObject({ startMs: 1000, durationMs: 1500 });
     expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === secondClipId)?.startMs).toBe(3000);
+
+    const rippleShrink = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: firstClipId,
+      action: 'trim',
+      durationMs: 100,
+      ripple: true,
+    });
+
+    expect(rippleShrink.isError).toBe(false);
+    project = JSON.parse(readFileSync(projectPath, 'utf-8')) as typeof project;
+    const clips = [...project.timeline.tracks[0]!.clips].sort((a, b) => a.startMs - b.startMs);
+    expect(clips.find((clip) => clip.id === firstClipId)).toMatchObject({ startMs: 1000, durationMs: 100 });
+    expect(clips.find((clip) => clip.id === secondClipId)?.startMs).toBe(1600);
+    expect(clips.find((clip) => clip.id === thirdClipId)?.startMs).toBe(3100);
+    for (let index = 1; index < clips.length; index += 1) {
+      const previous = clips[index - 1]!;
+      const current = clips[index]!;
+      expect(current.startMs).toBeGreaterThanOrEqual(previous.startMs + previous.durationMs);
+    }
   });
 
   test('video_clip_adjust stores presets and clamps manual values', async () => {
