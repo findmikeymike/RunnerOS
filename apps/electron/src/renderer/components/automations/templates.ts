@@ -99,6 +99,35 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
     },
     setupHint: 'Unsigned requests are explicitly allowed for prototyping — add secretEnv and remove allowUnauthenticated before going to production.',
   },
+  {
+    id: 'wh-youtube-intelligence-batch',
+    category: 'webhook',
+    title: 'YouTube intelligence batch',
+    description: 'Receive videos or channels and launch the YouTube Intelligence Batch workflow.',
+    glyph: 'Y',
+    event: 'WebhookReceive',
+    matcher: {
+      name: 'YouTube intelligence batch',
+      slug: 'youtube-intelligence',
+      secretEnv: 'CRAFT_WH_YOUTUBE_INTEL_SECRET',
+      allowedMethods: ['POST'],
+      actions: [
+        {
+          type: 'workflow',
+          workflowSlug: 'youtube-intelligence-batch',
+          triggerInputs: {
+            source_list: '$CRAFT_BODY_RAW',
+            provider: 'auto',
+            allow_paid: false,
+            max_videos: 25,
+            channel_video_limit: 10,
+            output_dir: 'youtube-intel/triggered-batch',
+          },
+        },
+      ],
+    },
+    setupHint: 'Set CRAFT_WH_YOUTUBE_INTEL_SECRET, then POST newline-separated videos/channels to this endpoint. The YouTube Intelligence Batch workflow must be active in the workspace.',
+  },
 
   // ----- FileWatch -----
   {

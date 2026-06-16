@@ -3,8 +3,8 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { expandWebhookAction } from './webhook-utils.ts';
-import type { WebhookAction } from './types.ts';
+import { expandWebhookAction, expandWorkflowAction } from './webhook-utils.ts';
+import type { WebhookAction, WorkflowAction } from './types.ts';
 
 const env = {
   CRAFT_WH_SESSION_ID: 'sess-123',
@@ -86,5 +86,26 @@ describe('expandWebhookAction', () => {
     expect(result.method).toBe('PUT');
     expect(result.bodyFormat).toBe('json');
     expect(result.captureResponse).toBe(true);
+  });
+});
+
+describe('expandWorkflowAction', () => {
+  it('expands workflow slug and nested trigger input templates', () => {
+    const action: WorkflowAction = {
+      type: 'workflow',
+      workflowSlug: 'daily-${CRAFT_WH_EVENT}',
+      triggerInputs: {
+        body: '${CRAFT_WH_SESSION_ID}',
+        nested: { token: '${API_TOKEN}' },
+        list: ['${CRAFT_WH_EVENT}', 2],
+      },
+    };
+    const result = expandWorkflowAction(action, env);
+    expect(result.workflowSlug).toBe('daily-LabelAdd');
+    expect(result.triggerInputs).toEqual({
+      body: 'sess-123',
+      nested: { token: 'tok-secret' },
+      list: ['LabelAdd', 2],
+    });
   });
 });

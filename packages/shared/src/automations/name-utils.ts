@@ -16,7 +16,8 @@ import type { AutomationMatcher } from './types.ts';
  * 2. First prompt action's `@mention` → "<mention> prompt"
  * 3. First prompt action's prompt text (truncated to 40 chars)
  * 4. First webhook action's URL (truncated to 40 chars)
- * 5. Event name fallback (raw event string)
+ * 5. First workflow action's slug
+ * 6. Event name fallback (raw event string)
  */
 export function deriveAutomationName(event: string, matcher: AutomationMatcher): string {
   if (matcher.name) return matcher.name;
@@ -31,6 +32,10 @@ export function deriveAutomationName(event: string, matcher: AutomationMatcher):
 
   if (firstAction.type === 'pulse') {
     return `Pulse ${firstAction.driverAgentSlug ?? 'orchestrator'}`;
+  }
+
+  if (firstAction.type === 'workflow') {
+    return `Workflow ${firstAction.workflowSlug}`;
   }
 
   // Extract @skill/@source mention

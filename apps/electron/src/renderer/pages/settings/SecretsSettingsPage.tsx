@@ -18,8 +18,11 @@ export default function SecretsSettingsPage() {
   const [zero, setZero] = React.useState<ZeroStatus | null>(null)
   const [name, setName] = React.useState('')
   const [value, setValue] = React.useState('')
+  const [supadataKey, setSupadataKey] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [installing, setInstalling] = React.useState(false)
+
+  const supadataSecret = secrets.find((secret) => secret.name === 'SUPADATA_API_KEY')
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -48,6 +51,17 @@ export default function SecretsSettingsPage() {
     setName('')
     setValue('')
     toast.success('Secret saved')
+    await load()
+  }
+
+  const saveSupadata = async () => {
+    const result = await window.electronAPI.saveSecret('SUPADATA_API_KEY', supadataKey)
+    if (!result.success) {
+      toast.error(result.error || 'Could not save Supadata key')
+      return
+    }
+    setSupadataKey('')
+    toast.success('Supadata key saved')
     await load()
   }
 
@@ -101,6 +115,41 @@ export default function SecretsSettingsPage() {
                     <Button size="sm" onClick={installZero} disabled={installing}>
                       {installing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
                       Install
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </SettingsCard>
+          </SettingsSection>
+
+          <SettingsSection title="Provider Keys">
+            <SettingsCard>
+              <div className="grid gap-4 p-4 md:grid-cols-[1fr_minmax(260px,360px)_auto] md:items-center">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <KeyRound className="h-4 w-4 text-white/55" />
+                    Supadata
+                    {supadataSecret && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />}
+                  </div>
+                  <div className="mt-1 text-xs text-white/40">
+                    Used by YouTube Intelligence for reliable transcript pulls.
+                    {supadataSecret ? ` Saved as ${supadataSecret.maskedValue}.` : ''}
+                  </div>
+                </div>
+                <input
+                  value={supadataKey}
+                  onChange={(event) => setSupadataKey(event.target.value)}
+                  placeholder={supadataSecret ? 'Replace API key' : 'Supadata API key'}
+                  type="password"
+                  className="h-9 rounded-md border border-white/10 bg-black/20 px-3 text-sm outline-none placeholder:text-white/25"
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={saveSupadata} disabled={!supadataKey}>
+                    Save
+                  </Button>
+                  {supadataSecret && (
+                    <Button variant="ghost" size="sm" onClick={() => remove('SUPADATA_API_KEY')}>
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
                 </div>

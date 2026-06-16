@@ -172,8 +172,10 @@ export function useAutomations(
         sessionId: e.sessionId,
         actionSummary: e.webhook
           ? `Webhook ${e.webhook.method} ${e.webhook.url}${e.webhook.attempts && e.webhook.attempts > 1 ? ` (${e.webhook.attempts} attempts)` : ''}`
-          : e.prompt,
-        error: e.webhook?.error ?? e.error,
+          : e.workflow
+            ? `Workflow ${e.workflow.slug}${e.workflow.runId ? ` (${e.workflow.runId.slice(0, 8)})` : ''}`
+            : e.prompt,
+        error: e.webhook?.error ?? e.workflow?.error ?? e.error,
         webhookDetails: e.webhook ? {
           method: e.webhook.method,
           url: e.webhook.url,
@@ -182,6 +184,11 @@ export function useAutomations(
           attempts: e.webhook.attempts,
           error: e.webhook.error,
           responseBody: e.webhook.responseBody,
+        } : undefined,
+        workflowDetails: e.workflow ? {
+          slug: e.workflow.slug,
+          runId: e.workflow.runId,
+          error: e.workflow.error,
         } : undefined,
       }))
     } catch {

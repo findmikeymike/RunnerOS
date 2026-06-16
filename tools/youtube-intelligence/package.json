@@ -1,0 +1,13 @@
+{
+  "name": "@runneros/youtube-intelligence-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-youtube-intelligence": "bin/youtube-intelligence.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/youtube-intelligence.mjs doctor",
+    "test": "node --test test/*.test.mjs"
+  }
+}

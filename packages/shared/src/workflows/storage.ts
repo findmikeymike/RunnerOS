@@ -52,6 +52,11 @@ export interface WorkflowStorageOptions {
   globalWorkflowsDir?: string;
 }
 
+export interface EnsureRequiredWorkflowsOptions extends WorkflowStorageOptions {
+  /** Opt-in upgrade hook for app-managed required workflows. Defaults to never overwrite. */
+  shouldUpgradeExisting?: (existing: LoadedWorkflow, required: { slug: string; metadata: WorkflowMetadata; body: string }) => boolean;
+}
+
 function getGlobalWorkflowsDir(options?: WorkflowStorageOptions): string {
   return options?.globalWorkflowsDir ?? GLOBAL_WORKFLOWS_DIR;
 }
@@ -364,21 +369,29 @@ export function seedGlobalWorkflowLibraryIfEmpty(
  */
 export function ensureRequiredWorkflows(
   required: ReadonlyArray<{ slug: string; metadata: WorkflowMetadata; body: string }>,
-  options?: WorkflowStorageOptions,
-): { ensured: number } {
+  options?: EnsureRequiredWorkflowsOptions,
+): { ensured: number; upgraded: number } {
   const root = getGlobalWorkflowsDir(options);
   mkdirSync(root, { recursive: true });
   let ensured = 0;
+  let upgraded = 0;
   const tombstoned = readDeletedWorkflowSlugs(options);
   for (const w of required) {
     if (!isValidWorkflowSlug(w.slug)) continue;
     if (tombstoned.has(w.slug)) continue;
     const dir = getGlobalWorkflowDir(w.slug, options);
     const file = join(dir, WORKFLOW_FILE);
-    if (existsSync(file)) continue;
+    if (existsSync(file)) {
+      const existing = loadGlobalWorkflow(w.slug, options);
+      if (existing && options?.shouldUpgradeExisting?.(existing, w)) {
+        writeFileSync(file, serializeWorkflow(w.metadata, w.body), 'utf-8');
+        upgraded += 1;
+      }
+      continue;
+    }
     mkdirSync(dir, { recursive: true });
     writeFileSync(file, serializeWorkflow(w.metadata, w.body), 'utf-8');
     ensured += 1;
   }
-  return { ensured };
+  return { ensured, upgraded };
 }

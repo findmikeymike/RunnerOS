@@ -103,7 +103,8 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
 
     const results: import('@craft-agent/shared/protocol').TestAutomationActionResult[] = []
     const { parsePromptReferences } = await import('@craft-agent/shared/automations')
-    const { executeWebhookRequest, createWebhookHistoryEntry, createPromptHistoryEntry } = await import('@craft-agent/shared/automations/webhook-utils')
+    const { executeWebhookRequest, createWebhookHistoryEntry, createPromptHistoryEntry, createWorkflowHistoryEntry } = await import('@craft-agent/shared/automations/webhook-utils')
+    const { loadGlobalWorkflow, normalizeWorkflowTriggerInputs, readActivatedWorkflows } = await import('@craft-agent/shared/workflows')
 
     for (const action of payload.actions) {
       const start = Date.now()
@@ -129,6 +130,56 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
             durationMs: result.durationMs ?? 0,
             error: result.error,
             responseBody: result.responseBody,
+          })
+          try {
+            await appendAutomationHistoryEntry(workspace.rootPath, entry)
+          } catch (e) {
+            log.warn('[Automations] Failed to write history:', e)
+          }
+        }
+        continue
+      }
+
+      if (action.type === 'workflow') {
+        let workflowRunId: string | undefined
+        let error: string | undefined
+        try {
+          if (!deps.getWorkflowRunner) throw new Error('Workflow runner is not available')
+          if (!readActivatedWorkflows(workspace.rootPath).active.includes(action.workflowSlug)) {
+            throw new Error(`Workflow "${action.workflowSlug}" is not active in this workspace.`)
+          }
+          const workflow = loadGlobalWorkflow(action.workflowSlug)
+          if (!workflow) throw new Error(`Workflow not found: ${action.workflowSlug}`)
+          const run = await deps.getWorkflowRunner().start({
+            workflow,
+            workspaceId: payload.workspaceId,
+            triggerInputs: normalizeWorkflowTriggerInputs(workflow, action.triggerInputs ?? {}),
+          })
+          workflowRunId = run.id
+          results.push({
+            type: 'workflow',
+            success: true,
+            workflowSlug: action.workflowSlug,
+            workflowRunId,
+            duration: Date.now() - start,
+          })
+        } catch (err: unknown) {
+          error = (err as Error).message
+          results.push({
+            type: 'workflow',
+            success: false,
+            workflowSlug: action.workflowSlug,
+            error,
+            duration: Date.now() - start,
+          })
+        }
+        if (payload.automationId) {
+          const entry = createWorkflowHistoryEntry({
+            matcherId: payload.automationId,
+            ok: !error,
+            workflowSlug: action.workflowSlug,
+            workflowRunId,
+            error,
           })
           try {
             await appendAutomationHistoryEntry(workspace.rootPath, entry)

@@ -27,7 +27,9 @@ export function AutomationActionPreview({ actions, className }: AutomationAction
           <span className="text-foreground/70 break-words line-clamp-2">
             {action.type === 'webhook'
               ? `${action.method ?? DEFAULT_WEBHOOK_METHOD} ${action.url}`
-              : action.prompt}
+              : action.type === 'workflow'
+                ? `Start workflow ${action.workflowSlug}`
+                : action.prompt}
           </span>
         </div>
       ))}

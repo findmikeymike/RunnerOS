@@ -122,8 +122,9 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
                 <textarea
                   value={values[i.name] as string}
                   onChange={(e) => setValues((p) => ({ ...p, [i.name]: e.target.value }))}
+                  placeholder={i.ui?.placeholder}
                   className="runneros-form-input min-h-[64px] font-mono text-xs"
-                  rows={3}
+                  rows={i.ui?.multiline ? i.ui.rows ?? 6 : 3}
                 />
               )}
             </label>

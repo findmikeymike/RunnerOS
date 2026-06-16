@@ -137,7 +137,7 @@ import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
 import { ensureLabelsExist } from '@craft-agent/shared/labels/crud'
 import { loadStatusConfig } from '@craft-agent/shared/statuses/storage'
-import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntry, normalizeStandardFiveFieldCron, matcherMatches, type AutomationSystemMetadataSnapshot } from '@craft-agent/shared/automations'
+import { AutomationSystem, createPromptHistoryEntry, createWorkflowHistoryEntry, expandWorkflowAction, appendAutomationHistoryEntry, normalizeStandardFiveFieldCron, matcherMatches, buildPromptEnvFromPayload, type AutomationSystemMetadataSnapshot, type WorkflowAction } from '@craft-agent/shared/automations'
 import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
@@ -1829,7 +1829,59 @@ export class SessionManager implements ISessionManager {
       // AutomationSystem) so SessionManager owns driver-session spawn + workflow
       // dispatch wiring without bloating the shared automations package.
       this.attachPulseDispatch(automationSystem, workspaceId, workspaceRootPath)
+      this.attachWorkflowAutomationDispatch(automationSystem, workspaceId, workspaceRootPath)
     }
+  }
+
+  /**
+   * Dispatch first-class workflow automation actions from any app trigger.
+   * Prompt/webhook actions live in the shared AutomationSystem; workflow start
+   * stays here because SessionManager owns workflow activation and runner state.
+   */
+  private attachWorkflowAutomationDispatch(automationSystem: AutomationSystem, workspaceId: string, workspaceRootPath: string): void {
+    automationSystem.eventBus.onAny(async (event, payload) => {
+      const matchers = automationSystem.getMatchersForEvent(event)
+      if (!matchers.length) return
+      const env = buildPromptEnvFromPayload(event, payload)
+      for (const matcher of matchers) {
+        const workflowActions = matcher.actions.filter((a) => (a as { type?: string }).type === 'workflow') as WorkflowAction[]
+        if (!workflowActions.length) continue
+        if (matcher.enabled === false) continue
+        if (!matcherMatches(matcher, event, payload as unknown as Record<string, unknown>)) continue
+        for (const rawAction of workflowActions) {
+          const action = expandWorkflowAction(rawAction, env)
+          let workflowRunId: string | undefined
+          let error: string | undefined
+          try {
+            if (!readActivatedWorkflows(workspaceRootPath).active.includes(action.workflowSlug)) {
+              throw new Error(`Workflow "${action.workflowSlug}" is not active in this workspace.`)
+            }
+            const workflow = loadGlobalWorkflow(action.workflowSlug)
+            if (!workflow) throw new Error(`Workflow not found: ${action.workflowSlug}`)
+            const run = await this.workflowRunner.start({
+              workflow,
+              workspaceId,
+              triggerInputs: normalizeWorkflowTriggerInputs(workflow, action.triggerInputs ?? {}),
+            })
+            workflowRunId = run.id
+            sessionLog.info(`[Automations] Started workflow ${action.workflowSlug} from trigger ${event}: ${run.id}`)
+          } catch (err) {
+            error = err instanceof Error ? err.message : String(err)
+            sessionLog.error(`[Automations] Failed to start workflow ${action.workflowSlug} from trigger ${event}:`, err)
+          }
+          if (matcher.id) {
+            const entry = createWorkflowHistoryEntry({
+              matcherId: matcher.id,
+              ok: !error,
+              workflowSlug: action.workflowSlug,
+              workflowRunId,
+              error,
+            })
+            appendAutomationHistoryEntry(workspaceRootPath, entry).catch(e => sessionLog.warn('[Automations] Failed to write workflow history:', e))
+          }
+        }
+      }
+    })
   }
 
   /**
@@ -2374,12 +2426,13 @@ export class SessionManager implements ISessionManager {
         }
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
-        // Chat nav entry), Social Publisher, Hypermotion, Shopify, Print Agent,
-        // and Update System Agent.
+        // Chat nav entry), Social Publisher, YouTube Intelligence, Hypermotion,
+        // Shopify, Print Agent, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
+            || a.slug === 'youtube-intelligence-agent'
             || a.slug === 'hypermotion-agent'
             || a.slug === 'shopify-agent'
             || a.slug === 'print-agent'
@@ -2510,13 +2563,26 @@ user a clickable link to where the thing now lives.`
       }
 
       // Seed starter workflows (idempotent; skipped after the first run).
-      // Starters are NOT load-bearing — if the user deletes one, the tombstone
-      // mechanism keeps it gone, so we don't call ensureRequiredWorkflows here.
+      // YouTube Intelligence Batch is also ensured for existing installs, while
+      // still respecting tombstones if the user deleted it.
       try {
-        const { seedGlobalWorkflowLibraryIfEmpty, STARTER_WORKFLOWS } = await import('@craft-agent/shared/workflows')
+        const { ensureRequiredWorkflows, seedGlobalWorkflowLibraryIfEmpty, STARTER_WORKFLOWS, YOUTUBE_INTELLIGENCE_BATCH_SLUG } = await import('@craft-agent/shared/workflows')
         const { seeded: workflowsSeeded } = seedGlobalWorkflowLibraryIfEmpty(STARTER_WORKFLOWS)
         if (workflowsSeeded > 0) {
           sessionLog.info(`[workflows] Seeded ${workflowsSeeded} starter workflow(s) into global library`)
+        }
+        const requiredWorkflow = STARTER_WORKFLOWS.filter((workflow) => workflow.slug === YOUTUBE_INTELLIGENCE_BATCH_SLUG)
+        const { ensured: workflowsEnsured, upgraded: workflowsUpgraded } = ensureRequiredWorkflows(requiredWorkflow, {
+          shouldUpgradeExisting: (existing) =>
+            existing.slug === YOUTUBE_INTELLIGENCE_BATCH_SLUG &&
+            existing.metadata.name === 'YouTube Intelligence Batch' &&
+            existing.metadata.steps.length === 1 &&
+            existing.metadata.steps[0]?.agent === 'youtube-intelligence-agent' &&
+            existing.metadata.steps[0]?.input.includes('Run the YouTube Intelligence batch workflow') &&
+            !existing.metadata.trigger.inputs?.some((input) => input.name === 'channel_video_limit'),
+        })
+        if (workflowsEnsured > 0 || workflowsUpgraded > 0) {
+          sessionLog.info(`[workflows] Ensured ${workflowsEnsured} and upgraded ${workflowsUpgraded} required workflow(s) in global library`)
         }
       } catch (err) {
         sessionLog.warn('[workflows] Starter seed skipped:', err as Error)
@@ -5003,7 +5069,7 @@ user a clickable link to where the thing now lives.`
 
           await this.sendMessage(sessionId, message, fileAttachments)
         },
-        createAgentFn: async (input) => {
+        createAgentFn: async (input: import('@craft-agent/session-tools-core').CreateAgentToolInput) => {
           const {
             writeGlobalAgent,
             loadGlobalAgent,
@@ -5075,7 +5141,7 @@ user a clickable link to where the thing now lives.`
             return { ok: true, slug }
           })
         },
-        createAutomationFn: async (input) => {
+        createAutomationFn: async (input: import('@craft-agent/session-tools-core').CreateAutomationToolInput) => {
           const targetWorkspaceId = input.workspaceId ?? managed.workspace.id
           const targetWorkspace = getWorkspaceByNameOrId(targetWorkspaceId)
           if (!targetWorkspace) {
@@ -5163,7 +5229,7 @@ user a clickable link to where the thing now lives.`
             return { ok: true, slug, eventName, nextFireAt }
           })
         },
-        createWorkflowFn: async (input) => {
+        createWorkflowFn: async (input: import('@craft-agent/session-tools-core').CreateWorkflowToolInput) => {
           const slug = input.slug
           if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(slug)) {
             return { ok: false, error: `Invalid workflow slug: "${slug}".` }

@@ -21,6 +21,7 @@ export type {
   AutomationEvent,
   PromptAction,
   WebhookAction,
+  WorkflowAction,
   WebhookHttpMethod,
   WebhookBodyFormat,
   WebhookAuth,
@@ -66,7 +67,7 @@ export { buildEnvFromSdkInput } from './sdk-bridge.ts';
 // Utilities
 // ============================================================================
 
-export { parsePromptReferences, matcherMatches } from './utils.ts';
+export { parsePromptReferences, matcherMatches, buildPromptEnvFromPayload } from './utils.ts';
 
 // ============================================================================
 // Re-exports from sub-modules
@@ -85,7 +86,7 @@ export { evaluateConditions, type ConditionContext } from './conditions.ts';
 export { sanitizeForShell } from './security.ts';
 
 // Webhook execution utilities
-export { executeWebhookRequest, executeWithRetry, createWebhookHistoryEntry, createPromptHistoryEntry, type ExecuteWebhookOptions, type RetryConfig } from './webhook-utils.ts';
+export { executeWebhookRequest, executeWithRetry, createWebhookHistoryEntry, createPromptHistoryEntry, createWorkflowHistoryEntry, expandWorkflowAction, type ExecuteWebhookOptions, type RetryConfig } from './webhook-utils.ts';
 
 // Retry scheduler
 export { RetryScheduler, type RetryQueueEntry, type RetrySchedulerOptions } from './retry-scheduler.ts';

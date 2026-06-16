@@ -97,7 +97,13 @@ export interface WebhookAction {
   auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string }
 }
 
-export type AutomationAction = PromptAction | WebhookAction
+export interface WorkflowAction {
+  type: 'workflow'
+  workflowSlug: string
+  triggerInputs?: Record<string, unknown>
+}
+
+export type AutomationAction = PromptAction | WebhookAction | WorkflowAction
 
 // ============================================================================
 // Conditions (mirrored from packages/shared/src/automations/types.ts)
@@ -316,6 +322,12 @@ export interface WebhookDetails {
   responseBody?: string
 }
 
+export interface WorkflowDetails {
+  slug: string
+  runId?: string
+  error?: string
+}
+
 export interface ExecutionEntry {
   id: string
   automationId: string
@@ -333,6 +345,8 @@ export interface ExecutionEntry {
   sessionId?: string
   /** Structured webhook execution details (expandable in timeline) */
   webhookDetails?: WebhookDetails
+  /** Workflow run details for workflow actions */
+  workflowDetails?: WorkflowDetails
 }
 
 // ============================================================================
@@ -428,6 +442,7 @@ interface AutomationsConfigFile {
 type RawAction =
   | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
   | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: WebhookAction['auth'] }
+  | { type: 'workflow'; workflowSlug: string; triggerInputs?: Record<string, unknown> }
 
 interface AutomationsConfigMatcher {
   id?: string
@@ -468,6 +483,10 @@ function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher):
   if (firstAction.type === 'webhook') {
     const label = `Webhook ${firstAction.method ?? DEFAULT_WEBHOOK_METHOD} ${firstAction.url}`
     return label.length > 40 ? label.slice(0, 40) + '...' : label
+  }
+
+  if (firstAction.type === 'workflow') {
+    return `Workflow ${firstAction.workflowSlug}`
   }
 
   // Extract @skill mentions or use first ~40 chars
@@ -550,7 +569,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
       if (!rawActions || !Array.isArray(rawActions) || rawActions.length === 0) continue
 
       const actions: AutomationAction[] = rawActions
-        .filter((a): a is AutomationAction => a.type === 'prompt' || a.type === 'webhook')
+        .filter((a): a is AutomationAction => a.type === 'prompt' || a.type === 'webhook' || a.type === 'workflow')
       if (actions.length === 0) continue
 
       items.push({

@@ -3,14 +3,15 @@
  *
  * Each entry maps to a `WORKFLOW.md` written under `~/.workflows/<slug>/`.
  * Seeding is idempotent: existing files are never overwritten, and tombstoned
- * starters stay deleted (`.deleted-workflows.json`). They are starters, not
- * load-bearing built-ins — `ensureRequiredWorkflows` should NOT include them.
+ * starters stay deleted (`.deleted-workflows.json`). Most are starters only;
+ * selected app-managed workflows may also be ensured explicitly at startup.
  */
 
 import type { WorkflowMetadata } from './types.ts';
 
 export const WEEKLY_CONTENT_PIPELINE_SLUG = 'weekly-content-pipeline';
 export const EMAIL_TRIAGE_SLUG = 'email-triage';
+export const YOUTUBE_INTELLIGENCE_BATCH_SLUG = 'youtube-intelligence-batch';
 
 const weeklyContentPipeline = {
   slug: WEEKLY_CONTENT_PIPELINE_SLUG,
@@ -126,10 +127,118 @@ const emailTriage = {
     'Until then, paste an email manually to test the routing logic.\n',
 };
 
+const youtubeIntelligenceBatch = {
+  slug: YOUTUBE_INTELLIGENCE_BATCH_SLUG,
+  metadata: {
+    name: 'YouTube Intelligence Batch',
+    description: 'Process YouTube videos, channel targets, or transcript files into transcript packets, intel cards, a cross-video reducer pass, and a reusable dossier.',
+    avatar: 'Y',
+    trigger: {
+      type: 'manual' as const,
+      inputs: [
+        {
+          name: 'source_list',
+          type: 'string',
+          required: true,
+          description: 'One target per line: video URL/ID, channel handle/URL, or video<TAB>transcript-file rows.',
+          ui: {
+            multiline: true,
+            rows: 8,
+            placeholder: 'https://www.youtube.com/watch?v=...\n@channelhandle\nhttps://youtu.be/...\t./transcript.txt',
+          },
+        },
+        {
+          name: 'provider',
+          type: 'string',
+          default: 'auto',
+          description: 'auto, local, or supadata.',
+        },
+        {
+          name: 'allow_paid',
+          type: 'boolean',
+          default: false,
+          description: 'Required before Supadata transcript credits are used.',
+        },
+        {
+          name: 'max_videos',
+          type: 'number',
+          default: 25,
+          description: 'Maximum videos/transcripts to process in this run.',
+        },
+        {
+          name: 'channel_video_limit',
+          type: 'number',
+          default: 10,
+          description: 'Maximum uploads to pull from each channel target.',
+        },
+        {
+          name: 'output_dir',
+          type: 'string',
+          default: 'youtube-intel/batch-run',
+          description: 'Workspace-relative output directory.',
+        },
+      ],
+    },
+    outputs: {
+      mode: 'final-step' as const,
+      kind: 'report' as const,
+      title: 'YouTube Intelligence Batch Dossier',
+      summary: 'Batch transcript intelligence dossier and agent context pack.',
+      primary: {
+        from: 'step-output' as const,
+        step: 'batch-extract',
+      },
+    },
+    steps: [
+      {
+        id: 'batch-extract',
+        agent: 'youtube-intelligence-agent',
+        timeout: 1800,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: {
+          requireNonEmptyOutput: true,
+          minOutputChars: 500,
+          requireToolUse: true,
+        },
+        input:
+          'Run the YouTube Intelligence batch workflow.\n\n' +
+          'Inputs:\n' +
+          '- source_list:\n{{trigger.source_list}}\n' +
+          '- provider: {{trigger.provider}}\n' +
+          '- allow_paid: {{trigger.allow_paid}}\n' +
+          '- max_videos: {{trigger.max_videos}}\n' +
+          '- channel_video_limit: {{trigger.channel_video_limit}}\n' +
+          '- output_dir: {{trigger.output_dir}}\n\n' +
+          'Required execution:\n' +
+          '1. Resolve the bundled `youtube-intelligence` source folder. If `tools/youtube-intelligence` exists in the workspace, that is fine; otherwise use the source local path/folder shown in the active source guide.\n' +
+          '2. Write the source list to a workspace-local input file and use its absolute path in the command. The source list may contain YouTube video URLs/IDs, channel handles/URLs, or video<TAB>transcript-file rows.\n' +
+          '3. Resolve `{{trigger.output_dir}}` against the workspace root if it is relative, then use that absolute output path.\n' +
+          '4. From the YouTube Intelligence tool folder, run `node bin/youtube-intelligence.mjs batch-prepare --input <absolute-input-file> --out <absolute-output-dir> --provider "{{trigger.provider}}" --max-videos {{trigger.max_videos}} --channel-limit {{trigger.channel_video_limit}}`.\n' +
+          '5. Add `--allow-paid` only when `allow_paid` is true. Do not use Supadata credits without that flag.\n' +
+          '6. Read `run-manifest.json`, each successful video `chunks.json`, `batch-extractor-prompt.md`, and `cross-video-reducer-prompt.md`.\n' +
+          '7. Produce per-video intel cards, cross-video patterns, contradictions, experiments, and a final dossier. No generic summaries.\n' +
+          '8. Write `dossier.md`, `cross-video-reducer.json`, and `agent-context-pack.json` in the output directory. The context pack must be usable by another agent without rereading the whole transcripts.\n' +
+          '9. Return a final report with these sections: Best Wisdom, Playbooks, Contradictions, Experiments, Agent Transfer Pack, Files Created, Source Index.\n',
+      },
+    ],
+  } satisfies WorkflowMetadata,
+  body:
+    '# YouTube Intelligence Batch\n\n' +
+    'Use this workflow when the user gives one video, many videos, channel handles/URLs, or transcript files and wants reusable intelligence instead of summaries.\n\n' +
+    'The workflow is intentionally agent-operated: the CLI prepares transcript packets and batch prompts; the YouTube Intelligence Agent performs extraction, reducer judgment, and dossier assembly.\n\n' +
+    'Rules:\n' +
+    '- Default to free/local transcript acquisition.\n' +
+    '- Use Supadata only when the run input explicitly allows paid credits.\n' +
+    '- Preserve timestamp evidence and source indexes.\n' +
+    '- Channel targets expand through youtube-research channel uploads before transcript acquisition.\n' +
+    '- Treat failed rows as reportable, not invisible.\n',
+};
+
 export const STARTER_WORKFLOWS: ReadonlyArray<{
   slug: string;
   metadata: WorkflowMetadata;
   body: string;
-}> = [weeklyContentPipeline, emailTriage];
+}> = [weeklyContentPipeline, emailTriage, youtubeIntelligenceBatch];
 
 export const STARTER_WORKFLOW_SLUGS: readonly string[] = STARTER_WORKFLOWS.map((w) => w.slug);

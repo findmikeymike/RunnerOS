@@ -22,6 +22,7 @@ import { SessionSearchHeader } from '@/components/app-shell/SessionSearchHeader'
 import { AutomationMenu } from './AutomationMenu'
 import { BatchAutomationMenu } from './BatchAutomationMenu'
 import { TemplatesGalleryDialog } from './TemplatesGalleryDialog'
+import { RunTargetTriggerDialog } from './RunTargetTriggerDialog'
 import { AutomationAvatar } from './AutomationAvatar'
 import { SendResourceToWorkspaceDialog } from '@/components/app-shell/SendResourceToWorkspaceDialog'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -123,6 +124,11 @@ function AutomationItem({
           {automation.actions.some(a => a.type === 'webhook') && (
             <MicroBadge colorClass="bg-orange-500/10 text-orange-600 dark:text-orange-400">
               {t('automations.badgeWebhook')}
+            </MicroBadge>
+          )}
+          {automation.actions.some(a => a.type === 'workflow') && (
+            <MicroBadge colorClass="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              Workflow
             </MicroBadge>
           )}
         </>
@@ -289,6 +295,13 @@ export function AutomationsListPanel({
                 </button>
               }
             />
+            <RunTargetTriggerDialog
+              trigger={
+                <button className="inline-flex min-h-7 max-w-[88px] items-center justify-center gap-1.5 rounded-[8px] bg-background px-2.5 py-1 text-center text-xs font-medium leading-tight shadow-minimal transition-colors hover:bg-foreground/[0.03]">
+                  <span>Run workflow/agent</span>
+                </button>
+              }
+            />
             {workspaceRootPath && (
               <EditPopover
                 align="center"
@@ -346,6 +359,17 @@ export function AutomationsListPanel({
               >
                 <Sparkles className="h-3 w-3" />
                 From template
+              </button>
+            }
+          />
+          <RunTargetTriggerDialog
+            trigger={
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-md text-foreground/70 hover:text-foreground hover:bg-foreground/5"
+                title="Create a trigger for a workflow or agent"
+              >
+                Run target
               </button>
             }
           />

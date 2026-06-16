@@ -156,6 +156,9 @@ export interface SessionToolContext {
   /** Unique session identifier */
   sessionId: string;
 
+  /** Active agent slug for agent-authored artifacts, when the session runs as an agent */
+  activeAgentSlug?: string;
+
   /** Absolute path to workspace folder (~/.craft-agent/workspaces/{id}) */
   workspacePath: string;
 

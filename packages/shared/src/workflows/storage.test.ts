@@ -246,6 +246,41 @@ describe('parseWorkflowFile', () => {
     expect(got!.metadata.trigger.inputs).toEqual([{ name: 'topic', type: 'string' }]);
   });
 
+  test('preserves trigger input UI hints', () => {
+    const text = [
+      '---',
+      'name: A',
+      'description: B',
+      'trigger:',
+      '  type: manual',
+      '  inputs:',
+      '    - name: source_list',
+      '      type: string',
+      '      required: true',
+      '      ui:',
+      '        multiline: true',
+      '        rows: 8',
+      '        placeholder: paste links',
+      'steps:',
+      '  - id: first',
+      '    agent: r',
+      '    input: "{{trigger.source_list}}"',
+      '---',
+    ].join('\n');
+    const got = parseWorkflowFile(text);
+    expect(got?.metadata.trigger.inputs?.[0]?.ui).toEqual({
+      multiline: true,
+      rows: 8,
+      placeholder: 'paste links',
+    });
+    const roundTrip = parseWorkflowFile(serializeWorkflow(got!.metadata, got!.body));
+    expect(roundTrip?.metadata.trigger.inputs?.[0]?.ui).toEqual({
+      multiline: true,
+      rows: 8,
+      placeholder: 'paste links',
+    });
+  });
+
   test('returns null on duplicate trigger input names', () => {
     const text = [
       '---',
@@ -868,7 +903,31 @@ describe('ensureRequiredWorkflows', () => {
       opts(),
     );
     expect(res.ensured).toBe(1);
+    expect(res.upgraded).toBe(0);
     expect(loadGlobalWorkflow('required', opts())).not.toBeNull();
+  });
+
+  test('can upgrade existing required workflows only when explicitly opted in', () => {
+    writeGlobalWorkflow({ slug: 'required', metadata: minimalMeta({ name: 'Old' }), body: 'old' }, opts());
+    const skipped = ensureRequiredWorkflows(
+      [{ slug: 'required', metadata: minimalMeta({ name: 'New' }), body: 'new' }],
+      opts(),
+    );
+    expect(skipped.ensured).toBe(0);
+    expect(skipped.upgraded).toBe(0);
+    expect(loadGlobalWorkflow('required', opts())!.metadata.name).toBe('Old');
+
+    const upgraded = ensureRequiredWorkflows(
+      [{ slug: 'required', metadata: minimalMeta({ name: 'New' }), body: 'new' }],
+      {
+        ...opts(),
+        shouldUpgradeExisting: (existing) => existing.metadata.name === 'Old',
+      },
+    );
+    expect(upgraded.ensured).toBe(0);
+    expect(upgraded.upgraded).toBe(1);
+    expect(loadGlobalWorkflow('required', opts())!.metadata.name).toBe('New');
+    expect(loadGlobalWorkflow('required', opts())!.body).toBe('new');
   });
 
   test('respects tombstones (deleted workflows do not come back)', () => {

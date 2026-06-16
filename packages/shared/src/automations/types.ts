@@ -109,7 +109,16 @@ export interface WebhookAction {
   auth?: WebhookAuth;
 }
 
-export type AutomationAction = PromptAction | WebhookAction | PulseAction;
+/** A workflow action - starts an active workflow from any app trigger */
+export interface WorkflowAction {
+  type: 'workflow';
+  /** Global workflow slug to start. Must be active in the workspace at runtime. */
+  workflowSlug: string;
+  /** Trigger inputs passed to the workflow. String values support $CRAFT_* expansion. */
+  triggerInputs?: Record<string, unknown>;
+}
+
+export type AutomationAction = PromptAction | WebhookAction | WorkflowAction | PulseAction;
 
 export type { PulseAction };
 

@@ -85,6 +85,24 @@ function coerceTriggerInputs(
     if (typeof e.description === 'string' && e.description.trim()) {
       input.description = e.description.trim();
     }
+    if (e.ui !== undefined) {
+      if (!e.ui || typeof e.ui !== 'object' || Array.isArray(e.ui)) {
+        warnings.push(warning('trigger', 'invalid-trigger-inputs', `trigger input "${name}" ui must be an object.`));
+      } else {
+        const uiRaw = e.ui as Record<string, unknown>;
+        const ui: NonNullable<WorkflowTriggerInput['ui']> = {};
+        if (typeof uiRaw.multiline === 'boolean') ui.multiline = uiRaw.multiline;
+        if (typeof uiRaw.placeholder === 'string' && uiRaw.placeholder.trim()) ui.placeholder = uiRaw.placeholder.trim();
+        if (uiRaw.rows !== undefined) {
+          if (typeof uiRaw.rows === 'number' && Number.isInteger(uiRaw.rows) && uiRaw.rows > 0 && uiRaw.rows <= 24) {
+            ui.rows = uiRaw.rows;
+          } else {
+            warnings.push(warning('trigger', 'invalid-trigger-inputs', `trigger input "${name}" ui.rows must be an integer from 1 to 24.`));
+          }
+        }
+        if (Object.keys(ui).length > 0) input.ui = ui;
+      }
+    }
     out.push(input);
   }
   return out.length > 0 ? out : undefined;
@@ -365,6 +383,7 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
       if (i.required) out.required = true;
       if (i.default !== undefined) out.default = i.default;
       if (i.description) out.description = i.description;
+      if (i.ui) out.ui = i.ui;
       return out;
     });
   }

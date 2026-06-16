@@ -504,6 +504,24 @@ body
     expect(youtubeAgent?.systemPrompt).toContain('You do not publish')
   })
 
+  test('starter library includes the YouTube Intelligence Agent for transcript intelligence', () => {
+    const youtubeIntelAgent = STARTER_AGENTS.find((agent) => agent.slug === 'youtube-intelligence-agent')
+
+    expect(youtubeIntelAgent).toBeDefined()
+    expect(youtubeIntelAgent?.metadata.permissionMode).toBe('safe')
+    expect(youtubeIntelAgent?.metadata.skills).toContain('youtube-intelligence')
+    expect(youtubeIntelAgent?.metadata.skills).toContain('youtube-research')
+    expect(youtubeIntelAgent?.metadata.sources).toContain('youtube-intelligence')
+    expect(youtubeIntelAgent?.metadata.sources).toContain('youtube-research')
+    expect(youtubeIntelAgent?.metadata.tags).toContain('dossiers')
+    expect(youtubeIntelAgent?.systemPrompt).toContain('not to summarize videos')
+    expect(youtubeIntelAgent?.systemPrompt).toContain('youtube-intelligence.mjs prepare')
+    expect(youtubeIntelAgent?.systemPrompt).toContain('youtube-intelligence-batch')
+    expect(youtubeIntelAgent?.systemPrompt).toContain('batch-prepare')
+    expect(youtubeIntelAgent?.systemPrompt).toContain('timestamped evidence')
+    expect(youtubeIntelAgent?.systemPrompt).toContain('Be honest about infrastructure')
+  })
+
   test('starter library includes the Hypermotion Agent with bundled motion source', () => {
     const hypermotionAgent = STARTER_AGENTS.find((agent) => agent.slug === 'hypermotion-agent')
 

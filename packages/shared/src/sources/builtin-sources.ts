@@ -17,6 +17,7 @@ const HYPERMOTION_SLUG = 'hypermotion';
 const VIDEO_STUDIO_SLUG = 'video-studio';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
+const YOUTUBE_INTELLIGENCE_SLUG = 'youtube-intelligence';
 const OPEN_SLIDE_SLUG = 'open-slide';
 const ZERO_SLUG = 'zero';
 const SHOPIFY_SLUG = 'shopify';
@@ -152,6 +153,20 @@ function getYouTubeResearchPath(): string {
   );
 }
 
+function getYouTubeIntelligencePath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'youtube-intelligence') : '',
+      join(appRoot, 'tools', 'youtube-intelligence'),
+      join(process.cwd(), 'tools', 'youtube-intelligence'),
+    ],
+    join('tools', 'youtube-intelligence')
+  );
+}
+
 function getShopifyPath(): string {
   const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
   const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
@@ -211,6 +226,23 @@ function getYouTubeResearchCachedAuthState(): { configured: boolean } {
   }
 }
 
+function getYouTubeIntelligenceAuthState(): { supadataConfigured: boolean } {
+  const cachePath = join(homedir(), '.config', 'runneros', 'youtube-intelligence', 'credentials.json');
+  if (!existsSync(cachePath)) {
+    return { supadataConfigured: Boolean(process.env.SUPADATA_API_KEY?.trim()) };
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(cachePath, 'utf8')) as Record<string, unknown>;
+    return {
+      supadataConfigured: Boolean(process.env.SUPADATA_API_KEY?.trim())
+        || Boolean(typeof parsed.supadataApiKey === 'string' && parsed.supadataApiKey.trim()),
+    };
+  } catch {
+    return { supadataConfigured: Boolean(process.env.SUPADATA_API_KEY?.trim()) };
+  }
+}
+
 function getShopifyAuthState(): { configured: boolean; shopConfigured: boolean; tokenConfigured: boolean } {
   const shopConfigured = Boolean((process.env.SHOPIFY_SHOP || process.env.SHOPIFY_STORE_DOMAIN)?.trim());
   const tokenConfigured = Boolean(process.env.SHOPIFY_ACCESS_TOKEN?.trim());
@@ -237,6 +269,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getVideoStudioSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
+    getYouTubeIntelligenceSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
     getZeroSource(workspaceId, workspaceRootPath),
     getShopifySource(workspaceId, workspaceRootPath),
@@ -632,6 +665,87 @@ export function getYouTubeResearchSource(workspaceId: string, workspaceRootPath:
 }
 
 /**
+ * Built-in source for the YouTube Intelligence transcript-to-dossier pipeline.
+ */
+export function getYouTubeIntelligenceSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getYouTubeIntelligencePath();
+  const researchPath = getYouTubeResearchPath();
+  const authState = getYouTubeIntelligenceAuthState();
+  const config: FolderSourceConfig = {
+    id: 'builtin-youtube-intelligence',
+    name: 'YouTube Intelligence',
+    slug: YOUTUBE_INTELLIGENCE_SLUG,
+    enabled: true,
+    provider: 'runneros-youtube-intelligence',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    api: {
+      baseUrl: 'https://api.supadata.ai/v1',
+      authType: 'header',
+      headerName: 'x-api-key',
+      testEndpoint: {
+        path: '/transcript',
+        method: 'GET',
+      },
+    },
+    tagline: 'Turns YouTube transcripts into timestamped intel cards, dossiers, playbooks, and agent context packs.',
+    icon: 'Y',
+    isAuthenticated: authState.supadataConfigured || existsSync(researchPath),
+    connectionStatus: !existsSync(toolPath) ? 'failed' : authState.supadataConfigured ? 'connected' : existsSync(researchPath) ? 'untested' : 'needs_auth',
+    connectionError: existsSync(toolPath)
+      ? authState.supadataConfigured
+        ? undefined
+        : existsSync(researchPath)
+          ? 'Supadata is not configured. The tool can still use local youtube-research fallback.'
+          : 'YouTube Intelligence needs Supadata or the bundled YouTube Research tool for transcript fetches.'
+      : 'Bundled YouTube Intelligence tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# YouTube Intelligence',
+        '',
+        'Use this source to turn YouTube videos or transcript files into source-backed intelligence packets.',
+        '',
+	        'Workflow:',
+	        '1. Run commands from this source folder, usually with `node bin/youtube-intelligence.mjs ...`.',
+	        '2. Run `node bin/youtube-intelligence.mjs doctor`.',
+	        '3. For reliability, save a Supadata API key in this source or set `SUPADATA_API_KEY`.',
+	        '4. Prepare a free/local packet: `node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --provider auto --out "<workspace>/youtube-intel/<video-id>"`.',
+	        '5. Prepare with Supadata credits allowed: `node bin/youtube-intelligence.mjs prepare --video "<url-or-id>" --provider auto --allow-paid --out "<workspace>/youtube-intel/<video-id>"`.',
+	        '6. For many videos/transcripts: `node bin/youtube-intelligence.mjs batch-prepare --input "<workspace>/links.tsv" --out "<workspace>/youtube-intel/batch-run" --provider auto --max-videos 25`.',
+	        '7. Provider order: cache -> local youtube-research unless `--allow-paid` is set; with `--allow-paid`, cache -> Supadata -> local youtube-research.',
+	        '8. Read packet prompts/chunks, extract strict JSON intel cards with timestamp evidence, then compile the dossier/context pack. Do not write generic summaries.',
+        '',
+        'Transcript fallback:',
+        '- Default: cache first, then bundled `youtube-research`. Supadata is only used when `--allow-paid` is explicit.',
+	        '- Existing Supadata transcript fetches cost 1 credit per video. AI-generated transcripts cost by minute and require explicit approval.',
+	        '- Manual: `node bin/youtube-intelligence.mjs prepare --video "<id>" --transcript transcript.txt --out "<dir>"`.',
+	        '- Batch input supports one URL/video ID per line, `video<TAB>transcript-file`, or transcript file paths.',
+	        '',
+	        'Outputs:',
+        '- `raw-transcript.json`',
+        '- `chunks.json`',
+        '- `extraction-packet.json`',
+        '- `extractor-prompt.md`',
+	        '- `reducer-prompt.md`',
+	        '- `report-template.md`',
+	        '- Batch also writes `run-manifest.json`, `batch-extractor-prompt.md`, `cross-video-reducer-prompt.md`, `dossier-template.md`, `agent-context-pack-template.json`, and `videos/<videoId>/...`.',
+	      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Built-in source for the open-slide deck framework.
  *
  * Each workspace gets its own decks folder at `<workspaceRoot>/decks/`.
@@ -1013,6 +1127,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === VIDEO_STUDIO_SLUG
     || slug === GOOGLE_ADS_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
+    || slug === YOUTUBE_INTELLIGENCE_SLUG
     || slug === OPEN_SLIDE_SLUG
     || slug === ZERO_SLUG
     || slug === SHOPIFY_SLUG

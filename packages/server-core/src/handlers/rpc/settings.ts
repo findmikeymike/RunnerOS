@@ -12,6 +12,10 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
+import {
+  clearYouTubeIntelligenceCredentialCache,
+  writeYouTubeIntelligenceCredentialCache,
+} from './youtube-intelligence-credential-cache'
 
 const execFileAsync = promisify(execFile)
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
@@ -135,6 +139,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     }
     await getCredentialManager().setUserSecret(normalized, value)
     process.env[normalized] = value
+    if (normalized === 'SUPADATA_API_KEY') {
+      await writeYouTubeIntelligenceCredentialCache(value)
+    }
     return { success: true }
   })
 
@@ -142,6 +149,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     const normalized = normalizeUserSecretName(name)
     const success = await getCredentialManager().deleteUserSecret(normalized)
     delete process.env[normalized]
+    if (normalized === 'SUPADATA_API_KEY') {
+      await clearYouTubeIntelligenceCredentialCache()
+    }
     return { success }
   })
 

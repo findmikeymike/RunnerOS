@@ -21,6 +21,7 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { syncGoogleAdsCredentialCache } from './google-ads-credential-cache'
 import { syncYouTubeResearchCredentialCache } from './youtube-research-credential-cache'
+import { syncYouTubeIntelligenceCredentialCache } from './youtube-intelligence-credential-cache'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
@@ -123,6 +124,7 @@ function sourceNeedsCredentials(source: LoadedSource): boolean {
 
   if (source.config.slug === 'google-ads') return true
   if (source.config.slug === 'youtube-research') return true
+  if (source.config.slug === 'youtube-intelligence') return true
   if (type === 'local') return false
   if (type === 'mcp') {
     if (mcp?.transport === 'stdio') return false
@@ -140,6 +142,7 @@ function sourceNeedsCredentials(source: LoadedSource): boolean {
 function getSourceAuthType(source: LoadedSource): string | null {
   if (source.config.slug === 'google-ads') return 'oauth'
   if (source.config.slug === 'youtube-research') return 'header'
+  if (source.config.slug === 'youtube-intelligence') return 'header'
   if (source.config.type === 'mcp') {
     if (source.config.mcp?.headerNames?.length) return 'headers'
     return source.config.mcp?.authType ?? null
@@ -287,6 +290,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     await credManager.save(source, { value: credential })
     await syncGoogleAdsCredentialCache(source)
     await syncYouTubeResearchCredentialCache(source)
+    await syncYouTubeIntelligenceCredentialCache(source)
     await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'SAVE_CREDENTIALS')
     broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
 
@@ -309,6 +313,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     await credManager.save(source, { value: credential, override: true })
     await syncGoogleAdsCredentialCache(source)
     await syncYouTubeResearchCredentialCache(source)
+    await syncYouTubeIntelligenceCredentialCache(source)
     await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'SAVE_CREDENTIAL_OVERRIDE')
     broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
     log.info(`Saved workspace credential override for global source: ${sourceSlug}`)
@@ -327,6 +332,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     await getSourceCredentialManager().save(source, { value: credential })
     await syncGoogleAdsCredentialCache(source)
     await syncYouTubeResearchCredentialCache(source)
+    await syncYouTubeIntelligenceCredentialCache(source)
     await reloadAndBroadcastGlobalCredentialChange(deps, sourceSlug, workspaceId, log)
     log.info(`Saved global credentials for source: ${sourceSlug}`)
   })
@@ -355,6 +361,7 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
     await getSourceCredentialManager().clearOverride(source)
     await syncGoogleAdsCredentialCache(source)
     await syncYouTubeResearchCredentialCache(source)
+    await syncYouTubeIntelligenceCredentialCache(source)
     await reloadSourcesForWorkspace(deps, workspace.rootPath, log, 'CLEAR_CREDENTIAL_OVERRIDE')
     broadcastSourcesChanged(deps, workspaceId, workspace.rootPath)
     log.info(`Cleared workspace credential override for global source: ${sourceSlug}`)

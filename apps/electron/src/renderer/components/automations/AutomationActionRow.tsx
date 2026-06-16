@@ -54,6 +54,18 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
   )
 }
 
+function WorkflowText({ action }: { action: Extract<AutomationAction, { type: 'workflow' }> }) {
+  const inputCount = action.triggerInputs ? Object.keys(action.triggerInputs).length : 0
+  return (
+    <span className="text-sm break-words">
+      <span className="font-mono font-medium text-accent">{action.workflowSlug}</span>
+      <span className="text-foreground/50 ml-1">
+        {inputCount > 0 ? `(${inputCount} input${inputCount === 1 ? '' : 's'})` : '(no inputs)'}
+      </span>
+    </span>
+  )
+}
+
 /**
  * Render the per-action override chips (connection / model / thinking level).
  * Each chip is conditional on its field being set on the action.
@@ -106,6 +118,7 @@ function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: stri
 export function AutomationActionRow({ action, index, className }: AutomationActionRowProps) {
   const { t } = useTranslation()
   const isWebhook = action.type === 'webhook'
+  const isWorkflow = action.type === 'workflow'
 
   return (
     <div className={cn('flex items-start gap-3 px-4 py-3', className)}>
@@ -121,6 +134,8 @@ export function AutomationActionRow({ action, index, className }: AutomationActi
       <div className="flex-1 min-w-0">
         {isWebhook ? (
           <WebhookText action={action} />
+        ) : isWorkflow ? (
+          <WorkflowText action={action} />
         ) : (
           <>
             <PromptText text={action.prompt} t={t} />

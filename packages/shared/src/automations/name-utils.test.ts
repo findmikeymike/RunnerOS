@@ -61,4 +61,11 @@ describe('deriveAutomationName', () => {
     };
     expect(deriveAutomationName('LabelAdd', matcher)).toBe('Custom Name');
   });
+
+  it('should derive name from workflow action', () => {
+    const matcher: AutomationMatcher = {
+      actions: [{ type: 'workflow', workflowSlug: 'youtube-intelligence-batch' }],
+    };
+    expect(deriveAutomationName('WebhookReceive', matcher)).toBe('Workflow youtube-intelligence-batch');
+  });
 });

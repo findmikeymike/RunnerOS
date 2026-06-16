@@ -44,6 +44,12 @@ export interface WorkflowTriggerInput {
   default?: unknown;
   /** Optional one-line description shown next to the field. */
   description?: string;
+  /** Optional UI rendering hint for the manual run form. */
+  ui?: {
+    multiline?: boolean;
+    rows?: number;
+    placeholder?: string;
+  };
 }
 
 export interface WorkflowTrigger {

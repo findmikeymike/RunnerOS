@@ -106,6 +106,29 @@ describe('parseAutomationsConfig', () => {
     expect(items[0].name).toBe('echo "hello world"')
   })
 
+  it('parses workflow actions and derives a workflow name', () => {
+    const config = {
+      version: 2,
+      automations: {
+        WebhookReceive: [{
+          slug: 'youtube-intel',
+          actions: [{
+            type: 'workflow',
+            workflowSlug: 'youtube-intelligence-batch',
+            triggerInputs: { source_list: '$CRAFT_BODY_RAW' },
+          }],
+        }],
+      },
+    }
+    const items = parseAutomationsConfig(config)
+    expect(items).toHaveLength(1)
+    expect(items[0].name).toBe('Workflow youtube-intelligence-batch')
+    expect(items[0].actions[0].type).toBe('workflow')
+    if (items[0].actions[0].type === 'workflow') {
+      expect(items[0].actions[0].workflowSlug).toBe('youtube-intelligence-batch')
+    }
+  })
+
   it('truncates long names to 40 chars with ellipsis', () => {
     const longPrompt = 'a'.repeat(50)
     const config = {

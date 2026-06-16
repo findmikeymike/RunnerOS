@@ -532,6 +532,21 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.local?.path).toContain('tools/youtube-research');
   });
 
+  test('resolves youtube-intelligence by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['youtube-intelligence']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('youtube-intelligence');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
+    expect(sources[0]!.config.local?.path).toContain('tools/youtube-intelligence');
+    expect(sources[0]!.config.api?.authType).toBe('header');
+    expect(sources[0]!.config.api?.headerName).toBe('x-api-key');
+    expect(isSourceUsable(sources[0]!)).toBe(true);
+  });
+
   test('resolves open-slide by slug without workspace activation', () => {
     const ws = makeWorkspace();
     const sources = getSourcesBySlugs(ws, ['open-slide']);

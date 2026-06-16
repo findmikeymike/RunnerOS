@@ -6,7 +6,7 @@
  * env var expansion, and retry logic so the two code paths can't diverge.
  */
 
-import type { WebhookAction, WebhookActionResult } from './types.ts';
+import type { WebhookAction, WebhookActionResult, WorkflowAction } from './types.ts';
 import { expandEnvVars } from './utils.ts';
 import { DEFAULT_WEBHOOK_METHOD, HISTORY_FIELD_MAX_LENGTH } from './constants.ts';
 
@@ -73,6 +73,50 @@ export function createPromptHistoryEntry(opts: {
     ...(opts.sessionId ? { sessionId: opts.sessionId } : {}),
     ...(opts.prompt ? { prompt: opts.prompt.slice(0, HISTORY_FIELD_MAX_LENGTH) } : {}),
     ...(opts.error ? { error: opts.error.slice(0, HISTORY_FIELD_MAX_LENGTH) } : {}),
+  };
+}
+
+/**
+ * Create a workflow-action history entry for appending to the history JSONL file.
+ */
+export function createWorkflowHistoryEntry(opts: {
+  matcherId: string;
+  ok: boolean;
+  workflowSlug: string;
+  workflowRunId?: string;
+  error?: string;
+}): Record<string, unknown> {
+  return {
+    id: opts.matcherId,
+    ts: Date.now(),
+    ok: opts.ok,
+    workflow: {
+      slug: opts.workflowSlug,
+      ...(opts.workflowRunId ? { runId: opts.workflowRunId } : {}),
+      ...(opts.error ? { error: opts.error.slice(0, HISTORY_FIELD_MAX_LENGTH) } : {}),
+    },
+  };
+}
+
+function expandValue(value: unknown, env: Record<string, string>): unknown {
+  if (typeof value === 'string') return expandEnvVars(value, env);
+  if (Array.isArray(value)) return value.map((item) => expandValue(item, env));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, expandValue(nested, env)]),
+    );
+  }
+  return value;
+}
+
+/** Return a copy of a WorkflowAction with all env-expandable trigger input strings resolved. */
+export function expandWorkflowAction(action: WorkflowAction, env: Record<string, string>): WorkflowAction {
+  return {
+    ...action,
+    workflowSlug: expandEnvVars(action.workflowSlug, env),
+    triggerInputs: action.triggerInputs
+      ? expandValue(action.triggerInputs, env) as Record<string, unknown>
+      : undefined,
   };
 }
 
