@@ -472,6 +472,66 @@ describe('video studio session tools', () => {
     expect(trimmed.content[0]?.type === 'text' ? trimmed.content[0].text : '').toContain('overlaps');
   });
 
+  test('video_clip_edit respects locked tracks and ripple trims later clips', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Locked Ripple' });
+    const first = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'A',
+      startMs: 1000,
+      durationMs: 1000,
+      label: 'A',
+    });
+    const second = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'B',
+      startMs: 2500,
+      durationMs: 1000,
+      label: 'B',
+    });
+    const firstClipId = (first.structuredContent as { clipId: string }).clipId;
+    const secondClipId = (second.structuredContent as { clipId: string }).clipId;
+
+    let project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ id: string; locked?: boolean; clips: Array<{ id: string; startMs: number; durationMs: number }> }> };
+    };
+    project.timeline.tracks[0]!.locked = true;
+    writeFileSync(projectPath, JSON.stringify(project, null, 2), 'utf-8');
+
+    const blockedMove = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: firstClipId,
+      action: 'move',
+      startMs: 0,
+    });
+    const packedLocked = await handleVideoClipEdit(ctx, { projectPath, action: 'pack' });
+
+    expect(blockedMove.isError).toBe(true);
+    expect(blockedMove.content[0]?.type === 'text' ? blockedMove.content[0].text : '').toContain('locked');
+    expect(packedLocked.isError).toBe(false);
+    project = JSON.parse(readFileSync(projectPath, 'utf-8')) as typeof project;
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)?.startMs).toBe(1000);
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === secondClipId)?.startMs).toBe(2500);
+
+    project.timeline.tracks[0]!.locked = false;
+    writeFileSync(projectPath, JSON.stringify(project, null, 2), 'utf-8');
+    const rippleTrim = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: firstClipId,
+      action: 'trim',
+      durationMs: 1500,
+      ripple: true,
+    });
+
+    expect(rippleTrim.isError).toBe(false);
+    project = JSON.parse(readFileSync(projectPath, 'utf-8')) as typeof project;
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)).toMatchObject({ startMs: 1000, durationMs: 1500 });
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === secondClipId)?.startMs).toBe(3000);
+  });
+
   test('video_clip_adjust stores presets and clamps manual values', async () => {
     const ctx = makeCtx();
     const projectPath = join(root, 'project', 'video.runner-video.json');

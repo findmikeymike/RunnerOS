@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Download, Eye, EyeOff, FileVideo, FolderOpen, History, Layers, Loader2, Lock, Magnet, MoreHorizontal, Pause, Play, Plus, Redo2, RefreshCw, Save, Scissors, Send, ShieldCheck, SlidersHorizontal, Trash2, Type, Undo2, Unlock, Upload, Volume2, VolumeX, X } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Download, Eye, EyeOff, FileVideo, FolderOpen, History, Layers, Link, Loader2, Lock, Magnet, MoreHorizontal, Pause, Play, Plus, Redo2, RefreshCw, Save, Scissors, Send, ShieldCheck, SlidersHorizontal, Trash2, Type, Undo2, Unlock, Upload, Volume2, VolumeX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
@@ -84,6 +84,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [checking, setChecking] = React.useState<'inspect' | 'dry-run' | null>(null)
   const [exporting, setExporting] = React.useState(false)
   const [timelineDrag, setTimelineDrag] = React.useState<TimelineDragState | null>(null)
+  const [rippleEdits, setRippleEdits] = React.useState(false)
   const [clipContextMenu, setClipContextMenu] = React.useState<ClipContextMenuState | null>(null)
   const [undoStack, setUndoStack] = React.useState<VideoProject[]>([])
   const [redoStack, setRedoStack] = React.useState<VideoProject[]>([])
@@ -364,7 +365,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
           initialSourceInMs: timelineDrag.initialSourceInMs,
         }), { recordHistory: false })
       } else {
-        updateProject((current) => trimClipEndInProject(current, timelineDrag.clipId, timelineDrag.initialDurationMs + deltaMs), { recordHistory: false })
+        updateProject((current) => trimClipEndInProject(current, timelineDrag.clipId, timelineDrag.initialDurationMs + deltaMs, rippleEdits), { recordHistory: false })
       }
     }
     const handlePointerUp = (event: PointerEvent) => {
@@ -384,7 +385,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
     }
-  }, [moveClip, timelineDrag, timelineZoom, updateProject])
+  }, [moveClip, rippleEdits, timelineDrag, timelineZoom, updateProject])
 
   const updateSelectedClipAdjustment = React.useCallback((patch: NonNullable<VideoClip['adjustments']>) => {
     updateSelectedClip({
@@ -544,6 +545,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const packTimeline = React.useCallback(() => {
     updateProject((current) => {
       const tracks = (current.timeline?.tracks ?? []).map((track) => {
+        if (track.locked) return track
         let cursor = 0
         const clips = [...(track.clips ?? [])]
           .sort((a, b) => (a.startMs ?? 0) - (b.startMs ?? 0))
@@ -1216,6 +1218,15 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 <Magnet className="h-3.5 w-3.5" />
                 Pack
               </button>
+              <button
+                type="button"
+                title="Ripple trim and delete"
+                onClick={() => setRippleEdits((value) => !value)}
+                className={`flex h-7 items-center gap-1.5 rounded-md px-2 text-[12px] ${rippleEdits ? 'bg-[#18c7d4]/16 text-[#75f4ff]' : 'bg-white/[0.06] text-white/62 hover:bg-white/[0.1] hover:text-white'}`}
+              >
+                <Link className="h-3.5 w-3.5" />
+                Ripple
+              </button>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -1518,7 +1529,7 @@ function trimClipStartInProject(
   }
 }
 
-function trimClipEndInProject(project: VideoProject, clipId: string, durationMs: number): VideoProject {
+function trimClipEndInProject(project: VideoProject, clipId: string, durationMs: number, ripple: boolean): VideoProject {
   const tracks = (project.timeline?.tracks ?? []).map((track) => {
     const ordered = sortClipsByStart(track.clips ?? [])
     const clipIndex = ordered.findIndex((clip) => clip.id === clipId)
@@ -1526,11 +1537,18 @@ function trimClipEndInProject(project: VideoProject, clipId: string, durationMs:
     const clip = ordered[clipIndex]
     if (!clip) return track
     const nextClip = ordered[clipIndex + 1]
-    const maxDurationMs = nextClip ? Math.max(MIN_CLIP_DURATION_MS, (nextClip.startMs ?? 0) - (clip.startMs ?? 0)) : Number.POSITIVE_INFINITY
+    const maxDurationMs = !ripple && nextClip ? Math.max(MIN_CLIP_DURATION_MS, (nextClip.startMs ?? 0) - (clip.startMs ?? 0)) : Number.POSITIVE_INFINITY
     const nextDurationMs = clampNumber(Math.round(durationMs), MIN_CLIP_DURATION_MS, maxDurationMs)
+    const deltaMs = nextDurationMs - Math.max(MIN_CLIP_DURATION_MS, clip.durationMs ?? MIN_CLIP_DURATION_MS)
     return {
       ...track,
-      clips: ordered.map((item) => item.id === clipId ? { ...item, durationMs: nextDurationMs } : item),
+      clips: sortClipsByStart(ordered.map((item, index) => {
+        if (item.id === clipId) return { ...item, durationMs: nextDurationMs }
+        if (ripple && index > clipIndex && deltaMs !== 0) {
+          return { ...item, startMs: Math.max(0, (item.startMs ?? 0) + deltaMs) }
+        }
+        return item
+      })),
     }
   })
   return {

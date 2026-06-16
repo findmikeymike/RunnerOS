@@ -547,6 +547,10 @@ function findClip(project: VideoProject, clipId: string): { track: VideoProject[
   return null;
 }
 
+function lockedTrackError(track: VideoProject['timeline']['tracks'][number]): string {
+  return `Track "${track.label || track.id}" is locked. Unlock it before editing clips on this track.`;
+}
+
 function snapClipStart(track: VideoProject['timeline']['tracks'][number], clipId: string, proposedStartMs: number, thresholdMs = 250): number {
   const snapPoints = track.clips
     .filter((clip) => clip.id !== clipId)
@@ -566,6 +570,7 @@ function snapClipStart(track: VideoProject['timeline']['tracks'][number], clipId
 function packTimeline(project: VideoProject): number {
   let changed = 0;
   for (const track of project.timeline.tracks) {
+    if (track.locked) continue;
     let cursor = 0;
     track.clips = orderedClips(track.clips).map((clip) => {
       const startMs = cursor;
@@ -577,6 +582,21 @@ function packTimeline(project: VideoProject): number {
   }
   project.timeline.durationMs = timelineDuration(project.timeline.tracks);
   return changed;
+}
+
+function rippleTrimEnd(track: VideoProject['timeline']['tracks'][number], clipId: string, nextDurationMs: number): { startMs: number; durationMs: number } | null {
+  const ordered = orderedClips(track.clips);
+  const clipIndex = ordered.findIndex((item) => item.id === clipId);
+  const clip = ordered[clipIndex];
+  if (!clip) return null;
+  const durationMs = Math.max(1, Math.round(nextDurationMs));
+  const deltaMs = durationMs - Math.max(1, clip.durationMs);
+  track.clips = orderedClips(ordered.map((item, index) => {
+    if (item.id === clip.id) return { ...item, durationMs };
+    if (index > clipIndex && deltaMs !== 0) return { ...item, startMs: Math.max(0, item.startMs + deltaMs) };
+    return item;
+  }));
+  return { startMs: clip.startMs, durationMs };
 }
 
 function ok(text: string, structuredContent: Record<string, unknown>): ToolResult {
@@ -716,6 +736,7 @@ export async function handleVideoClipAdd(ctx: SessionToolContext, args: VideoCli
   const startMs = args.startMs ?? project.timeline.durationMs;
   if (startMs < 0) return errorResponse('startMs must be non-negative.');
   const track = chooseTrack(project, media?.type ?? (clipType === 'audio' ? 'audio' : clipType === 'caption' ? 'caption' : 'video'), args.trackId);
+  if (track.locked) return errorResponse(lockedTrackError(track));
   const clip = {
     id: randomUUID(),
     mediaId: media?.id,
@@ -768,6 +789,7 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
     const { track, clip } = found;
     trackId = track.id;
     label = typeof clip.label === 'string' ? clip.label : clip.id;
+    if (track.locked) return errorResponse(lockedTrackError(track));
 
     if (args.action === 'move') {
       if (typeof args.startMs !== 'number' || !Number.isFinite(args.startMs) || args.startMs < 0) return errorResponse('startMs must be a non-negative number.');
@@ -777,17 +799,26 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
       durationMs = clip.durationMs;
     } else if (args.action === 'trim') {
       if (typeof args.durationMs !== 'number' || !Number.isFinite(args.durationMs) || args.durationMs <= 0) return errorResponse('durationMs must be a positive number.');
-      clip.durationMs = Math.max(1, Math.round(args.durationMs));
+      let trimmedClip = clip;
+      if (args.ripple) {
+        const result = rippleTrimEnd(track, clip.id, args.durationMs);
+        if (!result) return errorResponse(`Clip not found: ${args.clipId}`);
+        trimmedClip = track.clips.find((item) => item.id === clip.id) ?? clip;
+        startMs = result.startMs;
+        durationMs = result.durationMs;
+      } else {
+        clip.durationMs = Math.max(1, Math.round(args.durationMs));
+        startMs = clip.startMs;
+        durationMs = clip.durationMs;
+      }
       if (args.sourceInMs !== undefined) {
         if (!Number.isFinite(args.sourceInMs) || args.sourceInMs < 0) return errorResponse('sourceInMs must be a non-negative number.');
-        clip.sourceInMs = Math.round(args.sourceInMs);
+        trimmedClip.sourceInMs = Math.round(args.sourceInMs);
       }
       if (args.sourceOutMs !== undefined) {
         if (!Number.isFinite(args.sourceOutMs) || args.sourceOutMs < 0) return errorResponse('sourceOutMs must be a non-negative number.');
-        clip.sourceOutMs = Math.round(args.sourceOutMs);
+        trimmedClip.sourceOutMs = Math.round(args.sourceOutMs);
       }
-      startMs = clip.startMs;
-      durationMs = clip.durationMs;
     } else if (args.action === 'split') {
       if (typeof args.atMs !== 'number' || !Number.isFinite(args.atMs) || args.atMs < 0) return errorResponse('atMs must be a non-negative number.');
       const splitAt = Math.round(args.atMs);
@@ -877,6 +908,7 @@ export async function handleVideoClipAdjust(ctx: SessionToolContext, args: Video
   const found = findClip(project, args.clipId);
   if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
   const { clip, track } = found;
+  if (track.locked) return errorResponse(lockedTrackError(track));
 
   if (args.reset) {
     delete clip.adjustments;

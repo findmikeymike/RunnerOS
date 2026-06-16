@@ -161,10 +161,15 @@ function findClip(project, clipId) {
   return null;
 }
 
+function lockedTrackError(track) {
+  fail(`Track "${track.label || track.id}" is locked. Unlock it before editing clips on this track.`);
+}
+
 function packProjectTimeline(project) {
   const next = cloneJson(project);
   let moved = 0;
   for (const track of next.timeline.tracks || []) {
+    if (track.locked) continue;
     let cursor = 0;
     track.clips = orderedClips(track).map((clip) => {
       const previous = clip.startMs || 0;
@@ -185,6 +190,7 @@ function splitProjectClip(project, clipId, atMs) {
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
   const { track, clip, index } = found;
+  if (track.locked) lockedTrackError(track);
   const start = clip.startMs || 0;
   const duration = clip.durationMs || 0;
   const end = start + duration;
@@ -217,6 +223,7 @@ function deleteProjectClip(project, clipId, ripple = false) {
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
   const { track, clip, index } = found;
+  if (track.locked) lockedTrackError(track);
   const removedDuration = clip.durationMs || 0;
   const removedStart = clip.startMs || 0;
   track.clips.splice(index, 1);
@@ -235,6 +242,7 @@ function duplicateProjectClip(project, clipId) {
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
   const { track, clip, index } = found;
+  if (track.locked) lockedTrackError(track);
   const insertStart = (clip.startMs || 0) + Math.max(1, clip.durationMs || 1);
   const clipDuration = Math.max(1, clip.durationMs || 1);
   const duplicate = {
@@ -275,6 +283,7 @@ function moveProjectClip(project, clipId, startMs, snap = false) {
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
   const { track, clip } = found;
+  if (track.locked) lockedTrackError(track);
   const nextStart = snap ? snapClipStart(track, clipId, startMs) : Math.max(0, Math.round(startMs));
   clip.startMs = nextStart;
   track.clips = orderedClips(track);
@@ -283,24 +292,39 @@ function moveProjectClip(project, clipId, startMs, snap = false) {
   return { project: next, movedClipId: clipId, startMs: nextStart };
 }
 
-function trimProjectClip(project, clipId, durationMs, sourceInMs, sourceOutMs) {
+function trimProjectClip(project, clipId, durationMs, sourceInMs, sourceOutMs, ripple = false) {
   if (!Number.isFinite(durationMs) || durationMs <= 0) fail('--duration-ms must be a positive number.');
   const next = cloneJson(project);
   const found = findClip(next, clipId);
   if (!found) fail(`Clip not found: ${clipId}`);
-  const { clip } = found;
-  clip.durationMs = Math.max(1, Math.round(durationMs));
+  const { track, clip } = found;
+  if (track.locked) lockedTrackError(track);
+  const nextDurationMs = Math.max(1, Math.round(durationMs));
+  const ordered = orderedClips(track);
+  const clipIndex = ordered.findIndex((item) => item.id === clipId);
+  const deltaMs = nextDurationMs - Math.max(1, clip.durationMs || 1);
+  let editedClip = clip;
+  if (ripple) {
+    track.clips = ordered.map((item, index) => {
+      if (item.id === clipId) return { ...item, durationMs: nextDurationMs };
+      if (index > clipIndex && deltaMs !== 0) return { ...item, startMs: Math.max(0, (item.startMs || 0) + deltaMs) };
+      return item;
+    });
+    editedClip = track.clips.find((item) => item.id === clipId) || clip;
+  } else {
+    clip.durationMs = nextDurationMs;
+  }
   if (sourceInMs !== undefined) {
     if (!Number.isFinite(sourceInMs) || sourceInMs < 0) fail('--source-in-ms must be a non-negative number.');
-    clip.sourceInMs = Math.round(sourceInMs);
+    editedClip.sourceInMs = Math.round(sourceInMs);
   }
   if (sourceOutMs !== undefined) {
     if (!Number.isFinite(sourceOutMs) || sourceOutMs < 0) fail('--source-out-ms must be a non-negative number.');
-    clip.sourceOutMs = Math.round(sourceOutMs);
+    editedClip.sourceOutMs = Math.round(sourceOutMs);
   }
   next.timeline.durationMs = timelineDuration(next.timeline.tracks);
-  addProjectVersion(next, `Trimmed clip ${clip.label || clip.id}`);
-  return { project: next, trimmedClipId: clipId, clipDurationMs: clip.durationMs };
+  addProjectVersion(next, `Trimmed clip ${editedClip.label || editedClip.id}${ripple ? ' with ripple' : ''}`);
+  return { project: next, trimmedClipId: clipId, clipDurationMs: editedClip.durationMs };
 }
 
 function inspectProject(project) {
@@ -698,6 +722,7 @@ function runEdit() {
     Number(opt('--duration-ms', Number.NaN)),
     args.includes('--source-in-ms') ? Number(opt('--source-in-ms', Number.NaN)) : undefined,
     args.includes('--source-out-ms') ? Number(opt('--source-out-ms', Number.NaN)) : undefined,
+    hasFlag('--ripple'),
   );
   else fail('Unknown edit action. Use pack, split, delete, duplicate, move, or trim.');
   const validation = validateProject(result.project);
