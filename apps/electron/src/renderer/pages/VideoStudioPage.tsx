@@ -1,7 +1,8 @@
 import * as React from 'react'
-import { AlertTriangle, ChevronLeft, ChevronRight, ClipboardCheck, Copy, Download, FileVideo, FolderOpen, History, Loader2, Magnet, Minus, Plus, Redo2, RefreshCw, Save, Scissors, ShieldCheck, Trash2, Undo2, Upload } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Download, Eye, EyeOff, FileVideo, FolderOpen, History, Layers, Loader2, Lock, Magnet, MoreHorizontal, Pause, Play, Plus, Redo2, RefreshCw, Save, Scissors, Send, ShieldCheck, SlidersHorizontal, Trash2, Type, Undo2, Unlock, Upload, Volume2, VolumeX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
 import { findVideoProjectAsset, formatDuration, summarizeVideoProject } from '@/components/outputs/video-project-output'
 import type { RunnerVideoProject, VideoAspectRatio, VideoClip } from '@craft-agent/shared/video'
@@ -40,10 +41,20 @@ interface TimelineDragState {
   clipId: string
   mode: TimelineDragMode
   startX: number
+  currentX: number
+  currentY: number
+  sourceTrackId: string
   initialStartMs: number
   initialDurationMs: number
   initialSourceInMs: number
+  lastProposedStartMs: number
   active: boolean
+}
+
+interface ClipContextMenuState {
+  clipId: string
+  x: number
+  y: number
 }
 
 type VideoStudioElectronAPI = typeof window.electronAPI & {
@@ -52,6 +63,7 @@ type VideoStudioElectronAPI = typeof window.electronAPI & {
   inspectVideoStudio?: (workspaceId: string, outputId: string) => Promise<{ ok: boolean; assetId: string; status: number }>
   dryRunVideoStudio?: (workspaceId: string, outputId: string) => Promise<{ ok: boolean; assetId: string; status: number }>
   exportVideoStudio?: (workspaceId: string, outputId: string, preset?: string) => Promise<{ assetId: string }>
+  runVideoStudioAgent?: (workspaceId: string, outputId: string, prompt: string) => Promise<{ ok: boolean; status: string; message?: string }>
 }
 
 export default function VideoStudioPage({ workspaceId, outputId }: Props) {
@@ -61,8 +73,10 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [project, setProject] = React.useState<VideoProject | null>(null)
   const [rawJson, setRawJson] = React.useState('')
   const [selectedClipId, setSelectedClipId] = React.useState<string | null>(null)
-  const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
+  const [renderPreviewUrl, setRenderPreviewUrl] = React.useState<string | null>(null)
+  const [clipPreviewUrl, setClipPreviewUrl] = React.useState<string | null>(null)
   const [playheadMs, setPlayheadMs] = React.useState(0)
+  const [isPreviewPlaying, setIsPreviewPlaying] = React.useState(false)
   const [timelineZoom, setTimelineZoom] = React.useState(1)
   const [loading, setLoading] = React.useState(true)
   const [saving, setSaving] = React.useState(false)
@@ -70,9 +84,19 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [checking, setChecking] = React.useState<'inspect' | 'dry-run' | null>(null)
   const [exporting, setExporting] = React.useState(false)
   const [timelineDrag, setTimelineDrag] = React.useState<TimelineDragState | null>(null)
+  const [clipContextMenu, setClipContextMenu] = React.useState<ClipContextMenuState | null>(null)
   const [undoStack, setUndoStack] = React.useState<VideoProject[]>([])
   const [redoStack, setRedoStack] = React.useState<VideoProject[]>([])
+  const [showDeveloperDetails, setShowDeveloperDetails] = React.useState(false)
+  const [agentPanelOpen, setAgentPanelOpen] = React.useState(false)
+  const [agentPrompt, setAgentPrompt] = React.useState('')
+  const [agentRunning, setAgentRunning] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const previewVideoRef = React.useRef<HTMLVideoElement | null>(null)
+  const timelineScrubRef = React.useRef<HTMLDivElement | null>(null)
+  const selectedClipRef = React.useRef<VideoClip | null>(null)
+  const clipPreviewActiveRef = React.useRef(false)
+  const timelineDurationMs = project?.timeline?.durationMs ?? 0
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -93,9 +117,9 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       const latestRender = findLatestVideoRenderAsset(loaded)
       if (latestRender) {
         const url = await window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, latestRender.id)
-        setPreviewUrl(url)
+        setRenderPreviewUrl(url)
       } else {
-        setPreviewUrl(null)
+        setRenderPreviewUrl(null)
       }
       const firstClip = parsed.timeline?.tracks?.flatMap((track) => track.clips ?? [])[0]
       setSelectedClipId(firstClip?.id ?? null)
@@ -117,6 +141,74 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     return cleanup
   }, [load, workspaceId])
 
+  React.useEffect(() => {
+    if (!clipContextMenu) return
+    const close = () => setClipContextMenu(null)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [clipContextMenu])
+
+  React.useEffect(() => {
+    setPlayheadMs((current) => clampNumber(current, 0, timelineDurationMs))
+  }, [timelineDurationMs])
+
+  const setPlayheadPosition = React.useCallback((nextMs: number, seekPreview = false) => {
+    const clamped = clampNumber(Number.isFinite(nextMs) ? nextMs : 0, 0, timelineDurationMs)
+    setPlayheadMs(Math.round(clamped))
+    if (seekPreview && previewVideoRef.current) {
+      const selected = selectedClipRef.current
+      const previewMs = clipPreviewActiveRef.current && selected
+        ? clampNumber(clamped - (selected.startMs ?? 0) + (selected.sourceInMs ?? 0), 0, selected.durationMs ?? timelineDurationMs)
+        : clamped
+      previewVideoRef.current.currentTime = previewMs / 1000
+    }
+  }, [timelineDurationMs])
+
+  const updatePlayheadFromPointer = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
+    if (!timelineScrubRef.current) return
+    const rect = timelineScrubRef.current.getBoundingClientRect()
+    const x = event.clientX - rect.left + timelineScrubRef.current.scrollLeft - 12
+    setPlayheadPosition(timelineMsFromPixels(x, timelineZoom), true)
+  }, [setPlayheadPosition, timelineZoom])
+
+  const updatePlayheadFromPreviewTime = React.useCallback((videoTimeMs: number) => {
+    const selected = selectedClipRef.current
+    const timelineMs = clipPreviewActiveRef.current && selected
+      ? (selected.startMs ?? 0) + Math.max(0, videoTimeMs - (selected.sourceInMs ?? 0))
+      : videoTimeMs
+    setPlayheadMs(Math.round(clampNumber(timelineMs, 0, timelineDurationMs)))
+  }, [timelineDurationMs])
+
+  const togglePreviewPlayback = React.useCallback(() => {
+    const video = previewVideoRef.current
+    if (!video) return
+    if (video.paused) {
+      void video.play()
+    } else {
+      video.pause()
+    }
+  }, [])
+
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      const target = event.target
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || (target instanceof HTMLElement && target.isContentEditable)) return
+      event.preventDefault()
+      togglePreviewPlayback()
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [togglePreviewPlayback])
+
   const selectedClip = React.useMemo(() => {
     if (!project || !selectedClipId) return null
     for (const track of project.timeline?.tracks ?? []) {
@@ -131,9 +223,40 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     return (project.media ?? []).find((item) => item.id === selectedClip.mediaId) ?? null
   }, [project, selectedClip?.mediaId])
 
+  React.useEffect(() => {
+    selectedClipRef.current = selectedClip
+  }, [selectedClip])
+
+  React.useEffect(() => {
+    let cancelled = false
+    async function loadSelectedClipPreview() {
+      setClipPreviewUrl(null)
+      if (!manifest || !selectedClipMedia || !selectedClip?.mediaId) return
+      if (selectedClipMedia.type !== 'video') return
+      const mediaAsset = manifest.assets.find((asset) => asset.id === `video-media-${selectedClip.mediaId}`)
+      if (!mediaAsset) return
+      try {
+        const url = await window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, mediaAsset.id)
+        if (!cancelled) setClipPreviewUrl(url)
+      } catch {
+        if (!cancelled) setClipPreviewUrl(null)
+      }
+    }
+    void loadSelectedClipPreview()
+    return () => {
+      cancelled = true
+    }
+  }, [manifest, outputId, selectedClip?.mediaId, selectedClipMedia, workspaceId])
+
   const selectedClipSupportsLook = selectedClipMedia?.type === 'video' || selectedClipMedia?.type === 'image'
   const selectedLookValue = selectedClip?.adjustments ? selectedClip.adjustments.preset ?? 'manual' : 'neutral'
   const previewLook = selectedClipSupportsLook ? previewLookStyle(selectedClip?.adjustments) : null
+  const previewUrl = clipPreviewUrl ?? renderPreviewUrl
+  const previewStatus = clipPreviewUrl ? 'selected clip' : renderPreviewUrl ? 'latest export' : 'not rendered'
+
+  React.useEffect(() => {
+    clipPreviewActiveRef.current = Boolean(clipPreviewUrl)
+  }, [clipPreviewUrl])
 
   const updateProject = React.useCallback((updater: (current: VideoProject) => VideoProject, options: { recordHistory?: boolean } = {}) => {
     setProject((current) => {
@@ -177,8 +300,20 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     restoreProject(next)
   }, [project, redoStack, restoreProject])
 
+  const selectedClipTrack = React.useMemo(() => findTrackForClip(project, selectedClipId), [project, selectedClipId])
+  const selectedClipLocked = selectedClipTrack?.locked === true
+
+  const canEditClip = React.useCallback((clipId: string | null | undefined) => {
+    if (!clipId) return false
+    return findTrackForClip(project, clipId)?.locked !== true
+  }, [project])
+
   const updateSelectedClip = React.useCallback((patch: Partial<VideoClip>) => {
     if (!selectedClipId) return
+    if (!canEditClip(selectedClipId)) {
+      toast.error('Unlock the track before editing this clip.')
+      return
+    }
     updateProject((current) => {
       const tracks = (current.timeline?.tracks ?? []).map((track) => ({
         ...track,
@@ -194,7 +329,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
         },
       }
     })
-  }, [selectedClipId, updateProject])
+  }, [canEditClip, selectedClipId, updateProject])
 
   const moveClip = React.useCallback((clipId: string, startMs: number, snap = true, recordHistory = true) => {
     updateProject((current) => moveClipInProject(current, clipId, startMs, snap), { recordHistory })
@@ -218,7 +353,9 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       }
       const deltaMs = Math.round(deltaX * (12 / timelineZoom))
       if (timelineDrag.mode === 'move') {
-        moveClip(timelineDrag.clipId, timelineDrag.initialStartMs + deltaMs, true, false)
+        const nextStartMs = timelineDrag.initialStartMs + deltaMs
+        moveClip(timelineDrag.clipId, nextStartMs, true, false)
+        setTimelineDrag((current) => current ? { ...current, currentX: event.clientX, currentY: event.clientY, lastProposedStartMs: Math.max(0, nextStartMs) } : current)
       } else if (timelineDrag.mode === 'trim-start') {
         updateProject((current) => trimClipStartInProject(current, timelineDrag.clipId, {
           startMs: timelineDrag.initialStartMs + deltaMs,
@@ -230,7 +367,14 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
         updateProject((current) => trimClipEndInProject(current, timelineDrag.clipId, timelineDrag.initialDurationMs + deltaMs), { recordHistory: false })
       }
     }
-    const handlePointerUp = () => {
+    const handlePointerUp = (event: PointerEvent) => {
+      if (timelineDrag.mode === 'move' && timelineDrag.active) {
+        const target = document.elementFromPoint(event.clientX, event.clientY)
+        const targetTrackId = target instanceof HTMLElement ? target.closest<HTMLElement>('[data-video-track-id]')?.dataset.videoTrackId : undefined
+        if (targetTrackId && targetTrackId !== timelineDrag.sourceTrackId) {
+          updateProject((current) => moveClipToTrackInProject(current, timelineDrag.clipId, targetTrackId, timelineDrag.lastProposedStartMs, true), { recordHistory: false })
+        }
+      }
       setTimelineDrag(null)
     }
 
@@ -242,26 +386,6 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     }
   }, [moveClip, timelineDrag, timelineZoom, updateProject])
 
-  const nudgeSelectedClip = React.useCallback((deltaMs: number) => {
-    if (!selectedClip) return
-    moveClip(selectedClip.id, Math.max(0, (selectedClip.startMs ?? 0) + deltaMs), true)
-  }, [moveClip, selectedClip])
-
-  const resizeSelectedClip = React.useCallback((deltaMs: number) => {
-    if (!selectedClip) return
-    updateProject((current) => trimClipEndInProject(current, selectedClip.id, (selectedClip.durationMs ?? 1000) + deltaMs))
-  }, [selectedClip, updateProject])
-
-  const setSelectedClipStart = React.useCallback((startMs: number) => {
-    if (!selectedClip) return
-    moveClip(selectedClip.id, Math.max(0, startMs), false)
-  }, [moveClip, selectedClip])
-
-  const setSelectedClipDuration = React.useCallback((durationMs: number) => {
-    if (!selectedClip) return
-    updateProject((current) => trimClipEndInProject(current, selectedClip.id, durationMs))
-  }, [selectedClip, updateProject])
-
   const updateSelectedClipAdjustment = React.useCallback((patch: NonNullable<VideoClip['adjustments']>) => {
     updateSelectedClip({
       adjustments: {
@@ -270,6 +394,66 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       },
     })
   }, [selectedClip, updateSelectedClip])
+
+  const toggleClipDisabled = React.useCallback((clipId: string) => {
+    if (!canEditClip(clipId)) {
+      toast.error('Unlock the track before editing this clip.')
+      return
+    }
+    updateProject((current) => {
+      const tracks = (current.timeline?.tracks ?? []).map((track) => ({
+        ...track,
+        clips: (track.clips ?? []).map((clip) => clip.id === clipId ? { ...clip, disabled: clip.disabled === true ? undefined : true } : clip),
+      }))
+      return {
+        ...current,
+        timeline: {
+          ...current.timeline,
+          tracks,
+        },
+      }
+    })
+  }, [canEditClip, updateProject])
+
+  const toggleTrackFlag = React.useCallback((trackId: string, flag: 'locked' | 'muted' | 'hidden') => {
+    updateProject((current) => ({
+      ...current,
+      timeline: {
+        ...current.timeline,
+        tracks: (current.timeline?.tracks ?? []).map((track) => track.id === trackId ? { ...track, [flag]: track[flag] === true ? undefined : true } : track),
+      },
+    }))
+  }, [updateProject])
+
+  const updateSelectedClipDurationFromPreview = React.useCallback((durationMs: number) => {
+    if (!selectedClipId || !selectedClip?.mediaId || !Number.isFinite(durationMs) || durationMs <= 0) return
+    if (!canEditClip(selectedClipId)) return
+    const roundedDurationMs = Math.max(1, Math.round(durationMs))
+    if (Math.abs((selectedClip.durationMs ?? 0) - roundedDurationMs) < 250) return
+    updateProject((current) => {
+      const tracks = (current.timeline?.tracks ?? []).map((track) => ({
+        ...track,
+        clips: (track.clips ?? []).map((clip) => clip.id === selectedClipId
+          ? {
+              ...clip,
+              durationMs: roundedDurationMs,
+              sourceInMs: clip.sourceInMs ?? 0,
+              sourceOutMs: roundedDurationMs,
+            }
+          : clip),
+      }))
+      const media = (current.media ?? []).map((item) => item.id === selectedClip.mediaId ? { ...item, durationMs: roundedDurationMs } : item)
+      return {
+        ...current,
+        media,
+        timeline: {
+          ...current.timeline,
+          durationMs: computeTimelineDuration(tracks),
+          tracks,
+        },
+      }
+    }, { recordHistory: false })
+  }, [canEditClip, selectedClip, selectedClipId, updateProject])
 
   const applyLookPreset = React.useCallback((preset: LookPreset) => {
     const found = LOOK_PRESETS.find((item) => item.value === preset)
@@ -280,6 +464,67 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const resetLook = React.useCallback(() => {
     updateSelectedClip({ adjustments: undefined })
   }, [updateSelectedClip])
+
+  const addLane = React.useCallback((type: 'video' | 'audio') => {
+    updateProject((current) => {
+      const tracks = current.timeline?.tracks ?? []
+      const trackCount = tracks.filter((track) => track.type === type).length
+      const newTrack = {
+        id: `${type}-${crypto.randomUUID()}`,
+        type,
+        label: `${type === 'video' ? 'Video' : 'Audio'} ${trackCount + 1}`,
+        clips: [],
+      }
+      const lastMatchingIndex = tracks.reduce((lastIndex, track, index) => track.type === type ? index : lastIndex, -1)
+      const nextTracks = [...tracks]
+      nextTracks.splice(lastMatchingIndex + 1, 0, newTrack)
+      return {
+        ...current,
+        timeline: {
+          ...current.timeline,
+          tracks: nextTracks,
+        },
+      }
+    })
+    toast.success(`${type === 'video' ? 'Video' : 'Audio'} lane added.`)
+  }, [updateProject])
+
+  const stackSelectedClipOnNewLane = React.useCallback(() => {
+    if (!selectedClip) return
+    if (!canEditClip(selectedClip.id)) {
+      toast.error('Unlock the track before editing this clip.')
+      return
+    }
+    let createdId: string | null = null
+    updateProject((current) => {
+      const tracks = current.timeline?.tracks ?? []
+      const videoTrackCount = tracks.filter((track) => track.type === 'video').length
+      createdId = crypto.randomUUID()
+      const newTrack = {
+        id: `video-${crypto.randomUUID()}`,
+        type: 'video' as const,
+        label: `Video ${videoTrackCount + 1}`,
+        clips: [{
+          ...selectedClip,
+          id: createdId,
+          label: selectedClip.label ? `${selectedClip.label} take` : 'Stacked take',
+        }],
+      }
+      const lastVideoIndex = tracks.reduce((lastIndex, track, index) => track.type === 'video' ? index : lastIndex, -1)
+      const nextTracks = [...tracks]
+      nextTracks.splice(lastVideoIndex + 1, 0, newTrack)
+      return {
+        ...current,
+        timeline: {
+          ...current.timeline,
+          durationMs: Math.max(current.timeline?.durationMs ?? 0, (selectedClip.startMs ?? 0) + (selectedClip.durationMs ?? 0)),
+          tracks: nextTracks,
+        },
+      }
+    })
+    if (createdId) setSelectedClipId(createdId)
+    toast.success('Take stacked on a new video lane.')
+  }, [canEditClip, selectedClip, updateProject])
 
   const changeAspectRatio = React.useCallback((aspectRatio: AspectSelectValue) => {
     if (aspectRatio === 'custom') return
@@ -321,12 +566,50 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     toast.success('Timeline packed.')
   }, [updateProject])
 
-  const duplicateSelectedClip = React.useCallback(() => {
-    if (!selectedClipId) return
+  const addTextClip = React.useCallback(() => {
+    let createdId: string | null = null
+    updateProject((current) => {
+      const tracks = current.timeline?.tracks ?? []
+      const captionTrack = tracks.find((track) => track.type === 'caption' && track.locked !== true && track.hidden !== true)
+      const targetTrackId = captionTrack?.id ?? 'captions-main'
+      const durationMs = 3000
+      const clipStartMs = captionTrack
+        ? clampClipMoveStart(captionTrack.clips ?? [], 'new-title-clip', Math.max(0, Math.round(playheadMs)), durationMs)
+        : Math.max(0, Math.round(playheadMs))
+      const newClip: VideoClip = {
+        id: crypto.randomUUID(),
+        type: 'text',
+        startMs: clipStartMs,
+        durationMs,
+        label: 'Title',
+        text: { text: 'Title', fontSize: 64, color: '#ffffff' },
+      }
+      createdId = newClip.id
+      const nextTracks = captionTrack
+        ? tracks.map((track) => track.id === targetTrackId ? { ...track, clips: sortClipsByStart([...(track.clips ?? []), newClip]) } : track)
+        : [...tracks, { id: `caption-${crypto.randomUUID()}`, type: 'caption' as const, label: 'Titles', clips: [newClip] }]
+      return {
+        ...current,
+        timeline: {
+          ...current.timeline,
+          durationMs: computeTimelineDuration(nextTracks),
+          tracks: nextTracks,
+        },
+      }
+    })
+    if (createdId) setSelectedClipId(createdId)
+  }, [playheadMs, updateProject])
+
+  const duplicateClip = React.useCallback((clipId: string | null = selectedClipId) => {
+    if (!clipId) return
+    if (!canEditClip(clipId)) {
+      toast.error('Unlock the track before editing this clip.')
+      return
+    }
     let createdId: string | null = null
     updateProject((current) => {
       const tracks = (current.timeline?.tracks ?? []).map((track) => {
-        const index = (track.clips ?? []).findIndex((clip) => clip.id === selectedClipId)
+        const index = (track.clips ?? []).findIndex((clip) => clip.id === clipId)
         if (index === -1) return track
         const clips = [...(track.clips ?? [])]
         const clip = clips[index]
@@ -358,14 +641,23 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       }
     })
     if (createdId) setSelectedClipId(createdId)
-  }, [selectedClipId, updateProject])
+  }, [canEditClip, selectedClipId, updateProject])
 
-  const deleteSelectedClip = React.useCallback(() => {
-    if (!selectedClipId) return
+  const deleteClip = React.useCallback((clipId: string | null = selectedClipId, ripple = false) => {
+    if (!clipId) return
+    if (!canEditClip(clipId)) {
+      toast.error('Unlock the track before editing this clip.')
+      return
+    }
     let nextSelection: string | null = null
     updateProject((current) => {
       const tracks = (current.timeline?.tracks ?? []).map((track) => {
-        const clips = (track.clips ?? []).filter((clip) => clip.id !== selectedClipId)
+        const deleted = (track.clips ?? []).find((clip) => clip.id === clipId)
+        let clips = (track.clips ?? []).filter((clip) => clip.id !== clipId)
+        if (ripple && deleted) {
+          const deletedEndMs = (deleted.startMs ?? 0) + Math.max(1, deleted.durationMs ?? 1)
+          clips = clips.map((clip) => (clip.startMs ?? 0) >= deletedEndMs ? { ...clip, startMs: Math.max(0, (clip.startMs ?? 0) - Math.max(1, deleted.durationMs ?? 1)) } : clip)
+        }
         if (!nextSelection) nextSelection = clips[0]?.id ?? null
         return { ...track, clips }
       })
@@ -379,12 +671,18 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       }
     })
     setSelectedClipId(nextSelection)
-  }, [selectedClipId, updateProject])
+  }, [canEditClip, selectedClipId, updateProject])
 
-  const splitSelectedClip = React.useCallback(() => {
-    if (!selectedClipId || !selectedClip) return
-    const clipStart = selectedClip.startMs ?? 0
-    const clipDuration = selectedClip.durationMs ?? 0
+  const splitClip = React.useCallback((clipId: string | null = selectedClipId) => {
+    if (!clipId || !project) return
+    if (!canEditClip(clipId)) {
+      toast.error('Unlock the track before editing this clip.')
+      return
+    }
+    const clipToSplit = project.timeline?.tracks?.flatMap((track) => track.clips ?? []).find((clip) => clip.id === clipId)
+    if (!clipToSplit) return
+    const clipStart = clipToSplit.startMs ?? 0
+    const clipDuration = clipToSplit.durationMs ?? 0
     const splitAt = Math.round(playheadMs)
     const clipEnd = clipStart + clipDuration
     if (splitAt <= clipStart || splitAt >= clipEnd) {
@@ -394,7 +692,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     let createdId: string | null = null
     updateProject((current) => {
       const tracks = (current.timeline?.tracks ?? []).map((track) => {
-        const index = (track.clips ?? []).findIndex((clip) => clip.id === selectedClipId)
+        const index = (track.clips ?? []).findIndex((clip) => clip.id === clipId)
         if (index === -1) return track
         const clips = [...(track.clips ?? [])]
         const clip = clips[index]
@@ -427,7 +725,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       }
     })
     if (createdId) setSelectedClipId(createdId)
-  }, [playheadMs, selectedClip, selectedClipId, updateProject])
+  }, [canEditClip, playheadMs, project, selectedClipId, updateProject])
 
   const persistProject = async (summary = 'Edited in Video Studio') => {
     if (!projectAsset) return
@@ -508,6 +806,27 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     }
   }
 
+  const runVideoAgent = async () => {
+    const prompt = agentPrompt.trim()
+    if (!prompt) return
+    setAgentRunning(true)
+    try {
+      const result = await (window.electronAPI as VideoStudioElectronAPI).runVideoStudioAgent?.(workspaceId, outputId, prompt)
+      if (!result) throw new Error('Video agent bridge is unavailable.')
+      if (result.status === 'not-implemented') {
+        toast.info(result.message ?? 'Video agent handoff is not wired yet.')
+      } else {
+        toast.success(result.message ?? 'Video agent command sent.')
+        setAgentPrompt('')
+        await load()
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAgentRunning(false)
+    }
+  }
+
   if (loading) {
     return <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/50">Loading Video Studio</div>
   }
@@ -525,6 +844,9 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const tracks = project.timeline?.tracks ?? []
   const media = project.media ?? []
   const duration = project.timeline?.durationMs ?? 0
+  const contextClip = clipContextMenu
+    ? tracks.flatMap((track) => track.clips ?? []).find((clip) => clip.id === clipContextMenu.clipId) ?? null
+    : null
   const matchedAspectPreset = ASPECT_PRESETS.find((preset) =>
     preset.value === project.settings.aspectRatio
     && preset.width === project.settings.width
@@ -535,28 +857,33 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const isBusy = saving || importing || checking !== null || exporting
 
   return (
-    <div className="runneros-glass-route h-full overflow-hidden">
-      <div className="flex h-full min-h-0 flex-col">
-        <div className="flex shrink-0 flex-col gap-3 border-b border-white/[0.08] px-5 py-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-white/42">
-              <FileVideo className="h-3.5 w-3.5" />
-              Video Studio
+    <div className="h-full overflow-hidden bg-[#101010] text-white">
+      <div className="grid h-full min-h-0 grid-rows-[44px_minmax(0,1fr)_220px]">
+        <header className="flex min-w-0 items-center justify-between gap-3 border-b border-white/[0.07] bg-[#171717] px-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-white/[0.06] text-white/58">
+              <FileVideo className="h-4 w-4" />
             </div>
             <input
               value={project.title}
               onChange={(event) => updateProject((current) => ({ ...current, title: event.target.value }))}
-              className="mt-1 w-full min-w-0 bg-transparent text-2xl font-semibold text-white outline-none"
+              className="min-w-0 bg-transparent text-[15px] font-semibold text-white outline-none"
             />
+            <div className="hidden items-center gap-1.5 text-[11px] text-white/42 xl:flex">
+              <MetricPill label="Dur" value={formatDuration(duration)} />
+              <MetricPill label="Canvas" value={`${summary?.width ?? '-'}x${summary?.height ?? '-'}`} />
+              <MetricPill label="FPS" value={String(summary?.fps ?? '-')} />
+              <MetricPill label="Ver" value={String(summary?.versionCount ?? 0)} />
+            </div>
           </div>
-          <div className="grid w-full min-w-0 grid-cols-[repeat(auto-fit,minmax(7.5rem,1fr))] gap-2 [&>button]:min-w-0 [&>button]:w-full [&>button]:justify-center">
-            <label className="flex h-9 min-w-0 items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.045] px-2 text-xs text-white/55">
-              <span className="shrink-0">Canvas</span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <label className="flex h-8 items-center gap-2 rounded-md bg-white/[0.06] px-2 text-[12px] text-white/55">
+              <span>Canvas</span>
               <select
                 value={currentAspectRatio}
                 onChange={(event) => changeAspectRatio(event.target.value as AspectSelectValue)}
                 disabled={isBusy}
-                className="min-w-0 flex-1 bg-transparent text-sm text-white/78 outline-none"
+                className="w-[116px] bg-transparent text-[12px] text-white/80 outline-none"
               >
                 {currentAspectRatio === 'custom' && <option value="custom">{customAspectLabel}</option>}
                 {ASPECT_PRESETS.map((preset) => (
@@ -564,77 +891,101 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 ))}
               </select>
             </label>
-            {projectAsset && (
-              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => window.electronAPI.showOutputInFolder(workspaceId, outputId, projectAsset.id)}>
-                <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-                Show
-              </Button>
-            )}
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void load()}>
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              Reload
-            </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={undo} disabled={isBusy || undoStack.length === 0}>
-              <Undo2 className="mr-1.5 h-3.5 w-3.5" />
-              Undo
-            </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={redo} disabled={isBusy || redoStack.length === 0}>
-              <Redo2 className="mr-1.5 h-3.5 w-3.5" />
-              Redo
-            </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('files')} disabled={isBusy}>
-              {importing ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1.5 h-3.5 w-3.5" />}
-              Files
-            </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void importMedia('folder')} disabled={isBusy}>
-              <FolderOpen className="mr-1.5 h-3.5 w-3.5" />
-              Folder
-            </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void runReport('inspect')} disabled={isBusy}>
-              {checking === 'inspect' ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />}
-              Inspect
-            </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => void runReport('dry-run')} disabled={isBusy}>
-              {checking === 'dry-run' ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="mr-1.5 h-3.5 w-3.5" />}
-              Dry Run
-            </Button>
-            <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={exportProject} disabled={isBusy}>
-              {exporting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Download className="mr-1.5 h-3.5 w-3.5" />}
-              Export
-            </Button>
-            <Button size="sm" onClick={save} disabled={isBusy}>
-              <Save className="mr-1.5 h-3.5 w-3.5" />
-              {saving ? 'Saving' : 'Save'}
-            </Button>
+            <IconButton label="Undo" onClick={undo} disabled={isBusy || undoStack.length === 0}><Undo2 className="h-4 w-4" /></IconButton>
+            <IconButton label="Redo" onClick={redo} disabled={isBusy || redoStack.length === 0}><Redo2 className="h-4 w-4" /></IconButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" className="flex h-8 w-8 items-center justify-center rounded-md bg-white/[0.06] text-white/62 hover:bg-white/[0.1] hover:text-white">
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <StyledDropdownMenuContent align="end" minWidth="min-w-48">
+                <StyledDropdownMenuItem onClick={exportProject} disabled={isBusy}>
+                  {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+                  Export video
+                </StyledDropdownMenuItem>
+                <StyledDropdownMenuItem onClick={save} disabled={isBusy}>
+                  <Save className="h-3.5 w-3.5" />
+                  {saving ? 'Saving' : 'Save project'}
+                </StyledDropdownMenuItem>
+                <StyledDropdownMenuItem onClick={() => void importMedia('files')} disabled={isBusy}>
+                  {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                  Import files
+                </StyledDropdownMenuItem>
+                <StyledDropdownMenuItem onClick={() => void importMedia('folder')} disabled={isBusy}>
+                  <FolderOpen className="h-3.5 w-3.5" />
+                  Import folder
+                </StyledDropdownMenuItem>
+                <StyledDropdownMenuSeparator />
+                <StyledDropdownMenuItem onClick={() => void load()}>
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  Reload
+                </StyledDropdownMenuItem>
+                {projectAsset && (
+                  <StyledDropdownMenuItem onClick={() => window.electronAPI.showOutputInFolder(workspaceId, outputId, projectAsset.id)}>
+                    <FolderOpen className="h-3.5 w-3.5" />
+                    Show project file
+                  </StyledDropdownMenuItem>
+                )}
+                <StyledDropdownMenuItem onClick={() => void runReport('inspect')} disabled={isBusy}>
+                  {checking === 'inspect' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ClipboardCheck className="h-3.5 w-3.5" />}
+                  Inspect
+                </StyledDropdownMenuItem>
+                <StyledDropdownMenuItem onClick={() => void runReport('dry-run')} disabled={isBusy}>
+                  {checking === 'dry-run' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+                  Dry run
+                </StyledDropdownMenuItem>
+              </StyledDropdownMenuContent>
+            </DropdownMenu>
           </div>
-        </div>
+        </header>
 
-        <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-1 gap-0 overflow-auto">
-          <aside className="min-h-0 min-w-0 overflow-auto border-r border-white/[0.08] p-3">
-            <PanelTitle title="Media" value={`${media.length}`} />
-            <div className="mt-2 grid gap-2">
+        <div className="grid min-h-0 grid-cols-[220px_minmax(0,1fr)_460px] overflow-hidden">
+          <aside className="min-h-0 border-r border-white/[0.07] bg-[#181818]">
+            <div className="flex h-10 items-center justify-between border-b border-white/[0.07] px-3">
+              <PanelTitle title="Media" value={`${media.length}`} />
+              <button type="button" title="Import files" onClick={() => void importMedia('files')} disabled={isBusy} className="flex h-7 w-7 items-center justify-center rounded-md bg-white/[0.06] text-white/58 hover:bg-white/[0.1] hover:text-white">
+                <Upload className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="grid gap-2 p-2">
               {media.length === 0 ? <EmptyText>No media yet</EmptyText> : media.map((item) => (
-                <div key={item.id} className="rounded-md border border-white/[0.08] bg-white/[0.035] p-2">
-                  <div className="truncate text-sm font-medium text-white/78">{item.label ?? item.id}</div>
-                  <div className="mt-1 truncate text-xs text-white/42">{item.type ?? 'media'} · {item.path ?? ''}</div>
+                <div key={item.id} className="group rounded-md border border-white/[0.06] bg-[#222] p-2 hover:border-[#18c7d4]/40">
+                  <div className="aspect-video rounded bg-black/70" />
+                  <div className="mt-2 truncate text-[12px] font-medium text-white/78">{item.label ?? item.id}</div>
+                  <div className="truncate text-[11px] text-white/36">{item.type ?? 'media'}</div>
                 </div>
               ))}
             </div>
           </aside>
 
-          <main className="flex min-h-0 min-w-0 flex-col">
-            <div className="grid shrink-0 grid-cols-[repeat(auto-fit,minmax(4.75rem,1fr))] gap-2 border-b border-white/[0.08] p-3">
-              <Metric label="Duration" value={formatDuration(duration)} />
-              <Metric label="Canvas" value={`${summary?.width ?? '-'} x ${summary?.height ?? '-'}`} />
-              <Metric label="FPS" value={String(summary?.fps ?? '-')} />
-              <Metric label="Versions" value={String(summary?.versionCount ?? 0)} />
+          <main className="flex min-h-0 min-w-0 flex-col overflow-hidden bg-[#101010]">
+            <div className="flex h-10 shrink-0 items-center justify-between border-b border-white/[0.07] px-3">
+              <PanelTitle title="Player" value={previewStatus} />
+              <div className="flex items-center gap-2 text-[11px] text-white/38">
+                <span>{`${summary?.width ?? '-'} x ${summary?.height ?? '-'}`}</span>
+                <span>{`${summary?.fps ?? '-'} fps`}</span>
+              </div>
             </div>
-            <div className="shrink-0 border-b border-white/[0.08] bg-black/25 p-3">
-              <PanelTitle title="Preview" value={previewUrl ? 'latest export' : 'not rendered'} />
-              <div className="mt-2 flex aspect-video max-h-[280px] items-center justify-center overflow-hidden rounded-md border border-white/[0.08] bg-black">
+            <div className="flex min-h-0 flex-1 items-center justify-center bg-[#0a0a0a] p-4">
+              <div className="flex aspect-video w-full max-w-[min(100%,980px)] items-center justify-center overflow-hidden rounded-sm border border-white/[0.06] bg-black">
                 {previewUrl ? (
                   <div className="relative h-full w-full">
-                    <video src={previewUrl} controls className="h-full w-full object-contain" style={previewLook?.videoStyle} />
+                    <video
+                      ref={previewVideoRef}
+                      src={previewUrl}
+                      controls
+                      onTimeUpdate={(event) => updatePlayheadFromPreviewTime(event.currentTarget.currentTime * 1000)}
+                      onSeeked={(event) => updatePlayheadFromPreviewTime(event.currentTarget.currentTime * 1000)}
+                      onLoadedMetadata={(event) => {
+                        if (clipPreviewUrl) updateSelectedClipDurationFromPreview(event.currentTarget.duration * 1000)
+                      }}
+                      onPlay={() => setIsPreviewPlaying(true)}
+                      onPause={() => setIsPreviewPlaying(false)}
+                      onEnded={() => setIsPreviewPlaying(false)}
+                      className="h-full w-full object-contain"
+                      style={previewLook?.videoStyle}
+                    />
                     {previewLook?.grainOpacity ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 mix-blend-overlay" style={previewLook.grainStyle} /> : null}
                   </div>
                 ) : (
@@ -642,86 +993,63 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 )}
               </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-4">
-              <div className="flex items-center justify-between gap-3">
-                <PanelTitle title="Timeline" value={`${summary?.clipCount ?? 0} clips`} />
-                <div className="flex items-center gap-2">
-                  <NumberField compact label="Playhead" value={playheadMs} onChange={(value) => setPlayheadMs(Math.max(0, value))} />
-                  <label className="flex h-8 items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.045] px-2 text-xs text-white/55">
-                    <span>Zoom</span>
-                    <input
-                      type="range"
-                      min="0.5"
-                      max="2.5"
-                      step="0.25"
-                      value={timelineZoom}
-                      onChange={(event) => setTimelineZoom(Number(event.target.value))}
-                      className="w-20 accent-[#f97316]"
-                    />
-                  </label>
-                  <Button size="sm" variant="outline" className="h-8 border-white/[0.08] bg-white/[0.045] px-2 text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={packTimeline}>
-                    <Magnet className="mr-1.5 h-3.5 w-3.5" />
-                    Pack
-                  </Button>
-                </div>
-              </div>
-              <div className="mt-3 grid gap-3">
-                {tracks.map((track) => (
-                  <div key={track.id} className="rounded-md border border-white/[0.08] bg-black/30">
-                    <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2 text-xs text-white/48">
-                      <span>{track.label ?? track.id}</span>
-                      <span>{track.type ?? 'track'}</span>
-                    </div>
-                    <div className="flex min-h-[58px] items-center gap-2 overflow-x-auto p-2">
-                      {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/35">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, timelineZoom, (clip) => {
-                        setSelectedClipId(clip.id)
-                      }, (event, clip, mode) => {
-                        event.preventDefault()
-                        setSelectedClipId(clip.id)
-                        setTimelineDrag({
-                          clipId: clip.id,
-                          mode,
-                          startX: event.clientX,
-                          initialStartMs: clip.startMs ?? 0,
-                          initialDurationMs: clip.durationMs ?? 1000,
-                          initialSourceInMs: clip.sourceInMs ?? 0,
-                          active: false,
-                        })
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           </main>
 
-          <aside className="min-h-0 min-w-0 overflow-auto border-l border-white/[0.08] p-3">
-            <PanelTitle title="Inspector" value={selectedClip ? 'Clip' : 'Project'} />
-            {selectedClip ? (
-              <div className="mt-3 grid gap-3">
-                <Field label="Label" value={selectedClip.label ?? ''} onChange={(value) => updateSelectedClip({ label: value })} />
-                <div className="grid gap-1 text-xs text-white/42">
-                  Clip Tools
-                  <div className="grid grid-cols-4 gap-1">
-                    <IconButton label="-250 ms" onClick={() => nudgeSelectedClip(-250)}><ChevronLeft className="h-3.5 w-3.5" /></IconButton>
-                    <IconButton label="+250 ms" onClick={() => nudgeSelectedClip(250)}><ChevronRight className="h-3.5 w-3.5" /></IconButton>
-                    <IconButton label="Trim -" onClick={() => resizeSelectedClip(-250)}><Minus className="h-3.5 w-3.5" /></IconButton>
-                    <IconButton label="Trim +" onClick={() => resizeSelectedClip(250)}><Plus className="h-3.5 w-3.5" /></IconButton>
-                    <IconButton label="Split at playhead" onClick={splitSelectedClip}><Scissors className="h-3.5 w-3.5" /></IconButton>
-                    <IconButton label="Duplicate" onClick={duplicateSelectedClip}><Copy className="h-3.5 w-3.5" /></IconButton>
-                    <IconButton label="Delete" onClick={deleteSelectedClip}><Trash2 className="h-3.5 w-3.5" /></IconButton>
-                    <IconButton label="Pack timeline" onClick={packTimeline}><Magnet className="h-3.5 w-3.5" /></IconButton>
+          <aside className="relative min-h-0 min-w-0 overflow-hidden border-l border-white/[0.07] bg-[#181818]">
+            {agentPanelOpen && (
+              <div className="absolute inset-0 z-10 flex flex-col border-l border-[#18c7d4]/20 bg-[#181818] p-3">
+                <div className="flex h-9 shrink-0 items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-white/50">
+                    <Bot className="h-3.5 w-3.5" />
+                    Video Agent
+                  </div>
+                  <button type="button" title="Close Video Agent" onClick={() => setAgentPanelOpen(false)} className="flex h-7 w-7 items-center justify-center rounded-md bg-white/[0.06] text-white/55 hover:bg-white/[0.1] hover:text-white">
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="mt-2 min-h-0 flex-1 rounded-md border border-white/[0.06] bg-[#202020] p-3">
+                  <div className="rounded-md bg-black/25 p-3 text-[12px] leading-5 text-white/42">
+                    <div className="mb-2 text-white/72">Ready when you are.</div>
+                    <div>Tell the agent what to cut, add, rearrange, inspect, or export. It uses the current project.</div>
                   </div>
                 </div>
-                <NumberField label="Start ms" value={selectedClip.startMs ?? 0} onChange={setSelectedClipStart} />
-                <NumberField label="Duration ms" value={selectedClip.durationMs ?? 1000} onChange={setSelectedClipDuration} />
+                <div className="mt-3 flex shrink-0 gap-2">
+                  <textarea
+                    value={agentPrompt}
+                    onChange={(event) => setAgentPrompt(event.target.value)}
+                    placeholder="Make this a 9:16 punchy short..."
+                    className="h-24 min-w-0 flex-1 resize-none rounded-md border border-white/[0.08] bg-black/40 p-2 text-xs text-white/78 outline-none placeholder:text-white/30 focus:border-[#18c7d4]/60"
+                  />
+                  <button type="button" title="Send to Video Agent" onClick={runVideoAgent} disabled={agentRunning || !agentPrompt.trim()} className="flex h-24 w-12 shrink-0 items-center justify-center rounded-md bg-[#18c7d4] text-black disabled:cursor-not-allowed disabled:bg-white/[0.08] disabled:text-white/24">
+                    {agentRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="flex h-full min-h-0 flex-col overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setAgentPanelOpen(true)}
+                className="flex h-10 shrink-0 items-center justify-between border-b border-white/[0.07] px-3 text-xs uppercase tracking-wide text-white/46 hover:bg-white/[0.035] hover:text-white/72"
+              >
+                <span className="flex items-center gap-2"><Bot className="h-3.5 w-3.5" /> Video Agent</span>
+                <ChevronDown className="h-3.5 w-3.5" />
+              </button>
+              <div className="min-h-0 flex-1 overflow-auto p-3">
+              <div className="flex items-center justify-between">
+                <PanelTitle title="Adjust" value={selectedClip ? 'clip' : 'project'} />
+                <SlidersHorizontal className="h-3.5 w-3.5 text-white/34" />
+              </div>
+              {selectedClip ? (
+              <div className="mt-2 grid gap-2">
+                <Field placeholder="Clip Name" value={selectedClip.label ?? ''} onChange={(value) => updateSelectedClip({ label: value })} />
                 {selectedClipSupportsLook && (
-                  <div className="grid gap-2 rounded-md border border-white/[0.08] bg-black/25 p-2">
+                  <div className="grid gap-1.5 rounded-md border border-white/[0.07] bg-[#111214]/80 p-2">
                     <PanelTitle title="Look" value={selectedLookValue} />
                     <select
                       value={selectedLookValue}
                       onChange={(event) => applyLookPreset(event.target.value as LookPreset)}
-                      className="h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50"
+                      className="h-8 rounded-md border border-white/[0.07] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#18c7d4]/60"
                     >
                       <option value="manual" disabled>Manual</option>
                       {LOOK_PRESETS.map((preset) => (
@@ -734,40 +1062,66 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                     <AdjustmentField label="Highlights" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.highlights ?? 0} onChange={(value) => updateSelectedClipAdjustment({ highlights: value, preset: 'manual' })} />
                     <AdjustmentField label="Shadows" min={-1} max={1} step={0.01} value={selectedClip.adjustments?.shadows ?? 0} onChange={(value) => updateSelectedClipAdjustment({ shadows: value, preset: 'manual' })} />
                     <AdjustmentField label="Grain" min={0} max={1} step={0.01} value={selectedClip.adjustments?.grain ?? 0} onChange={(value) => updateSelectedClipAdjustment({ grain: value, preset: 'manual' })} />
-                    <Button size="sm" variant="outline" className="h-8 border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={resetLook}>
+                    <Button size="sm" variant="outline" className="h-7 border-white/[0.07] bg-white/[0.035] text-xs text-white/60 hover:bg-white/[0.07] hover:text-white" onClick={resetLook}>
                       Reset Look
                     </Button>
                   </div>
                 )}
-                {selectedClip.mediaId && <ReadOnlyValue label="Media ID" value={selectedClip.mediaId} />}
+                {selectedClip.type === 'text' && (
+                  <textarea
+                    value={selectedClip.text?.text ?? selectedClip.label ?? ''}
+                    onChange={(event) => updateSelectedClip({
+                      text: {
+                        text: event.target.value,
+                        fontSize: selectedClip.text?.fontSize ?? 64,
+                        color: selectedClip.text?.color ?? '#ffffff',
+                      },
+                      label: event.target.value.split('\n')[0]?.slice(0, 48) || 'Title',
+                    })}
+                    placeholder="Text"
+                    className="h-20 resize-none rounded-md border border-white/[0.07] bg-black/30 p-2 text-sm text-white/72 outline-none placeholder:text-white/28 focus:border-[#18c7d4]/60"
+                  />
+                )}
+                {selectedClip.mediaId && showDeveloperDetails && <ReadOnlyValue label="Media ID" value={selectedClip.mediaId} />}
               </div>
-            ) : <EmptyText>Select a clip to inspect</EmptyText>}
+              ) : <EmptyText>Select a clip to inspect</EmptyText>}
 
-            <div className="mt-5">
-              <PanelTitle title="Project JSON" value="editable" />
-              <textarea
-                value={rawJson}
-                onChange={(event) => setRawJson(event.target.value)}
-                spellCheck={false}
-                className="mt-2 h-80 w-full resize-none rounded-md border border-white/[0.08] bg-black/45 p-2 font-mono text-xs text-white/68 outline-none focus:border-[#f97316]/50"
-              />
-            </div>
+              <button
+                type="button"
+                onClick={() => setShowDeveloperDetails((value) => !value)}
+                className="mt-4 flex h-8 w-full items-center justify-between rounded-md border border-white/[0.08] bg-white/[0.035] px-2 text-xs uppercase tracking-wide text-white/42 hover:text-white/72"
+              >
+                <span className="flex items-center gap-1.5"><Code2 className="h-3.5 w-3.5" /> Developer details</span>
+                <span>{showDeveloperDetails ? 'Hide' : 'Show'}</span>
+              </button>
 
-            <div className="mt-5">
-              <PanelTitle title="Agent Changes" value={`${project.agentEvents?.length ?? 0}`} />
-              <div className="mt-2 grid gap-2">
+              {showDeveloperDetails && (
+                <div className="mt-3">
+                <PanelTitle title="Project JSON" value="editable" />
+                <textarea
+                  value={rawJson}
+                  onChange={(event) => setRawJson(event.target.value)}
+                  spellCheck={false}
+                  className="mt-2 h-56 w-full resize-none rounded-md border border-white/[0.08] bg-black/45 p-2 font-mono text-xs text-white/68 outline-none focus:border-[#f97316]/50"
+                />
+                </div>
+              )}
+
+              <div className="mt-5">
+                <PanelTitle title="Agent Changes" value={`${project.agentEvents?.length ?? 0}`} />
+                <div className="mt-2 grid gap-2">
                 {(project.agentEvents ?? []).slice(-5).reverse().map((event, index) => (
                   <div key={event.id ?? index} className="rounded-md border border-white/[0.08] bg-white/[0.035] p-2 text-xs">
                     <div className="text-white/72">{event.summary ?? event.toolName ?? 'Agent edit'}</div>
                     <div className="mt-1 text-white/38">{event.agentSlug ?? 'agent'} · {event.createdAt ?? ''}</div>
                   </div>
                 ))}
+                </div>
               </div>
-            </div>
 
-            <div className="mt-5">
-              <PanelTitle title="Versions" value={`${project.versions?.length ?? 0}`} />
-              <div className="mt-2 grid gap-2">
+              <div className="mt-5">
+                <PanelTitle title="Versions" value={`${project.versions?.length ?? 0}`} />
+                <div className="mt-2 grid gap-2">
                 {(project.versions ?? []).slice(-6).reverse().map((version) => (
                   <div key={version.id} className="rounded-md border border-white/[0.08] bg-white/[0.035] p-2 text-xs">
                     <div className="flex items-center gap-1.5 text-white/72">
@@ -777,10 +1131,220 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                     <div className="mt-1 text-white/38">{version.actor}{version.agentSlug ? ` · ${version.agentSlug}` : ''} · {version.createdAt}</div>
                   </div>
                 ))}
+                </div>
               </div>
+            </div>
             </div>
           </aside>
         </div>
+
+        <footer className="min-h-0 border-t border-white/[0.07] bg-[#151515]">
+          {clipContextMenu && contextClip && (
+            <div
+              className="fixed z-50 min-w-40 rounded-md border border-white/[0.1] bg-[#202020] p-1 shadow-modal-small"
+              style={{ left: clipContextMenu.x, top: clipContextMenu.y }}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                disabled={findTrackForClip(project, contextClip.id)?.locked === true}
+                className="flex h-8 w-full items-center justify-between rounded px-2 text-left text-xs text-white/72 hover:bg-white/[0.08] hover:text-white"
+                onClick={() => {
+                  toggleClipDisabled(contextClip.id)
+                  setClipContextMenu(null)
+                }}
+              >
+                <span>{contextClip.disabled === true ? 'Activate clip' : 'Deactivate clip'}</span>
+                <span className="text-white/32">{contextClip.disabled === true ? 'On' : 'Off'}</span>
+              </button>
+              <button
+                type="button"
+                className="flex h-8 w-full items-center rounded px-2 text-left text-xs text-white/54 hover:bg-white/[0.08] hover:text-white"
+                onClick={() => {
+                  setSelectedClipId(contextClip.id)
+                  setClipContextMenu(null)
+                }}
+              >
+                Select clip
+              </button>
+              <button
+                type="button"
+                disabled={findTrackForClip(project, contextClip.id)?.locked === true}
+                className="flex h-8 w-full items-center rounded px-2 text-left text-xs text-white/54 hover:bg-white/[0.08] hover:text-white"
+                onClick={() => {
+                  duplicateClip(contextClip.id)
+                  setClipContextMenu(null)
+                }}
+              >
+                Duplicate
+              </button>
+              <button
+                type="button"
+                disabled={findTrackForClip(project, contextClip.id)?.locked === true}
+                className="flex h-8 w-full items-center rounded px-2 text-left text-xs text-white/54 hover:bg-white/[0.08] hover:text-white"
+                onClick={() => {
+                  splitClip(contextClip.id)
+                  setClipContextMenu(null)
+                }}
+              >
+                Split at playhead
+              </button>
+              <button
+                type="button"
+                disabled={findTrackForClip(project, contextClip.id)?.locked === true}
+                className="flex h-8 w-full items-center rounded px-2 text-left text-xs text-red-200/70 hover:bg-red-500/10 hover:text-red-100"
+                onClick={() => {
+                  deleteClip(contextClip.id, true)
+                  setClipContextMenu(null)
+                }}
+              >
+                Ripple delete
+              </button>
+            </div>
+          )}
+          <div className="flex h-9 items-center justify-between border-b border-white/[0.06] px-3">
+            <div className="flex items-center gap-1.5">
+              <PanelTitle title="Timeline" />
+              <div className="ml-2 flex items-center gap-1">
+                <IconButton label="Split at playhead" onClick={() => splitClip()} disabled={!selectedClip || selectedClipLocked}><Scissors className="h-3.5 w-3.5" /></IconButton>
+                <IconButton label="Add title" onClick={addTextClip}><Type className="h-3.5 w-3.5" /></IconButton>
+                <IconButton label="Duplicate" onClick={() => duplicateClip()} disabled={!selectedClip || selectedClipLocked}><Copy className="h-3.5 w-3.5" /></IconButton>
+                <IconButton label="Stack take on new video lane" onClick={stackSelectedClipOnNewLane} disabled={!selectedClip || selectedClipLocked}><Layers className="h-3.5 w-3.5" /></IconButton>
+                <IconButton label="Delete" onClick={() => deleteClip()} disabled={!selectedClip || selectedClipLocked}><Trash2 className="h-3.5 w-3.5" /></IconButton>
+              </div>
+              <button type="button" title="Pack timeline" onClick={packTimeline} className="ml-1 flex h-7 items-center gap-1.5 rounded-md bg-white/[0.06] px-2 text-[12px] text-white/62 hover:bg-white/[0.1] hover:text-white">
+                <Magnet className="h-3.5 w-3.5" />
+                Pack
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                title={isPreviewPlaying ? 'Pause' : 'Play'}
+                onClick={togglePreviewPlayback}
+                disabled={!previewUrl}
+                className="flex h-7 min-w-16 items-center justify-center gap-1.5 rounded-md bg-white/[0.06] px-2 text-[12px] text-white/68 hover:bg-white/[0.1] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                {isPreviewPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+                {isPreviewPlaying ? 'Pause' : 'Play'}
+              </button>
+              <label className="flex h-7 items-center gap-2 rounded-md bg-white/[0.06] px-2 text-[11px] text-white/50">
+                <span>Zoom</span>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="2.5"
+                  step="0.25"
+                  value={timelineZoom}
+                  onChange={(event) => setTimelineZoom(Number(event.target.value))}
+                  className="w-24 accent-[#18c7d4]"
+                />
+              </label>
+            </div>
+          </div>
+          <div className="grid h-[181px] grid-cols-[132px_minmax(0,1fr)] overflow-hidden">
+            <div className="border-r border-white/[0.07] bg-[#111] text-[11px] text-white/38">
+              {tracks.map((track) => (
+                <div key={track.id} className={`flex h-[60px] items-center justify-between gap-2 px-2 ${track.hidden ? 'opacity-45' : ''}`}>
+                  <span className="min-w-0 truncate">{track.label ?? track.id}</span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button type="button" title={track.locked ? 'Unlock track' : 'Lock track'} onClick={() => toggleTrackFlag(track.id, 'locked')} className="flex h-5 w-5 items-center justify-center rounded bg-white/[0.04] text-white/38 hover:bg-white/[0.1] hover:text-white">
+                      {track.locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                    </button>
+                    <button type="button" title={track.muted ? 'Unmute track' : 'Mute track'} onClick={() => toggleTrackFlag(track.id, 'muted')} className="flex h-5 w-5 items-center justify-center rounded bg-white/[0.04] text-white/38 hover:bg-white/[0.1] hover:text-white">
+                      {track.muted ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
+                    </button>
+                    <button type="button" title={track.hidden ? 'Show track' : 'Hide track'} onClick={() => toggleTrackFlag(track.id, 'hidden')} className="flex h-5 w-5 items-center justify-center rounded bg-white/[0.04] text-white/38 hover:bg-white/[0.1] hover:text-white">
+                      {track.hidden ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    </button>
+                    {(track.type === 'video' || track.type === 'audio') && (
+                    <button
+                      type="button"
+                      title={`Add ${track.type} lane`}
+                      onClick={() => addLane(track.type === 'video' ? 'video' : 'audio')}
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-white/[0.06] text-white/45 hover:bg-white/[0.12] hover:text-white"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div
+              ref={timelineScrubRef}
+              className="relative overflow-auto"
+              onPointerDown={(event) => {
+                if (event.target !== event.currentTarget) return
+                event.currentTarget.setPointerCapture(event.pointerId)
+                updatePlayheadFromPointer(event)
+              }}
+              onPointerMove={(event) => {
+                if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+                updatePlayheadFromPointer(event)
+              }}
+              onPointerUp={(event) => {
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                  event.currentTarget.releasePointerCapture(event.pointerId)
+                }
+              }}
+            >
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-[#18c7d4]"
+                style={{ left: `${timelinePositionPixels(playheadMs, timelineZoom) + 12}px` }}
+              >
+                <div className="absolute -left-[5px] top-0 h-2.5 w-2.5 rotate-45 rounded-[2px] bg-[#18c7d4]" />
+              </div>
+              {tracks.map((track) => (
+                <div
+                  key={track.id}
+                  data-video-track-id={track.id}
+                  className="flex h-[60px] items-center border-b border-white/[0.05] px-3"
+                  onPointerDown={(event) => {
+                    if (event.target instanceof HTMLElement && event.target.closest('button')) return
+                    event.currentTarget.setPointerCapture(event.pointerId)
+                    updatePlayheadFromPointer(event)
+                  }}
+                  onPointerMove={(event) => {
+                    if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+                    updatePlayheadFromPointer(event)
+                  }}
+                  onPointerUp={(event) => {
+                    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                      event.currentTarget.releasePointerCapture(event.pointerId)
+                    }
+                  }}
+                >
+                  {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/26">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, timelineZoom, track, (clip) => {
+                    setSelectedClipId(clip.id)
+                    setPlayheadPosition(clip.startMs ?? 0, true)
+                  }, (event, clip, mode) => {
+                    if (track.locked) return
+                    event.preventDefault()
+                    setSelectedClipId(clip.id)
+                    setTimelineDrag({
+                      clipId: clip.id,
+                      mode,
+                      startX: event.clientX,
+                      currentX: event.clientX,
+                      currentY: event.clientY,
+                      sourceTrackId: track.id,
+                      initialStartMs: clip.startMs ?? 0,
+                      initialDurationMs: clip.durationMs ?? 1000,
+                      initialSourceInMs: clip.sourceInMs ?? 0,
+                      lastProposedStartMs: clip.startMs ?? 0,
+                      active: false,
+                    })
+                  }, (clip, event) => {
+                    setSelectedClipId(clip.id)
+                    setClipContextMenu({ clipId: clip.id, x: event.clientX, y: event.clientY })
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        </footer>
       </div>
     </div>
   )
@@ -791,6 +1355,11 @@ function computeTimelineDuration(tracks: VideoProject['timeline']['tracks']): nu
     duration,
     ...(track.clips ?? []).map((clip) => (clip.startMs ?? 0) + (clip.durationMs ?? 0)),
   ), 0)
+}
+
+function findTrackForClip(project: VideoProject | null, clipId: string | null | undefined): VideoProject['timeline']['tracks'][number] | null {
+  if (!project || !clipId) return null
+  return (project.timeline?.tracks ?? []).find((track) => (track.clips ?? []).some((clip) => clip.id === clipId)) ?? null
 }
 
 function sortClipsByStart(clips: VideoClip[]): VideoClip[] {
@@ -835,25 +1404,75 @@ function moveClipInProject(project: VideoProject, clipId: string, startMs: numbe
   }
 }
 
+function moveClipToTrackInProject(project: VideoProject, clipId: string, targetTrackId: string, proposedStartMs: number, snap: boolean): VideoProject {
+  const tracks = project.timeline?.tracks ?? []
+  let movingClip: VideoClip | null = null
+  let sourceTrackId: string | null = null
+  for (const track of tracks) {
+    const found = (track.clips ?? []).find((clip) => clip.id === clipId)
+    if (found) {
+      movingClip = found
+      sourceTrackId = track.id
+      break
+    }
+  }
+  if (!movingClip || !sourceTrackId || sourceTrackId === targetTrackId) return project
+  const targetTrack = tracks.find((track) => track.id === targetTrackId)
+  if (!targetTrack || targetTrack.locked === true || !canTrackAcceptClip(targetTrack.type, movingClip.type)) return project
+
+  const targetClips = (targetTrack.clips ?? []).filter((clip) => clip.id !== clipId)
+  const normalizedStartMs = Math.max(0, Math.round(proposedStartMs))
+  const snappedStartMs = snap ? snapClipStart(targetClips, clipId, normalizedStartMs) : normalizedStartMs
+  const nextStartMs = clampClipMoveStart(targetClips, clipId, snappedStartMs, movingClip.durationMs ?? 1000)
+  const movedClip = { ...movingClip, startMs: nextStartMs }
+  const nextTracks = tracks.map((track) => {
+    if (track.id === sourceTrackId) {
+      return { ...track, clips: (track.clips ?? []).filter((clip) => clip.id !== clipId) }
+    }
+    if (track.id === targetTrackId) {
+      return { ...track, clips: sortClipsByStart([...targetClips, movedClip]) }
+    }
+    return track
+  })
+  return {
+    ...project,
+    timeline: {
+      ...project.timeline,
+      durationMs: computeTimelineDuration(nextTracks),
+      tracks: nextTracks,
+    },
+  }
+}
+
+function canTrackAcceptClip(trackType: VideoProject['timeline']['tracks'][number]['type'], clipType: VideoClip['type']): boolean {
+  if (trackType === 'video') return clipType === 'video' || clipType === 'image' || clipType === 'html' || clipType === 'lottie'
+  if (trackType === 'audio') return clipType === 'audio'
+  if (trackType === 'caption') return clipType === 'caption' || clipType === 'text'
+  return false
+}
+
 function clampClipMoveStart(clips: VideoClip[], clipId: string, proposedStartMs: number, durationMs: number): number {
   const ordered = sortClipsByStart(clips).filter((clip) => clip.id !== clipId)
   const boundedStartMs = Math.max(0, Math.round(proposedStartMs))
   const clipDurationMs = Math.max(MIN_CLIP_DURATION_MS, durationMs)
-  const candidates: number[] = []
-  const firstClip = ordered[0]
-  if (!firstClip || (firstClip.startMs ?? 0) >= clipDurationMs) candidates.push(0)
-  for (let index = 0; index < ordered.length; index += 1) {
-    const previousClip = ordered[index]
-    const nextClip = ordered[index + 1]
-    if (!previousClip) continue
-    const previousEndMs = (previousClip.startMs ?? 0) + Math.max(MIN_CLIP_DURATION_MS, previousClip.durationMs ?? MIN_CLIP_DURATION_MS)
-    if (!nextClip || (nextClip.startMs ?? 0) - previousEndMs >= clipDurationMs) {
-      candidates.push(previousEndMs)
-    }
+  if (ordered.length === 0) return boundedStartMs
+
+  const ranges: Array<{ min: number; max: number }> = []
+  let cursor = 0
+  for (const clip of ordered) {
+    const clipStart = clip.startMs ?? 0
+    const clipEnd = clipStart + Math.max(MIN_CLIP_DURATION_MS, clip.durationMs ?? MIN_CLIP_DURATION_MS)
+    if (clipStart - cursor >= clipDurationMs) ranges.push({ min: cursor, max: clipStart - clipDurationMs })
+    cursor = Math.max(cursor, clipEnd)
   }
-  return candidates.reduce((best, candidate) =>
-    Math.abs(candidate - boundedStartMs) < Math.abs(best - boundedStartMs) ? candidate : best,
-  candidates[0] ?? boundedStartMs)
+  ranges.push({ min: cursor, max: Number.POSITIVE_INFINITY })
+  for (const range of ranges) {
+    if (boundedStartMs >= range.min && boundedStartMs <= range.max) return boundedStartMs
+  }
+  return ranges.reduce((best, range) => {
+    const candidate = boundedStartMs < range.min ? range.min : range.max
+    return Math.abs(candidate - boundedStartMs) < Math.abs(best - boundedStartMs) ? candidate : best
+  }, ranges[0]?.min ?? boundedStartMs)
 }
 
 function trimClipStartInProject(
@@ -961,18 +1580,32 @@ function timelinePixels(ms: number, zoom = 1): number {
   return Math.max(12, Math.min(640, (ms / 12) * zoom))
 }
 
+function timelinePositionPixels(ms: number, zoom = 1): number {
+  return Math.max(0, (ms / 12) * zoom)
+}
+
+function timelineMsFromPixels(px: number, zoom = 1): number {
+  return Math.max(0, Math.round((px / Math.max(zoom, 0.1)) * 12))
+}
+
 function renderTimelineClips(
   clips: VideoClip[],
   selectedClipId: string | null,
   zoom: number,
+  track: VideoProject['timeline']['tracks'][number],
   onSelectClip: (clip: VideoClip) => void,
   onStartDrag: (event: React.PointerEvent<HTMLElement>, clip: VideoClip, mode: TimelineDragMode) => void,
+  onOpenContextMenu: (clip: VideoClip, event: React.MouseEvent<HTMLElement>) => void,
 ): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
   let cursor = 0
   for (const clip of sortClipsByStart(clips)) {
     const startMs = clip.startMs ?? 0
     const durationMs = clip.durationMs ?? 1000
+    const inactive = clip.disabled === true
+    const trackMuted = track.muted === true
+    const trackHidden = track.hidden === true
+    const trackLocked = track.locked === true
     const gapMs = Math.max(0, startMs - cursor)
     if (gapMs > 0) {
       nodes.push(
@@ -990,10 +1623,25 @@ function renderTimelineClips(
         key={clip.id}
         type="button"
         onClick={() => onSelectClip(clip)}
+        onContextMenu={(event) => {
+          event.preventDefault()
+          onOpenContextMenu(clip, event)
+        }}
         onPointerDown={(event) => onStartDrag(event, clip, 'move')}
-        className={`group relative h-10 min-w-[112px] cursor-grab rounded-md border px-3 text-left text-xs active:cursor-grabbing ${selectedClipId === clip.id ? 'border-[#f97316]/70 bg-[#f97316]/18 text-white' : 'border-white/[0.08] bg-white/[0.045] text-white/68'}`}
+        className={`group relative h-10 min-w-[112px] cursor-grab rounded-md border px-3 text-left text-xs active:cursor-grabbing ${
+          inactive || trackHidden
+            ? 'border-white/[0.05] bg-white/[0.025] text-white/28 opacity-55'
+            : selectedClipId === clip.id
+              ? 'border-[#f97316]/70 bg-[#f97316]/18 text-white'
+              : 'border-[#18c7d4]/22 bg-[#172326] text-white/78 hover:border-[#18c7d4]/42 hover:bg-[#1b2c30]'
+        }`}
         style={{ width: `${Math.max(112, timelinePixels(durationMs, zoom))}px` }}
       >
+        {(inactive || trackMuted || trackHidden || trackLocked) && (
+          <span className="absolute right-2 top-1 rounded bg-black/45 px-1 text-[9px] uppercase tracking-wide text-white/40">
+            {inactive ? 'Off' : trackHidden ? 'Hidden' : trackMuted ? 'Muted' : 'Locked'}
+          </span>
+        )}
         <span
           aria-hidden="true"
           onPointerDown={(event) => {
@@ -1003,7 +1651,7 @@ function renderTimelineClips(
           className="absolute inset-y-1 left-1 w-1.5 cursor-ew-resize rounded-full bg-white/18 opacity-0 transition-opacity group-hover:opacity-100"
         />
         <span className="block truncate font-medium">{clip.label ?? clip.type ?? 'clip'}</span>
-        <span className="block truncate text-white/42">{formatDuration(startMs)} · {formatDuration(durationMs)}</span>
+        <span className="block truncate text-white/42">{formatDuration(startMs)} - {formatDuration(startMs + durationMs)}</span>
         <span
           aria-hidden="true"
           onPointerDown={(event) => {
@@ -1063,16 +1711,28 @@ function Metric({ label, value }: { label: string; value: string }) {
   )
 }
 
+function MetricPill({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex h-6 items-center gap-1 rounded-md bg-white/[0.055] px-2">
+      <span className="text-white/34">{label}</span>
+      <span className="font-medium text-white/72">{value}</span>
+    </span>
+  )
+}
+
 function EmptyText({ children }: { children: React.ReactNode }) {
   return <div className="rounded-md border border-white/[0.08] bg-white/[0.025] p-3 text-sm text-white/42">{children}</div>
 }
 
-function Field({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+function Field({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
   return (
-    <label className="grid gap-1 text-xs text-white/42">
-      {label}
-      <input value={value} onChange={(event) => onChange(event.target.value)} className="h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50" />
-    </label>
+    <input
+      aria-label={placeholder}
+      placeholder={placeholder}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-8 rounded-md border border-white/[0.07] bg-black/30 px-2 text-sm text-white/72 outline-none placeholder:text-white/28 focus:border-[#18c7d4]/60"
+    />
   )
 }
 
@@ -1085,13 +1745,14 @@ function ReadOnlyValue({ label, value }: { label: string; value: string }) {
   )
 }
 
-function IconButton({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
+function IconButton({ label, onClick, disabled = false, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
   return (
     <button
       type="button"
       title={label}
       onClick={onClick}
-      className="flex h-8 items-center justify-center rounded-md border border-white/[0.08] bg-black/35 text-white/68 outline-none hover:border-[#f97316]/40 hover:text-white"
+      disabled={disabled}
+      className="flex h-7 min-w-9 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.055] px-2 text-white/68 outline-none hover:border-[#18c7d4]/45 hover:bg-white/[0.09] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
     >
       {children}
     </button>
@@ -1108,11 +1769,12 @@ function NumberField({ label, value, onChange, compact = false }: { label: strin
 }
 
 function AdjustmentField({ label, min, max, step, value, onChange }: { label: string; min: number; max: number; step: number; value: number; onChange: (value: number) => void }) {
+  const percent = ((value - min) / (max - min)) * 100
   return (
-    <label className="grid gap-1 text-xs text-white/42">
+    <label className="grid gap-0.5 rounded-md px-1 py-0.5 text-[11px] text-white/46">
       <span className="flex items-center justify-between gap-2">
-        <span>{label}</span>
-        <span className="tabular-nums text-white/55">{value.toFixed(2)}</span>
+        <span className="font-medium text-white/58">{label}</span>
+        <span className="min-w-11 rounded border border-white/[0.055] bg-black/30 px-1.5 py-0.5 text-right text-[10px] tabular-nums text-white/62">{value.toFixed(2)}</span>
       </span>
       <input
         type="range"
@@ -1121,7 +1783,8 @@ function AdjustmentField({ label, min, max, step, value, onChange }: { label: st
         step={step}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
-        className="w-full accent-[#f97316]"
+        className="video-adjust-slider h-3 w-full appearance-none bg-transparent"
+        style={{ '--video-adjust-fill': `${percent}%` } as React.CSSProperties}
       />
     </label>
   )

@@ -202,6 +202,26 @@ function defaultClipDuration(mediaType: VideoMediaType): number {
   return 5000;
 }
 
+function probeMediaDurationMs(path: string): number | null {
+  const result = spawnSync('ffprobe', [
+    '-v', 'error',
+    '-show_entries', 'format=duration',
+    '-of', 'default=noprint_wrappers=1:nokey=1',
+    path,
+  ], { encoding: 'utf-8' });
+  if (result.status !== 0) return null;
+  const seconds = Number.parseFloat(result.stdout.trim());
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return Math.max(1, Math.round(seconds * 1000));
+}
+
+export function clipDurationForImport(path: string, mediaType: VideoMediaType): number {
+  if (mediaType === 'video' || mediaType === 'audio') {
+    return probeMediaDurationMs(path) ?? defaultClipDuration(mediaType);
+  }
+  return defaultClipDuration(mediaType);
+}
+
 function addVersion(project: RunnerVideoProject, summary: string, actor: 'user' | 'agent' | 'system' = 'user'): string {
   const now = new Date().toISOString();
   const versionId = randomUUID();
@@ -343,7 +363,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
         });
         const track = ensureTrack(project, mediaType);
         const startMs = Math.max(0, project.timeline.durationMs || 0);
-        const durationMs = defaultClipDuration(mediaType);
+        const durationMs = clipDurationForImport(targetPath, mediaType);
         track.clips.push({
           id: randomUUID(),
           mediaId,
@@ -351,6 +371,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
           startMs,
           durationMs,
           label,
+          ...(mediaType === 'video' || mediaType === 'audio' ? { sourceInMs: 0, sourceOutMs: durationMs } : {}),
         });
         project.timeline.durationMs = Math.max(project.timeline.durationMs || 0, startMs + durationMs);
         const asset: OutputAsset = {

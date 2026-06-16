@@ -95,6 +95,7 @@ export interface VideoClip {
   opacity?: number;
   volume?: number;
   speed?: number;
+  disabled?: boolean;
   adjustments?: VideoClipAdjustments;
   effects?: string[];
   transitionIn?: VideoTransition;

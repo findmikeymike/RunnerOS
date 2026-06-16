@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { collectImportableVideoStudioFiles } from './video-studio';
+import { clipDurationForImport, collectImportableVideoStudioFiles } from './video-studio';
 
 const tempDirs: string[] = [];
 
@@ -45,5 +45,19 @@ describe('collectImportableVideoStudioFiles', () => {
 
     expect(result.files).toHaveLength(1);
     expect(result.skipped).toBe(1);
+  });
+});
+
+describe('clipDurationForImport', () => {
+  test('keeps image imports at the editor default duration', () => {
+    expect(clipDurationForImport('/does/not/need/to/exist.png', 'image')).toBe(3000);
+  });
+
+  test('falls back when ffprobe cannot read video duration', () => {
+    const root = makeTempDir();
+    const bogusVideo = join(root, 'bogus.mp4');
+    writeFileSync(bogusVideo, 'not a real mp4');
+
+    expect(clipDurationForImport(bogusVideo, 'video')).toBe(5000);
   });
 });

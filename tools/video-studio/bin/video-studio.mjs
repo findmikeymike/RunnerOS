@@ -433,13 +433,18 @@ function renderSimpleMp4(project, outputPath) {
   const width = typeof project.settings?.width === 'number' ? project.settings.width : 1080;
   const height = typeof project.settings?.height === 'number' ? project.settings.height : 1920;
   const fps = typeof project.settings?.fps === 'number' ? project.settings.fps : 30;
-  const durationSeconds = Math.max(1, Math.ceil((project.timeline?.durationMs || 3000) / 1000));
   const mediaById = new Map((project.media || []).map((media) => [media.id, media]));
-  const clips = (project.timeline?.tracks || [])
-    .flatMap((track) => track.clips || [])
-    .sort((a, b) => (a.startMs || 0) - (b.startMs || 0));
+  const visibleTracks = (project.timeline?.tracks || []).filter((track) => track.hidden !== true);
+  const audibleTrackIds = new Set(visibleTracks.filter((track) => track.muted !== true).map((track) => track.id));
+  const clips = visibleTracks
+    .flatMap((track) => (track.clips || []).map((clip) => ({ clip, trackId: track.id })))
+    .filter((item) => item.clip.disabled !== true)
+    .sort((a, b) => (a.clip.startMs || 0) - (b.clip.startMs || 0));
+  const activeDurationMs = clips.reduce((end, { clip }) => Math.max(end, (clip.startMs || 0) + (clip.durationMs || 0)), 0);
+  const durationMs = activeDurationMs > 0 ? activeDurationMs : (project.timeline?.durationMs || 3000);
+  const durationSeconds = Math.max(1, Math.ceil(durationMs / 1000));
   const mediaClips = clips
-    .map((clip) => ({ clip, media: clip.mediaId ? mediaById.get(clip.mediaId) : undefined }))
+    .map(({ clip, trackId }) => ({ clip, trackId, media: clip.mediaId ? mediaById.get(clip.mediaId) : undefined }))
     .filter((item) => item.media);
   const unsupportedClips = mediaClips.filter(({ media }) => !['video', 'image', 'audio'].includes(media.type));
   if (unsupportedClips.length > 0) {
@@ -449,7 +454,7 @@ function renderSimpleMp4(project, outputPath) {
 
   const args = ['-y', '-f', 'lavfi', '-i', `color=c=#111111:s=${width}x${height}:r=${fps}:d=${durationSeconds}`];
   const inputClips = [];
-  for (const { clip, media } of mediaClips) {
+  for (const { clip, trackId, media } of mediaClips) {
     if (!existsSync(media.path)) fail(`Media file not found for clip "${clip.label || clip.id}": ${media.path}`);
     const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
     const sourceIn = seconds(typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0);
@@ -459,7 +464,7 @@ function renderSimpleMp4(project, outputPath) {
       if (sourceIn > 0) args.push('-ss', ffmpegNumber(sourceIn));
       args.push('-t', clipDuration, '-i', media.path);
     }
-    inputClips.push({ clip, media, inputIndex: inputClips.length + 1 });
+    inputClips.push({ clip, trackId, media, inputIndex: inputClips.length + 1 });
   }
 
   const filters = [`[0:v]format=rgba[base0]`];
@@ -481,8 +486,9 @@ function renderSimpleMp4(project, outputPath) {
     overlayIndex += 1;
   }
 
-  const textClips = (project.timeline?.tracks || [])
+  const textClips = visibleTracks
     .flatMap((track) => track.clips || [])
+    .filter((clip) => clip.disabled !== true)
     .filter((clip) => clip.type === 'text' || clip.text || !clip.mediaId)
     .slice(0, 8);
   for (const [index, clip] of textClips.entries()) {
@@ -501,7 +507,7 @@ function renderSimpleMp4(project, outputPath) {
   }
 
   const audioLabels = [];
-  inputClips.filter((item) => item.media.type === 'audio' || (item.media.type === 'video' && hasAudioStream(item.media.path))).forEach(({ clip, inputIndex }, index) => {
+  inputClips.filter((item) => audibleTrackIds.has(item.trackId) && (item.media.type === 'audio' || (item.media.type === 'video' && hasAudioStream(item.media.path)))).forEach(({ clip, inputIndex }, index) => {
     const delayMs = Math.max(0, Math.round(clip.startMs || 0));
     const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
     const label = `a${index}`;

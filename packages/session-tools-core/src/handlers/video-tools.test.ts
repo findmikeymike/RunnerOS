@@ -218,6 +218,91 @@ describe('video studio session tools', () => {
     expect(audioProbe.stdout.trim()).not.toBe('');
   });
 
+  test('video_export omits audio from muted tracks', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Muted Export' });
+    const mediaPath = join(root, 'source.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10',
+      '-f', 'lavfi',
+      '-i', 'sine=frequency=440:duration=1',
+      '-t', '1',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      mediaPath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const clip = await handleVideoClipAdd(ctx, {
+      projectPath,
+      mediaId: (imported.structuredContent as { mediaId: string }).mediaId,
+      startMs: 0,
+      durationMs: 1000,
+    });
+    expect(clip.isError).toBe(false);
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ id: string; muted?: boolean }> };
+    };
+    project.timeline.tracks[0]!.muted = true;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`);
+    const outputPath = join(root, 'project', 'renders', 'muted.mp4');
+
+    const exported = await handleVideoExport(ctx, { projectPath, outputPath });
+
+    expect(exported.isError).toBe(false);
+    const audioProbe = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', outputPath], { encoding: 'utf-8' });
+    expect(audioProbe.status).toBe(0);
+    expect(audioProbe.stdout.trim()).toBe('');
+  });
+
+  test('video_export skips hidden tracks', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Hidden Track Export' });
+    const visibleText = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'Visible',
+      startMs: 0,
+      durationMs: 1000,
+    });
+    expect(visibleText.isError).toBe(false);
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { durationMs: number; tracks: Array<{ id: string; type: string; label: string; hidden?: boolean; clips: Array<{ id: string; type: string; label: string; startMs: number; durationMs: number; text?: { text: string; fontSize: number; color: string } }> }> };
+    };
+    project.timeline.tracks.push({
+      id: 'hidden-long-track',
+      type: 'caption',
+      label: 'Hidden Long Track',
+      hidden: true,
+      clips: [{
+        id: 'hidden-long-title',
+        type: 'text',
+        label: 'Hidden',
+        startMs: 5000,
+        durationMs: 5000,
+        text: { text: 'Hidden', fontSize: 64, color: '#ffffff' },
+      }],
+    });
+    project.timeline.durationMs = 10000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`);
+    const outputPath = join(root, 'project', 'renders', 'hidden.mp4');
+
+    const exported = await handleVideoExport(ctx, { projectPath, outputPath });
+
+    expect(exported.isError).toBe(false);
+    expect(existsSync(outputPath)).toBe(true);
+    const durationProbe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', outputPath], { encoding: 'utf-8' });
+    expect(durationProbe.status).toBe(0);
+    expect(Number(durationProbe.stdout.trim())).toBeLessThan(2);
+  });
+
   test('rejects project and export paths outside the working directory', async () => {
     const ctx = makeCtx();
     const outside = mkdtempSync(join(tmpdir(), 'runner-video-outside-'));

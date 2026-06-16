@@ -107,7 +107,7 @@ import {
   isOutputsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
-import { isWorkflowsNavigation, isWorkflowRunNavigation } from "../../../shared/types"
+import { isVideoStudioNavigation, isWorkflowsNavigation, isWorkflowRunNavigation } from "../../../shared/types"
 import type { SettingsSubpage } from "../../../shared/types"
 import { SourcesListPanel } from "./SourcesListPanel"
 import { SkillsListPanel } from "./SkillsListPanel"
@@ -119,6 +119,7 @@ import { useAgents } from "@/hooks/useAgents"
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { OutputsListPanel } from "../outputs/OutputsListPanel"
+import { findVideoProjectAsset } from "../outputs/video-project-output"
 import { useAutomations } from "@/hooks/useAutomations"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { PanelHeader } from "./PanelHeader"
@@ -1445,6 +1446,7 @@ function AppShellContent({
     outputs,
     loading: outputsLoading,
     error: outputsError,
+    getOutput,
   } = useOutputs(activeWorkspaceId)
 
   // Filter session metadata based on sidebar mode and chat filter
@@ -1746,6 +1748,29 @@ function AppShellContent({
   const handleOutputsClick = useCallback(() => {
     navigate(routes.view.outputs())
   }, [])
+
+  const handleCreativeLabClick = useCallback(() => {
+    void (async () => {
+      const candidates = outputs.filter((output) =>
+      output.kind === 'video'
+      && (
+        output.tags?.includes('video-studio')
+        || output.title.toLowerCase().includes('video studio')
+        || output.primary?.path?.endsWith('video.runner-video.json')
+      ),
+      )
+
+      for (const candidate of candidates) {
+        const manifest = await getOutput(candidate.id)
+        if (manifest && findVideoProjectAsset(manifest)) {
+          navigate(routes.view.videoStudio(candidate.id))
+          return
+        }
+      }
+
+      navigate(routes.view.outputs())
+    })()
+  }, [getOutput, outputs])
 
   const handleOutputSelect = useCallback((outputId: string) => {
     navigate(routes.view.output(outputId))
@@ -2294,6 +2319,7 @@ function AppShellContent({
     if (isAutomationsNavigation(navState)) return false
     if (isWorkspaceContextNavigation(navState)) return false
     if (isOutputsNavigation(navState)) return false
+    if (isVideoStudioNavigation(navState)) return false
     if (isSettingsNavigation(navState)) return false
     return true
   }, [effectiveSidebarAndNavigatorHidden, isAutoCompact, navState])
@@ -2311,6 +2337,7 @@ function AppShellContent({
           onOpenTools={handleSourcesClick}
           onOpenSkills={handleSkillsClick}
           onOpenWorkspaceContext={() => navigate(routes.view.workspaceContext())}
+          onOpenCreativeLab={handleCreativeLabClick}
           onOpenOutputs={handleOutputsClick}
           onOpenKeyboardShortcuts={onOpenKeyboardShortcuts}
           onOpenStoredUserPreferences={onOpenStoredUserPreferences}

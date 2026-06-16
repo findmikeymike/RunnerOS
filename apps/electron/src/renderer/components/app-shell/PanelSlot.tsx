@@ -19,6 +19,7 @@ import { useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
 import { X, ChevronLeft } from 'lucide-react'
 import { parseRouteToNavigationState } from '../../../shared/route-parser'
+import { isVideoStudioNavigation } from '../../../shared/types'
 import { closePanelAtom, focusedPanelIdAtom, type PanelStackEntry } from '@/atoms/panel-stack'
 import { useAppShellContext, AppShellProvider } from '@/context/AppShellContext'
 import { PanelHeaderCenterButton } from '@/components/ui/PanelHeaderCenterButton'
@@ -59,6 +60,7 @@ export function PanelSlot({
   const setFocusedPanel = useSetAtom(focusedPanelIdAtom)
   const parentContext = useAppShellContext()
   const navState = parseRouteToNavigationState(entry.route)
+  const isFullWidthTool = navState ? isVideoStudioNavigation(navState) : false
 
   const handleClose = useCallback(() => {
     closePanel(entry.id)
@@ -131,7 +133,15 @@ export function PanelSlot({
           borderBottomLeftRadius: isAtLeftEdge ? RADIUS_EDGE : RADIUS_INNER,
           borderTopRightRadius: RADIUS_INNER,
           borderBottomRightRadius: isAtRightEdge ? RADIUS_EDGE : RADIUS_INNER,
-          ...(isOnly && !isCompact
+          ...(isOnly && !isCompact && isFullWidthTool
+            ? {
+                flexGrow: 1,
+                flexShrink: 1,
+                flexBasis: 0,
+                width: 'auto',
+                minWidth: PANEL_MIN_WIDTH,
+              }
+            : isOnly && !isCompact
             ? {
                 flexGrow: 0,
                 flexShrink: 1,

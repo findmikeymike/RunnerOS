@@ -146,6 +146,7 @@ interface TopBarProps {
   onOpenTools: () => void
   onOpenSkills: () => void
   onOpenWorkspaceContext: () => void
+  onOpenCreativeLab: () => void
   onOpenOutputs: () => void
   onOpenKeyboardShortcuts: () => void
   onOpenStoredUserPreferences: () => void
@@ -171,6 +172,7 @@ export function TopBar({
   onOpenTools,
   onOpenSkills,
   onOpenWorkspaceContext,
+  onOpenCreativeLab,
   onOpenOutputs,
   onOpenKeyboardShortcuts,
   onOpenStoredUserPreferences,
@@ -422,6 +424,14 @@ export function TopBar({
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <TopBarButton onClick={onOpenCreativeLab} aria-label="Creative Lab" className="h-[26px] w-[26px] rounded-lg">
+              <Icons.Clapperboard className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+            </TopBarButton>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">Creative Lab</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <TopBarButton onClick={onOpenOutputs} aria-label="Outputs" className="h-[26px] w-[26px] rounded-lg">
