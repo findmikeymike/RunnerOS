@@ -540,6 +540,10 @@ export const VideoClipAddSchema = z.object({
   durationMs: z.number().positive().optional().describe('Clip duration in milliseconds. Defaults to 3000 for text/image or 1000 otherwise.'),
   sourceInMs: z.number().nonnegative().optional().describe('Optional source in-point in milliseconds.'),
   sourceOutMs: z.number().nonnegative().optional().describe('Optional source out-point in milliseconds.'),
+  volume: z.number().min(0).max(4).optional().describe('Per-clip audio volume multiplier. 1 is normal, 0 is silent.'),
+  speed: z.number().min(0.25).max(4).optional().describe('Per-clip playback speed. 1 is normal.'),
+  fadeInMs: z.number().nonnegative().optional().describe('Optional audio fade-in duration in milliseconds.'),
+  fadeOutMs: z.number().nonnegative().optional().describe('Optional audio fade-out duration in milliseconds.'),
   label: z.string().optional().describe('Optional timeline clip label.'),
   text: z.string().optional().describe('Text payload for text clips.'),
 });
@@ -547,11 +551,15 @@ export const VideoClipAddSchema = z.object({
 export const VideoClipEditSchema = z.object({
   projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
   clipId: z.string().min(1).optional().describe('Existing timeline clip id to edit. Required except for pack.'),
-  action: z.enum(['move', 'trim', 'pack', 'split', 'delete', 'duplicate']).describe('Timeline edit to apply.'),
+  action: z.enum(['move', 'trim', 'pack', 'split', 'delete', 'duplicate', 'settings']).describe('Timeline edit to apply. Use settings for speed, volume, and fades.'),
   startMs: z.number().nonnegative().optional().describe('New timeline start in milliseconds. Required for move.'),
   durationMs: z.number().positive().optional().describe('New clip duration in milliseconds. Required for trim.'),
   sourceInMs: z.number().nonnegative().optional().describe('Optional source in-point in milliseconds for trim.'),
   sourceOutMs: z.number().nonnegative().optional().describe('Optional source out-point in milliseconds for trim.'),
+  volume: z.number().min(0).max(4).optional().describe('Per-clip audio volume multiplier for settings edits.'),
+  speed: z.number().min(0.25).max(4).optional().describe('Per-clip playback speed for settings edits.'),
+  fadeInMs: z.number().nonnegative().optional().describe('Audio fade-in duration in milliseconds for settings edits.'),
+  fadeOutMs: z.number().nonnegative().optional().describe('Audio fade-out duration in milliseconds for settings edits.'),
   atMs: z.number().nonnegative().optional().describe('Timeline timestamp in milliseconds. Required for split.'),
   ripple: z.boolean().optional().describe('For delete, pull later clips on the same track left by the removed duration.'),
   snap: z.boolean().optional().describe('For move, snap near previous clip end points on the same track.'),
@@ -1089,7 +1097,7 @@ Use this for the first agent-editable timeline operations: place imported media 
 
   video_clip_edit: `Edit a RunnerOS Video Studio timeline.
 
-Use move with startMs to reposition a clip. Pass snap: true when you want magnet behavior near another clip's end point. Use trim with durationMs and optional sourceInMs/sourceOutMs to change clip length/source bounds. Use split with atMs, duplicate, delete with optional ripple, or pack to remove gaps on each track. This mutates the project JSON and records a version/event for the agent change log.`,
+Use move with startMs to reposition a clip. Pass snap: true when you want magnet behavior near another clip's end point. Use trim with durationMs and optional sourceInMs/sourceOutMs to change clip length/source bounds. Use settings with speed, volume, fadeInMs, or fadeOutMs for playback/audio behavior. Use split with atMs, duplicate, delete with optional ripple, or pack to remove gaps on each track. This mutates the project JSON and records a version/event for the agent change log.`,
 
   video_clip_adjust: `Apply footage look adjustments to a RunnerOS Video Studio clip.
 
@@ -1097,7 +1105,7 @@ Use this for exposure, contrast, saturation, highlights, shadows, temperature, t
 
   video_export: `Create a Video Studio export.
 
-Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, and text clips, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Video presets are simple-mp4, mp4-16x9-1080p, mp4-9x16-1080x1920, mp4-1x1-1080, mp4-4x5-1080x1350, and mp4-source-size. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
+Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, text clips, per-clip speed, volume, and audio fades, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Video presets are simple-mp4, mp4-16x9-1080p, mp4-9x16-1080x1920, mp4-1x1-1080, mp4-4x5-1080x1350, and mp4-source-size. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
 
   visual_surface: `Update the current session Canvas through a safe structured operation.
 

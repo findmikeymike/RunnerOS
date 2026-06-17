@@ -46,6 +46,18 @@ function validateClip(clip: VideoClip, path: string, errors: VideoValidationIssu
   ) {
     push(errors, `${path}.sourceOutMs`, 'sourceOutMs must be greater than sourceInMs.');
   }
+  if (clip.volume !== undefined && (typeof clip.volume !== 'number' || !Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 4)) {
+    push(errors, `${path}.volume`, 'Clip volume must be between 0 and 4.');
+  }
+  if (clip.speed !== undefined && (typeof clip.speed !== 'number' || !Number.isFinite(clip.speed) || clip.speed < 0.25 || clip.speed > 4)) {
+    push(errors, `${path}.speed`, 'Clip speed must be between 0.25 and 4.');
+  }
+  if (clip.fadeInMs !== undefined && !isFiniteNonNegativeNumber(clip.fadeInMs)) {
+    push(errors, `${path}.fadeInMs`, 'fadeInMs must be a non-negative number.');
+  }
+  if (clip.fadeOutMs !== undefined && !isFiniteNonNegativeNumber(clip.fadeOutMs)) {
+    push(errors, `${path}.fadeOutMs`, 'fadeOutMs must be a non-negative number.');
+  }
   if (clip.text && !isNonEmptyString(clip.text.text)) {
     push(errors, `${path}.text.text`, 'Text clips require non-empty text.');
   }

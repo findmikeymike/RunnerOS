@@ -67,6 +67,10 @@ interface VideoClipAddInput {
   durationMs?: number;
   sourceInMs?: number;
   sourceOutMs?: number;
+  volume?: number;
+  speed?: number;
+  fadeInMs?: number;
+  fadeOutMs?: number;
   label?: string;
   text?: string;
 }
@@ -74,11 +78,15 @@ interface VideoClipAddInput {
 interface VideoClipEditInput {
   projectPath: string;
   clipId?: string;
-  action: 'move' | 'trim' | 'pack' | 'split' | 'delete' | 'duplicate';
+  action: 'move' | 'trim' | 'pack' | 'split' | 'delete' | 'duplicate' | 'settings';
   startMs?: number;
   durationMs?: number;
   sourceInMs?: number;
   sourceOutMs?: number;
+  volume?: number;
+  speed?: number;
+  fadeInMs?: number;
+  fadeOutMs?: number;
   atMs?: number;
   ripple?: boolean;
   snap?: boolean;
@@ -120,7 +128,7 @@ interface VideoProject {
   media: Array<Record<string, unknown> & { id: string; type: MediaType; label: string; path: string }>;
   timeline: {
     durationMs: number;
-    tracks: Array<{ id: string; type: TrackType; label: string; locked?: boolean; muted?: boolean; hidden?: boolean; clips: Array<Record<string, unknown> & { id: string; type: ClipType; startMs: number; durationMs: number; mediaId?: string; adjustments?: VideoClipAdjustments }> }>;
+    tracks: Array<{ id: string; type: TrackType; label: string; locked?: boolean; muted?: boolean; hidden?: boolean; clips: Array<Record<string, unknown> & { id: string; type: ClipType; startMs: number; durationMs: number; mediaId?: string; adjustments?: VideoClipAdjustments; volume?: number; speed?: number; fadeInMs?: number; fadeOutMs?: number }> }>;
     markers: unknown[];
   };
   captions: unknown[];
@@ -479,6 +487,67 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+function clipSpeed(clip: { speed?: unknown }): number {
+  return clamp(typeof clip.speed === 'number' && Number.isFinite(clip.speed) ? clip.speed : 1, 0.25, 4);
+}
+
+function clipVolume(clip: { volume?: unknown }): number {
+  return clamp(typeof clip.volume === 'number' && Number.isFinite(clip.volume) ? clip.volume : 1, 0, 4);
+}
+
+function clipFadeSeconds(clip: { fadeInMs?: unknown; fadeOutMs?: unknown }, key: 'fadeInMs' | 'fadeOutMs', clipDurationSeconds: number): number {
+  const value = typeof clip[key] === 'number' && Number.isFinite(clip[key]) ? (clip[key] as number) : 0;
+  return clamp(value / 1000, 0, Math.max(0, clipDurationSeconds / 2));
+}
+
+function atempoFilter(speed: number): string {
+  const parts: string[] = [];
+  let remaining = speed;
+  while (remaining > 2) {
+    parts.push('atempo=2');
+    remaining /= 2;
+  }
+  while (remaining < 0.5) {
+    parts.push('atempo=0.5');
+    remaining /= 0.5;
+  }
+  parts.push(`atempo=${ffmpegNumber(remaining)}`);
+  return parts.join(',');
+}
+
+function clipSourceDurationSeconds(clip: { durationMs: number; speed?: unknown; sourceInMs?: unknown; sourceOutMs?: unknown }): number {
+  const requestedMs = Math.max(1, clip.durationMs * clipSpeed(clip));
+  if (
+    typeof clip.sourceInMs === 'number'
+    && Number.isFinite(clip.sourceInMs)
+    && typeof clip.sourceOutMs === 'number'
+    && Number.isFinite(clip.sourceOutMs)
+  ) {
+    return seconds(Math.min(requestedMs, Math.max(1, clip.sourceOutMs - clip.sourceInMs)), 1000);
+  }
+  return seconds(requestedMs, 1000);
+}
+
+function applyClipSettings(clip: { volume?: number; speed?: number; fadeInMs?: number; fadeOutMs?: number }, input: { volume?: number; speed?: number; fadeInMs?: number; fadeOutMs?: number }): string | null {
+  if (input.volume !== undefined) {
+    if (!Number.isFinite(input.volume) || input.volume < 0 || input.volume > 4) return 'volume must be between 0 and 4.';
+    clip.volume = Math.round(input.volume * 1000) / 1000;
+  }
+  if (input.speed !== undefined) {
+    if (!Number.isFinite(input.speed) || input.speed < 0.25 || input.speed > 4) return 'speed must be between 0.25 and 4.';
+    clip.speed = Math.round(input.speed * 1000) / 1000;
+  }
+  if (input.fadeInMs !== undefined) {
+    if (!Number.isFinite(input.fadeInMs) || input.fadeInMs < 0) return 'fadeInMs must be non-negative.';
+    clip.fadeInMs = Math.round(input.fadeInMs);
+  }
+  if (input.fadeOutMs !== undefined) {
+    if (!Number.isFinite(input.fadeOutMs) || input.fadeOutMs < 0) return 'fadeOutMs must be non-negative.';
+    clip.fadeOutMs = Math.round(input.fadeOutMs);
+  }
+  return null;
+}
+
 const ADJUSTMENT_PRESETS: Record<NonNullable<VideoClipAdjustInput['preset']>, VideoClipAdjustments> = {
   neutral: {},
   clean: { exposure: 0.03, contrast: 1.05, saturation: 1.04, grain: 0, preset: 'clean' },
@@ -588,13 +657,13 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
   const inputClips: Array<{ clip: typeof clips[number]['clip']; trackId: string; media: VideoProject['media'][number]; inputIndex: number }> = [];
   for (const { clip, trackId, media } of mediaClips) {
     if (!existsSync(media.path)) throw new Error(`Media file not found for clip "${clip.label ?? clip.id}": ${media.path}`);
-    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
+    const sourceDuration = ffmpegNumber(media.type === 'image' ? seconds(clip.durationMs, 1000) : clipSourceDurationSeconds(clip));
     const sourceIn = seconds(typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0);
     if (media.type === 'image') {
-      args.push('-loop', '1', '-t', clipDuration, '-i', media.path);
+      args.push('-loop', '1', '-t', sourceDuration, '-i', media.path);
     } else {
       if (sourceIn > 0) args.push('-ss', ffmpegNumber(sourceIn));
-      args.push('-t', clipDuration, '-i', media.path);
+      args.push('-t', sourceDuration, '-i', media.path);
     }
     inputClips.push({ clip, trackId, media, inputIndex: inputClips.length + 1 });
   }
@@ -608,11 +677,14 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
     const prepared = `v${overlayIndex}`;
     const next = `base${overlayIndex + 1}`;
     const adjusted = `adj${overlayIndex}`;
+    const setpts = media.type === 'video'
+      ? `setpts=(PTS-STARTPTS)/${ffmpegNumber(clipSpeed(clip))}+${start}/TB`
+      : `setpts=PTS-STARTPTS+${start}/TB`;
     filters.push(
       `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba[${adjusted}]`,
     );
     filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments));
-    filters.push(`[${prepared}]setpts=PTS-STARTPTS+${start}/TB[${prepared}t]`);
+    filters.push(`[${prepared}]${setpts}[${prepared}t]`);
     filters.push(`${currentVideo}[${prepared}t]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
     currentVideo = `[${next}]`;
     overlayIndex += 1;
@@ -641,9 +713,21 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
   const audioLabels: string[] = [];
   inputClips.filter((item) => audibleTrackIds.has(item.trackId) && (item.media.type === 'audio' || (item.media.type === 'video' && hasAudioStream(item.media.path)))).forEach(({ clip, inputIndex }, index) => {
     const delayMs = Math.max(0, Math.round(clip.startMs ?? 0));
-    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
+    const clipDurationSeconds = seconds(clip.durationMs, 1000);
+    const sourceDuration = ffmpegNumber(clipSourceDurationSeconds(clip));
+    const fadeIn = clipFadeSeconds(clip, 'fadeInMs', clipDurationSeconds);
+    const fadeOut = clipFadeSeconds(clip, 'fadeOutMs', clipDurationSeconds);
+    const audioFilters = [
+      `atrim=duration=${sourceDuration}`,
+      'asetpts=PTS-STARTPTS',
+      atempoFilter(clipSpeed(clip)),
+      `volume=${ffmpegNumber(clipVolume(clip))}`,
+    ];
+    if (fadeIn > 0) audioFilters.push(`afade=t=in:st=0:d=${ffmpegNumber(fadeIn)}`);
+    if (fadeOut > 0) audioFilters.push(`afade=t=out:st=${ffmpegNumber(Math.max(0, clipDurationSeconds - fadeOut))}:d=${ffmpegNumber(fadeOut)}`);
+    audioFilters.push(`adelay=${delayMs}:all=1`);
     const label = `a${index}`;
-    filters.push(`[${inputIndex}:a]atrim=duration=${clipDuration},asetpts=PTS-STARTPTS,adelay=${delayMs}:all=1[${label}]`);
+    filters.push(`[${inputIndex}:a]${audioFilters.join(',')}[${label}]`);
     audioLabels.push(`[${label}]`);
   });
   if (audioLabels.length > 0) {
@@ -919,7 +1003,7 @@ export async function handleVideoClipAdd(ctx: SessionToolContext, args: VideoCli
     if (startMs < 0) return errorResponse('startMs must be non-negative.');
     const track = chooseTrack(project, media?.type ?? (clipType === 'audio' ? 'audio' : clipType === 'caption' ? 'caption' : 'video'), args.trackId);
     if (track.locked) return errorResponse(lockedTrackError(track));
-    const clip = {
+    const clip: VideoProject['timeline']['tracks'][number]['clips'][number] = {
       id: randomUUID(),
       mediaId: media?.id,
       type: clipType,
@@ -930,6 +1014,8 @@ export async function handleVideoClipAdd(ctx: SessionToolContext, args: VideoCli
       label: args.label?.trim() || media?.label || clipType,
       ...(args.text ? { text: { text: args.text, fontSize: 64, color: '#ffffff' } } : {}),
     };
+    const settingsError = applyClipSettings(clip, args);
+    if (settingsError) return errorResponse(settingsError);
     track.clips.push(clip);
     project.timeline.durationMs = Math.max(project.timeline.durationMs, startMs + durationMs);
     const errors = validateProject(project);
@@ -1058,6 +1144,11 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
         clipId = newClip.id;
         startMs = newClip.startMs;
         durationMs = newClip.durationMs;
+      } else if (args.action === 'settings') {
+        const settingsError = applyClipSettings(clip, args);
+        if (settingsError) return errorResponse(settingsError);
+        startMs = clip.startMs;
+        durationMs = clip.durationMs;
       } else {
         return errorResponse('Unknown video clip edit action.');
       }

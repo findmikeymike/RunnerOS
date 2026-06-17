@@ -317,6 +317,61 @@ describe('video studio session tools', () => {
     expect(audioProbe.stdout.trim()).toBe('');
   });
 
+  test('video_clip_edit settings persists speed volume and fades for export', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Clip Settings Export' });
+    const mediaPath = join(root, 'source.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10:duration=2',
+      '-f', 'lavfi',
+      '-i', 'sine=frequency=440:duration=2',
+      '-t', '2',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      mediaPath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const added = await handleVideoClipAdd(ctx, {
+      projectPath,
+      mediaId: (imported.structuredContent as { mediaId: string }).mediaId,
+      startMs: 0,
+      durationMs: 1000,
+    });
+    const clipId = (added.structuredContent as { clipId: string }).clipId;
+
+    const settings = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId,
+      action: 'settings',
+      speed: 2,
+      volume: 0.5,
+      fadeInMs: 150,
+      fadeOutMs: 200,
+    });
+
+    expect(settings.isError).toBe(false);
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ clips: Array<{ id: string; speed?: number; volume?: number; fadeInMs?: number; fadeOutMs?: number }> }> };
+    };
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === clipId)).toMatchObject({
+      speed: 2,
+      volume: 0.5,
+      fadeInMs: 150,
+      fadeOutMs: 200,
+    });
+
+    const outputPath = join(root, 'project', 'renders', 'settings.mp4');
+    const exported = await handleVideoExport(ctx, { projectPath, outputPath });
+    expect(exported.isError).toBe(false);
+    expect(existsSync(outputPath)).toBe(true);
+  });
+
   test('video_export skips hidden tracks', async () => {
     if (!hasFfmpeg()) return;
     const ctx = makeCtx();

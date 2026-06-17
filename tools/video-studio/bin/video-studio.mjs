@@ -163,6 +163,10 @@ function validateProject(project) {
         if (clip.sourceInMs !== undefined && (typeof clip.sourceInMs !== 'number' || !Number.isFinite(clip.sourceInMs) || clip.sourceInMs < 0)) errors.push(`${path}.sourceInMs must be non-negative.`);
         if (clip.sourceOutMs !== undefined && (typeof clip.sourceOutMs !== 'number' || !Number.isFinite(clip.sourceOutMs) || clip.sourceOutMs < 0)) errors.push(`${path}.sourceOutMs must be non-negative.`);
         if (clip.sourceInMs !== undefined && clip.sourceOutMs !== undefined && clip.sourceOutMs <= clip.sourceInMs) errors.push(`${path}.sourceOutMs must be greater than sourceInMs.`);
+        if (clip.volume !== undefined && (typeof clip.volume !== 'number' || !Number.isFinite(clip.volume) || clip.volume < 0 || clip.volume > 4)) errors.push(`${path}.volume must be between 0 and 4.`);
+        if (clip.speed !== undefined && (typeof clip.speed !== 'number' || !Number.isFinite(clip.speed) || clip.speed < 0.25 || clip.speed > 4)) errors.push(`${path}.speed must be between 0.25 and 4.`);
+        if (clip.fadeInMs !== undefined && (typeof clip.fadeInMs !== 'number' || !Number.isFinite(clip.fadeInMs) || clip.fadeInMs < 0)) errors.push(`${path}.fadeInMs must be non-negative.`);
+        if (clip.fadeOutMs !== undefined && (typeof clip.fadeOutMs !== 'number' || !Number.isFinite(clip.fadeOutMs) || clip.fadeOutMs < 0)) errors.push(`${path}.fadeOutMs must be non-negative.`);
       }
     }
   }
@@ -372,6 +376,18 @@ function trimProjectClip(project, clipId, durationMs, sourceInMs, sourceOutMs, r
   return { project: next, trimmedClipId: clipId, clipDurationMs: editedClip.durationMs };
 }
 
+function updateProjectClipSettings(project, clipId, settings) {
+  const next = cloneJson(project);
+  const found = findClip(next, clipId);
+  if (!found) fail(`Clip not found: ${clipId}`);
+  const { track, clip } = found;
+  if (track.locked) lockedTrackError(track);
+  applyClipSettings(clip, settings);
+  next.timeline.durationMs = timelineDuration(next.timeline.tracks);
+  addProjectVersion(next, `Updated clip settings ${clip.label || clip.id}`);
+  return { project: next, updatedClipId: clipId };
+}
+
 function inspectProject(project) {
   const issues = [];
   const warnings = [];
@@ -495,6 +511,66 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function clipSpeed(clip) {
+  return clamp(typeof clip.speed === 'number' && Number.isFinite(clip.speed) ? clip.speed : 1, 0.25, 4);
+}
+
+function clipVolume(clip) {
+  return clamp(typeof clip.volume === 'number' && Number.isFinite(clip.volume) ? clip.volume : 1, 0, 4);
+}
+
+function clipFadeSeconds(clip, key, clipDurationSeconds) {
+  const value = typeof clip[key] === 'number' && Number.isFinite(clip[key]) ? clip[key] : 0;
+  return clamp(value / 1000, 0, Math.max(0, clipDurationSeconds / 2));
+}
+
+function atempoFilter(speed) {
+  const parts = [];
+  let remaining = speed;
+  while (remaining > 2) {
+    parts.push('atempo=2');
+    remaining /= 2;
+  }
+  while (remaining < 0.5) {
+    parts.push('atempo=0.5');
+    remaining /= 0.5;
+  }
+  parts.push(`atempo=${ffmpegNumber(remaining)}`);
+  return parts.join(',');
+}
+
+function clipSourceDurationSeconds(clip) {
+  const requestedMs = Math.max(1, (clip.durationMs || 1000) * clipSpeed(clip));
+  if (
+    typeof clip.sourceInMs === 'number'
+    && Number.isFinite(clip.sourceInMs)
+    && typeof clip.sourceOutMs === 'number'
+    && Number.isFinite(clip.sourceOutMs)
+  ) {
+    return seconds(Math.min(requestedMs, Math.max(1, clip.sourceOutMs - clip.sourceInMs)), 1000);
+  }
+  return seconds(requestedMs, 1000);
+}
+
+function applyClipSettings(clip, input) {
+  if (input.volume !== undefined) {
+    if (!Number.isFinite(input.volume) || input.volume < 0 || input.volume > 4) fail('--volume must be between 0 and 4.');
+    clip.volume = Math.round(input.volume * 1000) / 1000;
+  }
+  if (input.speed !== undefined) {
+    if (!Number.isFinite(input.speed) || input.speed < 0.25 || input.speed > 4) fail('--speed must be between 0.25 and 4.');
+    clip.speed = Math.round(input.speed * 1000) / 1000;
+  }
+  if (input.fadeInMs !== undefined) {
+    if (!Number.isFinite(input.fadeInMs) || input.fadeInMs < 0) fail('--fade-in-ms must be non-negative.');
+    clip.fadeInMs = Math.round(input.fadeInMs);
+  }
+  if (input.fadeOutMs !== undefined) {
+    if (!Number.isFinite(input.fadeOutMs) || input.fadeOutMs < 0) fail('--fade-out-ms must be non-negative.');
+    clip.fadeOutMs = Math.round(input.fadeOutMs);
+  }
+}
+
 function hasAdjustments(adjustments) {
   return Boolean(adjustments && Object.keys(adjustments).some((key) => key !== 'preset'));
 }
@@ -574,13 +650,13 @@ function renderSimpleMp4(project, outputPath, renderSettings) {
   const inputClips = [];
   for (const { clip, trackId, media } of mediaClips) {
     if (!existsSync(media.path)) fail(`Media file not found for clip "${clip.label || clip.id}": ${media.path}`);
-    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
+    const sourceDuration = ffmpegNumber(media.type === 'image' ? seconds(clip.durationMs, 1000) : clipSourceDurationSeconds(clip));
     const sourceIn = seconds(typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0);
     if (media.type === 'image') {
-      args.push('-loop', '1', '-t', clipDuration, '-i', media.path);
+      args.push('-loop', '1', '-t', sourceDuration, '-i', media.path);
     } else {
       if (sourceIn > 0) args.push('-ss', ffmpegNumber(sourceIn));
-      args.push('-t', clipDuration, '-i', media.path);
+      args.push('-t', sourceDuration, '-i', media.path);
     }
     inputClips.push({ clip, trackId, media, inputIndex: inputClips.length + 1 });
   }
@@ -594,11 +670,14 @@ function renderSimpleMp4(project, outputPath, renderSettings) {
     const prepared = `v${overlayIndex}`;
     const next = `base${overlayIndex + 1}`;
     const adjusted = `adj${overlayIndex}`;
+    const setpts = media.type === 'video'
+      ? `setpts=(PTS-STARTPTS)/${ffmpegNumber(clipSpeed(clip))}+${start}/TB`
+      : `setpts=PTS-STARTPTS+${start}/TB`;
     filters.push(
       `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba[${adjusted}]`,
     );
     filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments));
-    filters.push(`[${prepared}]setpts=PTS-STARTPTS+${start}/TB[${prepared}t]`);
+    filters.push(`[${prepared}]${setpts}[${prepared}t]`);
     filters.push(`${currentVideo}[${prepared}t]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
     currentVideo = `[${next}]`;
     overlayIndex += 1;
@@ -627,9 +706,21 @@ function renderSimpleMp4(project, outputPath, renderSettings) {
   const audioLabels = [];
   inputClips.filter((item) => audibleTrackIds.has(item.trackId) && (item.media.type === 'audio' || (item.media.type === 'video' && hasAudioStream(item.media.path)))).forEach(({ clip, inputIndex }, index) => {
     const delayMs = Math.max(0, Math.round(clip.startMs || 0));
-    const clipDuration = ffmpegNumber(seconds(clip.durationMs, 1000));
+    const clipDurationSeconds = seconds(clip.durationMs, 1000);
+    const sourceDuration = ffmpegNumber(clipSourceDurationSeconds(clip));
+    const fadeIn = clipFadeSeconds(clip, 'fadeInMs', clipDurationSeconds);
+    const fadeOut = clipFadeSeconds(clip, 'fadeOutMs', clipDurationSeconds);
+    const audioFilters = [
+      `atrim=duration=${sourceDuration}`,
+      'asetpts=PTS-STARTPTS',
+      atempoFilter(clipSpeed(clip)),
+      `volume=${ffmpegNumber(clipVolume(clip))}`,
+    ];
+    if (fadeIn > 0) audioFilters.push(`afade=t=in:st=0:d=${ffmpegNumber(fadeIn)}`);
+    if (fadeOut > 0) audioFilters.push(`afade=t=out:st=${ffmpegNumber(Math.max(0, clipDurationSeconds - fadeOut))}:d=${ffmpegNumber(fadeOut)}`);
+    audioFilters.push(`adelay=${delayMs}:all=1`);
     const label = `a${index}`;
-    filters.push(`[${inputIndex}:a]atrim=duration=${clipDuration},asetpts=PTS-STARTPTS,adelay=${delayMs}:all=1[${label}]`);
+    filters.push(`[${inputIndex}:a]${audioFilters.join(',')}[${label}]`);
     audioLabels.push(`[${label}]`);
   });
   if (audioLabels.length > 0) {
@@ -802,7 +893,7 @@ function runDryRun() {
 
 function runEdit() {
   const projectPath = positional(0);
-  if (!projectPath) fail('Usage: video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--source-in-ms <ms>] [--source-out-ms <ms>] [--snap] [--ripple] [--json]');
+  if (!projectPath) fail('Usage: video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim|settings [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--source-in-ms <ms>] [--source-out-ms <ms>] [--volume <0-4>] [--speed <0.25-4>] [--fade-in-ms <ms>] [--fade-out-ms <ms>] [--snap] [--ripple] [--json]');
   const action = opt('--action', '');
   const clipId = opt('--clip-id', '');
   const { resolved, project } = readValidProject(projectPath);
@@ -820,7 +911,13 @@ function runEdit() {
     args.includes('--source-out-ms') ? Number(opt('--source-out-ms', Number.NaN)) : undefined,
     hasFlag('--ripple'),
   );
-  else fail('Unknown edit action. Use pack, split, delete, duplicate, move, or trim.');
+  else if (action === 'settings') result = updateProjectClipSettings(project, clipId, {
+    volume: args.includes('--volume') ? Number(opt('--volume', Number.NaN)) : undefined,
+    speed: args.includes('--speed') ? Number(opt('--speed', Number.NaN)) : undefined,
+    fadeInMs: args.includes('--fade-in-ms') ? Number(opt('--fade-in-ms', Number.NaN)) : undefined,
+    fadeOutMs: args.includes('--fade-out-ms') ? Number(opt('--fade-out-ms', Number.NaN)) : undefined,
+  });
+  else fail('Unknown edit action. Use pack, split, delete, duplicate, move, trim, or settings.');
   const validation = validateProject(result.project);
   if (!validation.ok) fail('Edit produced an invalid project.', { errors: validation.errors });
   writeJsonAtomic(resolved, result.project);
@@ -925,7 +1022,7 @@ Usage:
   video-studio probe <media-path> [--json]
   video-studio inspect <project-path> [--json]
   video-studio dry-run <project-path> [--json]
-  video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--snap] [--ripple] [--json]
+  video-studio edit <project-path> --action pack|split|delete|duplicate|move|trim|settings [--clip-id <id>] [--at-ms <ms>] [--start-ms <ms>] [--duration-ms <ms>] [--source-in-ms <ms>] [--source-out-ms <ms>] [--volume <0-4>] [--speed <0.25-4>] [--fade-in-ms <ms>] [--fade-out-ms <ms>] [--snap] [--ripple] [--json]
   video-studio validate <project-path> [--json]
   video-studio export <project-path> --out <output-path> [--preset <name>] [--json]
 `);

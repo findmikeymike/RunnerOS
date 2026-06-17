@@ -87,6 +87,32 @@ describe('video-studio edit commands', () => {
     expect(run(['inspect', projectPath, '--json']).ok).toBe(true);
   });
 
+  test('updates clip playback and audio settings', () => {
+    const projectPath = tempProject();
+
+    const updated = run([
+      'edit',
+      projectPath,
+      '--action',
+      'settings',
+      '--clip-id',
+      'clip-a',
+      '--speed',
+      '1.5',
+      '--volume',
+      '0.25',
+      '--fade-in-ms',
+      '120',
+      '--fade-out-ms',
+      '180',
+      '--json',
+    ]);
+
+    expect(updated.updatedClipId).toBe('clip-a');
+    const clip = readProject(projectPath).timeline.tracks[0].clips.find((item) => item.id === 'clip-a');
+    expect(clip).toMatchObject({ speed: 1.5, volume: 0.25, fadeInMs: 120, fadeOutMs: 180 });
+  });
+
   test('inspect fails on overlapping clips', () => {
     const projectPath = tempProject();
     const project = readProject(projectPath);
@@ -139,8 +165,8 @@ describe('video-studio edit commands', () => {
       '-f', 'lavfi',
       '-i', 'testsrc=size=160x90:rate=10',
       '-f', 'lavfi',
-      '-i', 'sine=frequency=440:duration=1',
-      '-t', '1',
+      '-i', 'sine=frequency=440:duration=2',
+      '-t', '2',
       '-c:v', 'libx264',
       '-pix_fmt', 'yuv420p',
       '-c:a', 'aac',
@@ -171,8 +197,8 @@ describe('video-studio edit commands', () => {
       '-f', 'lavfi',
       '-i', 'testsrc=size=160x90:rate=10',
       '-f', 'lavfi',
-      '-i', 'sine=frequency=440:duration=1',
-      '-t', '1',
+      '-i', 'sine=frequency=440:duration=2',
+      '-t', '2',
       '-c:v', 'libx264',
       '-pix_fmt', 'yuv420p',
       '-c:a', 'aac',
@@ -181,7 +207,18 @@ describe('video-studio edit commands', () => {
     expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
     const project = readProject(projectPath);
     project.media.push({ id: 'media-video', type: 'video', label: 'Source', path: sourcePath, source: { kind: 'user-import' } });
-    project.timeline.tracks[0].clips = [{ id: 'clip-video', mediaId: 'media-video', type: 'video', startMs: 0, durationMs: 1000, label: 'Source' }];
+    project.timeline.tracks[0].clips = [{
+      id: 'clip-video',
+      mediaId: 'media-video',
+      type: 'video',
+      startMs: 0,
+      durationMs: 1000,
+      label: 'Source',
+      speed: 1.5,
+      volume: 0.75,
+      fadeInMs: 100,
+      fadeOutMs: 100,
+    }];
     project.timeline.durationMs = 1000;
     writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
 
