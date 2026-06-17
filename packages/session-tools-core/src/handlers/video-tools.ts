@@ -143,6 +143,11 @@ interface VideoMediaProbeMetadata {
   hasVideo?: boolean;
 }
 
+interface VideoMediaDerivativePaths {
+  thumbnailPath?: string;
+  waveformPath?: string;
+}
+
 interface VideoExportRenderSettings {
   slug: string;
   width: number;
@@ -411,6 +416,39 @@ function probeMediaMetadata(path: string, mediaType: MediaType = inferMediaType(
     return metadata;
   }
   return metadata;
+}
+
+function runDerivativeFfmpeg(args: string[], outputPath: string): boolean {
+  const result = spawnSync('ffmpeg', args, { encoding: 'utf-8', timeout: 45_000 });
+  return result.status === 0 && existsSync(outputPath);
+}
+
+function generateVideoMediaDerivatives(
+  inputPath: string,
+  mediaType: MediaType,
+  metadata: Pick<VideoMediaProbeMetadata, 'hasAudio'>,
+  targets: { thumbnailPath: string; waveformPath: string },
+): VideoMediaDerivativePaths {
+  const derivatives: VideoMediaDerivativePaths = {};
+  if (mediaType === 'video' || mediaType === 'image') {
+    mkdirSync(dirname(targets.thumbnailPath), { recursive: true });
+    const thumbnailArgs = mediaType === 'video'
+      ? ['-y', '-ss', '0', '-i', inputPath, '-frames:v', '1', '-vf', 'scale=320:-2', targets.thumbnailPath]
+      : ['-y', '-i', inputPath, '-frames:v', '1', '-vf', 'scale=320:-2', targets.thumbnailPath];
+    if (runDerivativeFfmpeg(thumbnailArgs, targets.thumbnailPath)) derivatives.thumbnailPath = targets.thumbnailPath;
+  }
+  if (mediaType === 'audio' || metadata.hasAudio === true) {
+    mkdirSync(dirname(targets.waveformPath), { recursive: true });
+    const waveformArgs = [
+      '-y',
+      '-i', inputPath,
+      '-filter_complex', 'aformat=channel_layouts=mono,showwavespic=s=640x120:colors=#ff7a1a',
+      '-frames:v', '1',
+      targets.waveformPath,
+    ];
+    if (runDerivativeFfmpeg(waveformArgs, targets.waveformPath)) derivatives.waveformPath = targets.waveformPath;
+  }
+  return derivatives;
 }
 
 function isVideoOutputPath(path: string): boolean {
@@ -832,12 +870,17 @@ export async function handleVideoMediaImport(ctx: SessionToolContext, args: Vide
     copyFileSync(mediaPath, storedMediaPath);
     const mediaType = args.mediaType ?? inferMediaType(mediaPath);
     const metadata = probeMediaMetadata(storedMediaPath, mediaType);
+    const derivatives = generateVideoMediaDerivatives(storedMediaPath, mediaType, metadata, {
+      thumbnailPath: join(dirname(projectPath), 'thumbnails', `${mediaId}.jpg`),
+      waveformPath: join(dirname(projectPath), 'waveforms', `${mediaId}.png`),
+    });
     const media = {
       id: mediaId,
       type: mediaType,
       label: args.label?.trim() || basename(mediaPath),
       path: storedMediaPath,
       ...metadata,
+      ...derivatives,
       originalPath: mediaPath,
       source: { kind: 'user-import' },
     };

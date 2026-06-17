@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { clipDurationForImport, collectImportableVideoStudioFiles, probeMediaMetadata } from './video-studio';
+import { clipDurationForImport, collectImportableVideoStudioFiles, generateVideoMediaDerivatives, probeMediaMetadata } from './video-studio';
 
 const tempDirs: string[] = [];
 
@@ -89,5 +89,33 @@ describe('clipDurationForImport', () => {
     expect(metadata.hasVideo).toBe(true);
     expect(metadata.hasAudio).toBe(true);
     expect(metadata.codec).toBeTruthy();
+  });
+
+  test('generates thumbnail and waveform derivatives for video with audio', () => {
+    const root = makeTempDir();
+    const video = join(root, 'source.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10',
+      '-f', 'lavfi',
+      '-i', 'sine=frequency=440:duration=1',
+      '-t', '1',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      video,
+    ], { encoding: 'utf-8' });
+    if (fixture.status !== 0) return;
+
+    const derivatives = generateVideoMediaDerivatives(video, 'video', { hasAudio: true }, {
+      thumbnailPath: join(root, 'thumbs', 'source.jpg'),
+      waveformPath: join(root, 'waves', 'source.png'),
+    });
+
+    expect(derivatives.thumbnailPath).toBeTruthy();
+    expect(derivatives.waveformPath).toBeTruthy();
+    expect(existsSync(derivatives.thumbnailPath!)).toBe(true);
+    expect(existsSync(derivatives.waveformPath!)).toBe(true);
   });
 });

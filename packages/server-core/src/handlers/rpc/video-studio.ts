@@ -60,6 +60,11 @@ interface VideoMediaProbeMetadata {
   hasVideo?: boolean;
 }
 
+interface VideoMediaDerivativePaths {
+  thumbnailPath?: string;
+  waveformPath?: string;
+}
+
 // Renderer-supplied export preset is passed to the CLI; constrain to a known set.
 const ALLOWED_VIDEO_EXPORT_PRESETS = new Set([
   'simple-mp4',
@@ -196,6 +201,39 @@ function mimeTypeForPath(path: string): string | undefined {
   if (ext === '.svg') return 'image/svg+xml';
   if (ext === '.json') return 'application/json';
   return undefined;
+}
+
+function runDerivativeFfmpeg(args: string[], outputPath: string): boolean {
+  const result = spawnSync('ffmpeg', args, { encoding: 'utf-8', timeout: 45_000 });
+  return result.status === 0 && existsSync(outputPath);
+}
+
+export function generateVideoMediaDerivatives(
+  inputPath: string,
+  mediaType: VideoMediaType,
+  metadata: Pick<VideoMediaProbeMetadata, 'hasAudio'>,
+  targets: { thumbnailPath: string; waveformPath: string },
+): VideoMediaDerivativePaths {
+  const derivatives: VideoMediaDerivativePaths = {};
+  if (mediaType === 'video' || mediaType === 'image') {
+    mkdirSync(dirname(targets.thumbnailPath), { recursive: true });
+    const thumbnailArgs = mediaType === 'video'
+      ? ['-y', '-ss', '0', '-i', inputPath, '-frames:v', '1', '-vf', 'scale=320:-2', targets.thumbnailPath]
+      : ['-y', '-i', inputPath, '-frames:v', '1', '-vf', 'scale=320:-2', targets.thumbnailPath];
+    if (runDerivativeFfmpeg(thumbnailArgs, targets.thumbnailPath)) derivatives.thumbnailPath = targets.thumbnailPath;
+  }
+  if (mediaType === 'audio' || metadata.hasAudio === true) {
+    mkdirSync(dirname(targets.waveformPath), { recursive: true });
+    const waveformArgs = [
+      '-y',
+      '-i', inputPath,
+      '-filter_complex', 'aformat=channel_layouts=mono,showwavespic=s=640x120:colors=#ff7a1a',
+      '-frames:v', '1',
+      targets.waveformPath,
+    ];
+    if (runDerivativeFfmpeg(waveformArgs, targets.waveformPath)) derivatives.waveformPath = targets.waveformPath;
+  }
+  return derivatives;
 }
 
 function trackTypeForMedia(mediaType: VideoMediaType): VideoTrackType {
@@ -429,6 +467,10 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
 
           const label = basename(sourcePath);
           const metadata = probeMediaMetadata(targetPath, mediaType);
+          const derivatives = generateVideoMediaDerivatives(targetPath, mediaType, metadata, {
+            thumbnailPath: service.resolveAssetPath(workspaceId, outputId, `thumbnails/${mediaId}.jpg`),
+            waveformPath: service.resolveAssetPath(workspaceId, outputId, `waveforms/${mediaId}.png`),
+          });
           project.media.push({
             id: mediaId,
             type: mediaType,
@@ -436,6 +478,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
             path: targetPath,
             mimeType: mimeTypeForPath(targetPath),
             ...metadata,
+            ...derivatives,
             source: { kind: 'user-import' },
           });
           const track = ensureTrack(project, mediaType);
@@ -459,6 +502,24 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
             ...fileMetadata(targetPath),
           };
           nextAssets.push(asset);
+          if (derivatives.thumbnailPath) {
+            nextAssets.push({
+              id: `video-thumbnail-${mediaId}`,
+              label: `${label} thumbnail`,
+              role: 'supporting',
+              path: relativeAssetPath(root, outputId, derivatives.thumbnailPath),
+              ...fileMetadata(derivatives.thumbnailPath),
+            });
+          }
+          if (derivatives.waveformPath) {
+            nextAssets.push({
+              id: `video-waveform-${mediaId}`,
+              label: `${label} waveform`,
+              role: 'supporting',
+              path: relativeAssetPath(root, outputId, derivatives.waveformPath),
+              ...fileMetadata(derivatives.waveformPath),
+            });
+          }
           imported.push({ mediaId, assetId: asset.id, label, type: mediaType, path: targetPath });
         }
 
