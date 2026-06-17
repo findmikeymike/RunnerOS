@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
-import { basename, dirname, extname, join, relative } from 'node:path';
+import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
@@ -51,6 +51,25 @@ interface VideoStudioReportResult {
 
 // Renderer-supplied export preset is passed to the CLI; constrain to a known set.
 const ALLOWED_VIDEO_EXPORT_PRESETS = new Set(['simple-mp4', 'placeholder']);
+const videoProjectLocks = new Map<string, Promise<void>>();
+
+async function withVideoProjectLock<T>(projectPath: string, task: () => Promise<T> | T): Promise<T> {
+  const key = resolve(projectPath);
+  const previous = videoProjectLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolveCurrent) => {
+    release = resolveCurrent;
+  });
+  const chained = previous.catch(() => undefined).then(() => current);
+  videoProjectLocks.set(key, chained);
+  await previous.catch(() => undefined);
+  try {
+    return await task();
+  } finally {
+    release();
+    if (videoProjectLocks.get(key) === chained) videoProjectLocks.delete(key);
+  }
+}
 
 function resolveRootPath(workspaceId: string): string {
   const workspace = getWorkspaceByNameOrId(workspaceId);
@@ -228,6 +247,19 @@ function mergeAssetsById(existing: OutputAsset[], next: OutputAsset[]): OutputAs
   return Array.from(merged.values());
 }
 
+function addAssetToOutput(server: RpcServer, workspaceId: string, outputId: string, asset: OutputAsset): void {
+  const service = serviceFor(server);
+  const root = resolveRootPath(workspaceId);
+  const latestOutput = service.get(workspaceId, outputId);
+  if (!latestOutput) throw new Error(`Output not found: ${outputId}`);
+  writeOutputManifest(root, {
+    ...latestOutput,
+    updatedAt: new Date().toISOString(),
+    assets: mergeAssetsById(latestOutput.assets, [asset]),
+  });
+  pushOutputsUpdated(server, workspaceId);
+}
+
 function videoStudioCli(workspaceId: string): string {
   const workspace = getWorkspaceByNameOrId(workspaceId);
   const root = workspace?.rootPath ?? process.cwd();
@@ -243,7 +275,7 @@ function parseJsonOutput(stdout: string, fallback: Record<string, unknown>): unk
   }
 }
 
-function runVideoStudioReport(server: RpcServer, workspaceId: string, outputId: string, command: 'inspect' | 'dry-run'): VideoStudioReportResult {
+async function runVideoStudioReport(server: RpcServer, workspaceId: string, outputId: string, command: 'inspect' | 'dry-run'): Promise<VideoStudioReportResult> {
   assertLocalWorkspace(workspaceId, `${command === 'inspect' ? 'Inspect' : 'Dry-run'} Video Studio project`);
   const service = serviceFor(server);
   const root = resolveRootPath(workspaceId);
@@ -251,53 +283,49 @@ function runVideoStudioReport(server: RpcServer, workspaceId: string, outputId: 
   if (!output) throw new Error(`Output not found: ${outputId}`);
   const projectAsset = videoProjectAsset(output);
   const projectPath = service.resolveAssetPath(workspaceId, outputId, projectAsset.path);
-  const cliPath = videoStudioCli(workspaceId);
-  if (!existsSync(cliPath)) throw new Error(`Video Studio CLI not found: ${cliPath}`);
-  const child = spawnSync('node', [cliPath, command, projectPath, '--json'], {
-    encoding: 'utf-8',
-    cwd: dirname(projectPath),
+  return withVideoProjectLock(projectPath, () => {
+    const cliPath = videoStudioCli(workspaceId);
+    if (!existsSync(cliPath)) throw new Error(`Video Studio CLI not found: ${cliPath}`);
+    const child = spawnSync('node', [cliPath, command, projectPath, '--json'], {
+      encoding: 'utf-8',
+      cwd: dirname(projectPath),
+    });
+    const report = parseJsonOutput(child.stdout, {
+      ok: false,
+      error: child.stderr || child.stdout || `Video Studio ${command} failed.`,
+      status: child.status ?? 1,
+    });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const reportName = command === 'inspect' ? 'video-inspect' : 'video-dry-run';
+    const reportAssetPath = `reports/${reportName}-${stamp}.json`;
+    const reportPath = service.resolveAssetPath(workspaceId, outputId, reportAssetPath);
+    mkdirSync(dirname(reportPath), { recursive: true });
+    writeFileSync(reportPath, `${JSON.stringify({
+      command,
+      status: child.status ?? 1,
+      stdout: child.stdout,
+      stderr: child.stderr,
+      report,
+    }, null, 2)}\n`, 'utf-8');
+    const assetId = `video-${reportName}-${stamp}`;
+    const reportAsset: OutputAsset = {
+      id: assetId,
+      label: basename(reportPath),
+      role: 'supporting',
+      path: relativeAssetPath(root, outputId, reportPath),
+      ...fileMetadata(reportPath),
+    };
+    addAssetToOutput(server, workspaceId, outputId, reportAsset);
+    return {
+      ok: child.status === 0,
+      outputId,
+      command,
+      assetId,
+      reportPath,
+      status: child.status ?? 1,
+      report,
+    };
   });
-  const report = parseJsonOutput(child.stdout, {
-    ok: false,
-    error: child.stderr || child.stdout || `Video Studio ${command} failed.`,
-    status: child.status ?? 1,
-  });
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const reportName = command === 'inspect' ? 'video-inspect' : 'video-dry-run';
-  const reportAssetPath = `reports/${reportName}-${stamp}.json`;
-  const reportPath = service.resolveAssetPath(workspaceId, outputId, reportAssetPath);
-  mkdirSync(dirname(reportPath), { recursive: true });
-  writeFileSync(reportPath, `${JSON.stringify({
-    command,
-    status: child.status ?? 1,
-    stdout: child.stdout,
-    stderr: child.stderr,
-    report,
-  }, null, 2)}\n`, 'utf-8');
-  const assetId = `video-${reportName}-${stamp}`;
-  const reportAsset: OutputAsset = {
-    id: assetId,
-    label: basename(reportPath),
-    role: 'supporting',
-    path: relativeAssetPath(root, outputId, reportPath),
-    ...fileMetadata(reportPath),
-  };
-  const latestOutput = service.get(workspaceId, outputId) ?? output;
-  writeOutputManifest(root, {
-    ...latestOutput,
-    updatedAt: new Date().toISOString(),
-    assets: mergeAssetsById(latestOutput.assets, [reportAsset]),
-  });
-  pushOutputsUpdated(server, workspaceId);
-  return {
-    ok: child.status === 0,
-    outputId,
-    command,
-    assetId,
-    reportPath,
-    status: child.status ?? 1,
-    report,
-  };
 }
 
 export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDeps): void {
@@ -323,66 +351,67 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
       if (!output) throw new Error(`Output not found: ${outputId}`);
       const projectAsset = videoProjectAsset(output);
       const projectPath = service.resolveAssetPath(workspaceId, outputId, projectAsset.path);
-      const project = readProject(projectPath);
-      const mediaDir = service.resolveAssetPath(workspaceId, outputId, 'media/.keep');
-      mkdirSync(dirname(mediaDir), { recursive: true });
-
       const imported: VideoStudioImportResult['imported'] = [];
-      const nextAssets = [...output.assets];
       const collected = collectImportableVideoStudioFiles(result.filePaths);
-      for (const sourcePath of collected.files) {
-        const mediaId = randomUUID();
-        const mediaType = inferMediaType(sourcePath);
-        const safeName = sanitizeFilename(basename(sourcePath)) || `media${extname(sourcePath)}`;
-        const assetPath = `media/${mediaId}-${safeName}`;
-        const targetPath = service.resolveAssetPath(workspaceId, outputId, assetPath);
-        mkdirSync(dirname(targetPath), { recursive: true });
-        copyFileSync(sourcePath, targetPath);
+      await withVideoProjectLock(projectPath, () => {
+        const project = readProject(projectPath);
+        const mediaDir = service.resolveAssetPath(workspaceId, outputId, 'media/.keep');
+        mkdirSync(dirname(mediaDir), { recursive: true });
+        const nextAssets: OutputAsset[] = [];
+        for (const sourcePath of collected.files) {
+          const mediaId = randomUUID();
+          const mediaType = inferMediaType(sourcePath);
+          const safeName = sanitizeFilename(basename(sourcePath)) || `media${extname(sourcePath)}`;
+          const assetPath = `media/${mediaId}-${safeName}`;
+          const targetPath = service.resolveAssetPath(workspaceId, outputId, assetPath);
+          mkdirSync(dirname(targetPath), { recursive: true });
+          copyFileSync(sourcePath, targetPath);
 
-        const label = basename(sourcePath);
-        project.media.push({
-          id: mediaId,
-          type: mediaType,
-          label,
-          path: targetPath,
-          mimeType: mimeTypeForPath(targetPath),
-          source: { kind: 'user-import' },
-        });
-        const track = ensureTrack(project, mediaType);
-        const startMs = Math.max(0, project.timeline.durationMs || 0);
-        const durationMs = clipDurationForImport(targetPath, mediaType);
-        track.clips.push({
-          id: randomUUID(),
-          mediaId,
-          type: mediaType === 'audio' ? 'audio' : mediaType === 'caption' ? 'caption' : mediaType === 'image' ? 'image' : 'video',
-          startMs,
-          durationMs,
-          label,
-          ...(mediaType === 'video' || mediaType === 'audio' ? { sourceInMs: 0, sourceOutMs: durationMs } : {}),
-        });
-        project.timeline.durationMs = Math.max(project.timeline.durationMs || 0, startMs + durationMs);
-        const asset: OutputAsset = {
-          id: `video-media-${mediaId}`,
-          label,
-          role: 'attachment',
-          path: assetPath,
-          ...fileMetadata(targetPath),
-        };
-        nextAssets.push(asset);
-        imported.push({ mediaId, assetId: asset.id, label, type: mediaType, path: targetPath });
-      }
+          const label = basename(sourcePath);
+          project.media.push({
+            id: mediaId,
+            type: mediaType,
+            label,
+            path: targetPath,
+            mimeType: mimeTypeForPath(targetPath),
+            source: { kind: 'user-import' },
+          });
+          const track = ensureTrack(project, mediaType);
+          const startMs = Math.max(0, project.timeline.durationMs || 0);
+          const durationMs = clipDurationForImport(targetPath, mediaType);
+          track.clips.push({
+            id: randomUUID(),
+            mediaId,
+            type: mediaType === 'audio' ? 'audio' : mediaType === 'caption' ? 'caption' : mediaType === 'image' ? 'image' : 'video',
+            startMs,
+            durationMs,
+            label,
+            ...(mediaType === 'video' || mediaType === 'audio' ? { sourceInMs: 0, sourceOutMs: durationMs } : {}),
+          });
+          project.timeline.durationMs = Math.max(project.timeline.durationMs || 0, startMs + durationMs);
+          const asset: OutputAsset = {
+            id: `video-media-${mediaId}`,
+            label,
+            role: 'attachment',
+            path: assetPath,
+            ...fileMetadata(targetPath),
+          };
+          nextAssets.push(asset);
+          imported.push({ mediaId, assetId: asset.id, label, type: mediaType, path: targetPath });
+        }
 
-      if (imported.length > 0) {
-        addVersion(project, `Imported ${imported.length} media file${imported.length === 1 ? '' : 's'}`);
-        writeProject(projectPath, project);
-        const latestOutput = service.get(workspaceId, outputId) ?? output;
-        writeOutputManifest(root, {
-          ...latestOutput,
-          updatedAt: new Date().toISOString(),
-          assets: mergeAssetsById(latestOutput.assets, nextAssets),
-        });
-        pushOutputsUpdated(server, workspaceId);
-      }
+        if (imported.length > 0) {
+          addVersion(project, `Imported ${imported.length} media file${imported.length === 1 ? '' : 's'}`);
+          writeProject(projectPath, project);
+          const latestOutput = service.get(workspaceId, outputId) ?? output;
+          writeOutputManifest(root, {
+            ...latestOutput,
+            updatedAt: new Date().toISOString(),
+            assets: mergeAssetsById(latestOutput.assets, nextAssets),
+          });
+          pushOutputsUpdated(server, workspaceId);
+        }
+      });
 
       return { ok: true, outputId, imported, skipped: collected.skipped, projectAssetId: projectAsset.id };
     },
@@ -411,51 +440,74 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
       if (!output) throw new Error(`Output not found: ${outputId}`);
       const projectAsset = videoProjectAsset(output);
       const projectPath = service.resolveAssetPath(workspaceId, outputId, projectAsset.path);
-      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const renderPath = service.resolveAssetPath(workspaceId, outputId, `renders/${stamp}.mp4`);
-      mkdirSync(dirname(renderPath), { recursive: true });
-      const cliPath = videoStudioCli(workspaceId);
-      if (!existsSync(cliPath)) throw new Error(`Video Studio CLI not found: ${cliPath}`);
-      const child = spawnSync('node', [cliPath, 'export', projectPath, '--preset', preset, '--out', renderPath, '--json'], {
-        encoding: 'utf-8',
-        cwd: dirname(projectPath),
+      return withVideoProjectLock(projectPath, () => {
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const renderPath = service.resolveAssetPath(workspaceId, outputId, `renders/${stamp}.mp4`);
+        mkdirSync(dirname(renderPath), { recursive: true });
+        const cliPath = videoStudioCli(workspaceId);
+        if (!existsSync(cliPath)) throw new Error(`Video Studio CLI not found: ${cliPath}`);
+        const child = spawnSync('node', [cliPath, 'export', projectPath, '--preset', preset, '--out', renderPath, '--json'], {
+          encoding: 'utf-8',
+          cwd: dirname(projectPath),
+        });
+        const receiptPath = `${renderPath}.receipt.json`;
+        const receiptAssetPath = relativeAssetPath(root, outputId, receiptPath);
+        const receiptAssetId = `video-render-receipt-${stamp}`;
+        if (child.status !== 0) {
+          const message = child.stderr || child.stdout || 'Video Studio export failed.';
+          writeFileSync(receiptPath, `${JSON.stringify({
+            ok: false,
+            rendered: false,
+            projectPath,
+            outputPath: renderPath,
+            preset,
+            createdAt: new Date().toISOString(),
+            status: child.status ?? 1,
+            stdout: child.stdout,
+            stderr: child.stderr,
+            error: message,
+          }, null, 2)}\n`, 'utf-8');
+          const failureReceiptAsset: OutputAsset = {
+            id: receiptAssetId,
+            label: basename(receiptPath),
+            role: 'supporting',
+            path: receiptAssetPath,
+            ...fileMetadata(receiptPath),
+          };
+          addAssetToOutput(server, workspaceId, outputId, failureReceiptAsset);
+          throw new Error(message);
+        }
+        const renderAssetPath = relativeAssetPath(root, outputId, renderPath);
+        const assetId = `video-render-${stamp}`;
+        const renderAsset: OutputAsset = {
+          id: assetId,
+          label: basename(renderPath),
+          role: 'primary',
+          path: renderAssetPath,
+          ...fileMetadata(renderPath),
+        };
+        const receiptAsset: OutputAsset = {
+          id: receiptAssetId,
+          label: basename(receiptPath),
+          role: 'supporting',
+          path: receiptAssetPath,
+          ...fileMetadata(receiptPath),
+        };
+        const latestOutput = service.get(workspaceId, outputId) ?? output;
+        writeOutputManifest(root, {
+          ...latestOutput,
+          kind: 'video',
+          status: 'published',
+          updatedAt: new Date().toISOString(),
+          completedAt: new Date().toISOString(),
+          summary: `Video Studio export rendered to ${basename(renderPath)}.`,
+          primary: renderAsset,
+          preview: { mode: 'video', assetId },
+          assets: mergeAssetsById(latestOutput.assets, [renderAsset, receiptAsset]),
+        });
+        pushOutputsUpdated(server, workspaceId);
+        return { ok: true, outputId, assetId, receiptAssetId, outputPath: renderPath, receiptPath, rendered: true };
       });
-      if (child.status !== 0) {
-        throw new Error(child.stderr || child.stdout || 'Video Studio export failed.');
-      }
-      const receiptPath = `${renderPath}.receipt.json`;
-      const renderAssetPath = relativeAssetPath(root, outputId, renderPath);
-      const receiptAssetPath = relativeAssetPath(root, outputId, receiptPath);
-      const assetId = `video-render-${stamp}`;
-      const receiptAssetId = `video-render-receipt-${stamp}`;
-      const renderAsset: OutputAsset = {
-        id: assetId,
-        label: basename(renderPath),
-        role: 'primary',
-        path: renderAssetPath,
-        ...fileMetadata(renderPath),
-      };
-      const receiptAsset: OutputAsset = {
-        id: receiptAssetId,
-        label: basename(receiptPath),
-        role: 'supporting',
-        path: receiptAssetPath,
-        ...fileMetadata(receiptPath),
-      };
-      const latestOutput = service.get(workspaceId, outputId) ?? output;
-      writeOutputManifest(root, {
-        ...latestOutput,
-        kind: 'video',
-        status: 'published',
-        updatedAt: new Date().toISOString(),
-        completedAt: new Date().toISOString(),
-        summary: `Video Studio export rendered to ${basename(renderPath)}.`,
-        primary: renderAsset,
-        preview: { mode: 'video', assetId },
-        assets: mergeAssetsById(latestOutput.assets, [renderAsset, receiptAsset]),
-      });
-      pushOutputsUpdated(server, workspaceId);
-      return { ok: true, outputId, assetId, receiptAssetId, outputPath: renderPath, receiptPath, rendered: true };
     },
   );
 

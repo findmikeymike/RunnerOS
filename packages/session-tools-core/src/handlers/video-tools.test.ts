@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -130,6 +130,37 @@ describe('video studio session tools', () => {
     expect(result.isError).toBe(false);
     expect(publishedTitle).toContain('Publish Cut');
     expect((result.structuredContent as { outputId?: string }).outputId).toBe('output-1');
+  });
+
+  test('video_export writes a failure receipt for unsupported simple-render media', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Unsupported Cut' });
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      media: Array<{ id: string; type: string; label: string; path: string; source: { kind: string } }>;
+      timeline: { durationMs: number; tracks: Array<{ clips: Array<{ id: string; mediaId: string; type: string; startMs: number; durationMs: number; label: string }> }> };
+      exports: Array<{ status: string; receiptPath?: string; error?: string }>;
+    };
+    const svgPath = join(root, 'project', 'media', 'badge.svg');
+    mkdirSync(dirname(svgPath), { recursive: true });
+    writeFileSync(svgPath, '<svg />', 'utf-8');
+    project.media.push({ id: 'media-svg', type: 'svg', label: 'badge.svg', path: svgPath, source: { kind: 'user-import' } });
+    project.timeline.tracks[0]!.clips.push({ id: 'clip-svg', mediaId: 'media-svg', type: 'image', startMs: 0, durationMs: 1000, label: 'badge' });
+    project.timeline.durationMs = 1000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+    const outputPath = join(root, 'project', 'renders', 'unsupported.mp4');
+
+    const exported = await handleVideoExport(ctx, { projectPath, outputPath });
+
+    expect(exported.isError).toBe(true);
+    const receiptPath = `${outputPath}.receipt.json`;
+    expect(existsSync(receiptPath)).toBe(true);
+    const receipt = JSON.parse(readFileSync(receiptPath, 'utf-8')) as { ok: boolean; error: string };
+    expect(receipt.ok).toBe(false);
+    expect(receipt.error).toContain('Simple MP4 renderer only supports');
+    const updated = JSON.parse(readFileSync(projectPath, 'utf-8')) as { exports: Array<{ status: string; receiptPath?: string; error?: string }> };
+    expect(updated.exports.at(-1)?.status).toBe('failed');
+    expect(updated.exports.at(-1)?.receiptPath).toBe(receiptPath);
   });
 
   test('video_project_update changes aspect ratio and output settings', async () => {

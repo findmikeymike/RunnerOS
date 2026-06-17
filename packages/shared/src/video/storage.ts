@@ -103,9 +103,10 @@ export function migrateVideoProject(raw: unknown): unknown {
 }
 
 /** Atomic + durable write: backup existing good file, fsync temp, then rename. */
-function writeVideoProjectFile(projectPath: string, project: RunnerVideoProject): void {
+function writeVideoProjectFile(projectPath: string, project: RunnerVideoProject, options: { backupExisting?: boolean } = {}): void {
+  const backupExisting = options.backupExisting ?? true;
   mkdirSync(dirname(projectPath), { recursive: true });
-  if (existsSync(projectPath)) {
+  if (backupExisting && existsSync(projectPath)) {
     try {
       copyFileSync(projectPath, `${projectPath}.bak`);
     } catch {
@@ -124,17 +125,25 @@ function writeVideoProjectFile(projectPath: string, project: RunnerVideoProject)
 }
 
 export function readVideoProject(projectPath: string): RunnerVideoProject {
-  let parsed: unknown;
+  let raw: unknown;
   try {
-    parsed = migrateVideoProject(JSON.parse(readFileSync(projectPath, 'utf-8')));
+    raw = JSON.parse(readFileSync(projectPath, 'utf-8'));
   } catch (error) {
-    // Corrupt / unparseable / unsupported version. Try a backup, then preserve
-    // the bad file so a later write can't silently destroy the only copy.
+    // Corrupt / unparseable JSON. Try a backup, then preserve the bad file so
+    // a later write can't silently destroy the only copy.
     const backupPath = `${projectPath}.bak`;
     if (existsSync(backupPath)) {
       try {
         const recovered = migrateVideoProject(JSON.parse(readFileSync(backupPath, 'utf-8')));
-        if (validateRunnerVideoProject(recovered).ok) return recovered as RunnerVideoProject;
+        if (validateRunnerVideoProject(recovered).ok) {
+          try {
+            copyFileSync(projectPath, `${projectPath}.${Date.now()}.corrupt.bak`);
+          } catch {
+            /* best-effort */
+          }
+          writeVideoProjectFile(projectPath, recovered as RunnerVideoProject, { backupExisting: false });
+          return recovered as RunnerVideoProject;
+        }
       } catch {
         /* backup also unusable — fall through */
       }
@@ -146,6 +155,7 @@ export function readVideoProject(projectPath: string): RunnerVideoProject {
     }
     throw error instanceof Error ? error : new Error('Invalid video project JSON.');
   }
+  const parsed = migrateVideoProject(raw);
   const validation = validateRunnerVideoProject(parsed);
   if (!validation.ok) {
     const first = validation.errors[0];

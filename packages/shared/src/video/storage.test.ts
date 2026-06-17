@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -126,5 +126,18 @@ describe('Runner video project storage', () => {
     const recovered = readVideoProject(projectPath);
     expect(recovered.id).toBe(project.id);
     expect(recovered.title).toBe('Recoverable');
+    expect(JSON.parse(readFileSync(projectPath, 'utf-8')).id).toBe(project.id);
+    expect(existsSync(`${projectPath}.bak`)).toBe(true);
+    expect(existsSync(`${projectPath}.corrupt.bak`)).toBe(false);
+  });
+
+  test('does not recover newer schema projects from a stale backup', () => {
+    const projectPath = join(root, 'video.runner-video.json');
+    const project = createRunnerVideoProject({ title: 'Old Backup', workspaceId: 'workspace-1' });
+    writeVideoProject(projectPath, project);
+    writeVideoProject(projectPath, { ...project, updatedAt: new Date().toISOString() }); // creates .bak
+    writeFileSync(projectPath, `${JSON.stringify({ ...project, version: 99 }, null, 2)}\n`, 'utf-8');
+
+    expect(() => readVideoProject(projectPath)).toThrow(/newer schema/i);
   });
 });

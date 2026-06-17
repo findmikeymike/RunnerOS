@@ -11,6 +11,26 @@ type TrackType = 'video' | 'audio' | 'image' | 'text' | 'caption' | 'effect' | '
 type ClipType = 'video' | 'audio' | 'image' | 'text' | 'caption' | 'shape' | 'lottie' | 'html';
 type AspectRatio = '9:16' | '1:1' | '16:9' | '4:5' | 'custom';
 
+const videoProjectLocks = new Map<string, Promise<void>>();
+
+async function withVideoProjectLock<T>(projectPath: string, task: () => Promise<T> | T): Promise<T> {
+  const key = resolve(projectPath);
+  const previous = videoProjectLocks.get(key) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolveCurrent) => {
+    release = resolveCurrent;
+  });
+  const chained = previous.catch(() => undefined).then(() => current);
+  videoProjectLocks.set(key, chained);
+  await previous.catch(() => undefined);
+  try {
+    return await task();
+  } finally {
+    release();
+    if (videoProjectLocks.get(key) === chained) videoProjectLocks.delete(key);
+  }
+}
+
 interface VideoProjectCreateInput {
   projectPath?: string;
   projectDir?: string;
@@ -620,21 +640,25 @@ export async function handleVideoProjectCreate(ctx: SessionToolContext, args: Vi
     : resolveWorkspacePath(ctx, join(args.projectDir ?? join('.runneros', 'video-projects', `${slugify(args.title)}-${Date.now()}`), 'video.runner-video.json'), 'projectPath');
   if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
   const projectPath = projectPathResult.path;
-  if (existsSync(projectPath) && !args.overwrite) {
-    return errorResponse(`Video project already exists: ${projectPath}. Pass overwrite: true to replace it.`);
-  }
-  const project = createProject(args.title, basename(ctx.workspacePath), {
-    aspectRatio: args.aspectRatio,
-    width: args.width,
-    height: args.height,
-    fps: args.fps,
-  });
-  writeJsonAtomic(projectPath, project);
-  return ok(`Created video project "${project.title}" at ${projectPath}.`, {
-    ok: true,
-    projectPath,
-    projectId: project.id,
-    versionId: project.versions[0]?.id,
+  return withVideoProjectLock(projectPath, () => {
+    if (existsSync(projectPath) && !args.overwrite) {
+      return errorResponse(`Video project already exists: ${projectPath}. Pass overwrite: true to replace it.`);
+    }
+    const project = createProject(args.title, basename(ctx.workspacePath), {
+      aspectRatio: args.aspectRatio,
+      width: args.width,
+      height: args.height,
+      fps: args.fps,
+    });
+    writeJsonAtomic(projectPath, project);
+    return ok(`Created video project "${project.title}" at ${projectPath}.`, {
+      ok: true,
+      projectPath,
+      projectId: project.id,
+      versionId: project.versions[0]?.id,
+      changedClipIds: [],
+      warnings: [],
+    });
   });
 }
 
@@ -644,46 +668,50 @@ export async function handleVideoProjectUpdate(ctx: SessionToolContext, args: Vi
   if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
   const projectPath = projectPathResult.path;
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
-  const project = readProject(projectPath);
+  return withVideoProjectLock(projectPath, () => {
+    const project = readProject(projectPath);
 
-  if (args.title !== undefined) {
-    const title = args.title.trim();
-    if (!title) return errorResponse('title must not be empty.');
-    project.title = title;
-  }
-  const preset = args.aspectRatio && args.aspectRatio !== 'custom' ? aspectSettings(args.aspectRatio) : undefined;
-  const nextSettings: Partial<{ aspectRatio: AspectRatio; width: number; height: number; fps: number }> = preset
-    ? { aspectRatio: preset.aspectRatio, width: preset.width, height: preset.height }
-    : args.aspectRatio === 'custom'
-      ? { aspectRatio: 'custom' }
-      : {};
-  if (args.width !== undefined) {
-    if (!Number.isFinite(args.width) || args.width <= 0) return errorResponse('width must be a positive number.');
-    nextSettings.width = Math.round(args.width);
-  }
-  if (args.height !== undefined) {
-    if (!Number.isFinite(args.height) || args.height <= 0) return errorResponse('height must be a positive number.');
-    nextSettings.height = Math.round(args.height);
-  }
-  if (args.fps !== undefined) {
-    if (!Number.isFinite(args.fps) || args.fps <= 0) return errorResponse('fps must be a positive number.');
-    nextSettings.fps = Math.round(args.fps);
-  }
-  project.settings = { ...project.settings, ...nextSettings };
-  const width = typeof project.settings.width === 'number' ? project.settings.width : undefined;
-  const height = typeof project.settings.height === 'number' ? project.settings.height : undefined;
-  project.settings.aspectRatio = normalizeAspectRatio(typeof project.settings.aspectRatio === 'string' ? project.settings.aspectRatio : undefined, width, height);
+    if (args.title !== undefined) {
+      const title = args.title.trim();
+      if (!title) return errorResponse('title must not be empty.');
+      project.title = title;
+    }
+    const preset = args.aspectRatio && args.aspectRatio !== 'custom' ? aspectSettings(args.aspectRatio) : undefined;
+    const nextSettings: Partial<{ aspectRatio: AspectRatio; width: number; height: number; fps: number }> = preset
+      ? { aspectRatio: preset.aspectRatio, width: preset.width, height: preset.height }
+      : args.aspectRatio === 'custom'
+        ? { aspectRatio: 'custom' }
+        : {};
+    if (args.width !== undefined) {
+      if (!Number.isFinite(args.width) || args.width <= 0) return errorResponse('width must be a positive number.');
+      nextSettings.width = Math.round(args.width);
+    }
+    if (args.height !== undefined) {
+      if (!Number.isFinite(args.height) || args.height <= 0) return errorResponse('height must be a positive number.');
+      nextSettings.height = Math.round(args.height);
+    }
+    if (args.fps !== undefined) {
+      if (!Number.isFinite(args.fps) || args.fps <= 0) return errorResponse('fps must be a positive number.');
+      nextSettings.fps = Math.round(args.fps);
+    }
+    project.settings = { ...project.settings, ...nextSettings };
+    const width = typeof project.settings.width === 'number' ? project.settings.width : undefined;
+    const height = typeof project.settings.height === 'number' ? project.settings.height : undefined;
+    project.settings.aspectRatio = normalizeAspectRatio(typeof project.settings.aspectRatio === 'string' ? project.settings.aspectRatio : undefined, width, height);
 
-  const errors = validateProject(project);
-  if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
-  const versionId = addVersion(project, 'Updated project settings', ctx, 'video_project_update');
-  writeJsonAtomic(projectPath, project);
-  return ok(`Updated video project "${project.title}".`, {
-    ok: true,
-    projectPath,
-    projectId: project.id,
-    settings: project.settings,
-    versionId,
+    const errors = validateProject(project);
+    if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
+    const versionId = addVersion(project, 'Updated project settings', ctx, 'video_project_update');
+    writeJsonAtomic(projectPath, project);
+    return ok(`Updated video project "${project.title}".`, {
+      ok: true,
+      projectPath,
+      projectId: project.id,
+      settings: project.settings,
+      versionId,
+      changedClipIds: [],
+      warnings: [],
+    });
   });
 }
 
@@ -698,33 +726,37 @@ export async function handleVideoMediaImport(ctx: SessionToolContext, args: Vide
   const mediaPath = mediaPathResult.path;
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
   if (!existsSync(mediaPath)) return errorResponse(`Media file not found: ${mediaPath}`);
-  const project = readProject(projectPath);
   const stats = statSync(mediaPath);
   if (stats.isDirectory()) return errorResponse(`Media path must be a file: ${mediaPath}`);
-  const mediaId = randomUUID();
-  const mediaDir = join(dirname(projectPath), 'media');
-  const ext = extname(mediaPath);
-  const storedMediaPath = join(mediaDir, `${mediaId}${ext}`);
-  mkdirSync(mediaDir, { recursive: true });
-  copyFileSync(mediaPath, storedMediaPath);
-  const media = {
-    id: mediaId,
-    type: args.mediaType ?? inferMediaType(mediaPath),
-    label: args.label?.trim() || basename(mediaPath),
-    path: storedMediaPath,
-    sizeBytes: stats.size,
-    originalPath: mediaPath,
-    source: { kind: 'user-import' },
-  };
-  project.media.push(media);
-  const versionId = addVersion(project, `Imported media ${media.label}`, ctx, 'video_media_import');
-  writeJsonAtomic(projectPath, project);
-  return ok(`Imported media "${media.label}" into ${project.title}.`, {
-    ok: true,
-    projectPath,
-    mediaId: media.id,
-    media,
-    versionId,
+  return withVideoProjectLock(projectPath, () => {
+    const project = readProject(projectPath);
+    const mediaId = randomUUID();
+    const mediaDir = join(dirname(projectPath), 'media');
+    const ext = extname(mediaPath);
+    const storedMediaPath = join(mediaDir, `${mediaId}${ext}`);
+    mkdirSync(mediaDir, { recursive: true });
+    copyFileSync(mediaPath, storedMediaPath);
+    const media = {
+      id: mediaId,
+      type: args.mediaType ?? inferMediaType(mediaPath),
+      label: args.label?.trim() || basename(mediaPath),
+      path: storedMediaPath,
+      sizeBytes: stats.size,
+      originalPath: mediaPath,
+      source: { kind: 'user-import' },
+    };
+    project.media.push(media);
+    const versionId = addVersion(project, `Imported media ${media.label}`, ctx, 'video_media_import');
+    writeJsonAtomic(projectPath, project);
+    return ok(`Imported media "${media.label}" into ${project.title}.`, {
+      ok: true,
+      projectPath,
+      mediaId: media.id,
+      media,
+      versionId,
+      changedClipIds: [],
+      warnings: [],
+    });
   });
 }
 
@@ -734,42 +766,46 @@ export async function handleVideoClipAdd(ctx: SessionToolContext, args: VideoCli
   if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
   const projectPath = projectPathResult.path;
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
-  const project = readProject(projectPath);
-  const media = args.mediaId ? project.media.find((asset) => asset.id === args.mediaId) : undefined;
-  if (args.mediaId && !media) return errorResponse(`Media not found in project: ${args.mediaId}`);
-  const clipType = args.type ?? (media?.type === 'audio' ? 'audio' : media?.type === 'image' ? 'image' : media?.type === 'caption' ? 'caption' : args.text ? 'text' : 'text');
-  if (!media && ['video', 'audio', 'image'].includes(clipType)) {
-    return errorResponse(`${clipType} clips require a mediaId. Use type: "text" for generated title/text clips.`);
-  }
-  const durationMs = args.durationMs ?? (clipType === 'image' || clipType === 'text' ? 3000 : 1000);
-  if (durationMs <= 0) return errorResponse('durationMs must be positive.');
-  const startMs = args.startMs ?? project.timeline.durationMs;
-  if (startMs < 0) return errorResponse('startMs must be non-negative.');
-  const track = chooseTrack(project, media?.type ?? (clipType === 'audio' ? 'audio' : clipType === 'caption' ? 'caption' : 'video'), args.trackId);
-  if (track.locked) return errorResponse(lockedTrackError(track));
-  const clip = {
-    id: randomUUID(),
-    mediaId: media?.id,
-    type: clipType,
-    startMs,
-    durationMs,
-    sourceInMs: args.sourceInMs,
-    sourceOutMs: args.sourceOutMs,
-    label: args.label?.trim() || media?.label || clipType,
-    ...(args.text ? { text: { text: args.text, fontSize: 64, color: '#ffffff' } } : {}),
-  };
-  track.clips.push(clip);
-  project.timeline.durationMs = Math.max(project.timeline.durationMs, startMs + durationMs);
-  const errors = validateProject(project);
-  if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
-  const versionId = addVersion(project, `Added ${clip.label} clip`, ctx, 'video_clip_add');
-  writeJsonAtomic(projectPath, project);
-  return ok(`Added clip "${clip.label}" to track "${track.label}".`, {
-    ok: true,
-    projectPath,
-    clipId: clip.id,
-    trackId: track.id,
-    versionId,
+  return withVideoProjectLock(projectPath, () => {
+    const project = readProject(projectPath);
+    const media = args.mediaId ? project.media.find((asset) => asset.id === args.mediaId) : undefined;
+    if (args.mediaId && !media) return errorResponse(`Media not found in project: ${args.mediaId}`);
+    const clipType = args.type ?? (media?.type === 'audio' ? 'audio' : media?.type === 'image' ? 'image' : media?.type === 'caption' ? 'caption' : args.text ? 'text' : 'text');
+    if (!media && ['video', 'audio', 'image'].includes(clipType)) {
+      return errorResponse(`${clipType} clips require a mediaId. Use type: "text" for generated title/text clips.`);
+    }
+    const durationMs = args.durationMs ?? (clipType === 'image' || clipType === 'text' ? 3000 : 1000);
+    if (durationMs <= 0) return errorResponse('durationMs must be positive.');
+    const startMs = args.startMs ?? project.timeline.durationMs;
+    if (startMs < 0) return errorResponse('startMs must be non-negative.');
+    const track = chooseTrack(project, media?.type ?? (clipType === 'audio' ? 'audio' : clipType === 'caption' ? 'caption' : 'video'), args.trackId);
+    if (track.locked) return errorResponse(lockedTrackError(track));
+    const clip = {
+      id: randomUUID(),
+      mediaId: media?.id,
+      type: clipType,
+      startMs,
+      durationMs,
+      sourceInMs: args.sourceInMs,
+      sourceOutMs: args.sourceOutMs,
+      label: args.label?.trim() || media?.label || clipType,
+      ...(args.text ? { text: { text: args.text, fontSize: 64, color: '#ffffff' } } : {}),
+    };
+    track.clips.push(clip);
+    project.timeline.durationMs = Math.max(project.timeline.durationMs, startMs + durationMs);
+    const errors = validateProject(project);
+    if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
+    const versionId = addVersion(project, `Added ${clip.label} clip`, ctx, 'video_clip_add');
+    writeJsonAtomic(projectPath, project);
+    return ok(`Added clip "${clip.label}" to track "${track.label}".`, {
+      ok: true,
+      projectPath,
+      clipId: clip.id,
+      trackId: track.id,
+      versionId,
+      changedClipIds: [clip.id],
+      warnings: [],
+    });
   });
 }
 
@@ -779,131 +815,135 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
   if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
   const projectPath = projectPathResult.path;
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
-  const project = readProject(projectPath);
-  let trackId: string | undefined;
-  let clipId: string | undefined = args.clipId;
-  let label = args.clipId;
-  let startMs: number | undefined;
-  let durationMs: number | undefined;
-  let createdClipId: string | undefined;
-  let deletedClipId: string | undefined;
-  let changed = 0;
+  return withVideoProjectLock(projectPath, () => {
+    const project = readProject(projectPath);
+    let trackId: string | undefined;
+    let clipId: string | undefined = args.clipId;
+    let label = args.clipId;
+    let startMs: number | undefined;
+    let durationMs: number | undefined;
+    let createdClipId: string | undefined;
+    let deletedClipId: string | undefined;
+    let changed = 0;
 
-  if (args.action === 'pack') {
-    changed = packTimeline(project);
-    label = 'timeline';
-  } else {
-    if (!args.clipId) return errorResponse('clipId is required for this action.');
-    const found = findClip(project, args.clipId);
-    if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
-    const { track, clip } = found;
-    trackId = track.id;
-    label = typeof clip.label === 'string' ? clip.label : clip.id;
-    if (track.locked) return errorResponse(lockedTrackError(track));
+    if (args.action === 'pack') {
+      changed = packTimeline(project);
+      label = 'timeline';
+    } else {
+      if (!args.clipId) return errorResponse('clipId is required for this action.');
+      const found = findClip(project, args.clipId);
+      if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
+      const { track, clip } = found;
+      trackId = track.id;
+      label = typeof clip.label === 'string' ? clip.label : clip.id;
+      if (track.locked) return errorResponse(lockedTrackError(track));
 
-    if (args.action === 'move') {
-      if (typeof args.startMs !== 'number' || !Number.isFinite(args.startMs) || args.startMs < 0) return errorResponse('startMs must be a non-negative number.');
-      clip.startMs = args.snap ? snapClipStart(track, clip.id, args.startMs) : Math.max(0, Math.round(args.startMs));
-      track.clips = orderedClips(track.clips);
-      startMs = clip.startMs;
-      durationMs = clip.durationMs;
-    } else if (args.action === 'trim') {
-      if (typeof args.durationMs !== 'number' || !Number.isFinite(args.durationMs) || args.durationMs <= 0) return errorResponse('durationMs must be a positive number.');
-      let trimmedClip = clip;
-      if (args.ripple) {
-        const result = rippleTrimEnd(track, clip.id, args.durationMs);
-        if (!result) return errorResponse(`Clip not found: ${args.clipId}`);
-        trimmedClip = track.clips.find((item) => item.id === clip.id) ?? clip;
-        startMs = result.startMs;
-        durationMs = result.durationMs;
-      } else {
-        clip.durationMs = Math.max(1, Math.round(args.durationMs));
+      if (args.action === 'move') {
+        if (typeof args.startMs !== 'number' || !Number.isFinite(args.startMs) || args.startMs < 0) return errorResponse('startMs must be a non-negative number.');
+        clip.startMs = args.snap ? snapClipStart(track, clip.id, args.startMs) : Math.max(0, Math.round(args.startMs));
+        track.clips = orderedClips(track.clips);
         startMs = clip.startMs;
         durationMs = clip.durationMs;
-      }
-      if (args.sourceInMs !== undefined) {
-        if (!Number.isFinite(args.sourceInMs) || args.sourceInMs < 0) return errorResponse('sourceInMs must be a non-negative number.');
-        trimmedClip.sourceInMs = Math.round(args.sourceInMs);
-      }
-      if (args.sourceOutMs !== undefined) {
-        if (!Number.isFinite(args.sourceOutMs) || args.sourceOutMs < 0) return errorResponse('sourceOutMs must be a non-negative number.');
-        trimmedClip.sourceOutMs = Math.round(args.sourceOutMs);
-      }
-    } else if (args.action === 'split') {
-      if (typeof args.atMs !== 'number' || !Number.isFinite(args.atMs) || args.atMs < 0) return errorResponse('atMs must be a non-negative number.');
-      const splitAt = Math.round(args.atMs);
-      if (splitAt <= clip.startMs || splitAt >= clip.startMs + clip.durationMs) return errorResponse('atMs must be inside the clip bounds.');
-      const firstDuration = splitAt - clip.startMs;
-      const secondDuration = clip.durationMs - firstDuration;
-      const sourceInMs = typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0;
-      const secondClip = {
-        ...clip,
-        id: randomUUID(),
-        startMs: splitAt,
-        durationMs: secondDuration,
-        sourceInMs: sourceInMs + firstDuration,
-        label: typeof clip.label === 'string' ? `${clip.label} split` : undefined,
-      };
-      clip.durationMs = firstDuration;
-      if (clip.sourceOutMs !== undefined) clip.sourceOutMs = sourceInMs + firstDuration;
-      const index = track.clips.findIndex((item) => item.id === clip.id);
-      track.clips.splice(index + 1, 0, secondClip);
-      createdClipId = secondClip.id;
-      startMs = clip.startMs;
-      durationMs = clip.durationMs;
-    } else if (args.action === 'delete') {
-      const deletedStartMs = clip.startMs;
-      const deletedDurationMs = clip.durationMs;
-      track.clips = track.clips.filter((item) => item.id !== clip.id);
-      if (args.ripple) {
-        track.clips = track.clips.map((item) => item.startMs >= deletedStartMs + deletedDurationMs ? {
-          ...item,
-          startMs: Math.max(0, item.startMs - deletedDurationMs),
-        } : item);
-      }
-      deletedClipId = clip.id;
-      clipId = undefined;
-    } else if (args.action === 'duplicate') {
-      const newClip = {
-        ...clip,
-        id: randomUUID(),
-        startMs: clip.startMs + Math.max(1, clip.durationMs),
-        label: typeof clip.label === 'string' ? `${clip.label} copy` : undefined,
-      };
-      for (let index = 0; index < track.clips.length; index += 1) {
-        const item = track.clips[index];
-        if (item && item.id !== clip.id && item.startMs >= newClip.startMs) {
-          track.clips[index] = { ...item, startMs: item.startMs + Math.max(1, clip.durationMs) };
+      } else if (args.action === 'trim') {
+        if (typeof args.durationMs !== 'number' || !Number.isFinite(args.durationMs) || args.durationMs <= 0) return errorResponse('durationMs must be a positive number.');
+        let trimmedClip = clip;
+        if (args.ripple) {
+          const result = rippleTrimEnd(track, clip.id, args.durationMs);
+          if (!result) return errorResponse(`Clip not found: ${args.clipId}`);
+          trimmedClip = track.clips.find((item) => item.id === clip.id) ?? clip;
+          startMs = result.startMs;
+          durationMs = result.durationMs;
+        } else {
+          clip.durationMs = Math.max(1, Math.round(args.durationMs));
+          startMs = clip.startMs;
+          durationMs = clip.durationMs;
         }
+        if (args.sourceInMs !== undefined) {
+          if (!Number.isFinite(args.sourceInMs) || args.sourceInMs < 0) return errorResponse('sourceInMs must be a non-negative number.');
+          trimmedClip.sourceInMs = Math.round(args.sourceInMs);
+        }
+        if (args.sourceOutMs !== undefined) {
+          if (!Number.isFinite(args.sourceOutMs) || args.sourceOutMs < 0) return errorResponse('sourceOutMs must be a non-negative number.');
+          trimmedClip.sourceOutMs = Math.round(args.sourceOutMs);
+        }
+      } else if (args.action === 'split') {
+        if (typeof args.atMs !== 'number' || !Number.isFinite(args.atMs) || args.atMs < 0) return errorResponse('atMs must be a non-negative number.');
+        const splitAt = Math.round(args.atMs);
+        if (splitAt <= clip.startMs || splitAt >= clip.startMs + clip.durationMs) return errorResponse('atMs must be inside the clip bounds.');
+        const firstDuration = splitAt - clip.startMs;
+        const secondDuration = clip.durationMs - firstDuration;
+        const sourceInMs = typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0;
+        const secondClip = {
+          ...clip,
+          id: randomUUID(),
+          startMs: splitAt,
+          durationMs: secondDuration,
+          sourceInMs: sourceInMs + firstDuration,
+          label: typeof clip.label === 'string' ? `${clip.label} split` : undefined,
+        };
+        clip.durationMs = firstDuration;
+        if (clip.sourceOutMs !== undefined) clip.sourceOutMs = sourceInMs + firstDuration;
+        const index = track.clips.findIndex((item) => item.id === clip.id);
+        track.clips.splice(index + 1, 0, secondClip);
+        createdClipId = secondClip.id;
+        startMs = clip.startMs;
+        durationMs = clip.durationMs;
+      } else if (args.action === 'delete') {
+        const deletedStartMs = clip.startMs;
+        const deletedDurationMs = clip.durationMs;
+        track.clips = track.clips.filter((item) => item.id !== clip.id);
+        if (args.ripple) {
+          track.clips = track.clips.map((item) => item.startMs >= deletedStartMs + deletedDurationMs ? {
+            ...item,
+            startMs: Math.max(0, item.startMs - deletedDurationMs),
+          } : item);
+        }
+        deletedClipId = clip.id;
+        clipId = undefined;
+      } else if (args.action === 'duplicate') {
+        const newClip = {
+          ...clip,
+          id: randomUUID(),
+          startMs: clip.startMs + Math.max(1, clip.durationMs),
+          label: typeof clip.label === 'string' ? `${clip.label} copy` : undefined,
+        };
+        for (let index = 0; index < track.clips.length; index += 1) {
+          const item = track.clips[index];
+          if (item && item.id !== clip.id && item.startMs >= newClip.startMs) {
+            track.clips[index] = { ...item, startMs: item.startMs + Math.max(1, clip.durationMs) };
+          }
+        }
+        track.clips.push(newClip);
+        track.clips = orderedClips(track.clips);
+        createdClipId = newClip.id;
+        clipId = newClip.id;
+        startMs = newClip.startMs;
+        durationMs = newClip.durationMs;
+      } else {
+        return errorResponse('Unknown video clip edit action.');
       }
-      track.clips.push(newClip);
-      track.clips = orderedClips(track.clips);
-      createdClipId = newClip.id;
-      clipId = newClip.id;
-      startMs = newClip.startMs;
-      durationMs = newClip.durationMs;
-    } else {
-      return errorResponse('Unknown video clip edit action.');
     }
-  }
 
-  project.timeline.durationMs = timelineDuration(project.timeline.tracks);
-  const errors = validateProject(project);
-  if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
-  const actionLabel = args.action[0]!.toUpperCase() + args.action.slice(1);
-  const versionId = addVersion(project, `${actionLabel} ${label ?? 'clip'}${args.action === 'pack' ? '' : ' clip'}`, ctx, 'video_clip_edit');
-  writeJsonAtomic(projectPath, project);
-  return ok(`Applied ${args.action} edit to "${label ?? 'timeline'}".`, {
-    ok: true,
-    projectPath,
-    clipId,
-    createdClipId,
-    deletedClipId,
-    changed,
-    trackId,
-    startMs,
-    durationMs,
-    versionId,
+    project.timeline.durationMs = timelineDuration(project.timeline.tracks);
+    const errors = validateProject(project);
+    if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
+    const actionLabel = args.action[0]!.toUpperCase() + args.action.slice(1);
+    const versionId = addVersion(project, `${actionLabel} ${label ?? 'clip'}${args.action === 'pack' ? '' : ' clip'}`, ctx, 'video_clip_edit');
+    writeJsonAtomic(projectPath, project);
+    return ok(`Applied ${args.action} edit to "${label ?? 'timeline'}".`, {
+      ok: true,
+      projectPath,
+      clipId,
+      createdClipId,
+      deletedClipId,
+      changed,
+      trackId,
+      startMs,
+      durationMs,
+      versionId,
+      changedClipIds: [clipId, createdClipId, deletedClipId].filter(Boolean),
+      warnings: [],
+    });
   });
 }
 
@@ -914,50 +954,54 @@ export async function handleVideoClipAdjust(ctx: SessionToolContext, args: Video
   if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
   const projectPath = projectPathResult.path;
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
-  const project = readProject(projectPath);
-  const found = findClip(project, args.clipId);
-  if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
-  const { clip, track } = found;
-  if (track.locked) return errorResponse(lockedTrackError(track));
+  return withVideoProjectLock(projectPath, () => {
+    const project = readProject(projectPath);
+    const found = findClip(project, args.clipId);
+    if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
+    const { clip, track } = found;
+    if (track.locked) return errorResponse(lockedTrackError(track));
 
-  if (args.reset) {
-    delete clip.adjustments;
-  } else {
-    const media = clip.mediaId ? project.media.find((asset) => asset.id === clip.mediaId) : undefined;
-    if (!media || !['video', 'image'].includes(media.type)) {
-      return errorResponse(`Clip "${clip.label ?? clip.id}" is not a video or image clip that can render look adjustments.`);
+    if (args.reset) {
+      delete clip.adjustments;
+    } else {
+      const media = clip.mediaId ? project.media.find((asset) => asset.id === clip.mediaId) : undefined;
+      if (!media || !['video', 'image'].includes(media.type)) {
+        return errorResponse(`Clip "${clip.label ?? clip.id}" is not a video or image clip that can render look adjustments.`);
+      }
+      const preset = args.preset ? ADJUSTMENT_PRESETS[args.preset] : undefined;
+      if (args.preset && !preset) return errorResponse(`Unknown adjustment preset: ${args.preset}`);
+      const hasExplicit = hasExplicitAdjustmentInput(args);
+      const base = args.preset ? { ...(preset ?? {}) } : { ...(clip.adjustments ?? {}) };
+      clip.adjustments = sanitizedAdjustments({
+        ...base,
+        exposure: args.exposure ?? base.exposure,
+        contrast: args.contrast ?? base.contrast,
+        saturation: args.saturation ?? base.saturation,
+        highlights: args.highlights ?? base.highlights,
+        shadows: args.shadows ?? base.shadows,
+        temperature: args.temperature ?? base.temperature,
+        tint: args.tint ?? base.tint,
+        sharpen: args.sharpen ?? base.sharpen,
+        vignette: args.vignette ?? base.vignette,
+        grain: args.grain ?? base.grain,
+        preset: hasExplicit ? 'manual' : args.preset ?? clip.adjustments?.preset,
+      });
     }
-    const preset = args.preset ? ADJUSTMENT_PRESETS[args.preset] : undefined;
-    if (args.preset && !preset) return errorResponse(`Unknown adjustment preset: ${args.preset}`);
-    const hasExplicit = hasExplicitAdjustmentInput(args);
-    const base = args.preset ? { ...(preset ?? {}) } : { ...(clip.adjustments ?? {}) };
-    clip.adjustments = sanitizedAdjustments({
-      ...base,
-      exposure: args.exposure ?? base.exposure,
-      contrast: args.contrast ?? base.contrast,
-      saturation: args.saturation ?? base.saturation,
-      highlights: args.highlights ?? base.highlights,
-      shadows: args.shadows ?? base.shadows,
-      temperature: args.temperature ?? base.temperature,
-      tint: args.tint ?? base.tint,
-      sharpen: args.sharpen ?? base.sharpen,
-      vignette: args.vignette ?? base.vignette,
-      grain: args.grain ?? base.grain,
-      preset: hasExplicit ? 'manual' : args.preset ?? clip.adjustments?.preset,
-    });
-  }
 
-  const errors = validateProject(project);
-  if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
-  const versionId = addVersion(project, `${args.reset ? 'Reset' : 'Adjusted'} ${clip.label ?? clip.id} clip look`, ctx, 'video_clip_adjust');
-  writeJsonAtomic(projectPath, project);
-  return ok(`${args.reset ? 'Reset' : 'Applied'} adjustments for clip "${clip.label ?? clip.id}".`, {
-    ok: true,
-    projectPath,
-    clipId: clip.id,
-    trackId: track.id,
-    adjustments: clip.adjustments ?? {},
-    versionId,
+    const errors = validateProject(project);
+    if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
+    const versionId = addVersion(project, `${args.reset ? 'Reset' : 'Adjusted'} ${clip.label ?? clip.id} clip look`, ctx, 'video_clip_adjust');
+    writeJsonAtomic(projectPath, project);
+    return ok(`${args.reset ? 'Reset' : 'Applied'} adjustments for clip "${clip.label ?? clip.id}".`, {
+      ok: true,
+      projectPath,
+      clipId: clip.id,
+      trackId: track.id,
+      adjustments: clip.adjustments ?? {},
+      versionId,
+      changedClipIds: [clip.id],
+      warnings: [],
+    });
   });
 }
 
@@ -967,83 +1011,119 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
   if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
   const projectPath = projectPathResult.path;
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
-  const project = readProject(projectPath);
   const outputPathResult = resolveWorkspacePath(ctx, args.outputPath ?? join(dirname(projectPath), 'renders', 'preview.placeholder.txt'), 'outputPath');
   if (!outputPathResult.ok) return errorResponse(outputPathResult.error);
   const outputPath = outputPathResult.path;
-  mkdirSync(dirname(outputPath), { recursive: true });
-  const createdAt = new Date().toISOString();
-  const realVideo = isVideoOutputPath(outputPath);
-  if (realVideo) {
-    try {
-      renderSimpleMp4(project, outputPath);
-    } catch (error) {
-      return errorResponse(error instanceof Error ? error.message : String(error));
+  return withVideoProjectLock(projectPath, async () => {
+    const project = readProject(projectPath);
+    mkdirSync(dirname(outputPath), { recursive: true });
+    const createdAt = new Date().toISOString();
+    const realVideo = isVideoOutputPath(outputPath);
+    const receiptPath = `${outputPath}.receipt.json`;
+    const projectDir = dirname(projectPath);
+    const sourceMediaPaths = new Set(
+      project.media
+        .map((media) => typeof media.path === 'string' ? resolve(projectDir, media.path) : null)
+        .filter((path): path is string => Boolean(path)),
+    );
+    if (sourceMediaPaths.has(outputPath)) {
+      return errorResponse('Refusing to overwrite source media with the export output. Choose a different outputPath.');
     }
-  } else {
-    writeFileSync(outputPath, [
-      'RunnerOS Video Studio placeholder export',
-      `Project: ${project.title}`,
-      `Project ID: ${project.id}`,
-      `Created: ${createdAt}`,
-      'This is not a playable MP4. Use an .mp4 output path for the simple FFmpeg renderer.',
-      '',
-    ].join('\n'), 'utf-8');
-  }
-  const receiptPath = `${outputPath}.receipt.json`;
-  writeJsonAtomic(receiptPath, {
-    ok: true,
-    placeholder: !realVideo,
-    rendered: realVideo,
-    projectPath,
-    outputPath,
-    preset: args.preset ?? (realVideo ? 'simple-mp4' : 'placeholder'),
-    createdAt,
-  });
-  project.exports.push({
-    id: randomUUID(),
-    createdAt,
-    status: 'succeeded',
-    path: outputPath,
-    preset: args.preset ?? (realVideo ? 'simple-mp4' : 'placeholder'),
-    placeholder: !realVideo,
-    receiptPath,
-  });
-  const versionId = addVersion(project, `Exported ${realVideo ? 'video' : 'placeholder'} ${basename(outputPath)}`, ctx, 'video_export');
-  writeJsonAtomic(projectPath, project);
-
-  let outputId: string | undefined;
-  if (args.publishOutput && ctx.createOutput) {
-    const result = await ctx.createOutput({
-      title: `${project.title} ${realVideo ? 'video export' : 'placeholder export'}`,
-      kind: realVideo ? 'video' : 'receipt',
-      summary: realVideo ? 'Video Studio simple MP4 render.' : 'Placeholder Video Studio export receipt.',
-      files: [
-        { path: outputPath, label: basename(outputPath), role: realVideo ? 'primary' : 'supporting' },
-        { path: receiptPath, label: basename(receiptPath), role: realVideo ? 'supporting' : 'primary' },
-        { path: projectPath, label: basename(projectPath), role: 'source' },
-      ],
-      receipts: [{
-        provider: 'runner-video-studio',
-        action: realVideo ? 'simple-mp4-export' : 'placeholder-export',
-        status: 'succeeded',
-        displayText: realVideo ? 'Playable MP4 export created.' : 'Placeholder export created.',
-        metadata: { projectId: project.id, placeholder: !realVideo, rendered: realVideo },
-      }],
-      tags: ['video-studio', realVideo ? 'video-export' : 'placeholder-export'],
-      showInCanvas: args.showInCanvas,
+    if (realVideo) {
+      try {
+        renderSimpleMp4(project, outputPath);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        writeJsonAtomic(receiptPath, {
+          ok: false,
+          placeholder: false,
+          rendered: false,
+          projectPath,
+          outputPath,
+          preset: args.preset ?? 'simple-mp4',
+          createdAt,
+          error: message,
+        });
+        project.exports.push({
+          id: randomUUID(),
+          createdAt,
+          status: 'failed',
+          path: outputPath,
+          preset: args.preset ?? 'simple-mp4',
+          placeholder: false,
+          error: message,
+          receiptPath,
+        });
+        addVersion(project, `Failed export ${basename(outputPath)}`, ctx, 'video_export');
+        writeJsonAtomic(projectPath, project);
+        return errorResponse(`${message} Receipt: ${receiptPath}`);
+      }
+    } else {
+      writeFileSync(outputPath, [
+        'RunnerOS Video Studio placeholder export',
+        `Project: ${project.title}`,
+        `Project ID: ${project.id}`,
+        `Created: ${createdAt}`,
+        'This is not a playable MP4. Use an .mp4 output path for the simple FFmpeg renderer.',
+        '',
+      ].join('\n'), 'utf-8');
+    }
+    writeJsonAtomic(receiptPath, {
+      ok: true,
+      placeholder: !realVideo,
+      rendered: realVideo,
+      projectPath,
+      outputPath,
+      preset: args.preset ?? (realVideo ? 'simple-mp4' : 'placeholder'),
+      createdAt,
     });
-    outputId = result.outputId;
-  }
+    project.exports.push({
+      id: randomUUID(),
+      createdAt,
+      status: 'succeeded',
+      path: outputPath,
+      preset: args.preset ?? (realVideo ? 'simple-mp4' : 'placeholder'),
+      placeholder: !realVideo,
+      receiptPath,
+    });
+    const versionId = addVersion(project, `Exported ${realVideo ? 'video' : 'placeholder'} ${basename(outputPath)}`, ctx, 'video_export');
+    writeJsonAtomic(projectPath, project);
 
-  return ok(`${realVideo ? 'Rendered video' : 'Created placeholder export'} at ${outputPath}.`, {
-    ok: true,
-    projectPath,
-    outputPath,
-    receiptPath,
-    placeholder: !realVideo,
-    rendered: realVideo,
-    versionId,
-    outputId,
+    let outputId: string | undefined;
+    if (args.publishOutput && ctx.createOutput) {
+      const result = await ctx.createOutput({
+        title: `${project.title} ${realVideo ? 'video export' : 'placeholder export'}`,
+        kind: realVideo ? 'video' : 'receipt',
+        summary: realVideo ? 'Video Studio simple MP4 render.' : 'Placeholder Video Studio export receipt.',
+        files: [
+          { path: outputPath, label: basename(outputPath), role: realVideo ? 'primary' : 'supporting' },
+          { path: receiptPath, label: basename(receiptPath), role: realVideo ? 'supporting' : 'primary' },
+          { path: projectPath, label: basename(projectPath), role: 'source' },
+        ],
+        receipts: [{
+          provider: 'runner-video-studio',
+          action: realVideo ? 'simple-mp4-export' : 'placeholder-export',
+          status: 'succeeded',
+          displayText: realVideo ? 'Playable MP4 export created.' : 'Placeholder export created.',
+          metadata: { projectId: project.id, placeholder: !realVideo, rendered: realVideo },
+        }],
+        tags: ['video-studio', realVideo ? 'video-export' : 'placeholder-export'],
+        showInCanvas: args.showInCanvas,
+      });
+      outputId = result.outputId;
+    }
+
+    return ok(`${realVideo ? 'Rendered video' : 'Created placeholder export'} at ${outputPath}.`, {
+      ok: true,
+      projectPath,
+      outputPath,
+      receiptPath,
+      placeholder: !realVideo,
+      rendered: realVideo,
+      versionId,
+      outputId,
+      changedClipIds: [],
+      warnings: [],
+    });
   });
 }
