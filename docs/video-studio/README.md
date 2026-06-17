@@ -7,6 +7,9 @@ This is not a pasted-in CapCut clone. The target is a local-first video project 
 ## Docs
 
 - [01 Spec](./01-spec.md)
+- [02 VibeFrame-Inspired Agentic Editing Upgrades](./02-vibeframe-inspired-upgrades.md)
+- [Roadmap](./ROADMAP.md)
+- [Render Engine Decision](./RENDER_ENGINE_DECISION.md)
 
 ## Short Version
 
