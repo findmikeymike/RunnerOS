@@ -52,6 +52,10 @@ export interface VideoMediaAsset {
   width?: number;
   height?: number;
   fps?: number;
+  sizeBytes?: number;
+  codec?: string;
+  hasAudio?: boolean;
+  hasVideo?: boolean;
   waveformPath?: string;
   thumbnailPath?: string;
   transcriptPath?: string;

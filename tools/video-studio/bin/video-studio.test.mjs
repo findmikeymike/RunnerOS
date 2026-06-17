@@ -129,6 +129,37 @@ describe('video-studio edit commands', () => {
     expect(run(['inspect', projectPath, '--json']).ok).toBe(true);
   });
 
+  test('probe reports real media metadata', () => {
+    if (!hasFfmpeg()) return;
+    const dir = mkdtempSync(join(tmpdir(), 'runneros-video-probe-'));
+    tempDirs.push(dir);
+    const sourcePath = join(dir, 'source.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10',
+      '-f', 'lavfi',
+      '-i', 'sine=frequency=440:duration=1',
+      '-t', '1',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      sourcePath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+
+    const probed = run(['probe', sourcePath, '--json']);
+
+    expect(probed.type).toBe('video');
+    expect(probed.width).toBe(160);
+    expect(probed.height).toBe(90);
+    expect(probed.fps).toBe(10);
+    expect(probed.durationMs).toBeGreaterThanOrEqual(900);
+    expect(probed.hasVideo).toBe(true);
+    expect(probed.hasAudio).toBe(true);
+    expect(probed.codec).toBeTruthy();
+  });
+
   test('simple MP4 export preserves audio from video clips', () => {
     if (!hasFfmpeg()) return;
     const projectPath = tempProject();

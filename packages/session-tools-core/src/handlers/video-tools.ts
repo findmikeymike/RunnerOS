@@ -132,6 +132,17 @@ interface VideoProject {
   agentEvents: Array<Record<string, unknown>>;
 }
 
+interface VideoMediaProbeMetadata {
+  durationMs?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  sizeBytes?: number;
+  codec?: string;
+  hasAudio?: boolean;
+  hasVideo?: boolean;
+}
+
 interface VideoClipAdjustments {
   exposure?: number;
   contrast?: number;
@@ -317,6 +328,60 @@ function inferMediaType(path: string): MediaType {
   if (['.srt', '.vtt'].includes(ext)) return 'caption';
   if (ext === '.svg') return 'svg';
   return 'unknown';
+}
+
+function parseFfprobeRate(value: unknown): number | undefined {
+  if (typeof value !== 'string' || !value.trim() || value === '0/0') return undefined;
+  const parts = value.split('/').map(Number);
+  const numerator = Number(parts[0]);
+  const denominator = Number(parts[1]);
+  if (!Number.isFinite(numerator)) return undefined;
+  if (!Number.isFinite(denominator) || denominator === 0) return numerator > 0 ? numerator : undefined;
+  const fps = numerator / denominator;
+  return Number.isFinite(fps) && fps > 0 ? Math.round(fps * 1000) / 1000 : undefined;
+}
+
+function parsePositiveNumber(value: unknown): number | undefined {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number.parseFloat(value) : Number.NaN;
+  return Number.isFinite(number) && number > 0 ? number : undefined;
+}
+
+function probeMediaMetadata(path: string, mediaType: MediaType = inferMediaType(path)): VideoMediaProbeMetadata {
+  const stats = statSync(path);
+  const metadata: VideoMediaProbeMetadata = { sizeBytes: stats.size };
+  if (!['video', 'audio', 'image'].includes(mediaType)) return metadata;
+  const result = spawnSync('ffprobe', [
+    '-v', 'error',
+    '-print_format', 'json',
+    '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate',
+    path,
+  ], { encoding: 'utf-8', timeout: 30_000 });
+  if (result.status !== 0 || !result.stdout.trim()) return metadata;
+  try {
+    const parsed = JSON.parse(result.stdout) as {
+      format?: { duration?: string | number };
+      streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number; avg_frame_rate?: string; r_frame_rate?: string }>;
+    };
+    const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+    const video = streams.find((stream) => stream.codec_type === 'video');
+    const audio = streams.find((stream) => stream.codec_type === 'audio');
+    const durationSeconds = parsePositiveNumber(parsed.format?.duration);
+    if (durationSeconds) metadata.durationMs = Math.max(1, Math.round(durationSeconds * 1000));
+    if (video) {
+      metadata.hasVideo = true;
+      metadata.width = typeof video.width === 'number' && video.width > 0 ? video.width : undefined;
+      metadata.height = typeof video.height === 'number' && video.height > 0 ? video.height : undefined;
+      metadata.fps = parseFfprobeRate(video.avg_frame_rate) ?? parseFfprobeRate(video.r_frame_rate);
+      metadata.codec = video.codec_name;
+    }
+    if (audio) {
+      metadata.hasAudio = true;
+      if (!metadata.codec) metadata.codec = audio.codec_name;
+    }
+  } catch {
+    return metadata;
+  }
+  return metadata;
 }
 
 function isVideoOutputPath(path: string): boolean {
@@ -736,12 +801,14 @@ export async function handleVideoMediaImport(ctx: SessionToolContext, args: Vide
     const storedMediaPath = join(mediaDir, `${mediaId}${ext}`);
     mkdirSync(mediaDir, { recursive: true });
     copyFileSync(mediaPath, storedMediaPath);
+    const mediaType = args.mediaType ?? inferMediaType(mediaPath);
+    const metadata = probeMediaMetadata(storedMediaPath, mediaType);
     const media = {
       id: mediaId,
-      type: args.mediaType ?? inferMediaType(mediaPath),
+      type: mediaType,
       label: args.label?.trim() || basename(mediaPath),
       path: storedMediaPath,
-      sizeBytes: stats.size,
+      ...metadata,
       originalPath: mediaPath,
       source: { kind: 'user-import' },
     };

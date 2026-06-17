@@ -49,6 +49,17 @@ interface VideoStudioReportResult {
   report: unknown;
 }
 
+interface VideoMediaProbeMetadata {
+  durationMs?: number;
+  width?: number;
+  height?: number;
+  fps?: number;
+  sizeBytes?: number;
+  codec?: string;
+  hasAudio?: boolean;
+  hasVideo?: boolean;
+}
+
 // Renderer-supplied export preset is passed to the CLI; constrain to a known set.
 const ALLOWED_VIDEO_EXPORT_PRESETS = new Set(['simple-mp4', 'placeholder']);
 const videoProjectLocks = new Map<string, Promise<void>>();
@@ -208,22 +219,63 @@ function defaultClipDuration(mediaType: VideoMediaType): number {
   return 5000;
 }
 
-function probeMediaDurationMs(path: string): number | null {
+function parseFfprobeRate(value: unknown): number | undefined {
+  if (typeof value !== 'string' || !value.trim() || value === '0/0') return undefined;
+  const parts = value.split('/').map(Number);
+  const numerator = Number(parts[0]);
+  const denominator = Number(parts[1]);
+  if (!Number.isFinite(numerator)) return undefined;
+  if (!Number.isFinite(denominator) || denominator === 0) return numerator > 0 ? numerator : undefined;
+  const fps = numerator / denominator;
+  return Number.isFinite(fps) && fps > 0 ? Math.round(fps * 1000) / 1000 : undefined;
+}
+
+function parsePositiveNumber(value: unknown): number | undefined {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number.parseFloat(value) : Number.NaN;
+  return Number.isFinite(number) && number > 0 ? number : undefined;
+}
+
+export function probeMediaMetadata(path: string, mediaType: VideoMediaType = inferMediaType(path)): VideoMediaProbeMetadata {
+  const stats = statSync(path);
+  const metadata: VideoMediaProbeMetadata = { sizeBytes: stats.size };
+  if (!['video', 'audio', 'image'].includes(mediaType)) return metadata;
   const result = spawnSync('ffprobe', [
     '-v', 'error',
-    '-show_entries', 'format=duration',
-    '-of', 'default=noprint_wrappers=1:nokey=1',
+    '-print_format', 'json',
+    '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate',
     path,
-  ], { encoding: 'utf-8' });
-  if (result.status !== 0) return null;
-  const seconds = Number.parseFloat(result.stdout.trim());
-  if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  return Math.max(1, Math.round(seconds * 1000));
+  ], { encoding: 'utf-8', timeout: 30_000 });
+  if (result.status !== 0 || !result.stdout.trim()) return metadata;
+  try {
+    const parsed = JSON.parse(result.stdout) as {
+      format?: { duration?: string | number };
+      streams?: Array<{ codec_type?: string; codec_name?: string; width?: number; height?: number; avg_frame_rate?: string; r_frame_rate?: string }>;
+    };
+    const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+    const video = streams.find((stream) => stream.codec_type === 'video');
+    const audio = streams.find((stream) => stream.codec_type === 'audio');
+    const durationSeconds = parsePositiveNumber(parsed.format?.duration);
+    if (durationSeconds) metadata.durationMs = Math.max(1, Math.round(durationSeconds * 1000));
+    if (video) {
+      metadata.hasVideo = true;
+      metadata.width = typeof video.width === 'number' && video.width > 0 ? video.width : undefined;
+      metadata.height = typeof video.height === 'number' && video.height > 0 ? video.height : undefined;
+      metadata.fps = parseFfprobeRate(video.avg_frame_rate) ?? parseFfprobeRate(video.r_frame_rate);
+      metadata.codec = video.codec_name;
+    }
+    if (audio) {
+      metadata.hasAudio = true;
+      if (!metadata.codec) metadata.codec = audio.codec_name;
+    }
+  } catch {
+    return metadata;
+  }
+  return metadata;
 }
 
 export function clipDurationForImport(path: string, mediaType: VideoMediaType): number {
   if (mediaType === 'video' || mediaType === 'audio') {
-    return probeMediaDurationMs(path) ?? defaultClipDuration(mediaType);
+    return probeMediaMetadata(path, mediaType).durationMs ?? defaultClipDuration(mediaType);
   }
   return defaultClipDuration(mediaType);
 }
@@ -368,17 +420,19 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
           copyFileSync(sourcePath, targetPath);
 
           const label = basename(sourcePath);
+          const metadata = probeMediaMetadata(targetPath, mediaType);
           project.media.push({
             id: mediaId,
             type: mediaType,
             label,
             path: targetPath,
             mimeType: mimeTypeForPath(targetPath),
+            ...metadata,
             source: { kind: 'user-import' },
           });
           const track = ensureTrack(project, mediaType);
           const startMs = Math.max(0, project.timeline.durationMs || 0);
-          const durationMs = clipDurationForImport(targetPath, mediaType);
+          const durationMs = metadata.durationMs ?? defaultClipDuration(mediaType);
           track.clips.push({
             id: randomUUID(),
             mediaId,

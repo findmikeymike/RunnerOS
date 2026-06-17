@@ -396,6 +396,55 @@ function inferType(path) {
   return 'unknown';
 }
 
+function parseFfprobeRate(value) {
+  if (typeof value !== 'string' || !value.trim() || value === '0/0') return undefined;
+  const [numerator, denominator] = value.split('/').map(Number);
+  if (!Number.isFinite(numerator)) return undefined;
+  if (!Number.isFinite(denominator) || denominator === 0) return numerator > 0 ? numerator : undefined;
+  const fps = numerator / denominator;
+  return Number.isFinite(fps) && fps > 0 ? Math.round(fps * 1000) / 1000 : undefined;
+}
+
+function parsePositiveNumber(value) {
+  const number = typeof value === 'number' ? value : typeof value === 'string' ? Number.parseFloat(value) : Number.NaN;
+  return Number.isFinite(number) && number > 0 ? number : undefined;
+}
+
+function probeMediaMetadata(path, mediaType = inferType(path)) {
+  const stats = statSync(path);
+  const metadata = { sizeBytes: stats.size };
+  if (!['video', 'audio', 'image'].includes(mediaType)) return metadata;
+  const result = spawnSync('ffprobe', [
+    '-v', 'error',
+    '-print_format', 'json',
+    '-show_entries', 'format=duration:stream=codec_type,codec_name,width,height,avg_frame_rate,r_frame_rate',
+    path,
+  ], { encoding: 'utf-8', timeout: 30_000 });
+  if (result.status !== 0 || !result.stdout.trim()) return metadata;
+  try {
+    const parsed = JSON.parse(result.stdout);
+    const streams = Array.isArray(parsed.streams) ? parsed.streams : [];
+    const video = streams.find((stream) => stream.codec_type === 'video');
+    const audio = streams.find((stream) => stream.codec_type === 'audio');
+    const durationSeconds = parsePositiveNumber(parsed.format?.duration);
+    if (durationSeconds) metadata.durationMs = Math.max(1, Math.round(durationSeconds * 1000));
+    if (video) {
+      metadata.hasVideo = true;
+      metadata.width = typeof video.width === 'number' && video.width > 0 ? video.width : undefined;
+      metadata.height = typeof video.height === 'number' && video.height > 0 ? video.height : undefined;
+      metadata.fps = parseFfprobeRate(video.avg_frame_rate) ?? parseFfprobeRate(video.r_frame_rate);
+      metadata.codec = video.codec_name;
+    }
+    if (audio) {
+      metadata.hasAudio = true;
+      if (!metadata.codec) metadata.codec = audio.codec_name;
+    }
+  } catch {
+    return metadata;
+  }
+  return metadata;
+}
+
 function isVideoOutputPath(path) {
   return ['.mp4', '.mov', '.m4v', '.webm', '.mkv'].includes(extname(path).toLowerCase());
 }
@@ -582,13 +631,15 @@ function probeMedia(path) {
   const resolved = resolve(path);
   if (!existsSync(resolved)) fail(`Media file not found: ${path}`);
   const stats = statSync(resolved);
+  const type = inferType(resolved);
   return {
     ok: true,
     path: resolved,
     label: basename(resolved),
-    type: inferType(resolved),
+    type,
     sizeBytes: stats.size,
     modifiedAt: stats.mtime.toISOString(),
+    ...probeMediaMetadata(resolved, type),
   };
 }
 

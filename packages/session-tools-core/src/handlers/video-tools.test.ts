@@ -232,6 +232,18 @@ describe('video studio session tools', () => {
     ], { encoding: 'utf-8' });
     expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
     const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const importedProject = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      media: Array<{ durationMs?: number; width?: number; height?: number; fps?: number; hasAudio?: boolean; hasVideo?: boolean; codec?: string }>;
+    };
+    expect(importedProject.media[0]).toMatchObject({
+      width: 160,
+      height: 90,
+      fps: 10,
+      hasAudio: true,
+      hasVideo: true,
+    });
+    expect(importedProject.media[0]?.durationMs).toBeGreaterThanOrEqual(900);
+    expect(importedProject.media[0]?.codec).toBeTruthy();
     const clip = await handleVideoClipAdd(ctx, {
       projectPath,
       mediaId: (imported.structuredContent as { mediaId: string }).mediaId,

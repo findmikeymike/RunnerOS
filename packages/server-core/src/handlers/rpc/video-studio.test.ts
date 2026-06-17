@@ -2,7 +2,8 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { clipDurationForImport, collectImportableVideoStudioFiles } from './video-studio';
+import { spawnSync } from 'node:child_process';
+import { clipDurationForImport, collectImportableVideoStudioFiles, probeMediaMetadata } from './video-studio';
 
 const tempDirs: string[] = [];
 
@@ -59,5 +60,34 @@ describe('clipDurationForImport', () => {
     writeFileSync(bogusVideo, 'not a real mp4');
 
     expect(clipDurationForImport(bogusVideo, 'video')).toBe(5000);
+  });
+
+  test('probes real video duration, dimensions, fps, and streams', () => {
+    const root = makeTempDir();
+    const video = join(root, 'probe.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10',
+      '-f', 'lavfi',
+      '-i', 'sine=frequency=440:duration=1',
+      '-t', '1',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      video,
+    ], { encoding: 'utf-8' });
+    if (fixture.status !== 0) return;
+
+    const metadata = probeMediaMetadata(video, 'video');
+
+    expect(metadata.durationMs).toBeGreaterThanOrEqual(900);
+    expect(metadata.durationMs).toBeLessThanOrEqual(1200);
+    expect(metadata.width).toBe(160);
+    expect(metadata.height).toBe(90);
+    expect(metadata.fps).toBe(10);
+    expect(metadata.hasVideo).toBe(true);
+    expect(metadata.hasAudio).toBe(true);
+    expect(metadata.codec).toBeTruthy();
   });
 });
