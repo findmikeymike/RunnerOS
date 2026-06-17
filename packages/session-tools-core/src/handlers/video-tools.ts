@@ -143,6 +143,13 @@ interface VideoMediaProbeMetadata {
   hasVideo?: boolean;
 }
 
+interface VideoExportRenderSettings {
+  slug: string;
+  width: number;
+  height: number;
+  fps: number;
+}
+
 interface VideoClipAdjustments {
   exposure?: number;
   contrast?: number;
@@ -189,6 +196,28 @@ function aspectSettings(aspectRatio: string | undefined): { aspectRatio: AspectR
   if (aspectRatio === '1:1') return { aspectRatio, width: 1080, height: 1080, fps: 30 };
   if (aspectRatio === '4:5') return { aspectRatio, width: 1080, height: 1350, fps: 30 };
   return { aspectRatio: '9:16', width: 1080, height: 1920, fps: 30 };
+}
+
+const VIDEO_EXPORT_PRESETS: Record<string, Partial<VideoExportRenderSettings>> = {
+  'simple-mp4': {},
+  placeholder: {},
+  'mp4-16x9-1080p': { width: 1920, height: 1080, fps: 30 },
+  'mp4-9x16-1080x1920': { width: 1080, height: 1920, fps: 30 },
+  'mp4-1x1-1080': { width: 1080, height: 1080, fps: 30 },
+  'mp4-4x5-1080x1350': { width: 1080, height: 1350, fps: 30 },
+  'mp4-source-size': {},
+};
+
+function resolveExportPreset(project: VideoProject, preset: string | undefined, realVideo: boolean): { settings?: VideoExportRenderSettings; error?: string } {
+  const slug = preset ?? (realVideo ? 'simple-mp4' : 'placeholder');
+  const selected = VIDEO_EXPORT_PRESETS[slug];
+  if (!selected) return { error: `Unknown export preset: ${slug}` };
+  if (realVideo && slug === 'placeholder') return { error: 'The placeholder preset requires a non-video output path.' };
+  if (!realVideo && slug !== 'placeholder') return { error: `Preset ${slug} requires a video output path.` };
+  const width = selected.width ?? (typeof project.settings.width === 'number' ? project.settings.width : 1080);
+  const height = selected.height ?? (typeof project.settings.height === 'number' ? project.settings.height : 1920);
+  const fps = selected.fps ?? (typeof project.settings.fps === 'number' ? project.settings.fps : 30);
+  return { settings: { slug, width, height, fps } };
 }
 
 function aspectMatchesDimensions(aspectRatio: string | undefined, width: number | undefined, height: number | undefined): boolean {
@@ -497,10 +526,10 @@ function hasAudioStream(path: string): boolean {
   return result.status === 0 && result.stdout.trim().length > 0;
 }
 
-function renderSimpleMp4(project: VideoProject, outputPath: string): void {
-  const width = typeof project.settings.width === 'number' ? project.settings.width : 1080;
-  const height = typeof project.settings.height === 'number' ? project.settings.height : 1920;
-  const fps = typeof project.settings.fps === 'number' ? project.settings.fps : 30;
+function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettings?: VideoExportRenderSettings): void {
+  const width = renderSettings?.width ?? (typeof project.settings.width === 'number' ? project.settings.width : 1080);
+  const height = renderSettings?.height ?? (typeof project.settings.height === 'number' ? project.settings.height : 1920);
+  const fps = renderSettings?.fps ?? (typeof project.settings.fps === 'number' ? project.settings.fps : 30);
   const mediaById = new Map(project.media.map((media) => [media.id, media]));
   const visibleTracks = project.timeline.tracks.filter((track) => track.hidden !== true);
   const audibleTrackIds = new Set(visibleTracks.filter((track) => track.muted !== true).map((track) => track.id));
@@ -1087,6 +1116,8 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
     const createdAt = new Date().toISOString();
     const realVideo = isVideoOutputPath(outputPath);
     const receiptPath = `${outputPath}.receipt.json`;
+    const preset = resolveExportPreset(project, args.preset, realVideo);
+    if (preset.error || !preset.settings) return errorResponse(preset.error ?? 'Invalid export preset.');
     const projectDir = dirname(projectPath);
     const sourceMediaPaths = new Set(
       project.media
@@ -1098,7 +1129,7 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
     }
     if (realVideo) {
       try {
-        renderSimpleMp4(project, outputPath);
+        renderSimpleMp4(project, outputPath, preset.settings);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         writeJsonAtomic(receiptPath, {
@@ -1107,7 +1138,10 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
           rendered: false,
           projectPath,
           outputPath,
-          preset: args.preset ?? 'simple-mp4',
+          preset: preset.settings.slug,
+          width: preset.settings.width,
+          height: preset.settings.height,
+          fps: preset.settings.fps,
           createdAt,
           error: message,
         });
@@ -1116,7 +1150,7 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
           createdAt,
           status: 'failed',
           path: outputPath,
-          preset: args.preset ?? 'simple-mp4',
+          preset: preset.settings.slug,
           placeholder: false,
           error: message,
           receiptPath,
@@ -1141,7 +1175,10 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
       rendered: realVideo,
       projectPath,
       outputPath,
-      preset: args.preset ?? (realVideo ? 'simple-mp4' : 'placeholder'),
+      preset: preset.settings.slug,
+      width: preset.settings.width,
+      height: preset.settings.height,
+      fps: preset.settings.fps,
       createdAt,
     });
     project.exports.push({
@@ -1149,7 +1186,7 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
       createdAt,
       status: 'succeeded',
       path: outputPath,
-      preset: args.preset ?? (realVideo ? 'simple-mp4' : 'placeholder'),
+      preset: preset.settings.slug,
       placeholder: !realVideo,
       receiptPath,
     });
@@ -1187,6 +1224,10 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
       receiptPath,
       placeholder: !realVideo,
       rendered: realVideo,
+      preset: preset.settings.slug,
+      width: preset.settings.width,
+      height: preset.settings.height,
+      fps: preset.settings.fps,
       versionId,
       outputId,
       changedClipIds: [],

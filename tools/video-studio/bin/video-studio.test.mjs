@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 
@@ -221,5 +221,25 @@ describe('video-studio edit commands', () => {
     run(['export', projectPath, '--out', adjustedPath, '--json']);
 
     expect(averageFrameLuma(adjustedPath)).toBeGreaterThan(averageFrameLuma(baselinePath) + 25);
+  });
+
+  test('export preset controls output dimensions', () => {
+    if (!hasFfmpeg()) return;
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 64, height: 64, fps: 10 };
+    project.timeline.tracks[0].clips = [{ id: 'title', type: 'text', startMs: 0, durationMs: 1000, label: 'Title', text: { text: 'Title', fontSize: 32, color: '#ffffff' } }];
+    project.timeline.durationMs = 1000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+    const outputPath = join(dirname(projectPath), 'square.mp4');
+
+    const exported = run(['export', projectPath, '--out', outputPath, '--preset', 'mp4-1x1-1080', '--json']);
+
+    expect(exported.preset).toBe('mp4-1x1-1080');
+    expect(exported.width).toBe(1080);
+    expect(exported.height).toBe(1080);
+    const dimensions = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', outputPath], { encoding: 'utf-8' });
+    expect(dimensions.status).toBe(0);
+    expect(dimensions.stdout.trim()).toBe('1080x1080');
   });
 });

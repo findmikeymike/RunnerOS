@@ -42,6 +42,7 @@ import { handleListAgents } from './handlers/list-agents.ts';
 import { handleListSkills } from './handlers/list-skills.ts';
 import { handleListSources } from './handlers/list-sources.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
+import { handleMessageAgent } from './handlers/message-agent.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleCreateAgent } from './handlers/create-agent.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
@@ -327,6 +328,21 @@ export const SendAgentMessageSchema = z.object({
     path: z.string().describe('Absolute file path on disk'),
     name: z.string().optional().describe('Display name (defaults to file basename)'),
   })).optional().describe('Files to include with the message'),
+  deliveryMode: z.enum(['normal', 'passive']).optional().describe('normal starts/queues processing in the target session. passive stores a visible update without interrupting or starting the target agent.'),
+});
+
+export const MessageAgentSchema = z.object({
+  agentSlug: z.string().describe('Saved agent slug to delegate to'),
+  task: z.string().describe('Specific bounded task for the target agent'),
+  context: z.string().optional().describe('Short context the target agent needs. Do not dump full transcripts.'),
+  expectedOutput: z.string().optional().describe('What the target agent should return'),
+  outputSchema: z.record(z.string(), z.unknown()).optional().describe('Optional JSON Schema the final target-agent reply must satisfy'),
+  sourceSlugs: z.array(z.string()).optional().describe('Optional source subset the target agent may use'),
+  skillSlugs: z.array(z.string()).optional().describe('Optional skills to invoke in the child session'),
+  permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional().describe('Child permission mode. Cannot be looser than the parent session mode.'),
+  timeoutSeconds: z.number().int().min(1).max(1800).optional().describe('Timeout for the delegated turn. Defaults to 300 seconds.'),
+  maxTurns: z.number().int().min(1).max(1).optional().describe('Maximum child turns. MVP supports one delegated turn.'),
+  priority: z.enum(['low', 'normal', 'high']).optional().describe('Scheduling hint for future use. Defaults to normal.'),
 });
 
 export const ListMessagingChannelsSchema = z.object({
@@ -561,7 +577,7 @@ export const VideoClipAdjustSchema = z.object({
 export const VideoExportSchema = z.object({
   projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
   outputPath: z.string().optional().describe('Output path. Defaults to renders/preview.placeholder.txt next to the project. Use .mp4 for the simple FFmpeg renderer. It supports video, image, audio, and text clips. Non-video paths write a placeholder text receipt.'),
-  preset: z.string().optional().describe('Export preset label. Defaults to placeholder.'),
+  preset: z.enum(['simple-mp4', 'placeholder', 'mp4-16x9-1080p', 'mp4-9x16-1080x1920', 'mp4-1x1-1080', 'mp4-4x5-1080x1350', 'mp4-source-size']).optional().describe('Export preset. Video outputs default to simple-mp4; non-video receipts default to placeholder.'),
   publishOutput: z.boolean().optional().describe('Also publish a Runner Output receipt if create_output is available. Defaults to false.'),
   showInCanvas: z.boolean().optional().describe('When publishOutput is true, request immediate Canvas display.'),
 });
@@ -875,8 +891,23 @@ Use this only when the user asks to stop/cancel a workflow run.`,
 
 Use this to coordinate with spawned sessions, send follow-up instructions, or relay information between sessions.
 Use list_sessions to find session IDs, or use the sessionId returned by spawn_session.
+Use deliveryMode "passive" for progress updates or FYIs that should not interrupt a currently running target agent.
 
 The target session receives your message with a sender envelope containing your session ID, so it can use send_agent_message to reply.`,
+
+  message_agent: `Delegate a bounded task to another saved RunnerOS agent and wait for a compact result.
+
+Use this when a specialist agent is clearly better suited for a subtask, such as asking a reviewer to inspect a draft, an analyst to summarize data, or a researcher to check sources.
+
+This creates a real hidden child session for the target agent, records a receipt, enforces source/skill readiness, and returns the child output plus tool-use summary.
+
+Rules:
+- Use list_agents first if you do not know the exact target agent slug.
+- Provide a concrete task and expected output.
+- Pass only the context needed for the subtask; do not paste the whole parent transcript.
+- Do not use this for casual discussion or trivial work you can complete directly.
+- The child cannot use a looser permission mode than this parent session.
+- Delegation is bounded by timeout and recursion depth.`,
 
   list_messaging_channels: `List messaging channels (Telegram, WhatsApp) bound to a session.
 Shows which external chat apps are connected and can send/receive messages.`,
@@ -1066,7 +1097,7 @@ Use this for exposure, contrast, saturation, highlights, shadows, temperature, t
 
   video_export: `Create a Video Studio export.
 
-Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, and text clips, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
+Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, and text clips, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Video presets are simple-mp4, mp4-16x9-1080p, mp4-9x16-1080x1920, mp4-1x1-1080, mp4-4x5-1080x1350, and mp4-source-size. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
 
   visual_surface: `Update the current session Canvas through a safe structured operation.
 
@@ -1170,6 +1201,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'cancel_workflow_run', description: TOOL_DESCRIPTIONS.cancel_workflow_run, inputSchema: CancelWorkflowRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCancelWorkflowRun },
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
+  { name: 'message_agent', description: TOOL_DESCRIPTIONS.message_agent, inputSchema: MessageAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleMessageAgent },
   // Messaging gateway tools
   { name: 'list_messaging_channels', description: TOOL_DESCRIPTIONS.list_messaging_channels, inputSchema: ListMessagingChannelsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListMessagingChannels },
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },

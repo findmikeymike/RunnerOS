@@ -77,6 +77,28 @@ function defaultSettings(aspectRatio = '9:16') {
   return { aspectRatio, width: 1080, height: 1920, fps: 30 };
 }
 
+const VIDEO_EXPORT_PRESETS = {
+  'simple-mp4': {},
+  placeholder: {},
+  'mp4-16x9-1080p': { width: 1920, height: 1080, fps: 30 },
+  'mp4-9x16-1080x1920': { width: 1080, height: 1920, fps: 30 },
+  'mp4-1x1-1080': { width: 1080, height: 1080, fps: 30 },
+  'mp4-4x5-1080x1350': { width: 1080, height: 1350, fps: 30 },
+  'mp4-source-size': {},
+};
+
+function resolveExportPreset(project, preset, realVideo) {
+  const slug = preset || (realVideo ? 'simple-mp4' : 'placeholder');
+  const selected = VIDEO_EXPORT_PRESETS[slug];
+  if (!selected) fail(`Unknown export preset: ${slug}`);
+  if (realVideo && slug === 'placeholder') fail('The placeholder preset requires a non-video output path.');
+  if (!realVideo && slug !== 'placeholder') fail(`Preset ${slug} requires a video output path.`);
+  const width = selected.width || (typeof project.settings?.width === 'number' ? project.settings.width : 1080);
+  const height = selected.height || (typeof project.settings?.height === 'number' ? project.settings.height : 1920);
+  const fps = selected.fps || (typeof project.settings?.fps === 'number' ? project.settings.fps : 30);
+  return { slug, width, height, fps };
+}
+
 function createProject({ title, workspaceId, aspectRatio }) {
   const now = new Date().toISOString();
   return {
@@ -525,10 +547,10 @@ function hasAudioStream(path) {
   return result.status === 0 && result.stdout.trim().length > 0;
 }
 
-function renderSimpleMp4(project, outputPath) {
-  const width = typeof project.settings?.width === 'number' ? project.settings.width : 1080;
-  const height = typeof project.settings?.height === 'number' ? project.settings.height : 1920;
-  const fps = typeof project.settings?.fps === 'number' ? project.settings.fps : 30;
+function renderSimpleMp4(project, outputPath, renderSettings) {
+  const width = renderSettings?.width || (typeof project.settings?.width === 'number' ? project.settings.width : 1080);
+  const height = renderSettings?.height || (typeof project.settings?.height === 'number' ? project.settings.height : 1920);
+  const fps = renderSettings?.fps || (typeof project.settings?.fps === 'number' ? project.settings.fps : 30);
   const mediaById = new Map((project.media || []).map((media) => [media.id, media]));
   const visibleTracks = (project.timeline?.tracks || []).filter((track) => track.hidden !== true);
   const audibleTrackIds = new Set(visibleTracks.filter((track) => track.muted !== true).map((track) => track.id));
@@ -831,8 +853,9 @@ function runExport() {
   }
   ensureDir(dirname(outPath));
   const realVideo = isVideoOutputPath(outPath);
+  const renderSettings = resolveExportPreset(project, opt('--preset', realVideo ? 'simple-mp4' : 'placeholder'), realVideo);
   if (realVideo) {
-    renderSimpleMp4(project, outPath);
+    renderSimpleMp4(project, outPath, renderSettings);
   } else {
     writeFileSync(
       outPath,
@@ -854,6 +877,10 @@ function runExport() {
     rendered: realVideo,
     projectPath: resolvedProject,
     outputPath: outPath,
+    preset: renderSettings.slug,
+    width: renderSettings.width,
+    height: renderSettings.height,
+    fps: renderSettings.fps,
     createdAt: new Date().toISOString(),
     engine: realVideo ? 'runneros-video-studio-ffmpeg-simple' : 'runneros-video-studio-placeholder',
     note: realVideo ? 'Playable MP4 rendered by the simple FFmpeg media timeline engine.' : 'Placeholder export written by foundation CLI.',
@@ -864,7 +891,7 @@ function runExport() {
     createdAt: receipt.createdAt,
     status: 'succeeded',
     path: outPath,
-    preset: opt('--preset', realVideo ? 'simple-mp4' : 'placeholder'),
+    preset: renderSettings.slug,
     placeholder: !realVideo,
     receiptPath,
   });
@@ -877,6 +904,10 @@ function runExport() {
     receiptPath,
     placeholder: !realVideo,
     rendered: realVideo,
+    preset: renderSettings.slug,
+    width: renderSettings.width,
+    height: renderSettings.height,
+    fps: renderSettings.fps,
     lines: [
       realVideo ? `✓ MP4 export rendered: ${outPath}` : `✓ Placeholder export written: ${outPath}`,
       `✓ Receipt written: ${receiptPath}`,

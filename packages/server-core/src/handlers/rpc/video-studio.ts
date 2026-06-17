@@ -61,7 +61,15 @@ interface VideoMediaProbeMetadata {
 }
 
 // Renderer-supplied export preset is passed to the CLI; constrain to a known set.
-const ALLOWED_VIDEO_EXPORT_PRESETS = new Set(['simple-mp4', 'placeholder']);
+const ALLOWED_VIDEO_EXPORT_PRESETS = new Set([
+  'simple-mp4',
+  'placeholder',
+  'mp4-16x9-1080p',
+  'mp4-9x16-1080x1920',
+  'mp4-1x1-1080',
+  'mp4-4x5-1080x1350',
+  'mp4-source-size',
+]);
 const videoProjectLocks = new Map<string, Promise<void>>();
 
 async function withVideoProjectLock<T>(projectPath: string, task: () => Promise<T> | T): Promise<T> {
