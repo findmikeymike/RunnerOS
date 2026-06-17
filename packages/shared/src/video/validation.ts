@@ -5,6 +5,8 @@ import type {
   VideoValidationResult,
 } from './types.ts';
 
+const VIDEO_ASPECT_RATIOS = new Set(['9:16', '1:1', '16:9', '4:5', 'custom']);
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -81,6 +83,7 @@ export function validateRunnerVideoProject(value: unknown): VideoValidationResul
     push(errors, 'settings', 'settings is required.');
   } else {
     if (!isNonEmptyString(project.settings.aspectRatio)) push(errors, 'settings.aspectRatio', 'aspectRatio is required.');
+    else if (!VIDEO_ASPECT_RATIOS.has(project.settings.aspectRatio)) push(errors, 'settings.aspectRatio', 'aspectRatio must be one of 9:16, 1:1, 16:9, 4:5, custom.');
     if (typeof project.settings.width !== 'number' || project.settings.width <= 0) push(errors, 'settings.width', 'width must be positive.');
     if (typeof project.settings.height !== 'number' || project.settings.height <= 0) push(errors, 'settings.height', 'height must be positive.');
     if (typeof project.settings.fps !== 'number' || project.settings.fps <= 0) push(errors, 'settings.fps', 'fps must be positive.');

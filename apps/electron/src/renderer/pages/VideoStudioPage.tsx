@@ -162,6 +162,18 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     timelineDragRef.current = timelineDrag
   }, [timelineDrag])
 
+  // Warn before the window closes/navigates with unsaved edits in the editor.
+  React.useEffect(() => {
+    const hasUnsaved = undoStack.length > 0 || redoStack.length > 0 || rawJsonDirty
+    if (!hasUnsaved) return
+    const handler = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [rawJsonDirty, redoStack.length, undoStack.length])
+
   React.useEffect(() => {
     if (!clipContextMenu) return
     const close = () => setClipContextMenu(null)

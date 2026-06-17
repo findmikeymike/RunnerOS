@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -46,12 +46,24 @@ function ensureDir(path) {
 function writeJsonAtomic(path, value) {
   ensureDir(dirname(path));
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, 'utf-8');
+  const fd = openSync(tmp, 'w');
+  try {
+    writeSync(fd, `${JSON.stringify(value, null, 2)}\n`);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
   renameSync(tmp, path);
 }
 
 function readJson(path) {
-  return JSON.parse(readFileSync(path, 'utf-8'));
+  try {
+    return JSON.parse(readFileSync(path, 'utf-8'));
+  } catch (error) {
+    // Preserve the corrupt file so a later write can't destroy the only copy.
+    try { copyFileSync(path, `${path}.${Date.now()}.corrupt.bak`); } catch { /* best-effort */ }
+    throw error;
+  }
 }
 
 function cloneJson(value) {
@@ -460,7 +472,7 @@ function hasAudioStream(path) {
     '-show_entries', 'stream=index',
     '-of', 'csv=p=0',
     path,
-  ], { encoding: 'utf-8' });
+  ], { encoding: 'utf-8', timeout: 30_000 });
   return result.status === 0 && result.stdout.trim().length > 0;
 }
 
@@ -562,7 +574,7 @@ function renderSimpleMp4(project, outputPath) {
   }
   args.push(outputPath);
 
-  const result = spawnSync('ffmpeg', args, { encoding: 'utf-8' });
+  const result = spawnSync('ffmpeg', args, { encoding: 'utf-8', timeout: 300_000 });
   if (result.status !== 0) fail(result.stderr || result.stdout || 'ffmpeg failed to render video.');
 }
 
@@ -582,7 +594,7 @@ function probeMedia(path) {
 
 function runDoctor() {
   const nodeVersion = process.version;
-  const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
+  const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8', timeout: 15_000 });
   const ffmpegAvailable = ffmpeg.status === 0;
   const lines = [
     `✓ Node: ${nodeVersion}`,
@@ -697,7 +709,7 @@ function runDryRun() {
   if (!projectPath) fail('Usage: video-studio dry-run <project-path> [--json]');
   const { resolved, project } = readValidProject(projectPath);
   const report = inspectProject(project);
-  const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
+  const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8', timeout: 15_000 });
   const ffmpegAvailable = ffmpeg.status === 0;
   const renderable = report.ok && ffmpegAvailable && report.warnings.every((warning) => warning.type !== 'unsupported-simple-render');
   print({
@@ -758,6 +770,14 @@ function runExport() {
   const project = readJson(resolvedProject);
   const validation = validateProject(project);
   if (!validation.ok) fail('Project validation failed.', { projectPath: resolvedProject, errors: validation.errors });
+  // Never overwrite source media with the export output (spec hard rule).
+  const projectDir = dirname(resolvedProject);
+  const sourceMediaPaths = new Set(
+    (project.media || []).map((media) => (media && media.path ? resolve(projectDir, media.path) : null)).filter(Boolean),
+  );
+  if (sourceMediaPaths.has(outPath)) {
+    fail('Refusing to overwrite source media with the export output. Choose a different --out path.');
+  }
   ensureDir(dirname(outPath));
   const realVideo = isVideoOutputPath(outPath);
   if (realVideo) {

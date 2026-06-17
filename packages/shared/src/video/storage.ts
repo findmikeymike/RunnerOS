@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, copyFileSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, renameSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type {
@@ -79,8 +79,73 @@ export function createRunnerVideoProject(input: CreateVideoProjectInput): Runner
   };
 }
 
+export const CURRENT_VIDEO_PROJECT_VERSION = 1;
+
+/**
+ * Bring a parsed project to the current schema version. Newer-than-known
+ * versions are rejected with a clear message instead of being mis-parsed;
+ * older versions are migrated forward (scaffold — only v1 exists today).
+ */
+export function migrateVideoProject(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const record = raw as Record<string, unknown>;
+  const version = typeof record.version === 'number' ? record.version : 1;
+  if (version > CURRENT_VIDEO_PROJECT_VERSION) {
+    throw new Error(
+      `This video project uses a newer schema (v${version}) than this RunnerOS build supports (v${CURRENT_VIDEO_PROJECT_VERSION}). Update RunnerOS to open it.`,
+    );
+  }
+  // Future: apply sequential v(n) -> v(n+1) migrations here.
+  if (record.version !== CURRENT_VIDEO_PROJECT_VERSION) {
+    return { ...record, version: CURRENT_VIDEO_PROJECT_VERSION };
+  }
+  return raw;
+}
+
+/** Atomic + durable write: backup existing good file, fsync temp, then rename. */
+function writeVideoProjectFile(projectPath: string, project: RunnerVideoProject): void {
+  mkdirSync(dirname(projectPath), { recursive: true });
+  if (existsSync(projectPath)) {
+    try {
+      copyFileSync(projectPath, `${projectPath}.bak`);
+    } catch {
+      /* best-effort backup; never block a save on backup failure */
+    }
+  }
+  const tmp = `${projectPath}.${process.pid}.${Date.now()}.tmp`;
+  const fd = openSync(tmp, 'w');
+  try {
+    writeSync(fd, `${JSON.stringify(project, null, 2)}\n`);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(tmp, projectPath);
+}
+
 export function readVideoProject(projectPath: string): RunnerVideoProject {
-  const parsed = JSON.parse(readFileSync(projectPath, 'utf-8')) as unknown;
+  let parsed: unknown;
+  try {
+    parsed = migrateVideoProject(JSON.parse(readFileSync(projectPath, 'utf-8')));
+  } catch (error) {
+    // Corrupt / unparseable / unsupported version. Try a backup, then preserve
+    // the bad file so a later write can't silently destroy the only copy.
+    const backupPath = `${projectPath}.bak`;
+    if (existsSync(backupPath)) {
+      try {
+        const recovered = migrateVideoProject(JSON.parse(readFileSync(backupPath, 'utf-8')));
+        if (validateRunnerVideoProject(recovered).ok) return recovered as RunnerVideoProject;
+      } catch {
+        /* backup also unusable — fall through */
+      }
+    }
+    try {
+      copyFileSync(projectPath, `${projectPath}.${Date.now()}.corrupt.bak`);
+    } catch {
+      /* best-effort */
+    }
+    throw error instanceof Error ? error : new Error('Invalid video project JSON.');
+  }
   const validation = validateRunnerVideoProject(parsed);
   if (!validation.ok) {
     const first = validation.errors[0];
@@ -95,10 +160,7 @@ export function writeVideoProject(projectPath: string, project: RunnerVideoProje
     const first = validation.errors[0];
     throw new Error(first ? `${first.path}: ${first.message}` : 'Invalid video project.');
   }
-  mkdirSync(dirname(projectPath), { recursive: true });
-  const tmp = `${projectPath}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
-  renameSync(tmp, projectPath);
+  writeVideoProjectFile(projectPath, project);
 }
 
 export function getDefaultVideoProjectPath(projectDir: string): string {

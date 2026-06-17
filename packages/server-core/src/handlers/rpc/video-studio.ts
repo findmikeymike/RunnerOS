@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 import { getVideoStudioSource } from '@craft-agent/shared/sources';
-import { validateRunnerVideoProject, type RunnerVideoProject, type VideoMediaType, type VideoTrackType } from '@craft-agent/shared/video';
+import { readVideoProject, writeVideoProject, type RunnerVideoProject, type VideoMediaType, type VideoTrackType } from '@craft-agent/shared/video';
 import { writeOutputManifest, type OutputAsset, type OutputManifest } from '@craft-agent/shared/outputs';
 import type { RpcServer } from '@craft-agent/server-core/transport';
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport';
@@ -49,6 +49,9 @@ interface VideoStudioReportResult {
   report: unknown;
 }
 
+// Renderer-supplied export preset is passed to the CLI; constrain to a known set.
+const ALLOWED_VIDEO_EXPORT_PRESETS = new Set(['simple-mp4', 'placeholder']);
+
 function resolveRootPath(workspaceId: string): string {
   const workspace = getWorkspaceByNameOrId(workspaceId);
   if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`);
@@ -73,30 +76,14 @@ function videoProjectAsset(output: OutputManifest): OutputAsset {
   return asset;
 }
 
+// Delegate to the shared storage layer so the RPC path gets schema migration,
+// malformed-file backup/recovery, and durable (fsync) atomic writes.
 function readProject(path: string): RunnerVideoProject {
-  const parsed = JSON.parse(readFileSync(path, 'utf-8')) as RunnerVideoProject;
-  const validation = validateRunnerVideoProject(parsed);
-  if (!validation.ok) {
-    const first = validation.errors[0];
-    throw new Error(first ? `Invalid video project: ${first.path} ${first.message}` : 'Invalid video project.');
-  }
-  return parsed;
+  return readVideoProject(path);
 }
 
 function writeProject(path: string, project: RunnerVideoProject): void {
-  const validation = validateRunnerVideoProject(project);
-  if (!validation.ok) {
-    const first = validation.errors[0];
-    throw new Error(first ? `Invalid video project: ${first.path} ${first.message}` : 'Invalid video project.');
-  }
-  const tempPath = `${path}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    writeFileSync(tempPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
-    renameSync(tempPath, path);
-  } catch (error) {
-    rmSync(tempPath, { force: true });
-    throw error;
-  }
+  writeVideoProject(path, project);
 }
 
 function fileMetadata(path: string): Pick<OutputAsset, 'mimeType' | 'sizeBytes' | 'sha256'> {
@@ -415,6 +402,9 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
     RPC_CHANNELS.videoStudio.EXPORT,
     async (_ctx, workspaceId: string, outputId: string, preset = 'simple-mp4'): Promise<VideoStudioExportResult> => {
       assertLocalWorkspace(workspaceId, 'Export Video Studio project');
+      if (!ALLOWED_VIDEO_EXPORT_PRESETS.has(preset)) {
+        throw new Error(`Unknown export preset: ${preset}`);
+      }
       const service = serviceFor(server);
       const root = resolveRootPath(workspaceId);
       const output = service.get(workspaceId, outputId);

@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   addVideoProjectVersion,
   appendVideoAgentEvent,
   createRunnerVideoProject,
+  migrateVideoProject,
   readVideoProject,
   upsertVideoMediaAsset,
   validateRunnerVideoProject,
@@ -86,5 +87,44 @@ describe('Runner video project storage', () => {
     expect(project.versions.at(-1)?.summary).toBe('Imported media');
     expect(project.agentEvents.at(-1)?.id).toBe(event.id);
     expect(validateRunnerVideoProject(project).ok).toBe(true);
+  });
+
+  test('rejects an unknown aspectRatio at validation', () => {
+    const project = createRunnerVideoProject({ title: 'Bad Ratio', workspaceId: 'workspace-1' });
+    (project.settings as { aspectRatio: string }).aspectRatio = 'banana';
+    const validation = validateRunnerVideoProject(project);
+    expect(validation.ok).toBe(false);
+    expect(validation.errors.some((issue) => issue.path === 'settings.aspectRatio')).toBe(true);
+  });
+
+  test('migrateVideoProject rejects a newer schema version', () => {
+    expect(() => migrateVideoProject({ version: 99 })).toThrow(/newer schema/i);
+    // Current version passes through untouched.
+    const ok = createRunnerVideoProject({ title: 'V1', workspaceId: 'w' });
+    expect(migrateVideoProject(ok)).toBe(ok);
+  });
+
+  test('backs up the prior project on overwrite', () => {
+    const projectPath = join(root, 'video.runner-video.json');
+    const project = createRunnerVideoProject({ title: 'First', workspaceId: 'workspace-1' });
+    writeVideoProject(projectPath, project);
+    expect(existsSync(`${projectPath}.bak`)).toBe(false); // no prior file to back up
+
+    const updated = { ...project, title: 'Second', updatedAt: new Date().toISOString() };
+    writeVideoProject(projectPath, updated);
+    expect(existsSync(`${projectPath}.bak`)).toBe(true); // prior good copy preserved
+  });
+
+  test('recovers a corrupt project file from its backup', () => {
+    const projectPath = join(root, 'video.runner-video.json');
+    const project = createRunnerVideoProject({ title: 'Recoverable', workspaceId: 'workspace-1' });
+    writeVideoProject(projectPath, project);
+    writeVideoProject(projectPath, { ...project, updatedAt: new Date().toISOString() }); // creates .bak
+
+    writeFileSync(projectPath, 'this is not valid json {{{', 'utf-8'); // corrupt the live file
+
+    const recovered = readVideoProject(projectPath);
+    expect(recovered.id).toBe(project.id);
+    expect(recovered.title).toBe('Recoverable');
   });
 });
