@@ -528,6 +528,33 @@ function clipSourceDurationSeconds(clip: { durationMs: number; speed?: unknown; 
   return seconds(requestedMs, 1000);
 }
 
+function sourceAvailableMs(
+  clip: { sourceInMs?: unknown; sourceOutMs?: unknown },
+  media: { durationMs?: unknown },
+): number | undefined {
+  const sourceInMs = typeof clip.sourceInMs === 'number' && Number.isFinite(clip.sourceInMs) ? clip.sourceInMs : 0;
+  const sourceOutMs = typeof clip.sourceOutMs === 'number' && Number.isFinite(clip.sourceOutMs)
+    ? clip.sourceOutMs
+    : typeof media.durationMs === 'number' && Number.isFinite(media.durationMs)
+      ? media.durationMs
+      : undefined;
+  return sourceOutMs !== undefined && sourceOutMs > sourceInMs ? sourceOutMs - sourceInMs : undefined;
+}
+
+function assertSourceCanCoverSpeed(
+  clip: { durationMs: number; speed?: unknown; sourceInMs?: unknown; sourceOutMs?: unknown; label?: unknown; id: string },
+  media: { durationMs?: unknown; type: MediaType },
+): void {
+  if (media.type === 'image') return;
+  const availableMs = sourceAvailableMs(clip, media);
+  if (availableMs === undefined) return;
+  const requiredMs = clip.durationMs * clipSpeed(clip);
+  if (requiredMs > availableMs + 33) {
+    const label = typeof clip.label === 'string' ? clip.label : clip.id;
+    throw new Error(`Clip "${label}" speed requires ${Math.ceil(requiredMs)} ms of source media, but only ${Math.floor(availableMs)} ms is available. Shorten durationMs or extend sourceOutMs.`);
+  }
+}
+
 function applyClipSettings(clip: { volume?: number; speed?: number; fadeInMs?: number; fadeOutMs?: number }, input: { volume?: number; speed?: number; fadeInMs?: number; fadeOutMs?: number }): string | null {
   if (input.volume !== undefined) {
     if (!Number.isFinite(input.volume) || input.volume < 0 || input.volume > 4) return 'volume must be between 0 and 4.';
@@ -657,6 +684,7 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
   const inputClips: Array<{ clip: typeof clips[number]['clip']; trackId: string; media: VideoProject['media'][number]; inputIndex: number }> = [];
   for (const { clip, trackId, media } of mediaClips) {
     if (!existsSync(media.path)) throw new Error(`Media file not found for clip "${clip.label ?? clip.id}": ${media.path}`);
+    assertSourceCanCoverSpeed(clip, media);
     const sourceDuration = ffmpegNumber(media.type === 'image' ? seconds(clip.durationMs, 1000) : clipSourceDurationSeconds(clip));
     const sourceIn = seconds(typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0);
     if (media.type === 'image') {

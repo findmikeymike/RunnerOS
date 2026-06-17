@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { clipDurationForImport, collectImportableVideoStudioFiles, generateVideoMediaDerivatives, probeMediaMetadata } from './video-studio';
+import { clipDurationForImport, collectImportableVideoStudioFiles, generateVideoMediaDerivatives, generateVideoMediaDerivativesAsync, probeMediaMetadata } from './video-studio';
 
 const tempDirs: string[] = [];
 
@@ -117,5 +117,29 @@ describe('clipDurationForImport', () => {
     expect(derivatives.waveformPath).toBeTruthy();
     expect(existsSync(derivatives.thumbnailPath!)).toBe(true);
     expect(existsSync(derivatives.waveformPath!)).toBe(true);
+  });
+
+  test('generates derivatives through async ffmpeg helper', async () => {
+    const root = makeTempDir();
+    const video = join(root, 'source-async.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10',
+      '-t', '1',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      video,
+    ], { encoding: 'utf-8' });
+    if (fixture.status !== 0) return;
+
+    const derivatives = await generateVideoMediaDerivativesAsync(video, 'video', { hasAudio: false }, {
+      thumbnailPath: join(root, 'thumbs', 'source-async.jpg'),
+      waveformPath: join(root, 'waves', 'source-async.png'),
+    });
+
+    expect(derivatives.thumbnailPath).toBeTruthy();
+    expect(derivatives.waveformPath).toBeUndefined();
+    expect(existsSync(derivatives.thumbnailPath!)).toBe(true);
   });
 });

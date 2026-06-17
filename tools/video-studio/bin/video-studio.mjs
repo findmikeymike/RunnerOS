@@ -552,6 +552,27 @@ function clipSourceDurationSeconds(clip) {
   return seconds(requestedMs, 1000);
 }
 
+function sourceAvailableMs(clip, media) {
+  const sourceInMs = typeof clip.sourceInMs === 'number' && Number.isFinite(clip.sourceInMs) ? clip.sourceInMs : 0;
+  const sourceOutMs = typeof clip.sourceOutMs === 'number' && Number.isFinite(clip.sourceOutMs)
+    ? clip.sourceOutMs
+    : typeof media.durationMs === 'number' && Number.isFinite(media.durationMs)
+      ? media.durationMs
+      : undefined;
+  return sourceOutMs !== undefined && sourceOutMs > sourceInMs ? sourceOutMs - sourceInMs : undefined;
+}
+
+function assertSourceCanCoverSpeed(clip, media) {
+  if (media.type === 'image') return;
+  const availableMs = sourceAvailableMs(clip, media);
+  if (availableMs === undefined) return;
+  const requiredMs = (clip.durationMs || 1000) * clipSpeed(clip);
+  if (requiredMs > availableMs + 33) {
+    const label = clip.label || clip.id;
+    fail(`Clip "${label}" speed requires ${Math.ceil(requiredMs)} ms of source media, but only ${Math.floor(availableMs)} ms is available. Shorten durationMs or extend sourceOutMs.`);
+  }
+}
+
 function applyClipSettings(clip, input) {
   if (input.volume !== undefined) {
     if (!Number.isFinite(input.volume) || input.volume < 0 || input.volume > 4) fail('--volume must be between 0 and 4.');
@@ -650,6 +671,7 @@ function renderSimpleMp4(project, outputPath, renderSettings) {
   const inputClips = [];
   for (const { clip, trackId, media } of mediaClips) {
     if (!existsSync(media.path)) fail(`Media file not found for clip "${clip.label || clip.id}": ${media.path}`);
+    assertSourceCanCoverSpeed(clip, media);
     const sourceDuration = ffmpegNumber(media.type === 'image' ? seconds(clip.durationMs, 1000) : clipSourceDurationSeconds(clip));
     const sourceIn = seconds(typeof clip.sourceInMs === 'number' ? clip.sourceInMs : 0);
     if (media.type === 'image') {

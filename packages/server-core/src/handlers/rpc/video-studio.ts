@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
 import { getVideoStudioSource } from '@craft-agent/shared/sources';
@@ -208,6 +208,23 @@ function runDerivativeFfmpeg(args: string[], outputPath: string): boolean {
   return result.status === 0 && existsSync(outputPath);
 }
 
+function runDerivativeFfmpegAsync(args: string[], outputPath: string): Promise<boolean> {
+  return new Promise((resolveRun) => {
+    const child = spawn('ffmpeg', args, { stdio: 'ignore' });
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+    }, 45_000);
+    child.once('error', () => {
+      clearTimeout(timer);
+      resolveRun(false);
+    });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      resolveRun(code === 0 && existsSync(outputPath));
+    });
+  });
+}
+
 export function generateVideoMediaDerivatives(
   inputPath: string,
   mediaType: VideoMediaType,
@@ -232,6 +249,34 @@ export function generateVideoMediaDerivatives(
       targets.waveformPath,
     ];
     if (runDerivativeFfmpeg(waveformArgs, targets.waveformPath)) derivatives.waveformPath = targets.waveformPath;
+  }
+  return derivatives;
+}
+
+export async function generateVideoMediaDerivativesAsync(
+  inputPath: string,
+  mediaType: VideoMediaType,
+  metadata: Pick<VideoMediaProbeMetadata, 'hasAudio'>,
+  targets: { thumbnailPath: string; waveformPath: string },
+): Promise<VideoMediaDerivativePaths> {
+  const derivatives: VideoMediaDerivativePaths = {};
+  if (mediaType === 'video' || mediaType === 'image') {
+    mkdirSync(dirname(targets.thumbnailPath), { recursive: true });
+    const thumbnailArgs = mediaType === 'video'
+      ? ['-y', '-ss', '0', '-i', inputPath, '-frames:v', '1', '-vf', 'scale=320:-2', targets.thumbnailPath]
+      : ['-y', '-i', inputPath, '-frames:v', '1', '-vf', 'scale=320:-2', targets.thumbnailPath];
+    if (await runDerivativeFfmpegAsync(thumbnailArgs, targets.thumbnailPath)) derivatives.thumbnailPath = targets.thumbnailPath;
+  }
+  if (mediaType === 'audio' || metadata.hasAudio === true) {
+    mkdirSync(dirname(targets.waveformPath), { recursive: true });
+    const waveformArgs = [
+      '-y',
+      '-i', inputPath,
+      '-filter_complex', 'aformat=channel_layouts=mono,showwavespic=s=640x120:colors=#ff7a1a',
+      '-frames:v', '1',
+      targets.waveformPath,
+    ];
+    if (await runDerivativeFfmpegAsync(waveformArgs, targets.waveformPath)) derivatives.waveformPath = targets.waveformPath;
   }
   return derivatives;
 }
@@ -451,7 +496,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
       const projectPath = service.resolveAssetPath(workspaceId, outputId, projectAsset.path);
       const imported: VideoStudioImportResult['imported'] = [];
       const collected = collectImportableVideoStudioFiles(result.filePaths);
-      await withVideoProjectLock(projectPath, () => {
+      await withVideoProjectLock(projectPath, async () => {
         const project = readProject(projectPath);
         const mediaDir = service.resolveAssetPath(workspaceId, outputId, 'media/.keep');
         mkdirSync(dirname(mediaDir), { recursive: true });
@@ -467,7 +512,7 @@ export function registerVideoStudioHandlers(server: RpcServer, _deps: HandlerDep
 
           const label = basename(sourcePath);
           const metadata = probeMediaMetadata(targetPath, mediaType);
-          const derivatives = generateVideoMediaDerivatives(targetPath, mediaType, metadata, {
+          const derivatives = await generateVideoMediaDerivativesAsync(targetPath, mediaType, metadata, {
             thumbnailPath: service.resolveAssetPath(workspaceId, outputId, `thumbnails/${mediaId}.jpg`),
             waveformPath: service.resolveAssetPath(workspaceId, outputId, `waveforms/${mediaId}.png`),
           });

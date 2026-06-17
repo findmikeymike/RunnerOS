@@ -59,6 +59,24 @@ function hasFfmpeg(): boolean {
     && spawnSync('ffprobe', ['-version'], { encoding: 'utf-8' }).status === 0;
 }
 
+function meanVolumeDb(path: string): number {
+  const result = spawnSync('ffmpeg', [
+    '-v',
+    'info',
+    '-i',
+    path,
+    '-af',
+    'volumedetect',
+    '-f',
+    'null',
+    '-',
+  ], { encoding: 'utf-8' });
+  expect(result.status, result.stderr || result.stdout).toBe(0);
+  const match = result.stderr.match(/mean_volume:\s*(-?inf|-?\d+(?:\.\d+)?) dB/);
+  expect(match?.[1]).toBeTruthy();
+  return match?.[1] === '-inf' ? -1000 : Number(match?.[1]);
+}
+
 describe('video studio session tools', () => {
   test('create -> import -> add clip -> export placeholder', async () => {
     const ctx = makeCtx();
@@ -345,12 +363,16 @@ describe('video studio session tools', () => {
     });
     const clipId = (added.structuredContent as { clipId: string }).clipId;
 
+    const baselinePath = join(root, 'project', 'renders', 'baseline-volume.mp4');
+    const baselineExport = await handleVideoExport(ctx, { projectPath, outputPath: baselinePath });
+    expect(baselineExport.isError).toBe(false);
+
     const settings = await handleVideoClipEdit(ctx, {
       projectPath,
       clipId,
       action: 'settings',
       speed: 2,
-      volume: 0.5,
+      volume: 0,
       fadeInMs: 150,
       fadeOutMs: 200,
     });
@@ -361,7 +383,7 @@ describe('video studio session tools', () => {
     };
     expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === clipId)).toMatchObject({
       speed: 2,
-      volume: 0.5,
+      volume: 0,
       fadeInMs: 150,
       fadeOutMs: 200,
     });
@@ -370,6 +392,42 @@ describe('video studio session tools', () => {
     const exported = await handleVideoExport(ctx, { projectPath, outputPath });
     expect(exported.isError).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
+    expect(meanVolumeDb(outputPath)).toBeLessThan(meanVolumeDb(baselinePath) - 20);
+  });
+
+  test('video_export fails when speed outruns available source media', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Speed Guard' });
+    const mediaPath = join(root, 'source.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10:duration=2',
+      '-t', '2',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      mediaPath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const added = await handleVideoClipAdd(ctx, {
+      projectPath,
+      mediaId: (imported.structuredContent as { mediaId: string }).mediaId,
+      startMs: 0,
+      durationMs: 2000,
+      speed: 2,
+    });
+    expect(added.isError).toBe(false);
+
+    const exported = await handleVideoExport(ctx, {
+      projectPath,
+      outputPath: join(root, 'project', 'renders', 'speed-too-fast.mp4'),
+    });
+
+    expect(exported.isError).toBe(true);
+    expect(exported.content[0]?.type === 'text' ? exported.content[0].text : '').toContain('speed requires');
   });
 
   test('video_export skips hidden tracks', async () => {

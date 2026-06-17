@@ -60,6 +60,24 @@ function averageFrameLuma(videoPath) {
   return total / (bytes.length / 3);
 }
 
+function meanVolumeDb(videoPath) {
+  const result = spawnSync('ffmpeg', [
+    '-v',
+    'info',
+    '-i',
+    videoPath,
+    '-af',
+    'volumedetect',
+    '-f',
+    'null',
+    '-',
+  ], { encoding: 'utf-8' });
+  expect(result.status, result.stderr || result.stdout).toBe(0);
+  const match = result.stderr.match(/mean_volume:\s*(-?inf|-?\d+(?:\.\d+)?) dB/);
+  expect(match?.[1]).toBeTruthy();
+  return match?.[1] === '-inf' ? -1000 : Number(match?.[1]);
+}
+
 describe('video-studio edit commands', () => {
   test('packs timeline clips end-to-start', () => {
     const projectPath = tempProject();
@@ -192,6 +210,7 @@ describe('video-studio edit commands', () => {
     const projectDir = projectPath.replace('/video.runner-video.json', '');
     const sourcePath = `${projectDir}/source.mp4`;
     const outputPath = `${projectDir}/out.mp4`;
+    const silentOutputPath = `${projectDir}/silent.mp4`;
     const fixture = spawnSync('ffmpeg', [
       '-y',
       '-f', 'lavfi',
@@ -227,6 +246,39 @@ describe('video-studio edit commands', () => {
     const audioProbe = spawnSync('ffprobe', ['-v', 'error', '-select_streams', 'a', '-show_entries', 'stream=index', '-of', 'csv=p=0', outputPath], { encoding: 'utf-8' });
     expect(audioProbe.status).toBe(0);
     expect(audioProbe.stdout.trim()).not.toBe('');
+
+    project.timeline.tracks[0].clips[0].volume = 0;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+    run(['export', projectPath, '--out', silentOutputPath, '--json']);
+    expect(meanVolumeDb(silentOutputPath)).toBeLessThan(meanVolumeDb(outputPath) - 20);
+  });
+
+  test('export fails when speed outruns known source duration', () => {
+    if (!hasFfmpeg()) return;
+    const projectPath = tempProject();
+    const projectDir = projectPath.replace('/video.runner-video.json', '');
+    const sourcePath = `${projectDir}/source.mp4`;
+    const outputPath = `${projectDir}/too-fast.mp4`;
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10:duration=2',
+      '-t', '2',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      sourcePath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+    const project = readProject(projectPath);
+    project.media.push({ id: 'media-video', type: 'video', label: 'Source', path: sourcePath, durationMs: 2000, source: { kind: 'user-import' } });
+    project.timeline.tracks[0].clips = [{ id: 'clip-video', mediaId: 'media-video', type: 'video', startMs: 0, durationMs: 2000, label: 'Source', speed: 2 }];
+    project.timeline.durationMs = 2000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    const result = run(['export', projectPath, '--out', outputPath, '--json'], { expectFailure: true });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr || result.stdout).toContain('speed requires');
   });
 
   test('simple MP4 export applies clip look adjustments', () => {

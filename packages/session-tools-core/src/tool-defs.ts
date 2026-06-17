@@ -541,7 +541,7 @@ export const VideoClipAddSchema = z.object({
   sourceInMs: z.number().nonnegative().optional().describe('Optional source in-point in milliseconds.'),
   sourceOutMs: z.number().nonnegative().optional().describe('Optional source out-point in milliseconds.'),
   volume: z.number().min(0).max(4).optional().describe('Per-clip audio volume multiplier. 1 is normal, 0 is silent.'),
-  speed: z.number().min(0.25).max(4).optional().describe('Per-clip playback speed. 1 is normal.'),
+  speed: z.number().min(0.25).max(4).optional().describe('Per-clip playback speed. 1 is normal. This does not change timeline durationMs; trim the clip separately when retiming should shorten or lengthen the timeline.'),
   fadeInMs: z.number().nonnegative().optional().describe('Optional audio fade-in duration in milliseconds.'),
   fadeOutMs: z.number().nonnegative().optional().describe('Optional audio fade-out duration in milliseconds.'),
   label: z.string().optional().describe('Optional timeline clip label.'),
@@ -557,7 +557,7 @@ export const VideoClipEditSchema = z.object({
   sourceInMs: z.number().nonnegative().optional().describe('Optional source in-point in milliseconds for trim.'),
   sourceOutMs: z.number().nonnegative().optional().describe('Optional source out-point in milliseconds for trim.'),
   volume: z.number().min(0).max(4).optional().describe('Per-clip audio volume multiplier for settings edits.'),
-  speed: z.number().min(0.25).max(4).optional().describe('Per-clip playback speed for settings edits.'),
+  speed: z.number().min(0.25).max(4).optional().describe('Per-clip playback speed for settings edits. This does not change timeline durationMs; trim the clip separately when retiming should shorten or lengthen the timeline.'),
   fadeInMs: z.number().nonnegative().optional().describe('Audio fade-in duration in milliseconds for settings edits.'),
   fadeOutMs: z.number().nonnegative().optional().describe('Audio fade-out duration in milliseconds for settings edits.'),
   atMs: z.number().nonnegative().optional().describe('Timeline timestamp in milliseconds. Required for split.'),
@@ -1097,7 +1097,7 @@ Use this for the first agent-editable timeline operations: place imported media 
 
   video_clip_edit: `Edit a RunnerOS Video Studio timeline.
 
-Use move with startMs to reposition a clip. Pass snap: true when you want magnet behavior near another clip's end point. Use trim with durationMs and optional sourceInMs/sourceOutMs to change clip length/source bounds. Use settings with speed, volume, fadeInMs, or fadeOutMs for playback/audio behavior. Use split with atMs, duplicate, delete with optional ripple, or pack to remove gaps on each track. This mutates the project JSON and records a version/event for the agent change log.`,
+Use move with startMs to reposition a clip. Pass snap: true when you want magnet behavior near another clip's end point. Use trim with durationMs and optional sourceInMs/sourceOutMs to change clip length/source bounds. Use settings with speed, volume, fadeInMs, or fadeOutMs for playback/audio behavior. Speed keeps the existing timeline duration; if retiming should change clip length, call trim too. Use split with atMs, duplicate, delete with optional ripple, or pack to remove gaps on each track. This mutates the project JSON and records a version/event for the agent change log.`,
 
   video_clip_adjust: `Apply footage look adjustments to a RunnerOS Video Studio clip.
 
