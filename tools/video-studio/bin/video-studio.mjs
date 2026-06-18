@@ -169,6 +169,18 @@ function validateProject(project) {
         if (clip.fadeOutMs !== undefined && (typeof clip.fadeOutMs !== 'number' || !Number.isFinite(clip.fadeOutMs) || clip.fadeOutMs < 0)) errors.push(`${path}.fadeOutMs must be non-negative.`);
       }
     }
+    for (const [trackIndex, track] of (project.captions || []).entries()) {
+      if (!track.id) errors.push(`captions[${trackIndex}].id is required.`);
+      if (!track.label) errors.push(`captions[${trackIndex}].label is required.`);
+      if (!Array.isArray(track.cues)) errors.push(`captions[${trackIndex}].cues must be an array.`);
+      for (const [cueIndex, cue] of (track.cues || []).entries()) {
+        const path = `captions[${trackIndex}].cues[${cueIndex}]`;
+        if (!cue.id) errors.push(`${path}.id is required.`);
+        if (typeof cue.startMs !== 'number' || !Number.isFinite(cue.startMs) || cue.startMs < 0) errors.push(`${path}.startMs must be non-negative.`);
+        if (typeof cue.durationMs !== 'number' || !Number.isFinite(cue.durationMs) || cue.durationMs <= 0) errors.push(`${path}.durationMs must be positive.`);
+        if (typeof cue.text !== 'string' || cue.text.trim().length === 0) errors.push(`${path}.text is required.`);
+      }
+    }
   }
   return { ok: errors.length === 0, errors };
 }
@@ -633,6 +645,18 @@ function textForClip(clip, fallback) {
   return typeof clip.text?.text === 'string' ? clip.text.text : (clip.label || fallback);
 }
 
+function captionCuesForRender(project, visibleTracks) {
+  const cueById = new Map((project.captions || []).flatMap((track) => (track.cues || []).map((cue) => [cue.id, cue])));
+  const visibleCueIds = visibleTracks
+    .flatMap((track) => track.clips || [])
+    .filter((clip) => clip.disabled !== true && clip.type === 'caption')
+    .flatMap((clip) => Array.isArray(clip.captionCueIds) ? clip.captionCueIds : []);
+  const cues = visibleCueIds.length > 0
+    ? visibleCueIds.map((id) => cueById.get(id)).filter(Boolean)
+    : (project.captions || []).flatMap((track) => track.cues || []);
+  return [...cues].sort((a, b) => (a.startMs || 0) - (b.startMs || 0));
+}
+
 function hasAudioStream(path) {
   const result = spawnSync('ffprobe', [
     '-v', 'error',
@@ -661,7 +685,8 @@ function renderSimpleMp4(project, outputPath, renderSettings) {
   const mediaClips = clips
     .map(({ clip, trackId }) => ({ clip, trackId, media: clip.mediaId ? mediaById.get(clip.mediaId) : undefined }))
     .filter((item) => item.media);
-  const unsupportedClips = mediaClips.filter(({ media }) => !['video', 'image', 'audio'].includes(media.type));
+  const unsupportedClips = mediaClips.filter(({ media }) => !['video', 'image', 'audio', 'caption'].includes(media.type));
+  const inputSourceClips = mediaClips.filter(({ media }) => ['video', 'image', 'audio'].includes(media.type));
   if (unsupportedClips.length > 0) {
     const labels = unsupportedClips.slice(0, 3).map(({ clip }) => clip.label || clip.id).join(', ');
     fail(`Simple MP4 renderer only supports video, image, audio, and text clips right now: ${labels}.`);
@@ -669,7 +694,7 @@ function renderSimpleMp4(project, outputPath, renderSettings) {
 
   const args = ['-y', '-f', 'lavfi', '-i', `color=c=#111111:s=${width}x${height}:r=${fps}:d=${durationSeconds}`];
   const inputClips = [];
-  for (const { clip, trackId, media } of mediaClips) {
+  for (const { clip, trackId, media } of inputSourceClips) {
     if (!existsSync(media.path)) fail(`Media file not found for clip "${clip.label || clip.id}": ${media.path}`);
     assertSourceCanCoverSpeed(clip, media);
     const sourceDuration = ffmpegNumber(media.type === 'image' ? seconds(clip.durationMs, 1000) : clipSourceDurationSeconds(clip));
@@ -720,7 +745,19 @@ function renderSimpleMp4(project, outputPath, renderSettings) {
     );
     currentVideo = `[${next}]`;
   }
-  if (textClips.length === 0 && inputClips.length === 0) {
+
+  const captionCues = captionCuesForRender(project, visibleTracks).slice(0, 200);
+  for (const [index, cue] of captionCues.entries()) {
+    const start = seconds(cue.startMs);
+    const end = Math.max(start + 0.2, start + seconds(cue.durationMs, 1000));
+    const next = `caption${index}`;
+    filters.push(
+      `${currentVideo}drawtext=text='${escapeDrawText(cue.text)}':fontcolor=white:fontsize=${Math.max(24, Math.round(width / 30))}:x=(w-text_w)/2:y=h-text_h-${Math.max(48, Math.round(height * 0.09))}:box=1:boxcolor=black@0.55:boxborderw=${Math.max(10, Math.round(width / 90))}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`,
+    );
+    currentVideo = `[${next}]`;
+  }
+
+  if (textClips.length === 0 && inputClips.length === 0 && captionCues.length === 0) {
     filters.push(`${currentVideo}drawtext=text='${escapeDrawText(project.title)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2[title0]`);
     currentVideo = '[title0]';
   }

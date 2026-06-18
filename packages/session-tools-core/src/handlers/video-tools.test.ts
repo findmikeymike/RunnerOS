@@ -77,6 +77,31 @@ function meanVolumeDb(path: string): number {
   return match?.[1] === '-inf' ? -1000 : Number(match?.[1]);
 }
 
+function averageBottomLuma(path: string, atSeconds: number): number {
+  const frame = spawnSync('ffmpeg', [
+    '-v',
+    'error',
+    '-ss',
+    String(atSeconds),
+    '-i',
+    path,
+    '-vf',
+    'crop=iw:ih/3:0:ih*2/3',
+    '-frames:v',
+    '1',
+    '-f',
+    'rawvideo',
+    '-pix_fmt',
+    'gray',
+    '-',
+  ]);
+  expect(frame.status, frame.stderr?.toString() || frame.stdout?.toString()).toBe(0);
+  const bytes = frame.stdout;
+  let total = 0;
+  for (const byte of bytes) total += byte;
+  return total / Math.max(1, bytes.length);
+}
+
 describe('video studio session tools', () => {
   test('create -> import -> add clip -> export placeholder', async () => {
     const ctx = makeCtx();
@@ -471,6 +496,45 @@ describe('video studio session tools', () => {
     const durationProbe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=noprint_wrappers=1:nokey=1', outputPath], { encoding: 'utf-8' });
     expect(durationProbe.status).toBe(0);
     expect(Number(durationProbe.stdout.trim())).toBeLessThan(2);
+  });
+
+  test('video_media_import parses captions and video_export burns them in', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, {
+      projectPath,
+      title: 'Caption Export',
+      aspectRatio: '16:9',
+      width: 320,
+      height: 180,
+      fps: 10,
+    });
+    const captionPath = join(root, 'captions.srt');
+    writeFileSync(captionPath, [
+      '1',
+      '00:00:00,100 --> 00:00:01,600',
+      'HELLO CAPTION TEST',
+      '',
+    ].join('\n'));
+
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath: captionPath });
+
+    expect(imported.isError).toBe(false);
+    expect((imported.structuredContent as { captionCueCount?: number }).captionCueCount).toBe(1);
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      captions: Array<{ cues: Array<{ text: string }> }>;
+      timeline: { tracks: Array<{ id: string; clips: Array<{ type: string; captionCueIds?: string[] }> }> };
+    };
+    expect(project.captions[0]?.cues[0]?.text).toBe('HELLO CAPTION TEST');
+    expect(project.timeline.tracks.find((track) => track.id === 'captions-main')?.clips[0]).toMatchObject({ type: 'caption' });
+
+    const outputPath = join(root, 'project', 'renders', 'captioned.mp4');
+    const exported = await handleVideoExport(ctx, { projectPath, outputPath });
+
+    expect(exported.isError).toBe(false);
+    expect(existsSync(outputPath)).toBe(true);
+    expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(2);
   });
 
   test('rejects project and export paths outside the working directory', async () => {

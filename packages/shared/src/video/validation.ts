@@ -143,6 +143,26 @@ export function validateRunnerVideoProject(value: unknown): VideoValidationResul
     }
   }
 
+  if (Array.isArray(project.captions)) {
+    project.captions.forEach((track, trackIndex) => {
+      if (!isNonEmptyString(track.id)) push(errors, `captions[${trackIndex}].id`, 'Caption track id is required.');
+      if (!isNonEmptyString(track.label)) push(errors, `captions[${trackIndex}].label`, 'Caption track label is required.');
+      if (!Array.isArray(track.cues)) {
+        push(errors, `captions[${trackIndex}].cues`, 'Caption cues must be an array.');
+      } else {
+        track.cues.forEach((cue, cueIndex) => {
+          const path = `captions[${trackIndex}].cues[${cueIndex}]`;
+          if (!isNonEmptyString(cue.id)) push(errors, `${path}.id`, 'Caption cue id is required.');
+          if (!isFiniteNonNegativeNumber(cue.startMs)) push(errors, `${path}.startMs`, 'Caption cue startMs must be a non-negative number.');
+          if (typeof cue.durationMs !== 'number' || !Number.isFinite(cue.durationMs) || cue.durationMs <= 0) {
+            push(errors, `${path}.durationMs`, 'Caption cue durationMs must be a positive number.');
+          }
+          if (!isNonEmptyString(cue.text)) push(errors, `${path}.text`, 'Caption cue text is required.');
+        });
+      }
+    });
+  }
+
   if (project.versions?.length === 0) {
     warnings.push({ path: 'versions', message: 'Project has no version history yet.' });
   }

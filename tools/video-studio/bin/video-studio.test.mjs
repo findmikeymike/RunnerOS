@@ -60,6 +60,31 @@ function averageFrameLuma(videoPath) {
   return total / (bytes.length / 3);
 }
 
+function averageBottomLuma(videoPath, atSeconds) {
+  const frame = spawnSync('ffmpeg', [
+    '-v',
+    'error',
+    '-ss',
+    String(atSeconds),
+    '-i',
+    videoPath,
+    '-vf',
+    'crop=iw:ih/3:0:ih*2/3',
+    '-frames:v',
+    '1',
+    '-f',
+    'rawvideo',
+    '-pix_fmt',
+    'gray',
+    '-',
+  ]);
+  expect(frame.status, frame.stderr?.toString() || frame.stdout?.toString()).toBe(0);
+  const bytes = frame.stdout;
+  let total = 0;
+  for (const byte of bytes) total += byte;
+  return total / Math.max(1, bytes.length);
+}
+
 function meanVolumeDb(videoPath) {
   const result = spawnSync('ffmpeg', [
     '-v',
@@ -279,6 +304,34 @@ describe('video-studio edit commands', () => {
 
     expect(result.status).toBe(1);
     expect(result.stderr || result.stdout).toContain('speed requires');
+  });
+
+  test('simple MP4 export burns project captions into video', () => {
+    if (!hasFfmpeg()) return;
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const outputPath = join(dirname(projectPath), 'captioned.mp4');
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 320, height: 180, fps: 10 };
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].clips = [{
+      id: 'caption-clip',
+      type: 'caption',
+      startMs: 100,
+      durationMs: 1500,
+      label: 'HELLO CAPTION TEST',
+      captionCueIds: ['cue-1'],
+    }];
+    project.captions = [{
+      id: 'captions-1',
+      label: 'Captions',
+      cues: [{ id: 'cue-1', startMs: 100, durationMs: 1500, text: 'HELLO CAPTION TEST' }],
+    }];
+    project.timeline.durationMs = 1800;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', outputPath, '--json']);
+
+    expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(2);
   });
 
   test('simple MP4 export applies clip look adjustments', () => {

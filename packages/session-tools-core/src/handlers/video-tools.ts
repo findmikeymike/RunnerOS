@@ -131,13 +131,20 @@ interface VideoProject {
     tracks: Array<{ id: string; type: TrackType; label: string; locked?: boolean; muted?: boolean; hidden?: boolean; clips: Array<Record<string, unknown> & { id: string; type: ClipType; startMs: number; durationMs: number; mediaId?: string; adjustments?: VideoClipAdjustments; volume?: number; speed?: number; fadeInMs?: number; fadeOutMs?: number }> }>;
     markers: unknown[];
   };
-  captions: unknown[];
+  captions: Array<{ id: string; label: string; cues: Array<{ id: string; startMs: number; durationMs: number; text: string }>; style?: Record<string, unknown> }>;
   overlays: unknown[];
   effects: unknown[];
   templates: unknown[];
   exports: Array<Record<string, unknown>>;
   versions: Array<Record<string, unknown>>;
   agentEvents: Array<Record<string, unknown>>;
+}
+
+interface ParsedCaptionCue {
+  id: string;
+  startMs: number;
+  durationMs: number;
+  text: string;
 }
 
 interface VideoMediaProbeMetadata {
@@ -370,6 +377,77 @@ function inferMediaType(path: string): MediaType {
   if (['.srt', '.vtt'].includes(ext)) return 'caption';
   if (ext === '.svg') return 'svg';
   return 'unknown';
+}
+
+function parseCaptionTimestamp(value: string): number | null {
+  const match = value.trim().match(/^(?:(\d+):)?(\d{2}):(\d{2})([,.](\d{1,3}))?$/);
+  if (!match) return null;
+  const hours = Number(match[1] ?? 0);
+  const minutes = Number(match[2]);
+  const secondsValue = Number(match[3]);
+  const millis = Number((match[5] ?? '0').padEnd(3, '0').slice(0, 3));
+  if (![hours, minutes, secondsValue, millis].every(Number.isFinite)) return null;
+  return (((hours * 60 + minutes) * 60 + secondsValue) * 1000) + millis;
+}
+
+function stripCaptionText(value: string): string {
+  return value.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function parseCaptionFile(content: string): ParsedCaptionCue[] {
+  const normalized = content.replace(/\r/g, '').replace(/^\uFEFF/, '');
+  const blocks = normalized.split(/\n{2,}/);
+  const cues: ParsedCaptionCue[] = [];
+  for (const block of blocks) {
+    const lines = block.split('\n').map((line) => line.trim()).filter(Boolean);
+    if (lines.length === 0) continue;
+    if (lines[0]?.toUpperCase().startsWith('WEBVTT')) continue;
+    if (lines[0]?.toUpperCase().startsWith('NOTE')) continue;
+    const timingIndex = lines.findIndex((line) => line.includes('-->'));
+    if (timingIndex === -1) continue;
+    const [rawStart, rawEndWithSettings] = lines[timingIndex]!.split('-->').map((part) => part.trim());
+    const rawEnd = rawEndWithSettings?.split(/\s+/)[0];
+    if (!rawStart || !rawEnd) continue;
+    const startMs = parseCaptionTimestamp(rawStart);
+    const endMs = parseCaptionTimestamp(rawEnd);
+    if (startMs === null || endMs === null || endMs <= startMs) continue;
+    const text = stripCaptionText(lines.slice(timingIndex + 1).join(' '));
+    if (!text) continue;
+    cues.push({
+      id: randomUUID(),
+      startMs,
+      durationMs: endMs - startMs,
+      text,
+    });
+  }
+  return cues;
+}
+
+function addCaptionCuesToProject(project: VideoProject, label: string, cues: ParsedCaptionCue[]): string[] {
+  if (cues.length === 0) return [];
+  const captionTrackId = randomUUID();
+  project.captions.push({
+    id: captionTrackId,
+    label,
+    cues,
+  });
+  const timelineTrack = chooseTrack(project, 'caption', 'captions-main');
+  const clipIds: string[] = [];
+  for (const cue of cues) {
+    const clip = {
+      id: randomUUID(),
+      type: 'caption' as const,
+      startMs: cue.startMs,
+      durationMs: cue.durationMs,
+      label: cue.text,
+      captionCueIds: [cue.id],
+    };
+    timelineTrack.clips.push(clip);
+    clipIds.push(clip.id);
+  }
+  timelineTrack.clips = orderedClips(timelineTrack.clips);
+  project.timeline.durationMs = Math.max(project.timeline.durationMs, timelineDuration(project.timeline.tracks));
+  return clipIds;
 }
 
 function parseFfprobeRate(value: unknown): number | undefined {
@@ -649,6 +727,18 @@ function textForClip(clip: VideoProject['timeline']['tracks'][number]['clips'][n
   return typeof clip.label === 'string' ? clip.label : fallback;
 }
 
+function captionCuesForRender(project: VideoProject, visibleTracks: VideoProject['timeline']['tracks']): ParsedCaptionCue[] {
+  const cueById = new Map(project.captions.flatMap((track) => track.cues.map((cue) => [cue.id, cue] as const)));
+  const visibleCueIds = visibleTracks
+    .flatMap((track) => track.clips)
+    .filter((clip) => clip.disabled !== true && clip.type === 'caption')
+    .flatMap((clip) => Array.isArray(clip.captionCueIds) ? clip.captionCueIds : []);
+  const cues = visibleCueIds.length > 0
+    ? visibleCueIds.map((id) => cueById.get(id)).filter((cue): cue is ParsedCaptionCue => Boolean(cue))
+    : project.captions.flatMap((track) => track.cues);
+  return [...cues].sort((a, b) => a.startMs - b.startMs);
+}
+
 function hasAudioStream(path: string): boolean {
   const result = spawnSync('ffprobe', [
     '-v', 'error',
@@ -674,7 +764,8 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
   const mediaClips = clips
     .map(({ clip, trackId }) => ({ clip, trackId, media: clip.mediaId ? mediaById.get(clip.mediaId) : undefined }))
     .filter((item): item is { clip: typeof clips[number]['clip']; trackId: string; media: VideoProject['media'][number] } => Boolean(item.media));
-  const unsupportedClips = mediaClips.filter(({ media }) => !['video', 'image', 'audio'].includes(media.type));
+  const unsupportedClips = mediaClips.filter(({ media }) => !['video', 'image', 'audio', 'caption'].includes(media.type));
+  const inputSourceClips = mediaClips.filter(({ media }) => ['video', 'image', 'audio'].includes(media.type));
   if (unsupportedClips.length > 0) {
     const labels = unsupportedClips.slice(0, 3).map(({ clip }) => clip.label ?? clip.id).join(', ');
     throw new Error(`Simple MP4 renderer only supports video, image, audio, and text clips right now: ${labels}.`);
@@ -682,7 +773,7 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
 
   const args = ['-y', '-f', 'lavfi', '-i', `color=c=#111111:s=${width}x${height}:r=${fps}:d=${durationSeconds}`];
   const inputClips: Array<{ clip: typeof clips[number]['clip']; trackId: string; media: VideoProject['media'][number]; inputIndex: number }> = [];
-  for (const { clip, trackId, media } of mediaClips) {
+  for (const { clip, trackId, media } of inputSourceClips) {
     if (!existsSync(media.path)) throw new Error(`Media file not found for clip "${clip.label ?? clip.id}": ${media.path}`);
     assertSourceCanCoverSpeed(clip, media);
     const sourceDuration = ffmpegNumber(media.type === 'image' ? seconds(clip.durationMs, 1000) : clipSourceDurationSeconds(clip));
@@ -733,7 +824,19 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
     );
     currentVideo = `[${next}]`;
   }
-  if (textClips.length === 0 && inputClips.length === 0) {
+
+  const captionCues = captionCuesForRender(project, visibleTracks).slice(0, 200);
+  for (const [index, cue] of captionCues.entries()) {
+    const start = seconds(cue.startMs);
+    const end = Math.max(start + 0.2, start + seconds(cue.durationMs, 1000));
+    const next = `caption${index}`;
+    filters.push(
+      `${currentVideo}drawtext=text='${escapeDrawText(cue.text)}':fontcolor=white:fontsize=${Math.max(24, Math.round(width / 30))}:x=(w-text_w)/2:y=h-text_h-${Math.max(48, Math.round(height * 0.09))}:box=1:boxcolor=black@0.55:boxborderw=${Math.max(10, Math.round(width / 90))}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`,
+    );
+    currentVideo = `[${next}]`;
+  }
+
+  if (textClips.length === 0 && inputClips.length === 0 && captionCues.length === 0) {
     filters.push(`${currentVideo}drawtext=text='${escapeDrawText(project.title)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2[title0]`);
     currentVideo = '[title0]';
   }
@@ -978,9 +1081,11 @@ export async function handleVideoMediaImport(ctx: SessionToolContext, args: Vide
     const mediaDir = join(dirname(projectPath), 'media');
     const ext = extname(mediaPath);
     const storedMediaPath = join(mediaDir, `${mediaId}${ext}`);
+    const mediaType = args.mediaType ?? inferMediaType(mediaPath);
+    const captionCues = mediaType === 'caption' ? parseCaptionFile(readFileSync(mediaPath, 'utf-8')) : [];
+    if (mediaType === 'caption' && captionCues.length === 0) return errorResponse(`Caption file did not contain any valid cues: ${mediaPath}`);
     mkdirSync(mediaDir, { recursive: true });
     copyFileSync(mediaPath, storedMediaPath);
-    const mediaType = args.mediaType ?? inferMediaType(mediaPath);
     const metadata = probeMediaMetadata(storedMediaPath, mediaType);
     const derivatives = generateVideoMediaDerivatives(storedMediaPath, mediaType, metadata, {
       thumbnailPath: join(dirname(projectPath), 'thumbnails', `${mediaId}.jpg`),
@@ -997,6 +1102,7 @@ export async function handleVideoMediaImport(ctx: SessionToolContext, args: Vide
       source: { kind: 'user-import' },
     };
     project.media.push(media);
+    const changedClipIds = mediaType === 'caption' ? addCaptionCuesToProject(project, media.label, captionCues) : [];
     const versionId = addVersion(project, `Imported media ${media.label}`, ctx, 'video_media_import');
     writeJsonAtomic(projectPath, project);
     return ok(`Imported media "${media.label}" into ${project.title}.`, {
@@ -1004,8 +1110,9 @@ export async function handleVideoMediaImport(ctx: SessionToolContext, args: Vide
       projectPath,
       mediaId: media.id,
       media,
+      captionCueCount: captionCues.length,
       versionId,
-      changedClipIds: [],
+      changedClipIds,
       warnings: [],
     });
   });

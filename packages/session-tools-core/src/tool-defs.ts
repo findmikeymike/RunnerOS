@@ -1089,7 +1089,7 @@ Use this to change title, aspect ratio, output width/height, or FPS on an existi
 
   video_media_import: `Register a local media file in a RunnerOS Video Studio project.
 
-Use this after video_project_create and before adding media-backed clips to the timeline. The tool probes basic file metadata, adds the asset to the project media bin, and records a version/event.`,
+Use this after video_project_create and before adding media-backed clips to the timeline. The tool probes basic file metadata, adds the asset to the project media bin, and records a version/event. SRT/VTT caption files are parsed into project caption cues and visible caption timeline clips.`,
 
   video_clip_add: `Add a clip to a RunnerOS Video Studio project timeline.
 
@@ -1105,7 +1105,7 @@ Use this for exposure, contrast, saturation, highlights, shadows, temperature, t
 
   video_export: `Create a Video Studio export.
 
-Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, text clips, per-clip speed, volume, and audio fades, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Video presets are simple-mp4, mp4-16x9-1080p, mp4-9x16-1080x1920, mp4-1x1-1080, mp4-4x5-1080x1350, and mp4-source-size. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
+Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, text clips, caption burn-in from SRT/VTT imports, per-clip speed, volume, and audio fades, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Video presets are simple-mp4, mp4-16x9-1080p, mp4-9x16-1080x1920, mp4-1x1-1080, mp4-4x5-1080x1350, and mp4-source-size. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
 
   visual_surface: `Update the current session Canvas through a safe structured operation.
 

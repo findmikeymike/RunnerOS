@@ -31,8 +31,8 @@ describe('collectImportableVideoStudioFiles', () => {
 
     const result = collectImportableVideoStudioFiles([root]);
 
-    expect(result.files.sort()).toEqual([audio, image, video].sort());
-    expect(result.skipped).toBe(2);
+    expect(result.files.sort()).toEqual([audio, caption, image, video].sort());
+    expect(result.skipped).toBe(1);
   });
 
   test('caps collected files and counts overflow as skipped', () => {
