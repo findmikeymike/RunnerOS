@@ -537,6 +537,95 @@ describe('video studio session tools', () => {
     expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(2);
   });
 
+  test('video_export honors hidden and disabled caption clips', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, {
+      projectPath,
+      title: 'Hidden Caption Export',
+      aspectRatio: '16:9',
+      width: 320,
+      height: 180,
+      fps: 10,
+    });
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      captions: Array<{ id: string; label: string; cues: Array<{ id: string; startMs: number; durationMs: number; text: string }> }>;
+      timeline: { durationMs: number; tracks: Array<{ id: string; type: string; label: string; hidden?: boolean; clips: Array<{ id: string; type: string; disabled?: boolean; startMs: number; durationMs: number; label: string; captionCueIds?: string[] }> }> };
+    };
+    project.timeline.tracks[2]!.hidden = true;
+    project.timeline.tracks[2]!.clips = [{
+      id: 'hidden-caption-clip',
+      type: 'caption',
+      startMs: 100,
+      durationMs: 1500,
+      label: 'HIDDEN CAPTION TEST',
+      captionCueIds: ['cue-hidden'],
+    }];
+    project.captions = [{
+      id: 'captions-hidden',
+      label: 'Captions',
+      cues: [{ id: 'cue-hidden', startMs: 100, durationMs: 1500, text: 'HIDDEN CAPTION TEST' }],
+    }];
+    project.timeline.durationMs = 1800;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`);
+
+    const hiddenOutput = join(root, 'project', 'renders', 'hidden-caption.mp4');
+    const hiddenExport = await handleVideoExport(ctx, { projectPath, outputPath: hiddenOutput });
+    expect(hiddenExport.isError).toBe(false);
+    expect(averageBottomLuma(hiddenOutput, 0.5)).toBeLessThan(20);
+
+    project.timeline.tracks[2]!.hidden = false;
+    project.timeline.tracks[2]!.clips[0]!.disabled = true;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`);
+    const disabledOutput = join(root, 'project', 'renders', 'disabled-caption.mp4');
+    const disabledExport = await handleVideoExport(ctx, { projectPath, outputPath: disabledOutput });
+    expect(disabledExport.isError).toBe(false);
+    expect(averageBottomLuma(disabledOutput, 0.5)).toBeLessThan(20);
+  });
+
+  test('video_export fails loudly instead of silently truncating caption cues', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, {
+      projectPath,
+      title: 'Long Caption Export',
+      aspectRatio: '16:9',
+      width: 320,
+      height: 180,
+      fps: 10,
+    });
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      captions: Array<{ id: string; label: string; cues: Array<{ id: string; startMs: number; durationMs: number; text: string }> }>;
+      timeline: { durationMs: number; tracks: Array<{ id: string; type: string; label: string; clips: Array<{ id: string; type: string; startMs: number; durationMs: number; label: string; captionCueIds?: string[] }> }> };
+    };
+    const cues = Array.from({ length: 201 }, (_, index) => ({
+      id: `cue-${index}`,
+      startMs: index * 10,
+      durationMs: 5,
+      text: `Caption ${index}`,
+    }));
+    project.captions = [{ id: 'captions-long', label: 'Captions', cues }];
+    project.timeline.tracks[2]!.clips = cues.map((cue) => ({
+      id: `clip-${cue.id}`,
+      type: 'caption',
+      startMs: cue.startMs,
+      durationMs: cue.durationMs,
+      label: cue.text,
+      captionCueIds: [cue.id],
+    }));
+    project.timeline.durationMs = 3000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`);
+
+    const exported = await handleVideoExport(ctx, {
+      projectPath,
+      outputPath: join(root, 'project', 'renders', 'long-captions.mp4'),
+    });
+
+    expect(exported.isError).toBe(true);
+    expect(exported.content[0]?.type === 'text' ? exported.content[0].text : '').toContain('at most 200 caption cues');
+  });
+
   test('rejects project and export paths outside the working directory', async () => {
     const ctx = makeCtx();
     const outside = mkdtempSync(join(tmpdir(), 'runner-video-outside-'));

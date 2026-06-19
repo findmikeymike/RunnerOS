@@ -727,16 +727,28 @@ function textForClip(clip: VideoProject['timeline']['tracks'][number]['clips'][n
   return typeof clip.label === 'string' ? clip.label : fallback;
 }
 
+const MAX_DRAWTEXT_CAPTION_CUES = 200;
+
 function captionCuesForRender(project: VideoProject, visibleTracks: VideoProject['timeline']['tracks']): ParsedCaptionCue[] {
   const cueById = new Map(project.captions.flatMap((track) => track.cues.map((cue) => [cue.id, cue] as const)));
+  const hasTimelineCaptionClips = project.timeline.tracks
+    .flatMap((track) => track.clips)
+    .some((clip) => clip.type === 'caption' || Array.isArray(clip.captionCueIds));
   const visibleCueIds = visibleTracks
     .flatMap((track) => track.clips)
     .filter((clip) => clip.disabled !== true && clip.type === 'caption')
     .flatMap((clip) => Array.isArray(clip.captionCueIds) ? clip.captionCueIds : []);
   const cues = visibleCueIds.length > 0
     ? visibleCueIds.map((id) => cueById.get(id)).filter((cue): cue is ParsedCaptionCue => Boolean(cue))
-    : project.captions.flatMap((track) => track.cues);
+    : hasTimelineCaptionClips
+      ? []
+      : project.captions.flatMap((track) => track.cues);
   return [...cues].sort((a, b) => a.startMs - b.startMs);
+}
+
+function assertDrawtextCaptionCueLimit(cues: ParsedCaptionCue[]): void {
+  if (cues.length <= MAX_DRAWTEXT_CAPTION_CUES) return;
+  throw new Error(`Simple MP4 renderer can burn at most ${MAX_DRAWTEXT_CAPTION_CUES} caption cues right now; got ${cues.length}. Split the caption track or use a subtitle renderer before exporting.`);
 }
 
 function hasAudioStream(path: string): boolean {
@@ -825,7 +837,8 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
     currentVideo = `[${next}]`;
   }
 
-  const captionCues = captionCuesForRender(project, visibleTracks).slice(0, 200);
+  const captionCues = captionCuesForRender(project, visibleTracks);
+  assertDrawtextCaptionCueLimit(captionCues);
   for (const [index, cue] of captionCues.entries()) {
     const start = seconds(cue.startMs);
     const end = Math.max(start + 0.2, start + seconds(cue.durationMs, 1000));

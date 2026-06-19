@@ -334,6 +334,73 @@ describe('video-studio edit commands', () => {
     expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(2);
   });
 
+  test('simple MP4 export honors hidden and disabled caption clips', () => {
+    if (!hasFfmpeg()) return;
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const hiddenOutput = join(dirname(projectPath), 'hidden-caption.mp4');
+    const disabledOutput = join(dirname(projectPath), 'disabled-caption.mp4');
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 320, height: 180, fps: 10 };
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].hidden = true;
+    project.timeline.tracks[2].clips = [{
+      id: 'caption-clip',
+      type: 'caption',
+      startMs: 100,
+      durationMs: 1500,
+      label: 'HIDDEN CAPTION TEST',
+      captionCueIds: ['cue-1'],
+    }];
+    project.captions = [{
+      id: 'captions-1',
+      label: 'Captions',
+      cues: [{ id: 'cue-1', startMs: 100, durationMs: 1500, text: 'HIDDEN CAPTION TEST' }],
+    }];
+    project.timeline.durationMs = 1800;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', hiddenOutput, '--json']);
+
+    expect(averageBottomLuma(hiddenOutput, 0.5)).toBeLessThan(20);
+
+    project.timeline.tracks[2].hidden = false;
+    project.timeline.tracks[2].clips[0].disabled = true;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', disabledOutput, '--json']);
+
+    expect(averageBottomLuma(disabledOutput, 0.5)).toBeLessThan(20);
+  });
+
+  test('simple MP4 export fails loudly instead of silently truncating caption cues', () => {
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const outputPath = join(dirname(projectPath), 'long-captions.mp4');
+    const cues = Array.from({ length: 201 }, (_, index) => ({
+      id: `cue-${index}`,
+      startMs: index * 10,
+      durationMs: 5,
+      text: `Caption ${index}`,
+    }));
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].clips = cues.map((cue) => ({
+      id: `clip-${cue.id}`,
+      type: 'caption',
+      startMs: cue.startMs,
+      durationMs: cue.durationMs,
+      label: cue.text,
+      captionCueIds: [cue.id],
+    }));
+    project.captions = [{ id: 'captions-long', label: 'Captions', cues }];
+    project.timeline.durationMs = 3000;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    const result = run(['export', projectPath, '--out', outputPath, '--json'], { expectFailure: true });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr || result.stdout).toContain('at most 200 caption cues');
+  });
+
   test('simple MP4 export applies clip look adjustments', () => {
     if (!hasFfmpeg()) return;
     const projectPath = tempProject();
