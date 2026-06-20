@@ -85,6 +85,31 @@ function averageBottomLuma(videoPath, atSeconds) {
   return total / Math.max(1, bytes.length);
 }
 
+function averageCaptionCenterLaneLuma(videoPath, atSeconds) {
+  const frame = spawnSync('ffmpeg', [
+    '-v',
+    'error',
+    '-ss',
+    String(atSeconds),
+    '-i',
+    videoPath,
+    '-vf',
+    'crop=iw:30:0:65',
+    '-frames:v',
+    '1',
+    '-f',
+    'rawvideo',
+    '-pix_fmt',
+    'gray',
+    '-',
+  ]);
+  expect(frame.status, frame.stderr?.toString() || frame.stdout?.toString()).toBe(0);
+  const bytes = frame.stdout;
+  let total = 0;
+  for (const byte of bytes) total += byte;
+  return total / Math.max(1, bytes.length);
+}
+
 function meanVolumeDb(videoPath) {
   const result = spawnSync('ffmpeg', [
     '-v',
@@ -332,6 +357,7 @@ describe('video-studio edit commands', () => {
     run(['export', projectPath, '--out', outputPath, '--json']);
 
     expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(2);
+    expect(averageCaptionCenterLaneLuma(outputPath, 0.5)).toBeLessThan(20);
   });
 
   test('simple MP4 export honors hidden and disabled caption clips', () => {

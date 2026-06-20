@@ -745,6 +745,7 @@ function renderSimpleMp4(project, outputPath, renderSettings) {
   const textClips = visibleTracks
     .flatMap((track) => track.clips || [])
     .filter((clip) => clip.disabled !== true)
+    .filter((clip) => clip.type !== 'caption')
     .filter((clip) => clip.type === 'text' || clip.text || !clip.mediaId)
     .slice(0, 8);
   for (const [index, clip] of textClips.entries()) {

@@ -102,6 +102,31 @@ function averageBottomLuma(path: string, atSeconds: number): number {
   return total / Math.max(1, bytes.length);
 }
 
+function averageCaptionCenterLaneLuma(path: string, atSeconds: number): number {
+  const frame = spawnSync('ffmpeg', [
+    '-v',
+    'error',
+    '-ss',
+    String(atSeconds),
+    '-i',
+    path,
+    '-vf',
+    'crop=iw:30:0:65',
+    '-frames:v',
+    '1',
+    '-f',
+    'rawvideo',
+    '-pix_fmt',
+    'gray',
+    '-',
+  ]);
+  expect(frame.status, frame.stderr?.toString() || frame.stdout?.toString()).toBe(0);
+  const bytes = frame.stdout;
+  let total = 0;
+  for (const byte of bytes) total += byte;
+  return total / Math.max(1, bytes.length);
+}
+
 describe('video studio session tools', () => {
   test('create -> import -> add clip -> export placeholder', async () => {
     const ctx = makeCtx();
@@ -535,6 +560,7 @@ describe('video studio session tools', () => {
     expect(exported.isError).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
     expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(2);
+    expect(averageCaptionCenterLaneLuma(outputPath, 0.5)).toBeLessThan(20);
   });
 
   test('video_export honors hidden and disabled caption clips', async () => {
