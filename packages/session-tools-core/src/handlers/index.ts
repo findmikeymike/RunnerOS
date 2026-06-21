@@ -155,6 +155,13 @@ export type {
 
 // Video Studio
 export {
+  handleVideoGetTimeline,
+  handleVideoGetMedia,
+  handleVideoInspectTimeline,
+  handleVideoInspectMedia,
+  handleVideoProjectSnapshot,
+  handleVideoProjectDiff,
+  handleVideoProjectUndo,
   handleVideoProjectCreate,
   handleVideoProjectUpdate,
   handleVideoMediaImport,

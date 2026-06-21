@@ -425,6 +425,9 @@ export interface SessionToolContext {
   /** Send a message to another session. Injected by backend (SessionManager). */
   sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
 
+  /** Delegate a bounded task to another saved agent. Injected by backend. */
+  messageAgent?(input: import('./handlers/message-agent.ts').MessageAgentToolInput): Promise<import('./handlers/message-agent.ts').MessageAgentToolResult>;
+
   /**
    * Activate a source in the running session: add to enabledSourceSlugs,
    * build its MCP/API servers, apply to the agent.

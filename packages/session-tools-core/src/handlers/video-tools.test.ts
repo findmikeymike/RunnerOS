@@ -9,8 +9,15 @@ import {
   handleVideoClipAdd,
   handleVideoClipEdit,
   handleVideoExport,
+  handleVideoGetMedia,
+  handleVideoGetTimeline,
+  handleVideoInspectMedia,
+  handleVideoInspectTimeline,
   handleVideoMediaImport,
   handleVideoProjectCreate,
+  handleVideoProjectDiff,
+  handleVideoProjectSnapshot,
+  handleVideoProjectUndo,
   handleVideoProjectUpdate,
 } from './video-tools.ts';
 
@@ -198,6 +205,173 @@ describe('video studio session tools', () => {
     expect(result.isError).toBe(false);
     expect(publishedTitle).toContain('Publish Cut');
     expect((result.structuredContent as { outputId?: string }).outputId).toBe('output-1');
+  });
+
+  test('video_get_timeline and video_get_media expose frame-accurate agent summaries', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, {
+      projectPath,
+      title: 'Agent Read',
+      aspectRatio: '16:9',
+      fps: 24,
+    });
+    const mediaPath = join(root, 'clip.mp4');
+    writeFileSync(mediaPath, 'fake fixture media', 'utf-8');
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const mediaId = (imported.structuredContent as { mediaId: string }).mediaId;
+    const added = await handleVideoClipAdd(ctx, {
+      projectPath,
+      mediaId,
+      startMs: 500,
+      durationMs: 1500,
+      sourceInMs: 250,
+      sourceOutMs: 1750,
+      label: 'Read Clip',
+    });
+    const clipId = (added.structuredContent as { clipId: string }).clipId;
+
+    const timelineResult = await handleVideoGetTimeline(ctx, { projectPath });
+    const mediaResult = await handleVideoGetMedia(ctx, { projectPath });
+
+    expect(timelineResult.isError).toBe(false);
+    expect(mediaResult.isError).toBe(false);
+    const timeline = (timelineResult.structuredContent as { timeline: { fps: number; totalFrames: number; tracks: Array<{ clips: Array<{ id: string; startFrame: number; durationFrames: number; trimStartFrame?: number; trimEndFrame?: number }> }> } }).timeline;
+    expect(timeline.fps).toBe(24);
+    expect(timeline.totalFrames).toBe(48);
+    expect(timeline.tracks[0]!.clips[0]).toMatchObject({
+      id: clipId,
+      startFrame: 12,
+      durationFrames: 36,
+      trimStartFrame: 6,
+      trimEndFrame: 42,
+    });
+    const media = (mediaResult.structuredContent as { media: Array<{ id: string; usedByClipIds: string[]; exists: boolean }> }).media;
+    expect(media[0]).toMatchObject({ id: mediaId, usedByClipIds: [clipId], exists: true });
+  });
+
+  test('video_project_snapshot diff and undo restore prior timeline state', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Undo Cut' });
+    const first = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'A',
+      startMs: 0,
+      durationMs: 1000,
+      label: 'A',
+    });
+    const firstClipId = (first.structuredContent as { clipId: string }).clipId;
+    const snapshot = await handleVideoProjectSnapshot(ctx, { projectPath, label: 'before move' });
+    expect(snapshot.isError).toBe(false);
+    const snapshotPath = (snapshot.structuredContent as { snapshotPath: string }).snapshotPath;
+
+    const moved = await handleVideoClipEdit(ctx, {
+      projectPath,
+      clipId: firstClipId,
+      action: 'move',
+      startMs: 1000,
+    });
+    expect(moved.isError).toBe(false);
+
+    const diff = await handleVideoProjectDiff(ctx, { projectPath, snapshotPath });
+    expect(diff.isError).toBe(false);
+    expect((diff.structuredContent as { diff: { changedClipIds: string[] } }).diff.changedClipIds).toContain(firstClipId);
+
+    const undo = await handleVideoProjectUndo(ctx, { projectPath });
+    expect(undo.isError).toBe(false);
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ clips: Array<{ id: string; startMs: number }> }> };
+    };
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)?.startMs).toBe(0);
+  });
+
+  test('video_project_undo walks backward through multiple edit snapshots', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Multi Undo' });
+    const first = await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'A',
+      startMs: 0,
+      durationMs: 1000,
+      label: 'A',
+    });
+    const firstClipId = (first.structuredContent as { clipId: string }).clipId;
+    expect((await handleVideoClipEdit(ctx, { projectPath, clipId: firstClipId, action: 'move', startMs: 1000 })).isError).toBe(false);
+    expect((await handleVideoClipEdit(ctx, { projectPath, clipId: firstClipId, action: 'move', startMs: 2000 })).isError).toBe(false);
+
+    expect((await handleVideoProjectUndo(ctx, { projectPath })).isError).toBe(false);
+    let project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      timeline: { tracks: Array<{ clips: Array<{ id: string; startMs: number }> }> };
+    };
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)?.startMs).toBe(1000);
+
+    expect((await handleVideoProjectUndo(ctx, { projectPath })).isError).toBe(false);
+    project = JSON.parse(readFileSync(projectPath, 'utf-8')) as typeof project;
+    expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)?.startMs).toBe(0);
+  });
+
+  test('video_inspect_timeline renders JPEG frame paths from the actual timeline', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, {
+      projectPath,
+      title: 'Inspect Timeline',
+      aspectRatio: '16:9',
+      width: 320,
+      height: 180,
+      fps: 10,
+    });
+    await handleVideoClipAdd(ctx, {
+      projectPath,
+      type: 'text',
+      text: 'Visible',
+      startMs: 0,
+      durationMs: 1000,
+    });
+
+    const inspected = await handleVideoInspectTimeline(ctx, { projectPath, startFrame: 0 });
+
+    expect(inspected.isError).toBe(false);
+    const payload = inspected.structuredContent as { frameNumbers: number[]; imagePaths: string[] };
+    expect(payload.frameNumbers).toEqual([0]);
+    expect(payload.imagePaths).toHaveLength(1);
+    expect(existsSync(payload.imagePaths[0]!)).toBe(true);
+  });
+
+  test('video_inspect_media renders a video overview contact sheet', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Inspect Media' });
+    const mediaPath = join(root, 'source.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=160x90:rate=10:duration=2',
+      '-t', '2',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      mediaPath,
+    ], { encoding: 'utf-8' });
+    expect(fixture.status, fixture.stderr || fixture.stdout).toBe(0);
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const mediaId = (imported.structuredContent as { mediaId: string }).mediaId;
+
+    const inspected = await handleVideoInspectMedia(ctx, {
+      projectPath,
+      mediaId,
+      overview: true,
+      maxFrames: 6,
+    });
+
+    expect(inspected.isError).toBe(false);
+    const overviewPath = (inspected.structuredContent as { overview: { overviewPath: string } }).overview.overviewPath;
+    expect(existsSync(overviewPath)).toBe(true);
   });
 
   test('video_export writes a failure receipt for unsupported simple-render media', async () => {

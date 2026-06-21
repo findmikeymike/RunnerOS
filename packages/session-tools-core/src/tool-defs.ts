@@ -64,6 +64,13 @@ import {
   handleCancelWorkflowRun,
 } from './handlers/workflows.ts';
 import {
+  handleVideoGetTimeline,
+  handleVideoGetMedia,
+  handleVideoInspectTimeline,
+  handleVideoInspectMedia,
+  handleVideoProjectSnapshot,
+  handleVideoProjectDiff,
+  handleVideoProjectUndo,
   handleVideoProjectCreate,
   handleVideoProjectUpdate,
   handleVideoMediaImport,
@@ -590,6 +597,46 @@ export const VideoExportSchema = z.object({
   showInCanvas: z.boolean().optional().describe('When publishOutput is true, request immediate Canvas display.'),
 });
 
+export const VideoGetTimelineSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  startFrame: z.number().int().nonnegative().optional().describe('Optional project-frame window start.'),
+  endFrame: z.number().int().positive().optional().describe('Optional project-frame window end.'),
+});
+
+export const VideoGetMediaSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+});
+
+export const VideoInspectTimelineSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  startFrame: z.number().int().nonnegative().optional().describe('Project frame to inspect. Defaults to 0.'),
+  endFrame: z.number().int().positive().optional().describe('Optional project-frame end. When set, samples up to maxFrames across the range.'),
+  maxFrames: z.number().int().min(1).max(12).optional().describe('Maximum frames to render when endFrame is set. Defaults to 6.'),
+});
+
+export const VideoInspectMediaSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  mediaId: z.string().min(1).describe('Media asset id from video_get_media.'),
+  overview: z.boolean().optional().describe('For video assets, render a storyboard contact sheet.'),
+  maxFrames: z.number().int().min(1).max(36).optional().describe('Maximum overview tiles. Defaults to 12.'),
+  startSeconds: z.number().nonnegative().optional().describe('Optional source-media window start for overview.'),
+  endSeconds: z.number().positive().optional().describe('Optional source-media window end for overview.'),
+});
+
+export const VideoProjectSnapshotSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  label: z.string().optional().describe('Optional snapshot label.'),
+});
+
+export const VideoProjectDiffSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  snapshotPath: z.string().optional().describe('Optional snapshot file path. Defaults to the latest undo snapshot.'),
+});
+
+export const VideoProjectUndoSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+});
+
 export const VisualSurfaceSchema = z.object({
   action: z.enum(['open_board', 'add_note', 'pin_output', 'add_image', 'add_video']).describe('Canvas operation to apply.'),
   title: z.string().max(120).optional().describe('Board title for open_board or note title for add_note.'),
@@ -1083,6 +1130,34 @@ Use this before timeline edits. The project file is the source of truth for both
 
 This tool writes \`video.runner-video.json\`, initializes default video/audio/caption tracks, and records an initial version.`,
 
+  video_get_timeline: `Read a RunnerOS Video Studio timeline in an agent-friendly frame model.
+
+Call this before editing an existing project. It returns project fps, canvas, totalFrames, tracks, clips, frame timing, millisecond timing, media references, selection, and markers. Use the returned clip ids and track ids for later video tools.`,
+
+  video_get_media: `Read the Video Studio media bin.
+
+Call this before referencing any media asset. It returns media ids, paths, probe metadata, thumbnails/waveforms when available, existence checks, duration in milliseconds and project frames, and clip usage.`,
+
+  video_inspect_timeline: `Render actual timeline inspection frames.
+
+Use this to verify what the user would see after an edit. It renders the current project through the simple MP4 composition path, extracts JPEG frames, and returns their file paths plus frame numbers. This is for visual verification, not final export.`,
+
+  video_inspect_media: `Inspect a media asset from the project bin.
+
+For video assets, pass overview: true to render a storyboard contact sheet over the source-media window. Use this before asking the agent to cut or describe footage. Returns metadata and generated inspection image paths.`,
+
+  video_project_snapshot: `Save a named Video Studio project snapshot.
+
+Use this before a risky multi-step edit or as a stable checkpoint. The snapshot is a full project JSON copy stored beside the project and can be used by video_project_diff.`,
+
+  video_project_diff: `Compare the current Video Studio project to a snapshot.
+
+Defaults to the latest undo snapshot when snapshotPath is omitted. Returns changed settings, duration changes, added/removed media ids, and added/removed/changed clip ids.`,
+
+  video_project_undo: `Restore the latest undo snapshot for a Video Studio project.
+
+Every mutating Video Studio tool records an undo snapshot before saving. Use this when an agent edit needs to be reverted. Repeated calls walk backward through the undo history.`,
+
   video_project_update: `Update RunnerOS Video Studio project-level settings.
 
 Use this to change title, aspect ratio, output width/height, or FPS on an existing project without touching timeline clips. Aspect presets are 9:16 vertical, 16:9 landscape, 1:1 square, and 4:5 portrait. This records a version/event for the agent change log.`,
@@ -1223,6 +1298,13 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
+  { name: 'video_get_timeline', description: TOOL_DESCRIPTIONS.video_get_timeline, inputSchema: VideoGetTimelineSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoGetTimeline },
+  { name: 'video_get_media', description: TOOL_DESCRIPTIONS.video_get_media, inputSchema: VideoGetMediaSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoGetMedia },
+  { name: 'video_inspect_timeline', description: TOOL_DESCRIPTIONS.video_inspect_timeline, inputSchema: VideoInspectTimelineSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoInspectTimeline },
+  { name: 'video_inspect_media', description: TOOL_DESCRIPTIONS.video_inspect_media, inputSchema: VideoInspectMediaSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoInspectMedia },
+  { name: 'video_project_snapshot', description: TOOL_DESCRIPTIONS.video_project_snapshot, inputSchema: VideoProjectSnapshotSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectSnapshot },
+  { name: 'video_project_diff', description: TOOL_DESCRIPTIONS.video_project_diff, inputSchema: VideoProjectDiffSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoProjectDiff },
+  { name: 'video_project_undo', description: TOOL_DESCRIPTIONS.video_project_undo, inputSchema: VideoProjectUndoSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUndo },
   { name: 'video_project_update', description: TOOL_DESCRIPTIONS.video_project_update, inputSchema: VideoProjectUpdateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUpdate },
   { name: 'video_media_import', description: TOOL_DESCRIPTIONS.video_media_import, inputSchema: VideoMediaImportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoMediaImport },
   { name: 'video_clip_add', description: TOOL_DESCRIPTIONS.video_clip_add, inputSchema: VideoClipAddSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipAdd },

@@ -37,7 +37,7 @@ import {
   type WorkspaceInfo,
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
-import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput } from '@craft-agent/session-tools-core'
+import type { CreateAgentToolInput, MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput } from '@craft-agent/session-tools-core'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import {
   // Session persistence functions
@@ -5003,7 +5003,7 @@ user a clickable link to where the thing now lives.`
 
           await this.sendMessage(sessionId, message, fileAttachments)
         },
-        createAgentFn: async (input) => {
+        createAgentFn: async (input: CreateAgentToolInput) => {
           const {
             writeGlobalAgent,
             loadGlobalAgent,

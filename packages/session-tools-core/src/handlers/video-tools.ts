@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -118,6 +118,42 @@ interface VideoExportInput {
   showInCanvas?: boolean;
 }
 
+interface VideoProjectReadInput {
+  projectPath: string;
+  startFrame?: number;
+  endFrame?: number;
+}
+
+interface VideoInspectTimelineInput {
+  projectPath: string;
+  startFrame?: number;
+  endFrame?: number;
+  maxFrames?: number;
+}
+
+interface VideoInspectMediaInput {
+  projectPath: string;
+  mediaId: string;
+  overview?: boolean;
+  maxFrames?: number;
+  startSeconds?: number;
+  endSeconds?: number;
+}
+
+interface VideoProjectSnapshotInput {
+  projectPath: string;
+  label?: string;
+}
+
+interface VideoProjectDiffInput {
+  projectPath: string;
+  snapshotPath?: string;
+}
+
+interface VideoProjectUndoInput {
+  projectPath: string;
+}
+
 interface VideoProject {
   version: 1;
   id: string;
@@ -131,6 +167,7 @@ interface VideoProject {
     durationMs: number;
     tracks: Array<{ id: string; type: TrackType; label: string; locked?: boolean; muted?: boolean; hidden?: boolean; clips: Array<Record<string, unknown> & { id: string; type: ClipType; startMs: number; durationMs: number; mediaId?: string; adjustments?: VideoClipAdjustments; volume?: number; speed?: number; fadeInMs?: number; fadeOutMs?: number }> }>;
     markers: unknown[];
+    selection?: unknown;
   };
   captions: Array<{ id: string; label: string; cues: Array<{ id: string; startMs: number; durationMs: number; text: string }>; style?: Record<string, unknown> }>;
   overlays: unknown[];
@@ -299,11 +336,310 @@ function writeJsonAtomic(path: string, value: unknown): void {
   renameSync(tmp, path);
 }
 
+function videoProjectSidecarDir(projectPath: string): string {
+  return join(dirname(projectPath), '.runner-video');
+}
+
+function undoDir(projectPath: string): string {
+  return join(videoProjectSidecarDir(projectPath), 'undo');
+}
+
+function snapshotsDir(projectPath: string): string {
+  return join(videoProjectSidecarDir(projectPath), 'snapshots');
+}
+
+function fpsForProject(project: VideoProject): number {
+  const fps = project.settings?.fps;
+  return typeof fps === 'number' && Number.isFinite(fps) && fps > 0 ? fps : 30;
+}
+
+function positiveNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function msToFrame(project: VideoProject, ms: number): number {
+  return Math.max(0, Math.round((Math.max(0, ms) / 1000) * fpsForProject(project)));
+}
+
+function frameToMs(project: VideoProject, frame: number): number {
+  return Math.max(0, Math.round((Math.max(0, frame) / fpsForProject(project)) * 1000));
+}
+
+function compactObject<T extends Record<string, unknown>>(value: T): Partial<T> {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined)) as Partial<T>;
+}
+
+function undoSnapshotFiles(projectPath: string): string[] {
+  const dir = undoDir(projectPath);
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith('.runner-video.json'))
+    .sort()
+    .map((name) => join(dir, name));
+}
+
+function latestUndoSnapshot(projectPath: string): string | undefined {
+  return undoSnapshotFiles(projectPath).at(-1);
+}
+
+function trimUndoSnapshots(projectPath: string, keep = 25): void {
+  const files = undoSnapshotFiles(projectPath);
+  for (const file of files.slice(0, Math.max(0, files.length - keep))) {
+    rmSync(file, { force: true });
+  }
+}
+
+function writeUndoSnapshot(projectPath: string, project: VideoProject, reason: string): string {
+  const dir = undoDir(projectPath);
+  mkdirSync(dir, { recursive: true });
+  const safeReason = slugify(reason).slice(0, 32);
+  const snapshotPath = join(dir, `${Date.now()}-${safeReason}-${randomUUID()}.runner-video.json`);
+  writeJsonAtomic(snapshotPath, project);
+  trimUndoSnapshots(projectPath);
+  return snapshotPath;
+}
+
+function writeProjectWithUndo(projectPath: string, beforeProject: VideoProject, nextProject: VideoProject, reason: string): string {
+  const undoPath = writeUndoSnapshot(projectPath, beforeProject, reason);
+  writeJsonAtomic(projectPath, nextProject);
+  return undoPath;
+}
+
+function cloneProject(project: VideoProject): VideoProject {
+  return JSON.parse(JSON.stringify(project)) as VideoProject;
+}
+
 function readProject(projectPath: string): VideoProject {
   const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as VideoProject;
   const errors = validateProject(project);
   if (errors.length > 0) throw new Error(errors[0]);
   return project;
+}
+
+function summarizeClip(project: VideoProject, clip: VideoProject['timeline']['tracks'][number]['clips'][number], trackId: string): Record<string, unknown> {
+  const media = clip.mediaId ? project.media.find((asset) => asset.id === clip.mediaId) : undefined;
+  const startFrame = msToFrame(project, clip.startMs);
+  const durationFrames = Math.max(1, msToFrame(project, clip.durationMs));
+  return compactObject({
+    id: clip.id,
+    trackId,
+    type: clip.type,
+    mediaId: clip.mediaId,
+    mediaType: media?.type,
+    label: clip.label,
+    startMs: clip.startMs,
+    durationMs: clip.durationMs,
+    startFrame,
+    durationFrames,
+    endFrame: startFrame + durationFrames,
+    sourceInMs: clip.sourceInMs,
+    sourceOutMs: clip.sourceOutMs,
+    trimStartFrame: typeof clip.sourceInMs === 'number' ? msToFrame(project, clip.sourceInMs) : undefined,
+    trimEndFrame: typeof clip.sourceOutMs === 'number' ? msToFrame(project, clip.sourceOutMs) : undefined,
+    speed: clip.speed,
+    volume: clip.volume,
+    opacity: typeof clip.opacity === 'number' ? clip.opacity : undefined,
+    fadeInMs: clip.fadeInMs,
+    fadeOutMs: clip.fadeOutMs,
+    disabled: clip.disabled === true ? true : undefined,
+    transform: clip.transform,
+    crop: clip.crop,
+    adjustments: clip.adjustments,
+    keyframeCount: Array.isArray(clip.keyframes) ? clip.keyframes.length : undefined,
+    captionCueIds: clip.captionCueIds,
+    text: typeof clip.text === 'object' && clip.text ? clip.text : undefined,
+  });
+}
+
+function summarizeTimeline(project: VideoProject, window?: { startFrame?: number; endFrame?: number }): Record<string, unknown> {
+  const fps = fpsForProject(project);
+  const totalFrames = msToFrame(project, project.timeline.durationMs);
+  const startFrame = Math.max(0, Math.round(window?.startFrame ?? 0));
+  const endFrame = Math.max(startFrame, Math.round(window?.endFrame ?? totalFrames));
+  const hasWindow = window?.startFrame !== undefined || window?.endFrame !== undefined;
+  return {
+    projectId: project.id,
+    title: project.title,
+    fps,
+    width: project.settings.width,
+    height: project.settings.height,
+    aspectRatio: project.settings.aspectRatio,
+    durationMs: project.timeline.durationMs,
+    totalFrames,
+    window: hasWindow ? { startFrame, endFrame } : undefined,
+    selection: project.timeline.selection,
+    markers: project.timeline.markers,
+    tracks: project.timeline.tracks.map((track, index) => {
+      const clips = track.clips
+        .map((clip) => summarizeClip(project, clip, track.id))
+        .filter((clip) => {
+          if (!hasWindow) return true;
+          const clipStart = typeof clip.startFrame === 'number' ? clip.startFrame : 0;
+          const clipEnd = typeof clip.endFrame === 'number' ? clip.endFrame : clipStart;
+          return clipEnd > startFrame && clipStart < endFrame;
+        });
+      return compactObject({
+        id: track.id,
+        index,
+        type: track.type,
+        label: track.label,
+        locked: track.locked === true ? true : undefined,
+        muted: track.muted === true ? true : undefined,
+        hidden: track.hidden === true ? true : undefined,
+        clipCount: track.clips.length,
+        clips,
+      });
+    }),
+  };
+}
+
+function summarizeMedia(project: VideoProject): Array<Record<string, unknown>> {
+  const projectDir = dirname(project.media[0]?.path ?? '');
+  return project.media.map((asset) => compactObject({
+    id: asset.id,
+    type: asset.type,
+    label: asset.label,
+    path: asset.path,
+    exists: existsSync(asset.path),
+    durationMs: asset.durationMs,
+    durationFrames: typeof asset.durationMs === 'number' ? msToFrame(project, asset.durationMs) : undefined,
+    width: asset.width,
+    height: asset.height,
+    fps: asset.fps,
+    sizeBytes: asset.sizeBytes,
+    codec: asset.codec,
+    hasAudio: asset.hasAudio,
+    hasVideo: asset.hasVideo,
+    thumbnailPath: asset.thumbnailPath,
+    waveformPath: asset.waveformPath,
+    transcriptPath: asset.transcriptPath,
+    originalPath: typeof asset.originalPath === 'string' ? asset.originalPath : undefined,
+    relativePath: projectDir ? relative(projectDir, asset.path) : undefined,
+    usedByClipIds: project.timeline.tracks.flatMap((track) => track.clips.filter((clip) => clip.mediaId === asset.id).map((clip) => clip.id)),
+  }));
+}
+
+function diffProjects(before: VideoProject, after: VideoProject): Record<string, unknown> {
+  const beforeClips = new Map(before.timeline.tracks.flatMap((track) => track.clips.map((clip) => [clip.id, { trackId: track.id, clip }] as const)));
+  const afterClips = new Map(after.timeline.tracks.flatMap((track) => track.clips.map((clip) => [clip.id, { trackId: track.id, clip }] as const)));
+  const addedClipIds = [...afterClips.keys()].filter((id) => !beforeClips.has(id));
+  const removedClipIds = [...beforeClips.keys()].filter((id) => !afterClips.has(id));
+  const changedClipIds = [...afterClips.entries()]
+    .filter(([id, item]) => {
+      const previous = beforeClips.get(id);
+      return previous && JSON.stringify(previous) !== JSON.stringify(item);
+    })
+    .map(([id]) => id);
+  const addedMediaIds = projectIds(after.media).filter((id) => !projectIds(before.media).includes(id));
+  const removedMediaIds = projectIds(before.media).filter((id) => !projectIds(after.media).includes(id));
+  return {
+    beforeProjectId: before.id,
+    afterProjectId: after.id,
+    titleChanged: before.title !== after.title,
+    settingsChanged: JSON.stringify(before.settings) !== JSON.stringify(after.settings),
+    durationMsBefore: before.timeline.durationMs,
+    durationMsAfter: after.timeline.durationMs,
+    addedClipIds,
+    removedClipIds,
+    changedClipIds,
+    addedMediaIds,
+    removedMediaIds,
+    versionCountBefore: before.versions.length,
+    versionCountAfter: after.versions.length,
+  };
+}
+
+function projectIds(items: Array<{ id: string }>): string[] {
+  return items.map((item) => item.id);
+}
+
+function sampleFrames(startFrame: number, endFrame: number | undefined, totalFrames: number, maxFrames: number | undefined): number[] {
+  if (totalFrames <= 0) return [];
+  const start = clamp(Math.round(startFrame), 0, Math.max(0, totalFrames - 1));
+  if (endFrame === undefined) return [start];
+  const end = clamp(Math.round(endFrame), start + 1, totalFrames);
+  const span = Math.max(1, end - start);
+  const count = clamp(Math.round(maxFrames ?? 6), 1, Math.min(12, span));
+  return Array.from({ length: count }, (_, index) => start + Math.floor((span * (index + 0.5)) / count));
+}
+
+function extractFrameImage(videoPath: string, outputPath: string, atSeconds: number): void {
+  mkdirSync(dirname(outputPath), { recursive: true });
+  const result = spawnSync('ffmpeg', [
+    '-y',
+    '-v', 'error',
+    '-ss', ffmpegNumber(atSeconds),
+    '-i', videoPath,
+    '-frames:v', '1',
+    '-q:v', '3',
+    outputPath,
+  ], { encoding: 'utf-8', timeout: 30_000 });
+  if (result.status !== 0 || !existsSync(outputPath)) {
+    throw new Error(result.stderr || result.stdout || 'ffmpeg failed to extract timeline frame.');
+  }
+}
+
+function renderTimelineInspection(project: VideoProject, projectPath: string, args: VideoInspectTimelineInput): Record<string, unknown> {
+  const totalFrames = msToFrame(project, project.timeline.durationMs);
+  if (totalFrames <= 0) throw new Error('Timeline is empty.');
+  const frames = sampleFrames(args.startFrame ?? 0, args.endFrame, totalFrames, args.maxFrames);
+  const inspectionId = randomUUID();
+  const dir = join(dirname(projectPath), 'inspections', inspectionId);
+  const tempVideoPath = join(dir, 'timeline-preview.mp4');
+  mkdirSync(dir, { recursive: true });
+  const renderSettings = resolveExportPreset(project, 'simple-mp4', true);
+  if (renderSettings.error || !renderSettings.settings) throw new Error(renderSettings.error ?? 'Invalid timeline inspection preset.');
+  renderSimpleMp4(project, tempVideoPath, renderSettings.settings);
+  const imagePaths = frames.map((frame) => {
+    const imagePath = join(dir, `frame-${String(frame).padStart(6, '0')}.jpg`);
+    extractFrameImage(tempVideoPath, imagePath, frame / fpsForProject(project));
+    return imagePath;
+  });
+  rmSync(tempVideoPath, { force: true });
+  return {
+    inspectionId,
+    projectPath,
+    fps: fpsForProject(project),
+    width: renderSettings.settings.width,
+    height: renderSettings.settings.height,
+    totalFrames,
+    frameNumbers: frames,
+    imagePaths,
+  };
+}
+
+function renderMediaOverview(asset: VideoProject['media'][number], project: VideoProject, projectPath: string, args: VideoInspectMediaInput): Record<string, unknown> {
+  if (asset.type !== 'video') throw new Error('overview is only supported for video media.');
+  if (!existsSync(asset.path)) throw new Error(`Media file not found: ${asset.path}`);
+  const durationSeconds = Math.max(0.001, (positiveNumber(asset.durationMs) ?? 1000) / 1000);
+  const start = clamp(args.startSeconds ?? 0, 0, durationSeconds);
+  const end = clamp(args.endSeconds ?? durationSeconds, start + 0.001, durationSeconds);
+  const count = clamp(Math.round(args.maxFrames ?? 12), 1, 36);
+  const outputPath = join(dirname(projectPath), 'inspections', randomUUID(), `${asset.id}-overview.jpg`);
+  mkdirSync(dirname(outputPath), { recursive: true });
+  const fpsExpression = Math.max(0.05, count / Math.max(0.001, end - start));
+  const result = spawnSync('ffmpeg', [
+    '-y',
+    '-v', 'error',
+    '-ss', ffmpegNumber(start),
+    '-t', ffmpegNumber(end - start),
+    '-i', asset.path,
+    '-vf', `fps=${ffmpegNumber(fpsExpression)},scale=160:90:force_original_aspect_ratio=decrease,pad=160:90:(ow-iw)/2:(oh-ih)/2,tile=${Math.min(6, count)}x${Math.ceil(count / Math.min(6, count))}`,
+    '-frames:v', '1',
+    '-q:v', '4',
+    outputPath,
+  ], { encoding: 'utf-8', timeout: 45_000 });
+  if (result.status !== 0 || !existsSync(outputPath)) {
+    throw new Error(result.stderr || result.stdout || 'ffmpeg failed to render media overview.');
+  }
+  return {
+    mediaId: asset.id,
+    overviewPath: outputPath,
+    startSeconds: start,
+    endSeconds: end,
+    requestedTiles: count,
+    durationFrames: typeof asset.durationMs === 'number' ? msToFrame(project, asset.durationMs) : undefined,
+  };
 }
 
 function validateProject(project: VideoProject): string[] {
@@ -349,18 +685,19 @@ function validateProject(project: VideoProject): string[] {
 function addVersion(project: VideoProject, summary: string, ctx: SessionToolContext, toolName: string): string {
   const now = new Date().toISOString();
   const versionId = randomUUID();
+  const activeAgentSlug = (ctx as SessionToolContext & { activeAgentSlug?: string }).activeAgentSlug;
   project.versions.push({
     id: versionId,
     createdAt: now,
     summary,
     actor: 'agent',
-    agentSlug: ctx.activeAgentSlug,
+    agentSlug: activeAgentSlug,
     sessionId: ctx.sessionId,
   });
   project.agentEvents.push({
     id: randomUUID(),
     createdAt: now,
-    agentSlug: ctx.activeAgentSlug ?? 'unknown-agent',
+    agentSlug: activeAgentSlug ?? 'unknown-agent',
     sessionId: ctx.sessionId,
     toolName,
     summary,
@@ -1011,6 +1348,156 @@ function ok(text: string, structuredContent: Record<string, unknown>): ToolResul
   return { content: [{ type: 'text', text }], structuredContent, isError: false };
 }
 
+export async function handleVideoGetTimeline(ctx: SessionToolContext, args: VideoProjectReadInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  const project = readProject(projectPath);
+  const timeline = summarizeTimeline(project, { startFrame: args.startFrame, endFrame: args.endFrame });
+  return ok(`Loaded timeline for "${project.title}".`, {
+    ok: true,
+    projectPath,
+    timeline,
+  });
+}
+
+export async function handleVideoGetMedia(ctx: SessionToolContext, args: VideoProjectReadInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  const project = readProject(projectPath);
+  const media = summarizeMedia(project);
+  return ok(`Loaded ${media.length} media assets for "${project.title}".`, {
+    ok: true,
+    projectPath,
+    media,
+  });
+}
+
+export async function handleVideoInspectTimeline(ctx: SessionToolContext, args: VideoInspectTimelineInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  try {
+    const project = readProject(projectPath);
+    const inspection = renderTimelineInspection(project, projectPath, args);
+    return ok(`Rendered ${Array.isArray(inspection.imagePaths) ? inspection.imagePaths.length : 0} timeline inspection frame(s).`, {
+      ok: true,
+      ...inspection,
+    });
+  } catch (error) {
+    return errorResponse(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export async function handleVideoInspectMedia(ctx: SessionToolContext, args: VideoInspectMediaInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  if (!args.mediaId) return errorResponse('mediaId is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  try {
+    const project = readProject(projectPath);
+    const asset = project.media.find((item) => item.id === args.mediaId);
+    if (!asset) return errorResponse(`Media not found in project: ${args.mediaId}`);
+    const summary = summarizeMedia(project).find((item) => item.id === asset.id) ?? {};
+    const overview = args.overview ? renderMediaOverview(asset, project, projectPath, args) : undefined;
+    return ok(`Inspected media "${asset.label}".`, {
+      ok: true,
+      projectPath,
+      media: summary,
+      overview,
+    });
+  } catch (error) {
+    return errorResponse(error instanceof Error ? error.message : String(error));
+  }
+}
+
+export async function handleVideoProjectSnapshot(ctx: SessionToolContext, args: VideoProjectSnapshotInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  return withVideoProjectLock(projectPath, () => {
+    const project = readProject(projectPath);
+    const beforeProject = cloneProject(project);
+    const snapshotId = randomUUID();
+    const label = args.label?.trim() || 'snapshot';
+    const snapshotPath = join(snapshotsDir(projectPath), `${Date.now()}-${slugify(label)}-${snapshotId}.runner-video.json`);
+    writeJsonAtomic(snapshotPath, project);
+    const versionId = addVersion(project, `Saved snapshot ${label}`, ctx, 'video_project_snapshot');
+    const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_project_snapshot');
+    return ok(`Saved snapshot for "${project.title}".`, {
+      ok: true,
+      projectPath,
+      snapshotId,
+      snapshotPath,
+      versionId,
+      undoSnapshotPath,
+      changedClipIds: [],
+      warnings: [],
+    });
+  });
+}
+
+export async function handleVideoProjectDiff(ctx: SessionToolContext, args: VideoProjectDiffInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  const snapshotPath = args.snapshotPath ? resolvePath(ctx, args.snapshotPath) : latestUndoSnapshot(projectPath);
+  if (!snapshotPath || !existsSync(snapshotPath)) return errorResponse('No snapshot found. Pass snapshotPath or make an edit/snapshot first.');
+  if (!isPathInside(dirname(projectPath), snapshotPath)) return errorResponse(`snapshotPath must be inside the project folder: ${dirname(projectPath)}`);
+  const before = readProject(snapshotPath);
+  const after = readProject(projectPath);
+  const diff = diffProjects(before, after);
+  return ok('Computed video project diff.', {
+    ok: true,
+    projectPath,
+    snapshotPath,
+    diff,
+  });
+}
+
+export async function handleVideoProjectUndo(ctx: SessionToolContext, args: VideoProjectUndoInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  return withVideoProjectLock(projectPath, () => {
+    const snapshotPath = latestUndoSnapshot(projectPath);
+    if (!snapshotPath) return errorResponse('No undo snapshot available.');
+    const current = readProject(projectPath);
+    const restored = readProject(snapshotPath);
+    const diff = diffProjects(current, restored);
+    addVersion(restored, `Undid latest video project edit`, ctx, 'video_project_undo');
+    writeJsonAtomic(projectPath, restored);
+    rmSync(snapshotPath, { force: true });
+    return ok(`Restored previous video project state for "${restored.title}".`, {
+      ok: true,
+      projectPath,
+      restoredFrom: snapshotPath,
+      diff,
+      changedClipIds: [
+        ...((diff as { addedClipIds?: string[] }).addedClipIds ?? []),
+        ...((diff as { removedClipIds?: string[] }).removedClipIds ?? []),
+        ...((diff as { changedClipIds?: string[] }).changedClipIds ?? []),
+      ],
+      warnings: [],
+    });
+  });
+}
+
 export async function handleVideoProjectCreate(ctx: SessionToolContext, args: VideoProjectCreateInput): Promise<ToolResult> {
   if (!args.title?.trim()) return errorResponse('title is required.');
   const projectPathResult = args.projectPath
@@ -1048,6 +1535,7 @@ export async function handleVideoProjectUpdate(ctx: SessionToolContext, args: Vi
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
   return withVideoProjectLock(projectPath, () => {
     const project = readProject(projectPath);
+    const beforeProject = cloneProject(project);
 
     if (args.title !== undefined) {
       const title = args.title.trim();
@@ -1080,13 +1568,14 @@ export async function handleVideoProjectUpdate(ctx: SessionToolContext, args: Vi
     const errors = validateProject(project);
     if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
     const versionId = addVersion(project, 'Updated project settings', ctx, 'video_project_update');
-    writeJsonAtomic(projectPath, project);
+    const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_project_update');
     return ok(`Updated video project "${project.title}".`, {
       ok: true,
       projectPath,
       projectId: project.id,
       settings: project.settings,
       versionId,
+      undoSnapshotPath,
       changedClipIds: [],
       warnings: [],
     });
@@ -1108,6 +1597,7 @@ export async function handleVideoMediaImport(ctx: SessionToolContext, args: Vide
   if (stats.isDirectory()) return errorResponse(`Media path must be a file: ${mediaPath}`);
   return withVideoProjectLock(projectPath, () => {
     const project = readProject(projectPath);
+    const beforeProject = cloneProject(project);
     const mediaId = randomUUID();
     const mediaDir = join(dirname(projectPath), 'media');
     const ext = extname(mediaPath);
@@ -1135,7 +1625,7 @@ export async function handleVideoMediaImport(ctx: SessionToolContext, args: Vide
     project.media.push(media);
     const changedClipIds = mediaType === 'caption' ? addCaptionCuesToProject(project, media.label, captionCues) : [];
     const versionId = addVersion(project, `Imported media ${media.label}`, ctx, 'video_media_import');
-    writeJsonAtomic(projectPath, project);
+    const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_media_import');
     return ok(`Imported media "${media.label}" into ${project.title}.`, {
       ok: true,
       projectPath,
@@ -1143,6 +1633,7 @@ export async function handleVideoMediaImport(ctx: SessionToolContext, args: Vide
       media,
       captionCueCount: captionCues.length,
       versionId,
+      undoSnapshotPath,
       changedClipIds,
       warnings: [],
     });
@@ -1157,6 +1648,7 @@ export async function handleVideoClipAdd(ctx: SessionToolContext, args: VideoCli
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
   return withVideoProjectLock(projectPath, () => {
     const project = readProject(projectPath);
+    const beforeProject = cloneProject(project);
     const media = args.mediaId ? project.media.find((asset) => asset.id === args.mediaId) : undefined;
     if (args.mediaId && !media) return errorResponse(`Media not found in project: ${args.mediaId}`);
     const clipType = args.type ?? (media?.type === 'audio' ? 'audio' : media?.type === 'image' ? 'image' : media?.type === 'caption' ? 'caption' : args.text ? 'text' : 'text');
@@ -1187,13 +1679,14 @@ export async function handleVideoClipAdd(ctx: SessionToolContext, args: VideoCli
     const errors = validateProject(project);
     if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
     const versionId = addVersion(project, `Added ${clip.label} clip`, ctx, 'video_clip_add');
-    writeJsonAtomic(projectPath, project);
+    const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_clip_add');
     return ok(`Added clip "${clip.label}" to track "${track.label}".`, {
       ok: true,
       projectPath,
       clipId: clip.id,
       trackId: track.id,
       versionId,
+      undoSnapshotPath,
       changedClipIds: [clip.id],
       warnings: [],
     });
@@ -1208,6 +1701,7 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
   return withVideoProjectLock(projectPath, () => {
     const project = readProject(projectPath);
+    const beforeProject = cloneProject(project);
     let trackId: string | undefined;
     let clipId: string | undefined = args.clipId;
     let label = args.clipId;
@@ -1325,7 +1819,7 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
     if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
     const actionLabel = args.action[0]!.toUpperCase() + args.action.slice(1);
     const versionId = addVersion(project, `${actionLabel} ${label ?? 'clip'}${args.action === 'pack' ? '' : ' clip'}`, ctx, 'video_clip_edit');
-    writeJsonAtomic(projectPath, project);
+    const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_clip_edit');
     return ok(`Applied ${args.action} edit to "${label ?? 'timeline'}".`, {
       ok: true,
       projectPath,
@@ -1337,6 +1831,7 @@ export async function handleVideoClipEdit(ctx: SessionToolContext, args: VideoCl
       startMs,
       durationMs,
       versionId,
+      undoSnapshotPath,
       changedClipIds: [clipId, createdClipId, deletedClipId].filter(Boolean),
       warnings: [],
     });
@@ -1352,6 +1847,7 @@ export async function handleVideoClipAdjust(ctx: SessionToolContext, args: Video
   if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
   return withVideoProjectLock(projectPath, () => {
     const project = readProject(projectPath);
+    const beforeProject = cloneProject(project);
     const found = findClip(project, args.clipId);
     if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
     const { clip, track } = found;
@@ -1387,7 +1883,7 @@ export async function handleVideoClipAdjust(ctx: SessionToolContext, args: Video
     const errors = validateProject(project);
     if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
     const versionId = addVersion(project, `${args.reset ? 'Reset' : 'Adjusted'} ${clip.label ?? clip.id} clip look`, ctx, 'video_clip_adjust');
-    writeJsonAtomic(projectPath, project);
+    const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_clip_adjust');
     return ok(`${args.reset ? 'Reset' : 'Applied'} adjustments for clip "${clip.label ?? clip.id}".`, {
       ok: true,
       projectPath,
@@ -1395,6 +1891,7 @@ export async function handleVideoClipAdjust(ctx: SessionToolContext, args: Video
       trackId: track.id,
       adjustments: clip.adjustments ?? {},
       versionId,
+      undoSnapshotPath,
       changedClipIds: [clip.id],
       warnings: [],
     });
@@ -1412,6 +1909,7 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
   const outputPath = outputPathResult.path;
   return withVideoProjectLock(projectPath, async () => {
     const project = readProject(projectPath);
+    const beforeProject = cloneProject(project);
     mkdirSync(dirname(outputPath), { recursive: true });
     const createdAt = new Date().toISOString();
     const realVideo = isVideoOutputPath(outputPath);
@@ -1456,7 +1954,7 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
           receiptPath,
         });
         addVersion(project, `Failed export ${basename(outputPath)}`, ctx, 'video_export');
-        writeJsonAtomic(projectPath, project);
+        writeProjectWithUndo(projectPath, beforeProject, project, 'video_export_failed');
         return errorResponse(`${message} Receipt: ${receiptPath}`);
       }
     } else {
@@ -1491,7 +1989,7 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
       receiptPath,
     });
     const versionId = addVersion(project, `Exported ${realVideo ? 'video' : 'placeholder'} ${basename(outputPath)}`, ctx, 'video_export');
-    writeJsonAtomic(projectPath, project);
+    const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_export');
 
     let outputId: string | undefined;
     if (args.publishOutput && ctx.createOutput) {
@@ -1529,6 +2027,7 @@ export async function handleVideoExport(ctx: SessionToolContext, args: VideoExpo
       height: preset.settings.height,
       fps: preset.settings.fps,
       versionId,
+      undoSnapshotPath,
       outputId,
       changedClipIds: [],
       warnings: [],

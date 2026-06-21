@@ -486,7 +486,7 @@ export function getVideoStudioSource(workspaceId: string, workspaceRootPath: str
         'Use this source for native RunnerOS video project files, media registration, timeline JSON edits, validation, simple MP4 exports, and placeholder receipts.',
         '',
         'Workflow:',
-        '1. Use session tools like `video_project_create`, `video_media_import`, `video_clip_add`, and `video_export` for agent edits.',
+        '1. Use session tools like `video_project_create`, `video_get_timeline`, `video_get_media`, `video_media_import`, `video_inspect_media`, `video_clip_add`, `video_clip_edit`, `video_inspect_timeline`, `video_project_snapshot`, `video_project_diff`, `video_project_undo`, and `video_export` for agent edits.',
         '2. Use the displayed local path as the CLI tool directory when direct doctor/validation commands are needed.',
         '3. Run `node bin/video-studio.mjs doctor --json` before production work.',
         '4. Run `node bin/video-studio.mjs validate <project-path> --json` before claiming a project is structurally sound.',
