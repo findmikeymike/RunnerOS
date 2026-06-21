@@ -647,17 +647,32 @@ function textForClip(clip, fallback) {
 
 const MAX_DRAWTEXT_CAPTION_CUES = 200;
 
+function captionCuesForClip(clip, cueById) {
+  const cueIds = Array.isArray(clip.captionCueIds) ? clip.captionCueIds : [];
+  const cues = cueIds.map((id) => cueById.get(id)).filter(Boolean);
+  if (cues.length === 0) return [];
+  if (cues.length === 1) return [{ ...cues[0], startMs: clip.startMs, durationMs: clip.durationMs }];
+  const sourceStartMs = Math.min(...cues.map((cue) => cue.startMs || 0));
+  return cues
+    .map((cue) => {
+      const offsetMs = Math.max(0, (cue.startMs || 0) - sourceStartMs);
+      const durationMs = Math.min(cue.durationMs || 0, Math.max(0, (clip.durationMs || 0) - offsetMs));
+      return durationMs > 0 ? { ...cue, startMs: (clip.startMs || 0) + offsetMs, durationMs } : null;
+    })
+    .filter(Boolean);
+}
+
 function captionCuesForRender(project, visibleTracks) {
   const cueById = new Map((project.captions || []).flatMap((track) => (track.cues || []).map((cue) => [cue.id, cue])));
   const hasTimelineCaptionClips = (project.timeline?.tracks || [])
     .flatMap((track) => track.clips || [])
     .some((clip) => clip.type === 'caption' || Array.isArray(clip.captionCueIds));
-  const visibleCueIds = visibleTracks
+  const visibleCaptionClips = visibleTracks
     .flatMap((track) => track.clips || [])
-    .filter((clip) => clip.disabled !== true && clip.type === 'caption')
-    .flatMap((clip) => Array.isArray(clip.captionCueIds) ? clip.captionCueIds : []);
-  const cues = visibleCueIds.length > 0
-    ? visibleCueIds.map((id) => cueById.get(id)).filter(Boolean)
+    .filter((clip) => clip.disabled !== true && clip.type === 'caption');
+  const visibleCues = visibleCaptionClips.flatMap((clip) => captionCuesForClip(clip, cueById));
+  const cues = visibleCues.length > 0
+    ? visibleCues
     : hasTimelineCaptionClips
       ? []
       : (project.captions || []).flatMap((track) => track.cues || []);

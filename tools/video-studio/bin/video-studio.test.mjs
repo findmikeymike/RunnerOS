@@ -356,8 +356,37 @@ describe('video-studio edit commands', () => {
 
     run(['export', projectPath, '--out', outputPath, '--json']);
 
-    expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(2);
+    expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(20);
     expect(averageCaptionCenterLaneLuma(outputPath, 0.5)).toBeLessThan(20);
+  });
+
+  test('simple MP4 export uses caption clip timing instead of raw cue timing', () => {
+    if (!hasFfmpeg()) return;
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const outputPath = join(dirname(projectPath), 'moved-caption.mp4');
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 320, height: 180, fps: 10 };
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].clips = [{
+      id: 'caption-clip',
+      type: 'caption',
+      startMs: 1000,
+      durationMs: 700,
+      label: 'MOVED CAPTION TEST',
+      captionCueIds: ['cue-1'],
+    }];
+    project.captions = [{
+      id: 'captions-1',
+      label: 'Captions',
+      cues: [{ id: 'cue-1', startMs: 100, durationMs: 1500, text: 'MOVED CAPTION TEST' }],
+    }];
+    project.timeline.durationMs = 1800;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', outputPath, '--json']);
+
+    expect(averageBottomLuma(outputPath, 0.5)).toBeLessThan(20);
+    expect(averageBottomLuma(outputPath, 1.2)).toBeGreaterThan(20);
   });
 
   test('simple MP4 export honors hidden and disabled caption clips', () => {

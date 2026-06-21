@@ -729,17 +729,35 @@ function textForClip(clip: VideoProject['timeline']['tracks'][number]['clips'][n
 
 const MAX_DRAWTEXT_CAPTION_CUES = 200;
 
+function captionCuesForClip(
+  clip: VideoProject['timeline']['tracks'][number]['clips'][number],
+  cueById: Map<string, ParsedCaptionCue>,
+): ParsedCaptionCue[] {
+  const cueIds = Array.isArray(clip.captionCueIds) ? clip.captionCueIds : [];
+  const cues = cueIds.map((id) => cueById.get(id)).filter((cue): cue is ParsedCaptionCue => Boolean(cue));
+  if (cues.length === 0) return [];
+  if (cues.length === 1) return [{ ...cues[0]!, startMs: clip.startMs, durationMs: clip.durationMs }];
+  const sourceStartMs = Math.min(...cues.map((cue) => cue.startMs));
+  return cues
+    .map((cue) => {
+      const offsetMs = Math.max(0, cue.startMs - sourceStartMs);
+      const durationMs = Math.min(cue.durationMs, Math.max(0, clip.durationMs - offsetMs));
+      return durationMs > 0 ? { ...cue, startMs: clip.startMs + offsetMs, durationMs } : null;
+    })
+    .filter((cue): cue is ParsedCaptionCue => Boolean(cue));
+}
+
 function captionCuesForRender(project: VideoProject, visibleTracks: VideoProject['timeline']['tracks']): ParsedCaptionCue[] {
   const cueById = new Map(project.captions.flatMap((track) => track.cues.map((cue) => [cue.id, cue] as const)));
   const hasTimelineCaptionClips = project.timeline.tracks
     .flatMap((track) => track.clips)
     .some((clip) => clip.type === 'caption' || Array.isArray(clip.captionCueIds));
-  const visibleCueIds = visibleTracks
+  const visibleCaptionClips = visibleTracks
     .flatMap((track) => track.clips)
-    .filter((clip) => clip.disabled !== true && clip.type === 'caption')
-    .flatMap((clip) => Array.isArray(clip.captionCueIds) ? clip.captionCueIds : []);
-  const cues = visibleCueIds.length > 0
-    ? visibleCueIds.map((id) => cueById.get(id)).filter((cue): cue is ParsedCaptionCue => Boolean(cue))
+    .filter((clip) => clip.disabled !== true && clip.type === 'caption');
+  const visibleCues = visibleCaptionClips.flatMap((clip) => captionCuesForClip(clip, cueById));
+  const cues = visibleCues.length > 0
+    ? visibleCues
     : hasTimelineCaptionClips
       ? []
       : project.captions.flatMap((track) => track.cues);

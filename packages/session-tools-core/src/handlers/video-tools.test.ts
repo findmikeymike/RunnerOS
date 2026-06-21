@@ -559,8 +559,48 @@ describe('video studio session tools', () => {
 
     expect(exported.isError).toBe(false);
     expect(existsSync(outputPath)).toBe(true);
-    expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(2);
+    expect(averageBottomLuma(outputPath, 0.5)).toBeGreaterThan(20);
     expect(averageCaptionCenterLaneLuma(outputPath, 0.5)).toBeLessThan(20);
+  });
+
+  test('video_export uses caption clip timing instead of raw cue timing', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, {
+      projectPath,
+      title: 'Moved Caption Export',
+      aspectRatio: '16:9',
+      width: 320,
+      height: 180,
+      fps: 10,
+    });
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as {
+      captions: Array<{ id: string; label: string; cues: Array<{ id: string; startMs: number; durationMs: number; text: string }> }>;
+      timeline: { durationMs: number; tracks: Array<{ id: string; type: string; label: string; clips: Array<{ id: string; type: string; startMs: number; durationMs: number; label: string; captionCueIds?: string[] }> }> };
+    };
+    project.timeline.tracks[2]!.clips = [{
+      id: 'moved-caption-clip',
+      type: 'caption',
+      startMs: 1000,
+      durationMs: 700,
+      label: 'MOVED CAPTION TEST',
+      captionCueIds: ['cue-moved'],
+    }];
+    project.captions = [{
+      id: 'captions-moved',
+      label: 'Captions',
+      cues: [{ id: 'cue-moved', startMs: 100, durationMs: 1500, text: 'MOVED CAPTION TEST' }],
+    }];
+    project.timeline.durationMs = 1800;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`);
+
+    const outputPath = join(root, 'project', 'renders', 'moved-caption.mp4');
+    const exported = await handleVideoExport(ctx, { projectPath, outputPath });
+
+    expect(exported.isError).toBe(false);
+    expect(averageBottomLuma(outputPath, 0.5)).toBeLessThan(20);
+    expect(averageBottomLuma(outputPath, 1.2)).toBeGreaterThan(20);
   });
 
   test('video_export honors hidden and disabled caption clips', async () => {
