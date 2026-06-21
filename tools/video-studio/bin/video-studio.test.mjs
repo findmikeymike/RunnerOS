@@ -360,6 +360,32 @@ describe('video-studio edit commands', () => {
     expect(averageCaptionCenterLaneLuma(outputPath, 0.5)).toBeLessThan(20);
   });
 
+  test('simple MP4 export handles caption punctuation safely', () => {
+    if (!hasFfmpeg()) return;
+    const projectPath = tempProject();
+    const project = readProject(projectPath);
+    const outputPath = join(dirname(projectPath), 'punctuation-caption.mp4');
+    project.settings = { ...project.settings, aspectRatio: 'custom', width: 320, height: 180, fps: 10 };
+    project.timeline.tracks[0].clips = [];
+    project.timeline.tracks[2].clips = [{
+      id: 'caption-clip',
+      type: 'caption',
+      startMs: 100,
+      durationMs: 1200,
+      label: "It's ok: yes, now; [100%]",
+      captionCueIds: ['cue-1'],
+    }];
+    project.captions = [{
+      id: 'captions-1',
+      label: 'Captions',
+      cues: [{ id: 'cue-1', startMs: 100, durationMs: 1200, text: "It's ok: yes, now; [100%]" }],
+    }];
+    project.timeline.durationMs = 1600;
+    writeFileSync(projectPath, `${JSON.stringify(project, null, 2)}\n`, 'utf-8');
+
+    run(['export', projectPath, '--out', outputPath, '--json']);
+  });
+
   test('simple MP4 export uses caption clip timing instead of raw cue timing', () => {
     if (!hasFfmpeg()) return;
     const projectPath = tempProject();

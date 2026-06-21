@@ -563,6 +563,34 @@ describe('video studio session tools', () => {
     expect(averageCaptionCenterLaneLuma(outputPath, 0.5)).toBeLessThan(20);
   });
 
+  test('video_export handles caption punctuation safely', async () => {
+    if (!hasFfmpeg()) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, {
+      projectPath,
+      title: 'Caption Punctuation',
+      aspectRatio: '16:9',
+      width: 320,
+      height: 180,
+      fps: 10,
+    });
+    const captionPath = join(root, 'punctuation.srt');
+    writeFileSync(captionPath, [
+      '1',
+      '00:00:00,100 --> 00:00:01,200',
+      "It's ok: yes, now; [100%]",
+      '',
+    ].join('\n'));
+    expect((await handleVideoMediaImport(ctx, { projectPath, mediaPath: captionPath })).isError).toBe(false);
+
+    const outputPath = join(root, 'project', 'renders', 'punctuation.mp4');
+    const exported = await handleVideoExport(ctx, { projectPath, outputPath });
+
+    expect(exported.isError).toBe(false);
+    expect(existsSync(outputPath)).toBe(true);
+  });
+
   test('video_export uses caption clip timing instead of raw cue timing', async () => {
     if (!hasFfmpeg()) return;
     const ctx = makeCtx();

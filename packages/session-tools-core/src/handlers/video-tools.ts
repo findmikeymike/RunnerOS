@@ -1,4 +1,5 @@
-import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -541,18 +542,6 @@ function isVideoOutputPath(path: string): boolean {
   return ['.mp4', '.mov', '.m4v', '.webm', '.mkv'].includes(extname(path).toLowerCase());
 }
 
-function escapeDrawText(value: string): string {
-  return value
-    .replace(/\\/g, '\\\\')
-    .replace(/:/g, '\\:')
-    .replace(/'/g, "\\'")
-    .replace(/%/g, '\\%')
-    .replace(/\r?\n/g, ' ')
-    .replace(/\[/g, '\\[')
-    .replace(/\]/g, '\\]')
-    .slice(0, 180);
-}
-
 function seconds(ms: number | undefined, fallbackMs = 0): number {
   return Math.max(0, (ms ?? fallbackMs) / 1000);
 }
@@ -803,6 +792,15 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
 
   const args = ['-y', '-f', 'lavfi', '-i', `color=c=#111111:s=${width}x${height}:r=${fps}:d=${durationSeconds}`];
   const inputClips: Array<{ clip: typeof clips[number]['clip']; trackId: string; media: VideoProject['media'][number]; inputIndex: number }> = [];
+  const textFileDir = join(tmpdir(), `runneros-video-text-${randomUUID()}`);
+  let textFileIndex = 0;
+  const drawTextFileOption = (text: string): string => {
+    mkdirSync(textFileDir, { recursive: true });
+    const textPath = join(textFileDir, `text-${textFileIndex}.txt`);
+    textFileIndex += 1;
+    writeFileSync(textPath, text.replace(/\r?\n/g, ' ').slice(0, 180), 'utf-8');
+    return `textfile=${textPath}`;
+  };
   for (const { clip, trackId, media } of inputSourceClips) {
     if (!existsSync(media.path)) throw new Error(`Media file not found for clip "${clip.label ?? clip.id}": ${media.path}`);
     assertSourceCanCoverSpeed(clip, media);
@@ -851,7 +849,7 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
     const y = Math.round(height * 0.42) + (index % 3) * 86;
     const next = `text${index}`;
     filters.push(
-      `${currentVideo}drawtext=text='${escapeDrawText(textForClip(clip, project.title))}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 24))}:x=(w-text_w)/2:y=${y}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`,
+      `${currentVideo}drawtext=${drawTextFileOption(textForClip(clip, project.title))}:expansion=none:fontcolor=white:fontsize=${Math.max(28, Math.round(width / 24))}:x=(w-text_w)/2:y=${y}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`,
     );
     currentVideo = `[${next}]`;
   }
@@ -863,13 +861,13 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
     const end = Math.max(start + 0.2, start + seconds(cue.durationMs, 1000));
     const next = `caption${index}`;
     filters.push(
-      `${currentVideo}drawtext=text='${escapeDrawText(cue.text)}':fontcolor=white:fontsize=${Math.max(24, Math.round(width / 30))}:x=(w-text_w)/2:y=h-text_h-${Math.max(48, Math.round(height * 0.09))}:box=1:boxcolor=black@0.55:boxborderw=${Math.max(10, Math.round(width / 90))}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`,
+      `${currentVideo}drawtext=${drawTextFileOption(cue.text)}:expansion=none:fontcolor=white:fontsize=${Math.max(24, Math.round(width / 30))}:x=(w-text_w)/2:y=h-text_h-${Math.max(48, Math.round(height * 0.09))}:box=1:boxcolor=black@0.55:boxborderw=${Math.max(10, Math.round(width / 90))}:enable='between(t,${ffmpegNumber(start)},${ffmpegNumber(end)})'[${next}]`,
     );
     currentVideo = `[${next}]`;
   }
 
   if (textClips.length === 0 && inputClips.length === 0 && captionCues.length === 0) {
-    filters.push(`${currentVideo}drawtext=text='${escapeDrawText(project.title)}':fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2[title0]`);
+    filters.push(`${currentVideo}drawtext=${drawTextFileOption(project.title)}:expansion=none:fontcolor=white:fontsize=${Math.max(28, Math.round(width / 22))}:x=(w-text_w)/2:y=(h-text_h)/2[title0]`);
     currentVideo = '[title0]';
   }
 
@@ -910,6 +908,7 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
   args.push(outputPath);
 
   const result = spawnSync('ffmpeg', args, { encoding: 'utf-8' });
+  rmSync(textFileDir, { recursive: true, force: true });
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || 'ffmpeg failed to render video.');
   }
