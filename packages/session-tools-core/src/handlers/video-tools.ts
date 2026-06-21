@@ -13,6 +13,9 @@ type ClipType = 'video' | 'audio' | 'image' | 'text' | 'caption' | 'shape' | 'lo
 type AspectRatio = '9:16' | '1:1' | '16:9' | '4:5' | 'custom';
 
 const videoProjectLocks = new Map<string, Promise<void>>();
+const SIMPLE_RENDER_TIMEOUT_MS = 180_000;
+const INSPECTION_RENDER_TIMEOUT_MS = 60_000;
+let undoSnapshotSequence = 0;
 
 async function withVideoProjectLock<T>(projectPath: string, task: () => Promise<T> | T): Promise<T> {
   const key = resolve(projectPath);
@@ -110,6 +113,25 @@ interface VideoClipAdjustInput {
   reset?: boolean;
 }
 
+interface VideoClipTransformInput {
+  projectPath: string;
+  clipId: string;
+  x?: number;
+  y?: number;
+  scale?: number;
+  rotateDeg?: number;
+  opacity?: number;
+  cropX?: number;
+  cropY?: number;
+  cropWidth?: number;
+  cropHeight?: number;
+  layoutPreset?: 'center' | 'pip-top-right' | 'pip-bottom-right' | 'split-left' | 'split-right' | 'split-top' | 'split-bottom';
+  keyframes?: Array<{ timeMs: number; property: 'x' | 'y'; value: number; easing?: 'linear' | 'easeIn' | 'easeOut' | 'easeInOut' }>;
+  resetTransform?: boolean;
+  resetCrop?: boolean;
+  resetKeyframes?: boolean;
+}
+
 interface VideoExportInput {
   projectPath: string;
   outputPath?: string;
@@ -178,6 +200,11 @@ interface VideoProject {
   agentEvents: Array<Record<string, unknown>>;
 }
 
+interface ExportCleanupResult {
+  removedPaths: string[];
+  warnings: string[];
+}
+
 interface ParsedCaptionCue {
   id: string;
   startMs: number;
@@ -220,6 +247,34 @@ interface VideoClipAdjustments {
   vignette?: number;
   grain?: number;
   preset?: string;
+}
+
+interface VideoTransformShape {
+  x?: unknown;
+  y?: unknown;
+  scale?: unknown;
+  rotateDeg?: unknown;
+}
+
+interface VideoCropShape {
+  x?: unknown;
+  y?: unknown;
+  width?: unknown;
+  height?: unknown;
+}
+
+interface VideoKeyframeShape {
+  timeMs?: unknown;
+  property?: unknown;
+  value?: unknown;
+  easing?: unknown;
+}
+
+interface ResolvedVideoCrop {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 function baseDir(ctx: SessionToolContext): string {
@@ -393,7 +448,9 @@ function writeUndoSnapshot(projectPath: string, project: VideoProject, reason: s
   const dir = undoDir(projectPath);
   mkdirSync(dir, { recursive: true });
   const safeReason = slugify(reason).slice(0, 32);
-  const snapshotPath = join(dir, `${Date.now()}-${safeReason}-${randomUUID()}.runner-video.json`);
+  undoSnapshotSequence = (undoSnapshotSequence + 1) % 1_000_000;
+  const sequence = String(undoSnapshotSequence).padStart(6, '0');
+  const snapshotPath = join(dir, `${Date.now()}-${sequence}-${safeReason}-${randomUUID()}.runner-video.json`);
   writeJsonAtomic(snapshotPath, project);
   trimUndoSnapshots(projectPath);
   return snapshotPath;
@@ -414,6 +471,56 @@ function readProject(projectPath: string): VideoProject {
   const errors = validateProject(project);
   if (errors.length > 0) throw new Error(errors[0]);
   return project;
+}
+
+function stringField(value: Record<string, unknown>, key: string): string | undefined {
+  const item = value[key];
+  return typeof item === 'string' && item.trim() ? item : undefined;
+}
+
+function exportFilePaths(record: Record<string, unknown>, projectPath: string): string[] {
+  const projectDir = dirname(projectPath);
+  return ['path', 'receiptPath']
+    .map((key) => stringField(record, key))
+    .filter((path): path is string => Boolean(path))
+    .map((path) => resolve(projectDir, path));
+}
+
+function cleanupRevertedExportFiles(projectPath: string, current: VideoProject, restored: VideoProject): ExportCleanupResult {
+  const projectDir = dirname(projectPath);
+  const restoredExportIds = new Set(restored.exports.map((record) => stringField(record, 'id')).filter(Boolean));
+  const restoredPaths = new Set(restored.exports.flatMap((record) => exportFilePaths(record, projectPath)));
+  const candidatePaths = new Set<string>();
+  const warnings: string[] = [];
+  const removedPaths: string[] = [];
+
+  for (const record of current.exports) {
+    const id = stringField(record, 'id');
+    if (id && restoredExportIds.has(id)) continue;
+    for (const path of exportFilePaths(record, projectPath)) {
+      if (!restoredPaths.has(path)) candidatePaths.add(path);
+    }
+  }
+
+  for (const path of candidatePaths) {
+    if (!isPathInside(projectDir, path) || resolve(path) === resolve(projectPath)) {
+      warnings.push(`Skipped export side-effect cleanup outside project folder: ${path}`);
+      continue;
+    }
+    if (!existsSync(path)) continue;
+    try {
+      if (statSync(path).isDirectory()) {
+        warnings.push(`Skipped export side-effect cleanup for directory: ${path}`);
+        continue;
+      }
+      rmSync(path, { force: true });
+      removedPaths.push(path);
+    } catch (error) {
+      warnings.push(`Failed to remove reverted export file ${path}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return { removedPaths, warnings };
 }
 
 function summarizeClip(project: VideoProject, clip: VideoProject['timeline']['tracks'][number]['clips'][number], trackId: string): Record<string, unknown> {
@@ -589,7 +696,7 @@ function renderTimelineInspection(project: VideoProject, projectPath: string, ar
   mkdirSync(dir, { recursive: true });
   const renderSettings = resolveExportPreset(project, 'simple-mp4', true);
   if (renderSettings.error || !renderSettings.settings) throw new Error(renderSettings.error ?? 'Invalid timeline inspection preset.');
-  renderSimpleMp4(project, tempVideoPath, renderSettings.settings);
+  renderSimpleMp4(project, tempVideoPath, renderSettings.settings, { timeoutMs: INSPECTION_RENDER_TIMEOUT_MS });
   const imagePaths = frames.map((frame) => {
     const imagePath = join(dir, `frame-${String(frame).padStart(6, '0')}.jpg`);
     extractFrameImage(tempVideoPath, imagePath, frame / fpsForProject(project));
@@ -671,6 +778,53 @@ function validateProject(project: VideoProject): string[] {
       if (sourceInMs !== undefined && (typeof sourceInMs !== 'number' || !Number.isFinite(sourceInMs) || sourceInMs < 0)) errors.push(`${path}.sourceInMs must be non-negative.`);
       if (sourceOutMs !== undefined && (typeof sourceOutMs !== 'number' || !Number.isFinite(sourceOutMs) || sourceOutMs < 0)) errors.push(`${path}.sourceOutMs must be non-negative.`);
       if (typeof sourceInMs === 'number' && typeof sourceOutMs === 'number' && sourceOutMs <= sourceInMs) errors.push(`${path}.sourceOutMs must be greater than sourceInMs.`);
+      if (clip.opacity !== undefined && (typeof clip.opacity !== 'number' || !Number.isFinite(clip.opacity) || clip.opacity < 0 || clip.opacity > 1)) {
+        errors.push(`${path}.opacity must be between 0 and 1.`);
+      }
+      if (clip.transform !== undefined) {
+        if (!clip.transform || typeof clip.transform !== 'object' || Array.isArray(clip.transform)) {
+          errors.push(`${path}.transform must be an object.`);
+        } else {
+          const transform = clip.transform as VideoTransformShape;
+          for (const key of ['x', 'y', 'scale', 'rotateDeg'] as const) {
+            if (transform[key] !== undefined && (typeof transform[key] !== 'number' || !Number.isFinite(transform[key]))) {
+              errors.push(`${path}.transform.${key} must be a finite number.`);
+            }
+          }
+          if (typeof transform.scale === 'number' && (transform.scale < 0.05 || transform.scale > 5)) errors.push(`${path}.transform.scale must be between 0.05 and 5.`);
+        }
+      }
+      if (clip.crop !== undefined) {
+        if (!clip.crop || typeof clip.crop !== 'object' || Array.isArray(clip.crop)) {
+          errors.push(`${path}.crop must be an object.`);
+        } else {
+          const crop = clip.crop as VideoCropShape;
+          for (const key of ['x', 'y', 'width', 'height'] as const) {
+            if (typeof crop[key] !== 'number' || !Number.isFinite(crop[key])) errors.push(`${path}.crop.${key} must be a finite number.`);
+          }
+          if (typeof crop.x === 'number' && crop.x < 0) errors.push(`${path}.crop.x must be non-negative.`);
+          if (typeof crop.y === 'number' && crop.y < 0) errors.push(`${path}.crop.y must be non-negative.`);
+          if (typeof crop.width === 'number' && crop.width <= 0) errors.push(`${path}.crop.width must be positive.`);
+          if (typeof crop.height === 'number' && crop.height <= 0) errors.push(`${path}.crop.height must be positive.`);
+        }
+      }
+      if (clip.keyframes !== undefined) {
+        if (!Array.isArray(clip.keyframes)) {
+          errors.push(`${path}.keyframes must be an array.`);
+        } else {
+          for (const [keyframeIndex, rawKeyframe] of clip.keyframes.entries()) {
+            const keyframePath = `${path}.keyframes[${keyframeIndex}]`;
+            if (!rawKeyframe || typeof rawKeyframe !== 'object' || Array.isArray(rawKeyframe)) {
+              errors.push(`${keyframePath} must be an object.`);
+              continue;
+            }
+            const keyframe = rawKeyframe as VideoKeyframeShape;
+            if (typeof keyframe.timeMs !== 'number' || !Number.isFinite(keyframe.timeMs) || keyframe.timeMs < 0) errors.push(`${keyframePath}.timeMs must be non-negative.`);
+            if (keyframe.property !== 'x' && keyframe.property !== 'y') errors.push(`${keyframePath}.property must be x or y.`);
+            if (typeof keyframe.value !== 'number' || !Number.isFinite(keyframe.value)) errors.push(`${keyframePath}.value must be a finite number.`);
+          }
+        }
+      }
     }
     for (const clip of ordered) {
       if (Number.isFinite(clip.startMs) && Number.isFinite(clip.durationMs) && clip.startMs < cursor) {
@@ -904,6 +1058,134 @@ function clipFadeSeconds(clip: { fadeInMs?: unknown; fadeOutMs?: unknown }, key:
   return clamp(value / 1000, 0, Math.max(0, clipDurationSeconds / 2));
 }
 
+function finiteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function clipTransform(clip: Record<string, unknown>): { x: number; y: number; scale: number; rotateDeg: number } {
+  const transform = clip.transform && typeof clip.transform === 'object' ? clip.transform as VideoTransformShape : {};
+  return {
+    x: finiteNumber(transform.x, 0),
+    y: finiteNumber(transform.y, 0),
+    scale: clamp(finiteNumber(transform.scale, 1), 0.05, 5),
+    rotateDeg: finiteNumber(transform.rotateDeg, 0),
+  };
+}
+
+function clipOpacity(clip: Record<string, unknown>): number {
+  return clamp(finiteNumber(clip.opacity, 1), 0, 1);
+}
+
+function clipCrop(clip: Record<string, unknown>, media: Record<string, unknown>): ResolvedVideoCrop | null {
+  if (!clip.crop || typeof clip.crop !== 'object') return null;
+  const crop = clip.crop as VideoCropShape;
+  const mediaWidth = positiveNumber(media.width) ?? Number.POSITIVE_INFINITY;
+  const mediaHeight = positiveNumber(media.height) ?? Number.POSITIVE_INFINITY;
+  const x = Math.max(0, Math.round(finiteNumber(crop.x, 0)));
+  const y = Math.max(0, Math.round(finiteNumber(crop.y, 0)));
+  const width = Math.round(finiteNumber(crop.width, 0));
+  const height = Math.round(finiteNumber(crop.height, 0));
+  if (width <= 0 || height <= 0) return null;
+  return {
+    x: clamp(x, 0, Math.max(0, mediaWidth - 1)),
+    y: clamp(y, 0, Math.max(0, mediaHeight - 1)),
+    width: Math.max(1, Math.min(width, Math.max(1, mediaWidth - x))),
+    height: Math.max(1, Math.min(height, Math.max(1, mediaHeight - y))),
+  };
+}
+
+function visualSourceSize(media: Record<string, unknown>, crop: ResolvedVideoCrop | null, canvasWidth: number, canvasHeight: number): { width: number; height: number } {
+  return {
+    width: crop?.width ?? positiveNumber(media.width) ?? canvasWidth,
+    height: crop?.height ?? positiveNumber(media.height) ?? canvasHeight,
+  };
+}
+
+function fittedVisualSize(source: { width: number; height: number }, canvasWidth: number, canvasHeight: number, scale: number): { width: number; height: number } {
+  const fit = Math.min(canvasWidth / Math.max(1, source.width), canvasHeight / Math.max(1, source.height));
+  return {
+    width: Math.max(1, Math.round(source.width * fit * scale)),
+    height: Math.max(1, Math.round(source.height * fit * scale)),
+  };
+}
+
+function ffmpegExprNumber(value: number): string {
+  const rounded = Math.round(value * 1000) / 1000;
+  return Object.is(rounded, -0) ? '0' : ffmpegNumber(rounded);
+}
+
+function keyframeExpression(
+  clip: { startMs: number; durationMs: number; keyframes?: unknown },
+  property: 'x' | 'y',
+  fallback: number,
+): string {
+  const frames = Array.isArray(clip.keyframes)
+    ? clip.keyframes
+      .filter((frame): frame is VideoKeyframeShape => Boolean(frame) && typeof frame === 'object')
+      .filter((frame) => frame.property === property && typeof frame.value === 'number' && Number.isFinite(frame.value))
+      .map((frame) => ({
+        timeMs: clamp(Math.round(finiteNumber(frame.timeMs, 0)), 0, Math.max(1, clip.durationMs)),
+        value: frame.value as number,
+      }))
+      .sort((a, b) => a.timeMs - b.timeMs)
+    : [];
+  if (frames.length === 0) return ffmpegExprNumber(fallback);
+
+  const uniqueFrames = [{ timeMs: 0, value: fallback }, ...frames]
+    .filter((frame, index, items) => index === items.findIndex((item) => item.timeMs === frame.timeMs))
+    .sort((a, b) => a.timeMs - b.timeMs);
+  if (uniqueFrames.length === 1) return ffmpegExprNumber(uniqueFrames[0]!.value);
+
+  const timelineSeconds = (timeMs: number) => (clip.startMs + timeMs) / 1000;
+  let expression = ffmpegExprNumber(uniqueFrames.at(-1)!.value);
+  for (let index = uniqueFrames.length - 2; index >= 0; index -= 1) {
+    const current = uniqueFrames[index]!;
+    const next = uniqueFrames[index + 1]!;
+    const start = timelineSeconds(current.timeMs);
+    const end = timelineSeconds(next.timeMs);
+    const span = Math.max(0.001, end - start);
+    const value = `${ffmpegExprNumber(current.value)}+(${ffmpegExprNumber(next.value - current.value)})*((t-${ffmpegExprNumber(start)})/${ffmpegExprNumber(span)})`;
+    expression = `if(lt(t,${ffmpegExprNumber(end)}),${value},${expression})`;
+  }
+  return expression;
+}
+
+function visualOverlayPosition(
+  clip: { startMs: number; durationMs: number; keyframes?: unknown },
+  transform: { x: number; y: number; scale: number; rotateDeg: number },
+): { x: string; y: string } {
+  const x = keyframeExpression(clip, 'x', transform.x);
+  const y = keyframeExpression(clip, 'y', transform.y);
+  return {
+    x: `(main_w-overlay_w)/2+${x}`,
+    y: `(main_h-overlay_h)/2+${y}`,
+  };
+}
+
+function visualCompositionFilter(
+  inputLabel: string,
+  outputLabel: string,
+  clip: VideoProject['timeline']['tracks'][number]['clips'][number],
+  media: VideoProject['media'][number],
+  canvas: { width: number; height: number },
+): string {
+  const transform = clipTransform(clip);
+  const crop = clipCrop(clip, media);
+  const source = visualSourceSize(media, crop, canvas.width, canvas.height);
+  const fitted = fittedVisualSize(source, canvas.width, canvas.height, transform.scale);
+  const parts: string[] = [];
+  if (crop) parts.push(`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`);
+  parts.push(`scale=${fitted.width}:${fitted.height}:force_original_aspect_ratio=decrease`);
+  parts.push('setsar=1', 'format=rgba');
+  if (transform.rotateDeg !== 0) {
+    const angle = (transform.rotateDeg * Math.PI) / 180;
+    parts.push(`rotate=${ffmpegExprNumber(angle)}:ow=rotw(${ffmpegExprNumber(angle)}):oh=roth(${ffmpegExprNumber(angle)}):fillcolor=black@0`);
+  }
+  const opacity = clipOpacity(clip);
+  if (opacity < 1) parts.push(`colorchannelmixer=aa=${ffmpegExprNumber(opacity)}`);
+  return `${inputLabel}${parts.join(',')}${outputLabel}`;
+}
+
 function atempoFilter(speed: number): string {
   const parts: string[] = [];
   let remaining = speed;
@@ -1106,14 +1388,22 @@ function hasAudioStream(path: string): boolean {
   return result.status === 0 && result.stdout.trim().length > 0;
 }
 
-function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettings?: VideoExportRenderSettings): void {
+function renderSimpleMp4(
+  project: VideoProject,
+  outputPath: string,
+  renderSettings?: VideoExportRenderSettings,
+  options: { timeoutMs?: number } = {},
+): void {
   const width = renderSettings?.width ?? (typeof project.settings.width === 'number' ? project.settings.width : 1080);
   const height = renderSettings?.height ?? (typeof project.settings.height === 'number' ? project.settings.height : 1920);
   const fps = renderSettings?.fps ?? (typeof project.settings.fps === 'number' ? project.settings.fps : 30);
   const mediaById = new Map(project.media.map((media) => [media.id, media]));
   const visibleTracks = project.timeline.tracks.filter((track) => track.hidden !== true);
   const audibleTrackIds = new Set(visibleTracks.filter((track) => track.muted !== true).map((track) => track.id));
-  const clips = visibleTracks.flatMap((track) => track.clips.map((clip) => ({ clip, trackId: track.id }))).filter((item) => item.clip.disabled !== true).sort((a, b) => a.clip.startMs - b.clip.startMs);
+  const clips = visibleTracks
+    .flatMap((track, trackIndex) => track.clips.map((clip) => ({ clip, trackId: track.id, trackIndex })))
+    .filter((item) => item.clip.disabled !== true)
+    .sort((a, b) => a.trackIndex - b.trackIndex || a.clip.startMs - b.clip.startMs);
   const activeDurationMs = clips.reduce((end, { clip }) => Math.max(end, clip.startMs + clip.durationMs), 0);
   const durationMs = activeDurationMs > 0 ? activeDurationMs : project.timeline.durationMs || 3000;
   const durationSeconds = Math.max(1, Math.ceil(durationMs / 1000));
@@ -1161,15 +1451,15 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
     const prepared = `v${overlayIndex}`;
     const next = `base${overlayIndex + 1}`;
     const adjusted = `adj${overlayIndex}`;
+    const composed = `cmp${overlayIndex}`;
+    const overlayPosition = visualOverlayPosition(clip, clipTransform(clip));
     const setpts = media.type === 'video'
       ? `setpts=(PTS-STARTPTS)/${ffmpegNumber(clipSpeed(clip))}+${start}/TB`
       : `setpts=PTS-STARTPTS+${start}/TB`;
-    filters.push(
-      `[${inputIndex}:v]scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black@0,setsar=1,format=rgba[${adjusted}]`,
-    );
+    filters.push(visualCompositionFilter(`[${inputIndex}:v]`, `[${adjusted}]`, clip, media, { width, height }));
     filters.push(adjustmentFilter(`[${adjusted}]`, `[${prepared}]`, clip.adjustments));
-    filters.push(`[${prepared}]${setpts}[${prepared}t]`);
-    filters.push(`${currentVideo}[${prepared}t]overlay=0:0:enable='between(t,${start},${end})'[${next}]`);
+    filters.push(`[${prepared}]${setpts}[${composed}]`);
+    filters.push(`${currentVideo}[${composed}]overlay=x='${overlayPosition.x}':y='${overlayPosition.y}':enable='between(t,${start},${end})'[${next}]`);
     currentVideo = `[${next}]`;
     overlayIndex += 1;
   }
@@ -1244,8 +1534,11 @@ function renderSimpleMp4(project: VideoProject, outputPath: string, renderSettin
   }
   args.push(outputPath);
 
-  const result = spawnSync('ffmpeg', args, { encoding: 'utf-8' });
+  const result = spawnSync('ffmpeg', args, { encoding: 'utf-8', timeout: options.timeoutMs ?? SIMPLE_RENDER_TIMEOUT_MS });
   rmSync(textFileDir, { recursive: true, force: true });
+  if (result.error) {
+    throw new Error(result.error.message || 'ffmpeg failed to render video.');
+  }
   if (result.status !== 0) {
     throw new Error(result.stderr || result.stdout || 'ffmpeg failed to render video.');
   }
@@ -1342,6 +1635,82 @@ function rippleTrimEnd(track: VideoProject['timeline']['tracks'][number], clipId
     return { ...item, startMs };
   });
   return { startMs: clip.startMs, durationMs };
+}
+
+function transformForLayoutPreset(project: VideoProject, preset: NonNullable<VideoClipTransformInput['layoutPreset']>): { x: number; y: number; scale: number; rotateDeg: number } {
+  const width = typeof project.settings.width === 'number' ? project.settings.width : 1080;
+  const height = typeof project.settings.height === 'number' ? project.settings.height : 1920;
+  if (preset === 'pip-top-right') return { x: Math.round(width * 0.3), y: -Math.round(height * 0.3), scale: 0.32, rotateDeg: 0 };
+  if (preset === 'pip-bottom-right') return { x: Math.round(width * 0.3), y: Math.round(height * 0.3), scale: 0.32, rotateDeg: 0 };
+  if (preset === 'split-left') return { x: -Math.round(width * 0.25), y: 0, scale: 0.5, rotateDeg: 0 };
+  if (preset === 'split-right') return { x: Math.round(width * 0.25), y: 0, scale: 0.5, rotateDeg: 0 };
+  if (preset === 'split-top') return { x: 0, y: -Math.round(height * 0.25), scale: 0.5, rotateDeg: 0 };
+  if (preset === 'split-bottom') return { x: 0, y: Math.round(height * 0.25), scale: 0.5, rotateDeg: 0 };
+  return { x: 0, y: 0, scale: 1, rotateDeg: 0 };
+}
+
+function sanitizeTransformInput(project: VideoProject, clip: VideoProject['timeline']['tracks'][number]['clips'][number], args: VideoClipTransformInput): string | null {
+  const base = args.layoutPreset ? transformForLayoutPreset(project, args.layoutPreset) : clipTransform(clip) as { x: number; y: number; scale: number; rotateDeg: number };
+  if (args.resetTransform) {
+    delete clip.transform;
+  } else {
+    if (args.x !== undefined) {
+      if (!Number.isFinite(args.x)) return 'x must be a finite number.';
+      base.x = Math.round(args.x);
+    }
+    if (args.y !== undefined) {
+      if (!Number.isFinite(args.y)) return 'y must be a finite number.';
+      base.y = Math.round(args.y);
+    }
+    if (args.scale !== undefined) {
+      if (!Number.isFinite(args.scale) || args.scale < 0.05 || args.scale > 5) return 'scale must be between 0.05 and 5.';
+      base.scale = Math.round(args.scale * 1000) / 1000;
+    }
+    if (args.rotateDeg !== undefined) {
+      if (!Number.isFinite(args.rotateDeg)) return 'rotateDeg must be a finite number.';
+      base.rotateDeg = Math.round(args.rotateDeg * 1000) / 1000;
+    }
+    clip.transform = base;
+  }
+
+  if (args.opacity !== undefined) {
+    if (!Number.isFinite(args.opacity) || args.opacity < 0 || args.opacity > 1) return 'opacity must be between 0 and 1.';
+    clip.opacity = Math.round(args.opacity * 1000) / 1000;
+  }
+
+  const hasCropInput = args.cropX !== undefined || args.cropY !== undefined || args.cropWidth !== undefined || args.cropHeight !== undefined;
+  if (args.resetCrop) {
+    delete clip.crop;
+  } else if (hasCropInput) {
+    const current = clip.crop && typeof clip.crop === 'object' ? clip.crop as VideoCropShape : {};
+    const crop = {
+      x: args.cropX ?? finiteNumber(current.x, 0),
+      y: args.cropY ?? finiteNumber(current.y, 0),
+      width: args.cropWidth ?? finiteNumber(current.width, 0),
+      height: args.cropHeight ?? finiteNumber(current.height, 0),
+    };
+    if (![crop.x, crop.y, crop.width, crop.height].every(Number.isFinite)) return 'crop values must be finite numbers.';
+    if (crop.x < 0 || crop.y < 0) return 'crop x/y must be non-negative.';
+    if (crop.width <= 0 || crop.height <= 0) return 'crop width/height must be positive.';
+    clip.crop = {
+      x: Math.round(crop.x),
+      y: Math.round(crop.y),
+      width: Math.round(crop.width),
+      height: Math.round(crop.height),
+    };
+  }
+
+  if (args.resetKeyframes) {
+    delete clip.keyframes;
+  } else if (args.keyframes !== undefined) {
+    clip.keyframes = args.keyframes.map((keyframe) => ({
+      timeMs: Math.round(keyframe.timeMs),
+      property: keyframe.property,
+      value: Math.round(keyframe.value * 1000) / 1000,
+      ...(keyframe.easing ? { easing: keyframe.easing } : {}),
+    }));
+  }
+  return null;
 }
 
 function ok(text: string, structuredContent: Record<string, unknown>): ToolResult {
@@ -1480,6 +1849,7 @@ export async function handleVideoProjectUndo(ctx: SessionToolContext, args: Vide
     const current = readProject(projectPath);
     const restored = readProject(snapshotPath);
     const diff = diffProjects(current, restored);
+    const cleanup = cleanupRevertedExportFiles(projectPath, current, restored);
     addVersion(restored, `Undid latest video project edit`, ctx, 'video_project_undo');
     writeJsonAtomic(projectPath, restored);
     rmSync(snapshotPath, { force: true });
@@ -1493,7 +1863,8 @@ export async function handleVideoProjectUndo(ctx: SessionToolContext, args: Vide
         ...((diff as { removedClipIds?: string[] }).removedClipIds ?? []),
         ...((diff as { changedClipIds?: string[] }).changedClipIds ?? []),
       ],
-      warnings: [],
+      removedExportPaths: cleanup.removedPaths,
+      warnings: cleanup.warnings,
     });
   });
 }
@@ -1890,6 +2261,49 @@ export async function handleVideoClipAdjust(ctx: SessionToolContext, args: Video
       clipId: clip.id,
       trackId: track.id,
       adjustments: clip.adjustments ?? {},
+      versionId,
+      undoSnapshotPath,
+      changedClipIds: [clip.id],
+      warnings: [],
+    });
+  });
+}
+
+export async function handleVideoClipTransform(ctx: SessionToolContext, args: VideoClipTransformInput): Promise<ToolResult> {
+  if (!args.projectPath) return errorResponse('projectPath is required.');
+  if (!args.clipId) return errorResponse('clipId is required.');
+  const projectPathResult = resolveWorkspacePath(ctx, args.projectPath, 'projectPath');
+  if (!projectPathResult.ok) return errorResponse(projectPathResult.error);
+  const projectPath = projectPathResult.path;
+  if (!existsSync(projectPath)) return errorResponse(`Project not found: ${projectPath}`);
+  return withVideoProjectLock(projectPath, () => {
+    const project = readProject(projectPath);
+    const beforeProject = cloneProject(project);
+    const found = findClip(project, args.clipId);
+    if (!found) return errorResponse(`Clip not found: ${args.clipId}`);
+    const { clip, track } = found;
+    if (track.locked) return errorResponse(lockedTrackError(track));
+    const media = clip.mediaId ? project.media.find((asset) => asset.id === clip.mediaId) : undefined;
+    if (!media || !['video', 'image'].includes(media.type)) {
+      return errorResponse(`Clip "${clip.label ?? clip.id}" is not a video or image clip that can use transform/crop/opacity rendering.`);
+    }
+
+    const inputError = sanitizeTransformInput(project, clip, args);
+    if (inputError) return errorResponse(inputError);
+
+    const errors = validateProject(project);
+    if (errors.length) return errorResponse(errors[0] ?? 'Invalid video project.');
+    const versionId = addVersion(project, `Transformed ${clip.label ?? clip.id} clip`, ctx, 'video_clip_transform');
+    const undoSnapshotPath = writeProjectWithUndo(projectPath, beforeProject, project, 'video_clip_transform');
+    return ok(`Applied transform to clip "${clip.label ?? clip.id}".`, {
+      ok: true,
+      projectPath,
+      clipId: clip.id,
+      trackId: track.id,
+      transform: clip.transform,
+      crop: clip.crop,
+      opacity: clip.opacity,
+      keyframes: clip.keyframes,
       versionId,
       undoSnapshotPath,
       changedClipIds: [clip.id],

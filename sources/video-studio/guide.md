@@ -7,6 +7,10 @@ Preferred agent path:
 - `video_project_create`
 - `video_media_import`
 - `video_clip_add`
+- `video_clip_edit`
+- `video_clip_adjust`
+- `video_clip_transform`
+- `video_inspect_timeline`
 - `video_export`
 
 Direct CLI path:
@@ -19,4 +23,4 @@ node bin/video-studio.mjs validate <project-path> --json
 node bin/video-studio.mjs export <project-path> --out <output-path> --json
 ```
 
-Export behavior: `.mp4` output paths use the simple FFmpeg renderer for video, image, audio, and text clips. SVG/Lottie/HTML clips fail loudly until the fuller renderer lands. Non-video paths write placeholder receipts.
+Export behavior: `.mp4` output paths use the FFmpeg composition renderer for video, image, audio, text, and caption burn-in. It supports per-clip speed, volume, audio fades, look adjustments, source crop, scale/position/rotation, opacity, and linear x/y motion keyframes. SVG/Lottie/HTML clips fail loudly until the fuller renderer lands. Non-video paths write placeholder receipts.

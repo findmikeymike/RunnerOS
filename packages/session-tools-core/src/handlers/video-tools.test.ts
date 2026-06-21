@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { SessionToolContext } from '../context.ts';
+import { SESSION_TOOL_DEFS } from '../tool-defs.ts';
 import {
   handleVideoClipAdjust,
   handleVideoClipAdd,
   handleVideoClipEdit,
+  handleVideoClipTransform,
   handleVideoExport,
   handleVideoGetMedia,
   handleVideoGetTimeline,
@@ -185,6 +187,16 @@ describe('video studio session tools', () => {
     expect(project.agentEvents.length).toBeGreaterThanOrEqual(3);
   });
 
+  test('generated inspection tools are approval-gated because they write files', () => {
+    const timelineInspect = SESSION_TOOL_DEFS.find((tool) => tool.name === 'video_inspect_timeline');
+    const mediaInspect = SESSION_TOOL_DEFS.find((tool) => tool.name === 'video_inspect_media');
+
+    expect(timelineInspect).toMatchObject({ safeMode: 'block' });
+    expect(mediaInspect).toMatchObject({ safeMode: 'block' });
+    expect(timelineInspect?.readOnly).not.toBe(true);
+    expect(mediaInspect?.readOnly).not.toBe(true);
+  });
+
   test('video_export can publish an output receipt when context supports it', async () => {
     let publishedTitle = '';
     const ctx = makeCtx({
@@ -312,6 +324,25 @@ describe('video studio session tools', () => {
     expect((await handleVideoProjectUndo(ctx, { projectPath })).isError).toBe(false);
     project = JSON.parse(readFileSync(projectPath, 'utf-8')) as typeof project;
     expect(project.timeline.tracks[0]!.clips.find((clip) => clip.id === firstClipId)?.startMs).toBe(0);
+  });
+
+  test('video_project_undo removes reverted export files inside the project folder', async () => {
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Undo Export' });
+    const outputPath = join(root, 'project', 'renders', 'preview.placeholder.txt');
+    const receiptPath = `${outputPath}.receipt.json`;
+
+    const exported = await handleVideoExport(ctx, { projectPath, outputPath });
+    expect(exported.isError).toBe(false);
+    expect(existsSync(outputPath)).toBe(true);
+    expect(existsSync(receiptPath)).toBe(true);
+
+    const undo = await handleVideoProjectUndo(ctx, { projectPath });
+    expect(undo.isError).toBe(false);
+    expect(existsSync(outputPath)).toBe(false);
+    expect(existsSync(receiptPath)).toBe(false);
+    expect((undo.structuredContent as { removedExportPaths: string[] }).removedExportPaths).toEqual(expect.arrayContaining([outputPath, receiptPath]));
   });
 
   test('video_inspect_timeline renders JPEG frame paths from the actual timeline', async () => {
@@ -1211,6 +1242,66 @@ describe('video studio session tools', () => {
     const stored = project.timeline.tracks[0]!.clips.find((item) => item.id === clipId)?.adjustments;
     expect(stored).toEqual({ preset: 'manual', exposure: 1, grain: 1 });
     expect(project.agentEvents.some((event) => event.toolName === 'video_clip_adjust')).toBe(true);
+  });
+
+  test('video_clip_transform stores composition fields and exports mp4', async () => {
+    const ffmpeg = spawnSync('ffmpeg', ['-version'], { encoding: 'utf-8' });
+    if (ffmpeg.status !== 0) return;
+    const ctx = makeCtx();
+    const projectPath = join(root, 'project', 'video.runner-video.json');
+    await handleVideoProjectCreate(ctx, { projectPath, title: 'Composed Media', aspectRatio: '16:9' });
+    const mediaPath = join(root, 'clip.mp4');
+    const fixture = spawnSync('ffmpeg', [
+      '-y',
+      '-f', 'lavfi',
+      '-i', 'testsrc=size=320x180:rate=30',
+      '-t', '1',
+      '-pix_fmt', 'yuv420p',
+      mediaPath,
+    ], { encoding: 'utf-8' });
+    if (fixture.status !== 0) throw new Error(fixture.stderr || fixture.stdout || 'failed to create fixture video');
+    const imported = await handleVideoMediaImport(ctx, { projectPath, mediaPath });
+    const mediaId = (imported.structuredContent as { mediaId: string }).mediaId;
+    const added = await handleVideoClipAdd(ctx, {
+      projectPath,
+      mediaId,
+      startMs: 0,
+      durationMs: 1000,
+      label: 'PiP source',
+    });
+    const clipId = (added.structuredContent as { clipId: string }).clipId;
+
+    const transformed = await handleVideoClipTransform(ctx, {
+      projectPath,
+      clipId,
+      layoutPreset: 'pip-bottom-right',
+      opacity: 0.65,
+      cropX: 10,
+      cropY: 10,
+      cropWidth: 200,
+      cropHeight: 120,
+      keyframes: [
+        { timeMs: 0, property: 'x', value: -160 },
+        { timeMs: 1000, property: 'x', value: 160 },
+      ],
+    });
+
+    expect(transformed.isError).toBe(false);
+    expect((transformed.structuredContent as { transform?: { scale?: number }; opacity?: number; keyframes?: unknown[] }).transform?.scale).toBe(0.32);
+    expect((transformed.structuredContent as { opacity?: number }).opacity).toBe(0.65);
+    expect((transformed.structuredContent as { keyframes?: unknown[] }).keyframes?.length).toBe(2);
+
+    const result = await handleVideoExport(ctx, {
+      projectPath,
+      outputPath: join(root, 'project', 'renders', 'composed.mp4'),
+    });
+
+    expect(result.isError).toBe(false);
+    const outputPath = (result.structuredContent as { outputPath: string }).outputPath;
+    expect(existsSync(outputPath)).toBe(true);
+    expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
+    const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as { agentEvents: Array<{ toolName: string }> };
+    expect(project.agentEvents.some((event) => event.toolName === 'video_clip_transform')).toBe(true);
   });
 
   test('video_clip_adjust rejects clips that cannot render look adjustments', async () => {

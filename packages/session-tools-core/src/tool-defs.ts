@@ -77,6 +77,7 @@ import {
   handleVideoClipAdd,
   handleVideoClipEdit,
   handleVideoClipAdjust,
+  handleVideoClipTransform,
   handleVideoExport,
 } from './handlers/video-tools.ts';
 
@@ -587,6 +588,30 @@ export const VideoClipAdjustSchema = z.object({
   vignette: z.number().min(0).max(1).optional().describe('Vignette amount. 0 is neutral.'),
   grain: z.number().min(0).max(1).optional().describe('Film grain amount. 0 is neutral.'),
   reset: z.boolean().optional().describe('Remove all adjustments from the clip.'),
+});
+
+export const VideoClipTransformSchema = z.object({
+  projectPath: z.string().min(1).describe('Path to video.runner-video.json. Relative paths resolve from the session working directory.'),
+  clipId: z.string().min(1).describe('Existing video or image clip id to transform.'),
+  x: z.number().optional().describe('Horizontal canvas offset in pixels from center. Positive moves right.'),
+  y: z.number().optional().describe('Vertical canvas offset in pixels from center. Positive moves down.'),
+  scale: z.number().min(0.05).max(5).optional().describe('Visual scale multiplier after fitting media to the canvas. 1 is full fitted size.'),
+  rotateDeg: z.number().optional().describe('Clockwise rotation in degrees.'),
+  opacity: z.number().min(0).max(1).optional().describe('Clip opacity. 1 is opaque, 0 is invisible.'),
+  cropX: z.number().nonnegative().optional().describe('Source crop x in source pixels.'),
+  cropY: z.number().nonnegative().optional().describe('Source crop y in source pixels.'),
+  cropWidth: z.number().positive().optional().describe('Source crop width in source pixels.'),
+  cropHeight: z.number().positive().optional().describe('Source crop height in source pixels.'),
+  layoutPreset: z.enum(['center', 'pip-top-right', 'pip-bottom-right', 'split-left', 'split-right', 'split-top', 'split-bottom']).optional().describe('Convenience transform preset for common layouts. Explicit x/y/scale/rotateDeg override the preset.'),
+  keyframes: z.array(z.object({
+    timeMs: z.number().nonnegative().describe('Keyframe time relative to clip start.'),
+    property: z.enum(['x', 'y']).describe('Currently rendered keyframe property.'),
+    value: z.number().describe('Pixel offset value for the property.'),
+    easing: z.enum(['linear', 'easeIn', 'easeOut', 'easeInOut']).optional().describe('Stored easing hint. The current FFmpeg renderer uses linear interpolation.'),
+  })).optional().describe('Replace clip motion keyframes. Current renderer supports x/y motion keyframes.'),
+  resetTransform: z.boolean().optional().describe('Remove transform from the clip.'),
+  resetCrop: z.boolean().optional().describe('Remove source crop from the clip.'),
+  resetKeyframes: z.boolean().optional().describe('Remove motion keyframes from the clip.'),
 });
 
 export const VideoExportSchema = z.object({
@@ -1140,11 +1165,11 @@ Call this before referencing any media asset. It returns media ids, paths, probe
 
   video_inspect_timeline: `Render actual timeline inspection frames.
 
-Use this to verify what the user would see after an edit. It renders the current project through the simple MP4 composition path, extracts JPEG frames, and returns their file paths plus frame numbers. This is for visual verification, not final export.`,
+Use this to verify what the user would see after an edit. It renders the current project through the simple MP4 composition path, writes generated JPEG inspection files, and returns their file paths plus frame numbers. This is for visual verification, not final export.`,
 
   video_inspect_media: `Inspect a media asset from the project bin.
 
-For video assets, pass overview: true to render a storyboard contact sheet over the source-media window. Use this before asking the agent to cut or describe footage. Returns metadata and generated inspection image paths.`,
+For video assets, pass overview: true to render a storyboard contact sheet over the source-media window. Use this before asking the agent to cut or describe footage. Returns metadata and generated inspection image paths. Overview mode writes a generated inspection image.`,
 
   video_project_snapshot: `Save a named Video Studio project snapshot.
 
@@ -1178,9 +1203,13 @@ Use move with startMs to reposition a clip. Pass snap: true when you want magnet
 
 Use this for exposure, contrast, saturation, highlights, shadows, temperature, tint, sharpen, vignette, grain, or a preset look such as clean, cinematic, warm, punchy, or black-and-white. The simple FFmpeg renderer applies the practical subset now and stores the rest for richer preview/render engines later. This mutates the project JSON and records a version/event for the agent change log.`,
 
+  video_clip_transform: `Transform a RunnerOS Video Studio video/image clip.
+
+Use this for picture-in-picture, split-screen, reframing, crop, opacity, rotation, and simple motion. The renderer applies source crop, fitted scale, rotation, opacity, centered x/y placement, and linear x/y keyframes. It records undo/version history and returns the changed clip fields.`,
+
   video_export: `Create a Video Studio export.
 
-Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, text clips, caption burn-in from SRT/VTT imports, per-clip speed, volume, and audio fades, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Video presets are simple-mp4, mp4-16x9-1080p, mp4-9x16-1080x1920, mp4-1x1-1080, mp4-4x5-1080x1350, and mp4-source-size. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
+Use an .mp4 output path for the simple FFmpeg renderer. It supports video, image, audio, text clips, caption burn-in from SRT/VTT imports, per-clip speed, volume, audio fades, transform/crop/opacity, and x/y keyframes, and fails loudly on unsupported media types like SVG/Lottie/HTML until the fuller renderer lands. Video presets are simple-mp4, mp4-16x9-1080p, mp4-9x16-1080x1920, mp4-1x1-1080, mp4-4x5-1080x1350, and mp4-source-size. Non-video output paths write a placeholder text receipt. The tool updates export history, writes a receipt, and can optionally publish a Runner Output with the project file attached as a source asset.`,
 
   visual_surface: `Update the current session Canvas through a safe structured operation.
 
@@ -1300,8 +1329,8 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
   { name: 'video_get_timeline', description: TOOL_DESCRIPTIONS.video_get_timeline, inputSchema: VideoGetTimelineSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoGetTimeline },
   { name: 'video_get_media', description: TOOL_DESCRIPTIONS.video_get_media, inputSchema: VideoGetMediaSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoGetMedia },
-  { name: 'video_inspect_timeline', description: TOOL_DESCRIPTIONS.video_inspect_timeline, inputSchema: VideoInspectTimelineSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoInspectTimeline },
-  { name: 'video_inspect_media', description: TOOL_DESCRIPTIONS.video_inspect_media, inputSchema: VideoInspectMediaSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoInspectMedia },
+  { name: 'video_inspect_timeline', description: TOOL_DESCRIPTIONS.video_inspect_timeline, inputSchema: VideoInspectTimelineSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoInspectTimeline },
+  { name: 'video_inspect_media', description: TOOL_DESCRIPTIONS.video_inspect_media, inputSchema: VideoInspectMediaSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoInspectMedia },
   { name: 'video_project_snapshot', description: TOOL_DESCRIPTIONS.video_project_snapshot, inputSchema: VideoProjectSnapshotSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectSnapshot },
   { name: 'video_project_diff', description: TOOL_DESCRIPTIONS.video_project_diff, inputSchema: VideoProjectDiffSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVideoProjectDiff },
   { name: 'video_project_undo', description: TOOL_DESCRIPTIONS.video_project_undo, inputSchema: VideoProjectUndoSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUndo },
@@ -1310,6 +1339,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'video_clip_add', description: TOOL_DESCRIPTIONS.video_clip_add, inputSchema: VideoClipAddSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipAdd },
   { name: 'video_clip_edit', description: TOOL_DESCRIPTIONS.video_clip_edit, inputSchema: VideoClipEditSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipEdit },
   { name: 'video_clip_adjust', description: TOOL_DESCRIPTIONS.video_clip_adjust, inputSchema: VideoClipAdjustSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipAdjust },
+  { name: 'video_clip_transform', description: TOOL_DESCRIPTIONS.video_clip_transform, inputSchema: VideoClipTransformSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoClipTransform },
   { name: 'video_export', description: TOOL_DESCRIPTIONS.video_export, inputSchema: VideoExportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoExport },
   { name: 'visual_surface_state', description: TOOL_DESCRIPTIONS.visual_surface_state, inputSchema: VisualSurfaceStateSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleVisualSurfaceState },
   { name: 'visual_surface', description: TOOL_DESCRIPTIONS.visual_surface, inputSchema: VisualSurfaceSchema, executionMode: 'registry', safeMode: 'block', handler: handleVisualSurface },

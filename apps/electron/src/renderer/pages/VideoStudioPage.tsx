@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Download, Eye, EyeOff, FileVideo, FolderOpen, History, Layers, Link, Loader2, Lock, Magnet, MoreHorizontal, Pause, Play, Plus, Redo2, RefreshCw, Save, Scissors, Send, ShieldCheck, SlidersHorizontal, Trash2, Type, Undo2, Unlock, Upload, Volume2, VolumeX, X } from 'lucide-react'
+import { AlertTriangle, Bot, ChevronDown, ClipboardCheck, Code2, Copy, Crop, Download, Eye, EyeOff, FileVideo, Film, FolderOpen, History, Layers, Link, Loader2, Lock, Magnet, MoreHorizontal, Move, Music, Pause, Play, Plus, Redo2, RefreshCw, RotateCw, Save, Scissors, Send, ShieldCheck, SlidersHorizontal, Trash2, Type, Undo2, Unlock, Upload, Volume2, VolumeX, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, StyledDropdownMenuContent, StyledDropdownMenuItem, StyledDropdownMenuSeparator } from '@/components/ui/styled-dropdown'
@@ -23,6 +23,7 @@ const ASPECT_PRESETS: Array<{ value: Exclude<VideoAspectRatio, 'custom'>; label:
 
 type AspectSelectValue = VideoAspectRatio
 type LookPreset = 'neutral' | 'clean' | 'cinematic' | 'warm' | 'punchy' | 'black-and-white'
+type MediaFilter = 'all' | 'video' | 'audio' | 'image'
 
 const LOOK_PRESETS: Array<{ value: LookPreset; label: string; adjustments: NonNullable<VideoClip['adjustments']> }> = [
   { value: 'neutral', label: 'Neutral', adjustments: {} },
@@ -94,6 +95,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [agentPanelOpen, setAgentPanelOpen] = React.useState(false)
   const [agentPrompt, setAgentPrompt] = React.useState('')
   const [agentRunning, setAgentRunning] = React.useState(false)
+  const [mediaFilter, setMediaFilter] = React.useState<MediaFilter>('all')
   const [error, setError] = React.useState<string | null>(null)
   const previewVideoRef = React.useRef<HTMLVideoElement | null>(null)
   const timelineScrubRef = React.useRef<HTMLDivElement | null>(null)
@@ -282,7 +284,9 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   }, [manifest, outputId, selectedClip?.mediaId, selectedClipMedia, workspaceId])
 
   const selectedClipSupportsLook = selectedClipMedia?.type === 'video' || selectedClipMedia?.type === 'image'
+  const selectedClipSupportsTransform = selectedClipSupportsLook
   const selectedLookValue = selectedClip?.adjustments ? selectedClip.adjustments.preset ?? 'manual' : 'neutral'
+  const selectedTransform = normalizeClipTransform(selectedClip)
   const previewLook = selectedClipSupportsLook ? previewLookStyle(selectedClip?.adjustments) : null
   const previewUrl = clipPreviewUrl ?? renderPreviewUrl
   const previewStatus = clipPreviewUrl ? 'selected clip' : renderPreviewUrl ? 'latest export' : 'not rendered'
@@ -430,6 +434,44 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     })
   }, [selectedClip, updateSelectedClip])
 
+  const updateSelectedClipTransform = React.useCallback((patch: Partial<NonNullable<VideoClip['transform']>>) => {
+    updateSelectedClip({
+      transform: {
+        ...normalizeClipTransform(selectedClip),
+        ...patch,
+      },
+    })
+  }, [selectedClip, updateSelectedClip])
+
+  const applyTransformPreset = React.useCallback((preset: 'center' | 'pip' | 'split-left' | 'split-right') => {
+    const width = project?.settings?.width ?? 1080
+    const height = project?.settings?.height ?? 1920
+    if (preset === 'center') {
+      updateSelectedClip({ transform: { x: 0, y: 0, scale: 1, rotateDeg: 0 }, opacity: 1, keyframes: undefined })
+      return
+    }
+    if (preset === 'pip') {
+      updateSelectedClip({ transform: { x: Math.round(width * 0.3), y: Math.round(height * 0.3), scale: 0.32, rotateDeg: 0 } })
+      return
+    }
+    if (preset === 'split-left') {
+      updateSelectedClip({ transform: { x: -Math.round(width * 0.25), y: 0, scale: 0.5, rotateDeg: 0 } })
+      return
+    }
+    updateSelectedClip({ transform: { x: Math.round(width * 0.25), y: 0, scale: 0.5, rotateDeg: 0 } })
+  }, [project?.settings?.height, project?.settings?.width, updateSelectedClip])
+
+  const applySlideKeyframes = React.useCallback(() => {
+    if (!selectedClip) return
+    const width = project?.settings?.width ?? 1080
+    updateSelectedClip({
+      keyframes: [
+        { timeMs: 0, property: 'x', value: -Math.round(width * 0.18), easing: 'linear' },
+        { timeMs: Math.max(1, selectedClip.durationMs ?? 1000), property: 'x', value: Math.round(width * 0.18), easing: 'linear' },
+      ],
+    })
+  }, [project?.settings?.width, selectedClip, updateSelectedClip])
+
   const toggleClipDisabled = React.useCallback((clipId: string) => {
     if (!canEditClip(clipId)) {
       toast.error('Unlock the track before editing this clip.')
@@ -560,6 +602,45 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     if (createdId) setSelectedClipId(createdId)
     toast.success('Take stacked on a new video lane.')
   }, [canEditClip, selectedClip, updateProject])
+
+  const addMediaToTimeline = React.useCallback((item: VideoProject['media'][number]) => {
+    if (!['video', 'audio', 'image'].includes(item.type)) {
+      toast.error('This media type is not timeline-ready yet.')
+      return
+    }
+    let createdId: string | null = null
+    updateProject((current) => {
+      const trackType = item.type === 'audio' ? 'audio' : 'video'
+      const tracks = current.timeline?.tracks ?? []
+      const targetTrack = tracks.find((track) => track.type === trackType && track.locked !== true)
+      if (!targetTrack) return current
+      const durationMs = Math.max(MIN_CLIP_DURATION_MS, item.durationMs ?? (item.type === 'image' ? 3000 : 1000))
+      const startMs = clampClipMoveStart(targetTrack.clips ?? [], crypto.randomUUID(), playheadMs, durationMs)
+      createdId = crypto.randomUUID()
+      const clip: VideoClip = {
+        id: createdId,
+        mediaId: item.id,
+        type: item.type === 'audio' ? 'audio' : item.type === 'image' ? 'image' : 'video',
+        startMs,
+        durationMs,
+        sourceInMs: item.type === 'image' ? undefined : 0,
+        sourceOutMs: item.type === 'image' ? undefined : durationMs,
+        label: item.label,
+      }
+      const nextTracks = tracks.map((track) => track.id === targetTrack.id
+        ? { ...track, clips: sortClipsByStart([...(track.clips ?? []), clip]) }
+        : track)
+      return {
+        ...current,
+        timeline: {
+          ...current.timeline,
+          durationMs: Math.max(current.timeline?.durationMs ?? 0, startMs + durationMs),
+          tracks: nextTracks,
+        },
+      }
+    })
+    if (createdId) setSelectedClipId(createdId)
+  }, [playheadMs, updateProject])
 
   const changeAspectRatio = React.useCallback((aspectRatio: AspectSelectValue) => {
     if (aspectRatio === 'custom') return
@@ -892,6 +973,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const summary = summarizeVideoProject(project)
   const tracks = project.timeline?.tracks ?? []
   const media = project.media ?? []
+  const filteredMedia = media.filter((item) => mediaFilter === 'all' || item.type === mediaFilter)
   const duration = project.timeline?.durationMs ?? 0
   const contextClip = clipContextMenu
     ? tracks.flatMap((track) => track.clips ?? []).find((clip) => clip.id === clipContextMenu.clipId) ?? null
@@ -1009,14 +1091,50 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 <Upload className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="grid gap-2 p-2">
-              {media.length === 0 ? <EmptyText>No media yet</EmptyText> : media.map((item) => (
-                <div key={item.id} className="group rounded-md border border-white/[0.06] bg-[#222] p-2 hover:border-[#18c7d4]/40">
-                  <div className="aspect-video rounded bg-black/70" />
-                  <div className="mt-2 truncate text-[12px] font-medium text-white/78">{item.label ?? item.id}</div>
-                  <div className="truncate text-[11px] text-white/36">{item.type ?? 'media'}</div>
-                </div>
+            <div className="flex gap-1 border-b border-white/[0.06] p-2">
+              {(['all', 'video', 'audio', 'image'] as const).map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setMediaFilter(filter)}
+                  className={`h-7 rounded-md px-2 text-[11px] capitalize ${mediaFilter === filter ? 'bg-[#18c7d4]/16 text-[#75f4ff]' : 'bg-white/[0.045] text-white/46 hover:bg-white/[0.08] hover:text-white/72'}`}
+                >
+                  {filter}
+                </button>
               ))}
+            </div>
+            <div className="grid max-h-full gap-2 overflow-auto p-2">
+              {media.length === 0 ? <EmptyText>No media yet</EmptyText> : filteredMedia.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => addMediaToTimeline(item)}
+                  className="group rounded-md border border-white/[0.06] bg-[#202020] p-2 text-left hover:border-[#18c7d4]/40 hover:bg-[#242424]"
+                >
+                  <div className="relative aspect-video overflow-hidden rounded bg-black/70">
+                    {item.thumbnailPath ? (
+                      <img src={thumbnailUrl(item.thumbnailPath)} alt="" className="h-full w-full object-cover" />
+                    ) : item.waveformPath ? (
+                      <img src={thumbnailUrl(item.waveformPath)} alt="" className="h-full w-full object-cover opacity-90" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-white/28">
+                        {item.type === 'audio' ? <Music className="h-5 w-5" /> : <Film className="h-5 w-5" />}
+                      </div>
+                    )}
+                    <span className="absolute left-1.5 top-1.5 rounded bg-black/60 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-white/68">{item.type}</span>
+                    <span className="absolute bottom-1.5 right-1.5 flex h-5 w-5 items-center justify-center rounded bg-[#18c7d4] text-black opacity-0 transition-opacity group-hover:opacity-100">
+                      <Plus className="h-3 w-3" />
+                    </span>
+                  </div>
+                  <div className="mt-2 truncate text-[12px] font-medium text-white/80">{item.label ?? item.id}</div>
+                  <div className="mt-1 flex flex-wrap gap-1 text-[10px] text-white/38">
+                    {typeof item.durationMs === 'number' && <span className="rounded bg-white/[0.055] px-1.5 py-0.5">{formatDuration(item.durationMs)}</span>}
+                    {typeof item.width === 'number' && typeof item.height === 'number' && <span className="rounded bg-white/[0.055] px-1.5 py-0.5">{item.width}x{item.height}</span>}
+                    {typeof item.fps === 'number' && <span className="rounded bg-white/[0.055] px-1.5 py-0.5">{item.fps} fps</span>}
+                  </div>
+                </button>
+              ))}
+              {media.length > 0 && filteredMedia.length === 0 && <EmptyText>No {mediaFilter} media</EmptyText>}
             </div>
           </aside>
 
@@ -1104,6 +1222,46 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
               {selectedClip ? (
               <div className="mt-2 grid gap-2">
                 <Field placeholder="Clip Name" value={selectedClip.label ?? ''} onChange={(value) => updateSelectedClip({ label: value })} />
+                {selectedClipSupportsTransform && (
+                  <div className="grid gap-1.5 rounded-md border border-white/[0.07] bg-[#111214]/80 p-2">
+                    <PanelTitle title="Transform" value={selectedClip.keyframes?.length ? `${selectedClip.keyframes.length} keys` : 'rendered'} />
+                    <div className="grid grid-cols-4 gap-1">
+                      <button type="button" onClick={() => applyTransformPreset('center')} className="h-7 rounded-md bg-white/[0.055] text-[11px] text-white/58 hover:bg-white/[0.09] hover:text-white">Center</button>
+                      <button type="button" onClick={() => applyTransformPreset('pip')} className="h-7 rounded-md bg-white/[0.055] text-[11px] text-white/58 hover:bg-white/[0.09] hover:text-white">PiP</button>
+                      <button type="button" onClick={() => applyTransformPreset('split-left')} className="h-7 rounded-md bg-white/[0.055] text-[11px] text-white/58 hover:bg-white/[0.09] hover:text-white">Left</button>
+                      <button type="button" onClick={() => applyTransformPreset('split-right')} className="h-7 rounded-md bg-white/[0.055] text-[11px] text-white/58 hover:bg-white/[0.09] hover:text-white">Right</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <NumberField label="X" value={selectedTransform.x} onChange={(value) => updateSelectedClipTransform({ x: Math.round(value) })} />
+                      <NumberField label="Y" value={selectedTransform.y} onChange={(value) => updateSelectedClipTransform({ y: Math.round(value) })} />
+                    </div>
+                    <AdjustmentField label="Scale" min={0.05} max={2.5} step={0.01} value={selectedTransform.scale} onChange={(value) => updateSelectedClipTransform({ scale: value })} />
+                    <AdjustmentField label="Opacity" min={0} max={1} step={0.01} value={selectedClip.opacity ?? 1} onChange={(value) => updateSelectedClip({ opacity: value })} />
+                    <label className="grid gap-0.5 rounded-md px-1 py-0.5 text-[11px] text-white/46">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 font-medium text-white/58"><RotateCw className="h-3 w-3" /> Rotation</span>
+                        <span className="min-w-11 rounded border border-white/[0.055] bg-black/30 px-1.5 py-0.5 text-right text-[10px] tabular-nums text-white/62">{selectedTransform.rotateDeg.toFixed(0)} deg</span>
+                      </span>
+                      <input type="range" min="-180" max="180" step="1" value={selectedTransform.rotateDeg} onChange={(event) => updateSelectedClipTransform({ rotateDeg: Number(event.target.value) })} className="video-adjust-slider h-3 w-full appearance-none bg-transparent" style={{ '--video-adjust-fill': `${((selectedTransform.rotateDeg + 180) / 360) * 100}%` } as React.CSSProperties} />
+                    </label>
+                    <div className="grid gap-1 rounded-md border border-white/[0.055] bg-black/20 p-1.5">
+                      <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-white/38">
+                        <span className="flex items-center gap-1.5"><Crop className="h-3 w-3" /> Crop</span>
+                        <button type="button" onClick={() => updateSelectedClip({ crop: undefined })} className="text-white/42 hover:text-white">Reset</button>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1">
+                        <NumberField compact label="X" value={selectedClip.crop?.x ?? 0} onChange={(value) => updateSelectedClip({ crop: { x: Math.max(0, Math.round(value)), y: selectedClip.crop?.y ?? 0, width: selectedClip.crop?.width ?? selectedClipMedia?.width ?? 100, height: selectedClip.crop?.height ?? selectedClipMedia?.height ?? 100 } })} />
+                        <NumberField compact label="Y" value={selectedClip.crop?.y ?? 0} onChange={(value) => updateSelectedClip({ crop: { x: selectedClip.crop?.x ?? 0, y: Math.max(0, Math.round(value)), width: selectedClip.crop?.width ?? selectedClipMedia?.width ?? 100, height: selectedClip.crop?.height ?? selectedClipMedia?.height ?? 100 } })} />
+                        <NumberField compact label="W" value={selectedClip.crop?.width ?? selectedClipMedia?.width ?? 100} onChange={(value) => updateSelectedClip({ crop: { x: selectedClip.crop?.x ?? 0, y: selectedClip.crop?.y ?? 0, width: Math.max(1, Math.round(value)), height: selectedClip.crop?.height ?? selectedClipMedia?.height ?? 100 } })} />
+                        <NumberField compact label="H" value={selectedClip.crop?.height ?? selectedClipMedia?.height ?? 100} onChange={(value) => updateSelectedClip({ crop: { x: selectedClip.crop?.x ?? 0, y: selectedClip.crop?.y ?? 0, width: selectedClip.crop?.width ?? selectedClipMedia?.width ?? 100, height: Math.max(1, Math.round(value)) } })} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                      <button type="button" onClick={applySlideKeyframes} className="flex h-7 items-center justify-center gap-1.5 rounded-md bg-white/[0.055] text-[11px] text-white/58 hover:bg-white/[0.09] hover:text-white"><Move className="h-3 w-3" /> Slide</button>
+                      <button type="button" onClick={() => updateSelectedClip({ keyframes: undefined })} className="h-7 rounded-md bg-white/[0.055] text-[11px] text-white/58 hover:bg-white/[0.09] hover:text-white">Clear keys</button>
+                    </div>
+                  </div>
+                )}
                 {selectedClipSupportsLook && (
                   <div className="grid gap-1.5 rounded-md border border-white/[0.07] bg-[#111214]/80 p-2">
                     <PanelTitle title="Look" value={selectedLookValue} />
@@ -1652,6 +1810,19 @@ function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
+function thumbnailUrl(filePath: string): string {
+  return `thumbnail://thumb/${encodeURIComponent(filePath)}`
+}
+
+function normalizeClipTransform(clip: VideoClip | null | undefined): NonNullable<VideoClip['transform']> {
+  return {
+    x: typeof clip?.transform?.x === 'number' ? clip.transform.x : 0,
+    y: typeof clip?.transform?.y === 'number' ? clip.transform.y : 0,
+    scale: typeof clip?.transform?.scale === 'number' ? clip.transform.scale : 1,
+    rotateDeg: typeof clip?.transform?.rotateDeg === 'number' ? clip.transform.rotateDeg : 0,
+  }
+}
+
 function clampSourceIn(value: number, sourceOutMs: number | undefined): number {
   const min = 0
   const max = sourceOutMs === undefined ? Number.POSITIVE_INFINITY : Math.max(0, sourceOutMs - MIN_CLIP_DURATION_MS)
@@ -1865,9 +2036,9 @@ function IconButton({ label, onClick, disabled = false, children }: { label: str
 
 function NumberField({ label, value, onChange, compact = false }: { label: string; value: number; onChange: (value: number) => void; compact?: boolean }) {
   return (
-    <label className={`${compact ? 'flex items-center gap-1' : 'grid gap-1'} text-xs text-white/42`}>
+    <label className={`${compact ? 'grid gap-1' : 'grid gap-1'} text-xs text-white/42`}>
       {label}
-      <input type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} className={`${compact ? 'w-24' : 'w-full'} h-8 rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50`} />
+      <input type="number" value={value} onChange={(event) => onChange(Number(event.target.value))} className="h-8 w-full rounded-md border border-white/[0.08] bg-black/35 px-2 text-sm text-white/72 outline-none focus:border-[#f97316]/50" />
     </label>
   )
 }

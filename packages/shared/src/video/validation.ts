@@ -58,6 +58,50 @@ function validateClip(clip: VideoClip, path: string, errors: VideoValidationIssu
   if (clip.fadeOutMs !== undefined && !isFiniteNonNegativeNumber(clip.fadeOutMs)) {
     push(errors, `${path}.fadeOutMs`, 'fadeOutMs must be a non-negative number.');
   }
+  if (clip.opacity !== undefined && (typeof clip.opacity !== 'number' || !Number.isFinite(clip.opacity) || clip.opacity < 0 || clip.opacity > 1)) {
+    push(errors, `${path}.opacity`, 'Clip opacity must be between 0 and 1.');
+  }
+  if (clip.transform !== undefined) {
+    if (!isRecord(clip.transform)) {
+      push(errors, `${path}.transform`, 'Clip transform must be an object.');
+    } else {
+      for (const key of ['x', 'y', 'scale', 'rotateDeg'] as const) {
+        const value = clip.transform[key];
+        if (typeof value !== 'number' || !Number.isFinite(value)) push(errors, `${path}.transform.${key}`, `${key} must be a finite number.`);
+      }
+      if (typeof clip.transform.scale === 'number' && (clip.transform.scale < 0.05 || clip.transform.scale > 5)) {
+        push(errors, `${path}.transform.scale`, 'scale must be between 0.05 and 5.');
+      }
+    }
+  }
+  if (clip.crop !== undefined) {
+    if (!isRecord(clip.crop)) {
+      push(errors, `${path}.crop`, 'Clip crop must be an object.');
+    } else {
+      for (const key of ['x', 'y', 'width', 'height'] as const) {
+        const value = clip.crop[key];
+        if (typeof value !== 'number' || !Number.isFinite(value)) push(errors, `${path}.crop.${key}`, `${key} must be a finite number.`);
+      }
+      if (clip.crop.x < 0 || clip.crop.y < 0) push(errors, `${path}.crop`, 'crop x/y must be non-negative.');
+      if (clip.crop.width <= 0 || clip.crop.height <= 0) push(errors, `${path}.crop`, 'crop width/height must be positive.');
+    }
+  }
+  if (clip.keyframes !== undefined) {
+    if (!Array.isArray(clip.keyframes)) {
+      push(errors, `${path}.keyframes`, 'Clip keyframes must be an array.');
+    } else {
+      clip.keyframes.forEach((keyframe, index) => {
+        const keyframePath = `${path}.keyframes[${index}]`;
+        if (!isRecord(keyframe)) {
+          push(errors, keyframePath, 'Keyframe must be an object.');
+          return;
+        }
+        if (!isFiniteNonNegativeNumber(keyframe.timeMs)) push(errors, `${keyframePath}.timeMs`, 'timeMs must be non-negative.');
+        if (keyframe.property !== 'x' && keyframe.property !== 'y') push(errors, `${keyframePath}.property`, 'property must be x or y.');
+        if (typeof keyframe.value !== 'number' || !Number.isFinite(keyframe.value)) push(errors, `${keyframePath}.value`, 'value must be a finite number.');
+      });
+    }
+  }
   if (clip.text && !isNonEmptyString(clip.text.text)) {
     push(errors, `${path}.text.text`, 'Text clips require non-empty text.');
   }
