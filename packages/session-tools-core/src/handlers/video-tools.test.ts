@@ -68,6 +68,22 @@ function hasFfmpeg(): boolean {
     && spawnSync('ffprobe', ['-version'], { encoding: 'utf-8' }).status === 0;
 }
 
+function sampleRgbPixel(videoPath: string, x: number, y: number, atSeconds: number): [number, number, number] {
+  const result = spawnSync('ffmpeg', [
+    '-v', 'error',
+    '-ss', String(atSeconds),
+    '-i', videoPath,
+    '-frames:v', '1',
+    '-vf', `crop=1:1:${x}:${y},format=rgb24`,
+    '-f', 'rawvideo',
+    '-',
+  ]);
+  if (result.status !== 0 || result.stdout.length < 3) {
+    throw new Error(result.stderr?.toString() || 'failed to sample video pixel');
+  }
+  return [result.stdout[0]!, result.stdout[1]!, result.stdout[2]!];
+}
+
 function meanVolumeDb(path: string): number {
   const result = spawnSync('ffmpeg', [
     '-v',
@@ -1254,7 +1270,7 @@ describe('video studio session tools', () => {
     const fixture = spawnSync('ffmpeg', [
       '-y',
       '-f', 'lavfi',
-      '-i', 'testsrc=size=320x180:rate=30',
+      '-i', 'color=c=red:s=320x180:r=30',
       '-t', '1',
       '-pix_fmt', 'yuv420p',
       mediaPath,
@@ -1300,6 +1316,10 @@ describe('video studio session tools', () => {
     const outputPath = (result.structuredContent as { outputPath: string }).outputPath;
     expect(existsSync(outputPath)).toBe(true);
     expect(readFileSync(outputPath).subarray(4, 8).toString()).toBe('ftyp');
+    const [red, green, blue] = sampleRgbPixel(outputPath, 535, 710, 0.033);
+    expect(red).toBeGreaterThan(120);
+    expect(green).toBeLessThan(80);
+    expect(blue).toBeLessThan(80);
     const project = JSON.parse(readFileSync(projectPath, 'utf-8')) as { agentEvents: Array<{ toolName: string }> };
     expect(project.agentEvents.some((event) => event.toolName === 'video_clip_transform')).toBe(true);
   });

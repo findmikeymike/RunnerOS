@@ -67,7 +67,7 @@ function validateClip(clip: VideoClip, path: string, errors: VideoValidationIssu
     } else {
       for (const key of ['x', 'y', 'scale', 'rotateDeg'] as const) {
         const value = clip.transform[key];
-        if (typeof value !== 'number' || !Number.isFinite(value)) push(errors, `${path}.transform.${key}`, `${key} must be a finite number.`);
+        if (value !== undefined && (typeof value !== 'number' || !Number.isFinite(value))) push(errors, `${path}.transform.${key}`, `${key} must be a finite number.`);
       }
       if (typeof clip.transform.scale === 'number' && (clip.transform.scale < 0.05 || clip.transform.scale > 5)) {
         push(errors, `${path}.transform.scale`, 'scale must be between 0.05 and 5.');

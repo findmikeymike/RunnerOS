@@ -1131,7 +1131,8 @@ function keyframeExpression(
     : [];
   if (frames.length === 0) return ffmpegExprNumber(fallback);
 
-  const uniqueFrames = [{ timeMs: 0, value: fallback }, ...frames]
+  const hasExplicitZeroFrame = frames.some((frame) => frame.timeMs === 0);
+  const uniqueFrames = [...(hasExplicitZeroFrame ? [] : [{ timeMs: 0, value: fallback }]), ...frames]
     .filter((frame, index, items) => index === items.findIndex((item) => item.timeMs === frame.timeMs))
     .sort((a, b) => a.timeMs - b.timeMs);
   if (uniqueFrames.length === 1) return ffmpegExprNumber(uniqueFrames[0]!.value);

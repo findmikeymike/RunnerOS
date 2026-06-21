@@ -288,6 +288,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const selectedLookValue = selectedClip?.adjustments ? selectedClip.adjustments.preset ?? 'manual' : 'neutral'
   const selectedTransform = normalizeClipTransform(selectedClip)
   const previewLook = selectedClipSupportsLook ? previewLookStyle(selectedClip?.adjustments) : null
+  const previewTransform = selectedClipSupportsTransform ? previewTransformStyle(selectedClip) : null
   const previewUrl = clipPreviewUrl ?? renderPreviewUrl
   const previewStatus = clipPreviewUrl ? 'selected clip' : renderPreviewUrl ? 'latest export' : 'not rendered'
 
@@ -1163,8 +1164,9 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                       onPause={() => setIsPreviewPlaying(false)}
                       onEnded={() => setIsPreviewPlaying(false)}
                       className="h-full w-full object-contain"
-                      style={previewLook?.videoStyle}
+                      style={{ ...(previewLook?.videoStyle ?? {}), ...(clipPreviewUrl ? previewTransform?.videoStyle ?? {} : {}) }}
                     />
+                    {clipPreviewUrl && previewTransform?.cropOverlayStyle ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 border border-[#18c7d4]/35" style={previewTransform.cropOverlayStyle} /> : null}
                     {previewLook?.grainOpacity ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 mix-blend-overlay" style={previewLook.grainStyle} /> : null}
                   </div>
                 ) : (
@@ -1848,6 +1850,27 @@ function previewLookStyle(adjustments: VideoClip['adjustments']): { videoStyle: 
       backgroundSize: '5px 5px, 7px 7px',
     },
     grainOpacity,
+  }
+}
+
+function previewTransformStyle(clip: VideoClip | null | undefined): { videoStyle: React.CSSProperties; cropOverlayStyle?: React.CSSProperties } | null {
+  if (!clip) return null
+  const transform = normalizeClipTransform(clip)
+  const opacity = clampNumber(typeof clip.opacity === 'number' ? clip.opacity : 1, 0, 1)
+  const hasTransform = transform.x !== 0 || transform.y !== 0 || transform.scale !== 1 || transform.rotateDeg !== 0 || opacity !== 1
+  const hasCrop = Boolean(clip.crop)
+  if (!hasTransform && !hasCrop) return null
+  return {
+    videoStyle: {
+      opacity,
+      transform: `translate(${transform.x / 6}px, ${transform.y / 6}px) scale(${transform.scale}) rotate(${transform.rotateDeg}deg)`,
+      transformOrigin: 'center center',
+      transition: 'transform 120ms ease, opacity 120ms ease',
+    },
+    cropOverlayStyle: hasCrop ? {
+      inset: '12%',
+      borderStyle: 'dashed',
+    } : undefined,
   }
 }
 

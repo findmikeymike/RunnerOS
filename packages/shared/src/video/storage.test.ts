@@ -8,6 +8,7 @@ import {
   createRunnerVideoProject,
   migrateVideoProject,
   readVideoProject,
+  type VideoClip,
   upsertVideoMediaAsset,
   validateRunnerVideoProject,
   writeVideoProject,
@@ -60,6 +61,21 @@ describe('Runner video project storage', () => {
 
     expect(validation.ok).toBe(false);
     expect(validation.errors[0]?.message).toContain('Referenced media');
+  });
+
+  test('accepts partial clip transforms with renderer defaults', () => {
+    const project = createRunnerVideoProject({ title: 'Partial Transform', workspaceId: 'workspace-1' });
+    project.timeline.tracks[0]!.clips.push({
+      id: 'clip-1',
+      type: 'video',
+      startMs: 0,
+      durationMs: 1000,
+      transform: { x: 24 },
+    } as VideoClip);
+
+    const validation = validateRunnerVideoProject(project);
+
+    expect(validation.ok).toBe(true);
   });
 
   test('tracks media, versions, and agent events', () => {
