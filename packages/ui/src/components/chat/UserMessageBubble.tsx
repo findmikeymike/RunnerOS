@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Clock } from 'lucide-react'
+import { Clock, ExternalLink } from 'lucide-react'
 import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
 import { normalizePath } from '@craft-agent/core/utils'
 import { cn } from '../../lib/utils'
@@ -321,6 +321,10 @@ export interface UserMessageBubbleProps {
   isQueued?: boolean
   /** Compact mode - reduces padding for popover embedding */
   compactMode?: boolean
+  /** Display intent for specialized system/user notices. */
+  displayIntent?: string
+  /** Open a delegated child session from a passive agent message. */
+  onOpenSubagentSession?: (sessionId: string) => void
 }
 
 /** Minimum visible duration of the "Queued" chip. Both backends ack
@@ -328,6 +332,11 @@ export interface UserMessageBubbleProps {
  * flash too briefly to register. Hold it long enough for the user to
  * actually read it. */
 const QUEUED_MIN_VISIBLE_MS = 2500
+
+function extractChildSessionId(content: string): string | null {
+  const match = content.match(/^childSessionId:\s*([^\s]+)\s*$/m)
+  return match?.[1] ?? null
+}
 
 export function UserMessageBubble({
   content,
@@ -338,6 +347,8 @@ export function UserMessageBubble({
   badges,
   isQueued,
   compactMode,
+  displayIntent,
+  onOpenSubagentSession,
 }: UserMessageBubbleProps) {
   const { t } = useTranslation()
   const hasAttachments = attachments && attachments.length > 0
@@ -395,6 +406,9 @@ export function UserMessageBubble({
   const inlineBadges = badges?.filter(b => !isEditRequestBadge(b)) ?? []
   const hasEditRequestBadges = editRequestBadges.length > 0
   const hasInlineBadges = inlineBadges.length > 0
+  const childSessionId = displayIntent === 'agent-message-passive'
+    ? extractChildSessionId(content)
+    : null
 
   // Strip edit_request content from the displayed text
   // Each badge has start/end positions marking where to remove content
@@ -514,6 +528,16 @@ export function UserMessageBubble({
           )
         }
       </div>
+      {childSessionId && onOpenSubagentSession && (
+        <button
+          type="button"
+          onClick={() => onOpenSubagentSession(childSessionId)}
+          className="inline-flex items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 py-1.5 text-xs text-white/62 transition-colors hover:bg-white/[0.075] hover:text-white/82"
+        >
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+          <span>Open subagent</span>
+        </button>
+      )}
     </div>
   )
 }

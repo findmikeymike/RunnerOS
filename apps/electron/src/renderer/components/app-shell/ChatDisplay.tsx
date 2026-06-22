@@ -510,6 +510,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
   const currentWorkspaceId = workspaceId ?? session?.workspaceId
   const { outputs, loading: outputsLoading } = useOutputs(currentWorkspaceId)
+  const openSubagentSession = useCallback((childSessionId: string) => {
+    if (!currentWorkspaceId) return
+    void window.electronAPI.openSessionInNewWindow(currentWorkspaceId, childSessionId)
+  }, [currentWorkspaceId])
   const activeSessionVisualSurface =
     visualSidecar.activeSurface?.sessionId === session?.id ? visualSidecar.activeSurface : null
   const showRollupVisualSurface =
@@ -1630,6 +1634,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             onOpenUrl={onOpenUrl}
                             sessionId={session?.id}
                             compactMode={compactMode}
+                            onOpenSubagentSession={openSubagentSession}
                           />
                         </div>
                       )
@@ -2178,6 +2183,8 @@ interface MessageBubbleProps {
   compactMode?: boolean
   /** Callback to resend the user message that preceded an error */
   onRetry?: () => void
+  /** Open a hidden delegated child session. */
+  onOpenSubagentSession?: (sessionId: string) => void
 }
 
 /**
@@ -2265,6 +2272,7 @@ function MessageBubble({
   onPopOut,
   compactMode,
   onRetry,
+  onOpenSubagentSession,
 }: MessageBubbleProps) {
   const { t } = useTranslation()
 
@@ -2284,6 +2292,8 @@ function MessageBubble({
         onUrlClick={onOpenUrl}
         onFileClick={onOpenFile}
         compactMode={compactMode}
+        displayIntent={message.displayIntent}
+        onOpenSubagentSession={onOpenSubagentSession}
       />
     )
   }
@@ -2437,7 +2447,9 @@ const MemoizedMessageBubble = React.memo(MessageBubble, (prev, next) => {
     prev.message.id === next.message.id &&
     prev.message.content === next.message.content &&
     prev.message.role === next.message.role &&
+    prev.message.displayIntent === next.message.displayIntent &&
     prev.sessionId === next.sessionId &&
-    prev.compactMode === next.compactMode
+    prev.compactMode === next.compactMode &&
+    prev.onOpenSubagentSession === next.onOpenSubagentSession
   )
 })
