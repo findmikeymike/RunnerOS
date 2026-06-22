@@ -75,7 +75,6 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [rawJson, setRawJson] = React.useState('')
   const [selectedClipId, setSelectedClipId] = React.useState<string | null>(null)
   const [renderPreviewUrl, setRenderPreviewUrl] = React.useState<string | null>(null)
-  const [clipPreviewUrl, setClipPreviewUrl] = React.useState<string | null>(null)
   const [playheadMs, setPlayheadMs] = React.useState(0)
   const [isPreviewPlaying, setIsPreviewPlaying] = React.useState(false)
   const [timelineZoom, setTimelineZoom] = React.useState(1)
@@ -99,8 +98,6 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [error, setError] = React.useState<string | null>(null)
   const previewVideoRef = React.useRef<HTMLVideoElement | null>(null)
   const timelineScrubRef = React.useRef<HTMLDivElement | null>(null)
-  const selectedClipRef = React.useRef<VideoClip | null>(null)
-  const clipPreviewActiveRef = React.useRef(false)
   const hasLocalEditsRef = React.useRef(false)
   const timelineDragRef = React.useRef<TimelineDragState | null>(null)
   const timelineDurationMs = project?.timeline?.durationMs ?? 0
@@ -198,11 +195,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     const clamped = clampNumber(Number.isFinite(nextMs) ? nextMs : 0, 0, timelineDurationMs)
     setPlayheadMs(Math.round(clamped))
     if (seekPreview && previewVideoRef.current) {
-      const selected = selectedClipRef.current
-      const previewMs = clipPreviewActiveRef.current && selected
-        ? clampNumber(clamped - (selected.startMs ?? 0) + (selected.sourceInMs ?? 0), 0, selected.durationMs ?? timelineDurationMs)
-        : clamped
-      previewVideoRef.current.currentTime = previewMs / 1000
+      previewVideoRef.current.currentTime = clamped / 1000
     }
   }, [timelineDurationMs])
 
@@ -214,11 +207,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   }, [setPlayheadPosition, timelineZoom])
 
   const updatePlayheadFromPreviewTime = React.useCallback((videoTimeMs: number) => {
-    const selected = selectedClipRef.current
-    const timelineMs = clipPreviewActiveRef.current && selected
-      ? (selected.startMs ?? 0) + Math.max(0, videoTimeMs - (selected.sourceInMs ?? 0))
-      : videoTimeMs
-    setPlayheadMs(Math.round(clampNumber(timelineMs, 0, timelineDurationMs)))
+    setPlayheadMs(Math.round(clampNumber(videoTimeMs, 0, timelineDurationMs)))
   }, [timelineDurationMs])
 
   const togglePreviewPlayback = React.useCallback(() => {
@@ -258,43 +247,12 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     return (project.media ?? []).find((item) => item.id === selectedClip.mediaId) ?? null
   }, [project, selectedClip?.mediaId])
 
-  React.useEffect(() => {
-    selectedClipRef.current = selectedClip
-  }, [selectedClip])
-
-  React.useEffect(() => {
-    let cancelled = false
-    async function loadSelectedClipPreview() {
-      setClipPreviewUrl(null)
-      if (!manifest || !selectedClipMedia || !selectedClip?.mediaId) return
-      if (selectedClipMedia.type !== 'video') return
-      const mediaAsset = manifest.assets.find((asset) => asset.id === `video-media-${selectedClip.mediaId}`)
-      if (!mediaAsset) return
-      try {
-        const url = await window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, mediaAsset.id)
-        if (!cancelled) setClipPreviewUrl(url)
-      } catch {
-        if (!cancelled) setClipPreviewUrl(null)
-      }
-    }
-    void loadSelectedClipPreview()
-    return () => {
-      cancelled = true
-    }
-  }, [manifest, outputId, selectedClip?.mediaId, selectedClipMedia, workspaceId])
-
   const selectedClipSupportsLook = selectedClipMedia?.type === 'video' || selectedClipMedia?.type === 'image'
   const selectedClipSupportsTransform = selectedClipSupportsLook
   const selectedLookValue = selectedClip?.adjustments ? selectedClip.adjustments.preset ?? 'manual' : 'neutral'
   const selectedTransform = normalizeClipTransform(selectedClip)
-  const previewLook = selectedClipSupportsLook ? previewLookStyle(selectedClip?.adjustments) : null
-  const previewTransform = selectedClipSupportsTransform ? previewTransformStyle(selectedClip) : null
-  const previewUrl = clipPreviewUrl ?? renderPreviewUrl
-  const previewStatus = clipPreviewUrl ? 'selected clip' : renderPreviewUrl ? 'latest export' : 'not rendered'
-
-  React.useEffect(() => {
-    clipPreviewActiveRef.current = Boolean(clipPreviewUrl)
-  }, [clipPreviewUrl])
+  const previewUrl = renderPreviewUrl
+  const previewStatus = renderPreviewUrl ? 'latest export' : 'export needed'
 
   const updateProject = React.useCallback((updater: (current: VideoProject) => VideoProject, options: { recordHistory?: boolean } = {}) => {
     setProject((current) => {
@@ -502,36 +460,6 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       },
     }))
   }, [updateProject])
-
-  const updateSelectedClipDurationFromPreview = React.useCallback((durationMs: number) => {
-    if (!selectedClipId || !selectedClip?.mediaId || !Number.isFinite(durationMs) || durationMs <= 0) return
-    if (!canEditClip(selectedClipId)) return
-    const roundedDurationMs = Math.max(1, Math.round(durationMs))
-    if (Math.abs((selectedClip.durationMs ?? 0) - roundedDurationMs) < 250) return
-    updateProject((current) => {
-      const tracks = (current.timeline?.tracks ?? []).map((track) => ({
-        ...track,
-        clips: (track.clips ?? []).map((clip) => clip.id === selectedClipId
-          ? {
-              ...clip,
-              durationMs: roundedDurationMs,
-              sourceInMs: clip.sourceInMs ?? 0,
-              sourceOutMs: roundedDurationMs,
-            }
-          : clip),
-      }))
-      const media = (current.media ?? []).map((item) => item.id === selectedClip.mediaId ? { ...item, durationMs: roundedDurationMs } : item)
-      return {
-        ...current,
-        media,
-        timeline: {
-          ...current.timeline,
-          durationMs: computeTimelineDuration(tracks),
-          tracks,
-        },
-      }
-    }, { recordHistory: false })
-  }, [canEditClip, selectedClip, selectedClipId, updateProject])
 
   const applyLookPreset = React.useCallback((preset: LookPreset) => {
     const found = LOOK_PRESETS.find((item) => item.value === preset)
@@ -1157,17 +1085,11 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                       controls
                       onTimeUpdate={(event) => updatePlayheadFromPreviewTime(event.currentTarget.currentTime * 1000)}
                       onSeeked={(event) => updatePlayheadFromPreviewTime(event.currentTarget.currentTime * 1000)}
-                      onLoadedMetadata={(event) => {
-                        if (clipPreviewUrl) updateSelectedClipDurationFromPreview(event.currentTarget.duration * 1000)
-                      }}
                       onPlay={() => setIsPreviewPlaying(true)}
                       onPause={() => setIsPreviewPlaying(false)}
                       onEnded={() => setIsPreviewPlaying(false)}
                       className="h-full w-full object-contain"
-                      style={{ ...(previewLook?.videoStyle ?? {}), ...(clipPreviewUrl ? previewTransform?.videoStyle ?? {} : {}) }}
                     />
-                    {clipPreviewUrl && previewTransform?.cropOverlayStyle ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 border border-[#18c7d4]/35" style={previewTransform.cropOverlayStyle} /> : null}
-                    {previewLook?.grainOpacity ? <div aria-hidden="true" className="pointer-events-none absolute inset-0 mix-blend-overlay" style={previewLook.grainStyle} /> : null}
                   </div>
                 ) : (
                   <div className="text-sm text-white/38">Export once to preview rendered video</div>
@@ -1551,7 +1473,6 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 >
                   {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/26">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, timelineZoom, track, (clip) => {
                     setSelectedClipId(clip.id)
-                    setPlayheadPosition(clip.startMs ?? 0, true)
                   }, (event, clip, mode) => {
                     if (track.locked) return
                     event.preventDefault()
@@ -1829,49 +1750,6 @@ function clampSourceIn(value: number, sourceOutMs: number | undefined): number {
   const min = 0
   const max = sourceOutMs === undefined ? Number.POSITIVE_INFINITY : Math.max(0, sourceOutMs - MIN_CLIP_DURATION_MS)
   return clampNumber(Math.round(value), min, max)
-}
-
-function previewLookStyle(adjustments: VideoClip['adjustments']): { videoStyle: React.CSSProperties; grainStyle: React.CSSProperties; grainOpacity: number } | null {
-  if (!adjustments || !Object.keys(adjustments).some((key) => key !== 'preset')) return null
-  const exposure = clampNumber(adjustments.exposure ?? 0, -1, 1)
-  const highlights = clampNumber(adjustments.highlights ?? 0, -1, 1)
-  const shadows = clampNumber(adjustments.shadows ?? 0, -1, 1)
-  const contrast = clampNumber(adjustments.contrast ?? 1, 0, 3)
-  const saturation = clampNumber((adjustments.saturation ?? 1) + ((adjustments.temperature ?? 0) * 0.04) - Math.abs(adjustments.tint ?? 0) * 0.02, 0, 3)
-  const brightness = clampNumber(1 + exposure + (highlights * 0.08) + (shadows * 0.06), 0, 2)
-  const grainOpacity = clampNumber(adjustments.grain ?? 0, 0, 1) * 0.22
-  return {
-    videoStyle: {
-      filter: `brightness(${brightness.toFixed(3)}) contrast(${contrast.toFixed(3)}) saturate(${saturation.toFixed(3)})`,
-    },
-    grainStyle: {
-      opacity: grainOpacity,
-      backgroundImage: 'radial-gradient(circle at 20% 30%, rgba(255,255,255,0.55) 0 1px, transparent 1px), radial-gradient(circle at 70% 60%, rgba(0,0,0,0.45) 0 1px, transparent 1px)',
-      backgroundSize: '5px 5px, 7px 7px',
-    },
-    grainOpacity,
-  }
-}
-
-function previewTransformStyle(clip: VideoClip | null | undefined): { videoStyle: React.CSSProperties; cropOverlayStyle?: React.CSSProperties } | null {
-  if (!clip) return null
-  const transform = normalizeClipTransform(clip)
-  const opacity = clampNumber(typeof clip.opacity === 'number' ? clip.opacity : 1, 0, 1)
-  const hasTransform = transform.x !== 0 || transform.y !== 0 || transform.scale !== 1 || transform.rotateDeg !== 0 || opacity !== 1
-  const hasCrop = Boolean(clip.crop)
-  if (!hasTransform && !hasCrop) return null
-  return {
-    videoStyle: {
-      opacity,
-      transform: `translate(${transform.x / 6}px, ${transform.y / 6}px) scale(${transform.scale}) rotate(${transform.rotateDeg}deg)`,
-      transformOrigin: 'center center',
-      transition: 'transform 120ms ease, opacity 120ms ease',
-    },
-    cropOverlayStyle: hasCrop ? {
-      inset: '12%',
-      borderStyle: 'dashed',
-    } : undefined,
-  }
 }
 
 function timelinePixels(ms: number, zoom = 1): number {
