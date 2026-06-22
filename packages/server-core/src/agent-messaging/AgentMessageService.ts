@@ -35,6 +35,7 @@ export interface AgentMessageServiceDeps {
   getSessionToolUseSummary: (sessionId: string) => { count: number; names: string[] };
   getWorkspaceRootPath: (workspaceId: string) => string;
   resolveUsableSourceSlugs?: (workspaceId: string, sourceSlugs: string[]) => { usable: string[]; unavailable: string[] };
+  deliverPassiveMessage?: (sessionId: string, message: string) => Promise<void>;
   now?: () => string;
 }
 
@@ -145,6 +146,7 @@ export class AgentMessageService {
         maxTurns: input.maxTurns,
         maxDepth,
         depth,
+        background: input.background,
       },
       constraints: {
         sourceSlugs: input.sourceSlugs,
@@ -224,46 +226,22 @@ export class AgentMessageService {
 
       const prompt = buildDelegationPrompt(input, runtime);
       const sendPromise = this.deps.sendMessage(child.id, prompt, { skillSlugs: input.skillSlugs });
-      const sent = await timeout(sendPromise, input.timeoutSeconds * 1000);
+      const finish = () => this.finishDelegatedTurn({
+        receipt,
+        input,
+        runtime,
+        sendPromise,
+        started,
+        persist,
+        now,
+      });
 
-      if (sent.timedOut) {
-        await this.deps.abortSession(child.id);
-        void drainAfterAbort(sendPromise);
-        receipt.status = 'timed-out';
-        receipt.error = { code: 'timeout', message: `Delegated agent timed out after ${input.timeoutSeconds}s.` };
-        receipt.updatedAt = now();
-        receipt.completedAt = receipt.updatedAt;
-        persist();
+      if (input.background) {
+        void finish();
         return this.resultFromReceipt(receipt, started);
       }
 
-      const text = this.deps.getLastAssistantText(child.id);
-      let output: unknown = text;
-      if (input.outputSchema) {
-        const parsed = parseStructuredStepOutput(text, input.outputSchema);
-        if (!parsed.ok) {
-          receipt.status = 'failed';
-          receipt.error = { code: parsed.code, message: parsed.message };
-          receipt.updatedAt = now();
-          receipt.completedAt = receipt.updatedAt;
-          persist();
-          return this.resultFromReceipt(receipt, started);
-        }
-        output = parsed.value;
-      }
-
-      const toolSummary = this.deps.getSessionToolUseSummary(child.id);
-      receipt.status = 'succeeded';
-      receipt.result = {
-        output,
-        summary: summaryFromOutput(output),
-        toolUseCount: toolSummary.count,
-        toolNames: toolSummary.names,
-      };
-      receipt.updatedAt = now();
-      receipt.completedAt = receipt.updatedAt;
-      persist();
-      return this.resultFromReceipt(receipt, started);
+      return await finish();
     } catch (error) {
       receipt.status = 'failed';
       receipt.error = {
@@ -277,9 +255,105 @@ export class AgentMessageService {
     }
   }
 
+  private async finishDelegatedTurn(input: {
+    receipt: AgentMessageReceipt;
+    input: ReturnType<typeof normalizeMessageAgentInput>;
+    runtime: AgentMessageRuntimeContext;
+    sendPromise: Promise<void>;
+    started: number;
+    persist: () => void;
+    now: () => string;
+  }): Promise<MessageAgentResult> {
+    const { receipt, runtime, sendPromise, started, persist, now } = input;
+    const delegatedInput = input.input;
+
+    try {
+      const sent = await timeout(sendPromise, delegatedInput.timeoutSeconds * 1000);
+
+      if (sent.timedOut) {
+        if (receipt.childSessionId) {
+          await this.deps.abortSession(receipt.childSessionId);
+        }
+        void drainAfterAbort(sendPromise);
+        receipt.status = 'timed-out';
+        receipt.error = { code: 'timeout', message: `Delegated agent timed out after ${delegatedInput.timeoutSeconds}s.` };
+        receipt.updatedAt = now();
+        receipt.completedAt = receipt.updatedAt;
+        persist();
+        await this.notifyBackgroundParent(receipt, runtime);
+        return this.resultFromReceipt(receipt, started);
+      }
+
+      const text = receipt.childSessionId ? this.deps.getLastAssistantText(receipt.childSessionId) : '';
+      let output: unknown = text;
+      if (delegatedInput.outputSchema) {
+        const parsed = parseStructuredStepOutput(text, delegatedInput.outputSchema);
+        if (!parsed.ok) {
+          receipt.status = 'failed';
+          receipt.error = { code: parsed.code, message: parsed.message };
+          receipt.updatedAt = now();
+          receipt.completedAt = receipt.updatedAt;
+          persist();
+          await this.notifyBackgroundParent(receipt, runtime);
+          return this.resultFromReceipt(receipt, started);
+        }
+        output = parsed.value;
+      }
+
+      const toolSummary = receipt.childSessionId
+        ? this.deps.getSessionToolUseSummary(receipt.childSessionId)
+        : { count: 0, names: [] };
+      receipt.status = 'succeeded';
+      receipt.result = {
+        output,
+        summary: summaryFromOutput(output),
+        toolUseCount: toolSummary.count,
+        toolNames: toolSummary.names,
+      };
+      receipt.updatedAt = now();
+      receipt.completedAt = receipt.updatedAt;
+      persist();
+      await this.notifyBackgroundParent(receipt, runtime);
+      return this.resultFromReceipt(receipt, started);
+    } catch (error) {
+      receipt.status = 'failed';
+      receipt.error = {
+        code: 'message-agent-failed',
+        message: error instanceof Error ? error.message : String(error),
+      };
+      receipt.updatedAt = now();
+      receipt.completedAt = receipt.updatedAt;
+      persist();
+      await this.notifyBackgroundParent(receipt, runtime);
+      return this.resultFromReceipt(receipt, started);
+    }
+  }
+
+  private async notifyBackgroundParent(
+    receipt: AgentMessageReceipt,
+    runtime: AgentMessageRuntimeContext,
+  ): Promise<void> {
+    if (!receipt.policy.background || !runtime.parentSessionId || !this.deps.deliverPassiveMessage) return;
+
+    const lines = [
+      `Background agent "${receipt.targetAgentSlug}" ${receipt.status === 'succeeded' ? 'finished' : 'stopped'}.`,
+      `receiptId: ${receipt.id}`,
+      receipt.childSessionId ? `childSessionId: ${receipt.childSessionId}` : undefined,
+      receipt.result?.summary ? `summary: ${receipt.result.summary}` : undefined,
+      receipt.error ? `error: ${receipt.error.code}: ${receipt.error.message}` : undefined,
+    ].filter(Boolean);
+
+    try {
+      await this.deps.deliverPassiveMessage(runtime.parentSessionId, lines.join('\n'));
+    } catch {
+      // Notification is best-effort; the receipt is the durable source of truth.
+    }
+  }
+
   private resultFromReceipt(receipt: AgentMessageReceipt, started: number): MessageAgentResult {
     return {
-      ok: receipt.status === 'succeeded',
+      ok: receipt.status === 'succeeded' || receipt.status === 'running',
+      status: receipt.status,
       receiptId: receipt.id,
       childSessionId: receipt.childSessionId,
       agentSlug: receipt.targetAgentSlug,

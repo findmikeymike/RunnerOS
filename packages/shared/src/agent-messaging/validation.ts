@@ -89,6 +89,7 @@ export function normalizeMessageAgentInput(
     timeoutSeconds: clampInt(input.timeoutSeconds, DEFAULT_TIMEOUT_SECONDS, 1, MAX_TIMEOUT_SECONDS),
     maxTurns: clampInt(input.maxTurns, DEFAULT_MAX_TURNS, 1, MAX_TURNS),
     priority: input.priority ?? 'normal',
+    background: input.background === true,
   };
 }
 

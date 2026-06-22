@@ -76,6 +76,7 @@ describe('AgentMessageService', () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(result.status).toBe('succeeded');
     expect(result.childSessionId).toBe('child-1');
     expect(created[0]).toMatchObject({ hidden: true, permissionMode: 'safe', labels: ['agent-message-depth:1'] });
     expect(created[0]).toMatchObject({
@@ -119,6 +120,7 @@ describe('AgentMessageService', () => {
 
     expect(created).toBe(false);
     expect(result.ok).toBe(false);
+    expect(result.status).toBe('failed');
     expect(result.error?.message).toContain('missing-source');
   });
 
@@ -145,6 +147,7 @@ describe('AgentMessageService', () => {
 
     expect(aborted).toBe(true);
     expect(result.ok).toBe(false);
+    expect(result.status).toBe('timed-out');
     expect(result.error?.code).toBe('timeout');
     expect(Date.now() - started).toBeLessThan(2500);
     expect(readAgentMessageReceipt(root, result.receiptId!)?.status).toBe('timed-out');
@@ -171,6 +174,45 @@ describe('AgentMessageService', () => {
     });
 
     expect(result.ok).toBe(true);
+    expect(result.status).toBe('succeeded');
     expect(result.output).toEqual({ verdict: 'pass' });
+  });
+
+  test('background delegation returns immediately and completes receipt later', async () => {
+    let resolveSend: (() => void) | undefined;
+    const passiveMessages: string[] = [];
+    const service = new AgentMessageService(deps({
+      sendMessage: async () => {
+        await new Promise<void>((resolve) => {
+          resolveSend = resolve;
+        });
+      },
+      deliverPassiveMessage: async (_sessionId, message) => {
+        passiveMessages.push(message);
+      },
+    }));
+
+    const started = Date.now();
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentSessionId: 'parent',
+      parentPermissionMode: 'ask',
+    }, {
+      agentSlug: 'reviewer',
+      task: 'Review this in the background.',
+      background: true,
+    });
+
+    expect(Date.now() - started).toBeLessThan(250);
+    expect(result.ok).toBe(true);
+    expect(result.status).toBe('running');
+    expect(readAgentMessageReceipt(root, result.receiptId!)?.status).toBe('running');
+
+    resolveSend?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(readAgentMessageReceipt(root, result.receiptId!)?.status).toBe('succeeded');
+    expect(passiveMessages[0]).toContain('Background agent "reviewer" finished');
+    expect(passiveMessages[0]).toContain(`receiptId: ${result.receiptId}`);
   });
 });

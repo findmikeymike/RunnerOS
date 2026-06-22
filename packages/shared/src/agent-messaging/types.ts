@@ -15,10 +15,12 @@ export interface MessageAgentInput {
   timeoutSeconds?: number;
   maxTurns?: number;
   priority?: 'low' | 'normal' | 'high';
+  background?: boolean;
 }
 
 export interface MessageAgentResult {
   ok: boolean;
+  status: AgentMessageStatus;
   receiptId?: string;
   childSessionId?: string;
   agentSlug: string;
@@ -51,6 +53,7 @@ export interface AgentMessageReceipt {
     maxTurns: number;
     maxDepth: number;
     depth: number;
+    background?: boolean;
   };
   constraints: {
     sourceSlugs: string[];
@@ -84,4 +87,5 @@ export interface NormalizedMessageAgentInput extends MessageAgentInput {
   timeoutSeconds: number;
   maxTurns: number;
   priority: 'low' | 'normal' | 'high';
+  background: boolean;
 }

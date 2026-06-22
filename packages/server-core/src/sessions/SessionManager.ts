@@ -5089,6 +5089,14 @@ user a clickable link to where the thing now lives.`
               if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
               return workspace.rootPath
             },
+            deliverPassiveMessage: async (sessionId, message) => {
+              const target = this.sessions.get(sessionId)
+              if (!target) throw new Error(`Session ${sessionId} not found`)
+              if (target.workspace.id !== managed.workspace.id) {
+                throw new Error(`Session "${sessionId}" is not in this workspace.`)
+              }
+              await this.deliverPassiveAgentMessage(target, message)
+            },
             resolveUsableSourceSlugs: (workspaceId, sourceSlugs) => {
               const workspace = getWorkspaceByNameOrId(workspaceId)
               if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)

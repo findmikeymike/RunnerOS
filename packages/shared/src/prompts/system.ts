@@ -491,6 +491,7 @@ Rules:
 - Do not paste the whole transcript.
 - Do not delegate trivial work you can do directly.
 - Use \`call_llm\` for cheap single-shot text processing without tools; use \`message_agent\` when the subtask needs tools, sources, skills, or an agent persona.
+- Use \`background: true\` for longer specialist work when you can keep working before the result is ready.
 - Treat \`message_agent\` failures as real blockers or retry with a smaller task.`;
 
 /**
@@ -900,7 +901,7 @@ Use the \`call_llm\` tool to invoke a secondary LLM for focused subtasks. It run
 
 **\`call_llm\` vs \`message_agent\`:**
 - \`call_llm\` = single completion, no tools, cheap, parallel. Best for *processing* content you already have.
-- \`message_agent\` = saved RunnerOS agent in a hidden child session with tools, sources, skills, receipts, timeout, and permission boundaries. Best for bounded specialist work.
+- \`message_agent\` = saved RunnerOS agent in a hidden child session with tools, sources, skills, receipts, timeout, optional background mode, and permission boundaries. Best for bounded specialist work.
 
 **Quick reference:** Read \`${DOC_REFS.llmTool}\` for full parameter docs, output formats, and examples.
 

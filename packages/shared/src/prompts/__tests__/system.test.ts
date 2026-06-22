@@ -44,6 +44,7 @@ describe('system prompt guidance', () => {
     expect(prompt).toContain('Use `list_agents` first if you do not know the target agent slug')
     expect(prompt).toContain('Do not paste the whole transcript')
     expect(prompt).toContain('use `message_agent` when the subtask needs tools, sources, skills, or an agent persona')
+    expect(prompt).toContain('Use `background: true` for longer specialist work')
     expect(prompt).toContain('`message_agent` = saved RunnerOS agent in a hidden child session')
   })
 

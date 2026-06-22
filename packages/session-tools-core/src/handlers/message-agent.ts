@@ -14,10 +14,12 @@ export interface MessageAgentToolInput {
   timeoutSeconds?: number;
   maxTurns?: number;
   priority?: 'low' | 'normal' | 'high';
+  background?: boolean;
 }
 
 export interface MessageAgentToolResult {
   ok: boolean;
+  status: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed-out';
   receiptId?: string;
   childSessionId?: string;
   agentSlug: string;
@@ -34,7 +36,9 @@ export interface MessageAgentToolResult {
 
 function successResponse(result: MessageAgentToolResult): ToolResult {
   const lines = [
-    result.ok
+    result.status === 'running'
+      ? `Agent "${result.agentSlug}" started delegated task in the background.`
+      : result.ok
       ? `Agent "${result.agentSlug}" completed delegated task.`
       : `Agent "${result.agentSlug}" delegation failed.`,
     result.receiptId ? `receiptId: ${result.receiptId}` : undefined,

@@ -16,6 +16,17 @@ describe('agent messaging validation', () => {
     expect(input.permissionMode).toBe('ask');
     expect(input.timeoutSeconds).toBe(300);
     expect(input.maxTurns).toBe(1);
+    expect(input.background).toBe(false);
+  });
+
+  test('normalizes background mode', () => {
+    const input = normalizeMessageAgentInput({
+      agentSlug: 'code-reviewer',
+      task: 'Review the diff.',
+      background: true,
+    }, { parentPermissionMode: 'ask' });
+
+    expect(input.background).toBe(true);
   });
 
   test('blocks permission escalation', () => {

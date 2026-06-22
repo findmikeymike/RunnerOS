@@ -34,6 +34,7 @@ describe('message_agent handler', () => {
     const result = await handleMessageAgent(makeCtx({
       messageAgent: async (input) => ({
         ok: true,
+        status: 'succeeded',
         receiptId: 'r1',
         childSessionId: 's2',
         agentSlug: input.agentSlug,
@@ -57,6 +58,7 @@ describe('message_agent handler', () => {
     const result = await handleMessageAgent(makeCtx({
       messageAgent: async (input) => ({
         ok: false,
+        status: 'timed-out',
         receiptId: 'r2',
         childSessionId: 's3',
         agentSlug: input.agentSlug,
@@ -74,5 +76,28 @@ describe('message_agent handler', () => {
     expect(result.structuredContent?.receiptId).toBe('r2');
     expect(result.content[0]?.text.startsWith('[ERROR]')).toBe(true);
     expect(result.content[0]?.text).toContain('timeout');
+  });
+
+  test('reports background start as success', async () => {
+    const result = await handleMessageAgent(makeCtx({
+      messageAgent: async (input) => ({
+        ok: true,
+        status: 'running',
+        receiptId: 'r3',
+        childSessionId: 's4',
+        agentSlug: input.agentSlug,
+        toolUseCount: 0,
+        toolNames: [],
+        durationMs: 2,
+      }),
+    }), {
+      agentSlug: 'reviewer',
+      task: 'Review this.',
+      background: true,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent?.status).toBe('running');
+    expect(result.content[0]?.text).toContain('started delegated task in the background');
   });
 });
