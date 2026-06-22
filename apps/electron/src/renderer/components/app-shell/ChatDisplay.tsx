@@ -2187,6 +2187,11 @@ interface MessageBubbleProps {
   onOpenSubagentSession?: (sessionId: string) => void
 }
 
+function extractPassiveAgentChildSessionId(content: string): string | null {
+  const match = content.match(/^childSessionId:\s*([^\s]+)\s*$/m)
+  return match?.[1] ?? null
+}
+
 /**
  * ErrorMessage - Separate component for error messages to allow useState hook
  */
@@ -2293,6 +2298,7 @@ function MessageBubble({
         onFileClick={onOpenFile}
         compactMode={compactMode}
         displayIntent={message.displayIntent}
+        agentMessage={message.agentMessage}
         onOpenSubagentSession={onOpenSubagentSession}
       />
     )
@@ -2354,7 +2360,7 @@ function MessageBubble({
         <div className="w-3 h-3 flex items-center justify-center shrink-0">
           <Spinner className="text-[10px]" />
         </div>
-        <span>{message.content}</span>
+        <span className="whitespace-pre-wrap">{message.content}</span>
       </div>
     )
   }
@@ -2383,13 +2389,26 @@ function MessageBubble({
       success: { icon: CheckCircle2, className: 'text-success' },
     }[level]
     const Icon = config.icon
+    const childSessionId = message.displayIntent === 'agent-message-passive'
+      ? message.agentMessage?.childSessionId ?? extractPassiveAgentChildSessionId(message.content)
+      : null
 
     return (
       <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px] select-none', config.className)}>
         <div className="w-3 h-3 flex items-center justify-center shrink-0">
           <Icon className="w-3 h-3" />
         </div>
-        <span>{message.content}</span>
+        <span className="whitespace-pre-wrap">{message.content}</span>
+        {childSessionId && onOpenSubagentSession && (
+          <button
+            type="button"
+            onClick={() => onOpenSubagentSession(childSessionId)}
+            className="ml-1 inline-flex items-center gap-1 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2 py-1 text-xs text-white/62 transition-colors hover:bg-white/[0.075] hover:text-white/82"
+          >
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Open subagent</span>
+          </button>
+        )}
       </div>
     )
   }

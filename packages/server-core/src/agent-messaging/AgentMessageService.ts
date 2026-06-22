@@ -13,6 +13,7 @@ import {
   parseStructuredStepOutput,
 } from '@craft-agent/shared/workflows';
 import type { PermissionMode } from '@craft-agent/shared/agent/mode-types';
+import type { AgentMessageNoticeMetadata } from '@craft-agent/core/types';
 
 export interface AgentMessageRuntimeContext {
   workspaceId: string;
@@ -35,7 +36,7 @@ export interface AgentMessageServiceDeps {
   getSessionToolUseSummary: (sessionId: string) => { count: number; names: string[] };
   getWorkspaceRootPath: (workspaceId: string) => string;
   resolveUsableSourceSlugs?: (workspaceId: string, sourceSlugs: string[]) => { usable: string[]; unavailable: string[] };
-  deliverPassiveMessage?: (sessionId: string, message: string) => Promise<void>;
+  deliverPassiveMessage?: (sessionId: string, message: string, agentMessage?: AgentMessageNoticeMetadata) => Promise<void>;
   now?: () => string;
 }
 
@@ -225,8 +226,8 @@ export class AgentMessageService {
       persist();
 
       const prompt = buildDelegationPrompt(input, runtime);
-      const sendPromise = this.deps.sendMessage(child.id, prompt, { skillSlugs: input.skillSlugs });
-      const finish = () => this.finishDelegatedTurn({
+      const startSend = () => this.deps.sendMessage(child.id, prompt, { skillSlugs: input.skillSlugs });
+      const finish = (sendPromise: Promise<void>) => this.finishDelegatedTurn({
         receipt,
         input,
         runtime,
@@ -238,11 +239,11 @@ export class AgentMessageService {
 
       if (input.background) {
         await this.notifyBackgroundParentStarted(receipt, runtime);
-        void finish();
+        void finish(startSend());
         return this.resultFromReceipt(receipt, started);
       }
 
-      return await finish();
+      return await finish(startSend());
     } catch (error) {
       receipt.status = 'failed';
       receipt.error = {
@@ -345,7 +346,12 @@ export class AgentMessageService {
     ].filter(Boolean);
 
     try {
-      await this.deps.deliverPassiveMessage(runtime.parentSessionId, lines.join('\n'));
+      await this.deps.deliverPassiveMessage(runtime.parentSessionId, lines.join('\n'), {
+        receiptId: receipt.id,
+        childSessionId: receipt.childSessionId,
+        targetAgentSlug: receipt.targetAgentSlug,
+        status: receipt.status,
+      });
     } catch {
       // Notification is best-effort; the receipt is the durable source of truth.
     }
@@ -364,7 +370,12 @@ export class AgentMessageService {
     ].filter(Boolean);
 
     try {
-      await this.deps.deliverPassiveMessage(runtime.parentSessionId, lines.join('\n'));
+      await this.deps.deliverPassiveMessage(runtime.parentSessionId, lines.join('\n'), {
+        receiptId: receipt.id,
+        childSessionId: receipt.childSessionId,
+        targetAgentSlug: receipt.targetAgentSlug,
+        status: 'running',
+      });
     } catch {
       // Notification is best-effort; the receipt is the durable source of truth.
     }

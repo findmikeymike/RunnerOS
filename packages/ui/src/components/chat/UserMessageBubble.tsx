@@ -13,7 +13,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Clock, ExternalLink } from 'lucide-react'
-import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
+import type { AgentMessageNoticeMetadata, StoredAttachment, ContentBadge } from '@craft-agent/core'
 import { normalizePath } from '@craft-agent/core/utils'
 import { cn } from '../../lib/utils'
 import { Markdown } from '../markdown'
@@ -323,6 +323,8 @@ export interface UserMessageBubbleProps {
   compactMode?: boolean
   /** Display intent for specialized system/user notices. */
   displayIntent?: string
+  /** Structured metadata for passive agent notices. */
+  agentMessage?: AgentMessageNoticeMetadata
   /** Open a delegated child session from a passive agent message. */
   onOpenSubagentSession?: (sessionId: string) => void
 }
@@ -348,6 +350,7 @@ export function UserMessageBubble({
   isQueued,
   compactMode,
   displayIntent,
+  agentMessage,
   onOpenSubagentSession,
 }: UserMessageBubbleProps) {
   const { t } = useTranslation()
@@ -407,7 +410,7 @@ export function UserMessageBubble({
   const hasEditRequestBadges = editRequestBadges.length > 0
   const hasInlineBadges = inlineBadges.length > 0
   const childSessionId = displayIntent === 'agent-message-passive'
-    ? extractChildSessionId(content)
+    ? agentMessage?.childSessionId ?? extractChildSessionId(content)
     : null
 
   // Strip edit_request content from the displayed text

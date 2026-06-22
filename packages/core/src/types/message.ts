@@ -245,6 +245,13 @@ export interface StoredAttachment {
   resizedBase64?: string;        // Base64 of resized image (only when wasResized=true, for Claude API)
 }
 
+export interface AgentMessageNoticeMetadata {
+  receiptId?: string;
+  childSessionId?: string;
+  targetAgentSlug?: string;
+  status?: 'running' | 'succeeded' | 'failed' | 'cancelled' | 'timed-out';
+}
+
 /**
  * Runtime message type (includes transient fields like isStreaming)
  */
@@ -277,6 +284,8 @@ export interface Message {
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
   displayIntent?: 'canvas-visual-review' | 'agent-message-passive';
+  // Structured metadata for agent-message notices. Avoid parsing trusted actions from text.
+  agentMessage?: AgentMessageNoticeMetadata;
   /** Annotation payloads for this message */
   annotations?: AnnotationV1[];
   isError?: boolean;
@@ -367,6 +376,8 @@ export interface StoredMessage {
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
   displayIntent?: 'canvas-visual-review' | 'agent-message-passive';
+  // Structured metadata for agent-message notices.
+  agentMessage?: AgentMessageNoticeMetadata;
   /** Annotations persisted at message level */
   annotations?: AnnotationV1[];
   // Turn grouping - critical for TurnCard rendering after reload

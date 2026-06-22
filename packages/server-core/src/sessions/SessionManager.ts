@@ -83,7 +83,7 @@ import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
-import { messageToStored, storedToMessage, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
+import { messageToStored, storedToMessage, type AgentMessageNoticeMetadata, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
 import { loadAllSkills, loadGlobalSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
@@ -145,6 +145,11 @@ import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { filterAttachmentsForModelInput } from './runtime-config'
+
+function isConversationContextMessage(message: Message): boolean {
+  return (message.role === 'user' || message.role === 'assistant')
+    && message.displayIntent !== 'agent-message-passive'
+}
 
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
@@ -2790,26 +2795,31 @@ user a clickable link to where the thing now lives.`
     await sessionPersistenceQueue.flush(sessionId)
   }
 
-  private async deliverPassiveAgentMessage(managed: ManagedSession, message: string): Promise<void> {
+  private async deliverPassiveAgentMessage(
+    managed: ManagedSession,
+    message: string,
+    agentMessage?: AgentMessageNoticeMetadata,
+  ): Promise<void> {
     await this.ensureMessagesLoaded(managed)
 
-    const userMessage: Message = {
+    const passiveMessage: Message = {
       id: generateMessageId(),
-      role: 'user',
+      role: 'info',
       content: message,
       timestamp: this.monotonic(),
+      infoLevel: 'info',
       displayIntent: 'agent-message-passive',
+      agentMessage,
     }
 
-    managed.messages.push(userMessage)
-    managed.lastMessageRole = 'user'
+    managed.messages.push(passiveMessage)
     this.persistSession(managed)
     await this.flushSession(managed.id)
 
     this.sendEvent({
       type: 'user_message',
       sessionId: managed.id,
-      message: userMessage,
+      message: passiveMessage,
       status: 'accepted',
     }, managed.workspace.id)
   }
@@ -3849,7 +3859,7 @@ user a clickable link to where the thing now lives.`
 
       const getRecoveryMessages = () => {
         const relevantMessages = managed.messages
-          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .filter(isConversationContextMessage)
           .filter(m => !m.isIntermediate)
           .slice(-6)
         return relevantMessages.map(m => ({
@@ -3861,7 +3871,7 @@ user a clickable link to where the thing now lives.`
       const getBranchFallbackMessages = () => {
         if (!managed.branchFromMessageId) return []
         return managed.messages
-          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .filter(isConversationContextMessage)
           .filter(m => !m.isIntermediate)
           .map(m => ({
             type: m.role as 'user' | 'assistant',
@@ -3874,7 +3884,7 @@ user a clickable link to where the thing now lives.`
         if (managed.branchSeedApplied) return []
 
         const seedMessages = managed.messages
-          .filter(m => m.role === 'user' || m.role === 'assistant')
+          .filter(isConversationContextMessage)
           .filter(m => !m.isIntermediate)
 
         return seedMessages.map(m => ({
@@ -5089,13 +5099,13 @@ user a clickable link to where the thing now lives.`
               if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
               return workspace.rootPath
             },
-            deliverPassiveMessage: async (sessionId, message) => {
+            deliverPassiveMessage: async (sessionId, message, agentMessage) => {
               const target = this.sessions.get(sessionId)
               if (!target) throw new Error(`Session ${sessionId} not found`)
               if (target.workspace.id !== managed.workspace.id) {
                 throw new Error(`Session "${sessionId}" is not in this workspace.`)
               }
-              await this.deliverPassiveAgentMessage(target, message)
+              await this.deliverPassiveAgentMessage(target, message, agentMessage)
             },
             resolveUsableSourceSlugs: (workspaceId, sourceSlugs) => {
               const workspace = getWorkspaceByNameOrId(workspaceId)
@@ -8873,7 +8883,7 @@ user a clickable link to where the thing now lives.`
     await this.ensureMessagesLoaded(managed)
 
     const messages = managed.messages
-      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .filter(isConversationContextMessage)
       .filter(m => !m.isIntermediate)
       .map(m => ({
         type: m.role as 'user' | 'assistant',

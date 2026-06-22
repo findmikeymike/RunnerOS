@@ -180,15 +180,22 @@ describe('AgentMessageService', () => {
 
   test('background delegation returns immediately and completes receipt later', async () => {
     let resolveSend: (() => void) | undefined;
+    let sendStarted = false;
     const passiveMessages: string[] = [];
+    const passiveMetadata: unknown[] = [];
     const service = new AgentMessageService(deps({
       sendMessage: async () => {
+        sendStarted = true;
         await new Promise<void>((resolve) => {
           resolveSend = resolve;
         });
       },
-      deliverPassiveMessage: async (_sessionId, message) => {
+      deliverPassiveMessage: async (_sessionId, message, agentMessage) => {
         passiveMessages.push(message);
+        passiveMetadata.push(agentMessage);
+        if (message.includes('started')) {
+          expect(sendStarted).toBe(false);
+        }
       },
     }));
 
@@ -210,6 +217,12 @@ describe('AgentMessageService', () => {
     expect(passiveMessages[0]).toContain('Background agent "reviewer" started');
     expect(passiveMessages[0]).toContain(`receiptId: ${result.receiptId}`);
     expect(passiveMessages[0]).toContain('childSessionId: child-1');
+    expect(passiveMetadata[0]).toEqual({
+      receiptId: result.receiptId,
+      childSessionId: 'child-1',
+      targetAgentSlug: 'reviewer',
+      status: 'running',
+    });
 
     resolveSend?.();
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -217,5 +230,11 @@ describe('AgentMessageService', () => {
     expect(readAgentMessageReceipt(root, result.receiptId!)?.status).toBe('succeeded');
     expect(passiveMessages[1]).toContain('Background agent "reviewer" finished');
     expect(passiveMessages[1]).toContain(`receiptId: ${result.receiptId}`);
+    expect(passiveMetadata[1]).toMatchObject({
+      receiptId: result.receiptId,
+      childSessionId: 'child-1',
+      targetAgentSlug: 'reviewer',
+      status: 'succeeded',
+    });
   });
 });
