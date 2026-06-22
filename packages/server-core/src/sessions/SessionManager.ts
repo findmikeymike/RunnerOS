@@ -95,6 +95,8 @@ import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
+import { AgentMessageService } from '../agent-messaging/AgentMessageService'
+import { agentMatchesSearch } from './agent-search'
 import {
   createAgentMemorySidecarApplyMemory,
   createMemorySidecarReviewer,
@@ -1368,6 +1370,29 @@ const DEFAULT_TOKEN_USAGE = {
   contextTokens: 0, costUsd: 0,
 }
 
+const AGENT_MESSAGE_DEPTH_LABEL_PREFIX = 'agent-message-depth:'
+
+function getAgentMessageDepth(labels: string[] | undefined): number {
+  const label = labels?.find((value) => value.startsWith(AGENT_MESSAGE_DEPTH_LABEL_PREFIX))
+  if (!label) return 0
+  const parsed = Number.parseInt(label.slice(AGENT_MESSAGE_DEPTH_LABEL_PREFIX.length), 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+}
+
+function getCompletedToolUseSummary(managed: ManagedSession | undefined): { count: number; names: string[] } {
+  if (!managed) return { count: 0, names: [] }
+  const names = managed.messages
+    .filter((message) => (
+      message.role === 'tool' &&
+      message.toolStatus === 'completed' &&
+      message.isError !== true &&
+      typeof message.toolName === 'string' &&
+      message.toolName.length > 0
+    ))
+    .map((message) => message.toolName!)
+  return { count: names.length, names: Array.from(new Set(names)).sort() }
+}
+
 /**
  * Convert a ManagedSession to a renderer-side Session object.
  * Uses pickSessionFields() for persistent fields so new fields propagate automatically.
@@ -2374,13 +2399,15 @@ export class SessionManager implements ISessionManager {
         }
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
-        // Chat nav entry), Social Publisher, Hypermotion, Shopify, Print Agent,
-        // and Update System Agent.
+        // Chat nav entry), Social Publisher, Hypermotion, Lottie Animation,
+        // Video Editor, Shopify, Print Agent, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
             || a.slug === 'hypermotion-agent'
+            || a.slug === 'lottie-animation-agent'
+            || a.slug === 'video-editor-agent'
             || a.slug === 'shopify-agent'
             || a.slug === 'print-agent'
             || a.slug === 'update-system-agent',
@@ -2761,6 +2788,30 @@ user a clickable link to where the thing now lives.`
   // Flush a specific session immediately (call on session close/switch)
   async flushSession(sessionId: string): Promise<void> {
     await sessionPersistenceQueue.flush(sessionId)
+  }
+
+  private async deliverPassiveAgentMessage(managed: ManagedSession, message: string): Promise<void> {
+    await this.ensureMessagesLoaded(managed)
+
+    const userMessage: Message = {
+      id: generateMessageId(),
+      role: 'user',
+      content: message,
+      timestamp: this.monotonic(),
+      displayIntent: 'agent-message-passive',
+    }
+
+    managed.messages.push(userMessage)
+    managed.lastMessageRole = 'user'
+    this.persistSession(managed)
+    await this.flushSession(managed.id)
+
+    this.sendEvent({
+      type: 'user_message',
+      sessionId: managed.id,
+      message: userMessage,
+      status: 'accepted',
+    }, managed.workspace.id)
   }
 
   // Flush all pending sessions (call on app quit)
@@ -4792,15 +4843,7 @@ user a clickable link to where the thing now lives.`
             })
           }
           if (options?.search?.trim()) {
-            const needle = options.search.trim().toLowerCase()
-            agents = agents.filter(agent => [
-              agent.slug,
-              agent.name,
-              agent.description,
-              agent.inputs ?? '',
-              agent.outputs ?? '',
-              agent.tags.join(' '),
-            ].join(' ').toLowerCase().includes(needle))
+            agents = agents.filter(agent => agentMatchesSearch(agent, options.search!))
           }
 
           agents.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
@@ -4979,7 +5022,22 @@ user a clickable link to where the thing now lives.`
 
           return { resolved: null, available }
         },
-        sendAgentMessageFn: async (sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>) => {
+        sendAgentMessageFn: async (
+          sessionId: string,
+          message: string,
+          attachments?: Array<{ path: string; name?: string }>,
+          options?: { deliveryMode?: 'normal' | 'passive' },
+        ) => {
+          const target = this.sessions.get(sessionId)
+          if (!target) throw new Error(`Session ${sessionId} not found`)
+          if (target.workspace.id !== managed.workspace.id) {
+            throw new Error(`Session "${sessionId}" is not in this workspace.`)
+          }
+
+          if (options?.deliveryMode === 'passive' && attachments?.length) {
+            throw new Error('Passive agent messages do not support attachments.')
+          }
+
           // Build FileAttachment[] from paths (same pattern as spawn_session)
           let fileAttachments: FileAttachment[] | undefined
           if (attachments?.length) {
@@ -5001,7 +5059,58 @@ user a clickable link to where the thing now lives.`
             if (builtAttachments.length > 0) fileAttachments = builtAttachments
           }
 
+          if (options?.deliveryMode === 'passive') {
+            await this.deliverPassiveAgentMessage(target, message)
+            return
+          }
+
           await this.sendMessage(sessionId, message, fileAttachments)
+        },
+        messageAgentFn: async (input) => {
+          const service = new AgentMessageService({
+            createSession: (wsId, opts) => this.createSession(wsId, opts).then((session) => ({ id: session.id })),
+            resolveAgentSessionOptions: (wsId, agentSlug) => this.resolveAgentSessionOptions(wsId, agentSlug),
+            sendMessage: (sessionId, prompt, options) => this.sendMessage(
+              sessionId,
+              prompt,
+              undefined,
+              undefined,
+              options?.skillSlugs?.length ? { skillSlugs: options.skillSlugs } : undefined,
+            ),
+            abortSession: async (sessionId) => {
+              const target = this.sessions.get(sessionId)
+              if (!target) return
+              target.agent?.forceAbort(AbortReason.UserStop)
+            },
+            getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
+            getSessionToolUseSummary: (sessionId) => getCompletedToolUseSummary(this.sessions.get(sessionId)),
+            getWorkspaceRootPath: (workspaceId) => {
+              const workspace = getWorkspaceByNameOrId(workspaceId)
+              if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+              return workspace.rootPath
+            },
+            resolveUsableSourceSlugs: (workspaceId, sourceSlugs) => {
+              const workspace = getWorkspaceByNameOrId(workspaceId)
+              if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+              const sources = getSourcesBySlugs(workspace.rootPath, sourceSlugs)
+              const usable = new Set(sources.filter(isSourceUsable).map((source) => source.config.slug))
+              return {
+                usable: sourceSlugs.filter((slug) => usable.has(slug)),
+                unavailable: sourceSlugs.filter((slug) => !usable.has(slug)),
+              }
+            },
+          })
+
+          return service.messageAgent({
+            workspaceId: managed.workspace.id,
+            parentSessionId: managed.id,
+            parentRunId: managed.launchReceipt?.workflow?.runId,
+            parentStepId: managed.launchReceipt?.workflow?.stepId,
+            callerAgentSlug: managed.spawnedFromAgent?.agentSlug,
+            callerAgentName: managed.spawnedFromAgent?.agentName,
+            parentPermissionMode: managed.permissionMode ?? 'ask',
+            depth: getAgentMessageDepth(managed.labels),
+          }, input)
         },
         createAgentFn: async (input) => {
           const {
