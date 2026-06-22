@@ -38,6 +38,12 @@ const MIN_CLIP_DURATION_MS = 100
 
 type TimelineDragMode = 'move' | 'trim-start' | 'trim-end'
 
+interface TimelinePreviewClip {
+  clip: VideoClip
+  media: VideoProject['media'][number]
+  trackIndex: number
+}
+
 interface TimelineDragState {
   clipId: string
   mode: TimelineDragMode
@@ -75,6 +81,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [rawJson, setRawJson] = React.useState('')
   const [selectedClipId, setSelectedClipId] = React.useState<string | null>(null)
   const [renderPreviewUrl, setRenderPreviewUrl] = React.useState<string | null>(null)
+  const [timelinePreviewUrl, setTimelinePreviewUrl] = React.useState<string | null>(null)
   const [playheadMs, setPlayheadMs] = React.useState(0)
   const [isPreviewPlaying, setIsPreviewPlaying] = React.useState(false)
   const [timelineZoom, setTimelineZoom] = React.useState(1)
@@ -98,6 +105,9 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const [error, setError] = React.useState<string | null>(null)
   const previewVideoRef = React.useRef<HTMLVideoElement | null>(null)
   const timelineScrubRef = React.useRef<HTMLDivElement | null>(null)
+  const timelinePreviewCacheRef = React.useRef<Map<string, string>>(new Map())
+  const timelinePreviewClipRef = React.useRef<TimelinePreviewClip | null>(null)
+  const switchingPreviewClipRef = React.useRef(false)
   const hasLocalEditsRef = React.useRef(false)
   const timelineDragRef = React.useRef<TimelineDragState | null>(null)
   const timelineDurationMs = project?.timeline?.durationMs ?? 0
@@ -194,9 +204,12 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     const clamped = clampNumber(Number.isFinite(nextMs) ? nextMs : 0, 0, timelineDurationMs)
     setPlayheadMs(Math.round(clamped))
     if (seekPreview && previewVideoRef.current) {
-      previewVideoRef.current.currentTime = clamped / 1000
+      const previewClip = findTimelinePreviewClip(project, clamped)
+      if (previewClip) {
+        previewVideoRef.current.currentTime = previewClipSourceTime(previewClip.clip, clamped)
+      }
     }
-  }, [timelineDurationMs])
+  }, [project, timelineDurationMs])
 
   const updatePlayheadFromPointer = React.useCallback((event: React.PointerEvent<HTMLElement>) => {
     if (!timelineScrubRef.current) return
@@ -205,19 +218,35 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     setPlayheadPosition(timelineMsFromPixels(x, timelineZoom), true)
   }, [setPlayheadPosition, timelineZoom])
 
-  const updatePlayheadFromPreviewTime = React.useCallback((videoTimeMs: number) => {
-    setPlayheadMs(Math.round(clampNumber(videoTimeMs, 0, timelineDurationMs)))
-  }, [timelineDurationMs])
+  const advanceToNextPreviewClip = React.useCallback((afterMs: number): boolean => {
+    const nextClip = findNextTimelinePreviewClip(project, afterMs)
+    if (!nextClip) return false
+    switchingPreviewClipRef.current = true
+    setPlayheadMs(nextClip.clip.startMs ?? 0)
+    setIsPreviewPlaying(true)
+    return true
+  }, [project])
 
   const togglePreviewPlayback = React.useCallback(() => {
     const video = previewVideoRef.current
-    if (!video) return
-    if (video.paused) {
-      void video.play()
-    } else {
-      video.pause()
+    if (isPreviewPlaying) {
+      setIsPreviewPlaying(false)
+      video?.pause()
+      return
     }
-  }, [])
+    const previewClip = findTimelinePreviewClip(project, playheadMs) ?? findNextTimelinePreviewClip(project, playheadMs)
+    if (!previewClip) {
+      if (video && renderPreviewUrl) void video.play()
+      return
+    }
+    if ((playheadMs < (previewClip.clip.startMs ?? 0)) || playheadMs >= (previewClip.clip.startMs ?? 0) + (previewClip.clip.durationMs ?? 0)) {
+      setPlayheadMs(previewClip.clip.startMs ?? 0)
+    } else if (video) {
+      video.currentTime = previewClipSourceTime(previewClip.clip, playheadMs)
+    }
+    setIsPreviewPlaying(true)
+    void video?.play()
+  }, [isPreviewPlaying, playheadMs, project, renderPreviewUrl])
 
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -250,8 +279,91 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
   const selectedClipSupportsTransform = selectedClipSupportsLook
   const selectedLookValue = selectedClip?.adjustments ? selectedClip.adjustments.preset ?? 'manual' : 'neutral'
   const selectedTransform = normalizeClipTransform(selectedClip)
-  const previewUrl = renderPreviewUrl
-  const previewStatus = renderPreviewUrl ? 'latest export' : 'export needed'
+  const timelinePreviewClip = React.useMemo(
+    () => findTimelinePreviewClip(project, playheadMs) ?? findNextTimelinePreviewClip(project, playheadMs),
+    [playheadMs, project],
+  )
+  const previewUrl = timelinePreviewUrl ?? renderPreviewUrl
+  const previewStatus = timelinePreviewUrl ? 'timeline preview' : renderPreviewUrl ? 'latest export' : 'export needed'
+
+  React.useEffect(() => {
+    timelinePreviewClipRef.current = timelinePreviewClip
+  }, [timelinePreviewClip])
+
+  React.useEffect(() => {
+    let cancelled = false
+    async function loadTimelinePreviewClip() {
+      if (!manifest || !timelinePreviewClip?.clip.mediaId) {
+        setTimelinePreviewUrl(null)
+        return
+      }
+      const assetId = `video-media-${timelinePreviewClip.clip.mediaId}`
+      const cached = timelinePreviewCacheRef.current.get(assetId)
+      if (cached) {
+        setTimelinePreviewUrl(cached)
+        return
+      }
+      const mediaAsset = manifest.assets.find((asset) => asset.id === assetId)
+      if (!mediaAsset) {
+        setTimelinePreviewUrl(null)
+        return
+      }
+      try {
+        const url = await window.electronAPI.readOutputAssetDataUrl(workspaceId, outputId, mediaAsset.id)
+        if (cancelled) return
+        timelinePreviewCacheRef.current.set(assetId, url)
+        setTimelinePreviewUrl(url)
+      } catch {
+        if (!cancelled) setTimelinePreviewUrl(null)
+      }
+    }
+    void loadTimelinePreviewClip()
+    return () => {
+      cancelled = true
+    }
+  }, [manifest, outputId, timelinePreviewClip?.clip.mediaId, workspaceId])
+
+  React.useEffect(() => {
+    const video = previewVideoRef.current
+    const previewClip = timelinePreviewClip
+    if (!video || !timelinePreviewUrl || !previewClip) return
+    const timelineOffsetMs = playheadMs - (previewClip.clip.startMs ?? 0)
+    const withinClip = timelineOffsetMs >= 0 && timelineOffsetMs <= (previewClip.clip.durationMs ?? 0)
+    if (!isPreviewPlaying || switchingPreviewClipRef.current) {
+      video.currentTime = previewClipSourceTime(previewClip.clip, withinClip ? playheadMs : previewClip.clip.startMs ?? 0)
+    }
+    if (isPreviewPlaying) {
+      switchingPreviewClipRef.current = false
+      void video.play()
+    }
+  }, [isPreviewPlaying, playheadMs, timelinePreviewClip, timelinePreviewUrl])
+
+  React.useEffect(() => {
+    if (!isPreviewPlaying) return
+    let frameId = 0
+    const tick = () => {
+      const video = previewVideoRef.current
+      const previewClip = timelinePreviewClipRef.current
+      if (!video || !previewClip || video.paused) {
+        frameId = requestAnimationFrame(tick)
+        return
+      }
+      const timelineMs = timelineMsFromPreviewVideoTime(previewClip.clip, video.currentTime)
+      const clipEndMs = (previewClip.clip.startMs ?? 0) + (previewClip.clip.durationMs ?? 0)
+      if (timelineMs >= clipEndMs - 24) {
+        if (!advanceToNextPreviewClip(clipEndMs + 1)) {
+          setPlayheadMs(Math.round(clampNumber(clipEndMs, 0, timelineDurationMs)))
+          setIsPreviewPlaying(false)
+          video.pause()
+        }
+        return
+      }
+      setPlayheadMs(Math.round(clampNumber(timelineMs, 0, timelineDurationMs)))
+      frameId = requestAnimationFrame(tick)
+    }
+    frameId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frameId)
+  }, [advanceToNextPreviewClip, isPreviewPlaying, timelineDurationMs])
 
   const updateProject = React.useCallback((updater: (current: VideoProject) => VideoProject, options: { recordHistory?: boolean } = {}) => {
     setProject((current) => {
@@ -1080,11 +1192,19 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                       ref={previewVideoRef}
                       src={previewUrl}
                       controls
-                      onTimeUpdate={(event) => updatePlayheadFromPreviewTime(event.currentTarget.currentTime * 1000)}
-                      onSeeked={(event) => updatePlayheadFromPreviewTime(event.currentTarget.currentTime * 1000)}
+                      onSeeked={(event) => {
+                        const previewClip = timelinePreviewClipRef.current
+                        if (previewClip) setPlayheadMs(Math.round(clampNumber(timelineMsFromPreviewVideoTime(previewClip.clip, event.currentTarget.currentTime), 0, timelineDurationMs)))
+                      }}
                       onPlay={() => setIsPreviewPlaying(true)}
-                      onPause={() => setIsPreviewPlaying(false)}
-                      onEnded={() => setIsPreviewPlaying(false)}
+                      onPause={() => {
+                        if (!switchingPreviewClipRef.current) setIsPreviewPlaying(false)
+                      }}
+                      onEnded={() => {
+                        const previewClip = timelinePreviewClipRef.current
+                        const clipEndMs = previewClip ? (previewClip.clip.startMs ?? 0) + (previewClip.clip.durationMs ?? 0) : playheadMs
+                        if (!advanceToNextPreviewClip(clipEndMs + 1)) setIsPreviewPlaying(false)
+                      }}
                       className="h-full w-full object-contain"
                     />
                   </div>
@@ -1374,7 +1494,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 type="button"
                 title={isPreviewPlaying ? 'Pause' : 'Play'}
                 onClick={togglePreviewPlayback}
-                disabled={!previewUrl}
+                disabled={!timelinePreviewClip && !previewUrl}
                 className="flex h-7 min-w-16 items-center justify-center gap-1.5 rounded-md bg-white/[0.06] px-2 text-[12px] text-white/68 hover:bg-white/[0.1] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
               >
                 {isPreviewPlaying ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
@@ -1512,6 +1632,48 @@ function computeTimelineDuration(tracks: VideoProject['timeline']['tracks']): nu
 function findTrackForClip(project: VideoProject | null, clipId: string | null | undefined): VideoProject['timeline']['tracks'][number] | null {
   if (!project || !clipId) return null
   return (project.timeline?.tracks ?? []).find((track) => (track.clips ?? []).some((clip) => clip.id === clipId)) ?? null
+}
+
+function timelinePreviewClips(project: VideoProject | null): TimelinePreviewClip[] {
+  if (!project) return []
+  const mediaById = new Map(project.media.map((media) => [media.id, media]))
+  return (project.timeline?.tracks ?? [])
+    .flatMap((track, trackIndex) => {
+      if (track.hidden === true || track.type !== 'video') return []
+      return (track.clips ?? []).flatMap((clip) => {
+        if (clip.disabled === true || clip.type !== 'video' || !clip.mediaId) return []
+        const media = mediaById.get(clip.mediaId)
+        if (!media || media.type !== 'video') return []
+        return [{ clip, media, trackIndex }]
+      })
+    })
+    .sort((a, b) => (a.clip.startMs ?? 0) - (b.clip.startMs ?? 0) || b.trackIndex - a.trackIndex)
+}
+
+function findTimelinePreviewClip(project: VideoProject | null, timeMs: number): TimelinePreviewClip | null {
+  const roundedTimeMs = Math.max(0, Math.round(timeMs))
+  return timelinePreviewClips(project).find(({ clip }) => {
+    const startMs = clip.startMs ?? 0
+    const endMs = startMs + Math.max(MIN_CLIP_DURATION_MS, clip.durationMs ?? MIN_CLIP_DURATION_MS)
+    return roundedTimeMs >= startMs && roundedTimeMs < endMs
+  }) ?? null
+}
+
+function findNextTimelinePreviewClip(project: VideoProject | null, afterMs: number): TimelinePreviewClip | null {
+  const roundedAfterMs = Math.max(0, Math.round(afterMs))
+  return timelinePreviewClips(project).find(({ clip }) => (clip.startMs ?? 0) >= roundedAfterMs) ?? null
+}
+
+function previewClipSourceTime(clip: VideoClip, timelineMs: number): number {
+  const sourceInMs = clip.sourceInMs ?? 0
+  const clipStartMs = clip.startMs ?? 0
+  return Math.max(0, (sourceInMs + Math.max(0, timelineMs - clipStartMs)) / 1000)
+}
+
+function timelineMsFromPreviewVideoTime(clip: VideoClip, currentTimeSeconds: number): number {
+  const sourceInMs = clip.sourceInMs ?? 0
+  const clipStartMs = clip.startMs ?? 0
+  return clipStartMs + Math.max(0, (currentTimeSeconds * 1000) - sourceInMs)
 }
 
 function sortClipsByStart(clips: VideoClip[]): VideoClip[] {
