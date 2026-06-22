@@ -207,12 +207,15 @@ describe('AgentMessageService', () => {
     expect(result.ok).toBe(true);
     expect(result.status).toBe('running');
     expect(readAgentMessageReceipt(root, result.receiptId!)?.status).toBe('running');
+    expect(passiveMessages[0]).toContain('Background agent "reviewer" started');
+    expect(passiveMessages[0]).toContain(`receiptId: ${result.receiptId}`);
+    expect(passiveMessages[0]).toContain('childSessionId: child-1');
 
     resolveSend?.();
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(readAgentMessageReceipt(root, result.receiptId!)?.status).toBe('succeeded');
-    expect(passiveMessages[0]).toContain('Background agent "reviewer" finished');
-    expect(passiveMessages[0]).toContain(`receiptId: ${result.receiptId}`);
+    expect(passiveMessages[1]).toContain('Background agent "reviewer" finished');
+    expect(passiveMessages[1]).toContain(`receiptId: ${result.receiptId}`);
   });
 });

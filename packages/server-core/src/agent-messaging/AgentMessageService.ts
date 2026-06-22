@@ -237,6 +237,7 @@ export class AgentMessageService {
       });
 
       if (input.background) {
+        await this.notifyBackgroundParentStarted(receipt, runtime);
         void finish();
         return this.resultFromReceipt(receipt, started);
       }
@@ -341,6 +342,25 @@ export class AgentMessageService {
       receipt.childSessionId ? `childSessionId: ${receipt.childSessionId}` : undefined,
       receipt.result?.summary ? `summary: ${receipt.result.summary}` : undefined,
       receipt.error ? `error: ${receipt.error.code}: ${receipt.error.message}` : undefined,
+    ].filter(Boolean);
+
+    try {
+      await this.deps.deliverPassiveMessage(runtime.parentSessionId, lines.join('\n'));
+    } catch {
+      // Notification is best-effort; the receipt is the durable source of truth.
+    }
+  }
+
+  private async notifyBackgroundParentStarted(
+    receipt: AgentMessageReceipt,
+    runtime: AgentMessageRuntimeContext,
+  ): Promise<void> {
+    if (!receipt.policy.background || !runtime.parentSessionId || !this.deps.deliverPassiveMessage) return;
+
+    const lines = [
+      `Background agent "${receipt.targetAgentSlug}" started.`,
+      `receiptId: ${receipt.id}`,
+      receipt.childSessionId ? `childSessionId: ${receipt.childSessionId}` : undefined,
     ].filter(Boolean);
 
     try {
