@@ -127,8 +127,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       } else {
         setRenderPreviewUrl(null)
       }
-      const firstClip = parsed.timeline?.tracks?.flatMap((track) => track.clips ?? [])[0]
-      setSelectedClipId(firstClip?.id ?? null)
+      setSelectedClipId(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -274,10 +273,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
     setRawJson(JSON.stringify(next, null, 2))
     setRawJsonDirty(false)
     const clipStillExists = selectedClipId && next.timeline?.tracks?.some((track) => track.clips?.some((clip) => clip.id === selectedClipId))
-    if (!clipStillExists) {
-      const firstClip = next.timeline?.tracks?.flatMap((track) => track.clips ?? [])[0]
-      setSelectedClipId(firstClip?.id ?? null)
-    }
+    if (!clipStillExists) setSelectedClipId(null)
   }, [selectedClipId])
 
   const undo = React.useCallback(() => {
@@ -544,7 +540,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
       const targetTrack = tracks.find((track) => track.type === trackType && track.locked !== true)
       if (!targetTrack) return current
       const durationMs = Math.max(MIN_CLIP_DURATION_MS, item.durationMs ?? (item.type === 'image' ? 3000 : 1000))
-      const startMs = clampClipMoveStart(targetTrack.clips ?? [], crypto.randomUUID(), playheadMs, durationMs)
+      const laneEndMs = (targetTrack.clips ?? []).reduce((end, clip) => Math.max(end, (clip.startMs ?? 0) + (clip.durationMs ?? 0)), 0)
+      const startMs = clampClipMoveStart(targetTrack.clips ?? [], crypto.randomUUID(), laneEndMs, durationMs)
       createdId = crypto.randomUUID()
       const clip: VideoClip = {
         id: createdId,
@@ -1455,7 +1452,8 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                 <div
                   key={track.id}
                   data-video-track-id={track.id}
-                  className="flex h-[60px] items-center border-b border-white/[0.05] px-3"
+                  className="relative h-[60px] border-b border-white/[0.05]"
+                  style={{ minWidth: `${timelinePositionPixels(timelineDurationMs, timelineZoom) + 180}px` }}
                   onPointerDown={(event) => {
                     if (event.target instanceof HTMLElement && event.target.closest('button')) return
                     event.currentTarget.setPointerCapture(event.pointerId)
@@ -1471,7 +1469,7 @@ export default function VideoStudioPage({ workspaceId, outputId }: Props) {
                     }
                   }}
                 >
-                  {(track.clips ?? []).length === 0 ? <span className="text-xs text-white/26">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, timelineZoom, track, (clip) => {
+                  {(track.clips ?? []).length === 0 ? <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-white/26">No clips</span> : renderTimelineClips(track.clips ?? [], selectedClipId, timelineZoom, track, (clip) => {
                     setSelectedClipId(clip.id)
                   }, (event, clip, mode) => {
                     if (track.locked) return
@@ -1774,7 +1772,6 @@ function renderTimelineClips(
   onOpenContextMenu: (clip: VideoClip, event: React.MouseEvent<HTMLElement>) => void,
 ): React.ReactNode[] {
   const nodes: React.ReactNode[] = []
-  let cursor = 0
   for (const clip of sortClipsByStart(clips)) {
     const startMs = clip.startMs ?? 0
     const durationMs = clip.durationMs ?? 1000
@@ -1782,18 +1779,6 @@ function renderTimelineClips(
     const trackMuted = track.muted === true
     const trackHidden = track.hidden === true
     const trackLocked = track.locked === true
-    const gapMs = Math.max(0, startMs - cursor)
-    if (gapMs > 0) {
-      nodes.push(
-        <div
-          key={`gap-${clip.id}`}
-          className="flex h-10 shrink-0 items-center justify-center rounded-md border border-dashed border-white/[0.06] bg-black/25 px-2 text-[10px] uppercase tracking-wide text-white/28"
-          style={{ width: `${timelinePixels(gapMs, zoom)}px` }}
-        >
-          Gap
-        </div>,
-      )
-    }
     nodes.push(
       <button
         key={clip.id}
@@ -1804,14 +1789,17 @@ function renderTimelineClips(
           onOpenContextMenu(clip, event)
         }}
         onPointerDown={(event) => onStartDrag(event, clip, 'move')}
-        className={`group relative h-10 min-w-[112px] cursor-grab rounded-md border px-3 text-left text-xs active:cursor-grabbing ${
+        className={`group absolute top-1/2 h-10 min-w-[112px] -translate-y-1/2 cursor-grab rounded-md border px-3 text-left text-xs active:cursor-grabbing ${
           inactive || trackHidden
             ? 'border-white/[0.05] bg-white/[0.025] text-white/28 opacity-55'
             : selectedClipId === clip.id
-              ? 'border-[#f97316]/70 bg-[#f97316]/18 text-white'
+              ? 'border-[#d8dee9]/75 bg-[#263238] text-white shadow-[0_0_0_1px_rgba(24,199,212,0.28)]'
               : 'border-[#18c7d4]/22 bg-[#172326] text-white/78 hover:border-[#18c7d4]/42 hover:bg-[#1b2c30]'
         }`}
-        style={{ width: `${Math.max(112, timelinePixels(durationMs, zoom))}px` }}
+        style={{
+          left: `${timelinePositionPixels(startMs, zoom) + 12}px`,
+          width: `${Math.max(112, timelinePixels(durationMs, zoom))}px`,
+        }}
       >
         {(inactive || trackMuted || trackHidden || trackLocked) && (
           <span className="absolute right-2 top-1 rounded bg-black/45 px-1 text-[9px] uppercase tracking-wide text-white/40">
@@ -1838,7 +1826,6 @@ function renderTimelineClips(
         />
       </button>,
     )
-    cursor = Math.max(cursor, startMs + durationMs)
   }
   return nodes
 }
