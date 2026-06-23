@@ -1657,6 +1657,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                             onOpenFile={onOpenFile}
                             onOpenUrl={onOpenUrl}
                             sessionId={session?.id}
+                            onOpenSubagentSession={openSubagentSession}
                             onRetry={turn.message.role === 'error' ? () => {
                               const msgs = session?.messages
                               if (!msgs) return
@@ -2467,6 +2468,7 @@ const MemoizedMessageBubble = React.memo(MessageBubble, (prev, next) => {
     prev.message.content === next.message.content &&
     prev.message.role === next.message.role &&
     prev.message.displayIntent === next.message.displayIntent &&
+    prev.message.agentMessage?.childSessionId === next.message.agentMessage?.childSessionId &&
     prev.sessionId === next.sessionId &&
     prev.compactMode === next.compactMode &&
     prev.onOpenSubagentSession === next.onOpenSubagentSession
