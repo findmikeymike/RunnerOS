@@ -151,6 +151,20 @@ function isConversationContextMessage(message: Message): boolean {
     && message.displayIntent !== 'agent-message-passive'
 }
 
+export type SessionVisibilityOptions = {
+  includeHidden?: boolean
+}
+
+export function shouldExposeSessionInLists(session: { hidden?: boolean }, options?: SessionVisibilityOptions): boolean {
+  return options?.includeHidden === true || session.hidden !== true
+}
+
+export function assertCanSendAgentMessageToSession(target: { id: string; hidden?: boolean }): void {
+  if (target.hidden) {
+    throw new Error(`Session "${target.id}" is hidden and cannot receive send_agent_message traffic. Use its receipt or direct session view instead.`)
+  }
+}
+
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
 import { resizeImageForAPI, resizeIconBuffer } from '@craft-agent/server-core/services'
@@ -3108,7 +3122,7 @@ user a clickable link to where the thing now lives.`
     this.loadSessionsFromDisk()
   }
 
-  getSessions(workspaceId?: string): Session[] {
+  getSessions(workspaceId?: string, options?: SessionVisibilityOptions): Session[] {
     // Returns session metadata only - messages are NOT included to save memory
     // Use getSession(id) to load messages for a specific session
     let sessions = Array.from(this.sessions.values())
@@ -3119,6 +3133,7 @@ user a clickable link to where the thing now lives.`
     }
 
     return sessions
+      .filter(m => shouldExposeSessionInLists(m, options))
       .map(m => managedToSession(m))
       .sort((a, b) => (b.lastMessageAt ?? 0) - (a.lastMessageAt ?? 0))
   }
@@ -5044,6 +5059,7 @@ user a clickable link to where the thing now lives.`
           if (target.workspace.id !== managed.workspace.id) {
             throw new Error(`Session "${sessionId}" is not in this workspace.`)
           }
+          assertCanSendAgentMessageToSession(target)
 
           if (options?.deliveryMode === 'passive' && attachments?.length) {
             throw new Error('Passive agent messages do not support attachments.')

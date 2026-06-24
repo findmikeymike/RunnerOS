@@ -43,7 +43,7 @@ export interface ISessionManager {
   // Session CRUD
   // ---------------------------------------------------------------------------
 
-  getSessions(workspaceId?: string): Session[]
+  getSessions(workspaceId?: string, options?: { includeHidden?: boolean }): Session[]
   getSession(sessionId: string): Promise<Session | null>
   createSession(workspaceId: string, options?: CreateSessionOptions): Promise<Session>
   resolveAgentSessionOptions(
