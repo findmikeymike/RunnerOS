@@ -96,6 +96,7 @@ import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } fr
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
+import { listAgentMessageReceipts, type AgentMessageReceipt } from '@craft-agent/shared/agent-messaging'
 import { agentMatchesSearch } from './agent-search'
 import {
   createAgentMemorySidecarApplyMemory,
@@ -159,8 +160,42 @@ export function shouldExposeSessionInLists(session: { hidden?: boolean }, option
   return options?.includeHidden === true || session.hidden !== true
 }
 
-export function assertCanSendAgentMessageToSession(target: { id: string; hidden?: boolean }): void {
-  if (target.hidden) {
+export type AgentMessageSendBoundaryOptions = {
+  allowHiddenTarget?: boolean
+}
+
+export function isAgentMessageLineageReply(
+  receipts: Pick<AgentMessageReceipt, 'childSessionId' | 'parentSessionId'>[],
+  senderSessionId: string,
+  targetSessionId: string,
+): boolean {
+  return receipts.some((receipt) => (
+    receipt.childSessionId === senderSessionId
+    && receipt.parentSessionId === targetSessionId
+  ))
+}
+
+function canSendPassiveAgentMessageToHiddenParent(
+  workspaceRootPath: string,
+  senderSessionId: string,
+  targetSessionId: string,
+): boolean {
+  try {
+    return isAgentMessageLineageReply(
+      listAgentMessageReceipts(workspaceRootPath),
+      senderSessionId,
+      targetSessionId,
+    )
+  } catch {
+    return false
+  }
+}
+
+export function assertCanSendAgentMessageToSession(
+  target: { id: string; hidden?: boolean },
+  options?: AgentMessageSendBoundaryOptions,
+): void {
+  if (target.hidden && options?.allowHiddenTarget !== true) {
     throw new Error(`Session "${target.id}" is hidden and cannot receive send_agent_message traffic. Use its receipt or direct session view instead.`)
   }
 }
@@ -5059,7 +5094,10 @@ user a clickable link to where the thing now lives.`
           if (target.workspace.id !== managed.workspace.id) {
             throw new Error(`Session "${sessionId}" is not in this workspace.`)
           }
-          assertCanSendAgentMessageToSession(target)
+          assertCanSendAgentMessageToSession(target, {
+            allowHiddenTarget: options?.deliveryMode === 'passive'
+              && canSendPassiveAgentMessageToHiddenParent(managed.workspace.rootPath, managed.id, target.id),
+          })
 
           if (options?.deliveryMode === 'passive' && attachments?.length) {
             throw new Error('Passive agent messages do not support attachments.')
