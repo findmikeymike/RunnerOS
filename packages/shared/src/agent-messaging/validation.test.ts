@@ -13,10 +13,20 @@ describe('agent messaging validation', () => {
     expect(input.agentSlug).toBe('code-reviewer');
     expect(input.sourceSlugs).toEqual(['exa', 'github']);
     expect(input.skillSlugs).toEqual(['fix']);
-    expect(input.permissionMode).toBe('ask');
+    expect(input.permissionMode).toBeUndefined();
     expect(input.timeoutSeconds).toBe(300);
     expect(input.maxTurns).toBe(1);
     expect(input.background).toBe(false);
+  });
+
+  test('preserves explicit permission mode', () => {
+    const input = normalizeMessageAgentInput({
+      agentSlug: 'code-reviewer',
+      task: 'Review the diff.',
+      permissionMode: 'safe',
+    }, { parentPermissionMode: 'ask' });
+
+    expect(input.permissionMode).toBe('safe');
   });
 
   test('normalizes background mode', () => {

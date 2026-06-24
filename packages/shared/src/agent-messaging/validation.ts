@@ -66,8 +66,8 @@ export function normalizeMessageAgentInput(
   }
 
   const parentPermissionMode = options?.parentPermissionMode ?? 'ask';
-  const requestedPermissionMode = input.permissionMode ?? parentPermissionMode;
-  if (isPermissionEscalation(requestedPermissionMode, parentPermissionMode)) {
+  const requestedPermissionMode = input.permissionMode;
+  if (requestedPermissionMode && isPermissionEscalation(requestedPermissionMode, parentPermissionMode)) {
     throw new Error(`message_agent cannot escalate permissionMode from ${parentPermissionMode} to ${requestedPermissionMode}.`);
   }
 

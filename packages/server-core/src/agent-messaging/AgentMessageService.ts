@@ -89,6 +89,31 @@ function buildDelegationPrompt(
   return input.outputSchema ? appendOutputSchemaInstruction(prompt, input.outputSchema) : prompt;
 }
 
+const PERMISSION_RANK: Record<PermissionMode, number> = {
+  safe: 0,
+  ask: 1,
+  'allow-all': 2,
+};
+
+function leastPrivilegedPermission(modes: PermissionMode[]): PermissionMode {
+  return modes.reduce((lowest, mode) => (
+    PERMISSION_RANK[mode] < PERMISSION_RANK[lowest] ? mode : lowest
+  ));
+}
+
+function isPermissionAbove(permissionMode: PermissionMode, ceiling: PermissionMode): boolean {
+  return PERMISSION_RANK[permissionMode] > PERMISSION_RANK[ceiling];
+}
+
+function requireRequestedSubset(kind: 'source' | 'skill', requested: string[], allowed: string[] | undefined): void {
+  if (requested.length === 0) return;
+  const allowedSet = new Set(allowed ?? []);
+  const unavailable = requested.filter((slug) => !allowedSet.has(slug));
+  if (unavailable.length > 0) {
+    throw new Error(`Requested ${kind} slug(s) are not available to the target agent: ${unavailable.join(', ')}`);
+  }
+}
+
 function timeout<T>(promise: Promise<T>, ms: number): Promise<{ timedOut: false; value: T } | { timedOut: true }> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => resolve({ timedOut: true }), ms);
@@ -142,7 +167,7 @@ export class AgentMessageService {
       task: input.task,
       status: 'running',
       policy: {
-        permissionMode: input.permissionMode,
+        permissionMode: input.permissionMode ?? runtime.parentPermissionMode,
         timeoutSeconds: input.timeoutSeconds,
         maxTurns: input.maxTurns,
         maxDepth,
@@ -165,6 +190,18 @@ export class AgentMessageService {
     const started = Date.now();
     try {
       const agentOptions = await this.deps.resolveAgentSessionOptions(runtime.workspaceId, input.agentSlug);
+      const targetPermissionMode = agentOptions.permissionMode ?? runtime.parentPermissionMode;
+      const requestedPermissionMode = rawInput.permissionMode;
+      if (requestedPermissionMode && isPermissionAbove(requestedPermissionMode, targetPermissionMode)) {
+        throw new Error(`message_agent cannot raise permissionMode above target agent default (${targetPermissionMode}).`);
+      }
+
+      const effectivePermissionMode = requestedPermissionMode
+        ?? leastPrivilegedPermission([runtime.parentPermissionMode, targetPermissionMode]);
+
+      requireRequestedSubset('source', input.sourceSlugs, agentOptions.enabledSourceSlugs);
+      requireRequestedSubset('skill', input.skillSlugs, agentOptions.agentSkillSlugs);
+
       if (input.sourceSlugs.length > 0 && this.deps.resolveUsableSourceSlugs) {
         const readiness = this.deps.resolveUsableSourceSlugs(runtime.workspaceId, input.sourceSlugs);
         if (readiness.unavailable.length > 0) {
@@ -186,7 +223,7 @@ export class AgentMessageService {
         name: `Delegated: ${input.agentSlug}`,
         hidden: true,
         labels: [`agent-message-depth:${depth + 1}`],
-        permissionMode: input.permissionMode,
+        permissionMode: effectivePermissionMode,
         enabledSourceSlugs,
         agentSkillSlugs,
         spawnedFromAgent: {
@@ -205,7 +242,7 @@ export class AgentMessageService {
           },
           config: {
             ...(baseLaunchReceipt?.config ?? {}),
-            permissionMode: input.permissionMode,
+            permissionMode: effectivePermissionMode,
             model: agentOptions.model,
             llmConnection: agentOptions.llmConnection,
             thinkingLevel: agentOptions.thinkingLevel,
@@ -222,11 +259,14 @@ export class AgentMessageService {
       });
 
       receipt.childSessionId = child.id;
+      receipt.policy.permissionMode = effectivePermissionMode;
+      receipt.constraints.sourceSlugs = enabledSourceSlugs ?? [];
+      receipt.constraints.skillSlugs = agentSkillSlugs ?? [];
       receipt.updatedAt = now();
       persist();
 
       const prompt = buildDelegationPrompt(input, runtime);
-      const startSend = () => this.deps.sendMessage(child.id, prompt, { skillSlugs: input.skillSlugs });
+      const startSend = () => this.deps.sendMessage(child.id, prompt, { skillSlugs: agentSkillSlugs });
       const finish = (sendPromise: Promise<void>) => this.finishDelegatedTurn({
         receipt,
         input,

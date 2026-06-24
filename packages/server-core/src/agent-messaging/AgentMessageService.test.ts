@@ -124,6 +124,169 @@ describe('AgentMessageService', () => {
     expect(result.error?.message).toContain('missing-source');
   });
 
+  test('defaults child permission to target agent default capped by parent', async () => {
+    const created: unknown[] = [];
+    const service = new AgentMessageService(deps({
+      createSession: async (_workspaceId, options) => {
+        created.push(options);
+        return { id: 'child-1' };
+      },
+      resolveAgentSessionOptions: async (_workspaceId, agentSlug) => ({
+        spawnedFromAgent: { agentSlug, agentName: agentSlug, timestamp: 1 },
+        enabledSourceSlugs: ['exa'],
+        agentSkillSlugs: ['research'],
+        permissionMode: 'safe',
+        launchReceipt: {
+          createdAt: 1,
+          origin: 'agent',
+          agent: { slug: agentSlug, name: agentSlug },
+          config: { permissionMode: 'safe' },
+          injected: { skills: ['research'], sources: ['exa'], contextDocs: [] },
+        },
+      }),
+    }));
+
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentPermissionMode: 'allow-all',
+    }, {
+      agentSlug: 'reviewer',
+      task: 'Review this.',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(created[0]).toMatchObject({ permissionMode: 'safe' });
+    expect(readAgentMessageReceipt(root, result.receiptId!)?.policy.permissionMode).toBe('safe');
+  });
+
+  test('caps target agent default by parent permission', async () => {
+    const created: unknown[] = [];
+    const service = new AgentMessageService(deps({
+      createSession: async (_workspaceId, options) => {
+        created.push(options);
+        return { id: 'child-1' };
+      },
+      resolveAgentSessionOptions: async (_workspaceId, agentSlug) => ({
+        spawnedFromAgent: { agentSlug, agentName: agentSlug, timestamp: 1 },
+        enabledSourceSlugs: ['exa'],
+        agentSkillSlugs: ['research'],
+        permissionMode: 'allow-all',
+      }),
+    }));
+
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentPermissionMode: 'ask',
+    }, {
+      agentSlug: 'reviewer',
+      task: 'Review this.',
+    });
+
+    expect(result.ok).toBe(true);
+    expect(created[0]).toMatchObject({ permissionMode: 'ask' });
+    expect(readAgentMessageReceipt(root, result.receiptId!)?.policy.permissionMode).toBe('ask');
+  });
+
+  test('rejects explicit permission above the target agent default', async () => {
+    let created = false;
+    const service = new AgentMessageService(deps({
+      createSession: async () => {
+        created = true;
+        return { id: 'child-1' };
+      },
+      resolveAgentSessionOptions: async (_workspaceId, agentSlug) => ({
+        spawnedFromAgent: { agentSlug, agentName: agentSlug, timestamp: 1 },
+        enabledSourceSlugs: ['exa'],
+        agentSkillSlugs: ['research'],
+        permissionMode: 'safe',
+      }),
+    }));
+
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentPermissionMode: 'allow-all',
+    }, {
+      agentSlug: 'reviewer',
+      task: 'Review this.',
+      permissionMode: 'ask',
+    });
+
+    expect(created).toBe(false);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe('failed');
+    expect(result.error?.message).toContain('target agent default');
+  });
+
+  test('rejects source requests outside the target agent bundle', async () => {
+    let created = false;
+    const service = new AgentMessageService(deps({
+      createSession: async () => {
+        created = true;
+        return { id: 'child-1' };
+      },
+    }));
+
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentPermissionMode: 'ask',
+    }, {
+      agentSlug: 'reviewer',
+      task: 'Review this.',
+      sourceSlugs: ['exa', 'github'],
+    });
+
+    expect(created).toBe(false);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe('failed');
+    expect(result.error?.message).toContain('github');
+  });
+
+  test('rejects skill requests outside the target agent bundle', async () => {
+    let created = false;
+    const service = new AgentMessageService(deps({
+      createSession: async () => {
+        created = true;
+        return { id: 'child-1' };
+      },
+    }));
+
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentPermissionMode: 'ask',
+    }, {
+      agentSlug: 'reviewer',
+      task: 'Review this.',
+      skillSlugs: ['research', 'browser'],
+    });
+
+    expect(created).toBe(false);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe('failed');
+    expect(result.error?.message).toContain('browser');
+  });
+
+  test('forwards only validated target skill subset to child send', async () => {
+    const sentSkillSlugs: Array<string[] | undefined> = [];
+    const service = new AgentMessageService(deps({
+      sendMessage: async (_sessionId, _prompt, options) => {
+        sentSkillSlugs.push(options?.skillSlugs);
+      },
+    }));
+
+    const result = await service.messageAgent({
+      workspaceId: 'ws',
+      parentPermissionMode: 'ask',
+    }, {
+      agentSlug: 'reviewer',
+      task: 'Review this.',
+      skillSlugs: ['research'],
+    });
+
+    expect(result.ok).toBe(true);
+    expect(sentSkillSlugs[0]).toEqual(['research']);
+    expect(readAgentMessageReceipt(root, result.receiptId!)?.constraints.skillSlugs).toEqual(['research']);
+  });
+
   test('returns timeout result without waiting for stalled child send to drain', async () => {
     let aborted = false;
     const started = Date.now();

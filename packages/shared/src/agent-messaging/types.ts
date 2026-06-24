@@ -83,7 +83,7 @@ export interface NormalizedMessageAgentInput extends MessageAgentInput {
   task: string;
   sourceSlugs: string[];
   skillSlugs: string[];
-  permissionMode: PermissionMode;
+  permissionMode?: PermissionMode;
   timeoutSeconds: number;
   maxTurns: number;
   priority: 'low' | 'normal' | 'high';
