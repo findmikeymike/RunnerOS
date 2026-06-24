@@ -24,7 +24,8 @@ export async function connectToRemote(url: string, token: string, workspaceId?: 
     token,
     workspaceId,
     autoReconnect: false,
-    tlsRejectUnauthorized: false,
+    // Validate TLS certs by default; only skip for explicit dev override.
+    tlsRejectUnauthorized: process.env.CRAFT_INSECURE_TLS === '1' ? false : true,
   })
 
   const connected = await new Promise<boolean>((resolve) => {

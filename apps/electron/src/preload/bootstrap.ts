@@ -124,7 +124,8 @@ if (isClientOnly) {
       mode: 'remote',
       requestTimeout: 90_000,
       clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
-      tlsRejectUnauthorized: false,
+      // Validate TLS certs by default; only skip for explicit dev override.
+      tlsRejectUnauthorized: process.env.CRAFT_INSECURE_TLS === '1' ? false : true,
     })
     initialWorkspaceClient.connect()
   } else {
@@ -149,7 +150,8 @@ if (isClientOnly) {
       mode: 'remote',
       requestTimeout: 90_000,
       clientCapabilities: [...LOCAL_CLIENT_CAPABILITIES],
-      tlsRejectUnauthorized: false,
+      // Validate TLS certs by default; only skip for explicit dev override.
+      tlsRejectUnauthorized: process.env.CRAFT_INSECURE_TLS === '1' ? false : true,
     })
   })
 
