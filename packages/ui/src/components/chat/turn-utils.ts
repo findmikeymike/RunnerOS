@@ -44,11 +44,16 @@ function parseMessageAgentToolResult(message: Message): ActivityItem['agentMessa
   const childSessionId = content.match(/^childSessionId:\s*([^\s]+)\s*$/m)?.[1]
   if (!receiptId && !childSessionId) return undefined
 
+  let status: NonNullable<ActivityItem['agentMessage']>['status'] = message.isError ? 'failed' : 'succeeded'
+  if (!message.isError && /^Agent ".+" started delegated task in the background\./m.test(content)) {
+    status = 'running'
+  }
+
   return {
     receiptId,
     childSessionId,
     targetAgentSlug: typeof message.toolInput?.agentSlug === 'string' ? message.toolInput.agentSlug : undefined,
-    status: message.isError ? 'failed' : 'succeeded',
+    status,
   }
 }
 

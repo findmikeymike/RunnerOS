@@ -409,4 +409,38 @@ describe('message_agent activity metadata', () => {
       status: 'succeeded',
     })
   })
+
+  it('keeps background delegated child session metadata running', () => {
+    resetCounters()
+    const messages: Message[] = [
+      createUserMessage('Ask a specialist'),
+      {
+        id: `tool-${++messageIdCounter}`,
+        role: 'tool',
+        content: '',
+        timestamp: Date.now() + messageIdCounter * 100,
+        toolName: 'message_agent',
+        toolUseId: `tu-${messageIdCounter}`,
+        toolInput: { agentSlug: 'reviewer' },
+        toolStatus: 'completed',
+        toolResult: [
+          'Agent "reviewer" started delegated task in the background.',
+          'receiptId: receipt-123',
+          'childSessionId: child-session-456',
+          'toolUseCount: 0',
+        ].join('\n'),
+        turnId: 'turn-agent',
+      },
+    ]
+
+    const turns = groupMessagesByTurn(messages)
+    const turn = getLastAssistantTurn(turns)
+
+    expect(turn?.activities[0]?.agentMessage).toEqual({
+      receiptId: 'receipt-123',
+      childSessionId: 'child-session-456',
+      targetAgentSlug: 'reviewer',
+      status: 'running',
+    })
+  })
 })
