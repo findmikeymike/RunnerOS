@@ -3,8 +3,25 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { expandWebhookAction } from './webhook-utils.ts';
+import { expandWebhookAction, uniqueWebhookSlug } from './webhook-utils.ts';
 import type { WebhookAction } from './types.ts';
+
+describe('uniqueWebhookSlug', () => {
+  it('returns the base slug when no collision', () => {
+    expect(uniqueWebhookSlug('intake', [])).toBe('intake');
+    expect(uniqueWebhookSlug('intake', ['other'])).toBe('intake');
+  });
+
+  it('appends an incrementing suffix on collision (the duplicate-automation case)', () => {
+    expect(uniqueWebhookSlug('intake', ['intake'])).toBe('intake-2');
+    expect(uniqueWebhookSlug('intake', ['intake', 'intake-2'])).toBe('intake-3');
+  });
+
+  it('skips already-taken suffixes', () => {
+    expect(uniqueWebhookSlug('intake', ['intake', 'intake-3'])).toBe('intake-2');
+    expect(uniqueWebhookSlug('intake', ['intake', 'intake-2', 'intake-3'])).toBe('intake-4');
+  });
+});
 
 const env = {
   CRAFT_WH_SESSION_ID: 'sess-123',

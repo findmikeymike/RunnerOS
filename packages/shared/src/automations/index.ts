@@ -85,7 +85,7 @@ export { evaluateConditions, type ConditionContext } from './conditions.ts';
 export { sanitizeForShell } from './security.ts';
 
 // Webhook execution utilities
-export { executeWebhookRequest, executeWithRetry, createWebhookHistoryEntry, createPromptHistoryEntry, type ExecuteWebhookOptions, type RetryConfig } from './webhook-utils.ts';
+export { executeWebhookRequest, executeWithRetry, createWebhookHistoryEntry, createPromptHistoryEntry, uniqueWebhookSlug, type ExecuteWebhookOptions, type RetryConfig } from './webhook-utils.ts';
 
 // Retry scheduler
 export { RetryScheduler, type RetryQueueEntry, type RetrySchedulerOptions } from './retry-scheduler.ts';

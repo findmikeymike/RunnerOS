@@ -11,6 +11,23 @@ import { expandEnvVars } from './utils.ts';
 import { DEFAULT_WEBHOOK_METHOD, HISTORY_FIELD_MAX_LENGTH } from './constants.ts';
 
 /**
+ * Produce a slug unique within a set of existing slugs by appending -2, -3, ….
+ * WebhookReceive matchers must have unique slugs within their event group, or
+ * config validation fails closed and disables inbound webhook triggers — so
+ * both the add and duplicate paths must uniquify through this single helper.
+ */
+export function uniqueWebhookSlug(baseSlug: string, existingSlugs: Iterable<string>): string {
+  const taken = new Set(existingSlugs);
+  let candidate = baseSlug;
+  let n = 2;
+  while (taken.has(candidate)) {
+    candidate = `${baseSlug}-${n}`;
+    n += 1;
+  }
+  return candidate;
+}
+
+/**
  * Redact a URL for safe logging. Webhook URLs may contain secrets
  * (e.g., Slack webhook paths). Keep scheme + host, truncate long paths.
  */

@@ -3,9 +3,17 @@ import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { appendAutomationHistoryEntry } from '@craft-agent/shared/automations/history-store'
+import { uniqueWebhookSlug } from '@craft-agent/shared/automations/webhook-utils'
 import { AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER } from '@craft-agent/shared/automations/constants'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+
+// Collect the existing webhook slugs in a matcher group (for uniquification).
+function collectWebhookSlugs(matchers: ReadonlyArray<unknown>): string[] {
+  return matchers
+    .map((m) => (typeof (m as { slug?: unknown }).slug === 'string' ? (m as { slug: string }).slug : null))
+    .filter((s): s is string => s !== null)
+}
 
 // History file name — matches AUTOMATIONS_HISTORY_FILE from @craft-agent/shared/automations/constants
 const HISTORY_FILE = 'automations-history.jsonl'
@@ -247,18 +255,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       cloned.id = generateShortId()
       // For WebhookReceive, ensure the slug is unique within the event group
       if (eventName === 'WebhookReceive' && typeof cloned.slug === 'string') {
-        const existingSlugs = new Set(
-          matchers
-            .map((m) => (typeof (m as { slug?: unknown }).slug === 'string' ? (m as { slug: string }).slug : null))
-            .filter((s): s is string => s !== null)
-        )
-        let candidate = cloned.slug
-        let n = 2
-        while (existingSlugs.has(candidate)) {
-          candidate = `${cloned.slug}-${n}`
-          n += 1
-        }
-        cloned.slug = candidate
+        cloned.slug = uniqueWebhookSlug(cloned.slug, collectWebhookSlugs(matchers))
       }
       matchers.push(cloned)
 
@@ -280,6 +277,11 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       const clone = JSON.parse(JSON.stringify(matchers[idx]))
       clone.id = genId()
       clone.name = clone.name ? `${clone.name} Copy` : 'Untitled Copy'
+      // WebhookReceive slugs must be unique within the event group, otherwise
+      // config validation fails closed and disables inbound webhook triggers.
+      if (eventName === 'WebhookReceive' && typeof clone.slug === 'string') {
+        clone.slug = uniqueWebhookSlug(clone.slug, collectWebhookSlugs(matchers))
+      }
       matchers.splice(idx + 1, 0, clone)
     })
   })
