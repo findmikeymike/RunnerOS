@@ -19,6 +19,14 @@
     {
       "pattern": "^cd\\s+tools/google-ads\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+customers-google-ads\\s+search\\s+[^\\s]+\\s+--agent\\s+--query\\s+.+$",
       "comment": "Run read-only GAQL search"
+    },
+    {
+      "pattern": "^cd\\s+tools/google-ads\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+customers-google-ads\\s+mutate\\s+[^\\s]+\\s+--agent\\s+--dry-run\\b.*$",
+      "comment": "Preview Google Ads mutate request without sending it"
+    },
+    {
+      "pattern": "^cd\\s+tools/google-ads\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+customers-[a-z0-9-]+\\s+[^&;|`]*\\s+--agent\\s+--dry-run\\b.*$",
+      "comment": "Preview Google Ads resource operation without sending it"
     }
   ],
   "blockedCommandHints": [
@@ -27,7 +35,8 @@
       "reason": "Google Ads mutation changes live account resources.",
       "context": "Ask for explicit approval before live account changes.",
       "tryInstead": [
-        "Run `node bin/google-ads.mjs customers-google-ads search <customerId> --agent --query \"<GAQL>\"` first"
+        "Run `node bin/google-ads.mjs customers-google-ads search <customerId> --agent --query \"<GAQL>\"` first",
+        "Then run `node bin/google-ads.mjs customers-google-ads mutate <customerId> --agent --dry-run ...` to preview the mutation"
       ]
     },
     {

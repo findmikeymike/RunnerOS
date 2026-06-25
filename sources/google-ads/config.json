@@ -6,7 +6,7 @@
   "provider": "google",
   "type": "local",
   "icon": "G",
-  "tagline": "Bundled Google Ads CLI for account discovery, GAQL reporting, diagnostics, and approval-gated operations.",
+  "tagline": "Bundled Google Ads API v24 CLI for account discovery, GAQL reporting, diagnostics, and approval-gated operations.",
   "local": {
     "path": "tools/google-ads",
     "format": "cli-tool"
