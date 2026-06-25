@@ -16,6 +16,8 @@ cd tools/google-ads
 node bin/google-ads.mjs <command> --agent
 ```
 
+Current bundled build: `2026.6.25-runneros-v24`, targeting Google Ads API `v24`.
+
 Do not assume a globally installed `google-ads-pp-cli`. RunnerOS resolves the bundled binary through `tools/google-ads/bin/google-ads.mjs`.
 
 ## First Checks
@@ -40,5 +42,6 @@ Use real hyphenated commands. Some upstream introspection may show underscore na
 ## Safety
 
 - Start read-only.
+- For proposed writes, run a `--dry-run` preview first and show the exact object, operation payload, reason, risk, and expected impact.
 - Summarize business meaning; do not dump raw API output unless asked.
 - Never mutate campaigns, budgets, keywords, audiences, conversions, billing, or status without explicit approval in the current conversation.

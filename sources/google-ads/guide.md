@@ -2,6 +2,8 @@
 
 Google Ads is bundled with RunnerOS at `tools/google-ads`.
 
+Current bundled build: `2026.6.25-runneros-v24`, targeting Google Ads API `v24`.
+
 ## Scope
 
 - Treat this as a local CLI source, not an MCP server.
@@ -25,6 +27,7 @@ Google Ads is bundled with RunnerOS at `tools/google-ads`.
 - If auth is missing, tell the user to open Tools → Google Ads → Connect Google Ads. RunnerOS stores Google OAuth, developer token, and optional login customer ID for future app launches.
 - Use real hyphenated commands. Some upstream introspection may show underscore names; convert command names to hyphen form before executing.
 - Start read-only. Prefer account discovery, field lookup, and reporting before recommendations.
+- For proposed writes, run a `--dry-run` preview first and show the exact object, operation payload, reason, risk, and expected impact.
 - Never mutate campaigns, budgets, keywords, audiences, conversions, billing, or status without explicit user approval in the current conversation.
 
 ## Validation
