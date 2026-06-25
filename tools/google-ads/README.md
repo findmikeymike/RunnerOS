@@ -2,6 +2,8 @@
 
 Repo-owned wrapper for the bundled `google-ads-pp-cli` binary.
 
+Bundled build: `2026.6.25-runneros-v24`, targeting Google Ads API `v24`.
+
 Use from this directory:
 
 ```bash

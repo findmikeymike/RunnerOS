@@ -86,6 +86,34 @@
       "comment": "Dry-run bundled Printing Press Social DM commands"
     },
     {
+      "pattern": "^cd\\s+(?:tools/google-ads|\"[^\"]*google-ads\")\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+doctor\\s+--agent$",
+      "comment": "Check bundled Google Ads CLI health"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/google-ads|\"[^\"]*google-ads\")\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+auth\\s+status\\s+--agent$",
+      "comment": "Check bundled Google Ads authentication state"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/google-ads|\"[^\"]*google-ads\")\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+customers\\s+list-accessible-customers\\s+--agent$",
+      "comment": "List accessible Google Ads customers"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/google-ads|\"[^\"]*google-ads\")\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+google-ads-fields\\s+search\\s+--agent\\s+--query\\s+.+$",
+      "comment": "Search Google Ads field metadata"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/google-ads|\"[^\"]*google-ads\")\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+customers-google-ads\\s+search\\s+[^\\s]+\\s+--agent\\s+--query\\s+.+$",
+      "comment": "Run read-only Google Ads GAQL search"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/google-ads|\"[^\"]*google-ads\")\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+customers-google-ads\\s+mutate\\s+[^\\s]+\\s+--agent\\s+--dry-run\\b.*$",
+      "comment": "Preview Google Ads mutate request without sending it"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/google-ads|\"[^\"]*google-ads\")\\s+&&\\s+node\\s+bin/google-ads\\.mjs\\s+customers-[a-z0-9-]+\\s+[^&;|`]*\\s+--agent\\s+--dry-run\\b.*$",
+      "comment": "Preview Google Ads resource operation without sending it"
+    },
+    {
       "pattern": "^pdf-tool\\s+(extract|info)\\b",
       "comment": "PDF read operations: extract text/pages, view info"
     },
