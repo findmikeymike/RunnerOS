@@ -9,7 +9,7 @@ RunnerOS bundles `google-ads-pp-cli` from:
 - Upstream release URL: https://github.com/mvanhorn/printing-press-library/releases/tag/google-ads-current
 - Upstream generator version: `3.10.0`
 - RunnerOS build version: `2026.6.25-runneros-v24`
-- Google Ads API target: `v24`
+- Google Ads API target: `v24` REST path, current through Google Ads API v24.2 released 2026-06-24
 - License: Apache-2.0, copied in `LICENSE.google-ads-pp-cli.txt`
 - Notice: copied in `NOTICE.google-ads-pp-cli.txt`
 
@@ -22,7 +22,7 @@ RunnerOS bundles `google-ads-pp-cli` from:
 | `bin/linux-x64/google-ads-pp-cli` | `linux/amd64` | `ea057ae4058bbf6929d0f00d21d4c56a06563a4dc3abeff9411c8ea7f65639a6` |
 | `bin/win32-x64/google-ads-pp-cli.exe` | `windows/amd64` | `a34d38adffc3df51e4a401f95e7d6a165d0f0d8f9a564411d3496982469abee3` |
 
-The upstream release checked on 2026-06-25 still targeted Google Ads API v22. RunnerOS rebuilt the CLI from source with generated REST paths patched to v24 so account discovery, GAQL reporting, and mutate operations call the current major API version. This does not add brand-new v24-only commands that are absent from the upstream generated command surface.
+The upstream release checked on 2026-06-25 still targeted Google Ads API v22. RunnerOS rebuilt the CLI from source with generated REST paths patched to v24 so account discovery, GAQL reporting, and mutate operations call the current major API version. Google Ads API v24.2, released 2026-06-24, is a minor release on the v24 API line; the REST path remains v24. This does not add brand-new v24/v24.2-only commands that are absent from the upstream generated command surface.
 
 RunnerOS does not currently bundle linux-arm64 or windows-arm64 Google Ads variants.
 

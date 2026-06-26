@@ -2,7 +2,7 @@
 
 Google Ads is bundled with RunnerOS at `tools/google-ads`.
 
-Current bundled build: `2026.6.25-runneros-v24`, targeting Google Ads API `v24`.
+Current bundled build: `2026.6.25-runneros-v24`, targeting Google Ads API `v24` with v24.2 release coverage. Google Ads API v24.2 was released on 2026-06-24; the REST endpoint path remains `v24`.
 
 ## Scope
 
