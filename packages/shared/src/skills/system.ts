@@ -3,6 +3,7 @@ export const CREATOR_SYSTEM_SKILL_SLUGS = [
   'automation-creator',
   'workflow-creator',
   'source-recipe',
+  'skill-scout',
 ] as const;
 
 export const CONCIERGE_SYSTEM_SKILL_SLUGS = [

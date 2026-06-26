@@ -981,7 +981,7 @@ export interface ElectronAPI {
   listPulseTicks(workspaceId: string, pulseId: string, limit?: number): Promise<PulseTickEntry[]>
   onPulseTick(callback: (workspaceId: string, tick: PulseTickEntry) => void): () => void
 
-  getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }>>
+  getAutomationHistory(workspaceId: string, automationId: string, limit?: number): Promise<Array<{ id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; type?: 'prompt' | 'webhook' | 'workflow'; status?: string; workflowSlug?: string; runId?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }>>
   getAutomationLastExecuted(workspaceId: string): Promise<Record<string, number>>
   replayAutomation(workspaceId: string, automationId: string, eventName: string): Promise<{ results: Array<{ type: string; url: string; statusCode: number; success: boolean; error?: string; duration: number }> }>
 

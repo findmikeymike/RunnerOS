@@ -65,6 +65,14 @@ export const WebhookActionSchema = z.object({
   ]).optional(),
 });
 
+export const WorkflowActionSchema = z.object({
+  type: z.literal('workflow'),
+  workflowSlug: z
+    .string()
+    .regex(/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/, 'workflowSlug must be lowercase letters, digits, hyphens (1-64 chars, no leading/trailing hyphen)'),
+  triggerInputs: z.record(z.string(), z.unknown()).optional(),
+});
+
 export const PulseActionSchema = z.object({
   type: z.literal('pulse'),
   driverAgentSlug: z
@@ -95,6 +103,7 @@ export const PulseActionSchema = z.object({
 export const ActionDefinitionSchema = z.union([
   PromptActionSchema,
   WebhookActionSchema,
+  WorkflowActionSchema,
   PulseActionSchema,
   z.object({ type: z.string() }).passthrough(),
 ]);

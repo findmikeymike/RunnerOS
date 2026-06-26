@@ -509,8 +509,7 @@ body
 
     expect(hypermotionAgent).toBeDefined()
     expect(hypermotionAgent?.metadata.visualAgent).toBe(true)
-    expect(hypermotionAgent?.metadata.skills).toContain('hyperframes')
-    expect(hypermotionAgent?.metadata.skills).toContain('remotion-production')
+    expect(hypermotionAgent?.metadata.skills).toEqual(['hyperframes'])
     expect(hypermotionAgent?.metadata.sources).toContain('hypermotion')
     expect(hypermotionAgent?.systemPrompt).toContain('node bin/hypermotion.mjs doctor')
     expect(hypermotionAgent?.systemPrompt).toContain('showInCanvas')

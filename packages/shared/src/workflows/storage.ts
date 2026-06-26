@@ -46,10 +46,17 @@ export { parseWorkflowFile, serializeWorkflow } from './parser.ts';
 export const GLOBAL_WORKFLOWS_DIR = join(homedir(), '.workflows');
 
 const DELETED_WORKFLOWS_FILE = '.deleted-workflows.json';
+const SEEDED_WORKFLOWS_FILE = '.seeded-workflows.json';
 
 export interface WorkflowStorageOptions {
   /** Test-only escape hatch; production callers should use the default. */
   globalWorkflowsDir?: string;
+  /**
+   * Starter slugs known to have been available before the seeded-slug manifest
+   * existed. Used to avoid resurrecting deleted starters while still allowing
+   * newly bundled starters to backfill into existing installs.
+   */
+  legacySeededSlugs?: readonly string[];
 }
 
 function getGlobalWorkflowsDir(options?: WorkflowStorageOptions): string {
@@ -74,6 +81,38 @@ export function isValidWorkflowSlug(slug: string): boolean {
 
 function getDeletedWorkflowsFile(options?: WorkflowStorageOptions): string {
   return join(getGlobalWorkflowsDir(options), DELETED_WORKFLOWS_FILE);
+}
+
+function getSeededWorkflowsFile(options?: WorkflowStorageOptions): string {
+  return join(getGlobalWorkflowsDir(options), SEEDED_WORKFLOWS_FILE);
+}
+
+function readSeededWorkflowSlugs(options?: WorkflowStorageOptions): Set<string> | null {
+  const file = getSeededWorkflowsFile(options);
+  if (!existsSync(file)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as { seeded?: unknown };
+    if (!Array.isArray(parsed.seeded)) return new Set();
+    return new Set(
+      parsed.seeded.filter(
+        (slug): slug is string => typeof slug === 'string' && isValidWorkflowSlug(slug),
+      ),
+    );
+  } catch {
+    return new Set();
+  }
+}
+
+function writeSeededWorkflowSlugs(seeded: Set<string>, options?: WorkflowStorageOptions): void {
+  writeFileSync(
+    getSeededWorkflowsFile(options),
+    JSON.stringify(
+      { version: 1, seeded: [...seeded].sort(), updatedAt: new Date().toISOString() },
+      null,
+      2,
+    ) + '\n',
+    'utf-8',
+  );
 }
 
 function readDeletedWorkflowSlugs(options?: WorkflowStorageOptions): Set<string> {
@@ -337,23 +376,30 @@ export function seedGlobalWorkflowLibraryIfEmpty(
   const root = getGlobalWorkflowsDir(options);
   mkdirSync(root, { recursive: true });
   const marker = join(root, '.seeded');
-  if (existsSync(marker)) return { seeded: 0 };
+  const markerExists = existsSync(marker);
+  const seededSlugs = readSeededWorkflowSlugs(options)
+    ?? new Set(markerExists ? (options?.legacySeededSlugs ?? []) : []);
 
   let seeded = 0;
   for (const starter of starters) {
     if (!isValidWorkflowSlug(starter.slug)) continue;
     const dir = getGlobalWorkflowDir(starter.slug, options);
     const file = join(dir, WORKFLOW_FILE);
-    if (existsSync(file)) continue;
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(file, serializeWorkflow(starter.metadata, starter.body), 'utf-8');
+    if (existsSync(file)) {
+      seededSlugs.add(starter.slug);
+      continue;
+    }
+    if (seededSlugs.has(starter.slug)) continue;
+    writeGlobalWorkflow(starter, options);
+    seededSlugs.add(starter.slug);
     seeded += 1;
   }
 
   try {
     writeFileSync(marker, new Date().toISOString(), 'utf-8');
+    writeSeededWorkflowSlugs(seededSlugs, options);
   } catch {
-    // Marker is a hint; failing to write it just means seed will run again.
+    // Markers are hints; failing to write them just means seed may retry.
   }
   return { seeded };
 }

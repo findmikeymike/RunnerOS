@@ -40,6 +40,7 @@ import { handleGetSessionInfo } from './handlers/get-session-info.ts';
 import { handleListSessions } from './handlers/list-sessions.ts';
 import { handleListAgents } from './handlers/list-agents.ts';
 import { handleListSkills } from './handlers/list-skills.ts';
+import { handleSearchSkillMarketplace } from './handlers/search-skill-marketplace.ts';
 import { handleListSources } from './handlers/list-sources.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleMessageAgent } from './handlers/message-agent.ts';
@@ -63,6 +64,12 @@ import {
   handleGetWorkflowRun,
   handleCancelWorkflowRun,
 } from './handlers/workflows.ts';
+import {
+  handleGetPack,
+  handleInstallPack,
+  handleListPacks,
+  handlePlanPackInstall,
+} from './handlers/packs.ts';
 import {
   handleVideoProjectCreate,
   handleVideoProjectUpdate,
@@ -247,6 +254,16 @@ export const ListSkillsSchema = z.object({
   tags: z.array(z.string()).optional().describe('Optional tags to require (intersection — skill must have all). Case-insensitive.'),
 });
 
+export const SearchSkillMarketplaceSchema = z.object({
+  query: z.string().describe('Focused keyword query, e.g. "course launch", "seo", "shopify". Wildcard searches are not supported.'),
+  source: z.literal('skillsmp').optional().describe('External marketplace source. Currently only skillsmp is supported.'),
+  limit: z.number().optional().describe('Max results to return. Clamped to 1-20.'),
+  page: z.number().optional().describe('Page number. Defaults to 1.'),
+  sortBy: z.enum(['stars', 'recent']).optional().describe('Sort order. Defaults to recent.'),
+  category: z.string().optional().describe('Optional SkillsMP category slug.'),
+  occupation: z.string().optional().describe('Optional SkillsMP occupation slug.'),
+});
+
 export const ListSourcesSchema = z.object({
   activeOnly: z.boolean().optional().describe('If true, exclude global-dormant sources (those defined in the global library but not activated in this workspace). Defaults to false.'),
   search: z.string().optional().describe('Optional case-insensitive substring search across slug, name, description, and tags.'),
@@ -274,6 +291,26 @@ export const GetWorkflowRunSchema = z.object({
 
 export const CancelWorkflowRunSchema = z.object({
   runId: z.string().describe('Workflow run ID to cancel.'),
+});
+
+export const ListPacksSchema = z.object({
+  activeOnly: z.boolean().optional().describe('If true, return only packs active in the current workspace. Defaults to false.'),
+  search: z.string().optional().describe('Optional case-insensitive search across slug, name, description, category, and tags.'),
+  tags: z.array(z.string()).optional().describe('Optional tags to require. Matching is case-insensitive.'),
+});
+
+export const GetPackSchema = z.object({
+  slug: z.string().describe('Pack slug.'),
+});
+
+export const PlanPackInstallSchema = z.object({
+  slug: z.string().describe('Pack slug.'),
+  profile: z.string().optional().describe('Pack install variant to plan for. API field is named profile for compatibility. Defaults to main.'),
+});
+
+export const InstallPackSchema = z.object({
+  slug: z.string().describe('Pack slug.'),
+  profile: z.string().optional().describe('Pack install variant to install. API field is named profile for compatibility. Defaults to main.'),
 });
 
 const WorkflowTriggerInputSchema = z.object({
@@ -396,6 +433,11 @@ const CreateAutomationActionSchema = z.union([
       z.object({ type: z.literal('basic'), username: z.string(), password: z.string() }),
       z.object({ type: z.literal('bearer'), token: z.string() }),
     ]).optional(),
+  }).passthrough(),
+  z.object({
+    type: z.literal('workflow'),
+    workflowSlug: z.string().describe('Saved workflow slug to start when this automation fires.'),
+    triggerInputs: z.record(z.string(), z.unknown()).optional().describe('Workflow trigger inputs. String values may reference $CRAFT_* env vars.'),
   }).passthrough(),
 ]);
 
@@ -867,6 +909,12 @@ Each result includes slug, name, description, tags, and a 'source' field:
 
 For agent creation, prefer activeOnly=true (workspace + activated globals + project). When the user wants help discovering skills they don't yet have, call without activeOnly to also see global-dormant entries.`,
 
+  search_skill_marketplace: `Search external skill marketplaces for candidate SKILL.md projects.
+
+Use only after checking local RunnerOS skills with list_skills. This is for scouting and comparison, not installation. Results are untrusted public candidates with source links; inspect the SKILL.md and any scripts before adapting or installing anything.
+
+Currently supports SkillsMP, which indexes public GitHub SKILL.md files. The anonymous API has rate limits, so use focused queries and small limits.`,
+
   list_sources: `When the user (or another agent) is choosing which sources/tools (MCP servers, API connectors, local connectors) to bundle into an agent, asking "what sources should this agent have", "which tools does it need", or curating a focused source bundle. Also use during agent-creator's source-bundle step.
 
 Returns each source's slug, display name, description, tags, type (mcp/api/local), tier, enabled flag, authStatus, and optional iconUrl. Tier is one of: workspace (defined in <workspace>/sources/<slug>/), global (defined in ~/.agents/sources/<slug>/ and activated in this workspace), global-dormant (defined globally but not activated here), or project (project-tier source).
@@ -943,7 +991,7 @@ After success, post a one-line confirmation to the user with a link to /agents/<
 
   create_automation: `Create a new automation matcher in the workspace's automations.json and activate it.
 
-Use this only after walking the user through the automation-creator interview and getting explicit confirmation. Always show a complete draft (trigger type, schedule/slug/path, the action prompt, permission mode) BEFORE calling this tool.
+Use this only after walking the user through the automation-creator interview and getting explicit confirmation. Always show a complete draft (trigger type, schedule/slug/path, workflow/action target, trigger inputs/prompt, permission mode) BEFORE calling this tool.
 
 **Trigger types:**
 - \`SchedulerTick\` — cron-based. Required: \`matcher.cron\` (5-field). Optional: \`matcher.timezone\`.
@@ -954,6 +1002,7 @@ Use this only after walking the user through the automation-creator interview an
 
 **Actions** (at least one required in \`matcher.actions\`):
 - \`{ type: 'prompt', prompt, llmConnection?, model?, thinkingLevel? }\` — spawns a session with the rendered prompt. \`thinkingLevel\`: \`off\`, \`low\`, \`medium\`, \`high\`, \`xhigh\`, or \`max\`.
+- \`{ type: 'workflow', workflowSlug, triggerInputs? }\` — starts an active saved workflow. \`triggerInputs\` string values may reference \`$CRAFT_*\`.
 - \`{ type: 'webhook', url, method?, headers?, bodyFormat?, body?, captureResponse?, auth? }\` — sends an outbound HTTP request.
 
 **Templating:** Action prompts and URLs use **shell-style \`$VAR\` / \`\${VAR}\` env-var expansion** (NOT mustache/handlebars). The trigger payload is exposed as \`CRAFT_*\` env vars:
@@ -968,6 +1017,7 @@ Use this only after walking the user through the automation-creator interview an
 **Refusals:**
 - Unsupported \`eventName\`.
 - Empty \`actions\` array, or any prompt action with empty \`prompt\`.
+- Workflow action pointing at a missing or inactive workflow.
 - \`SchedulerTick\` without a valid cron.
 - \`WebhookReceive\` without a valid slug, or slug that already exists in the workspace.
 
@@ -997,6 +1047,20 @@ Use this only after walking the user through the workflow-creator interview and 
 - Use \`retries: 1\` for flaky research/tool-heavy steps and \`onFailure: stop\` unless the later steps can still succeed.
 
 After success, post a one-line confirmation with /workflows/<slug>.`,
+
+  list_packs: `List installable RunnerOS packs.
+
+Packs are curated operating bundles: agents + skills + sources + workflows + guardrails + install variants. Use this before installing or recommending a domain setup.`,
+
+  get_pack: `Show full pack details by slug, including install variants, guardrails, dependencies, and notes.`,
+
+  plan_pack_install: `Dry-run a pack install for a selected install variant.
+
+Always call this before install_pack. It reports exactly which agents, skills, sources, and workflows would activate. Declared automations are returned as setup-required until the user approves concrete create_automation calls.`,
+
+  install_pack: `Install a pack variant into the current workspace.
+
+Use only after the user confirms the plan from plan_pack_install. This activates existing agents, skills, sources, and workflows through RunnerOS storage APIs and records the active pack/install variant. It refuses when required dependencies are missing. It does not silently enable background automations; returned requiresSetup.automations must be proposed and saved through create_automation with approval.`,
 
   save_memory: `Persist a durable fact about the user, your collaboration, or the ongoing project.
 
@@ -1201,12 +1265,17 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'list_sessions', description: TOOL_DESCRIPTIONS.list_sessions, inputSchema: ListSessionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSessions },
   { name: 'list_agents', description: TOOL_DESCRIPTIONS.list_agents, inputSchema: ListAgentsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgents },
   { name: 'list_skills', description: TOOL_DESCRIPTIONS.list_skills, inputSchema: ListSkillsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSkills },
+  { name: 'search_skill_marketplace', description: TOOL_DESCRIPTIONS.search_skill_marketplace, inputSchema: SearchSkillMarketplaceSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleSearchSkillMarketplace },
   { name: 'list_sources', description: TOOL_DESCRIPTIONS.list_sources, inputSchema: ListSourcesSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListSources },
   { name: 'list_workflows', description: TOOL_DESCRIPTIONS.list_workflows, inputSchema: ListWorkflowsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListWorkflows },
   { name: 'get_workflow', description: TOOL_DESCRIPTIONS.get_workflow, inputSchema: GetWorkflowSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWorkflow },
   { name: 'start_workflow', description: TOOL_DESCRIPTIONS.start_workflow, inputSchema: StartWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleStartWorkflow },
   { name: 'get_workflow_run', description: TOOL_DESCRIPTIONS.get_workflow_run, inputSchema: GetWorkflowRunSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWorkflowRun },
   { name: 'cancel_workflow_run', description: TOOL_DESCRIPTIONS.cancel_workflow_run, inputSchema: CancelWorkflowRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCancelWorkflowRun },
+  { name: 'list_packs', description: TOOL_DESCRIPTIONS.list_packs, inputSchema: ListPacksSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListPacks },
+  { name: 'get_pack', description: TOOL_DESCRIPTIONS.get_pack, inputSchema: GetPackSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetPack },
+  { name: 'plan_pack_install', description: TOOL_DESCRIPTIONS.plan_pack_install, inputSchema: PlanPackInstallSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handlePlanPackInstall },
+  { name: 'install_pack', description: TOOL_DESCRIPTIONS.install_pack, inputSchema: InstallPackSchema, executionMode: 'registry', safeMode: 'block', handler: handleInstallPack },
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
   { name: 'message_agent', description: TOOL_DESCRIPTIONS.message_agent, inputSchema: MessageAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleMessageAgent },

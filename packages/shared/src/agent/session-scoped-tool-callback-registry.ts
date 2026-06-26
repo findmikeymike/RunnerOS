@@ -65,6 +65,14 @@ export interface SessionScopedToolCallbacks {
   listSkillsFn?: (options?: import('@craft-agent/session-tools-core').ListSkillsOptions) => import('@craft-agent/session-tools-core').ListSkillsResult;
   /** List workflows available to the workspace. */
   listWorkflowsFn?: (options?: import('@craft-agent/session-tools-core').ListWorkflowsOptions) => import('@craft-agent/session-tools-core').ListWorkflowsResult;
+  /** List packs available to the workspace. */
+  listPacksFn?: (options?: import('@craft-agent/session-tools-core').ListPacksOptions) => import('@craft-agent/session-tools-core').ListPacksResult;
+  /** Get pack details by slug. */
+  getPackFn?: (slug: string) => import('@craft-agent/session-tools-core').PackToolDetail | null;
+  /** Build a pack install plan. */
+  planPackInstallFn?: (slug: string, profile?: string) => import('@craft-agent/session-tools-core').PackInstallPlanToolResult;
+  /** Install a pack profile. */
+  installPackFn?: (slug: string, profile?: string) => Promise<import('@craft-agent/session-tools-core').PackInstallPlanToolResult>;
   /** Get workflow details by slug. */
   getWorkflowFn?: (slug: string) => import('@craft-agent/session-tools-core').WorkflowToolDetail | null;
   /** Start a workflow run. */

@@ -17,7 +17,19 @@ function collectWebhookSlugs(matchers: ReadonlyArray<unknown>): string[] {
 
 // History file name — matches AUTOMATIONS_HISTORY_FILE from @craft-agent/shared/automations/constants
 const HISTORY_FILE = 'automations-history.jsonl'
-interface HistoryEntry { id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }
+interface HistoryEntry {
+  id: string;
+  ts: number;
+  ok: boolean;
+  sessionId?: string;
+  prompt?: string;
+  error?: string;
+  type?: 'prompt' | 'webhook' | 'workflow';
+  status?: string;
+  workflowSlug?: string;
+  runId?: string;
+  webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string };
+}
 
 // Per-workspace config mutex: serializes read-modify-write cycles on automations.json
 // to prevent concurrent IPC calls from clobbering each other's changes.

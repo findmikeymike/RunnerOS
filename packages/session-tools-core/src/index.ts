@@ -140,6 +140,11 @@ export type {
   WorkflowToolDetail,
   ListWorkflowsOptions,
   ListWorkflowsResult,
+  PackListItem,
+  ListPacksOptions,
+  ListPacksResult,
+  PackToolDetail,
+  PackInstallPlanToolResult,
   // list_sources types
   SourceTier,
   SourceListItemType,
@@ -184,6 +189,7 @@ export {
   handleSendDeveloperFeedback,
   // Agent catalog
   handleListAgents,
+  handleSearchSkillMarketplace,
   handleListSources,
   // Workflows
   handleListWorkflows,
@@ -254,6 +260,7 @@ export type {
   RenderTemplateArgs,
   SendDeveloperFeedbackArgs,
   ListAgentsArgs,
+  SearchSkillMarketplaceArgs,
   ListWorkflowsArgs,
   GetWorkflowArgs,
   StartWorkflowArgs,

@@ -49,6 +49,16 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content.toLowerCase()).toContain('3 sources');
   });
 
+  it('includes the skill-scout starter skill', () => {
+    const scout = STARTER_SKILLS.find(s => s.slug === 'skill-scout');
+    expect(scout).toBeDefined();
+    const parsed = matter(getSkillMd(scout!));
+    expect(parsed.data.name).toBe('Skill Scout');
+    expect(parsed.data.tools).toContain('list_skills');
+    expect(parsed.data.tools).toContain('search_skill_marketplace');
+    expect(parsed.content).toContain('Do not search Michael');
+  });
+
   it('keeps the agent-creator, automation-creator, and workflow-creator starters', () => {
     const slugs = STARTER_SKILLS.map(s => s.slug);
     expect(slugs).toContain('agent-creator');

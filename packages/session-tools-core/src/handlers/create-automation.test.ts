@@ -207,6 +207,50 @@ describe('handleCreateAutomation', () => {
     expect((result.content[0] as any).text).toContain('non-empty');
   });
 
+  it('accepts workflow actions and forwards triggerInputs', async () => {
+    let captured: CreateAutomationToolInput | undefined;
+    const ctx = makeCtx({
+      createAutomation: async (input) => {
+        captured = input;
+        return { ok: true, eventName: input.eventName };
+      },
+    });
+    const result = await handleCreateAutomation(ctx, {
+      eventName: 'SchedulerTick',
+      matcher: {
+        cron: '0 7 * * 1-5',
+        actions: [{
+          type: 'workflow',
+          workflowSlug: 'daily-company-brief',
+          triggerInputs: {
+            company_context: '$CRAFT_EVENT_DATA',
+            time_horizon: 'today',
+          },
+        }],
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(captured?.matcher.actions[0]).toMatchObject({
+      type: 'workflow',
+      workflowSlug: 'daily-company-brief',
+    });
+  });
+
+  it('rejects workflow actions with invalid workflowSlug', async () => {
+    const ctx = makeCtx({ createAutomation: async () => ({ ok: true }) });
+    const result = await handleCreateAutomation(ctx, {
+      eventName: 'SchedulerTick',
+      matcher: {
+        cron: '0 7 * * *',
+        actions: [{ type: 'workflow', workflowSlug: 'Bad Slug' }],
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain('workflowSlug');
+  });
+
   it('surfaces slug-exists conflict from backend', async () => {
     const ctx = makeCtx({
       createAutomation: async () => ({

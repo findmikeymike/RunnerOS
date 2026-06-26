@@ -25,6 +25,7 @@ import {
   writeActivatedWorkflows,
   writeGlobalWorkflow,
 } from './storage.ts';
+import { STARTER_WORKFLOWS } from './starter-templates.ts';
 import type { WorkflowMetadata } from './types.ts';
 
 let libDir: string;
@@ -829,6 +830,14 @@ describe('activation manifest', () => {
 // ---------------------------------------------------------------------------
 
 describe('seedGlobalWorkflowLibraryIfEmpty', () => {
+  test('all starter workflows round-trip through parser validation', () => {
+    const invalid = STARTER_WORKFLOWS
+      .filter((workflow) => !parseWorkflowFile(serializeWorkflow(workflow.metadata, workflow.body)))
+      .map((workflow) => workflow.slug);
+
+    expect(invalid).toEqual([]);
+  });
+
   test('seeds starters on first run', () => {
     const res = seedGlobalWorkflowLibraryIfEmpty(
       [{ slug: 'starter', metadata: minimalMeta(), body: '' }],
@@ -858,6 +867,21 @@ describe('seedGlobalWorkflowLibraryIfEmpty', () => {
       opts(),
     );
     expect(second.seeded).toBe(0);
+  });
+
+  test('backfills new starters after old seeded marker', () => {
+    writeFileSync(join(libDir, '.seeded'), '2026-01-01T00:00:00.000Z', 'utf-8');
+    const res = seedGlobalWorkflowLibraryIfEmpty(
+      [
+        { slug: 'legacy-flow', metadata: minimalMeta({ name: 'Legacy Flow' }), body: 'LEGACY' },
+        { slug: 'next-flow', metadata: minimalMeta({ name: 'Next Flow' }), body: 'NEXT' },
+      ],
+      { globalWorkflowsDir: libDir, legacySeededSlugs: ['legacy-flow'] },
+    );
+
+    expect(res.seeded).toBe(1);
+    expect(loadGlobalWorkflow('legacy-flow', opts())).toBeNull();
+    expect(loadGlobalWorkflow('next-flow', opts())).not.toBeNull();
   });
 });
 

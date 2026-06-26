@@ -9,7 +9,7 @@
  */
 
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
-import type { AutomationEvent, AutomationsConfig, AutomationMatcher, PendingPrompt } from '../types.ts';
+import type { AutomationEvent, AutomationsConfig, AutomationMatcher, PendingPrompt, PendingWorkflow } from '../types.ts';
 
 // ============================================================================
 // Handler Interface
@@ -45,6 +45,18 @@ export interface PromptHandlerOptions {
   onError?: (event: AutomationEvent, error: Error) => void;
 }
 
+/** Options for creating a WorkflowHandler */
+export interface WorkflowHandlerOptions {
+  /** Workspace ID */
+  workspaceId: string;
+  /** Workspace root path for history file location */
+  workspaceRootPath: string;
+  /** Called when workflows are ready to be started */
+  onWorkflowsReady?: (workflows: PendingWorkflow[]) => void;
+  /** Called when workflow processing fails */
+  onError?: (event: AutomationEvent, error: Error) => void;
+}
+
 /** Options for creating an EventLogHandler */
 export interface EventLogHandlerOptions {
   /** Workspace root path for log file location */
@@ -63,6 +75,13 @@ export interface EventLogHandlerOptions {
 export interface PromptProcessingResult {
   event: AutomationEvent;
   prompts: PendingPrompt[];
+  durationMs: number;
+}
+
+/** Result from workflow processing */
+export interface WorkflowProcessingResult {
+  event: AutomationEvent;
+  workflows: PendingWorkflow[];
   durationMs: number;
 }
 

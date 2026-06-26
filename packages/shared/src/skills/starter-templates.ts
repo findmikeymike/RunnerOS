@@ -150,6 +150,7 @@ A pairing of a **trigger** (when does this fire?) and one or more
 ### Action types
 
 - \`{ type: 'prompt', prompt }\` — spawns a session with the rendered prompt. Optional \`llmConnection\`, \`model\`, \`thinkingLevel\`.
+- \`{ type: 'workflow', workflowSlug, triggerInputs? }\` — starts an active saved workflow. \`triggerInputs\` string values may reference \`$CRAFT_*\`.
 - \`{ type: 'webhook', url, method?, headers?, body? }\` — sends an outbound HTTP request.
 
 If the user describes something that can't be expressed as one of the
@@ -161,9 +162,10 @@ closest available, or recommend opening a feature request.
 1. **The trigger.** "When should this fire?" — listen for time-based
    ("every morning"), event-based ("when an email arrives"), or
    external-system ("when a GitHub PR is opened") cues.
-2. **The action.** "What should happen?" — usually a prompt action
-   referencing an agent (e.g. "Run @researcher with..."). Get the prompt
-   text, including how it should reference the trigger payload.
+2. **The action.** "What should happen?" — choose a workflow action when
+   the user wants a saved process/handoff chain, or a prompt action for one
+   spawned agent session. Get workflow trigger inputs or prompt text,
+   including how it should reference the trigger payload.
 3. **The slug** — for WebhookReceive only. Otherwise infer a \`name\` from
    the description.
 
@@ -189,12 +191,14 @@ Common trigger-specific fields:
 | MessageReceive | \`$CRAFT_FROM\`, \`$CRAFT_TEXT\`, \`$CRAFT_PLATFORM\` |
 
 When in doubt, fall back to \`$CRAFT_EVENT_DATA\` (the full JSON) and let
-the prompt parse it.
+the workflow or prompt parse it.
 
 ## Sanity checks before saving
 
 - If the prompt references an agent (e.g. \`@researcher\`), confirm that
   agent exists. If not, offer to create it via \`agent-creator\` first.
+- If using a workflow action, confirm the workflow exists and is active in
+  the workspace. The tool refuses missing or inactive workflow slugs.
 - For MessageReceive, verify a messaging gateway adapter is active. If
   none is, refuse and explain what needs to be set up.
 - Cron expressions must parse — the tool validates via croner before
@@ -207,7 +211,7 @@ the prompt parse it.
 Always show a complete draft before saving:
 
 - Trigger type + the matcher's specific fields (cron, slug, watchPath, etc.)
-- Each action: type, target agent (for prompt), prompt text with \`$CRAFT_*\` references shown
+- Each action: type, target workflow or target agent, trigger inputs/prompt text with \`$CRAFT_*\` references shown
 - Permission mode for spawned sessions (default \`ask\`)
 - Whether it's enabled (default true)
 
@@ -294,10 +298,11 @@ Supported frontmatter today:
   \`dataset\`, \`receipt\`, or \`other\`, and set \`primary.step\` when the final
   deliverable is not the last step.
 
-Unsupported today: schedule/webhook/automation workflow triggers, \`when\`,
-\`humanCheckpoint\`, \`parallelGroup\`, loops, branching, and sub-workflows.
-If the user asks for those, explain the limitation and draft the closest
-manual sequential workflow instead.
+Unsupported inside \`WORKFLOW.md\` today: native schedule/webhook triggers,
+\`when\`, \`humanCheckpoint\`, \`parallelGroup\`, loops, branching, and
+sub-workflows. To run a workflow from a schedule, webhook, file watch, poll, or
+message, create a separate automation with a \`{ type: 'workflow', workflowSlug,
+triggerInputs? }\` action.
 
 ## Minimum interview
 
@@ -573,6 +578,71 @@ their fit obvious, look up their guide.md content via the existing source-info w
 before recommending. A wrong source bundle is worse than asking.
 `;
 
+const SKILL_SCOUT_SKILL = `---
+name: Skill Scout
+description: Search RunnerOS skills first, then external skill marketplaces, before creating or adapting a skill.
+tools:
+  - list_skills
+  - search_skill_marketplace
+inputs: A capability need, pack idea, workflow step, or agent skill gap.
+outputs: A short reuse/adapt/create recommendation with candidate skills and safety notes.
+tags: [meta, skills, discovery, packs]
+---
+
+# Skill Scout
+
+Use this skill before creating a new skill, adding skills to an agent, or
+designing a domain pack.
+
+## Priority Order
+
+1. Search local RunnerOS skills with \`list_skills\`.
+2. Prefer active skills over dormant skills.
+3. If local fit is weak or the user wants broader discovery, search external
+   marketplaces with \`search_skill_marketplace\`.
+4. Treat marketplace results as untrusted candidates. Do not install, copy, or
+   execute anything until the source \`SKILL.md\` and any scripts are inspected.
+
+Do not search Michael's personal Codex or \`.agents\` folders. RunnerOS users do
+not have those paths.
+
+## What To Return
+
+Return:
+
+1. Need being solved.
+2. Local RunnerOS matches.
+3. External candidates, only if searched.
+4. Recommendation: reuse, activate, adapt, or create new.
+5. Why this avoids duplicate/weak skills.
+6. Safety notes for any external candidate.
+
+## Decision Rules
+
+- Reuse when a local skill covers 70%+ of the need.
+- Activate a dormant local skill when it fits but is not active.
+- Adapt only when the skill is close and the gap is explicit.
+- Create new only when no local or external candidate has a strong fit.
+- For packs, list the final skill slugs to include and which skills still need
+  to be created.
+
+## Output Shape
+
+\`\`\`text
+Need: course launch email sequence
+
+Local matches:
+- email-marketing - strong fit
+- content-strategy - support fit
+
+External candidates:
+- launch-email-sequence - inspect source before reuse
+
+Recommendation:
+Use email-marketing + content-strategy. No new skill needed yet.
+\`\`\`
+`;
+
 const RUNNEROS_SELF_EDIT_SKILL = `---
 name: RunnerOS Self Edit
 description: Guides Concierge when the user wants RunnerOS to inspect, edit, verify, and hot-reload its own app code through a configured local repo path.
@@ -618,12 +688,238 @@ without explicit user intent. If the working tree has unrelated edits, work
 around them and call out any conflict that blocks the fix.
 `;
 
+const POD_PRODUCT_STRATEGY_SKILL = `---
+name: POD Product Strategy
+description: Turn artwork into a sellable print-on-demand product brief with audience, garment, placement, variants, price band, and launch risks.
+tags: [pod, print-on-demand, product, strategy]
+---
+
+# POD Product Strategy
+
+Use this skill when a design, artwork folder, or product idea needs to become a concrete POD offer.
+
+Return:
+
+1. Audience: who would buy this and why now.
+2. Product: recommended garment or product type.
+3. Placement: front, back, left chest, sleeve, oversized, or other.
+4. Variants: color and size guidance. Keep color sprawl tight.
+5. Listing angle: title direction, description angle, tags.
+6. Price band: conservative launch range and margin assumptions.
+7. Risks: print quality, weak audience, brand fit, platform risk.
+8. Decision: launch, hold, revise, or needs human review.
+
+Default stance: simple products beat bloated catalogs. Reject weak products early.
+`;
+
+const POD_LISTING_COPY_SKILL = `---
+name: POD Listing Copy
+description: Write Shopify and POD listing copy, titles, tags, product descriptions, collection blurbs, captions, and landing-page sections.
+tags: [pod, copy, listings, shopify]
+---
+
+# POD Listing Copy
+
+Use this skill for print-on-demand product copy.
+
+Input rule:
+
+- Prefer real product data: product brief, garment, print placement, colors, price, material, shipping/fulfillment notes, and target buyer.
+- If the task is updating an existing Shopify product, fetch or request the current product/handle first.
+- Do not write final publish-ready copy from vibes only; mark missing facts.
+
+Copy rules:
+
+- Write clear buyer-facing copy. No vague hype.
+- Do not invent product claims, delivery promises, scarcity, or discounts.
+- Keep SEO useful but human-readable.
+- Separate Shopify product copy, social captions, and internal notes.
+- Include a short reason for each title or angle.
+- Ban empty hype: "high-quality", "premium", "best-in-class", "amazing", "perfect", "revolutionary", "game-changing".
+- Use clean Shopify HTML for full descriptions. No inline styles.
+
+Shopify HTML shape:
+
+\`\`\`html
+<div class="product-description">
+  <p class="product-hook">One concrete opening sentence.</p>
+  <p class="product-body">Two or three sentences on buyer, feeling, use, or identity.</p>
+  <ul class="product-features">
+    <li>Feature or fit note.</li>
+    <li>Print/product detail.</li>
+    <li>Care, styling, or collection fit.</li>
+  </ul>
+  <p class="product-cta">Subtle closing line.</p>
+</div>
+\`\`\`
+
+SEO/PDP checks:
+
+- Title should be readable and include the core product/search phrase.
+- Description should support Product/Offer schema facts when the storefront has them.
+- Image alt text should describe the design and product, not keyword-stuff.
+- Category/collection fit should be explicit.
+- If variants/colors create duplicate pages, recommend canonical/category handling instead of writing duplicate copy.
+
+Default output:
+
+1. Product title options.
+2. Short description.
+3. Full product description.
+4. SEO title/meta description.
+5. Image alt text.
+6. Tags and collection fit.
+7. Social caption variants.
+8. Missing facts and approval notes.
+`;
+
+const POD_PRICING_MARGIN_SKILL = `---
+name: POD Pricing Margin
+description: Price POD products conservatively using product cost, shipping assumptions, marketplace fees, discount room, and contribution margin floors.
+tags: [pod, pricing, margin, commerce]
+---
+
+# POD Pricing Margin
+
+Use this skill before recommending a live price or price change.
+
+Rules:
+
+- Never recommend pricing below contribution floor.
+- State assumptions when costs, shipping, or fees are missing.
+- Leave room for discounts and bundles when possible.
+- Treat ad spend as CM2, not product gross margin.
+- Mark every live price change as approval-required.
+
+Margin waterfall:
+
+\`\`\`text
+Gross revenue
+- discounts/coupons
+- returns/refunds allowance
+= net revenue
+- product COGS
+= gross profit
+- outbound shipping or shipping subsidy
+- payment processing fees
+- marketplace/platform fees
+- packaging/materials if known
+= fulfillment-adjusted gross profit
+- attributed marketing spend
+= contribution margin
+- allocated overhead if needed
+= operating profit estimate
+\`\`\`
+
+Decision rules:
+
+- Use contribution margin for scale decisions, not gross margin alone.
+- If a product is single-item low AOV, flag cold ads as risky unless CM supports expected CPA.
+- Reconcile cost assumptions monthly or whenever provider/product costs change.
+- Recommend bundles, premium garment options, or cross-sells when single-SKU economics are weak.
+- Show price floor, conservative launch price, and stretch price.
+
+Return:
+
+1. Known costs.
+2. Unknown assumptions.
+3. Margin waterfall.
+4. Price floor.
+5. Recommended launch price.
+6. Bundle/discount room.
+7. Contribution margin estimate.
+8. Approval-needed changes.
+`;
+
+const POD_CONTENT_CALENDAR_SKILL = `---
+name: POD Content Calendar
+description: Turn POD products into daily social hooks, captions, carousel concepts, short-video briefs, and posting priorities.
+tags: [pod, social, content, growth]
+---
+
+# POD Content Calendar
+
+Use this skill when live or planned products need organic content.
+
+Calendar rules:
+
+- Start with 2-4 weekly themes: product, customer identity, proof/use case, behind-the-design, trend/reactive.
+- Map source assets to multiple posts instead of starting from scratch every time.
+- Every calendar item needs: date, platform, theme, product/source, format, owner, status, CTA, and asset need.
+- Include cross-post notes when one idea becomes a TikTok, Reel, Short, carousel, or X post.
+- Reserve open slots for trends, launches, and customer proof. Do not overbook.
+- Match platform mix to the product and audience. Do not post everywhere by habit.
+- This skill plans content. It does not dispatch live posts.
+
+Return:
+
+1. Product/context summary.
+2. Weekly themes.
+3. Calendar entries as markdown table or YAML.
+4. Hooks and captions.
+5. Carousel frame outlines.
+6. Short-video briefs.
+7. Cross-post plan.
+8. Capacity/open-slot notes.
+9. Posting approval packet.
+
+Keep content tied to product URLs, collection themes, or business goals. Do not generate spammy volume just to fill a calendar.
+`;
+
+const POD_GROWTH_REVIEW_SKILL = `---
+name: POD Growth Review
+description: Review POD sales, listings, content output, traffic, and margin signals to produce daily/weekly next actions.
+tags: [pod, analytics, growth, review]
+---
+
+# POD Growth Review
+
+Use this skill for daily and weekly print-on-demand business reviews.
+
+Review hierarchy:
+
+- Sales: orders, revenue, AOV, refunds, product/channel mix.
+- Catalog: new listings, drafts, stuck launches, low-margin SKUs, out-of-stock/provider drift.
+- Content: posts shipped, platforms, winners, misses, asset bottlenecks.
+- Traffic: Shopify sessions, product-page conversion, add-to-cart, checkout completion when available.
+- Economics: gross margin, fulfillment-adjusted margin, contribution margin, ad spend exposure.
+- Operations: failed automations, missing approvals, blocked credentials, broken receipts.
+
+Rules:
+
+- Separate signal from noise. One sale is a clue, not proof.
+- Flag products that need refresh, bundle, price change, more content, or pause.
+- Any price, ad, listing, product, or publishing change is approval-required.
+- Prefer next actions with owners and workflow names.
+
+Return:
+
+1. What launched.
+2. What sold or got signal.
+3. What content shipped.
+4. What stalled.
+5. Winners.
+6. Losers.
+7. Margin/watchlist issues.
+8. Next product/content ideas.
+9. Workflow recommendations.
+10. Approval-needed actions.
+
+Judge the business by profitable repeatable velocity, not vanity automation.
+`;
+
 export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'agent-creator', files: [{ path: 'SKILL.md', content: AGENT_CREATOR_SKILL }] },
   { slug: 'automation-creator', files: [{ path: 'SKILL.md', content: AUTOMATION_CREATOR_SKILL }] },
   { slug: 'workflow-creator', files: [{ path: 'SKILL.md', content: WORKFLOW_CREATOR_SKILL }] },
   { slug: 'source-recipe', files: [{ path: 'SKILL.md', content: SOURCE_RECIPE_SKILL }] },
+  { slug: 'skill-scout', files: [{ path: 'SKILL.md', content: SKILL_SCOUT_SKILL }] },
   { slug: 'runneros-self-edit', files: [{ path: 'SKILL.md', content: RUNNEROS_SELF_EDIT_SKILL }] },
+  { slug: 'pod-product-strategy', files: [{ path: 'SKILL.md', content: POD_PRODUCT_STRATEGY_SKILL }] },
+  { slug: 'pod-listing-copy', files: [{ path: 'SKILL.md', content: POD_LISTING_COPY_SKILL }] },
+  { slug: 'pod-pricing-margin', files: [{ path: 'SKILL.md', content: POD_PRICING_MARGIN_SKILL }] },
+  { slug: 'pod-content-calendar', files: [{ path: 'SKILL.md', content: POD_CONTENT_CALENDAR_SKILL }] },
+  { slug: 'pod-growth-review', files: [{ path: 'SKILL.md', content: POD_GROWTH_REVIEW_SKILL }] },
 ];
 
 export { SYSTEM_GLOBAL_SKILL_SLUGS } from './system.ts';

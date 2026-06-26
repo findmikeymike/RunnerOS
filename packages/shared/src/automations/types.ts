@@ -109,7 +109,16 @@ export interface WebhookAction {
   auth?: WebhookAuth;
 }
 
-export type AutomationAction = PromptAction | WebhookAction | PulseAction;
+/** A workflow action - starts a saved RunnerOS workflow from an automation trigger. */
+export interface WorkflowAction {
+  type: 'workflow';
+  /** Global workflow slug to start in the current workspace. */
+  workflowSlug: string;
+  /** Workflow trigger inputs. String values support $CRAFT_* expansion. */
+  triggerInputs?: Record<string, unknown>;
+}
+
+export type AutomationAction = PromptAction | WebhookAction | PulseAction | WorkflowAction;
 
 export type { PulseAction };
 
@@ -343,7 +352,14 @@ export interface WebhookActionResult {
   responseBody?: string;
 }
 
-export type ActionExecutionResult = PromptActionResult | WebhookActionResult;
+/** Result of a workflow action queued for host execution. */
+export interface WorkflowActionResult {
+  type: 'workflow';
+  workflowSlug: string;
+  triggerInputs: Record<string, unknown>;
+}
+
+export type ActionExecutionResult = PromptActionResult | WebhookActionResult | WorkflowActionResult;
 
 /** A pending prompt with its metadata */
 export interface PendingPrompt {
@@ -380,12 +396,26 @@ export interface PendingPrompt {
   thinkingLevel?: ThinkingLevel;
 }
 
+/** A pending workflow start with expanded trigger inputs. */
+export interface PendingWorkflow {
+  /** Automation matcher ID this workflow start originated from. */
+  matcherId?: string;
+  /** Human-readable automation name. */
+  automationName?: string;
+  /** Workflow slug to start. */
+  workflowSlug: string;
+  /** Expanded workflow trigger inputs. */
+  triggerInputs: Record<string, unknown>;
+}
+
 export interface AutomationResult {
   event: string;
   matched: number;
   results: ActionExecutionResult[];
   /** Prompts that should be executed by Runner (with metadata) */
   pendingPrompts: PendingPrompt[];
+  /** Workflows that should be started by Runner. */
+  pendingWorkflows?: PendingWorkflow[];
 }
 
 // ============================================================================

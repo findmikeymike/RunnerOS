@@ -38,6 +38,7 @@ import {
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
 import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput } from '@craft-agent/session-tools-core'
+import type { ListPacksOptions, PackListItem } from '@craft-agent/session-tools-core'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import {
   // Session persistence functions
@@ -111,6 +112,13 @@ import {
   setWorkflowActive,
   writeGlobalWorkflow,
 } from '@craft-agent/shared/workflows'
+import {
+  buildPackInstallPlan,
+  installPack,
+  loadAllGlobalPacks,
+  loadGlobalPack,
+  readActivatedPacks,
+} from '@craft-agent/shared/packs'
 import {
   appendMemoryEvent,
   deleteMemoryEntry,
@@ -1460,6 +1468,11 @@ export class SessionManager implements ISessionManager {
   private lastTimestamp = 0
   /** Workflow runner — bootstrapped during `initialize()`. */
   private workflowRunner!: WorkflowRunner
+  private readonly automationWorkflowRuns = new Map<string, {
+    workspaceRootPath: string
+    matcherId?: string
+    workflowSlug: string
+  }>()
   /** Deep Research runner — bootstrapped during `initialize()`. */
   private deepResearchRunner!: DeepResearchRunner
 
@@ -1814,6 +1827,52 @@ export class SessionManager implements ISessionManager {
               sessionLog.error(`[Automations] Failed to execute prompt action ${idx + 1}:`, result.reason)
             } else {
               sessionLog.info(`[Automations] Created session ${result.value.sessionId} from prompt action`)
+            }
+          }
+        },
+        onWorkflowsReady: async (workflows) => {
+          for (const pending of workflows) {
+            try {
+              if (!readActivatedWorkflows(workspaceRootPath).active.includes(pending.workflowSlug)) {
+                throw new Error(`Workflow "${pending.workflowSlug}" is not active in this workspace.`)
+              }
+              const workflow = loadGlobalWorkflow(pending.workflowSlug)
+              if (!workflow) {
+                throw new Error(`Workflow not found: ${pending.workflowSlug}`)
+              }
+              const run = await this.workflowRunner.start({
+                workflow,
+                workspaceId,
+                triggerInputs: normalizeWorkflowTriggerInputs(workflow, pending.triggerInputs),
+              })
+              this.automationWorkflowRuns.set(run.id, {
+                workspaceRootPath,
+                matcherId: pending.matcherId,
+                workflowSlug: pending.workflowSlug,
+              })
+              sessionLog.info(`[Automations] Started workflow ${pending.workflowSlug} run ${run.id} from automation ${pending.automationName ?? pending.matcherId ?? 'unknown'}`)
+              appendAutomationHistoryEntry(workspaceRootPath, {
+                id: pending.matcherId,
+                ts: Date.now(),
+                matcherId: pending.matcherId,
+                type: 'workflow',
+                ok: true,
+                status: 'started',
+                workflowSlug: pending.workflowSlug,
+                runId: run.id,
+              }).catch(e => sessionLog.warn('[Automations] Failed to write workflow history:', e))
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              sessionLog.error(`[Automations] Failed to start workflow action ${pending.workflowSlug}:`, error)
+              appendAutomationHistoryEntry(workspaceRootPath, {
+                id: pending.matcherId,
+                ts: Date.now(),
+                matcherId: pending.matcherId,
+                type: 'workflow',
+                ok: false,
+                workflowSlug: pending.workflowSlug,
+                error: message,
+              }).catch(e => sessionLog.warn('[Automations] Failed to write workflow history:', e))
             }
           }
         },
@@ -2172,6 +2231,9 @@ export class SessionManager implements ISessionManager {
   }
 
   private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
+    if (event.type === 'run.completed') {
+      this.appendAutomationWorkflowCompletion(event)
+    }
     if (!this.eventSink) return
     if (event.type === 'outputs.updated') {
       this.eventSink(
@@ -2190,6 +2252,23 @@ export class SessionManager implements ISessionManager {
       event.run,
       eventType,
     )
+  }
+
+  private appendAutomationWorkflowCompletion(event: Extract<WorkflowRunEvent, { type: 'run.completed' }>): void {
+    const pending = this.automationWorkflowRuns.get(event.run.id)
+    if (!pending) return
+    this.automationWorkflowRuns.delete(event.run.id)
+    appendAutomationHistoryEntry(pending.workspaceRootPath, {
+      id: pending.matcherId,
+      ts: Date.now(),
+      matcherId: pending.matcherId,
+      type: 'workflow',
+      ok: event.run.state === 'succeeded',
+      status: event.run.state,
+      workflowSlug: pending.workflowSlug,
+      runId: event.run.id,
+      error: event.run.state === 'succeeded' ? undefined : `Workflow finished with state "${event.run.state}".`,
+    }).catch(e => sessionLog.warn('[Automations] Failed to write workflow completion history:', e))
   }
 
   /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
@@ -2372,14 +2451,18 @@ export class SessionManager implements ISessionManager {
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
         }
-        // Load-bearing agents must exist on every startup: Orchestrator
-        // (sidebar pin + future Rooms coordinator), Concierge (top-level
-        // Chat nav entry), Social Publisher, Hypermotion, Shopify, Print Agent,
-        // and Update System Agent.
+        // Load-bearing agents must exist on every startup: core nav agents plus
+        // specialist agents referenced by bundled starter packs/workflows.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
+            || a.slug === 'researcher'
+            || a.slug === 'writer'
+            || a.slug === 'triager'
+            || a.slug === 'critic'
+            || a.slug === 'ads-agent'
+            || a.slug === 'youtube-research-agent'
             || a.slug === 'hypermotion-agent'
             || a.slug === 'shopify-agent'
             || a.slug === 'print-agent'
@@ -2513,13 +2596,30 @@ user a clickable link to where the thing now lives.`
       // Starters are NOT load-bearing — if the user deletes one, the tombstone
       // mechanism keeps it gone, so we don't call ensureRequiredWorkflows here.
       try {
-        const { seedGlobalWorkflowLibraryIfEmpty, STARTER_WORKFLOWS } = await import('@craft-agent/shared/workflows')
-        const { seeded: workflowsSeeded } = seedGlobalWorkflowLibraryIfEmpty(STARTER_WORKFLOWS)
+        const { seedGlobalWorkflowLibraryIfEmpty, STARTER_WORKFLOWS, LEGACY_STARTER_WORKFLOW_SLUGS } = await import('@craft-agent/shared/workflows')
+        const { seeded: workflowsSeeded } = seedGlobalWorkflowLibraryIfEmpty(STARTER_WORKFLOWS, {
+          legacySeededSlugs: LEGACY_STARTER_WORKFLOW_SLUGS,
+        })
         if (workflowsSeeded > 0) {
           sessionLog.info(`[workflows] Seeded ${workflowsSeeded} starter workflow(s) into global library`)
         }
       } catch (err) {
         sessionLog.warn('[workflows] Starter seed skipped:', err as Error)
+      }
+
+      // Seed starter packs (idempotent; skipped after the first run).
+      // Packs are curated operating bundles over existing primitives; deletion
+      // should remain a user choice, so we do not force-recreate them.
+      try {
+        const { seedGlobalPackLibraryIfEmpty, STARTER_PACKS, LEGACY_STARTER_PACK_SLUGS } = await import('@craft-agent/shared/packs')
+        const { seeded: packsSeeded } = seedGlobalPackLibraryIfEmpty(STARTER_PACKS, {
+          legacySeededSlugs: LEGACY_STARTER_PACK_SLUGS,
+        })
+        if (packsSeeded > 0) {
+          sessionLog.info(`[packs] Seeded ${packsSeeded} starter pack(s) into global library`)
+        }
+      } catch (err) {
+        sessionLog.warn('[packs] Starter seed skipped:', err as Error)
       }
 
       // Backfill missing `models` arrays on existing LLM connections
@@ -4943,6 +5043,94 @@ user a clickable link to where the thing now lives.`
             body: workflow.body,
           }
         },
+        listPacksFn: (options?: ListPacksOptions) => {
+          const active = readActivatedPacks(managed.workspace.rootPath).active
+          const activeBySlug = new Map<string, string[]>()
+          for (const entry of active) {
+            const profiles = activeBySlug.get(entry.slug) ?? []
+            profiles.push(entry.profile)
+            activeBySlug.set(entry.slug, profiles)
+          }
+
+          let packs: PackListItem[] = loadAllGlobalPacks().map(pack => ({
+            slug: pack.slug,
+            name: pack.metadata.name,
+            description: pack.metadata.description,
+            version: pack.metadata.version,
+            category: pack.metadata.category,
+            active: activeBySlug.has(pack.slug),
+            activeProfiles: activeBySlug.get(pack.slug) ?? [],
+            profiles: Object.keys(pack.metadata.profiles ?? { main: {} }),
+            agents: pack.metadata.agents ?? [],
+            skills: pack.metadata.skills ?? [],
+            sources: pack.metadata.sources ?? [],
+            workflows: pack.metadata.workflows ?? [],
+            tags: pack.metadata.tags ?? [],
+          }))
+
+          if (options?.activeOnly) packs = packs.filter(pack => pack.active)
+          if (options?.tags?.length) {
+            const wanted = options.tags.map(tag => tag.toLowerCase())
+            packs = packs.filter(pack => {
+              const tags = new Set(pack.tags.map(tag => tag.toLowerCase()))
+              return wanted.every(tag => tags.has(tag))
+            })
+          }
+          if (options?.search?.trim()) {
+            const needle = options.search.trim().toLowerCase()
+            packs = packs.filter(pack => [
+              pack.slug,
+              pack.name,
+              pack.description,
+              pack.category ?? '',
+              pack.tags.join(' '),
+            ].join(' ').toLowerCase().includes(needle))
+          }
+
+          packs.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
+          return {
+            total: packs.length,
+            returned: packs.length,
+            packs,
+          }
+        },
+        getPackFn: (slug: string) => {
+          const pack = loadGlobalPack(slug)
+          if (!pack) return null
+          const activeProfiles = readActivatedPacks(managed.workspace.rootPath).active
+            .filter(entry => entry.slug === pack.slug)
+            .map(entry => entry.profile)
+          return {
+            slug: pack.slug,
+            name: pack.metadata.name,
+            description: pack.metadata.description,
+            version: pack.metadata.version,
+            category: pack.metadata.category,
+            active: activeProfiles.length > 0,
+            activeProfiles,
+            profiles: Object.keys(pack.metadata.profiles ?? { main: {} }),
+            agents: pack.metadata.agents ?? [],
+            skills: pack.metadata.skills ?? [],
+            sources: pack.metadata.sources ?? [],
+            workflows: pack.metadata.workflows ?? [],
+            tags: pack.metadata.tags ?? [],
+            body: pack.body,
+            guardrails: pack.metadata.guardrails,
+            runtime: pack.metadata.runtime,
+            dependencies: pack.metadata.dependencies,
+          }
+        },
+        planPackInstallFn: (slug: string, profile?: string) => {
+          return buildPackInstallPlan(slug, { profile })
+        },
+        installPackFn: async (slug: string, profile?: string) => {
+          const result = installPack(managed.workspace.rootPath, slug, { profile })
+          this.broadcastAgentDefinitionsChanged(managed.workspace.id)
+          this.broadcastSkillsChanged(managed.workspace.id, loadAllSkills(managed.workspace.rootPath, managed.workingDirectory))
+          this.broadcastSourcesChanged(managed.workspace.id, loadAllSources(managed.workspace.rootPath))
+          this.broadcastWorkflowsChanged(managed.workspace.id)
+          return result
+        },
         startWorkflowFn: async (slug: string, triggerInputs: Record<string, unknown>) => {
           if (!readActivatedWorkflows(managed.workspace.rootPath).active.includes(slug)) {
             throw new Error(`Workflow "${slug}" is not active in this workspace.`)
@@ -5099,6 +5287,24 @@ user a clickable link to where the thing now lives.`
             } catch (err) {
               const msg = err instanceof Error ? err.message : String(err)
               return { ok: false, error: `invalid-cron: ${msg}` }
+            }
+          }
+
+          const workflowActions = matcher.actions
+            .filter((action): action is { type: 'workflow'; workflowSlug: string } => (
+              !!action && typeof action === 'object' && action.type === 'workflow' && typeof action.workflowSlug === 'string'
+            ))
+          if (workflowActions.length > 0) {
+            const activeWorkflows = new Set(readActivatedWorkflows(targetWorkspace.rootPath).active)
+            const missingOrInactive = workflowActions
+              .map(action => action.workflowSlug)
+              .filter((slug, index, arr) => arr.indexOf(slug) === index)
+              .filter(slug => !loadGlobalWorkflow(slug) || !activeWorkflows.has(slug))
+            if (missingOrInactive.length > 0) {
+              return {
+                ok: false,
+                error: `Cannot create automation: workflow action references missing or inactive workflow(s): ${missingOrInactive.join(', ')}.`,
+              }
             }
           }
 

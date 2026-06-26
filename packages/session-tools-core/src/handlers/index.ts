@@ -76,6 +76,8 @@ export { handleListAgents } from './list-agents.ts';
 export type { ListAgentsArgs } from './list-agents.ts';
 export { handleListSources } from './list-sources.ts';
 export type { ListSourcesArgs } from './list-sources.ts';
+export { handleSearchSkillMarketplace } from './search-skill-marketplace.ts';
+export type { SearchSkillMarketplaceArgs } from './search-skill-marketplace.ts';
 export {
   handleListWorkflows,
   handleGetWorkflow,
@@ -90,6 +92,19 @@ export type {
   GetWorkflowRunArgs,
   CancelWorkflowRunArgs,
 } from './workflows.ts';
+
+// Packs
+export {
+  handleListPacks,
+  handleGetPack,
+  handlePlanPackInstall,
+  handleInstallPack,
+} from './packs.ts';
+export type {
+  ListPacksArgs,
+  GetPackArgs,
+  PackProfileArgs,
+} from './packs.ts';
 
 // Create Agent (agent-creator skill)
 export { handleCreateAgent } from './create-agent.ts';

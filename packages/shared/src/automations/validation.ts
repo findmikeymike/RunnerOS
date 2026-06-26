@@ -298,6 +298,27 @@ function runMatcherSemanticValidations(
               suggestion: 'Ensure the referenced CRAFT_WH_* variables are set in your shell profile',
             });
           }
+          if (action && typeof action === 'object' && 'type' in action && action.type === 'workflow') {
+            const workflowSlug = 'workflowSlug' in action ? action.workflowSlug : undefined;
+            if (typeof workflowSlug !== 'string' || !/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(workflowSlug)) {
+              errors.push({
+                file,
+                path: `automations.${event}[${i}].actions[${j}].workflowSlug`,
+                message: 'Workflow actions require a valid workflowSlug',
+                severity: 'error',
+                suggestion: 'Use a saved workflow slug: lowercase letters, digits, hyphens, 1-64 chars',
+              });
+            }
+            const triggerInputs = 'triggerInputs' in action ? action.triggerInputs : undefined;
+            if (triggerInputs !== undefined && (!triggerInputs || typeof triggerInputs !== 'object' || Array.isArray(triggerInputs))) {
+              errors.push({
+                file,
+                path: `automations.${event}[${i}].actions[${j}].triggerInputs`,
+                message: 'Workflow action triggerInputs must be an object when provided',
+                severity: 'error',
+              });
+            }
+          }
         }
       }
 

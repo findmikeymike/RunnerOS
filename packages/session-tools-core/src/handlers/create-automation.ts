@@ -31,6 +31,12 @@ export interface CreateAutomationWebhookAction {
   auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string };
 }
 
+export interface CreateAutomationWorkflowAction {
+  type: 'workflow';
+  workflowSlug: string;
+  triggerInputs?: Record<string, unknown>;
+}
+
 export interface CreateAutomationPulseAction {
   type: 'pulse';
   driverAgentSlug?: string;
@@ -47,6 +53,7 @@ export interface CreateAutomationPulseAction {
 export type CreateAutomationAction =
   | CreateAutomationPromptAction
   | CreateAutomationWebhookAction
+  | CreateAutomationWorkflowAction
   | CreateAutomationPulseAction;
 
 export interface CreateAutomationMatcher {
@@ -160,6 +167,15 @@ export async function handleCreateAutomation(
       if (!action.url || typeof action.url !== 'string') {
         return errorResponse('Webhook actions require a "url" string.');
       }
+    } else if (action.type === 'workflow') {
+      if (!action.workflowSlug || typeof action.workflowSlug !== 'string' || !SLUG_RE.test(action.workflowSlug)) {
+        return errorResponse(
+          'Workflow actions require a valid workflowSlug: lowercase letters, digits, hyphens (1-64 chars, no leading/trailing hyphen).',
+        );
+      }
+      if (action.triggerInputs !== undefined && (!action.triggerInputs || typeof action.triggerInputs !== 'object' || Array.isArray(action.triggerInputs))) {
+        return errorResponse('Workflow action triggerInputs must be an object when provided.');
+      }
     } else if (action.type === 'pulse') {
       if (args.eventName !== 'SchedulerTick') {
         return errorResponse('Pulse actions are only supported on SchedulerTick automations.');
@@ -191,7 +207,7 @@ export async function handleCreateAutomation(
         return errorResponse('Pulse notify.minUrgencyForChannel must be "low", "normal", or "high".');
       }
     } else {
-      return errorResponse(`Unsupported action type: "${(action as { type?: string }).type}". Use "prompt", "webhook", or "pulse".`);
+      return errorResponse(`Unsupported action type: "${(action as { type?: string }).type}". Use "prompt", "workflow", "webhook", or "pulse".`);
     }
   }
 

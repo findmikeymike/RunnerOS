@@ -76,8 +76,11 @@ Match the parser and runner in `packages/shared/src/workflows/` and
   `requireToolUse`. Use it when the step should not succeed after a mere
   acknowledgement.
 
-Unsupported today: schedule/webhook/automation workflow triggers, `when`,
-`humanCheckpoint`, `parallelGroup`, loops, branches, and sub-workflows.
+Unsupported inside `WORKFLOW.md` today: native schedule/webhook triggers, `when`,
+`humanCheckpoint`, `parallelGroup`, loops, branches, and sub-workflows. To run a
+workflow from a schedule, webhook, file watch, poll, or message, create a
+separate automation with a `{ type: 'workflow', workflowSlug, triggerInputs? }`
+action.
 
 ## Interview script
 

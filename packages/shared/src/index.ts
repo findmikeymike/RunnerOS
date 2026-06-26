@@ -20,6 +20,7 @@
  *   - config: Storage, models, preferences
  *   - credentials: Encrypted credential storage
  *   - mcp: MCP client, connection validation
+ *   - packs: Installable bundles of agents, skills, sources, workflows, and profiles
  *   - prompts: System prompt generation
  *   - sources: Workspace-scoped source management (MCP, API, local)
  *   - utils: Debug logging, file handling, summarization

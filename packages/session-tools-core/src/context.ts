@@ -156,6 +156,9 @@ export interface SessionToolContext {
   /** Unique session identifier */
   sessionId: string;
 
+  /** Saved agent slug currently driving this session, when known. */
+  activeAgentSlug?: string;
+
   /** Absolute path to workspace folder (~/.craft-agent/workspaces/{id}) */
   workspacePath: string;
 
@@ -287,6 +290,15 @@ export interface SessionToolContext {
    */
   testGoogleSource?(source: SourceConfig): Promise<ApiTestResult>;
 
+  /**
+   * Test a local source (filesystem or bundled local tool validation).
+   */
+  testLocalSource?(source: SourceConfig): Promise<ApiTestResult & {
+    message?: string;
+    lines?: string[];
+    fix?: string;
+  }>;
+
   // ============================================================
   // Preferences (for update_user_preferences)
   // ============================================================
@@ -330,6 +342,18 @@ export interface SessionToolContext {
 
   /** List workflows available to this workspace. Injected by backend. */
   listWorkflows?(options?: ListWorkflowsOptions): ListWorkflowsResult;
+
+  /** List packs available to this workspace. Injected by backend. */
+  listPacks?(options?: ListPacksOptions): ListPacksResult;
+
+  /** Get a pack definition by slug. Injected by backend. */
+  getPack?(slug: string): PackToolDetail | null;
+
+  /** Build a pack install plan for the current workspace. Injected by backend. */
+  planPackInstall?(slug: string, profile?: string): PackInstallPlanToolResult;
+
+  /** Install a pack profile into the current workspace. Injected by backend. */
+  installPack?(slug: string, profile?: string): Promise<PackInstallPlanToolResult>;
 
   /** List sources available to this workspace, including activated globals and (optionally) dormant globals. Injected by backend. */
   listSources?(options?: ListSourcesOptions): ListSourcesResult;
@@ -424,6 +448,9 @@ export interface SessionToolContext {
 
   /** Send a message to another session. Injected by backend (SessionManager). */
   sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
+
+  /** Delegate a bounded task to a saved agent and wait for a structured result. */
+  messageAgent?(input: import('./handlers/message-agent.ts').MessageAgentToolInput): Promise<import('./handlers/message-agent.ts').MessageAgentToolResult>;
 
   /**
    * Activate a source in the running session: add to enabledSourceSlugs,
@@ -652,6 +679,75 @@ export interface ListWorkflowsResult {
   total: number;
   returned: number;
   workflows: WorkflowListItem[];
+}
+
+/** Compact pack summary (returned by list_packs). */
+export interface PackListItem {
+  slug: string;
+  name: string;
+  description: string;
+  version: string;
+  category?: string;
+  active: boolean;
+  activeProfiles: string[];
+  profiles: string[];
+  agents: string[];
+  skills: string[];
+  sources: string[];
+  workflows: string[];
+  tags: string[];
+}
+
+/** Options for list_packs filtering. */
+export interface ListPacksOptions {
+  activeOnly?: boolean;
+  search?: string;
+  tags?: string[];
+}
+
+/** Result from list_packs. */
+export interface ListPacksResult {
+  total: number;
+  returned: number;
+  packs: PackListItem[];
+}
+
+/** Full pack detail (returned by get_pack). */
+export interface PackToolDetail extends PackListItem {
+  body: string;
+  guardrails?: unknown;
+  runtime?: unknown;
+  dependencies?: unknown[];
+}
+
+/** Result from plan_pack_install and install_pack. */
+export interface PackInstallPlanToolResult {
+  packSlug: string;
+  profile: string;
+  activate: {
+    agents: string[];
+    skills: string[];
+    sources: string[];
+    workflows: string[];
+    automations: string[];
+  };
+  requiresSetup?: {
+    automations: string[];
+  };
+  issues: Array<{
+    severity: 'error' | 'warning';
+    kind: string;
+    slug: string;
+    message: string;
+  }>;
+  installed?: {
+    agents: string[];
+    skills: string[];
+    sources: string[];
+    workflows: string[];
+    automations: string[];
+    packs: Array<{ slug: string; profile: string; activatedAt: string }>;
+  };
 }
 
 // ============================================================

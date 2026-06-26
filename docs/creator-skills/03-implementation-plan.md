@@ -106,8 +106,8 @@ packages/shared/src/skills/
 ### What to skip (defer to later)
 
 - Webhook URL discovery / deep-linking to the automation's URL with copy-to-clipboard — UX polish.
-- Action types beyond prompt/webhook — add workflow execution only after the automation tool and workflow runner expose a supported `RunWorkflow` action.
 - Visual cron builder. The dialogue handles it.
+- Native workflow-DAG triggers. Automations can start active saved workflows now, but workflow files themselves still stay manual/sequential.
 
 ---
 

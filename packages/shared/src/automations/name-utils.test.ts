@@ -29,6 +29,13 @@ describe('deriveAutomationName', () => {
     expect(deriveAutomationName('LabelAdd', matcher)).toBe('Review the code');
   });
 
+  it('should derive name from workflow action', () => {
+    const matcher = {
+      actions: [{ type: 'workflow' as const, workflowSlug: 'daily-company-brief' }],
+    };
+    expect(deriveAutomationName('SchedulerTick', matcher)).toBe('Workflow daily-company-brief');
+  });
+
   it('should truncate long prompts to 40 chars', () => {
     const longPrompt = 'This is a very long prompt that exceeds the forty character limit';
     const matcher: AutomationMatcher = {

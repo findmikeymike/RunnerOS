@@ -78,13 +78,10 @@ Available trigger types in this workspace today:
 Available actions today:
 - `{ type: 'prompt', prompt }` — spawn a session with a rendered prompt.
   Optional `llmConnection`, `model`, and `thinkingLevel`.
+- `{ type: 'workflow', workflowSlug, triggerInputs? }` — start an active
+  saved workflow. `triggerInputs` string values may reference `$CRAFT_*`.
 - `{ type: 'webhook', url, method?, headers?, body? }` — send an outbound
   HTTP request.
-
-Automation actions cannot run workflows directly today. If the user asks for
-"run this workflow on a schedule", explain that scheduled workflow triggers
-are not implemented yet and offer a scheduled prompt action as the closest
-available option.
 
 If the user describes something that can't be expressed as one of the
 trigger types above, say so plainly — don't fudge a fit. Suggest the
@@ -196,6 +193,7 @@ interface CreateAutomationToolInput {
     permissionMode?: 'safe' | 'ask' | 'allow-all';
     actions: Array<
       | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: 'high' | 'medium' | 'low' | 'disabled' }
+      | { type: 'workflow'; workflowSlug: string; triggerInputs?: Record<string, unknown> }
       | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; body?: unknown }
     >;
   };

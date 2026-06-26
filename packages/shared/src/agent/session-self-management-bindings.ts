@@ -95,6 +95,38 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'listPacks', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listPacksFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getPack', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.getPackFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'planPackInstall', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.planPackInstallFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'installPack', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.installPackFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'getWorkflow', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.getWorkflowFn;

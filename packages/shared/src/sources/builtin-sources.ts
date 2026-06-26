@@ -17,11 +17,14 @@ const HYPERMOTION_SLUG = 'hypermotion';
 const LOTTIE_SLUG = 'lottie';
 const VIDEO_STUDIO_SLUG = 'video-studio';
 const GOOGLE_ADS_SLUG = 'google-ads';
+const META_ADS_SLUG = 'meta-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 const OPEN_SLIDE_SLUG = 'open-slide';
 const ZERO_SLUG = 'zero';
 const SHOPIFY_SLUG = 'shopify';
 const PRINTIFY_SLUG = 'printify';
+const RUNNER_DOCS_SLUG = 'runner-docs';
+const CRAFT_AGENTS_DOCS_SLUG = 'craft-agents-docs';
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -252,6 +255,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getLottieSource(workspaceId, workspaceRootPath),
     getVideoStudioSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
+    getMetaAdsSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
     getZeroSource(workspaceId, workspaceRootPath),
@@ -630,6 +634,57 @@ export function getGoogleAdsSource(workspaceId: string, workspaceRootPath: strin
         '6. Ask for explicit approval before any live mutation to campaigns, budgets, keywords, audiences, conversions, billing, or status.',
         '',
         'Google Ads auth is separate from Meta Ads auth. If auth is missing, tell the user it needs OAuth login or configured Google Ads credentials.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
+ * Built-in source for Meta's official Ads MCP connector.
+ *
+ * Meta hosts this as a remote OAuth MCP endpoint. RunnerOS should expose the
+ * source so agents can route Meta Ads reads/plans through the normal source
+ * activation and auth flow instead of relying on an undeclared slug.
+ */
+export function getMetaAdsSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-meta-ads',
+    name: 'Meta Ads',
+    slug: META_ADS_SLUG,
+    enabled: true,
+    provider: 'meta',
+    type: 'mcp',
+    mcp: {
+      transport: 'http',
+      url: 'https://mcp.facebook.com/ads',
+      authType: 'oauth',
+    },
+    tagline: 'Meta Ads official MCP connector for account discovery, reporting, diagnostics, and approval-gated planning.',
+    icon: '📣',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Meta Ads',
+        '',
+        "Use this source for Meta Ads account discovery, campaign/ad set/ad inspection, reporting, insights, catalog checks, and diagnostics through Meta's official remote Ads MCP connector.",
+        '',
+        'Workflow:',
+        '1. Connect Meta Ads through the RunnerOS OAuth flow.',
+        '2. Start read-only: list accounts, inspect campaigns/ad sets/ads, pull reports, and run diagnostics.',
+        '3. Treat campaign, budget, catalog, creative, and status changes as externally visible business actions.',
+        '4. Before any write action, show the exact planned change and ask for explicit approval.',
+        '5. If Meta returns an eligibility or rollout error, report that Meta has not enabled Ads MCP for that Business yet.',
+        '',
+        'Endpoint: https://mcp.facebook.com/ads',
       ].join('\n'),
     },
     isBuiltin: true,
@@ -1081,9 +1136,12 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === LOTTIE_SLUG
     || slug === VIDEO_STUDIO_SLUG
     || slug === GOOGLE_ADS_SLUG
+    || slug === META_ADS_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
     || slug === OPEN_SLIDE_SLUG
     || slug === ZERO_SLUG
     || slug === SHOPIFY_SLUG
-    || slug === PRINTIFY_SLUG;
+    || slug === PRINTIFY_SLUG
+    || slug === RUNNER_DOCS_SLUG
+    || slug === CRAFT_AGENTS_DOCS_SLUG;
 }

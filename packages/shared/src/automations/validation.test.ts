@@ -54,6 +54,44 @@ describe('validation', () => {
       expect(result.valid).toBe(true);
     });
 
+    it('should accept config with workflow actions', () => {
+      const config = {
+        automations: {
+          SchedulerTick: [{
+            cron: '0 7 * * 1-5',
+            actions: [{
+              type: 'workflow',
+              workflowSlug: 'daily-company-brief',
+              triggerInputs: {
+                company_context: '$CRAFT_EVENT_DATA',
+                time_horizon: 'today',
+              },
+            }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(true);
+      expect(result.config?.automations.SchedulerTick?.[0]?.actions[0]).toMatchObject({
+        type: 'workflow',
+        workflowSlug: 'daily-company-brief',
+      });
+    });
+
+    it('should reject workflow actions with invalid workflowSlug', () => {
+      const config = {
+        automations: {
+          SchedulerTick: [{
+            cron: '0 7 * * *',
+            actions: [{ type: 'workflow', workflowSlug: 'Bad Slug' }],
+          }],
+        },
+      };
+      const result = validateAutomationsConfig(config);
+      expect(result.valid).toBe(false);
+      expect(result.errors.join('\n')).toContain('workflowSlug');
+    });
+
     it('should accept config with disabled matchers', () => {
       const config = {
         automations: {
