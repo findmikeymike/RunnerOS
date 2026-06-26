@@ -6,8 +6,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { delimiter } from 'node:path';
-import { join, resolve } from 'node:path';
+import { basename, delimiter, join, resolve } from 'node:path';
 import type { LoadedSource, FolderSourceConfig } from './types.ts';
 
 const COMPUTER_USE_SLUG = 'computer-use';
@@ -26,6 +25,7 @@ const SHOPIFY_SLUG = 'shopify';
 const PRINTIFY_SLUG = 'printify';
 const RUNNER_DOCS_SLUG = 'runner-docs';
 const CRAFT_AGENTS_DOCS_SLUG = 'craft-agents-docs';
+const DEFAULT_SQUAD_HOME = '/Users/michaelb.williams/CAS4/Squad';
 
 function firstExistingPath(candidates: string[], fallback: string): string {
   for (const candidate of candidates) {
@@ -155,6 +155,33 @@ export function getSquadPath(): string {
     ],
     join('tools', 'squad')
   );
+}
+
+function getSquadRuntimeStatus(toolPath: string): { ok: boolean; error?: string } {
+  if (!existsSync(toolPath)) {
+    return { ok: false, error: 'Bundled Squad wrapper folder not found' };
+  }
+
+  const squadHomeRaw = process.env.SQUAD_HOME || (existsSync(DEFAULT_SQUAD_HOME) ? DEFAULT_SQUAD_HOME : '');
+  if (!squadHomeRaw) {
+    return { ok: false, error: 'Squad checkout not configured. Set SQUAD_HOME=/absolute/path/to/Squad.' };
+  }
+
+  const squadHome = resolve(squadHomeRaw);
+  if (!existsSync(squadHome)) {
+    return { ok: false, error: `Squad checkout not found at ${squadHome}. Set SQUAD_HOME=/absolute/path/to/Squad.` };
+  }
+
+  const missing = [
+    join(squadHome, 'scripts', 'build_storyboard_plan_board.py'),
+    join(squadHome, 'scripts', 'run_creative_production.py'),
+  ].filter((path) => !existsSync(path));
+
+  if (missing.length > 0) {
+    return { ok: false, error: `Squad checkout is missing required script(s): ${missing.map((path) => basename(path)).join(', ')}` };
+  }
+
+  return { ok: true };
 }
 
 function getGoogleAdsPath(): string {
@@ -599,6 +626,7 @@ export function getVideoStudioSource(workspaceId: string, workspaceRootPath: str
  */
 export function getSquadSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
   const toolPath = getSquadPath();
+  const runtimeStatus = getSquadRuntimeStatus(toolPath);
   const config: FolderSourceConfig = {
     id: 'builtin-squad',
     name: 'Squad',
@@ -612,9 +640,9 @@ export function getSquadSource(workspaceId: string, workspaceRootPath: string): 
     },
     tagline: 'Runner wrapper for Squad storyboard boards, preflight, and approval-gated video production.',
     icon: '🎬',
-    isAuthenticated: true,
-    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
-    connectionError: existsSync(toolPath) ? undefined : 'Bundled Squad wrapper folder not found',
+    isAuthenticated: runtimeStatus.ok,
+    connectionStatus: runtimeStatus.ok ? 'connected' : 'failed',
+    connectionError: runtimeStatus.error,
   };
 
   return {

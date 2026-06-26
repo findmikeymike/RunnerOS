@@ -64,6 +64,35 @@ try {
   assert.ok(parsed.create_output.files[0].path.startsWith(workspace));
   assert.equal(readFileSync(parsed.create_output.files[0].path, 'utf-8').includes('Storyboard'), true);
 
+  const outsideWorkspace = join(root, 'outside-workspace');
+  const outsideStoryboard = spawnSync(process.execPath, ['bin/squad.mjs', 'storyboard', '--brief-file', 'brief.json', '--workspace-root', workspace, '--output-dir', outsideWorkspace, '--json'], {
+    cwd: new URL('.', import.meta.url).pathname,
+    env,
+    encoding: 'utf-8',
+  });
+  assert.equal(outsideStoryboard.status, 1, outsideStoryboard.stderr || outsideStoryboard.stdout);
+  assert.match(JSON.parse(outsideStoryboard.stdout).error, /inside the Runner workspace/);
+
+  const preflight = spawnSync(process.execPath, ['bin/squad.mjs', 'preflight', '--brief-file', 'brief.json', '--workspace-root', workspace, '--json'], {
+    cwd: new URL('.', import.meta.url).pathname,
+    env,
+    encoding: 'utf-8',
+  });
+  assert.equal(preflight.status, 0, preflight.stderr || preflight.stdout);
+  assert.equal(JSON.parse(preflight.stdout).ok, true);
+
+  writeFileSync(join(squadHome, 'scripts', 'run_creative_production.py'), `
+console.log('not json');
+`);
+  const malformedPreflight = spawnSync(process.execPath, ['bin/squad.mjs', 'preflight', '--brief-file', 'brief.json', '--workspace-root', workspace, '--json'], {
+    cwd: new URL('.', import.meta.url).pathname,
+    env,
+    encoding: 'utf-8',
+  });
+  assert.equal(malformedPreflight.status, 1, malformedPreflight.stderr || malformedPreflight.stdout);
+  assert.equal(JSON.parse(malformedPreflight.stdout).ok, false);
+  assert.match(JSON.parse(malformedPreflight.stdout).result.error, /valid JSON/);
+
   const blockedRun = spawnSync(process.execPath, ['bin/squad.mjs', 'run', '--brief-file', 'brief.json', '--workspace-root', workspace, '--json'], {
     cwd: new URL('.', import.meta.url).pathname,
     env,
