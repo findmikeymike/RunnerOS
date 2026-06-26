@@ -16,7 +16,7 @@ cd tools/google-ads
 node bin/google-ads.mjs <command> --agent
 ```
 
-Current bundled build: `2026.6.25-runneros-v24`, targeting Google Ads API `v24`.
+Current bundled build: `2026.6.25-runneros-v24`, targeting Google Ads API `v24` with v24.2 release coverage. Google Ads API v24.2 was released on 2026-06-24; the REST endpoint path remains `v24`.
 
 Do not assume a globally installed `google-ads-pp-cli`. RunnerOS resolves the bundled binary through `tools/google-ads/bin/google-ads.mjs`.
 
