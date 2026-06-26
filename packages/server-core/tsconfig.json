@@ -19,6 +19,7 @@
     "noUnusedParameters": false,
     "baseUrl": ".",
     "paths": {
+      "@craft-agent/session-tools-core": ["../session-tools-core/src/index.ts"],
       "@craft-agent/shared": ["../shared/src/index.ts"],
       "@craft-agent/shared/*": ["../shared/src/*"]
     }

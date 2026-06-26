@@ -1,0 +1,31 @@
+{
+  "allowedCommands": [
+    {
+      "pattern": "^node\\s+tools/squad/bin/squad\\.mjs\\s+doctor\\s+--json$",
+      "comment": "Check Squad wrapper and checkout readiness"
+    },
+    {
+      "pattern": "^node\\s+tools/squad/bin/squad\\.mjs\\s+storyboard\\s+.+\\s+--json$",
+      "comment": "Generate a no-spend Squad storyboard board"
+    },
+    {
+      "pattern": "^node\\s+tools/squad/bin/squad\\.mjs\\s+preflight\\s+.+\\s+--json$",
+      "comment": "Run Squad no-spend production preflight"
+    },
+    {
+      "pattern": "^node\\s+tools/squad/bin/squad\\.mjs\\s+inspect-latest\\s+--json$",
+      "comment": "Inspect latest Squad creative production run"
+    }
+  ],
+  "blockedCommandHints": [
+    {
+      "command": "node tools/squad/bin/squad.mjs run",
+      "reason": "Squad production can spend provider credits or start long media generation.",
+      "context": "Run storyboard and preflight first, then ask for explicit approval of budget, quality, and brief.",
+      "tryInstead": [
+        "node tools/squad/bin/squad.mjs storyboard --brief-file brief.json --json",
+        "node tools/squad/bin/squad.mjs preflight --brief-file brief.json --json"
+      ]
+    }
+  ]
+}

@@ -124,6 +124,7 @@ export {
   getComputerUseSource,
   getFieldTheorySource,
   getVideoStudioSource,
+  getSquadSource,
   getZeroSource,
   getDocsSource,
   getBuiltinSources,

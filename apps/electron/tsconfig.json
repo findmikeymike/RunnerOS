@@ -23,6 +23,9 @@
     "paths": {
       "@/*": ["src/renderer/*"],
       "@config/*": ["../../packages/shared/src/config/*"],
+      "@craft-agent/server-core": ["../../packages/server-core/src/index.ts"],
+      "@craft-agent/server-core/*": ["../../packages/server-core/src/*"],
+      "@craft-agent/session-tools-core": ["../../packages/session-tools-core/src/index.ts"],
       "@craft-agent/shared": ["../../packages/shared/src/index.ts"],
       "@craft-agent/shared/*": ["../../packages/shared/src/*"]
     }

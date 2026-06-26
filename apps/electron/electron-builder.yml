@@ -62,6 +62,7 @@ files:
   - tools/printing-press-social/**/*
   - tools/hypermotion/**/*
   - tools/video-studio/**/*
+  - tools/squad/**/*
   - tools/google-ads/**/*
   - tools/shopify/**/*
   - tools/printify/**/*
@@ -125,6 +126,11 @@ mac:
     # Managed local Video Studio project/render wrapper.
     - from: ../../tools/video-studio
       to: app/tools/video-studio
+      filter:
+        - "**/*"
+    # Managed local Squad creative production wrapper.
+    - from: ../../tools/squad
+      to: app/tools/squad
       filter:
         - "**/*"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
@@ -234,6 +240,11 @@ win:
       to: app/tools/video-studio
       filter:
         - "**/*"
+    # Managed local Squad creative production wrapper.
+    - from: ../../tools/squad
+      to: app/tools/squad
+      filter:
+        - "**/*"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
     - from: ../../tools/google-ads
       to: app/tools/google-ads
@@ -302,6 +313,11 @@ linux:
     # Managed local Video Studio project/render wrapper.
     - from: ../../tools/video-studio
       to: app/tools/video-studio
+      filter:
+        - "**/*"
+    # Managed local Squad creative production wrapper.
+    - from: ../../tools/squad
+      to: app/tools/squad
       filter:
         - "**/*"
     # Managed local Google Ads CLI wrapper and bundled platform binary.

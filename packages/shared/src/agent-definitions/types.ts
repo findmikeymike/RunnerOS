@@ -171,3 +171,6 @@ export const SOCIAL_PUBLISHER_SLUG = 'social-publisher';
 
 /** Built-in open-slide deck authoring agent slug. */
 export const OPEN_SLIDE_AGENT_SLUG = 'open-slide-agent';
+
+/** Built-in Squad video production agent slug. */
+export const VIDEO_DIRECTOR_SLUG = 'video-director';

@@ -23,7 +23,7 @@ import {
   removeBuiltInAgentSkills,
 } from './storage.ts'
 import { STARTER_AGENTS } from './starter-templates.ts'
-import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
+import { SOCIAL_PUBLISHER_SLUG, VIDEO_DIRECTOR_SLUG } from './types.ts'
 
 function tmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), 'craft-agent-defs-test-'))
@@ -513,6 +513,20 @@ body
     expect(hypermotionAgent?.metadata.sources).toContain('hypermotion')
     expect(hypermotionAgent?.systemPrompt).toContain('node bin/hypermotion.mjs doctor')
     expect(hypermotionAgent?.systemPrompt).toContain('showInCanvas')
+  })
+
+  test('starter library includes Video Director with Squad source and artifact-window publishing', () => {
+    const videoDirector = STARTER_AGENTS.find((agent) => agent.slug === VIDEO_DIRECTOR_SLUG)
+
+    expect(videoDirector).toBeDefined()
+    expect(VIDEO_DIRECTOR_SLUG).toBe('video-director')
+    expect(videoDirector?.metadata.visualAgent).toBe(true)
+    expect(videoDirector?.metadata.skills).toEqual(['squad'])
+    expect(videoDirector?.metadata.sources).toContain('squad')
+    expect(videoDirector?.systemPrompt).toContain('node tools/squad/bin/squad.mjs storyboard')
+    expect(videoDirector?.systemPrompt).toContain('create_output')
+    expect(videoDirector?.systemPrompt).toContain('artifact window')
+    expect(videoDirector?.systemPrompt).toContain('--approved')
   })
 
   test('starter library includes the Shopify Agent with bundled Shopify source', () => {

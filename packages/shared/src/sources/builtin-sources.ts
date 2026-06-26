@@ -16,6 +16,7 @@ const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
 const HYPERMOTION_SLUG = 'hypermotion';
 const LOTTIE_SLUG = 'lottie';
 const VIDEO_STUDIO_SLUG = 'video-studio';
+const SQUAD_SLUG = 'squad';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const META_ADS_SLUG = 'meta-ads';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
@@ -142,6 +143,20 @@ export function getVideoStudioPath(): string {
   );
 }
 
+export function getSquadPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'squad') : '',
+      join(appRoot, 'tools', 'squad'),
+      join(process.cwd(), 'tools', 'squad'),
+    ],
+    join('tools', 'squad')
+  );
+}
+
 function getGoogleAdsPath(): string {
   const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
   const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
@@ -254,6 +269,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getHypermotionSource(workspaceId, workspaceRootPath),
     getLottieSource(workspaceId, workspaceRootPath),
     getVideoStudioSource(workspaceId, workspaceRootPath),
+    getSquadSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getMetaAdsSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
@@ -568,6 +584,60 @@ export function getVideoStudioSource(workspaceId: string, workspaceRootPath: str
         '8. `node bin/video-studio.mjs export` can render video, image, audio, and text clips. SVG/Lottie/HTML clips fail loudly until the fuller renderer lands.',
         '',
         'Do not use Computer Use to click a video editor UI unless the user explicitly asks. The project JSON is the source of truth.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
+ * Built-in source for the RunnerOS Squad wrapper.
+ *
+ * Squad itself stays as an external checkout configured by SQUAD_HOME. The
+ * Runner wrapper normalizes command shape and stages previewable artifacts
+ * under the active workspace so Output previews can render them safely.
+ */
+export function getSquadSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getSquadPath();
+  const config: FolderSourceConfig = {
+    id: 'builtin-squad',
+    name: 'Squad',
+    slug: SQUAD_SLUG,
+    enabled: true,
+    provider: 'squad',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Runner wrapper for Squad storyboard boards, preflight, and approval-gated video production.',
+    icon: '🎬',
+    isAuthenticated: true,
+    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
+    connectionError: existsSync(toolPath) ? undefined : 'Bundled Squad wrapper folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Squad',
+        '',
+        'Use this source for Squad creative production: no-spend storyboards, preflight, budget video runs, review packets, carousels, and agent-readable production receipts.',
+        '',
+        'Workflow:',
+        '1. Run commands from the Runner workspace root so artifacts land inside the workspace.',
+        '2. Run `node tools/squad/bin/squad.mjs doctor --json` before production work.',
+        '3. Run `node tools/squad/bin/squad.mjs storyboard --brief-file brief.json --json` before spend. This emits a `create_output` payload for artifact-window display.',
+        '4. Run `node tools/squad/bin/squad.mjs preflight --brief-file brief.json --json` before provider spend.',
+        '5. Only after explicit approval, run `node tools/squad/bin/squad.mjs run --brief-file brief.json --approved --budget-cap-usd 1.00 --json`.',
+        '6. Pass the returned `create_output` payload to `create_output` with `showInCanvas: true` to display storyboard HTML or final MP4 in the artifact window.',
+        '',
+        'Default local Squad path: `/Users/michaelb.williams/CAS4/Squad`. Other installs should set `SQUAD_HOME=/absolute/path/to/Squad`.',
+        'Never expose `.env.local`, provider keys, or raw secrets. Do not raise budget or quality without approval.',
       ].join('\n'),
     },
     isBuiltin: true,
@@ -1138,6 +1208,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === HYPERMOTION_SLUG
     || slug === LOTTIE_SLUG
     || slug === VIDEO_STUDIO_SLUG
+    || slug === SQUAD_SLUG
     || slug === GOOGLE_ADS_SLUG
     || slug === META_ADS_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
