@@ -15,14 +15,14 @@ Never print `.env.local`, API keys, provider tokens, or raw secret values.
 
 ## Runner Wrapper
 
-Run from the Runner workspace root:
+Run from the Runner workspace root. Use the `squad` source Local path shown in Runner context, then append `/bin/squad.mjs`:
 
 ```bash
-node tools/squad/bin/squad.mjs doctor --json
-node tools/squad/bin/squad.mjs storyboard --brief-file brief.json --json
-node tools/squad/bin/squad.mjs preflight --brief-file brief.json --json
-node tools/squad/bin/squad.mjs run --brief-file brief.json --approved --budget-cap-usd 1.00 --json
-node tools/squad/bin/squad.mjs inspect-latest --json
+node <squad-source-local-path>/bin/squad.mjs doctor --json
+node <squad-source-local-path>/bin/squad.mjs storyboard --brief-file brief.json --json
+node <squad-source-local-path>/bin/squad.mjs preflight --brief-file brief.json --json
+node <squad-source-local-path>/bin/squad.mjs run --brief-file brief.json --approved --budget-cap-usd 1.00 --json
+node <squad-source-local-path>/bin/squad.mjs inspect-latest --json
 ```
 
 If Squad is not found, set:

@@ -175,6 +175,7 @@ function getSquadRuntimeStatus(toolPath: string): { ok: boolean; error?: string 
   const missing = [
     join(squadHome, 'scripts', 'build_storyboard_plan_board.py'),
     join(squadHome, 'scripts', 'run_creative_production.py'),
+    join(squadHome, 'scripts', 'show_creative_production_run.py'),
   ].filter((path) => !existsSync(path));
 
   if (missing.length > 0) {
@@ -182,6 +183,11 @@ function getSquadRuntimeStatus(toolPath: string): { ok: boolean; error?: string 
   }
 
   return { ok: true };
+}
+
+function shellArg(value: string): string {
+  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
+  return `'${value.replace(/'/g, String.raw`'\''`)}'`;
 }
 
 function getGoogleAdsPath(): string {
@@ -627,6 +633,7 @@ export function getVideoStudioSource(workspaceId: string, workspaceRootPath: str
 export function getSquadSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
   const toolPath = getSquadPath();
   const runtimeStatus = getSquadRuntimeStatus(toolPath);
+  const squadCli = `node ${shellArg(join(toolPath, 'bin', 'squad.mjs'))}`;
   const config: FolderSourceConfig = {
     id: 'builtin-squad',
     name: 'Squad',
@@ -658,10 +665,10 @@ export function getSquadSource(workspaceId: string, workspaceRootPath: string): 
         '',
         'Workflow:',
         '1. Run commands from the Runner workspace root so artifacts land inside the workspace.',
-        '2. Run `node tools/squad/bin/squad.mjs doctor --json` before production work.',
-        '3. Run `node tools/squad/bin/squad.mjs storyboard --brief-file brief.json --json` before spend. This emits a `create_output` payload for artifact-window display.',
-        '4. Run `node tools/squad/bin/squad.mjs preflight --brief-file brief.json --json` before provider spend.',
-        '5. Only after explicit approval, run `node tools/squad/bin/squad.mjs run --brief-file brief.json --approved --budget-cap-usd 1.00 --json`.',
+        `2. Run \`${squadCli} doctor --json\` before production work.`,
+        `3. Run \`${squadCli} storyboard --brief-file brief.json --json\` before spend. This emits a \`create_output\` payload for artifact-window display.`,
+        `4. Run \`${squadCli} preflight --brief-file brief.json --json\` before provider spend.`,
+        `5. Only after explicit approval, run \`${squadCli} run --brief-file brief.json --approved --budget-cap-usd 1.00 --json\`.`,
         '6. Pass the returned `create_output` payload to `create_output` with `showInCanvas: true` to display storyboard HTML or final MP4 in the artifact window.',
         '',
         'Default local Squad path: `/Users/michaelb.williams/CAS4/Squad`. Other installs should set `SQUAD_HOME=/absolute/path/to/Squad`.',

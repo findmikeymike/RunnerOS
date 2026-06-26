@@ -2,16 +2,16 @@
 
 Use this source for Squad creative production: no-spend storyboards, preflight, budget video runs, review packets, carousels, and agent-readable production receipts.
 
-Run commands from the Runner workspace root, not from inside `tools/squad`, so generated artifacts land under the workspace and can be shown in the artifact window.
+Run commands from the Runner workspace root so generated artifacts land under the workspace and can be shown in the artifact window. Use the `squad` source Local path shown in Runner context, then append `/bin/squad.mjs`.
 
 ## Commands
 
 ```bash
-node tools/squad/bin/squad.mjs doctor --json
-node tools/squad/bin/squad.mjs storyboard --brief-file brief.json --json
-node tools/squad/bin/squad.mjs preflight --brief-file brief.json --json
-node tools/squad/bin/squad.mjs run --brief-file brief.json --approved --budget-cap-usd 1.00 --json
-node tools/squad/bin/squad.mjs inspect-latest --json
+node <squad-source-local-path>/bin/squad.mjs doctor --json
+node <squad-source-local-path>/bin/squad.mjs storyboard --brief-file brief.json --json
+node <squad-source-local-path>/bin/squad.mjs preflight --brief-file brief.json --json
+node <squad-source-local-path>/bin/squad.mjs run --brief-file brief.json --approved --budget-cap-usd 1.00 --json
+node <squad-source-local-path>/bin/squad.mjs inspect-latest --json
 ```
 
 ## Artifact Window

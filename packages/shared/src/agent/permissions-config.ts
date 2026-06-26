@@ -19,6 +19,7 @@ import { readJsonFileSync, safeJsonParse } from '../utils/files.ts';
 import { CONFIG_DIR } from '../config/paths.ts';
 import { getBundledAssetsDir } from '../utils/paths.ts';
 import { getSourcePath } from '../sources/storage.ts';
+import { getBuiltinSourcePermissionsConfig } from '../sources/builtin-source-permissions.ts';
 import { isValidPermissionsFile } from '../config/validators.ts';
 import { FEATURE_FLAGS } from '../feature-flags.ts';
 import {
@@ -471,7 +472,11 @@ export function loadSourcePermissionsConfig(
   sourceSlug: string
 ): PermissionsCustomConfig | null {
   const path = getSourcePermissionsPath(workspaceRootPath, sourceSlug);
-  if (!existsSync(path)) return null;
+  if (!existsSync(path)) {
+    const builtin = getBuiltinSourcePermissionsConfig(sourceSlug);
+    if (!builtin) return null;
+    return parsePermissionsJson(JSON.stringify(builtin));
+  }
 
   try {
     const content = readFileSync(path, 'utf-8');
