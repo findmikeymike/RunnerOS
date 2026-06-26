@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { cpSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
@@ -58,6 +58,11 @@ function resolveWorkspaceRoot(args) {
 function resolveInputPath(path, baseDir) {
   if (!path || typeof path !== 'string') return '';
   return isAbsolute(path) ? resolve(path) : resolve(baseDir, path);
+}
+
+function isPathInside(parent, candidate) {
+  const rel = relative(resolve(parent), resolve(candidate));
+  return rel === '' || Boolean(rel && !rel.startsWith('..') && !isAbsolute(rel));
 }
 
 function safeName(input) {
@@ -151,10 +156,14 @@ function fileEntry(path, label, role = 'supporting') {
   return { path, label: label || basename(path), role };
 }
 
-function outputPayloadForStoryboard(result, title) {
+function outputPayloadForStoryboard(result, title, workspaceRoot) {
   const files = [];
-  if (result.html_path) files.push(fileEntry(result.html_path, 'Storyboard board', 'primary'));
-  if (result.json_path) files.push(fileEntry(result.json_path, 'Storyboard JSON', 'supporting'));
+  if (result.html_path && isPathInside(workspaceRoot, result.html_path)) {
+    files.push(fileEntry(result.html_path, 'Storyboard board', 'primary'));
+  }
+  if (result.json_path && isPathInside(workspaceRoot, result.json_path)) {
+    files.push(fileEntry(result.json_path, 'Storyboard JSON', 'supporting'));
+  }
   return {
     title,
     kind: 'report',
@@ -239,6 +248,14 @@ function storyboard(args) {
   const outputDir = args['output-dir']
     ? resolveInputPath(String(args['output-dir']), workspaceRoot)
     : makeArtifactRoot(workspaceRoot, 'storyboards', name);
+  if (!isPathInside(workspaceRoot, outputDir)) {
+    jsonOut({
+      ok: false,
+      error: '--output-dir must resolve inside the Runner workspace so artifacts can be shown in the artifact window.',
+      workspace_root: workspaceRoot,
+      output_dir: outputDir,
+    }, 1);
+  }
   const scriptArgs = [
     '--brief-file', briefFile,
     '--output-dir', outputDir,
@@ -252,7 +269,7 @@ function storyboard(args) {
   const child = runPython(status.squad_home, 'build_storyboard_plan_board.py', scriptArgs);
   const parsed = parseLastJson(child.stdout);
   const result = parsed || { ok: false, error: child.error || child.stderr || 'Squad storyboard command did not return JSON.' };
-  const hasArtifact = Boolean(result.html_path && existsSync(result.html_path));
+  const hasArtifact = Boolean(result.html_path && existsSync(result.html_path) && isPathInside(workspaceRoot, result.html_path));
   jsonOut({
     ok: hasArtifact,
     storyboard_ok: Boolean(result.ok),
@@ -263,7 +280,7 @@ function storyboard(args) {
     stdout: child.stdout.trim() || undefined,
     stderr: child.stderr.trim() || undefined,
     result,
-    create_output: hasArtifact ? outputPayloadForStoryboard(result, `Squad storyboard ${result.run_id || name}`) : undefined,
+    create_output: hasArtifact ? outputPayloadForStoryboard(result, `Squad storyboard ${result.run_id || name}`, workspaceRoot) : undefined,
   }, hasArtifact ? 0 : 1);
 }
 
@@ -285,16 +302,20 @@ function preflight(args) {
   }
   const child = runPython(status.squad_home, 'run_creative_production.py', scriptArgs);
   const parsed = parseLastJson(child.stdout);
+  const preflightOk = child.status === 0 && parsed?.ok === true;
   jsonOut({
-    ok: child.status === 0 && Boolean(parsed?.ok ?? true),
+    ok: preflightOk,
     command: 'preflight',
     squad_home: status.squad_home,
     workspace_root: workspaceRoot,
     exit_code: child.status,
     stdout: child.stdout.trim() || undefined,
     stderr: child.stderr.trim() || undefined,
-    result: parsed,
-  }, child.status === 0 ? 0 : 1);
+    result: parsed || {
+      ok: false,
+      error: 'Squad preflight did not return valid JSON with ok: true.',
+    },
+  }, preflightOk ? 0 : 1);
 }
 
 function runProduction(args) {
@@ -319,7 +340,9 @@ function runProduction(args) {
     scriptArgs.push('--asset-root', resolveInputPath(String(root), workspaceRoot));
   }
   const child = runPython(status.squad_home, 'run_creative_production.py', scriptArgs);
-  const summary = parseLastJson(child.stdout) || {};
+  const parsedSummary = parseLastJson(child.stdout);
+  const runOk = child.status === 0 && Boolean(parsedSummary);
+  const summary = parsedSummary || { ok: false, error: 'Squad run did not return valid JSON.' };
   const runId = summary.run_id || basename(briefFile, extname(briefFile));
   const runDir = makeArtifactRoot(workspaceRoot, 'runs', runId);
   const staged = {
@@ -328,7 +351,7 @@ function runProduction(args) {
     review_path: stageFileIntoRunDir(summary.review_path, runDir, summary.review_path ? `review${extname(summary.review_path) || ''}` : undefined),
   };
   jsonOut({
-    ok: child.status === 0,
+    ok: runOk,
     command: 'run',
     squad_home: status.squad_home,
     workspace_root: workspaceRoot,
@@ -339,7 +362,7 @@ function runProduction(args) {
     result: summary,
     staged,
     create_output: outputPayloadForRun(summary, staged),
-  }, child.status === 0 ? 0 : 1);
+  }, runOk ? 0 : 1);
 }
 
 function inspectLatest(args) {

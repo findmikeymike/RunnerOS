@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, mock } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync } from 'fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'fs';
 import * as os from 'os';
 import { tmpdir } from 'os';
 import { join, resolve, sep } from 'path';
@@ -21,6 +21,7 @@ mock.module('os', () => ({
 }));
 
 const storage = await import(`../storage.ts?global-sources-storage-test=${process.pid}-${Date.now()}`);
+const permissions = await import(`../../agent/permissions-config.ts?global-sources-storage-test=${process.pid}-${Date.now()}`);
 const {
   GLOBAL_AGENT_SOURCES_DIR,
   GLOBAL_WORKSPACE_ID,
@@ -43,6 +44,7 @@ const {
   deactivateGlobalSourceInWorkspace,
   mirrorSourceToGlobal,
 } = storage;
+const { parsePermissionsJson } = permissions;
 
 afterAll(() => {
   try {
@@ -413,6 +415,20 @@ describe('loadAllSources', () => {
     expect(found!.config.local?.path).toContain('tools/squad');
   });
 
+  test('bundled squad permissions parse into allowed bash patterns', () => {
+    const permissionsPath = resolve(import.meta.dir, '../../../../../sources/squad/permissions.json');
+    const raw = readFileSync(permissionsPath, 'utf-8');
+    const json = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = parsePermissionsJson(raw);
+    const allowedPatterns = parsed.allowedBashPatterns as Array<{ pattern: string }>;
+    const blockedHints = parsed.blockedCommandHints as Array<{ command: string }>;
+
+    expect(json.allowedCommands).toBeUndefined();
+    expect(allowedPatterns.length).toBeGreaterThanOrEqual(4);
+    expect(allowedPatterns.some((entry) => entry.pattern.includes('storyboard'))).toBe(true);
+    expect(blockedHints.some((hint) => hint.command.includes('squad.mjs run'))).toBe(true);
+  });
+
   test('includes shopify as a project local source', () => {
     const ws = makeWorkspace();
     const all = loadAllSources(ws);
@@ -543,6 +559,27 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.type).toBe('local');
     expect(sources[0]!.config.local?.path).toContain('tools/squad');
+  });
+
+  test('marks squad source failed when SQUAD_HOME is invalid', () => {
+    const previousSquadHome = process.env.SQUAD_HOME;
+    process.env.SQUAD_HOME = join(tmpdir(), `missing-squad-${Date.now()}`);
+    try {
+      const ws = makeWorkspace();
+      const sources = getSourcesBySlugs(ws, ['squad']);
+
+      expect(sources.length).toBe(1);
+      expect(sources[0]!.config.slug).toBe('squad');
+      expect(sources[0]!.config.isAuthenticated).toBe(false);
+      expect(sources[0]!.config.connectionStatus).toBe('failed');
+      expect(sources[0]!.config.connectionError).toContain('Squad checkout not found');
+    } finally {
+      if (previousSquadHome === undefined) {
+        delete process.env.SQUAD_HOME;
+      } else {
+        process.env.SQUAD_HOME = previousSquadHome;
+      }
+    }
   });
 
   test('resolves google-ads by slug without workspace activation', () => {

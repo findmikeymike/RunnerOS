@@ -1,5 +1,5 @@
 {
-  "allowedCommands": [
+  "allowedBashPatterns": [
     {
       "pattern": "^node\\s+tools/squad/bin/squad\\.mjs\\s+doctor\\s+--json$",
       "comment": "Check Squad wrapper and checkout readiness"
