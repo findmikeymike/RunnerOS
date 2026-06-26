@@ -93,6 +93,20 @@ console.log('not json');
   assert.equal(JSON.parse(malformedPreflight.stdout).ok, false);
   assert.match(JSON.parse(malformedPreflight.stdout).result.error, /valid JSON/);
 
+  writeFileSync(join(squadHome, 'scripts', 'run_creative_production.py'), `
+console.log(JSON.stringify({ ok: false, final_status: 'failed', run_id: 'failed-run', error: 'provider failed' }));
+`);
+  const failedRun = spawnSync(process.execPath, ['bin/squad.mjs', 'run', '--brief-file', 'brief.json', '--workspace-root', workspace, '--approved', '--json'], {
+    cwd: new URL('.', import.meta.url).pathname,
+    env,
+    encoding: 'utf-8',
+  });
+  assert.equal(failedRun.status, 1, failedRun.stderr || failedRun.stdout);
+  const failedRunJson = JSON.parse(failedRun.stdout);
+  assert.equal(failedRunJson.ok, false);
+  assert.equal(failedRunJson.result.ok, false);
+  assert.equal(failedRunJson.create_output.receipts[0].status, 'failed');
+
   const blockedRun = spawnSync(process.execPath, ['bin/squad.mjs', 'run', '--brief-file', 'brief.json', '--workspace-root', workspace, '--json'], {
     cwd: new URL('.', import.meta.url).pathname,
     env,
@@ -101,6 +115,19 @@ console.log('not json');
   assert.equal(blockedRun.status, 1, blockedRun.stderr || blockedRun.stdout);
   assert.equal(JSON.parse(blockedRun.stdout).ok, false);
   assert.match(JSON.parse(blockedRun.stdout).error, /--approved/);
+
+  const missingInspectHome = join(root, 'SquadMissingInspect');
+  mkdirSync(join(missingInspectHome, 'scripts'), { recursive: true });
+  writeFileSync(join(missingInspectHome, 'SKILL.md'), '# Squad\n');
+  writeFileSync(join(missingInspectHome, 'scripts', 'build_storyboard_plan_board.py'), 'print("{}")\n');
+  writeFileSync(join(missingInspectHome, 'scripts', 'run_creative_production.py'), 'print("{}")\n');
+  const missingInspectDoctor = spawnSync(process.execPath, ['bin/squad.mjs', 'doctor', '--json'], {
+    cwd: new URL('.', import.meta.url).pathname,
+    env: { ...env, SQUAD_HOME: missingInspectHome },
+    encoding: 'utf-8',
+  });
+  assert.equal(missingInspectDoctor.status, 1, missingInspectDoctor.stderr || missingInspectDoctor.stdout);
+  assert.equal(JSON.parse(missingInspectDoctor.stdout).inspect_script_exists, false);
 } finally {
   rmSync(root, { recursive: true, force: true });
 }

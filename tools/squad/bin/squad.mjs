@@ -100,7 +100,10 @@ function doctor(args) {
     inspect_script_exists: Boolean(squadHome && existsSync(scriptPath(squadHome, 'show_creative_production_run.py'))),
     python,
   };
-  const ok = checks.squad_home_exists && checks.storyboard_script_exists && checks.production_script_exists;
+  const ok = checks.squad_home_exists
+    && checks.storyboard_script_exists
+    && checks.production_script_exists
+    && checks.inspect_script_exists;
   return {
     ok,
     source: 'squad',
@@ -196,6 +199,7 @@ function outputPayloadForRun(summary, staged) {
   if (staged.review_path) files.push(fileEntry(staged.review_path, basename(staged.review_path), staged.final_asset_path ? 'supporting' : 'primary'));
   if (staged.manifest_path) files.push(fileEntry(staged.manifest_path, 'Squad manifest', 'supporting'));
   const rendered = Boolean(staged.final_asset_path);
+  const failed = summary.ok === false || String(summary.final_status || '').toLowerCase().includes('fail');
   return {
     title: `Squad video ${summary.run_id || 'run'}`,
     kind: rendered ? 'video' : 'receipt',
@@ -204,7 +208,7 @@ function outputPayloadForRun(summary, staged) {
     receipts: [{
       provider: 'squad',
       action: 'creative-production-run',
-      status: summary.final_status && !String(summary.final_status).toLowerCase().includes('fail') ? 'succeeded' : 'pending',
+      status: failed ? 'failed' : (summary.final_status ? 'succeeded' : 'pending'),
       displayText: rendered ? 'Playable video artifact created.' : 'No final video artifact found; inspect manifest/review packet.',
       metadata: {
         run_id: summary.run_id,
@@ -341,7 +345,13 @@ function runProduction(args) {
   }
   const child = runPython(status.squad_home, 'run_creative_production.py', scriptArgs);
   const parsedSummary = parseLastJson(child.stdout);
-  const runOk = child.status === 0 && Boolean(parsedSummary);
+  const failedStatus = parsedSummary
+    ? String(parsedSummary.final_status || '').toLowerCase().includes('fail')
+    : false;
+  const runOk = child.status === 0
+    && Boolean(parsedSummary)
+    && parsedSummary.ok !== false
+    && !failedStatus;
   const summary = parsedSummary || { ok: false, error: 'Squad run did not return valid JSON.' };
   const runId = summary.run_id || basename(briefFile, extname(briefFile));
   const runDir = makeArtifactRoot(workspaceRoot, 'runs', runId);

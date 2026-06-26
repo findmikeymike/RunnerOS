@@ -4,11 +4,12 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, mock } from 'bun:test';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'fs';
 import * as os from 'os';
 import { tmpdir } from 'os';
 import { join, resolve, sep } from 'path';
 import type { FolderSourceConfig, LoadedSource } from '../types.ts';
+import type { PatternWithComment } from '../../agent/permissions-config.ts';
 
 // Redirect ~/ to a temp directory before importing storage.ts so that
 // GLOBAL_AGENT_SOURCES_DIR resolves into the sandbox.
@@ -44,7 +45,7 @@ const {
   deactivateGlobalSourceInWorkspace,
   mirrorSourceToGlobal,
 } = storage;
-const { parsePermissionsJson } = permissions;
+const { parsePermissionsJson, loadSourcePermissionsConfig, permissionsConfigCache } = permissions;
 
 afterAll(() => {
   try {
@@ -427,6 +428,22 @@ describe('loadAllSources', () => {
     expect(allowedPatterns.length).toBeGreaterThanOrEqual(4);
     expect(allowedPatterns.some((entry) => entry.pattern.includes('storyboard'))).toBe(true);
     expect(blockedHints.some((hint) => hint.command.includes('squad.mjs run'))).toBe(true);
+  });
+
+  test('built-in squad permissions merge without a workspace source folder', () => {
+    const ws = makeWorkspace();
+    const permissionsPath = join(ws, 'sources', 'squad', 'permissions.json');
+    const sourceConfig = loadSourcePermissionsConfig(ws, 'squad');
+    const merged = permissionsConfigCache.getMergedConfig({
+      workspaceRootPath: ws,
+      activeSourceSlugs: ['squad'],
+    });
+    const absoluteDoctor = `node ${resolve('tools/squad/bin/squad.mjs')} doctor --json`;
+
+    expect(existsSync(permissionsPath)).toBe(false);
+    expect(sourceConfig).toBeTruthy();
+    expect(sourceConfig?.allowedBashPatterns.some((entry: PatternWithComment) => entry.pattern.includes('tools/squad/bin/squad'))).toBe(true);
+    expect(merged.readOnlyBashPatterns.some((entry: { regex: RegExp }) => entry.regex.test(absoluteDoctor))).toBe(true);
   });
 
   test('includes shopify as a project local source', () => {
