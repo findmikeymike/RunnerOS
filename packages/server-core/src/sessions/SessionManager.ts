@@ -2446,6 +2446,7 @@ export class SessionManager implements ISessionManager {
           ORCHESTRATOR_SLUG,
           CONCIERGE_SLUG,
           SOCIAL_PUBLISHER_SLUG,
+          VIDEO_DIRECTOR_SLUG,
         } = await import('@craft-agent/shared/agent-definitions')
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
@@ -2457,6 +2458,7 @@ export class SessionManager implements ISessionManager {
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
+            || a.slug === VIDEO_DIRECTOR_SLUG
             || a.slug === 'researcher'
             || a.slug === 'writer'
             || a.slug === 'triager'

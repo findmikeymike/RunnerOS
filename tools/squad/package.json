@@ -1,0 +1,13 @@
+{
+  "name": "@runneros/squad-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-squad": "bin/squad.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/squad.mjs doctor --json",
+    "test": "node squad-cli.test.mjs"
+  }
+}

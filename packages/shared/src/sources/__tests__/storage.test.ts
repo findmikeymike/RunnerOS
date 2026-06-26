@@ -401,6 +401,18 @@ describe('loadAllSources', () => {
     expect(found!.config.local?.path).toContain('tools/video-studio');
   });
 
+  test('includes squad as a project local source', () => {
+    const ws = makeWorkspace();
+    const all = loadAllSources(ws);
+    const found = all.find((s: LoadedSource) => s.config.slug === 'squad');
+
+    expect(found).toBeDefined();
+    expect(found!.tier).toBe('project');
+    expect(found!.config.type).toBe('local');
+    expect(found!.config.local?.format).toBe('cli-tool');
+    expect(found!.config.local?.path).toContain('tools/squad');
+  });
+
   test('includes shopify as a project local source', () => {
     const ws = makeWorkspace();
     const all = loadAllSources(ws);
@@ -519,6 +531,18 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.type).toBe('local');
     expect(sources[0]!.config.local?.path).toContain('tools/video-studio');
+  });
+
+  test('resolves squad by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['squad']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('squad');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
+    expect(sources[0]!.config.local?.path).toContain('tools/squad');
   });
 
   test('resolves google-ads by slug without workspace activation', () => {

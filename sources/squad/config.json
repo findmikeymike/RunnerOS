@@ -1,0 +1,16 @@
+{
+  "id": "squad_20260626",
+  "name": "Squad",
+  "slug": "squad",
+  "enabled": true,
+  "provider": "squad",
+  "type": "local",
+  "tagline": "Runner wrapper for Squad storyboard boards, preflight, and approval-gated video production.",
+  "local": {
+    "path": "tools/squad",
+    "format": "cli-tool"
+  },
+  "icon": "🎬",
+  "isAuthenticated": true,
+  "connectionStatus": "untested"
+}
