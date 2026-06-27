@@ -1,12 +1,12 @@
 import * as React from 'react'
-import { CheckCircle2, ExternalLink, KeyRound, Loader2, Plus, RefreshCcw, Trash2, WalletCards } from 'lucide-react'
+import { CheckCircle2, ExternalLink, KeyRound, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { SettingsCard, SettingsSection } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
-import type { UserSecretSummary, ZeroStatus } from '../../../shared/types'
+import type { UserSecretSummary } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { navigate, routes } from '@/lib/navigate'
 
@@ -168,7 +168,15 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'AI / Media',
+    group: 'Voice / TTS',
+    name: 'ASSEMBLYAI_API_KEY',
+    label: 'AssemblyAI API key',
+    description: 'Used by speech transcription and audio intelligence workflows.',
+    placeholder: 'AssemblyAI key',
+    storage: 'env',
+  },
+  {
+    group: 'Voice / TTS',
     name: 'ELEVENLABS_API_KEY',
     label: 'ElevenLabs API key',
     description: 'Used by voice/TTS workflows and env fallback source lookup.',
@@ -176,7 +184,7 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'AI / Media',
+    group: 'Voice / TTS',
     name: 'INWORLD_API_KEY',
     label: 'Inworld API key',
     description: 'Used by voice/TTS workflows and env fallback source lookup.',
@@ -184,7 +192,15 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'AI / Media',
+    group: 'Voice / TTS',
+    name: 'INWORLD_RUNTIME_KEY',
+    label: 'Inworld runtime key',
+    description: 'Used by Inworld runtime voice and character workflows.',
+    placeholder: 'Inworld runtime key',
+    storage: 'env',
+  },
+  {
+    group: 'Video',
     name: 'HEYGEN_API_KEY',
     label: 'HeyGen API key',
     description: 'Generic HeyGen key. Squad also supports SQUAD_HEYGEN_API_KEY for isolated Video Director credentials.',
@@ -192,31 +208,31 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'SQUAD_OPENAI_API_KEY',
-    label: 'Squad OpenAI API key',
-    description: 'Optional isolated OpenAI key for Squad director decisions, image prompts, and image evaluation.',
+    label: 'Video OpenAI API key',
+    description: 'Optional isolated OpenAI key for video director decisions, image prompts, and image evaluation.',
     placeholder: 'sk-...',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'SQUAD_FAL_API_KEY',
-    label: 'Squad Fal API key',
-    description: 'Required by Squad image generation and used as the Fal video fallback provider.',
+    label: 'Fal API key',
+    description: 'Required by image generation and used as the Fal video fallback provider.',
     placeholder: 'fal key',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'SQUAD_WAVESPEED_API_KEY',
-    label: 'Squad WaveSpeed API key',
-    description: 'Primary Squad full-production video provider key.',
+    label: 'WaveSpeed API key',
+    description: 'Primary full-production video provider key.',
     placeholder: 'WaveSpeed key',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'WAVESPEED_API_KEY',
     label: 'WaveSpeed API key',
     description: 'Generic WaveSpeed fallback accepted by Squad video smoke and production checks.',
@@ -224,47 +240,47 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'SQUAD_HEYGEN_API_KEY',
-    label: 'Squad HeyGen API key',
-    description: 'Isolated HeyGen key for Squad UGC/avatar video generation.',
+    label: 'HeyGen API key',
+    description: 'Isolated HeyGen key for UGC/avatar video generation.',
     placeholder: 'HeyGen API key',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'SQUAD_HEYGEN_AVATAR_ID',
-    label: 'Squad HeyGen avatar ID',
+    label: 'HeyGen avatar ID',
     description: 'Required with the HeyGen key for Squad talking-head/avatar video runs.',
     placeholder: 'avatar id',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'SQUAD_HEYGEN_VOICE_ID',
-    label: 'Squad HeyGen voice ID',
+    label: 'HeyGen voice ID',
     description: 'Required with the HeyGen key for Squad talking-head/avatar video runs.',
     placeholder: 'voice id',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'SQUAD_HEYGEN_PERSONA_MAP_JSON',
-    label: 'Squad HeyGen persona map',
+    label: 'HeyGen persona map',
     description: 'Optional JSON map for selecting HeyGen avatar and voice IDs by persona.',
     placeholder: '{"persona":{"avatar_id":"...","voice_id":"..."}}',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Voice / TTS',
     name: 'SQUAD_FISH_TTS_API_KEY',
-    label: 'Squad Fish Audio API key',
-    description: 'Optional isolated Fish Audio/Fish TTS key for Squad voiceover generation.',
+    label: 'Fish Audio API key',
+    description: 'Optional isolated Fish Audio/Fish TTS key for voiceover generation.',
     placeholder: 'Fish Audio key',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Voice / TTS',
     name: 'FISH_AUDIO_API_KEY',
     label: 'Fish Audio API key',
     description: 'Generic Fish Audio fallback accepted by Squad TTS.',
@@ -272,23 +288,23 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Voice / TTS',
     name: 'SQUAD_FISH_TTS_REFERENCE_ID',
-    label: 'Squad Fish voice reference ID',
+    label: 'Fish voice reference ID',
     description: 'Optional Fish TTS reference or voice ID for Squad voiceover generation.',
     placeholder: 'reference id',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Voice / TTS',
     name: 'SQUAD_INWORLD_TTS_API_KEY',
-    label: 'Squad Inworld TTS API key',
-    description: 'Optional isolated Inworld TTS key for Squad voiceover generation.',
+    label: 'Inworld TTS API key',
+    description: 'Optional isolated Inworld TTS key for voiceover generation.',
     placeholder: 'Inworld TTS key',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Voice / TTS',
     name: 'INWORLD_TTS_API_KEY',
     label: 'Inworld TTS API key',
     description: 'Generic Inworld TTS fallback accepted by Squad voiceover generation.',
@@ -296,15 +312,15 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Voice / TTS',
     name: 'SQUAD_INWORLD_TTS_VOICE_ID',
-    label: 'Squad Inworld voice ID',
+    label: 'Inworld voice ID',
     description: 'Optional Inworld voice ID for Squad voiceover generation.',
     placeholder: 'voice id',
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'MUAPI_API_KEY',
     label: 'MuAPI API key',
     description: 'Used by Squad MuAPI workflow execution tools.',
@@ -312,7 +328,7 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'RUNPOD_API_KEY',
     label: 'RunPod API key',
     description: 'Used by Squad RunPod/LTX video benchmark and hosted worker flows.',
@@ -320,7 +336,7 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'Squad Video',
+    group: 'Video',
     name: 'RUNPOD_LTX_ENDPOINT_ID',
     label: 'RunPod LTX endpoint ID',
     description: 'Required with RUNPOD_API_KEY for Squad RunPod/LTX video runs.',
@@ -472,7 +488,7 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'Zero',
+    group: 'Miscellaneous',
     name: 'ZERO_PRIVATE_KEY',
     label: 'Zero wallet private key',
     description: 'Used by Zero CLI before falling back to ~/.zero/config.json.',
@@ -485,13 +501,10 @@ const SECRET_GROUPS = Array.from(new Set(SECRET_PRESETS.map((preset) => preset.g
 export default function SecretsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
   const [secrets, setSecrets] = React.useState<UserSecretSummary[]>([])
-  const [zero, setZero] = React.useState<ZeroStatus | null>(null)
   const [name, setName] = React.useState('')
   const [value, setValue] = React.useState('')
   const [selectedGroup, setSelectedGroup] = React.useState(SECRET_GROUPS[0] ?? '')
   const [credentialDrafts, setCredentialDrafts] = React.useState<Record<string, string>>({})
-  const [loading, setLoading] = React.useState(false)
-  const [installing, setInstalling] = React.useState(false)
 
   const groupPresets = React.useMemo(
     () => SECRET_PRESETS.filter((preset) => preset.group === selectedGroup),
@@ -511,17 +524,8 @@ export default function SecretsSettingsPage() {
   )
 
   const load = React.useCallback(async () => {
-    setLoading(true)
-    try {
-      const [secretRows, zeroStatus] = await Promise.all([
-        window.electronAPI.listSecrets(),
-        window.electronAPI.getZeroStatus(),
-      ])
-      setSecrets(secretRows)
-      setZero(zeroStatus)
-    } finally {
-      setLoading(false)
-    }
+    const secretRows = await window.electronAPI.listSecrets()
+    setSecrets(secretRows)
   }, [])
 
   React.useEffect(() => {
@@ -607,57 +611,11 @@ export default function SecretsSettingsPage() {
     await load()
   }
 
-  const installZero = async () => {
-    setInstalling(true)
-    try {
-      const result = await window.electronAPI.installZero()
-      if (!result.success) {
-        toast.error(result.error || 'Zero install failed')
-        return
-      }
-      toast.success('Zero installed')
-      await load()
-    } finally {
-      setInstalling(false)
-    }
-  }
-
   return (
     <div className="flex h-full flex-col">
       <PanelHeader title="Secrets" />
       <ScrollArea className="flex-1">
         <div className="space-y-6 p-6">
-          <SettingsSection title="Zero">
-            <SettingsCard>
-              <div className="flex items-start justify-between gap-4 p-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <WalletCards className="h-4 w-4 text-white/55" />
-                    Zero CLI
-                  </div>
-                  <div className="mt-2 grid gap-1 text-xs text-white/45">
-                    <span>{zero?.installed ? `Installed${zero.version ? ` · ${zero.version}` : ''}` : 'Not installed'}</span>
-                    {zero?.path && <span className="truncate">{zero.path}</span>}
-                    <span>{zero?.walletConfigured ? 'Wallet ready' : 'Wallet missing'}</span>
-                    {zero?.balance && <span className="truncate">{zero.balance}</span>}
-                    {zero?.error && <span className="text-amber-300/80">{zero.error}</span>}
-                  </div>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-                    {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
-                  </Button>
-                  {!zero?.installed && (
-                    <Button size="sm" onClick={installZero} disabled={installing}>
-                      {installing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                      Install
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </SettingsCard>
-          </SettingsSection>
-
           <SettingsSection title="Environment Secrets">
             <SettingsCard>
               <div className="flex flex-wrap gap-2 p-3">
@@ -756,7 +714,7 @@ export default function SecretsSettingsPage() {
               </div>
             </SettingsCard>
 
-            {otherSecrets.length > 0 && (
+            {selectedGroup === 'Miscellaneous' && otherSecrets.length > 0 && (
               <SettingsCard>
                 <div className="divide-y divide-white/[0.06]">
                   {otherSecrets.map((secret) => (
