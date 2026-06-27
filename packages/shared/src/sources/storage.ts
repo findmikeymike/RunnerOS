@@ -24,6 +24,7 @@ import { readJsonFileSync } from '../utils/files.ts';
 import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getGoogleAdsSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
+import { getSourceCredentialManager } from './credential-manager.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -233,6 +234,31 @@ export function saveSourceConfig(
   }
 
   writeFileSync(join(dir, 'config.json'), JSON.stringify(storageConfig, null, 2));
+
+  if (storageConfig.type === 'api' && storageConfig.api?.authType === 'none') {
+    deleteApiKeyCredentialBestEffort(workspaceRootPath, storageConfig);
+  }
+}
+
+function deleteApiKeyCredentialBestEffort(
+  workspaceRootPath: string,
+  config: FolderSourceConfig
+): void {
+  try {
+    const cm = getSourceCredentialManager();
+    const source: LoadedSource = {
+      config,
+      guide: null,
+      folderPath: getSourcePath(workspaceRootPath, config.slug),
+      workspaceRootPath,
+      workspaceId: basename(workspaceRootPath),
+    };
+    void cm.delete(source).catch((err) => {
+      debug('[saveSourceConfig] orphan credential cleanup failed:', err);
+    });
+  } catch (err) {
+    debug('[saveSourceConfig] orphan credential cleanup threw:', err);
+  }
 }
 
 // ============================================================

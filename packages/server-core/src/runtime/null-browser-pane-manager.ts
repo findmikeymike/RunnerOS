@@ -38,15 +38,15 @@ export class NullBrowserPaneManager implements IBrowserPaneManager {
   destroyForSession(_sessionId: string): void {}
   async clearVisualsForSession(_sessionId: string): Promise<void> {}
   unbindAllForSession(_sessionId: string): void {}
-  getOrCreateForSession(_sessionId: string): string { return unavailable('getOrCreateForSession') }
+  getOrCreateForSession(_sessionId: string, _options?: { workspaceId?: string | null }): string { return unavailable('getOrCreateForSession') }
   setAgentControl(_sessionId: string, _meta: { displayName?: string; intent?: string }): void {}
 
   // -- Instance management --
-  createForSession(_sessionId: string, _options?: { show?: boolean }): string { return unavailable('createForSession') }
+  createForSession(_sessionId: string, _options?: { show?: boolean; workspaceId?: string | null }): string { return unavailable('createForSession') }
   getInstance(_id: string): BrowserInstanceSnapshot | undefined { return undefined }
   listInstances(): BrowserInstanceInfo[] { return [] }
-  focusBoundForSession(_sessionId: string): string { return unavailable('focusBoundForSession') }
-  bindSession(_id: string, _sessionId: string): void { unavailable('bindSession') }
+  focusBoundForSession(_sessionId: string, _options?: { workspaceId?: string | null }): string { return unavailable('focusBoundForSession') }
+  bindSession(_id: string, _sessionId: string, _options?: { workspaceId?: string | null }): void { unavailable('bindSession') }
   focus(_id: string): void { unavailable('focus') }
   destroyInstance(_id: string): void {}
   hide(_id: string): void {}

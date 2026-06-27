@@ -145,6 +145,7 @@ interface BrowserInstance {
   boundSessionId: string | null
   ownerType: 'session' | 'manual'
   ownerSessionId: string | null
+  workspaceId: string | null
   isVisible: boolean
   keepAliveOnWindowClose: boolean
   toolbarReady: boolean
@@ -171,6 +172,7 @@ interface CreateBrowserInstanceOptions {
   show?: boolean
   ownerType?: 'session' | 'manual'
   ownerSessionId?: string
+  workspaceId?: string | null
 }
 
 export interface BrowserScreenshotOptions {
@@ -348,6 +350,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     const shouldShow = options?.show ?? false
     const ownerType = options?.ownerType ?? 'manual'
     const ownerSessionId = ownerType === 'session' ? (options?.ownerSessionId ?? null) : null
+    const workspaceId = options?.workspaceId ?? null
 
     if (this.instances.has(instanceId)) {
       mainLog.warn(`[browser-pane] Instance already exists, reusing: ${instanceId}`)
@@ -441,6 +444,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       boundSessionId: ownerSessionId,
       ownerType,
       ownerSessionId,
+      workspaceId,
       isVisible: false,
       keepAliveOnWindowClose: true,
       toolbarReady: false,
@@ -484,7 +488,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     this.instances.set(instanceId, instance)
     this.emitStateChange(instance)
     mainLog.info(`[browser-pane] toolbar version: v4-react-chromeless`)
-    mainLog.info(`[browser-pane] Created instance: ${instanceId} (show=${shouldShow}, ownerType=${ownerType}, ownerSessionId=${ownerSessionId ?? 'none'})`)
+    mainLog.info(`[browser-pane] Created instance: ${instanceId} (show=${shouldShow}, ownerType=${ownerType}, ownerSessionId=${ownerSessionId ?? 'none'}, workspace=${workspaceId ?? 'none'})`)
 
     void this.loadToolbarPage(instance)
       .finally(() => {
@@ -1651,12 +1655,15 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     await instance.pageView.webContents.executeJavaScript(`window.scrollBy(${deltaX}, ${deltaY})`)
   }
 
-  bindSession(id: string, sessionId: string): void {
+  bindSession(id: string, sessionId: string, options?: { workspaceId?: string | null }): void {
     const instance = this.instances.get(id)
     if (instance) {
       instance.boundSessionId = sessionId
       instance.ownerType = 'session'
       instance.ownerSessionId = sessionId
+      if (options?.workspaceId !== undefined) {
+        instance.workspaceId = options.workspaceId
+      }
       this.emitStateChange(instance)
     }
   }
@@ -1698,17 +1705,27 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     return null
   }
 
-  private findReusableUnboundInstance(): BrowserInstance | null {
-    const unbound = Array.from(this.instances.values()).filter(i => i.boundSessionId === null && i.ownerType === 'manual')
+  private findReusableUnboundInstance(workspaceId: string | null): BrowserInstance | null {
+    const unbound = Array.from(this.instances.values()).filter(i =>
+      i.boundSessionId === null &&
+      i.ownerType === 'manual' &&
+      (i.workspaceId === null || i.workspaceId === workspaceId)
+    )
     if (unbound.length === 0) return null
 
     // Prefer visible windows first, then fall back to first available.
     return unbound.find(i => i.isVisible) ?? unbound[0]
   }
 
-  createForSession(sessionId: string, options?: { show?: boolean }): string {
+  createForSession(sessionId: string, options?: { show?: boolean; workspaceId?: string | null }): string {
+    const workspaceId = options?.workspaceId ?? null
     const existing = this.getBoundForSession(sessionId)
     if (existing) {
+      const instance = this.instances.get(existing)
+      if (instance && options?.workspaceId !== undefined && instance.workspaceId === null) {
+        instance.workspaceId = workspaceId
+        this.emitStateChange(instance)
+      }
       if (options?.show) {
         this.focus(existing)
       }
@@ -1717,13 +1734,13 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     // Reuse an unbound/manual window before creating a new one.
     // This helps agents avoid unnecessary browser window sprawl.
-    const reusable = this.findReusableUnboundInstance()
+    const reusable = this.findReusableUnboundInstance(workspaceId)
     if (reusable) {
-      this.bindSession(reusable.id, sessionId)
+      this.bindSession(reusable.id, sessionId, { workspaceId })
       if (options?.show) {
         this.focus(reusable.id)
       }
-      mainLog.info(`[browser-pane] Reused unbound instance ${reusable.id} for session ${sessionId}`)
+      mainLog.info(`[browser-pane] Reused unbound instance ${reusable.id} for session ${sessionId} (workspace=${workspaceId ?? 'none'})`)
       return reusable.id
     }
 
@@ -1731,17 +1748,18 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       show: options?.show ?? false,
       ownerType: 'session',
       ownerSessionId: sessionId,
+      workspaceId,
     })
   }
 
-  focusBoundForSession(sessionId: string): string {
-    const id = this.createForSession(sessionId, { show: true })
+  focusBoundForSession(sessionId: string, options?: { workspaceId?: string | null }): string {
+    const id = this.createForSession(sessionId, { show: true, workspaceId: options?.workspaceId })
     this.focus(id)
     return id
   }
 
-  getOrCreateForSession(sessionId: string): string {
-    return this.createForSession(sessionId, { show: false })
+  getOrCreateForSession(sessionId: string, options?: { workspaceId?: string | null }): string {
+    return this.createForSession(sessionId, { show: false, workspaceId: options?.workspaceId })
   }
 
   getBoundInstanceId(sessionId: string): string | null {
@@ -3115,6 +3133,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       boundSessionId: instance.boundSessionId,
       ownerType: instance.ownerType,
       ownerSessionId: instance.ownerSessionId,
+      workspaceId: instance.workspaceId,
       isVisible: instance.isVisible,
       agentControlActive: !!instance.agentControl?.active,
       themeColor: instance.themeColor,

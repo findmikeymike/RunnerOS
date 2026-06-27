@@ -524,10 +524,22 @@ async function testApiConnectionWithAuth(
       // Generic OAuth tokens are sent as Bearer tokens
       headers['Authorization'] = `Bearer ${token}`;
       break;
-    case 'basic':
-      // Token for basic auth is already base64 encoded (user:pass)
+    case 'basic': {
+      // source_basic is normally stored as {"username","password"}. Encode it
+      // the same way the live API tool path does; keep legacy raw tokens valid.
+      try {
+        const parsed = JSON.parse(token);
+        if (parsed && typeof parsed === 'object' && parsed.username && parsed.password) {
+          const encoded = Buffer.from(`${parsed.username}:${parsed.password}`).toString('base64');
+          headers['Authorization'] = `Basic ${encoded}`;
+          break;
+        }
+      } catch {
+        // Not JSON; pass through below.
+      }
       headers['Authorization'] = `Basic ${token}`;
       break;
+    }
     case 'header':
       // Custom header name
       if (source.api!.headerName) {

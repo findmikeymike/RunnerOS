@@ -416,6 +416,26 @@ describe('BrowserPaneManager', () => {
     expect(manager.listInstances()).toHaveLength(1)
   })
 
+  it('does not reuse manual browser windows from another workspace', () => {
+    manager.createInstance('manual-workspace-a', { workspaceId: 'workspace-a' })
+
+    const id = manager.createForSession('sess-workspace-b', { workspaceId: 'workspace-b' })
+
+    expect(id).not.toBe('manual-workspace-a')
+    expect(manager.listInstances()).toHaveLength(2)
+    expect(manager.listInstances().find((i) => i.id === id)?.workspaceId).toBe('workspace-b')
+  })
+
+  it('reuses same-workspace manual browser windows', () => {
+    manager.createInstance('manual-workspace-a', { workspaceId: 'workspace-a' })
+
+    const id = manager.createForSession('sess-workspace-a', { workspaceId: 'workspace-a' })
+
+    expect(id).toBe('manual-workspace-a')
+    expect(manager.listInstances()).toHaveLength(1)
+    expect(manager.listInstances()[0].workspaceId).toBe('workspace-a')
+  })
+
   it('navigate normalizes hostnames to https', async () => {
     manager.createInstance('nav-1')
     await manager.navigate('nav-1', 'example.com')

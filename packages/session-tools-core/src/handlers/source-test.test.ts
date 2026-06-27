@@ -692,3 +692,81 @@ describe('source_test HTTP MCP probe credential forwarding', () => {
     expect(persisted.connectionStatus).toBe('disconnected');
   });
 });
+
+describe('source_test basic-auth header', () => {
+  let tempDir: string;
+  let restoreFetch: () => void = () => {};
+  let captured: FetchCall | null = null;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'source-test-basic-auth-'));
+    captured = null;
+    const stub = installFetchStub((call) => {
+      captured = call;
+      return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    restoreFetch = stub.restore;
+  });
+
+  afterEach(() => {
+    restoreFetch();
+    restoreFetch = () => {};
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  function writeBasicAuthSource(slug: string): void {
+    writeApiSource(tempDir, slug, {
+      enabled: true,
+      isAuthenticated: true,
+      api: {
+        baseUrl: 'https://api.example.test',
+        authType: 'basic',
+        testEndpoint: { method: 'GET', path: '/ping' },
+      },
+    } as Partial<SourceConfig>);
+  }
+
+  function authHeader(): string | undefined {
+    const headers = captured?.init?.headers as Record<string, string> | undefined;
+    return headers?.Authorization;
+  }
+
+  it('encodes JSON username/password credentials', async () => {
+    writeBasicAuthSource('json-basic');
+    const cred = makeCredentialManager({
+      cachedToken: JSON.stringify({ username: 'u', password: 'p' }),
+    });
+
+    await handleSourceTest(createCtx(tempDir, { credentialManager: cred.manager }), {
+      sourceSlug: 'json-basic',
+      autoEnable: false,
+    });
+
+    expect(authHeader()).toBe(`Basic ${Buffer.from('u:p').toString('base64')}`);
+  });
+
+  it('passes through legacy base64 credentials', async () => {
+    writeBasicAuthSource('legacy-basic');
+    const encoded = Buffer.from('u:p').toString('base64');
+    const cred = makeCredentialManager({ cachedToken: encoded });
+
+    await handleSourceTest(createCtx(tempDir, { credentialManager: cred.manager }), {
+      sourceSlug: 'legacy-basic',
+      autoEnable: false,
+    });
+
+    expect(authHeader()).toBe(`Basic ${encoded}`);
+  });
+
+  it('passes through non-JSON credentials without throwing', async () => {
+    writeBasicAuthSource('raw-basic');
+    const cred = makeCredentialManager({ cachedToken: 'not-json' });
+
+    await handleSourceTest(createCtx(tempDir, { credentialManager: cred.manager }), {
+      sourceSlug: 'raw-basic',
+      autoEnable: false,
+    });
+
+    expect(authHeader()).toBe('Basic not-json');
+  });
+});

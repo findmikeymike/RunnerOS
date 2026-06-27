@@ -27,16 +27,22 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
   const { browserPaneManager, platform } = deps
   if (!browserPaneManager) return
 
-  server.handle(RPC_CHANNELS.browserPane.CREATE, (_ctx, input?: string | BrowserPaneCreateOptions) => {
+  server.handle(RPC_CHANNELS.browserPane.CREATE, (ctx, input?: string | BrowserPaneCreateOptions) => {
     if (typeof input === 'string') {
       return browserPaneManager.createInstance(input)
     }
 
     if (input?.bindToSessionId) {
-      return browserPaneManager.createForSession(input.bindToSessionId, { show: input.show ?? false })
+      return browserPaneManager.createForSession(input.bindToSessionId, {
+        show: input.show ?? false,
+        workspaceId: ctx.workspaceId ?? null,
+      })
     }
 
-    return browserPaneManager.createInstance(input?.id, { show: input?.show })
+    return browserPaneManager.createInstance(input?.id, {
+      show: input?.show,
+      workspaceId: ctx.workspaceId ?? null,
+    })
   })
 
   server.handle(RPC_CHANNELS.browserPane.DESTROY, (_ctx, id: string) => {

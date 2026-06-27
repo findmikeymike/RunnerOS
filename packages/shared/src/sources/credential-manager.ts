@@ -220,6 +220,10 @@ export class SourceCredentialManager {
   async load(source: LoadedSource): Promise<StoredCredential | null> {
     const manager = getCredentialManager();
 
+    if (source.config.type === 'api' && source.config.api?.authType === 'none') {
+      return null;
+    }
+
     // For MCP sources, try both OAuth and bearer credentials
     // (stdio transport doesn't need credentials)
     if (source.config.type === 'mcp' && source.config.mcp?.transport !== 'stdio' && source.config.mcp?.authType !== 'none') {
