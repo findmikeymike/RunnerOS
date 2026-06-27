@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
-import { CircleMinus, History, Pencil, Play, Plus, Search, Trash2, X, Workflow as WorkflowIcon } from 'lucide-react'
+import { Check, CircleMinus, History, Pencil, Play, Plus, Search, Trash2, X, Workflow as WorkflowIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -59,6 +59,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
   const usableSources = React.useMemo(() => sources.filter(isUsableSource), [sources])
   const [runDialogWorkflow, setRunDialogWorkflow] = React.useState<WorkflowDTO | null>(null)
   const [detailWorkflow, setDetailWorkflow] = React.useState<WorkflowDTO | null>(null)
+  const [libraryOpen, setLibraryOpen] = React.useState(false)
   const [deepResearchOpen, setDeepResearchOpen] = React.useState(false)
   const [deepResearchTopic, setDeepResearchTopic] = React.useState('')
   const [deepResearchPolicy, setDeepResearchPolicy] = React.useState<'approve' | 'auto'>('approve')
@@ -70,10 +71,6 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
     [deepResearchTopic, usableSources],
   )
   const activeSlugSet = React.useMemo(() => new Set(activeSlugs), [activeSlugs])
-  const inactiveWorkflows = React.useMemo(
-    () => allWorkflows.filter((wf) => !activeSlugSet.has(wf.slug)),
-    [activeSlugSet, allWorkflows],
-  )
   const selectedDeepResearchSources = React.useMemo(
     () => rankedDeepResearchSources.filter((source) => deepResearchSourceSlugs.includes(source.config.slug)),
     [deepResearchSourceSlugs, rankedDeepResearchSources],
@@ -216,8 +213,16 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
             </button>
             <button
               type="button"
-              onClick={handleNew}
+              onClick={() => setLibraryOpen(true)}
               className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/25 bg-[#f97316]/16 px-2.5 text-[11px] font-medium text-white/86 shadow-tinted transition-colors hover:bg-[#f97316]/24"
+            >
+              <Plus className="h-3 w-3" />
+              Add Workflow
+            </button>
+            <button
+              type="button"
+              onClick={handleNew}
+              className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 text-[11px] font-medium text-white/72 transition-colors hover:bg-white/[0.08] hover:text-white"
             >
               <Plus className="h-3 w-3" />
               {t('workflows.list.new')}
@@ -229,7 +234,7 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
           <div className="flex h-full items-center justify-center text-sm text-white/50">{t('common.loading')}</div>
         ) : error ? (
           <div className="rounded-[14px] border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">{error}</div>
-        ) : activeWorkflows.length === 0 && inactiveWorkflows.length === 0 ? (
+        ) : allWorkflows.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-white/48">
             <WorkflowIcon className="h-9 w-9 opacity-60" />
             <div>
@@ -242,8 +247,20 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
           <div className="space-y-8">
             <WorkflowSection title="Active in this workspace" count={activeWorkflows.length}>
               {activeWorkflows.length === 0 ? (
-                <div className="rounded-[16px] border border-dashed border-white/[0.15] bg-white/[0.02] px-4 py-8 text-center text-sm text-white/60">
-                  No workflows are active in this workspace.
+                <div className="rounded-[16px] border border-dashed border-white/[0.15] bg-white/[0.02] px-4 py-9 text-center">
+                  <WorkflowIcon className="mx-auto h-9 w-9 text-white/30" />
+                  <div className="mt-3 text-sm font-medium text-white/80">No workflows active here yet.</div>
+                  <div className="mx-auto mt-1 max-w-sm text-xs leading-5 text-white/45">
+                    Add global workflows to this workspace when you actually want them available here.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLibraryOpen(true)}
+                    className="mt-4 inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-[#fb923c]/22 bg-[#f97316]/14 px-3 text-xs font-medium text-[#fed7aa] hover:bg-[#f97316]/22"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add Workflow
+                  </button>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
@@ -261,27 +278,20 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
                 </div>
               )}
             </WorkflowSection>
-
-            {inactiveWorkflows.length > 0 && (
-              <WorkflowSection title="Library" count={inactiveWorkflows.length} suffix="inactive">
-                <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                  {inactiveWorkflows.map((wf) => (
-                    <WorkflowCard
-                      key={wf.slug}
-                      workflow={wf}
-                      active={false}
-                      lastRun={lastRunBySlug.get(wf.slug)}
-                      onOpen={() => setDetailWorkflow(wf)}
-                      onRun={() => setRunDialogWorkflow(wf)}
-                      onActivate={() => void handleActivate(wf)}
-                    />
-                  ))}
-                </div>
-              </WorkflowSection>
-            )}
           </div>
         )}
       </div>
+
+      <WorkflowLibraryDialog
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        workflows={allWorkflows}
+        activeSlugs={activeSlugs}
+        lastRunBySlug={lastRunBySlug}
+        onOpenWorkflow={(workflow) => setDetailWorkflow(workflow)}
+        onActivate={(workflow) => void handleActivate(workflow)}
+        onDeactivate={(workflow) => void handleDeactivate(workflow)}
+      />
 
       {runDialogWorkflow && (
         <WorkflowRunInputDialog
@@ -503,6 +513,274 @@ function deepResearchToolScopeLabel(source: LoadedSource): string {
   if (source.tier === 'global') return 'global'
   if (source.tier === 'workspace') return 'workspace'
   return source.tier ?? 'tool'
+}
+
+const WORKFLOW_CATEGORIES = [
+  'All',
+  'Video',
+  'Print Store',
+  'Ads',
+  'Research',
+  'Content',
+  'Commerce',
+  'Ops',
+  'Automation',
+  'Custom',
+] as const
+
+type WorkflowCategory = (typeof WORKFLOW_CATEGORIES)[number]
+
+function WorkflowLibraryDialog({
+  open,
+  onOpenChange,
+  workflows,
+  activeSlugs,
+  lastRunBySlug,
+  onOpenWorkflow,
+  onActivate,
+  onDeactivate,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  workflows: WorkflowDTO[]
+  activeSlugs: string[]
+  lastRunBySlug: Map<string, WorkflowRunDTO>
+  onOpenWorkflow: (workflow: WorkflowDTO) => void
+  onActivate: (workflow: WorkflowDTO) => void
+  onDeactivate: (workflow: WorkflowDTO) => void
+}) {
+  const [query, setQuery] = React.useState('')
+  const [category, setCategory] = React.useState<WorkflowCategory>('All')
+  const activeSlugSet = React.useMemo(() => new Set(activeSlugs), [activeSlugs])
+  const categorized = React.useMemo(() => {
+    const counts = new Map<WorkflowCategory, number>()
+    for (const item of WORKFLOW_CATEGORIES) counts.set(item, item === 'All' ? workflows.length : 0)
+    for (const workflow of workflows) {
+      const inferred = inferWorkflowCategory(workflow)
+      counts.set(inferred, (counts.get(inferred) ?? 0) + 1)
+    }
+    return counts
+  }, [workflows])
+  const filtered = React.useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    return workflows.filter((workflow) => {
+      const inferred = inferWorkflowCategory(workflow)
+      if (category !== 'All' && inferred !== category) return false
+      if (!normalizedQuery) return true
+      return workflowSearchText(workflow).includes(normalizedQuery)
+    })
+  }, [category, query, workflows])
+  const groupedFiltered = React.useMemo(() => {
+    const groups = WORKFLOW_CATEGORIES
+      .filter((item): item is Exclude<WorkflowCategory, 'All'> => item !== 'All')
+      .map((item) => ({
+        category: item,
+        workflows: filtered.filter((workflow) => inferWorkflowCategory(workflow) === item),
+      }))
+      .filter((group) => group.workflows.length > 0)
+    return groups
+  }, [filtered])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent showCloseButton={false} className="max-h-[86vh] max-w-4xl overflow-hidden !rounded-[18px] !border !border-white/[0.08] !bg-[#09090c] p-0 !text-white !shadow-modal-small">
+        <DialogHeader className="border-b border-white/[0.06] bg-[#0b0b0f] px-5 py-4">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <DialogTitle className="text-[20px] font-semibold leading-tight text-white">Add Workflows</DialogTitle>
+              <DialogDescription className="mt-1 max-w-2xl text-sm leading-5 text-white/52">
+                Pick global workflows to activate in this workspace. Active workflows stay on the main page.
+              </DialogDescription>
+            </div>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border border-white/[0.07] bg-white/[0.04] text-white/54 transition-colors hover:bg-white/[0.08] hover:text-white"
+              aria-label="Close workflow library"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </DialogHeader>
+
+        <div className="border-b border-white/[0.06] px-5 py-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/32" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search workflows"
+                className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.035] pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/32 focus:border-white/18"
+              />
+            </div>
+            <div className="text-xs text-white/38">{activeSlugs.length} active</div>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {WORKFLOW_CATEGORIES.map((item) => {
+              const count = categorized.get(item) ?? 0
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setCategory(item)}
+                  className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${category === item ? 'border-white/18 bg-white/12 text-white' : 'border-white/[0.08] bg-white/[0.035] text-white/54 hover:bg-white/[0.07] hover:text-white/78'}`}
+                >
+                  {item}
+                  <span className="font-mono text-[10px] text-white/34">{count}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="max-h-[calc(86vh-170px)] overflow-y-auto px-5 py-5">
+          {filtered.length === 0 ? (
+            <div className="rounded-[16px] border border-dashed border-white/[0.12] bg-white/[0.02] px-4 py-10 text-center text-sm text-white/50">
+              No workflows match this filter.
+            </div>
+          ) : category === 'All' ? (
+            <div className="space-y-5">
+              {groupedFiltered.map((group) => (
+                <section key={group.category} className="rounded-[15px] border border-white/[0.065] bg-black/10 p-3">
+                  <div className="mb-3 flex items-center gap-3">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/45">{group.category}</div>
+                    <div className="h-px flex-1 bg-white/[0.06]" />
+                    <div className="font-mono text-[10px] text-white/32">{group.workflows.length}</div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                    {group.workflows.map((workflow) => {
+                      const active = activeSlugSet.has(workflow.slug)
+                      return (
+                        <WorkflowLibraryCard
+                          key={workflow.slug}
+                          workflow={workflow}
+                          category={group.category}
+                          active={active}
+                          lastRun={lastRunBySlug.get(workflow.slug)}
+                          onOpen={() => onOpenWorkflow(workflow)}
+                          onActivate={() => onActivate(workflow)}
+                          onDeactivate={() => onDeactivate(workflow)}
+                        />
+                      )
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              {filtered.map((workflow) => {
+                const active = activeSlugSet.has(workflow.slug)
+                return (
+                  <WorkflowLibraryCard
+                    key={workflow.slug}
+                    workflow={workflow}
+                    category={inferWorkflowCategory(workflow)}
+                    active={active}
+                    lastRun={lastRunBySlug.get(workflow.slug)}
+                    onOpen={() => onOpenWorkflow(workflow)}
+                    onActivate={() => onActivate(workflow)}
+                    onDeactivate={() => onDeactivate(workflow)}
+                  />
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function WorkflowLibraryCard({
+  workflow,
+  category,
+  active,
+  lastRun,
+  onOpen,
+  onActivate,
+  onDeactivate,
+}: {
+  workflow: WorkflowDTO
+  category: WorkflowCategory
+  active: boolean
+  lastRun?: WorkflowRunDTO
+  onOpen: () => void
+  onActivate: () => void
+  onDeactivate: () => void
+}) {
+  return (
+    <div className="rounded-[13px] border border-white/[0.07] bg-white/[0.035] p-3 text-left shadow-thin transition-colors hover:border-white/[0.13] hover:bg-white/[0.055]">
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.08] bg-gradient-to-br from-white/[0.10] to-white/[0.035] font-mono text-[8px] font-semibold uppercase tracking-[0.08em] text-[#fed7aa] shadow-xs"
+          aria-label={`Open ${workflow.metadata.name}`}
+        >
+          {getWorkflowInitials(workflow)}
+        </button>
+        <div className="min-w-0 flex-1">
+          <button type="button" onClick={onOpen} className="block max-w-full truncate text-left text-sm font-semibold text-white hover:text-[#fed7aa]">
+            {workflow.metadata.name}
+          </button>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[10px] font-medium text-white/42">
+              {category}
+            </span>
+            <span className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-0.5 font-mono text-[10px] text-white/34">
+              {workflow.metadata.trigger.type}
+            </span>
+            {active && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/18 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-medium text-emerald-200/70">
+                <Check className="h-3 w-3" />
+                Active
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      <p className="mt-2 line-clamp-2 min-h-9 text-[11.5px] leading-[18px] text-white/62">{workflow.metadata.description}</p>
+      <div className="mt-3 flex items-center justify-between gap-3">
+        <div>{lastRun ? <RunStateDot state={lastRun.state} /> : <span />}</div>
+        {active ? (
+          <button type="button" onClick={onDeactivate} className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.04] px-2.5 text-[11px] font-medium text-white/58 hover:bg-white/[0.08] hover:text-white">
+            <CircleMinus className="h-3.5 w-3.5" />
+            Remove
+          </button>
+        ) : (
+          <button type="button" onClick={onActivate} className="inline-flex h-7 items-center gap-1.5 rounded-[8px] border border-[#fb923c]/22 bg-[#f97316]/14 px-2.5 text-[11px] font-medium text-[#fed7aa] hover:bg-[#f97316]/22">
+            <Plus className="h-3.5 w-3.5" />
+            Add
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function inferWorkflowCategory(workflow: WorkflowDTO): Exclude<WorkflowCategory, 'All'> {
+  const text = workflowSearchText(workflow)
+  if (/\b(video|youtube|yt|shorts?|clips?|reels?|storyboard|ugc|squad|director|b-roll|transcript)\b/.test(text)) return 'Video'
+  if (/\b(pod|printify|printful|print store|print-store|merch|mockup|etsy)\b/.test(text)) return 'Print Store'
+  if (/\b(ads?|campaign|creative|meta|google ads|paid|cpc|roas)\b/.test(text)) return 'Ads'
+  if (/\b(research|competitor|watch|intel|discovery|market|youtube intelligence)\b/.test(text)) return 'Research'
+  if (/\b(content|copy|caption|social|post|publishing|blog|email|newsletter|calendar)\b/.test(text)) return 'Content'
+  if (/\b(commerce|shopify|product launch|launch packet|listing|store|checkout|sales)\b/.test(text)) return 'Commerce'
+  if (/\b(cron|schedule|scheduler|webhook|trigger|heartbeat|automation|monitor)\b/.test(text)) return 'Automation'
+  if (/\b(brief|review|ops|company|daily|handoff|status|priority|business)\b/.test(text)) return 'Ops'
+  return 'Custom'
+}
+
+function workflowSearchText(workflow: WorkflowDTO): string {
+  return [
+    workflow.slug,
+    workflow.metadata.name,
+    workflow.metadata.description,
+    workflow.body,
+    ...workflow.metadata.steps.flatMap((step) => [step.id, step.agent, step.description ?? '', step.input]),
+  ].join(' ').toLowerCase()
 }
 
 function WorkflowSection({ title, count, suffix, children }: { title: string; count: number; suffix?: string; children: React.ReactNode }) {
