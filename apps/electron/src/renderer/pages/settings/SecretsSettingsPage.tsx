@@ -1,10 +1,10 @@
 import * as React from 'react'
-import { CheckCircle2, ExternalLink, Info, KeyRound, Loader2, Plus, RefreshCcw, Trash2, WalletCards } from 'lucide-react'
+import { CheckCircle2, ExternalLink, KeyRound, Loader2, Plus, RefreshCcw, Trash2, WalletCards } from 'lucide-react'
 import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
-import { SettingsCard, SettingsMenuSelect, SettingsSection } from '@/components/settings'
+import { SettingsCard, SettingsSection } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { UserSecretSummary, ZeroStatus } from '../../../shared/types'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -489,7 +489,7 @@ export default function SecretsSettingsPage() {
   const [name, setName] = React.useState('')
   const [value, setValue] = React.useState('')
   const [selectedGroup, setSelectedGroup] = React.useState(SECRET_GROUPS[0] ?? '')
-  const [selectedPresetName, setSelectedPresetName] = React.useState('')
+  const [credentialDrafts, setCredentialDrafts] = React.useState<Record<string, string>>({})
   const [loading, setLoading] = React.useState(false)
   const [installing, setInstalling] = React.useState(false)
 
@@ -497,12 +497,18 @@ export default function SecretsSettingsPage() {
     () => SECRET_PRESETS.filter((preset) => preset.group === selectedGroup),
     [selectedGroup],
   )
-  const selectedPreset = React.useMemo(
-    () => SECRET_PRESETS.find((preset) => preset.name === selectedPresetName) ?? null,
-    [selectedPresetName],
+  const savedSecretMap = React.useMemo(
+    () => new Map(secrets.map((secret) => [secret.name, secret])),
+    [secrets],
   )
-  const isSourcePreset = selectedPreset?.storage === 'source'
-  const isManagedSourcePreset = selectedPreset?.storage === 'managed-source'
+  const presetNames = React.useMemo(
+    () => new Set(SECRET_PRESETS.filter((preset) => preset.storage === 'env').map((preset) => preset.name)),
+    [],
+  )
+  const otherSecrets = React.useMemo(
+    () => secrets.filter((secret) => !presetNames.has(secret.name)),
+    [presetNames, secrets],
+  )
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -523,23 +529,6 @@ export default function SecretsSettingsPage() {
   }, [load])
 
   const save = async () => {
-    if (isManagedSourcePreset) {
-      openSelectedSource()
-      return
-    }
-
-    if (isSourcePreset) {
-      if (!activeWorkspaceId || !selectedPreset?.sourceSlug) {
-        toast.error('Select an active workspace before saving this source credential')
-        return
-      }
-      await window.electronAPI.saveSourceCredentials(activeWorkspaceId, selectedPreset.sourceSlug, value)
-      setValue('')
-      toast.success(`${selectedPreset.label} saved`)
-      await load()
-      return
-    }
-
     const result = await window.electronAPI.saveSecret(name, value)
     if (!result.success) {
       toast.error(result.error || 'Could not save secret')
@@ -551,22 +540,64 @@ export default function SecretsSettingsPage() {
     await load()
   }
 
-  const applyPreset = (presetName: string) => {
-    const preset = SECRET_PRESETS.find((candidate) => candidate.name === presetName)
-    setSelectedPresetName(presetName)
-    if (!preset) return
-    setName(preset.storage === 'env' ? preset.name : '')
-    setValue('')
+  const setDraftValue = (presetName: string, nextValue: string) => {
+    setCredentialDrafts((current) => ({ ...current, [presetName]: nextValue }))
   }
 
-  const openSelectedSource = () => {
-    if (!selectedPreset?.sourceSlug) return
-    if (selectedPreset.sourceType === 'mcp') {
-      navigate(routes.view.sourcesMcp(selectedPreset.sourceSlug))
-    } else if (selectedPreset.sourceType === 'api') {
-      navigate(routes.view.sourcesApi(selectedPreset.sourceSlug))
+  const savePreset = async (preset: SecretPreset) => {
+    if (preset.storage === 'managed-source') {
+      openPresetSource(preset)
+      return
+    }
+
+    const draftValue = credentialDrafts[preset.name] ?? ''
+    if (!draftValue.trim()) {
+      toast.error(`Enter a value for ${preset.label}`)
+      return
+    }
+
+    if (preset.storage === 'source') {
+      if (!activeWorkspaceId || !preset.sourceSlug) {
+        toast.error('Select an active workspace before saving this source credential')
+        return
+      }
+      await window.electronAPI.saveSourceCredentials(activeWorkspaceId, preset.sourceSlug, draftValue)
+      setDraftValue(preset.name, '')
+      toast.success(`${preset.label} saved`)
+      await load()
+      return
+    }
+
+    const result = await window.electronAPI.saveSecret(preset.name, draftValue)
+    if (!result.success) {
+      toast.error(result.error || 'Could not save secret')
+      return
+    }
+    setDraftValue(preset.name, '')
+    toast.success(`${preset.label} saved`)
+    await load()
+  }
+
+  const testPreset = (preset: SecretPreset) => {
+    if (preset.storage === 'managed-source') {
+      openPresetSource(preset)
+      return
+    }
+    if (savedSecretMap.has(preset.name)) {
+      toast.success(`${preset.label} is saved. Live provider test is not wired yet.`)
     } else {
-      navigate(routes.view.sourcesLocal(selectedPreset.sourceSlug))
+      toast.error(`Save ${preset.label} before testing`)
+    }
+  }
+
+  const openPresetSource = (preset: SecretPreset) => {
+    if (!preset.sourceSlug) return
+    if (preset.sourceType === 'mcp') {
+      navigate(routes.view.sourcesMcp(preset.sourceSlug))
+    } else if (preset.sourceType === 'api') {
+      navigate(routes.view.sourcesApi(preset.sourceSlug))
+    } else {
+      navigate(routes.view.sourcesLocal(preset.sourceSlug))
     }
   }
 
@@ -629,57 +660,77 @@ export default function SecretsSettingsPage() {
 
           <SettingsSection title="Environment Secrets">
             <SettingsCard>
-              <div className="grid gap-4 p-4 lg:grid-cols-[180px_minmax(260px,1fr)]">
-                <SettingsMenuSelect
-                  value={selectedGroup}
-                  onValueChange={(nextGroup) => {
-                    setSelectedGroup(nextGroup)
-                    setSelectedPresetName('')
-                    setName('')
-                    setValue('')
-                  }}
-                  options={SECRET_GROUPS.map((group) => ({ value: group, label: group }))}
-                  placeholder="Category"
-                  menuWidth={220}
-                  className="h-9 w-full"
-                />
-                <SettingsMenuSelect
-                  value={selectedPresetName}
-                  onValueChange={applyPreset}
-                  options={groupPresets.map((preset) => ({
-                    value: preset.name,
-                    label: preset.label,
-                    description: preset.storage === 'managed-source'
-                      ? 'OAuth / source setup'
-                      : preset.storage === 'source'
-                        ? 'Source credential'
-                        : preset.name,
-                  }))}
-                  placeholder="Choose credential..."
-                  menuWidth={360}
-                  className="h-9 w-full"
-                />
-                {selectedPreset && (
-                  <div className="flex gap-2 rounded-md border border-white/[0.06] bg-white/[0.025] p-3 text-xs text-white/45 lg:col-span-2">
-                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/35" />
-                    <div>
-                      <div className="font-medium text-white/68">
-                        {selectedPreset.storage === 'managed-source'
-                          ? 'Managed credential'
-                          : selectedPreset.storage === 'source'
-                            ? 'Source credential'
-                            : selectedPreset.name}
+              <div className="flex flex-wrap gap-2 p-3">
+                {SECRET_GROUPS.map((group) => (
+                  <button
+                    key={group}
+                    type="button"
+                    onClick={() => setSelectedGroup(group)}
+                    className={`rounded-full border px-3 py-1 text-xs transition ${
+                      selectedGroup === group
+                        ? 'border-white/22 bg-white/[0.12] text-white/85'
+                        : 'border-white/[0.08] bg-white/[0.035] text-white/45 hover:bg-white/[0.07] hover:text-white/70'
+                    }`}
+                  >
+                    {group}
+                  </button>
+                ))}
+              </div>
+            </SettingsCard>
+
+            <SettingsCard>
+              <div className="divide-y divide-white/[0.06]">
+                {groupPresets.map((preset) => {
+                  const saved = savedSecretMap.get(preset.name)
+                  const draft = credentialDrafts[preset.name] ?? ''
+                  const canSave = preset.storage !== 'managed-source' && draft.trim().length > 0
+                  return (
+                    <div key={preset.name} className="grid gap-3 p-4 lg:grid-cols-[minmax(180px,260px)_1fr_auto]">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-sm font-medium text-white/75">
+                          <KeyRound className="h-3.5 w-3.5 text-white/42" />
+                          <span className="truncate">{preset.label}</span>
+                          {saved && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400/80" />}
+                        </div>
+                        <div className="mt-1 truncate text-xs text-white/35">{preset.name}</div>
                       </div>
-                      <div className="mt-1 leading-5">{selectedPreset.description}</div>
-                      {selectedPreset.sourceSlug && (
-                        <Button variant="outline" size="sm" className="mt-3" onClick={openSelectedSource}>
-                          <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                          Open source setup
-                        </Button>
-                      )}
+                      <div className="min-w-0">
+                        {preset.storage === 'managed-source' ? (
+                          <div className="flex min-h-9 items-center rounded-md border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/38">
+                            OAuth-managed source credential
+                          </div>
+                        ) : (
+                          <input
+                            value={draft}
+                            onChange={(event) => setDraftValue(preset.name, event.target.value)}
+                            placeholder={saved ? saved.maskedValue : preset.placeholder || 'Secret value'}
+                            type="password"
+                            className="h-9 w-full rounded-md border border-white/10 bg-black/20 px-3 text-sm outline-none placeholder:text-white/25"
+                          />
+                        )}
+                        <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/35">{preset.description}</div>
+                      </div>
+                      <div className="flex items-start justify-end gap-2">
+                        {preset.storage === 'managed-source' ? (
+                          <Button variant="outline" size="sm" onClick={() => openPresetSource(preset)}>
+                            <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                            Connect
+                          </Button>
+                        ) : (
+                          <>
+                            <Button size="sm" onClick={() => savePreset(preset)} disabled={!canSave}>
+                              <Plus className="mr-2 h-3.5 w-3.5" />
+                              Save
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => testPreset(preset)}>
+                              Test
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )
+                })}
               </div>
             </SettingsCard>
 
@@ -688,7 +739,7 @@ export default function SecretsSettingsPage() {
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value.toUpperCase())}
-                  placeholder="ZERO_PRIVATE_KEY"
+                  placeholder="CUSTOM_SECRET_NAME"
                   className="h-9 rounded-md border border-white/10 bg-black/20 px-3 text-sm outline-none placeholder:text-white/25"
                 />
                 <input
@@ -705,25 +756,58 @@ export default function SecretsSettingsPage() {
               </div>
             </SettingsCard>
 
+            {otherSecrets.length > 0 && (
+              <SettingsCard>
+                <div className="divide-y divide-white/[0.06]">
+                  {otherSecrets.map((secret) => (
+                    <div key={secret.name} className="flex items-center justify-between gap-3 p-4">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <KeyRound className="h-3.5 w-3.5 text-white/45" />
+                          <span>{secret.name}</span>
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
+                        </div>
+                        <div className="mt-1 text-xs text-white/35">{secret.maskedValue}</div>
+                      </div>
+                      <Button variant="ghost" size="sm" onClick={() => remove(secret.name)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </SettingsCard>
+            )}
+
             <SettingsCard>
               <div className="divide-y divide-white/[0.06]">
-                {secrets.length === 0 ? (
+                {secrets.length === 0 && (
                   <div className="p-4 text-sm text-white/38">No secrets saved.</div>
-                ) : secrets.map((secret) => (
-                  <div key={secret.name} className="flex items-center justify-between gap-3 p-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <KeyRound className="h-3.5 w-3.5 text-white/45" />
-                        <span>{secret.name}</span>
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
+                )}
+                {groupPresets
+                  .filter((preset) => preset.storage === 'env' && savedSecretMap.has(preset.name))
+                  .map((preset) => {
+                    const secret = savedSecretMap.get(preset.name)!
+                    return (
+                      <div key={secret.name} className="flex items-center justify-between gap-3 p-4">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 text-sm font-medium">
+                            <KeyRound className="h-3.5 w-3.5 text-white/45" />
+                            <span>{secret.name}</span>
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
+                          </div>
+                          <div className="mt-1 text-xs text-white/35">{secret.maskedValue}</div>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => remove(secret.name)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
-                      <div className="mt-1 text-xs text-white/35">{secret.maskedValue}</div>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => remove(secret.name)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    )
+                  })}
+                {secrets.length > 0 && groupPresets.every((preset) => preset.storage !== 'env' || !savedSecretMap.has(preset.name)) && (
+                  <div className="p-4 text-sm text-white/38">
+                    No saved credentials in {selectedGroup}.
                   </div>
-                ))}
+                )}
               </div>
             </SettingsCard>
           </SettingsSection>
