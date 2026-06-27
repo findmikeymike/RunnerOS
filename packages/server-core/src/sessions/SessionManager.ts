@@ -766,8 +766,23 @@ async function buildServersFromSources(
     return undefined
   }
 
+  const getCredentialForSource = (source: LoadedSource) => {
+    if (source.config.type !== 'api') return undefined
+    if (source.config.api?.authType === 'none') return undefined
+    if (isApiOAuthProvider(source.config.provider)) return undefined
+    if (source.config.api?.authType === 'oauth') return undefined
+    if (hasRenewEndpoint(source)) return undefined
+    return async () => credManager.getApiCredential(source)
+  }
+
   // Pass sessionPath to enable saving large API responses to session folder
-  const result = await serverBuilder.buildAll(sourcesWithCreds, getTokenForSource, sessionPath, summarize)
+  const result = await serverBuilder.buildAll(
+    sourcesWithCreds,
+    getTokenForSource,
+    sessionPath,
+    summarize,
+    getCredentialForSource,
+  )
   span.mark('servers.built')
   span.setMetadata('mcpCount', Object.keys(result.mcpServers).length)
   span.setMetadata('apiCount', Object.keys(result.apiServers).length)
@@ -4086,9 +4101,13 @@ user a clickable link to where the thing now lives.`
       if (this.browserPaneManager) {
         const bpm = this.browserPaneManager
         const sid = managed.id
+        const browserWorkspaceId = managed.workspace.id
 
         const resolveSessionBrowserInstance = (toolName: string, options?: { show?: boolean }): string => {
-          const instanceId = bpm.createForSession(sid, { show: options?.show ?? false })
+          const instanceId = bpm.createForSession(sid, {
+            show: options?.show ?? false,
+            workspaceId: browserWorkspaceId,
+          })
           const info = bpm.getInstance(instanceId)
           sessionLog.info(`[browser-pane] tool target resolved: ${toolName} session=${sid} instance=${instanceId} ownerType=${info?.ownerType ?? 'unknown'} ownerSessionId=${info?.ownerSessionId ?? 'none'} visible=${info?.isVisible ?? false}`)
           return instanceId
@@ -4144,8 +4163,8 @@ user a clickable link to where the thing now lives.`
           browserPaneFns: {
             openPanel: async (options) => {
               const instanceId = options?.background
-                ? bpm.createForSession(sid, { show: false })
-                : bpm.focusBoundForSession(sid)
+                ? bpm.createForSession(sid, { show: false, workspaceId: browserWorkspaceId })
+                : bpm.focusBoundForSession(sid, { workspaceId: browserWorkspaceId })
               const info = bpm.getInstance(instanceId)
               sessionLog.info(`[browser-pane] route decision: browser_open session=${sid} instance=${instanceId} background=${options?.background ?? false} ownerType=${info?.ownerType ?? 'unknown'} ownerSessionId=${info?.ownerSessionId ?? 'none'} visible=${info?.isVisible ?? false}`)
               return { instanceId }
@@ -4265,7 +4284,7 @@ user a clickable link to where the thing now lives.`
               }
 
               if (!target.boundSessionId) {
-                bpm.bindSession(target.id, sid)
+                bpm.bindSession(target.id, sid, { workspaceId: browserWorkspaceId })
               }
 
               bpm.focus(target.id)
@@ -8316,7 +8335,7 @@ user a clickable link to where the thing now lives.`
 
         if (this.browserPaneManager && shouldActivateOverlay) {
           // Ensure first browser action in a turn gets an instance before overlay activation.
-          this.browserPaneManager.getOrCreateForSession(sessionId)
+          this.browserPaneManager.getOrCreateForSession(sessionId, { workspaceId: managed.workspace.id })
 
           const resolvedDisplayName = toolDisplayMeta?.displayName
             ?? event.displayName

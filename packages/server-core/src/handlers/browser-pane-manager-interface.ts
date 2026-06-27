@@ -153,7 +153,7 @@ export interface IBrowserPaneManager {
   unbindAllForSession(sessionId: string): void
 
   /** Get or create a browser instance for a session, returning the instance ID */
-  getOrCreateForSession(sessionId: string): string
+  getOrCreateForSession(sessionId: string, options?: { workspaceId?: string | null }): string
 
   /** Activate or update the agent control overlay for a session */
   setAgentControl(sessionId: string, meta: { displayName?: string; intent?: string }): void
@@ -161,7 +161,7 @@ export interface IBrowserPaneManager {
   // -- Instance management -------------------------------------------------
 
   /** Create a browser instance for a session (optionally shown) */
-  createForSession(sessionId: string, options?: { show?: boolean }): string
+  createForSession(sessionId: string, options?: { show?: boolean; workspaceId?: string | null }): string
 
   /** Get instance info by ID */
   getInstance(id: string): BrowserInstanceSnapshot | undefined
@@ -170,10 +170,10 @@ export interface IBrowserPaneManager {
   listInstances(): BrowserInstanceInfo[]
 
   /** Focus the bound browser instance for a session, creating if needed */
-  focusBoundForSession(sessionId: string): string
+  focusBoundForSession(sessionId: string, options?: { workspaceId?: string | null }): string
 
   /** Bind a browser instance to a session */
-  bindSession(id: string, sessionId: string): void
+  bindSession(id: string, sessionId: string, options?: { workspaceId?: string | null }): void
 
   /** Focus a browser instance window */
   focus(id: string): void

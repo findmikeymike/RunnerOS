@@ -7,8 +7,9 @@ import {
   setBrowserInstancesAtom,
   updateBrowserInstanceAtom,
 } from '../browser-pane'
+import { windowWorkspaceIdAtom } from '../sessions'
 
-function makeInstance(id: string): BrowserInstanceInfo {
+function makeInstance(id: string, workspaceId?: string | null): BrowserInstanceInfo {
   return {
     id,
     url: 'https://example.com',
@@ -20,6 +21,7 @@ function makeInstance(id: string): BrowserInstanceInfo {
     boundSessionId: null,
     ownerType: 'manual',
     ownerSessionId: null,
+    workspaceId,
     isVisible: true,
     agentControlActive: false,
     themeColor: null,
@@ -52,5 +54,21 @@ describe('browser pane atoms', () => {
     store.set(setBrowserInstancesAtom, [makeInstance('browser-2')])
 
     expect(store.get(browserInstancesAtom).map((i) => i.id)).toEqual(['browser-2'])
+  })
+
+  it('filters browser instances by active workspace while keeping legacy global windows visible', () => {
+    const store = createStore()
+    store.set(windowWorkspaceIdAtom, 'workspace-a')
+
+    store.set(setBrowserInstancesAtom, [
+      makeInstance('global', null),
+      makeInstance('workspace-a-browser', 'workspace-a'),
+      makeInstance('workspace-b-browser', 'workspace-b'),
+    ])
+
+    expect(store.get(browserInstancesAtom).map((i) => i.id)).toEqual([
+      'global',
+      'workspace-a-browser',
+    ])
   })
 })

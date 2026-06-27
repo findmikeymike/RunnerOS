@@ -43,7 +43,7 @@ export function buildAuthorizationHeader(authScheme: string | undefined, token: 
  * API credential source - can be a static credential or a function that returns a token.
  * Token getter functions are used for OAuth sources that need auto-refresh.
  */
-export type ApiCredentialSource = ApiCredential | (() => Promise<string>);
+export type ApiCredentialSource = ApiCredential | (() => Promise<ApiCredential | null>);
 
 /**
  * Type guard to check if credential is BasicAuthCredential
@@ -55,7 +55,7 @@ function isBasicAuthCredential(cred: ApiCredential): cred is BasicAuthCredential
 /**
  * Type guard to check if credential source is a token getter function
  */
-function isTokenGetter(cred: ApiCredentialSource): cred is () => Promise<string> {
+function isTokenGetter(cred: ApiCredentialSource): cred is () => Promise<ApiCredential | null> {
   return typeof cred === 'function';
 }
 
@@ -215,10 +215,12 @@ export function createApiTool(
       const { path, method, params, _intent } = args;
 
       try {
-        // Resolve credential - if it's a token getter function, call it to get fresh token
-        const resolvedCredential: ApiCredential = isTokenGetter(credential)
+        // Resolve credential - if it's a getter function, call it to get the
+        // freshest vault value for this request.
+        const rawCredential = isTokenGetter(credential)
           ? await credential()
           : credential;
+        const resolvedCredential: ApiCredential = rawCredential ?? '';
 
         const url = buildUrl(config.baseUrl, path, method, params, config.auth, resolvedCredential);
         const headers = buildHeaders(config.auth, resolvedCredential, config.defaultHeaders);

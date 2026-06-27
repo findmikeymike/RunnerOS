@@ -627,6 +627,7 @@ export interface BrowserInstanceInfo {
   boundSessionId: string | null
   ownerType: 'session' | 'manual'
   ownerSessionId: string | null
+  workspaceId?: string | null
   isVisible: boolean
   agentControlActive: boolean
   themeColor: string | null

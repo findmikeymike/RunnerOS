@@ -7,14 +7,28 @@
 
 import { atom } from 'jotai'
 import type { BrowserInstanceInfo } from '../../shared/types'
+import { windowWorkspaceIdAtom } from './sessions'
 
 /** Map of all browser instances by ID */
 export const browserInstancesMapAtom = atom<Map<string, BrowserInstanceInfo>>(new Map())
 
 /** Derived: array of all browser instances (for iteration) */
 export const browserInstancesAtom = atom<BrowserInstanceInfo[]>(
-  (get) => Array.from(get(browserInstancesMapAtom).values())
+  (get) => filterInstancesForWorkspace(
+    Array.from(get(browserInstancesMapAtom).values()),
+    get(windowWorkspaceIdAtom),
+  )
 )
+
+export function filterInstancesForWorkspace(
+  instances: BrowserInstanceInfo[],
+  activeWorkspaceId: string | null,
+): BrowserInstanceInfo[] {
+  return instances.filter((instance) => {
+    if (!instance.workspaceId) return true
+    return instance.workspaceId === activeWorkspaceId
+  })
+}
 
 /** Derived: count of active browser instances */
 export const browserInstanceCountAtom = atom<number>(
