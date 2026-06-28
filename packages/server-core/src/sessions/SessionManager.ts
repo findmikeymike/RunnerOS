@@ -7077,7 +7077,7 @@ user a clickable link to where the thing now lives.`
           }
 
           if (skipped.length > 0) {
-            sessionLog.warn(`Skill requires sources that are not usable (missing or unauthenticated): ${skipped.join(', ')}`)
+            throw new Error(`Skill requires sources that are not usable (missing or unauthenticated): ${skipped.join(', ')}`)
           }
 
           if (toEnable.length > 0) {
@@ -7093,6 +7093,7 @@ user a clickable link to where the thing now lives.`
         }
       } catch (e) {
         sessionLog.warn(`Failed to pre-enable skill sources for session ${sessionId}:`, e)
+        throw e
       }
     }
 
