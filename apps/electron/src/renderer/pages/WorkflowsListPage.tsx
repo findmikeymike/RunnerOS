@@ -288,7 +288,10 @@ export default function WorkflowsListPage({ workspaceId }: WorkflowsListPageProp
         workflows={allWorkflows}
         activeSlugs={activeSlugs}
         lastRunBySlug={lastRunBySlug}
-        onOpenWorkflow={(workflow) => setDetailWorkflow(workflow)}
+        onOpenWorkflow={(workflow) => {
+          setLibraryOpen(false)
+          setDetailWorkflow(workflow)
+        }}
         onActivate={(workflow) => void handleActivate(workflow)}
         onDeactivate={(workflow) => void handleDeactivate(workflow)}
       />
