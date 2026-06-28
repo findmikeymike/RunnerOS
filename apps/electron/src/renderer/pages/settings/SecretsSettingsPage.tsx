@@ -416,22 +416,6 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
-    group: 'MCP / Apps',
-    name: 'CANVA_CLIENT_ID',
-    label: 'Canva client ID',
-    description: 'Optional Canva integration credential when not using ~/.config/runneros/canva/integration.json.',
-    placeholder: 'Canva client ID',
-    storage: 'env',
-  },
-  {
-    group: 'MCP / Apps',
-    name: 'CANVA_CLIENT_SECRET',
-    label: 'Canva client secret',
-    description: 'Optional Canva integration credential when not using ~/.config/runneros/canva/integration.json.',
-    placeholder: 'Canva client secret',
-    storage: 'env',
-  },
-  {
     group: 'Automation',
     name: 'CRAFT_WH_SIGNED_HOOK_SECRET',
     label: 'Webhook signing secret',
@@ -497,7 +481,121 @@ const SECRET_PRESETS: SecretPreset[] = [
   },
 ]
 
-const SECRET_GROUPS = Array.from(new Set(SECRET_PRESETS.map((preset) => preset.group)))
+const SERVICES: SecretService[] = [
+  {
+    id: 'meta-ads',
+    group: 'Promotion',
+    title: 'Meta Ads',
+    description: 'Connect ad account access for Meta reporting, diagnostics, and planned ad work.',
+    presetNames: ['META_ADS_OAUTH'],
+  },
+  {
+    id: 'google-ads',
+    group: 'Promotion',
+    title: 'Google Ads',
+    description: 'Connect Google Ads for account lookup, reports, diagnostics, and campaign planning.',
+    presetNames: ['GOOGLE_ADS_OAUTH'],
+  },
+  {
+    id: 'youtube-research',
+    group: 'Promotion',
+    title: 'YouTube Research',
+    description: 'Let research agents search videos, transcripts, comments, embeds, and channels.',
+    presetNames: ['YOUTUBE_API_KEY'],
+  },
+  {
+    id: 'spotify',
+    group: 'Promotion',
+    title: 'Spotify',
+    description: 'Credentials for playlist and artist-data workflows.',
+    presetNames: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REDIRECT_URI'],
+    optionalPresetNames: ['SPOTIFY_REDIRECT_URI'],
+  },
+  {
+    id: 'social-publishing',
+    group: 'Promotion',
+    title: 'Social Publishing',
+    description: 'Optional posting services for agents that publish or schedule content.',
+    presetNames: ['TRYPOST_API_KEY', 'POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
+    optionalPresetNames: ['TRYPOST_API_KEY', 'POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
+  },
+  {
+    id: 'shopify',
+    group: 'Commerce',
+    title: 'Shopify',
+    description: 'Connect store access for merch/product agents.',
+    presetNames: ['SHOPIFY_SHOP', 'SHOPIFY_STORE_DOMAIN', 'SHOPIFY_ACCESS_TOKEN', 'SHOPIFY_API_VERSION'],
+    optionalPresetNames: ['SHOPIFY_API_VERSION'],
+    requiredAnyPresetNames: ['SHOPIFY_SHOP', 'SHOPIFY_STORE_DOMAIN'],
+  },
+  {
+    id: 'printify',
+    group: 'Commerce',
+    title: 'Printify',
+    description: 'Connect Printify for print-on-demand merch workflows.',
+    presetNames: ['PRINTIFY_API_TOKEN'],
+  },
+  {
+    id: 'voice-audio',
+    group: 'AI + Media',
+    title: 'Voice + Audio',
+    description: 'Speech, voiceover, transcription, and audio intelligence providers.',
+    presetNames: ['ASSEMBLYAI_API_KEY', 'ELEVENLABS_API_KEY', 'FISH_AUDIO_API_KEY', 'SQUAD_FISH_TTS_API_KEY', 'SQUAD_FISH_TTS_REFERENCE_ID', 'INWORLD_API_KEY', 'INWORLD_RUNTIME_KEY', 'INWORLD_TTS_API_KEY', 'SQUAD_INWORLD_TTS_API_KEY', 'SQUAD_INWORLD_TTS_VOICE_ID'],
+    optionalPresetNames: ['ASSEMBLYAI_API_KEY', 'ELEVENLABS_API_KEY', 'FISH_AUDIO_API_KEY', 'SQUAD_FISH_TTS_API_KEY', 'SQUAD_FISH_TTS_REFERENCE_ID', 'INWORLD_API_KEY', 'INWORLD_RUNTIME_KEY', 'INWORLD_TTS_API_KEY', 'SQUAD_INWORLD_TTS_API_KEY', 'SQUAD_INWORLD_TTS_VOICE_ID'],
+  },
+  {
+    id: 'video-generation',
+    group: 'AI + Media',
+    title: 'Video Generation',
+    description: 'Video, avatar, image, and render providers used by content agents.',
+    presetNames: ['SQUAD_OPENAI_API_KEY', 'HEYGEN_API_KEY', 'FAL_API_KEY', 'SQUAD_FAL_API_KEY', 'WAVESPEED_API_KEY', 'SQUAD_WAVESPEED_API_KEY', 'MUAPI_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_LTX_ENDPOINT_ID'],
+    optionalPresetNames: ['SQUAD_OPENAI_API_KEY', 'HEYGEN_API_KEY', 'FAL_API_KEY', 'SQUAD_FAL_API_KEY', 'WAVESPEED_API_KEY', 'SQUAD_WAVESPEED_API_KEY', 'MUAPI_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_LTX_ENDPOINT_ID'],
+  },
+  {
+    id: 'squad-avatar',
+    group: 'AI + Media',
+    title: 'Avatar Video',
+    description: 'Optional Squad-specific avatar and voice settings.',
+    presetNames: ['SQUAD_HEYGEN_API_KEY', 'SQUAD_HEYGEN_AVATAR_ID', 'SQUAD_HEYGEN_VOICE_ID', 'SQUAD_HEYGEN_PERSONA_MAP_JSON'],
+    optionalPresetNames: ['SQUAD_HEYGEN_API_KEY', 'SQUAD_HEYGEN_AVATAR_ID', 'SQUAD_HEYGEN_VOICE_ID', 'SQUAD_HEYGEN_PERSONA_MAP_JSON'],
+  },
+  {
+    id: 'developer-cloud',
+    group: 'Developer + Cloud',
+    title: 'Developer + Cloud',
+    description: 'Keys for GitHub, cloud storage, package publishing, and app service work.',
+    presetNames: ['GITHUB_TOKEN', 'GH_TOKEN', 'STRIPE_SECRET_KEY', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'NPM_TOKEN', 'STITCH_API_KEY'],
+    optionalPresetNames: ['GITHUB_TOKEN', 'GH_TOKEN', 'STRIPE_SECRET_KEY', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN', 'NPM_TOKEN', 'STITCH_API_KEY'],
+  },
+  {
+    id: 'mcp-apps',
+    group: 'Developer + Cloud',
+    title: 'MCP + Apps',
+    description: 'Credentials for optional external app integrations.',
+    presetNames: ['BRAVE_API_KEY'],
+    optionalPresetNames: ['BRAVE_API_KEY'],
+  },
+  {
+    id: 'automation',
+    group: 'Automation',
+    title: 'Automation Webhooks',
+    description: 'Secrets and webhook URLs used by inbound triggers and outbound notifications.',
+    presetNames: ['CRAFT_WH_SIGNED_HOOK_SECRET', 'CRAFT_WH_GITHUB_SECRET', 'CRAFT_WH_STRIPE_SECRET', 'CRAFT_WH_API_TOKEN', 'CRAFT_WH_SLACK_URL', 'CRAFT_WH_CLIENT_ID', 'CRAFT_WH_CLIENT_SECRET'],
+    optionalPresetNames: ['CRAFT_WH_SIGNED_HOOK_SECRET', 'CRAFT_WH_GITHUB_SECRET', 'CRAFT_WH_STRIPE_SECRET', 'CRAFT_WH_API_TOKEN', 'CRAFT_WH_SLACK_URL', 'CRAFT_WH_CLIENT_ID', 'CRAFT_WH_CLIENT_SECRET'],
+  },
+  {
+    id: 'zero',
+    group: 'Wallet',
+    title: 'Zero Wallet',
+    description: 'Private key fallback for Zero CLI when no local Zero config is present.',
+    presetNames: ['ZERO_PRIVATE_KEY'],
+    optionalPresetNames: ['ZERO_PRIVATE_KEY'],
+  },
+]
+
+const SECRET_GROUPS = Array.from(new Set(SERVICES.map((service) => service.group)))
+const PRESET_BY_NAME = new Map(SECRET_PRESETS.map((preset) => [preset.name, preset]))
+
 export default function SecretsSettingsPage() {
   const { activeWorkspaceId } = useAppShellContext()
   const [secrets, setSecrets] = React.useState<UserSecretSummary[]>([])

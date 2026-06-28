@@ -18,6 +18,7 @@ const VIDEO_STUDIO_SLUG = 'video-studio';
 const SQUAD_SLUG = 'squad';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const META_ADS_SLUG = 'meta-ads';
+const NOTEBOOKLM_SLUG = 'notebooklm';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 const OPEN_SLIDE_SLUG = 'open-slide';
 const ZERO_SLUG = 'zero';
@@ -33,6 +34,19 @@ function firstExistingPath(candidates: string[], fallback: string): string {
   }
   return resolve(candidates.find(Boolean) ?? fallback);
 }
+
+function findRepoRoot(startDir: string): string {
+  let current = resolve(startDir);
+  for (let depth = 0; depth < 6; depth += 1) {
+    if (existsSync(join(current, 'tools'))) return current;
+    const parent = resolve(current, '..');
+    if (parent === current) break;
+    current = parent;
+  }
+  return resolve(startDir);
+}
+
+const REPO_ROOT = findRepoRoot(process.cwd());
 
 function getResourceScriptPath(scriptName: string): string {
   const scriptsRoot = process.env.CRAFT_SCRIPTS;
@@ -67,6 +81,7 @@ function getPrintingPressSocialPath(): string {
     [
       resourcesBase ? join(resourcesBase, 'tools', 'printing-press-social') : '',
       join(appRoot, 'tools', 'printing-press-social'),
+      join(REPO_ROOT, 'tools', 'printing-press-social'),
       join(process.cwd(), 'tools', 'printing-press-social'),
     ],
     join('tools', 'printing-press-social')
@@ -81,6 +96,7 @@ function getOpenSlideExportPath(): string {
     [
       resourcesBase ? join(resourcesBase, 'tools', 'open-slide-export') : '',
       join(appRoot, 'tools', 'open-slide-export'),
+      join(REPO_ROOT, 'tools', 'open-slide-export'),
       join(process.cwd(), 'tools', 'open-slide-export'),
     ],
     join('tools', 'open-slide-export')
@@ -109,6 +125,7 @@ function getHypermotionPath(): string {
     [
       resourcesBase ? join(resourcesBase, 'tools', 'hypermotion') : '',
       join(appRoot, 'tools', 'hypermotion'),
+      join(REPO_ROOT, 'tools', 'hypermotion'),
       join(process.cwd(), 'tools', 'hypermotion'),
     ],
     join('tools', 'hypermotion')
@@ -123,6 +140,7 @@ export function getLottiePath(): string {
     [
       resourcesBase ? join(resourcesBase, 'tools', 'lottie') : '',
       join(appRoot, 'tools', 'lottie'),
+      join(REPO_ROOT, 'tools', 'lottie'),
       join(process.cwd(), 'tools', 'lottie'),
     ],
     join('tools', 'lottie')
@@ -137,6 +155,7 @@ export function getVideoStudioPath(): string {
     [
       resourcesBase ? join(resourcesBase, 'tools', 'video-studio') : '',
       join(appRoot, 'tools', 'video-studio'),
+      join(REPO_ROOT, 'tools', 'video-studio'),
       join(process.cwd(), 'tools', 'video-studio'),
     ],
     join('tools', 'video-studio')
@@ -198,6 +217,7 @@ function getGoogleAdsPath(): string {
     [
       resourcesBase ? join(resourcesBase, 'tools', 'google-ads') : '',
       join(appRoot, 'tools', 'google-ads'),
+      join(REPO_ROOT, 'tools', 'google-ads'),
       join(process.cwd(), 'tools', 'google-ads'),
     ],
     join('tools', 'google-ads')
@@ -212,6 +232,7 @@ function getYouTubeResearchPath(): string {
     [
       resourcesBase ? join(resourcesBase, 'tools', 'youtube-research') : '',
       join(appRoot, 'tools', 'youtube-research'),
+      join(REPO_ROOT, 'tools', 'youtube-research'),
       join(process.cwd(), 'tools', 'youtube-research'),
     ],
     join('tools', 'youtube-research')
@@ -226,6 +247,7 @@ function getShopifyPath(): string {
     [
       resourcesBase ? join(resourcesBase, 'tools', 'shopify') : '',
       join(appRoot, 'tools', 'shopify'),
+      join(REPO_ROOT, 'tools', 'shopify'),
       join(process.cwd(), 'tools', 'shopify'),
     ],
     join('tools', 'shopify')
@@ -240,6 +262,7 @@ function getPrintifyPath(): string {
     [
       resourcesBase ? join(resourcesBase, 'tools', 'printify') : '',
       join(appRoot, 'tools', 'printify'),
+      join(REPO_ROOT, 'tools', 'printify'),
       join(process.cwd(), 'tools', 'printify'),
     ],
     join('tools', 'printify')
@@ -305,6 +328,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getSquadSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getMetaAdsSource(workspaceId, workspaceRootPath),
+    getNotebookLmSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
     getZeroSource(workspaceId, workspaceRootPath),
@@ -800,6 +824,49 @@ export function getMetaAdsSource(workspaceId: string, workspaceRootPath: string)
 }
 
 /**
+ * Built-in source for the local NotebookLM MCP server.
+ */
+export function getNotebookLmSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-notebooklm',
+    name: 'NotebookLM',
+    slug: NOTEBOOKLM_SLUG,
+    enabled: true,
+    provider: 'notebooklm',
+    type: 'mcp',
+    mcp: {
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', 'notebooklm-mcp@latest'],
+      authType: 'none',
+    },
+    tagline: 'Query and manage Google NotebookLM notebooks through a local MCP browser automation server.',
+    icon: '📓',
+    isAuthenticated: true,
+    connectionStatus: 'connected',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# NotebookLM',
+        '',
+        'Runs the local `notebooklm-mcp` server with `npx -y notebooklm-mcp@latest`.',
+        '',
+        'Use this source for grounded NotebookLM queries against notebooks and uploaded sources.',
+        '',
+        'If Google authentication is missing or expired, run `nlm login` from the terminal and retry.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Built-in source for the bundled YouTube Research CLI wrapper.
  */
 export function getYouTubeResearchSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
@@ -1246,6 +1313,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === SQUAD_SLUG
     || slug === GOOGLE_ADS_SLUG
     || slug === META_ADS_SLUG
+    || slug === NOTEBOOKLM_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
     || slug === OPEN_SLIDE_SLUG
     || slug === ZERO_SLUG
