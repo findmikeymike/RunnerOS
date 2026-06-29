@@ -26,6 +26,16 @@ type SecretPreset = {
   sourceType?: 'api' | 'mcp' | 'local'
 }
 
+type SecretService = {
+  id: string
+  group: string
+  title: string
+  description: string
+  presetNames: string[]
+  optionalPresetNames?: string[]
+  requiredAnyPresetNames?: string[]
+}
+
 const SECRET_PRESETS: SecretPreset[] = [
   {
     group: 'Ads',
