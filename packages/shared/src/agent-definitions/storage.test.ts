@@ -649,6 +649,22 @@ body
     expect(brandingAgent?.systemPrompt).toContain('artist-intel-report')
   })
 
+  test('starter library includes the Comms Agent with artist comms skill', () => {
+    const commsAgent = STARTER_AGENTS.find((agent) => agent.slug === 'comms-agent')
+
+    expect(commsAgent).toBeDefined()
+    expect(commsAgent?.metadata.name).toBe('Comms Agent')
+    expect(commsAgent?.metadata.permissionMode).toBe('ask')
+    expect(commsAgent?.metadata.skills).toContain('artist-comms-strategist')
+    expect(commsAgent?.metadata.tags).toContain('comms')
+    expect(commsAgent?.metadata.tags).toContain('email')
+    expect(commsAgent?.systemPrompt).toContain('artist-profile')
+    expect(commsAgent?.systemPrompt).toContain('artist-voice')
+    expect(commsAgent?.systemPrompt).toContain('artist-branding')
+    expect(commsAgent?.systemPrompt).toContain('artist-intel-report')
+    expect(commsAgent?.systemPrompt).toContain('approval')
+  })
+
   test('starter library includes the Update System Agent as read-only maintenance', () => {
     const updateAgent = STARTER_AGENTS.find((agent) => agent.slug === 'update-system-agent')
 
