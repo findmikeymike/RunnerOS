@@ -2434,7 +2434,7 @@ function AppShellContent({
                       items: [
                         {
                           id: "nav:agents",
-                          title: "Agents",
+                          title: "Workers",
                           icon: Users,
                           variant: isAgentsNavigation(navState) ? "default" : "ghost",
                           onClick: handleAgentsClick,
