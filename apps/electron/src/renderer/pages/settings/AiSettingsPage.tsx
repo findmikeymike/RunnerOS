@@ -16,9 +16,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
 import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { routes } from '@/lib/navigate'
-import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, Plus } from 'lucide-react'
+import { X, MoreHorizontal, Pencil, Trash2, Star, ChevronDown, ChevronRight, CheckCircle2, AlertTriangle, RefreshCcw, Settings2, Plus, Info } from 'lucide-react'
 import type { CredentialHealthStatus, CredentialHealthIssue } from '../../../shared/types'
-import { FullscreenOverlayBase } from '@craft-agent/ui'
+import { FullscreenOverlayBase, Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { useSetAtom } from 'jotai'
 import { fullscreenOverlayOpenAtom } from '@/atoms/overlay'
 import { motion, AnimatePresence } from 'motion/react'
@@ -51,6 +51,21 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { getModelShortName, type ModelDefinition } from '@config/models'
 import { getModelsForProviderType, type CustomEndpointApi } from '@config/llm-connections'
 import { toast } from 'sonner'
+
+function InfoExplainer({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/[0.04] text-white/40 transition-colors hover:bg-white/[0.08] hover:text-white/80">
+          <Info className="h-2.5 w-2.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" className="max-w-[220px] bg-[#1a1a1a] border-white/10 text-white/80 text-[11px] leading-relaxed p-2.5 shadow-modal-small">
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
 
 /**
  * Derive model dropdown options from a connection's models array,
@@ -219,6 +234,7 @@ interface ConnectionRowProps {
 }
 
 function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, validationState, validationError }: ConnectionRowProps) {
+  const [modelsExpanded, setModelsExpanded] = useState(false)
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
@@ -296,13 +312,35 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
           </div>
 
           {modelSummary.length > 0 && (
-            <div className="mt-3 grid gap-2 sm:grid-cols-3">
-              {modelSummary.map((model) => (
-                <div key={`${model.label}:${model.value}`} className="rounded-lg border border-border/60 bg-foreground/[0.025] px-3 py-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">{model.label}</div>
-                  <div className="mt-0.5 truncate text-xs font-medium">{model.value}</div>
-                </div>
-              ))}
+            <div className="mt-3">
+              <button 
+                onClick={() => setModelsExpanded(!modelsExpanded)}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <ChevronRight className={cn("h-3 w-3 transition-transform", modelsExpanded && "rotate-90")} />
+                {modelsExpanded ? "Hide available models" : `View ${modelSummary.length} available models`}
+              </button>
+              
+              <AnimatePresence>
+                {modelsExpanded && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.15 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                      {modelSummary.map((model) => (
+                        <div key={`${model.label}:${model.value}`} className="rounded-lg border border-border/60 bg-foreground/[0.015] px-3 py-2">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">{model.label}</div>
+                          <div className="mt-0.5 truncate text-xs font-medium">{model.value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
         </div>
@@ -528,8 +566,8 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
           >
             <div className="border-t border-border/50 px-4 py-2">
               <SettingsMenuSelectRow
-                label={t("settings.ai.connection")}
-                description={t("settings.ai.connectionDesc")}
+                label="Provider override"
+                description="Use a different AI provider for this workspace."
                 value={currentConnection}
                 onValueChange={handleConnectionChange}
                 options={[
@@ -544,8 +582,8 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                 ]}
               />
               <SettingsMenuSelectRow
-                label={t("settings.ai.model")}
-                description={t("settings.ai.modelDesc")}
+                label="Model override"
+                description="Force this workspace to always use this specific model."
                 value={currentModel}
                 onValueChange={handleModelChange}
                 options={[
@@ -556,8 +594,8 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
                 ]}
               />
               <SettingsMenuSelectRow
-                label={t("settings.ai.thinking")}
-                description={t("settings.ai.thinkingDesc")}
+                label="Reasoning level"
+                description="How much computing power the AI should use before answering."
                 value={currentThinking}
                 onValueChange={handleThinkingChange}
                 options={[
@@ -942,8 +980,13 @@ export default function AiSettingsPage() {
             <div className="space-y-6">
               {/* Connections Management */}
               <SettingsSection
-                title="AI providers"
-                description="Connect Codex, OpenRouter, local models, or other APIs. The default provider is what new chats use first."
+                title={
+                  <div className="flex items-center gap-2">
+                    AI accounts & providers
+                    <InfoExplainer text="Connect APIs like Codex, OpenRouter, or local models. Runner uses these to power your chat and workers." />
+                  </div>
+                }
+                description="Connect accounts to access different AI models."
               >
                 <SettingsCard>
                   {llmConnections.length === 0 ? (
@@ -991,11 +1034,19 @@ export default function AiSettingsPage() {
 
               {/* Default Settings - only show if connections exist */}
               {llmConnections.length > 0 && (
-              <SettingsSection title="Default for new chats" description="This is the provider and model used when a chat has no override. You can still hot-swap per chat from the message bar.">
+              <SettingsSection
+                title={
+                  <div className="flex items-center gap-2">
+                    Default for new chats
+                    <InfoExplainer text="This model is used automatically when you start a new chat. You can always swap models instantly from the chat bar." />
+                  </div>
+                }
+                description="The provider and model used when a chat has no override."
+              >
                 <SettingsCard>
                   <SettingsMenuSelectRow
                     label="Provider"
-                    description={defaultConnection ? `${getConnectionProviderLabel(defaultConnection)} · ${defaultConnection.name}` : t("settings.ai.connectionDesc")}
+                    description="The main account powering your general chats."
                     value={defaultConnection?.slug || ''}
                     onValueChange={handleSetDefaultConnection}
                     options={llmConnections.map((conn) => ({
@@ -1009,7 +1060,7 @@ export default function AiSettingsPage() {
                   />
                   <SettingsMenuSelectRow
                     label="Model"
-                    description="Fallback model for this provider. Chat and agent overrides can use another model."
+                    description="The default model used from this provider."
                     value={defaultModel}
                     onValueChange={handleDefaultModelChange}
                     options={getModelOptionsForConnection(defaultConnection).map(o => ({
@@ -1017,8 +1068,8 @@ export default function AiSettingsPage() {
                     }))}
                   />
                   <SettingsMenuSelectRow
-                    label={t("settings.ai.thinking")}
-                    description={t("settings.ai.thinkingDesc")}
+                    label="Reasoning level"
+                    description="How much computing power the AI should use before answering."
                     value={defaultThinking}
                     onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
                     options={THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => ({
@@ -1033,7 +1084,15 @@ export default function AiSettingsPage() {
 
               {/* Workspace Overrides - only show if connections exist */}
               {workspaces.length > 0 && llmConnections.length > 0 && (
-                <SettingsSection title={t("settings.ai.workspaceOverrides")} description={t("settings.ai.workspaceOverridesDesc")}>
+                <SettingsSection
+                  title={
+                    <div className="flex items-center gap-2">
+                      {t("settings.ai.workspaceOverrides")}
+                      <InfoExplainer text="Lock a specific workspace to always use a certain model or reasoning level, regardless of your global default." />
+                    </div>
+                  }
+                  description={t("settings.ai.workspaceOverridesDesc")}
+                >
                   <div className="space-y-2">
                     {workspaces.map((workspace) => (
                       <WorkspaceOverrideCard
@@ -1048,7 +1107,15 @@ export default function AiSettingsPage() {
               )}
 
               {/* Performance */}
-              <SettingsSection title={t("settings.ai.performance")} description={t("settings.ai.performanceDesc")}>
+              <SettingsSection
+                title={
+                  <div className="flex items-center gap-2">
+                    {t("settings.ai.performance")}
+                    <InfoExplainer text="Advanced parameters. Turn these on only if you understand context window costs and caching behavior." />
+                  </div>
+                }
+                description={t("settings.ai.performanceDesc")}
+              >
                 <SettingsCard>
                   <SettingsToggle
                     label={t("settings.ai.extendedContext")}

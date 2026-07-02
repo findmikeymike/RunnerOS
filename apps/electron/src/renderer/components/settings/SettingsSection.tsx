@@ -13,7 +13,7 @@ import { cn } from '@/lib/utils'
 
 export interface SettingsSectionProps {
   /** Section title */
-  title: string
+  title: React.ReactNode
   /** Optional description below title (supports ReactNode for inline links) */
   description?: React.ReactNode
   /** Content - usually SettingsCard or SettingsRadioGroup */

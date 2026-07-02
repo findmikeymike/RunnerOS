@@ -27,6 +27,7 @@ import { StoplightProvider } from '@/context/StoplightContext'
 import {
   useNavigation,
   useNavigationState,
+  isCampaignNavigation,
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
@@ -259,6 +260,17 @@ export function MainContentPanel({
     </StoplightProvider>
   )
 
+  if (isCampaignNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <ArtistCommandCenterHome
+          workspaceId={activeWorkspaceId || ''}
+          artistProfileWorkspaceId={artistHQWorkspace?.id}
+        />
+      </Panel>
+    )
+  }
+
   // Settings navigator - uses component map from settings-pages.ts
   if (isSettingsNavigation(navState)) {
     const SettingsPageComponent = getSettingsPageComponent(navState.subpage)
@@ -266,12 +278,12 @@ export function MainContentPanel({
       <Panel
         variant="grow"
         className={cn(
-          'runneros-glass-route relative',
+          'runneros-glass-route',
           className
         )}
       >
-        <div className="pointer-events-none absolute left-0 right-0 top-[42px] z-20 flex justify-center px-6">
-          <div className="pointer-events-auto">
+        <div className="shrink-0 px-6 pt-5">
+          <div className="mx-auto w-full max-w-[1120px]">
             <SettingsPageSwitcher activeSubpage={navState.subpage} />
           </div>
         </div>

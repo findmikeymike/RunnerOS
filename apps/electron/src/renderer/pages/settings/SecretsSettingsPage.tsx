@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { AlertCircle, CheckCircle2, ExternalLink, Info, KeyRound, Loader2, RefreshCcw, Save, Trash2, WalletCards } from 'lucide-react'
 import { toast } from 'sonner'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
@@ -13,6 +14,21 @@ import { navigate, routes } from '@/lib/navigate'
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
   slug: 'secrets',
+}
+
+function InfoExplainer({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/[0.04] text-white/40 transition-colors hover:bg-white/[0.08] hover:text-white/80">
+          <Info className="h-2.5 w-2.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" className="max-w-[220px] bg-[#1a1a1a] border-white/10 text-white/80 text-[11px] leading-relaxed p-2.5 shadow-modal-small">
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 type SecretPreset = {
@@ -43,7 +59,7 @@ const SECRET_PRESETS: SecretPreset[] = [
     group: 'Ads',
     name: 'META_ADS_OAUTH',
     label: 'Meta Ads credential',
-    description: 'Managed by the Meta Ads source OAuth flow. Connect it from Tools/Sources, not by pasting a token here.',
+    description: 'Meta Ads connects through its source setup. Use the connect button here to open the Meta Ads source directly.',
     storage: 'managed-source',
     sourceSlug: 'meta-ads',
     sourceType: 'mcp',
@@ -52,7 +68,7 @@ const SECRET_PRESETS: SecretPreset[] = [
     group: 'Ads',
     name: 'GOOGLE_ADS_OAUTH',
     label: 'Google Ads credential',
-    description: 'Managed by the Google Ads source setup because it also needs a developer token and optional login customer ID.',
+    description: 'Google Ads connects through its source setup because it also needs a developer token and optional login customer ID.',
     storage: 'managed-source',
     sourceSlug: 'google-ads',
     sourceType: 'local',
@@ -89,6 +105,14 @@ const SECRET_PRESETS: SecretPreset[] = [
     label: 'Primary calendar ID',
     description: 'Optional. Defaults to primary. Use this when Artist HQ should sync to a dedicated Google Calendar.',
     placeholder: 'primary',
+    storage: 'env',
+  },
+  {
+    group: 'Community',
+    name: 'RESEND_API_KEY',
+    label: 'Resend API key',
+    description: 'Used by Community to send approved fan emails through Resend. Your From address must use a verified Resend domain.',
+    placeholder: 're_...',
     storage: 'env',
   },
   {
@@ -532,6 +556,13 @@ const SERVICES: SecretService[] = [
     optionalPresetNames: ['GOOGLE_WORKSPACE_PRIMARY_CALENDAR_ID'],
   },
   {
+    id: 'resend-email',
+    group: 'Community',
+    title: 'Community Email',
+    description: 'Connect Resend so Community can send approved fan emails from a verified domain.',
+    presetNames: ['RESEND_API_KEY'],
+  },
+  {
     id: 'spotify',
     group: 'Promotion',
     title: 'Spotify',
@@ -613,9 +644,9 @@ const SERVICES: SecretService[] = [
   },
   {
     id: 'zero',
-    group: 'Wallet',
-    title: 'Zero Wallet',
-    description: 'Private key fallback for Zero CLI when no local Zero config is present.',
+    group: 'Miscellaneous',
+    title: 'Zero CLI',
+    description: 'Zero lets you call external services that aren\'t natively supported. It requires a valid wallet setup.',
     presetNames: ['ZERO_PRIVATE_KEY'],
     optionalPresetNames: ['ZERO_PRIVATE_KEY'],
   },
@@ -774,7 +805,7 @@ export default function SecretsSettingsPage() {
     <div className="flex h-full flex-col">
       <PanelHeader title="Connections" />
       <ScrollArea className="flex-1">
-        <div className="mx-auto w-full max-w-[1120px] space-y-5 px-6 pb-8 pt-6">
+        <div className="mx-auto w-full max-w-[1120px] space-y-5 px-6 pb-8 pt-4">
           <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.025] p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -790,38 +821,14 @@ export default function SecretsSettingsPage() {
             </div>
           </div>
 
-          <SettingsSection title="Zero">
-            <SettingsCard>
-              <div className="flex items-start justify-between gap-4 p-4">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-sm font-medium">
-                    <WalletCards className="h-4 w-4 text-white/55" />
-                    Zero CLI
-                  </div>
-                  <div className="mt-2 grid gap-1 text-xs text-white/45">
-                    <span>{zero?.installed ? `Installed${zero.version ? ` · ${zero.version}` : ''}` : 'Not installed'}</span>
-                    {zero?.path && <span className="truncate">{zero.path}</span>}
-                    <span>{zero?.walletConfigured ? 'Wallet ready' : 'Wallet missing'}</span>
-                    {zero?.balance && <span className="truncate">{zero.balance}</span>}
-                    {zero?.error && <span className="text-amber-300/80">{zero.error}</span>}
-                  </div>
-                </div>
-                <div className="flex shrink-0 gap-2">
-                  <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-                    {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
-                  </Button>
-                  {!zero?.installed && (
-                    <Button size="sm" onClick={installZero} disabled={installing}>
-                      {installing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                      Install
-                    </Button>
-                  )}
-                </div>
+          <SettingsSection
+            title={
+              <div className="flex items-center gap-2">
+                Services
+                <InfoExplainer text="Add API keys to enable agent integrations for promotion, commerce, video generation, and more." />
               </div>
-            </SettingsCard>
-          </SettingsSection>
-
-          <SettingsSection title="Services">
+            }
+          >
             <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
               <SettingsCard className="self-start">
                 <div className="space-y-1 p-2">
@@ -859,22 +866,68 @@ export default function SecretsSettingsPage() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <h3 className="text-base font-semibold text-white/90">{service.title}</h3>
-                              <StatusPill status={status} serviceId={service.id} />
+                              {service.id !== 'zero' && (
+                                <StatusPill status={status} serviceId={service.id} />
+                              )}
                             </div>
                             <p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">{service.description}</p>
                           </div>
                           {managedPreset ? (
                             <Button size="sm" variant="outline" onClick={() => openSource(managedPreset)}>
                               <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                              Open setup
+                              {connectButtonLabel(service)}
                             </Button>
                           ) : null}
                         </div>
 
-                        {managedPreset ? (
-                          <div className="mt-4 flex gap-2 rounded-[12px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs leading-5 text-white/46">
-                            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/35" />
-                            <span>{managedPreset.description}</span>
+                        {service.id === 'zero' ? (
+                          <div className="mt-4 rounded-[12px] border border-white/[0.06] bg-black/20 p-4">
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                  <WalletCards className="h-4 w-4 text-white/50" />
+                                  <span>Zero Installation</span>
+                                  {zero?.installed ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
+                                  ) : (
+                                    <AlertCircle className="h-3.5 w-3.5 text-amber-400/80" />
+                                  )}
+                                </div>
+                                <div className="mt-2 grid gap-1 text-xs text-white/45">
+                                  <span>{zero?.installed ? `Installed${zero.version ? ` · ${zero.version}` : ''}` : 'Not installed'}</span>
+                                  {zero?.path && <span className="truncate font-mono text-[10px]">{zero.path}</span>}
+                                  <span>{zero?.walletConfigured ? 'Wallet ready' : 'Wallet missing'}</span>
+                                  {zero?.balance && <span className="truncate">{zero.balance}</span>}
+                                  {zero?.error && <span className="text-amber-300/80">{zero.error}</span>}
+                                </div>
+                              </div>
+                              <div className="flex shrink-0 flex-col gap-2">
+                                <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+                                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+                                </Button>
+                                {!zero?.installed && (
+                                  <Button size="sm" onClick={installZero} disabled={installing}>
+                                    {installing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                                    Install
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : managedPreset ? (
+                          <div className="mt-4 flex flex-col gap-3 rounded-[12px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs leading-5 text-white/46 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 gap-2">
+                              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/35" />
+                              <span>{managedPreset.description}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openSource(managedPreset)}
+                              className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-[#fb923c]/20 bg-[#f97316]/12 px-3 text-[11px] font-medium text-[#fed7aa] transition-colors hover:bg-[#f97316]/20"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              {sourceSetupBadgeLabel(service)}
+                            </button>
                           </div>
                         ) : (
                           <>
@@ -921,31 +974,41 @@ export default function SecretsSettingsPage() {
                 })}
               </div>
             </div>
+            </SettingsSection>
 
-            <SettingsCard>
-              <div className="divide-y divide-white/[0.06]">
-                {secrets.length === 0 ? (
-                  <div className="p-4 text-sm text-white/38">No secrets saved.</div>
-                ) : secrets.map((secret) => (
-                  <div key={secret.name} className="flex items-center justify-between gap-3 p-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <KeyRound className="h-3.5 w-3.5 text-white/45" />
-                        <span>{secret.name}</span>
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
+            <SettingsSection
+              title={
+                <div className="flex items-center gap-2">
+                  All Saved Secrets
+                  <InfoExplainer text="A raw view of all keys you have securely stored in your environment." />
+                </div>
+              }
+              className="mt-8"
+            >
+              <SettingsCard>
+                <div className="divide-y divide-white/[0.06]">
+                  {secrets.length === 0 ? (
+                    <div className="p-4 text-sm text-white/38">No secrets saved.</div>
+                  ) : secrets.map((secret) => (
+                    <div key={secret.name} className="flex items-center justify-between gap-3 p-4 hover:bg-white/[0.015] transition-colors">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 text-sm font-medium">
+                          <KeyRound className="h-3.5 w-3.5 text-white/45" />
+                          <span>{secret.name}</span>
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
+                        </div>
+                        <div className="mt-1 text-xs text-white/35 font-mono">{secret.maskedValue}</div>
                       </div>
-                      <div className="mt-1 text-xs text-white/35">{secret.maskedValue}</div>
+                      <Button variant="ghost" size="sm" onClick={() => remove(secret.name)} className="hover:bg-red-500/10 hover:text-red-400">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => remove(secret.name)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </SettingsCard>
-          </SettingsSection>
-        </div>
-      </ScrollArea>
+                  ))}
+                </div>
+              </SettingsCard>
+            </SettingsSection>
+          </div>
+        </ScrollArea>
     </div>
   )
 }
@@ -964,6 +1027,14 @@ function StatusPill({ status, serviceId }: { status: ServiceStatus; serviceId: s
       {label}
     </span>
   )
+}
+
+function connectButtonLabel(service: SecretService) {
+  return `Connect ${service.title}`
+}
+
+function sourceSetupBadgeLabel(service: SecretService) {
+  return `Open ${service.title} source`
 }
 
 function savedPlaceholder(preset: SecretPreset, savedByName: Map<string, UserSecretSummary>) {
