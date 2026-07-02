@@ -19,13 +19,18 @@ interface SessionInfoPopoverProps {
   presentation?: 'popover' | 'drawer'
 }
 
-const DEFAULT_POPOVER_CONTENT_CLASS = 'w-[360px] h-[460px] min-w-[200px] max-w-[420px] overflow-hidden rounded-[8px] bg-background text-foreground shadow-modal-small p-0'
+const DEFAULT_POPOVER_CONTENT_CLASS = [
+  'w-[380px] h-[500px] min-w-[240px] max-w-[440px]',
+  'overflow-hidden rounded-[12px]',
+  'border border-white/[0.08] bg-[#08090b]/95 text-foreground',
+  'shadow-[0_24px_80px_rgba(0,0,0,0.62)] backdrop-blur-xl p-0',
+].join(' ')
 const DEFAULT_DRAWER_CONTENT_CLASS = [
   'data-[vaul-drawer-direction=bottom]:inset-x-2',
   'data-[vaul-drawer-direction=bottom]:bottom-2',
   'data-[vaul-drawer-direction=bottom]:mt-0',
   'data-[vaul-drawer-direction=bottom]:max-h-[min(82vh,42rem)]',
-  'overflow-hidden rounded-[14px] border border-border/60 bg-background shadow-modal-small',
+  'overflow-hidden rounded-[14px] border border-white/[0.08] bg-[#08090b]/95 shadow-modal-small backdrop-blur-xl',
 ].join(' ')
 
 export function SessionInfoPopover({
@@ -135,16 +140,16 @@ function SessionInfoPopoverContent({ sessionId, sessionFolderPath }: { sessionId
 
   return (
     <div className="h-full min-h-0 flex flex-col">
-      <div className="shrink-0 p-3 border-b border-border/50">
-        <label className="text-xs font-medium text-muted-foreground block mb-1.5 select-none">
+      <div className="shrink-0 border-b border-white/[0.06] p-4">
+        <label className="mb-2 block select-none text-[11px] font-semibold uppercase tracking-[0.08em] text-white/42">
           {t("chat.title")}
         </label>
-        <div className="rounded-lg bg-foreground-2 has-[:focus]:bg-background shadow-minimal transition-colors">
+        <div className="rounded-[10px] border border-white/[0.08] bg-white/[0.045] shadow-inner-subtle transition-colors has-[:focus]:border-white/18 has-[:focus]:bg-white/[0.065]">
           <Input
             value={name}
             onChange={handleNameChange}
             placeholder={t("chat.titlePlaceholder")}
-            className="h-9 py-2 text-sm border-0 shadow-none bg-transparent focus-visible:ring-0"
+            className="h-10 border-0 bg-transparent px-3 py-2 text-sm text-white/88 shadow-none placeholder:text-white/28 focus-visible:ring-0"
           />
         </div>
       </div>
@@ -197,15 +202,19 @@ function LaunchReceiptSection({ receipt }: { receipt: SessionLaunchReceipt }) {
   ] satisfies Array<[string, string | undefined]>
 
   return (
-    <div className="shrink-0 max-h-[230px] overflow-y-auto border-b border-border/50 px-3 py-2">
-      <div className="mb-1.5 flex items-center justify-between gap-2">
-        <div className="text-xs font-medium text-muted-foreground select-none">Launch receipt</div>
-        <div className="shrink-0 text-[10px] leading-4 text-muted-foreground/70">
+    <div className="shrink-0 max-h-[255px] overflow-y-auto border-b border-white/[0.06] px-4 py-3">
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <div className="select-none text-[11px] font-semibold uppercase tracking-[0.08em] text-white/42">Launch receipt</div>
+        <div className="shrink-0 text-[11px] leading-4 text-white/32">
           {formatReceiptTime(receipt.createdAt)}
         </div>
       </div>
-      <div className="space-y-1.5 text-[11px] leading-4 text-muted-foreground">
-        {receipt.summary && <div className="rounded-md bg-foreground-2 px-2 py-1 text-foreground/80">{receipt.summary}</div>}
+      <div className="space-y-2 text-[12px] leading-4 text-white/58">
+        {receipt.summary && (
+          <div className="rounded-[9px] border border-white/[0.07] bg-white/[0.045] px-2.5 py-2 text-white/74">
+            {receipt.summary}
+          </div>
+        )}
 
         <ReceiptGroup title="Origin" summary={formatOrigin(receipt)} defaultOpen>
           <ReceiptRow label="Type" value={receipt.origin} />
@@ -309,12 +318,12 @@ function ReceiptGroup({
   children: React.ReactNode
 }) {
   return (
-    <details className="rounded-md bg-foreground-2 px-2 py-1" open={defaultOpen}>
-      <summary className="flex cursor-default list-none items-center justify-between gap-2 select-none [&::-webkit-details-marker]:hidden">
-        <span className="font-medium text-foreground/80">{title}</span>
-        <span className="min-w-0 truncate text-[10px] text-muted-foreground/80">{summary}</span>
+    <details className="rounded-[9px] border border-white/[0.07] bg-white/[0.035] px-2.5 py-2 open:bg-white/[0.045]" open={defaultOpen}>
+      <summary className="flex cursor-default list-none items-center justify-between gap-3 select-none [&::-webkit-details-marker]:hidden">
+        <span className="text-[12px] font-semibold text-white/76">{title}</span>
+        <span className="min-w-0 truncate text-[11px] text-white/36">{summary}</span>
       </summary>
-      <div className="mt-1 space-y-1 border-t border-border/40 pt-1">
+      <div className="mt-2 space-y-1.5 border-t border-white/[0.06] pt-2">
         {children}
       </div>
     </details>
@@ -323,22 +332,22 @@ function ReceiptGroup({
 
 function ReceiptRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return (
-    <div className="flex gap-2">
-      <span className="w-20 shrink-0 text-foreground/70">{label}</span>
-      <span className={cn('min-w-0 break-words text-foreground/80', mono && 'font-mono text-[10px]')}>{value}</span>
+    <div className="grid grid-cols-[5.75rem_minmax(0,1fr)] gap-2">
+      <span className="text-white/38">{label}</span>
+      <span className={cn('min-w-0 break-words text-white/68', mono && 'font-mono text-[11px] text-white/58')}>{value}</span>
     </div>
   )
 }
 
 function ReceiptSlugList({ values, emptyLabel }: { values: string[]; emptyLabel: string }) {
   if (values.length === 0) {
-    return <div className="text-muted-foreground/70">{emptyLabel}</div>
+    return <div className="text-white/34">{emptyLabel}</div>
   }
 
   return (
     <div className="flex flex-wrap gap-1">
       {values.map((value) => (
-        <span key={value} className="max-w-full rounded border border-border/50 bg-background px-1.5 py-0.5 font-mono text-[10px] text-foreground/80 break-all">
+        <span key={value} className="max-w-full break-all rounded-[6px] border border-white/[0.08] bg-black/20 px-1.5 py-0.5 font-mono text-[10px] text-white/62">
           {value}
         </span>
       ))}
@@ -354,17 +363,17 @@ function ReceiptEntityList({
   emptyLabel: string
 }) {
   if (items.length === 0) {
-    return <div className="text-muted-foreground/70">{emptyLabel}</div>
+    return <div className="text-white/34">{emptyLabel}</div>
   }
 
   return (
     <div className="space-y-1">
       {items.map((item) => (
-        <div key={item.key} className="min-w-0 rounded border border-border/50 bg-background px-1.5 py-1">
-          <div className="min-w-0 text-foreground/85 break-words">{item.name}</div>
-          <div className="font-mono text-[10px] text-muted-foreground break-all">{item.slug}</div>
+        <div key={item.key} className="min-w-0 rounded-[8px] border border-white/[0.08] bg-black/20 px-2 py-1.5">
+          <div className="min-w-0 break-words text-white/72">{item.name}</div>
+          <div className="break-all font-mono text-[10px] text-white/38">{item.slug}</div>
           {item.details?.map((detail) => (
-            <div key={detail} className="mt-0.5 text-[10px] leading-3 text-muted-foreground/80 break-words">{detail}</div>
+            <div key={detail} className="mt-1 break-words text-[10px] leading-3 text-white/44">{detail}</div>
           ))}
         </div>
       ))}
