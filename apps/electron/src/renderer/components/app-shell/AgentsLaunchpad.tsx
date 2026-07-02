@@ -251,7 +251,7 @@ function AgentCard({ slug, name, description, isOrchestrator, onClick, onStartCh
         event.preventDefault()
         onClick()
       }}
-      className="group relative min-h-[122px] overflow-hidden rounded-[14px] border border-white/10 bg-neutral-900/60 p-3.5 pr-10 text-left shadow-middle transition-all duration-200 hover:-translate-y-0.5 hover:border-white/16 hover:bg-neutral-900/70 hover:shadow-middle"
+      className="group relative min-h-[122px] overflow-hidden rounded-[14px] border border-white/10 bg-neutral-900/60 p-3.5 pb-9 text-left shadow-middle transition-all duration-200 hover:-translate-y-0.5 hover:border-white/16 hover:bg-neutral-900/70 hover:shadow-middle"
     >
       <div className={cn(
         "pointer-events-none absolute h-24 w-24 rounded-full blur-2xl",
@@ -263,10 +263,10 @@ function AgentCard({ slug, name, description, isOrchestrator, onClick, onStartCh
           e.stopPropagation()
           onStartChat()
         }}
-        className="absolute right-3 top-3 inline-flex h-6 w-6 items-center justify-center rounded-[8px] text-white/38 transition-colors hover:bg-white/[0.06] hover:text-white/78"
+        className="absolute bottom-3 right-3 inline-flex h-[30px] w-[30px] items-center justify-center rounded-[9px] text-white/42 transition-colors hover:bg-white/[0.06] hover:text-white/82"
         aria-label={`Start chat with ${name}`}
       >
-        <MessageSquare className="h-3 w-3" />
+        <MessageSquare className="h-[15px] w-[15px]" />
       </button>
       <div className="relative flex items-center gap-2.5">
         <span className="inline-flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-[7px] bg-gradient-to-br from-[#fb923c] to-[#f97316] text-neutral-950 shadow-middle">
