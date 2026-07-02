@@ -1778,6 +1778,10 @@ function AppShellContent({
 
   const handleWorkChatClick = useCallback(async () => {
     if (!activeWorkspaceId) return
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
 
     const existing = Array.from(sessionMetaMap.values())
       .filter((s) => (

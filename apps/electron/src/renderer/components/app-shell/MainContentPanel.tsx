@@ -83,7 +83,6 @@ import { findArtistHQWorkspace, isArtistHQWorkspace } from '@/lib/artist-workspa
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 
 export interface MainContentPanelProps {
   /** Whether both sidebar and navigator are hidden (focus mode / CMD+.) */
@@ -569,14 +568,6 @@ export function MainContentPanel({
       )
     }
 
-    const selectedSessionMeta = navState.details?.type === 'session'
-      ? sessionMetaMap.get(navState.details.sessionId)
-      : undefined
-    const isConciergeSession =
-      selectedSessionMeta?.launchReceipt?.origin === 'concierge' ||
-      selectedSessionMeta?.launchReceipt?.agent?.slug === CONCIERGE_SLUG ||
-      selectedSessionMeta?.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
-
     // Artist HQ tabs are real app pages. They must win over stale selected sessions.
     if (isArtistHQWorkspace(activeWorkspace, workspaces) && window.location.hash.startsWith('#artist-hq/')) {
       return wrapWithStoplight(
@@ -586,7 +577,7 @@ export function MainContentPanel({
       )
     }
 
-    if (navState.details?.type === 'session' && !isConciergeSession) {
+    if (navState.details?.type === 'session') {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
           <ChatPage sessionId={navState.details.sessionId} />
