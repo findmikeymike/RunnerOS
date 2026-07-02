@@ -474,6 +474,21 @@ body
     expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.name).toBe('Orchestrator')
   })
 
+  test('starter library includes HNIC as workflow-aware work router', () => {
+    const hnic = STARTER_AGENTS.find((agent) => agent.slug === 'concierge')
+
+    expect(hnic).toBeDefined()
+    expect(hnic?.metadata.name).toBe('HNIC')
+    expect(hnic?.metadata.tags).toContain('routing')
+    expect(hnic?.metadata.tags).toContain('workflows')
+    expect(hnic?.metadata.skills).toContain('workflow-creator')
+    expect(hnic?.metadata.skills).toContain('automation-creator')
+    expect(hnic?.systemPrompt).toContain('current active-agent capability catalog')
+    expect(hnic?.systemPrompt).toContain('suggest an automation')
+    expect(hnic?.systemPrompt).toContain('suggest a workflow')
+    expect(hnic?.systemPrompt).toContain('Handoff target')
+  })
+
   test('starter library includes the social publisher with the Printing Press source', () => {
     const socialPublisher = STARTER_AGENTS.find((agent) => agent.slug === SOCIAL_PUBLISHER_SLUG)
 

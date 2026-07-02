@@ -145,6 +145,8 @@ import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { useOutputs } from "@/hooks/useOutputs"
 import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace } from "@/lib/artist-workspace"
+import { openAgentSessionComposer } from "@/lib/run-agent"
+import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -526,6 +528,8 @@ function AppShellContent({
     onOpenKeyboardShortcuts,
     onOpenStoredUserPreferences,
     onReset,
+    onCreateSession,
+    onInputChange,
     onSendMessage,
     openNewChat,
     pendingPermissions,
@@ -1772,6 +1776,53 @@ function AppShellContent({
     navigate(routes.view.agents())
   }, [])
 
+  const handleWorkChatClick = useCallback(async () => {
+    if (!activeWorkspaceId) return
+
+    const existing = Array.from(sessionMetaMap.values())
+      .filter((s) => (
+        s.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
+        && !s.hidden
+        && !s.isArchived
+        && (s.workspaceId === activeWorkspaceId || (remoteWorkspaceId && s.workspaceId === remoteWorkspaceId))
+      ))
+      .sort((a, b) => (b.lastMessageAt ?? b.createdAt ?? 0) - (a.lastMessageAt ?? a.createdAt ?? 0))[0]
+
+    if (existing) {
+      navigate(routes.view.allSessions(existing.id))
+      setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
+      return
+    }
+
+    const agent = activeAgents.find((a) => a.slug === CONCIERGE_SLUG)
+    if (!agent) {
+      toast.error('HNIC worker is not installed')
+      navigate(routes.view.agents())
+      return
+    }
+
+    try {
+      const contextDocs = await window.electronAPI
+        .listWorkspaceContextDocsForAgent(activeWorkspaceId, agent.slug)
+        .catch(() => [])
+      await openAgentSessionComposer({
+        agent,
+        workspaceId: activeWorkspaceId,
+        onCreateSession,
+        onInputChange,
+        skills,
+        sources,
+        contextDocs,
+        agentCatalog: activeAgents,
+      })
+      setTimeout(() => focusZone('chat', { intent: 'programmatic' }), 50)
+    } catch (error) {
+      toast.error('Failed to open HNIC chat', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }, [activeAgents, activeWorkspaceId, focusZone, onCreateSession, onInputChange, remoteWorkspaceId, sessionMetaMap, skills, sources])
+
   const handleOutputsClick = useCallback(() => {
     navigate(routes.view.outputs())
   }, [])
@@ -1998,6 +2049,9 @@ function AppShellContent({
 
   const hqHomeActive = isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network', '#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash)
   const vaultActive = isVaultNavigation(navState)
+  const workChatActive = isSessionsNavigation(navState)
+    && !!navState.details?.sessionId
+    && sessionMetaMap.get(navState.details.sessionId)?.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
   const planExpanded = expandedMainNavGroups.has('plan')
   const peopleExpanded = expandedMainNavGroups.has('people')
   const workExpanded = expandedMainNavGroups.has('work')
@@ -2018,8 +2072,9 @@ function AppShellContent({
       result.push({ id: 'nav:community', type: 'nav', action: () => navigate(routes.view.community()) })
     }
     result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
-    result.push({ id: 'nav:work', type: 'nav', action: () => handleMainNavGroupClick('work', handleAgentsClick) })
+    result.push({ id: 'nav:work', type: 'nav', action: () => handleMainNavGroupClick('work', handleWorkChatClick) })
     if (workExpanded) {
+      result.push({ id: 'nav:work-chat', type: 'nav', action: handleWorkChatClick })
       result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
       result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
       result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
@@ -2033,7 +2088,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleMainNavGroupClick, peopleExpanded, planExpanded, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleMainNavGroupClick, handleWorkChatClick, peopleExpanded, planExpanded, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2430,8 +2485,15 @@ function AppShellContent({
                       expandable: true,
                       expanded: workExpanded,
                       onToggle: () => toggleMainNavGroup('work'),
-                      onClick: () => handleMainNavGroupClick('work', handleAgentsClick),
+                      onClick: () => handleMainNavGroupClick('work', handleWorkChatClick),
                       items: [
+                        {
+                          id: "nav:work-chat",
+                          title: "Chat",
+                          icon: MessageSquare,
+                          variant: workChatActive ? "default" : "ghost",
+                          onClick: handleWorkChatClick,
+                        },
                         {
                           id: "nav:agents",
                           title: "Workers",

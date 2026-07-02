@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { buildAgentCreateSessionOptions } from './run-agent'
+import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO } from '../../shared/types'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 
@@ -42,5 +43,40 @@ describe('buildAgentCreateSessionOptions memory receipts', () => {
       user: [{ name: 'Current user fact' }],
       agent: [{ name: 'Review rule' }],
     })
+  })
+
+  test('injects the active agent catalog into Concierge launch receipts', () => {
+    const options = buildAgentCreateSessionOptions(
+      {
+        ...makeAgent(),
+        slug: CONCIERGE_SLUG,
+        metadata: { name: 'HNIC', description: 'Routes work.' },
+      },
+      {
+        skills: [],
+        sources: [],
+        agentCatalog: [
+          {
+            ...makeAgent(),
+            slug: 'comms-agent',
+            metadata: {
+              name: 'Comms Agent',
+              description: 'Drafts fan, press, and partner comms.',
+              tags: ['comms'],
+            },
+          },
+        ],
+      },
+    )
+
+    expect(options.launchReceipt?.routing).toEqual({
+      mode: 'concierge',
+      activeAgentCount: 1,
+      instruction: 'Use the active agent capability catalog to route the user to a specialist when appropriate.',
+    })
+    expect(options.launchReceipt?.injected.agentCatalog).toEqual([
+      expect.objectContaining({ slug: 'comms-agent', name: 'Comms Agent', tags: ['comms'] }),
+    ])
+    expect(options.customSystemPrompt).toContain('Comms Agent')
   })
 })

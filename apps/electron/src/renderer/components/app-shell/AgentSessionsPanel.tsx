@@ -38,7 +38,7 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
   const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
-  const { allAgents } = useAgents(workspaceId)
+  const { allAgents, activeAgents } = useAgents(workspaceId)
   const { onCreateSession, onInputChange } = useAppShellContext()
 
   const agent = React.useMemo(
@@ -80,13 +80,14 @@ export function AgentSessionsPanel({ agentSlug, workspaceId, remoteWorkspaceId }
         skills,
         sources,
         contextDocs,
+        agentCatalog: activeAgents,
       })
     } catch (err) {
       toast.error('Failed to run worker', {
         description: err instanceof Error ? err.message : String(err),
       })
     }
-  }, [agent, agentSlug, onCreateSession, onInputChange, skills, sources, workspaceId])
+  }, [activeAgents, agent, agentSlug, onCreateSession, onInputChange, skills, sources, workspaceId])
 
   const avatar = agent?.metadata.avatar?.trim() || (agentSlug === ORCHESTRATOR_SLUG ? '🎯' : '🤖')
   const name = agent?.metadata.name ?? agentSlug
