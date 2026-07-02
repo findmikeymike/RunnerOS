@@ -17,7 +17,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { expandPath } from '../../utils/paths.ts';
 import {
   detectConfigFileType,
@@ -151,6 +151,7 @@ export const LABELS_BLOCKED_FILE_TOOLS = new Set(['Read', 'Write', 'Edit']);
 export function expandToolPaths(
   toolName: string,
   input: Record<string, unknown>,
+  workingDirectory?: string,
   onDebug?: (message: string) => void
 ): PathExpansionResult {
   if (!FILE_PATH_TOOLS.has(toolName)) {
@@ -159,31 +160,46 @@ export function expandToolPaths(
 
   let updatedInput: Record<string, unknown> | null = null;
 
-  // Expand file_path if present and starts with ~
-  if (typeof input.file_path === 'string' && input.file_path.startsWith('~')) {
-    const expandedPath = expandPath(input.file_path);
-    onDebug?.(`Expanding path: ${input.file_path} → ${expandedPath}`);
-    updatedInput = { ...input, file_path: expandedPath };
+  // Expand file_path if present. Relative paths resolve against the selected
+  // session working directory so the input folder badge controls file tools.
+  if (typeof input.file_path === 'string') {
+    const expandedPath = resolveToolPath(input.file_path, workingDirectory);
+    if (expandedPath !== input.file_path) {
+      onDebug?.(`Resolving path: ${input.file_path} → ${expandedPath}`);
+      updatedInput = { ...input, file_path: expandedPath };
+    }
   }
 
-  // Expand notebook_path if present and starts with ~
-  if (typeof input.notebook_path === 'string' && input.notebook_path.startsWith('~')) {
-    const expandedPath = expandPath(input.notebook_path);
-    onDebug?.(`Expanding notebook path: ${input.notebook_path} → ${expandedPath}`);
-    updatedInput = { ...(updatedInput || input), notebook_path: expandedPath };
+  // Expand notebook_path if present.
+  if (typeof input.notebook_path === 'string') {
+    const expandedPath = resolveToolPath(input.notebook_path, workingDirectory);
+    if (expandedPath !== input.notebook_path) {
+      onDebug?.(`Resolving notebook path: ${input.notebook_path} → ${expandedPath}`);
+      updatedInput = { ...(updatedInput || input), notebook_path: expandedPath };
+    }
   }
 
-  // Expand path if present and starts with ~ (for Glob, Grep)
-  if (typeof input.path === 'string' && input.path.startsWith('~')) {
-    const expandedPath = expandPath(input.path);
-    onDebug?.(`Expanding search path: ${input.path} → ${expandedPath}`);
-    updatedInput = { ...(updatedInput || input), path: expandedPath };
+  // Expand path if present (for Glob, Grep).
+  if (typeof input.path === 'string') {
+    const expandedPath = resolveToolPath(input.path, workingDirectory);
+    if (expandedPath !== input.path) {
+      onDebug?.(`Resolving search path: ${input.path} → ${expandedPath}`);
+      updatedInput = { ...(updatedInput || input), path: expandedPath };
+    }
   }
 
   return {
     modified: updatedInput !== null,
     input: updatedInput || input,
   };
+}
+
+function resolveToolPath(pathValue: string, workingDirectory?: string): string {
+  if (!pathValue) return pathValue;
+  if (pathValue.startsWith('~')) return expandPath(pathValue);
+  if (isAbsolute(pathValue)) return pathValue;
+  if (!workingDirectory) return pathValue;
+  return resolve(workingDirectory, pathValue);
 }
 
 // ============================================================
@@ -798,7 +814,7 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
   let wasModified = false;
 
   // 5a. Path expansion
-  const pathResult = expandToolPaths(toolName, currentInput, onDebug);
+  const pathResult = expandToolPaths(toolName, currentInput, workingDirectory, onDebug);
   if (pathResult.modified) {
     currentInput = pathResult.input;
     wasModified = true;

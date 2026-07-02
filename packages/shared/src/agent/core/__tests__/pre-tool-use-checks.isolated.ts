@@ -438,6 +438,32 @@ describe('runPreToolUseChecks', () => {
       expect(result.type).toBe('allow');
     });
 
+    it('resolves relative file writes against the selected working directory', () => {
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'Write',
+        input: { file_path: 'drafts/email.md', content: 'hello' },
+        workingDirectory: '/Users/test/Campaign',
+      }));
+
+      expect(result.type).toBe('modify');
+      if (result.type === 'modify') {
+        expect(result.input.file_path).toBe('/Users/test/Campaign/drafts/email.md');
+      }
+    });
+
+    it('resolves relative search paths against the selected working directory', () => {
+      const result = runPreToolUseChecks(createInput({
+        toolName: 'Grep',
+        input: { pattern: 'hook', path: 'docs' },
+        workingDirectory: '/Users/test/Campaign',
+      }));
+
+      expect(result.type).toBe('modify');
+      if (result.type === 'modify') {
+        expect(result.input.path).toBe('/Users/test/Campaign/docs');
+      }
+    });
+
     it('strips _intent and _displayName metadata', () => {
       const result = runPreToolUseChecks(createInput({
         toolName: 'mcp__linear__createIssue',
