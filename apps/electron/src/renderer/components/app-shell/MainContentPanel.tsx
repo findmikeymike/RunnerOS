@@ -62,6 +62,7 @@ import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { ArtistHQHome } from './ArtistHQHome'
 import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
 import { AgendaPage } from './AgendaPage'
+import { AGENDA_LABEL } from './agenda-utils'
 import { CommunityPage } from './CommunityPage'
 import { VaultPage } from './VaultPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
@@ -414,7 +415,7 @@ export function MainContentPanel({
             }
             navigate(routes.view.allSessions(sessionId))
           }}
-          onNewTask={() => navigate(routes.action.newSession({ name: 'New task' }))}
+          onNewTask={() => navigate(routes.action.newSession({ name: 'New task', label: AGENDA_LABEL, status: 'todo' }))}
           networkWorkspaceId={artistHQWorkspace?.id || activeWorkspaceId || ''}
         />
       </Panel>

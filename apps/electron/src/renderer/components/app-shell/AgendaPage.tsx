@@ -31,6 +31,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import { getSessionTitle } from '@/utils/session'
 import type { SessionMeta } from '@/atoms/sessions'
+import { isAgendaSession } from './agenda-utils'
 import {
   ARTIST_NETWORK_CONTEXT_SLUG,
   parseArtistNetworkDocResult,
@@ -168,7 +169,7 @@ export function AgendaPage({ sessions, onOpenSession, onNewTask, networkWorkspac
 
   const visibleSessions = React.useMemo(
     () => sessions
-      .filter((session) => !session.hidden && !session.isArchived)
+      .filter((session) => !session.hidden && !session.isArchived && isAgendaSession(session))
       .map((session) => ({ ...session, ...(sessionOverrides[session.id] ?? {}) })),
     [sessionOverrides, sessions],
   )
