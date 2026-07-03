@@ -103,7 +103,7 @@ import {
   createMemorySidecarReviewer,
   MemorySidecarService,
 } from '../memory/MemorySidecarService'
-import { profileDeepResearchSource } from '@craft-agent/shared/deep-research'
+import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { OutputService } from '../outputs/OutputService'
 import {
   loadAllGlobalWorkflows,
@@ -405,7 +405,7 @@ function formatWorkflowBundleBullet(slug: string, name: string | undefined, desc
 }
 
 function buildWorkflowAgentPrompt(
-  agent: { systemPrompt: string; metadata: { skills?: string[]; sources?: string[]; visualAgent?: boolean } },
+  agent: { systemPrompt: string; metadata: { skills?: string[]; sources?: string[]; optionalSources?: string[]; visualAgent?: boolean } },
   skills: LoadedSkill[],
   sources: LoadedSource[],
   contextDocs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>,
@@ -421,7 +421,10 @@ function buildWorkflowAgentPrompt(
       return skill ? formatWorkflowBundleBullet(slug, skill.metadata.name, skill.metadata.description) : null
     })
     .filter((line): line is string => Boolean(line))
-  const sourceBullets = (agent.metadata.sources ?? [])
+  const sourceBullets = [
+    ...(agent.metadata.sources ?? []),
+    ...(agent.metadata.optionalSources ?? []),
+  ]
     .map((slug) => {
       const source = sourceBySlug.get(slug)
       return source ? formatWorkflowBundleBullet(slug, source.config.name, source.config.tagline) : null
@@ -1207,6 +1210,8 @@ interface ManagedSession {
   customSystemPrompt?: string
   // Saved Agent skills applied implicitly to every turn in this session.
   agentSkillSlugs?: string[]
+  // Explicit internal session tools this worker can run without ask-mode babysitting.
+  trustedWorkerTools?: string[]
   // System prompt preset for mini agents ('default' | 'mini')
   systemPromptPreset?: 'default' | 'mini' | string
   // Role/type of the last message (for badge display without loading messages)
@@ -2066,8 +2071,13 @@ export class SessionManager implements ISessionManager {
     if (strict && missingSkillSlugs.length > 0) {
       throw new Error(`Agent "${agentSlug}" references unavailable skills in this workspace: ${missingSkillSlugs.join(', ')}`)
     }
-    const sources = getSourcesBySlugs(ws.rootPath, agent.metadata.sources ?? [])
     const declaredSourceSlugs = agent.metadata.sources ?? []
+    const declaredOptionalSourceSlugs = (agent.metadata.optionalSources ?? [])
+      .filter((slug) => !declaredSourceSlugs.includes(slug))
+    const sources = getSourcesBySlugs(ws.rootPath, [
+      ...declaredSourceSlugs,
+      ...declaredOptionalSourceSlugs,
+    ])
     const sourceBySlug = new Map(sources.map((s) => [s.config.slug, s]))
     const missingSourceSlugs = declaredSourceSlugs.filter((slug) => !sourceBySlug.has(slug))
     const unusableSourceSlugs = declaredSourceSlugs.filter((slug) => {
@@ -2096,6 +2106,7 @@ export class SessionManager implements ISessionManager {
       customSystemPrompt,
       agentSkillSlugs: resolvedSkillSlugs.length > 0 ? resolvedSkillSlugs : undefined,
       enabledSourceSlugs: resolvedSourceSlugs.length > 0 ? resolvedSourceSlugs : undefined,
+      trustedWorkerTools: agent.metadata.trustedWorkerTools?.length ? agent.metadata.trustedWorkerTools : undefined,
       llmConnection: agent.metadata.llmConnection,
       model: agent.metadata.model,
       permissionMode: agent.metadata.permissionMode,
@@ -2121,6 +2132,7 @@ export class SessionManager implements ISessionManager {
           systemPromptChars: customSystemPrompt.length,
           skills: resolvedSkillSlugs,
           sources: resolvedSourceSlugs,
+          trustedWorkerTools: agent.metadata.trustedWorkerTools ?? [],
           contextDocs: contextDocs.map((doc) => ({
             slug: doc.slug,
             name: doc.metadata.name,
@@ -2433,7 +2445,7 @@ export class SessionManager implements ISessionManager {
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
         // Chat nav entry), Social Publisher, TryPost, Hypermotion, Lottie Animation,
-        // Video Editor, promotion helpers, Shopify, Print Agent, and Update System Agent.
+        // Video Editor, promotion helpers, Shopify, Print Agent, Outreach, Industry Hunter, Record Doctor, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
@@ -2451,6 +2463,9 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'print-agent'
             || a.slug === 'branding-agent'
             || a.slug === 'comms-agent'
+            || a.slug === 'outreach-agent'
+            || a.slug === 'industry-hunter'
+            || a.slug === 'record-doctor'
             || a.slug === 'update-system-agent',
         )
         const { ensured } = ensureRequiredAgents(required)
@@ -3646,6 +3661,7 @@ user a clickable link to where the thing now lives.`
       llmConnection: options?.llmConnection,
       customSystemPrompt: options?.customSystemPrompt,
       agentSkillSlugs: options?.agentSkillSlugs,
+      trustedWorkerTools: options?.trustedWorkerTools,
       spawnedFromAgent: options?.spawnedFromAgent,
       launchReceipt,
     })
@@ -3718,6 +3734,7 @@ user a clickable link to where the thing now lives.`
       enabledSourceSlugs: defaultEnabledSourceSlugs,
       customSystemPrompt: options?.customSystemPrompt,
       agentSkillSlugs: options?.agentSkillSlugs,
+      trustedWorkerTools: options?.trustedWorkerTools,
       spawnedFromAgent: options?.spawnedFromAgent,
       launchReceipt,
       branchFromMessageId: validatedBranch?.sourceMessageId,
@@ -3807,6 +3824,18 @@ user a clickable link to where the thing now lives.`
   private async getOrCreateAgent(managed: ManagedSession): Promise<AgentInstance> {
     if (!managed.agent) {
       const end = perf.start('agent.create', { sessionId: managed.id })
+      const agentSlug = managed.spawnedFromAgent?.agentSlug
+      if (agentSlug) {
+        const currentAgent = loadGlobalAgent(agentSlug)
+        const currentTrustedTools = currentAgent?.metadata.trustedWorkerTools?.length
+          ? currentAgent.metadata.trustedWorkerTools
+          : undefined
+        if (JSON.stringify(managed.trustedWorkerTools ?? []) !== JSON.stringify(currentTrustedTools ?? [])) {
+          managed.trustedWorkerTools = currentTrustedTools
+          this.persistSession(managed)
+          sessionLog.info(`Synced trusted worker tools for agent session ${managed.id} from @${agentSlug}`)
+        }
+      }
 
       const workspaceConfig = loadWorkspaceConfig(managed.workspace.rootPath)
       const backendContext = resolveBackendContext({
@@ -3907,6 +3936,7 @@ user a clickable link to where the thing now lives.`
         llmConnection: managed.llmConnection,
         permissionMode: managed.permissionMode,
         previousPermissionMode: managed.previousPermissionMode,
+        trustedWorkerTools: managed.trustedWorkerTools,
       }
 
       const onSdkSessionIdUpdate = (sdkSessionId: string) => {
@@ -4932,6 +4962,8 @@ user a clickable link to where the thing now lives.`
             thinkingLevel: agent.metadata.thinkingLevel,
             skills: agent.metadata.skills ?? [],
             sources: agent.metadata.sources ?? [],
+            optionalSources: agent.metadata.optionalSources ?? [],
+            trustedWorkerTools: agent.metadata.trustedWorkerTools ?? [],
             inputs: agent.metadata.inputs,
             outputs: agent.metadata.outputs,
             tags: agent.metadata.tags ?? [],
@@ -5108,6 +5140,50 @@ user a clickable link to where the thing now lives.`
         },
         cancelWorkflowRunFn: async (runId: string) => {
           return this.workflowRunner.cancel(managed.workspace.id, runId)
+        },
+        startDeepResearchFn: async (input) => {
+          return this.deepResearchRunner.start(managed.workspace.id, input)
+        },
+        listDeepResearchRunsFn: (options) => {
+          let runs = listDeepResearchRuns(managed.workspace.rootPath).map((run) => ({
+            id: run.id,
+            title: run.title,
+            topic: run.topic,
+            state: run.state,
+            planPolicy: run.planPolicy,
+            depth: run.plan.depth,
+            reportFormat: run.plan.reportFormat,
+            outputId: run.outputId,
+            createdAt: run.createdAt,
+            updatedAt: run.updatedAt,
+            completedAt: run.completedAt,
+          }))
+
+          if (options?.state?.trim()) {
+            const wanted = options.state.trim()
+            runs = runs.filter((run) => run.state === wanted)
+          }
+          const total = runs.length
+          const limit = options?.limit && options.limit > 0 ? Math.min(options.limit, 50) : undefined
+          if (limit) runs = runs.slice(0, limit)
+
+          return {
+            total,
+            returned: runs.length,
+            runs,
+          }
+        },
+        getDeepResearchRunFn: (runId: string) => {
+          return readDeepResearchRun(managed.workspace.rootPath, runId)
+        },
+        approveDeepResearchPlanFn: async (runId: string) => {
+          return this.deepResearchRunner.approvePlan(managed.workspace.id, runId)
+        },
+        reviseDeepResearchPlanFn: async (runId: string, feedback: string) => {
+          return this.deepResearchRunner.revisePlan(managed.workspace.id, runId, feedback)
+        },
+        cancelDeepResearchRunFn: async (runId: string) => {
+          return this.deepResearchRunner.cancel(managed.workspace.id, runId)
         },
         resolveLabelsFn: (labels: string[]) => {
           const labelConfig = loadLabelConfig(managed.workspace.rootPath)

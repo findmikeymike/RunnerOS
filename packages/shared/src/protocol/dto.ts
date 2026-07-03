@@ -77,6 +77,7 @@ export interface Session {
   thinkingLevel?: ThinkingLevel
   customSystemPrompt?: string
   agentSkillSlugs?: string[]
+  trustedWorkerTools?: string[]
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
   launchReceipt?: SessionLaunchReceipt
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
@@ -137,6 +138,8 @@ export interface CreateSessionOptions {
   enabledSourceSlugs?: string[]
   /** Saved Agent skills applied implicitly to every turn in this session. */
   agentSkillSlugs?: string[]
+  /** Session tool names preauthorized for this trusted worker session. */
+  trustedWorkerTools?: string[]
   /** Provenance for sessions spawned from a saved Agent. */
   spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
   launchReceipt?: SessionLaunchReceipt

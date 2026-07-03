@@ -355,6 +355,24 @@ export interface SessionToolContext {
   /** Cancel a workflow run by run ID. Injected by backend. */
   cancelWorkflowRun?(runId: string): Promise<unknown>;
 
+  /** Start a deep research run in the current workspace. Injected by backend. */
+  startDeepResearch?(input: import('./handlers/deep-research.ts').StartDeepResearchArgs): Promise<unknown>;
+
+  /** List deep research runs in the current workspace. Injected by backend. */
+  listDeepResearchRuns?(options?: ListDeepResearchRunsOptions): ListDeepResearchRunsResult;
+
+  /** Get a deep research run snapshot by run ID. Injected by backend. */
+  getDeepResearchRun?(runId: string): unknown | null;
+
+  /** Approve a waiting deep research plan. Injected by backend. */
+  approveDeepResearchPlan?(runId: string): Promise<unknown>;
+
+  /** Revise a waiting deep research plan. Injected by backend. */
+  reviseDeepResearchPlan?(runId: string, feedback: string): Promise<unknown>;
+
+  /** Cancel a deep research run by run ID. Injected by backend. */
+  cancelDeepResearchRun?(runId: string): Promise<unknown>;
+
   /** Resolve label display names to IDs against configured labels. Injected by backend. */
   resolveLabels?(labels: string[]): ResolvedLabelsResult;
 
@@ -581,6 +599,8 @@ export interface AgentListItem {
   thinkingLevel?: string;
   skills: string[];
   sources: string[];
+  optionalSources?: string[];
+  trustedWorkerTools?: string[];
   inputs?: string;
   outputs?: string;
   tags: string[];
@@ -672,6 +692,34 @@ export interface ListWorkflowsResult {
   total: number;
   returned: number;
   workflows: WorkflowListItem[];
+}
+
+/** Compact deep research run summary returned by list_deep_research_runs. */
+export interface DeepResearchRunListItem {
+  id: string;
+  title: string;
+  topic: string;
+  state: string;
+  planPolicy: string;
+  depth?: string;
+  reportFormat?: string;
+  outputId?: string;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+}
+
+/** Options for list_deep_research_runs. */
+export interface ListDeepResearchRunsOptions {
+  state?: string;
+  limit?: number;
+}
+
+/** Result from list_deep_research_runs. */
+export interface ListDeepResearchRunsResult {
+  total: number;
+  returned: number;
+  runs: DeepResearchRunListItem[];
 }
 
 // ============================================================

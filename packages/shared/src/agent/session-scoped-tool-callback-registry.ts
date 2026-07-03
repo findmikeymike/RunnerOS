@@ -73,6 +73,22 @@ export interface SessionScopedToolCallbacks {
   getWorkflowRunFn?: (runId: string) => unknown | null;
   /** Cancel workflow run. */
   cancelWorkflowRunFn?: (runId: string) => Promise<unknown>;
+  /** Start a deep research run. */
+  startDeepResearchFn?: (
+    input: import('@craft-agent/session-tools-core').StartDeepResearchArgs,
+  ) => Promise<unknown>;
+  /** List deep research runs in the workspace. */
+  listDeepResearchRunsFn?: (
+    options?: import('@craft-agent/session-tools-core').ListDeepResearchRunsOptions,
+  ) => import('@craft-agent/session-tools-core').ListDeepResearchRunsResult;
+  /** Get deep research run snapshot. */
+  getDeepResearchRunFn?: (runId: string) => unknown | null;
+  /** Approve a waiting deep research plan. */
+  approveDeepResearchPlanFn?: (runId: string) => Promise<unknown>;
+  /** Revise a waiting deep research plan. */
+  reviseDeepResearchPlanFn?: (runId: string, feedback: string) => Promise<unknown>;
+  /** Cancel deep research run. */
+  cancelDeepResearchRunFn?: (runId: string) => Promise<unknown>;
   /** Resolve label display names to IDs. */
   resolveLabelsFn?: (labels: string[]) => import('@craft-agent/session-tools-core').ResolvedLabelsResult;
   /** Resolve a status display name to its ID. */

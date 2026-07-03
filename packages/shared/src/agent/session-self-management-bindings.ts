@@ -127,6 +127,54 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'startDeepResearch', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.startDeepResearchFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'listDeepResearchRuns', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listDeepResearchRunsFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'getDeepResearchRun', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.getDeepResearchRunFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'approveDeepResearchPlan', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.approveDeepResearchPlanFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'reviseDeepResearchPlan', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.reviseDeepResearchPlanFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'cancelDeepResearchRun', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.cancelDeepResearchRunFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'resolveLabels', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.resolveLabelsFn;

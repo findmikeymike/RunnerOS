@@ -72,6 +72,8 @@ describe('session tool filtering helpers', () => {
     expect(allowed.has('browser_tool')).toBe(true);
     expect(allowed.has('script_sandbox')).toBe(true);
     expect(allowed.has('recall_memory')).toBe(true);
+    expect(allowed.has('list_deep_research_runs')).toBe(true);
+    expect(allowed.has('get_deep_research_run')).toBe(true);
 
     expect(blocked.has('source_oauth_trigger')).toBe(true);
     expect(blocked.has('source_credential_prompt')).toBe(true);
@@ -79,6 +81,10 @@ describe('session tool filtering helpers', () => {
     expect(blocked.has('save_memory')).toBe(true);
     expect(blocked.has('update_memory')).toBe(true);
     expect(blocked.has('forget_memory')).toBe(true);
+    expect(blocked.has('start_deep_research')).toBe(true);
+    expect(blocked.has('approve_deep_research_plan')).toBe(true);
+    expect(blocked.has('revise_deep_research_plan')).toBe(true);
+    expect(blocked.has('cancel_deep_research_run')).toBe(true);
   });
 
   it('safe-mode helpers support MCP prefixing', () => {

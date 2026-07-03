@@ -29,7 +29,13 @@ function makeCtx(opts?: {
 
 const VALID_INPUT: CreateAgentToolInput = {
   slug: 'sales-call-prep',
-  metadata: { name: 'Sales Call Prep', description: 'Talking points + objections.', visualAgent: true },
+  metadata: {
+    name: 'Sales Call Prep',
+    description: 'Talking points + objections.',
+    visualAgent: true,
+    sources: ['zero'],
+    optionalSources: ['gmail'],
+  },
   systemPrompt: 'You are a sales call prep specialist.',
 };
 
@@ -84,6 +90,8 @@ describe('handleCreateAgent', () => {
     expect(result.isError).toBe(false);
     expect(captured?.slug).toBe('sales-call-prep');
     expect(captured?.metadata.visualAgent).toBe(true);
+    expect(captured?.metadata.sources).toEqual(['zero']);
+    expect(captured?.metadata.optionalSources).toEqual(['gmail']);
     expect((result.content[0] as any).text).toContain('/agents/agent/sales-call-prep');
   });
 });

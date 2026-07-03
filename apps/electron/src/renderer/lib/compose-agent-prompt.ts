@@ -101,7 +101,10 @@ export function buildAgentBundleFooter(
   sources: LoadedSource[],
 ): string {
   const skillBullets = collectSkillBullets(agent.metadata.skills ?? [], skills)
-  const sourceBullets = collectSourceBullets(agent.metadata.sources ?? [], sources)
+  const sourceBullets = collectSourceBullets([
+    ...(agent.metadata.sources ?? []),
+    ...(agent.metadata.optionalSources ?? []),
+  ], sources)
   if (skillBullets.length === 0 && sourceBullets.length === 0) return ''
 
   const sections: string[] = []

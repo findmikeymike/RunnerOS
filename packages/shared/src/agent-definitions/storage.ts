@@ -129,18 +129,18 @@ function warning(field: keyof AgentMetadata, code: AgentParseWarning['code'], me
 
 function coerceStringArray(
   value: unknown,
-  field: 'skills' | 'sources',
+  field: 'skills' | 'sources' | 'optionalSources' | 'trustedWorkerTools',
   warnings: AgentParseWarning[],
 ): string[] | undefined {
   if (typeof value === 'string') return [value.trim()].filter(Boolean);
   if (value == null) return undefined;
   if (!Array.isArray(value)) {
-    warnings.push(warning(field, `invalid-${field}`, `${field} must be a string or an array of strings.`));
+    warnings.push(warning(field, field === 'optionalSources' ? 'invalid-optional-sources' : field === 'trustedWorkerTools' ? 'invalid-trusted-worker-tools' : `invalid-${field}`, `${field} must be a string or an array of strings.`));
     return undefined;
   }
   const invalidCount = value.filter((entry) => typeof entry !== 'string').length;
   if (invalidCount > 0) {
-    warnings.push(warning(field, `invalid-${field}`, `${field} contains ${invalidCount} non-string entr${invalidCount === 1 ? 'y' : 'ies'} that were ignored.`));
+    warnings.push(warning(field, field === 'optionalSources' ? 'invalid-optional-sources' : field === 'trustedWorkerTools' ? 'invalid-trusted-worker-tools' : `invalid-${field}`, `${field} contains ${invalidCount} non-string entr${invalidCount === 1 ? 'y' : 'ies'} that were ignored.`));
   }
   const cleaned = Array.from(
     new Set(
@@ -251,6 +251,8 @@ export function parseAgentFile(content: string): { metadata: AgentMetadata; syst
     thinkingLevel: coerceThinkingLevel(data.thinkingLevel, warnings),
     skills: coerceStringArray(data.skills, 'skills', warnings),
     sources: coerceStringArray(data.sources, 'sources', warnings),
+    optionalSources: coerceStringArray(data.optionalSources, 'optionalSources', warnings),
+    trustedWorkerTools: coerceStringArray(data.trustedWorkerTools, 'trustedWorkerTools', warnings),
     visualAgent: data.visualAgent === true ? true : undefined,
     greeting: typeof data.greeting === 'string' ? data.greeting.trim() || undefined : undefined,
     inputs: typeof data.inputs === 'string' ? data.inputs.trim() || undefined : undefined,
@@ -423,6 +425,8 @@ export function serializeAgent(metadata: AgentMetadata, systemPrompt: string): s
   if (metadata.thinkingLevel) data.thinkingLevel = metadata.thinkingLevel;
   if (metadata.skills?.length) data.skills = metadata.skills;
   if (metadata.sources?.length) data.sources = metadata.sources;
+  if (metadata.optionalSources?.length) data.optionalSources = metadata.optionalSources;
+  if (metadata.trustedWorkerTools?.length) data.trustedWorkerTools = metadata.trustedWorkerTools;
   if (metadata.visualAgent) data.visualAgent = true;
   if (metadata.greeting) data.greeting = metadata.greeting;
   if (metadata.inputs) data.inputs = metadata.inputs;

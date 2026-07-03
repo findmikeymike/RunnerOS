@@ -643,6 +643,8 @@ export interface PreToolUseInput {
   allSourceSlugs: string[];
   /** Whether the agent supports source activation (has onSourceActivationRequest callback) */
   hasSourceActivation: boolean;
+  /** Session tool names preauthorized for this trusted worker session. */
+  trustedWorkerTools?: string[];
   /** PermissionManager for session-scoped whitelists */
   permissionManager: PermissionManagerLike;
   /** PrerequisiteManager for guide.md checking */
@@ -678,6 +680,24 @@ const BUILT_IN_MCP_SERVERS = new Set(['session', 'runner-docs']);
 
 /** File write tools that require permission in ask mode */
 const FILE_WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit']);
+
+const TRUST_ELIGIBLE_SESSION_TOOLS = new Set([
+  'start_deep_research',
+  'list_deep_research_runs',
+  'get_deep_research_run',
+  'create_output',
+]);
+
+function normalizeTrustedWorkerToolName(toolName: string): string {
+  return toolName.startsWith('mcp__session__') ? toolName.slice('mcp__session__'.length) : toolName;
+}
+
+function isTrustedWorkerTool(toolName: string, trustedWorkerTools?: readonly string[]): boolean {
+  if (!trustedWorkerTools?.length) return false;
+  const normalized = normalizeTrustedWorkerToolName(toolName);
+  if (!TRUST_ELIGIBLE_SESSION_TOOLS.has(normalized)) return false;
+  return trustedWorkerTools.includes(toolName) || trustedWorkerTools.includes(normalized);
+}
 
 /**
  * Centralized PreToolUse pipeline.
@@ -722,6 +742,7 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
     activeSourceSlugs,
     allSourceSlugs,
     hasSourceActivation,
+    trustedWorkerTools,
     permissionManager,
     prerequisiteManager,
     backendMetadata,
@@ -756,10 +777,14 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
     { plansFolderPath, dataFolderPath, permissionsContext }
   );
 
-  if (!modeResult.allowed) {
+  const trustedTool = isTrustedWorkerTool(toolName, trustedWorkerTools);
+
+  if (!modeResult.allowed && !trustedTool) {
     const reasonWithContext = withPermissionModeContext(modeResult.reason, sessionId, effectivePermissionMode);
     onDebug?.(`Permission mode ${effectivePermissionMode}: blocking ${toolName} — ${reasonWithContext}`);
     return { type: 'block', reason: reasonWithContext };
+  } else if (!modeResult.allowed && trustedTool) {
+    onDebug?.(`Trusted worker policy: allowing ${toolName} despite ${effectivePermissionMode} mode.`);
   }
 
   // ============================================================
@@ -867,7 +892,9 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
   // ============================================================
   // 6. ASK MODE PROMPT DECISION
   // ============================================================
-  if (effectivePermissionMode === 'ask') {
+  if (trustedTool) {
+    onDebug?.(`Trusted worker policy: auto-allowing ${toolName}.`);
+  } else if (effectivePermissionMode === 'ask') {
     const promptInfo = shouldPromptInAskMode(
       toolName,
       input, // Use original input for permission decisions (before stripping)

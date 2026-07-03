@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { buildAgentCreateSessionOptions } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
-import type { AgentDefinitionDTO } from '../../shared/types'
+import type { AgentDefinitionDTO, LoadedSource } from '../../shared/types'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 
 function makeAgent(): AgentDefinitionDTO {
@@ -25,6 +25,25 @@ function makeMemory(name: string, expires?: string): MemoryEntry {
     expires,
     body: 'Body.',
   }
+}
+
+function makeSource(slug: string, usable = true): LoadedSource {
+  return {
+    config: {
+      id: `id-${slug}`,
+      name: slug,
+      slug,
+      enabled: true,
+      provider: slug,
+      type: 'api',
+      api: usable ? { baseUrl: 'https://example.com', authType: 'none' } : { baseUrl: 'https://example.com', authType: 'oauth' },
+      isAuthenticated: usable,
+    },
+    guide: null,
+    folderPath: `/tmp/sources/${slug}`,
+    workspaceRootPath: '/tmp/ws',
+    workspaceId: 'ws-1',
+  } as unknown as LoadedSource
 }
 
 describe('buildAgentCreateSessionOptions memory receipts', () => {
@@ -78,5 +97,50 @@ describe('buildAgentCreateSessionOptions memory receipts', () => {
       expect.objectContaining({ slug: 'comms-agent', name: 'Comms Agent', tags: ['comms'] }),
     ])
     expect(options.customSystemPrompt).toContain('Comms Agent')
+  })
+
+  test('launches with optional sources only when they are usable', () => {
+    const agent = {
+      ...makeAgent(),
+      metadata: {
+        name: 'Outreach Agent',
+        description: 'For tests.',
+        sources: ['zero'],
+        optionalSources: ['gmail'],
+      },
+    } as AgentDefinitionDTO
+
+    const disconnected = buildAgentCreateSessionOptions(agent, {
+      skills: [],
+      sources: [makeSource('zero'), makeSource('gmail', false)],
+    })
+    expect(disconnected.enabledSourceSlugs).toEqual(['zero'])
+    expect(disconnected.customSystemPrompt).not.toContain('@gmail')
+
+    const connected = buildAgentCreateSessionOptions(agent, {
+      skills: [],
+      sources: [makeSource('zero'), makeSource('gmail')],
+    })
+    expect(connected.enabledSourceSlugs).toEqual(['zero', 'gmail'])
+    expect(connected.customSystemPrompt).toContain('@gmail')
+  })
+
+  test('passes trusted worker tools into spawned sessions and receipts', () => {
+    const agent = {
+      ...makeAgent(),
+      metadata: {
+        name: 'Industry Hunter',
+        description: 'For tests.',
+        trustedWorkerTools: ['start_deep_research', 'create_output'],
+      },
+    } as AgentDefinitionDTO
+
+    const options = buildAgentCreateSessionOptions(agent, {
+      skills: [],
+      sources: [],
+    })
+
+    expect(options.trustedWorkerTools).toEqual(['start_deep_research', 'create_output'])
+    expect(options.launchReceipt?.injected.trustedWorkerTools).toEqual(['start_deep_research', 'create_output'])
   })
 })

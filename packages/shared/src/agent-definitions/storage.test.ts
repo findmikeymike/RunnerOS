@@ -170,6 +170,21 @@ body
     expect(parsed!.metadata.sources).toEqual(['solo-src'])
   })
 
+  test('handles optional sources separately from required sources', () => {
+    const md = `---
+name: x
+description: y
+sources: zero
+optionalSources:
+  - gmail
+---
+body
+`
+    const parsed = parseAgentFile(md)
+    expect(parsed!.metadata.sources).toEqual(['zero'])
+    expect(parsed!.metadata.optionalSources).toEqual(['gmail'])
+  })
+
   test('returns null on completely malformed YAML rather than throwing', () => {
     const md = `---
 this is not: valid yaml: !!!! 😱
@@ -266,6 +281,8 @@ describe('serializeAgent', () => {
         permissionMode: 'safe',
         skills: ['a', 'b'],
         sources: ['s1'],
+        optionalSources: ['gmail'],
+        trustedWorkerTools: ['start_deep_research'],
         visualAgent: true,
         inputs: 'A topic.',
         outputs: 'A summary.',
@@ -280,6 +297,8 @@ describe('serializeAgent', () => {
     expect(parsed!.metadata.permissionMode).toBe('safe')
     expect(parsed!.metadata.skills).toEqual(['a', 'b'])
     expect(parsed!.metadata.sources).toEqual(['s1'])
+    expect(parsed!.metadata.optionalSources).toEqual(['gmail'])
+    expect(parsed!.metadata.trustedWorkerTools).toEqual(['start_deep_research'])
     expect(parsed!.metadata.visualAgent).toBe(true)
     expect(parsed!.metadata.inputs).toBe('A topic.')
     expect(parsed!.metadata.outputs).toBe('A summary.')
@@ -698,6 +717,82 @@ body
     expect(commsAgent?.systemPrompt).toContain('artist-branding')
     expect(commsAgent?.systemPrompt).toContain('artist-intel-report')
     expect(commsAgent?.systemPrompt).toContain('approval')
+  })
+
+  test('starter library includes the Outreach Agent with Zero and Gmail wiring', () => {
+    const outreachAgent = STARTER_AGENTS.find((agent) => agent.slug === 'outreach-agent')
+
+    expect(outreachAgent).toBeDefined()
+    expect(outreachAgent?.metadata.name).toBe('Outreach Agent')
+    expect(outreachAgent?.metadata.permissionMode).toBe('ask')
+    expect(outreachAgent?.metadata.skills).toContain('zero')
+    expect(outreachAgent?.metadata.skills).toContain('artist-comms-strategist')
+    expect(outreachAgent?.metadata.sources).toContain('zero')
+    expect(outreachAgent?.metadata.sources).not.toContain('gmail')
+    expect(outreachAgent?.metadata.optionalSources).toContain('gmail')
+    expect(outreachAgent?.metadata.tags).toContain('outreach')
+    expect(outreachAgent?.metadata.tags).toContain('linkedin')
+    expect(outreachAgent?.systemPrompt).toContain('Tomba LinkedIn email finder')
+    expect(outreachAgent?.systemPrompt).toContain('https://www.zero.xyz/c/tomba-api-tomba-linkedin-email-finder-1c87396a')
+    expect(outreachAgent?.systemPrompt).toContain('Gmail is optional')
+    expect(outreachAgent?.systemPrompt).toContain('POST /users/me/drafts')
+    expect(outreachAgent?.systemPrompt).toContain('POST /users/me/drafts/send')
+    expect(outreachAgent?.systemPrompt).toContain('copy-paste packet')
+    expect(outreachAgent?.systemPrompt).toContain('opt-out')
+    expect(outreachAgent?.systemPrompt).toContain('explicit approval')
+  })
+
+  test('starter library includes Industry Hunter with outreach-ready research output', () => {
+    const industryHunter = STARTER_AGENTS.find((agent) => agent.slug === 'industry-hunter')
+
+    expect(industryHunter).toBeDefined()
+    expect(industryHunter?.metadata.name).toBe('Industry Hunter')
+    expect(industryHunter?.metadata.permissionMode).toBe('safe')
+    expect(industryHunter?.metadata.skills).toContain('artist-industry-hunter')
+    expect(industryHunter?.metadata.trustedWorkerTools).toEqual([
+      'start_deep_research',
+      'list_deep_research_runs',
+      'get_deep_research_run',
+      'create_output',
+    ])
+    expect(industryHunter?.metadata.tags).toContain('industry')
+    expect(industryHunter?.metadata.tags).toContain('anr')
+    expect(industryHunter?.metadata.tags).toContain('outreach')
+    expect(industryHunter?.systemPrompt).toContain('artist-profile')
+    expect(industryHunter?.systemPrompt).toContain('artist-voice')
+    expect(industryHunter?.systemPrompt).toContain('artist-branding')
+    expect(industryHunter?.systemPrompt).toContain('artist-intel-report')
+    expect(industryHunter?.systemPrompt).toContain('start_deep_research')
+    expect(industryHunter?.systemPrompt).toContain('planPolicy: "auto"')
+    expect(industryHunter?.systemPrompt).toContain('planPolicy: "approve"')
+    expect(industryHunter?.systemPrompt).toContain('get_deep_research_run')
+    expect(industryHunter?.systemPrompt).toContain('Industry Hunter Target List')
+    expect(industryHunter?.systemPrompt).toContain('Outreach Agent')
+    expect(industryHunter?.systemPrompt).toContain('not looking for famous CEOs')
+    expect(industryHunter?.systemPrompt).toContain('showInCanvas: true')
+  })
+
+  test('starter library includes Record Doctor with approval-gated producer handoff', () => {
+    const recordDoctor = STARTER_AGENTS.find((agent) => agent.slug === 'record-doctor')
+
+    expect(recordDoctor).toBeDefined()
+    expect(recordDoctor?.metadata.name).toBe('Record Doctor')
+    expect(recordDoctor?.metadata.permissionMode).toBe('ask')
+    expect(recordDoctor?.metadata.skills).toContain('record-doctor-handoff')
+    expect(recordDoctor?.metadata.skills).toContain('artist-comms-strategist')
+    expect(recordDoctor?.metadata.optionalSources).toContain('gmail')
+    expect(recordDoctor?.metadata.tags).toContain('producer')
+    expect(recordDoctor?.metadata.tags).toContain('song-review')
+    expect(recordDoctor?.systemPrompt).toContain('mikeymikemusic@gmail.com')
+    expect(recordDoctor?.systemPrompt).toContain('artist-profile')
+    expect(recordDoctor?.systemPrompt).toContain('artist-voice')
+    expect(recordDoctor?.systemPrompt).toContain('artist-branding')
+    expect(recordDoctor?.systemPrompt).toContain('record-doctor-handoff')
+    expect(recordDoctor?.systemPrompt).toContain('Require explicit current-turn approval')
+    expect(recordDoctor?.systemPrompt).toContain('If Gmail is not connected')
+    expect(recordDoctor?.systemPrompt).toContain('POST /users/me/drafts')
+    expect(recordDoctor?.systemPrompt).toContain('POST /users/me/drafts/send')
+    expect(recordDoctor?.systemPrompt).toContain('Never mention internal app names')
   })
 
   test('starter library includes the Update System Agent as read-only maintenance', () => {

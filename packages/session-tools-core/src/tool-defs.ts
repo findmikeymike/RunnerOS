@@ -65,6 +65,14 @@ import {
   handleCancelWorkflowRun,
 } from './handlers/workflows.ts';
 import {
+  handleStartDeepResearch,
+  handleListDeepResearchRuns,
+  handleGetDeepResearchRun,
+  handleApproveDeepResearchPlan,
+  handleReviseDeepResearchPlan,
+  handleCancelDeepResearchRun,
+} from './handlers/deep-research.ts';
+import {
   handleVideoProjectCreate,
   handleVideoProjectUpdate,
   handleVideoMediaImport,
@@ -277,6 +285,37 @@ export const CancelWorkflowRunSchema = z.object({
   runId: z.string().describe('Workflow run ID to cancel.'),
 });
 
+export const StartDeepResearchSchema = z.object({
+  topic: z.string().min(1).describe('Research topic/objective. Be specific; include what decision the research should support.'),
+  title: z.string().optional().describe('Optional short display title for the run.'),
+  planPolicy: z.enum(['approve', 'auto']).optional().describe('approve creates a plan and waits for approval; auto starts immediately. Defaults to approve.'),
+  sourceSlugs: z.array(z.string()).optional().describe('Optional source slugs to use. If omitted, RunnerOS chooses usable search/browser-capable sources.'),
+  depth: z.enum(['quick', 'standard', 'deep']).optional().describe('Research depth. Defaults to standard.'),
+  reportFormat: z.enum(['brief', 'standard', 'full']).optional().describe('Final report detail level. Defaults to standard.'),
+});
+
+export const ListDeepResearchRunsSchema = z.object({
+  state: z.string().optional().describe('Optional state filter, such as awaiting_plan_approval, running, succeeded, failed, cancelled, or interrupted.'),
+  limit: z.number().int().positive().max(50).optional().describe('Maximum runs to return.'),
+});
+
+export const GetDeepResearchRunSchema = z.object({
+  runId: z.string().describe('Deep research run ID.'),
+});
+
+export const ApproveDeepResearchPlanSchema = z.object({
+  runId: z.string().describe('Deep research run ID waiting for plan approval.'),
+});
+
+export const ReviseDeepResearchPlanSchema = z.object({
+  runId: z.string().describe('Deep research run ID waiting for plan approval.'),
+  feedback: z.string().min(1).describe('Concrete plan revision feedback to append before approval.'),
+});
+
+export const CancelDeepResearchRunSchema = z.object({
+  runId: z.string().describe('Deep research run ID to cancel.'),
+});
+
 const WorkflowTriggerInputSchema = z.object({
   name: z.string().describe('Trigger input name. Use letters, digits, and underscores; do not start with a digit.'),
   type: z.enum(['string', 'number', 'boolean']).describe('Input value type.'),
@@ -372,6 +411,8 @@ export const CreateAgentSchema = z.object({
     thinkingLevel: z.enum(['off', 'low', 'medium', 'high', 'xhigh', 'max']).optional().describe('Reasoning depth. Default to "medium" for most agents.'),
     skills: z.array(z.string()).optional().describe('Skill slugs to bundle.'),
     sources: z.array(z.string()).optional().describe('Source slugs to bundle.'),
+    optionalSources: z.array(z.string()).optional().describe('Source slugs to use when already connected, but never require to launch the agent.'),
+    trustedWorkerTools: z.array(z.string()).optional().describe('Session tool names this trusted worker may run without per-tool babysitting. Use only for bounded internal work such as research runs and outputs; never for external sends/posts.'),
     visualAgent: z.boolean().optional().describe('Set true for agents that should proactively create/pin visual, web, media, or document Outputs in Canvas.'),
     inputs: z.string().optional().describe('One sentence describing expected inputs.'),
     outputs: z.string().optional().describe('One sentence describing produced outputs.'),
@@ -896,6 +937,30 @@ Use this to inspect progress, step outputs, errors, and final state.`,
 
 Use this only when the user asks to stop/cancel a workflow run.`,
 
+  start_deep_research: `Start a deep research run in the current workspace.
+
+Use this when a task needs a real multi-step research loop with selected search/browser/MCP/API sources and a durable report output. Prefer planPolicy="approve" unless the user explicitly wants it to run automatically. The returned run snapshot includes state, plan, source readiness, step status, and outputId once complete.`,
+
+  list_deep_research_runs: `List deep research runs in the current workspace.
+
+Use this to find recent research runs, check whether a relevant report already exists, or locate a run before calling get_deep_research_run.`,
+
+  get_deep_research_run: `Get a persisted deep research run snapshot by run ID.
+
+Use this to inspect plan, progress, step outputs, errors, final state, and outputId.`,
+
+  approve_deep_research_plan: `Approve a deep research run that is waiting for plan approval.
+
+Only call this after the user explicitly approves the plan. Once approved, RunnerOS starts the research steps.`,
+
+  revise_deep_research_plan: `Revise a deep research plan before approval.
+
+Use this only while the run is awaiting plan approval and the user asks for changes to scope, sources, depth, or emphasis.`,
+
+  cancel_deep_research_run: `Cancel a deep research run.
+
+Use this only when the user asks to stop/cancel the run.`,
+
   send_agent_message: `Send a message to another session. The message is delivered with your session ID so the target can reply back.
 
 Use this to coordinate with spawned sessions, send follow-up instructions, or relay information between sessions.
@@ -925,7 +990,7 @@ Use this only after walking the user through the agent-creator interview and get
 
 **Inputs:**
 - \`slug\`: kebab-case (1-64 chars). If unsure, derive from the agent name.
-- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags) and free for you to infer sensibly. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
+- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags) and free for you to infer sensibly. Use \`sources\` for required tools and \`optionalSources\` for tools that should attach only when connected. Use \`trustedWorkerTools\` only for bounded internal tools the worker may run without babysitting; never include email/post/send tools. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
 - \`systemPrompt\`: the agent's identity + operating instructions. Required, non-empty.
 - \`activateInWorkspace\` (default true): activate in this workspace immediately so the user sees it.
 - \`overwrite\` (default false): only set true if the user explicitly asked to replace an existing agent.
@@ -1203,6 +1268,12 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'start_workflow', description: TOOL_DESCRIPTIONS.start_workflow, inputSchema: StartWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleStartWorkflow },
   { name: 'get_workflow_run', description: TOOL_DESCRIPTIONS.get_workflow_run, inputSchema: GetWorkflowRunSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetWorkflowRun },
   { name: 'cancel_workflow_run', description: TOOL_DESCRIPTIONS.cancel_workflow_run, inputSchema: CancelWorkflowRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCancelWorkflowRun },
+  { name: 'start_deep_research', description: TOOL_DESCRIPTIONS.start_deep_research, inputSchema: StartDeepResearchSchema, executionMode: 'registry', safeMode: 'block', handler: handleStartDeepResearch },
+  { name: 'list_deep_research_runs', description: TOOL_DESCRIPTIONS.list_deep_research_runs, inputSchema: ListDeepResearchRunsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListDeepResearchRuns },
+  { name: 'get_deep_research_run', description: TOOL_DESCRIPTIONS.get_deep_research_run, inputSchema: GetDeepResearchRunSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetDeepResearchRun },
+  { name: 'approve_deep_research_plan', description: TOOL_DESCRIPTIONS.approve_deep_research_plan, inputSchema: ApproveDeepResearchPlanSchema, executionMode: 'registry', safeMode: 'block', handler: handleApproveDeepResearchPlan },
+  { name: 'revise_deep_research_plan', description: TOOL_DESCRIPTIONS.revise_deep_research_plan, inputSchema: ReviseDeepResearchPlanSchema, executionMode: 'registry', safeMode: 'block', handler: handleReviseDeepResearchPlan },
+  { name: 'cancel_deep_research_run', description: TOOL_DESCRIPTIONS.cancel_deep_research_run, inputSchema: CancelDeepResearchRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCancelDeepResearchRun },
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
   { name: 'message_agent', description: TOOL_DESCRIPTIONS.message_agent, inputSchema: MessageAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleMessageAgent },

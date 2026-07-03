@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import matter from 'gray-matter';
 import { STARTER_SKILLS } from '../starter-templates.ts';
+import { BUNDLED_STARTER_SKILLS } from '../bundled.generated.ts';
 
 describe('STARTER_SKILLS', () => {
   it('has unique kebab-case slugs', () => {
@@ -98,5 +99,43 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content).toContain('takes_packed.md');
     expect(parsed.content).toContain('edl.json');
     expect(parsed.content).toContain('MIT licensed');
+  });
+});
+
+describe('BUNDLED_STARTER_SKILLS', () => {
+  function getSkillMd(skill: { files: { path: string; content: string }[] }): string {
+    const f = skill.files.find(f => f.path === 'SKILL.md');
+    if (!f) throw new Error('Missing SKILL.md');
+    return f.content;
+  }
+
+  it('includes artist-industry-hunter for the Industry Hunter worker', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'artist-industry-hunter');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('Artist Industry Hunter');
+    expect(parsed.content).toContain('artist-profile');
+    expect(parsed.content).toContain('artist-voice');
+    expect(parsed.content).toContain('artist-branding');
+    expect(parsed.content).toContain('start_deep_research');
+    expect(parsed.content).toContain('planPolicy: "auto"');
+    expect(parsed.content).toContain('planPolicy: "approve"');
+    expect(parsed.content).toContain('get_deep_research_run');
+    expect(parsed.content).toContain('Industry Hunter Target List');
+    expect(parsed.content).toContain('Outreach Agent handoff');
+  });
+
+  it('includes record-doctor-handoff for producer review submissions', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'record-doctor-handoff');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('Record Doctor Handoff');
+    expect(parsed.content).toContain('mikeymikemusic@gmail.com');
+    expect(parsed.content).toContain('Artist HQ context');
+    expect(parsed.content).toContain('Gmail is optional');
+    expect(parsed.content).toContain('explicit current-turn approval');
+    expect(parsed.content).toContain('POST /users/me/drafts');
+    expect(parsed.content).toContain('POST /users/me/drafts/send');
+    expect(parsed.content).not.toContain('Runner');
   });
 });

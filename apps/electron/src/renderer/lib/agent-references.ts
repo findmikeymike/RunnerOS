@@ -26,6 +26,7 @@ export interface AgentReferenceResolution {
   /** Slugs that match an existing skill or source — safe to pass through. */
   resolvedSkills: string[]
   resolvedSources: string[]
+  resolvedOptionalSources: string[]
   /** Slugs the agent declares but that don't exist in this workspace. */
   missingSkills: string[]
   missingSources: string[]
@@ -38,10 +39,12 @@ export function resolveAgentReferences(
 ): AgentReferenceResolution {
   const skillSlugs = new Set(skills.map((s) => s.slug))
   // LoadedSource carries the slug on its nested config, not at the top level.
-  const sourceSlugs = new Set(sources.map((s) => s.config.slug))
+  const sourceBySlug = new Map(sources.map((s) => [s.config.slug, s]))
+  const sourceSlugs = new Set(sourceBySlug.keys())
 
   const declaredSkills = agent.metadata.skills ?? []
   const declaredSources = agent.metadata.sources ?? []
+  const declaredOptionalSources = agent.metadata.optionalSources ?? []
   const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
 
   const resolvedSkills: string[] = []
@@ -58,13 +61,27 @@ export function resolveAgentReferences(
     if (sourceSlugs.has(slug)) resolvedSources.push(slug)
     else missingSources.push(slug)
   }
+  const requiredSourceSet = new Set(declaredSources)
+  const resolvedOptionalSources = declaredOptionalSources.filter((slug) => {
+    if (requiredSourceSet.has(slug)) return false
+    const source = sourceBySlug.get(slug)
+    return source ? isRendererSourceUsable(source) : false
+  })
 
   return {
     resolvedSkills,
     resolvedSources,
+    resolvedOptionalSources,
     missingSkills,
     missingSources,
   }
+}
+
+function isRendererSourceUsable(source: LoadedSource): boolean {
+  if (!source.config.enabled) return false
+  const authType = source.config.mcp?.authType || source.config.api?.authType
+  if (authType === 'none' || authType === undefined) return true
+  return source.config.isAuthenticated === true
 }
 
 /** Convenience flag: any references unresolvable on the current machine? */

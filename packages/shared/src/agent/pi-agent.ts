@@ -1127,6 +1127,7 @@ export class PiAgent extends BaseAgent {
       activeSourceSlugs: Array.from(this.sourceManager.getActiveSlugs()),
       allSourceSlugs: this.sourceManager.getAllSources().map(s => s.config.slug),
       hasSourceActivation: !!this.onSourceActivationRequest,
+      trustedWorkerTools: this.config.session?.trustedWorkerTools,
       permissionManager: this.permissionManager,
       prerequisiteManager: this.prerequisiteManager,
       onDebug: (msg) => this.debug(`PreToolUse(sessionId=${sessionId}): ${msg}`),

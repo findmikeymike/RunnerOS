@@ -91,6 +91,23 @@ export type {
   CancelWorkflowRunArgs,
 } from './workflows.ts';
 
+export {
+  handleStartDeepResearch,
+  handleListDeepResearchRuns,
+  handleGetDeepResearchRun,
+  handleApproveDeepResearchPlan,
+  handleReviseDeepResearchPlan,
+  handleCancelDeepResearchRun,
+} from './deep-research.ts';
+export type {
+  StartDeepResearchArgs,
+  ListDeepResearchRunsArgs,
+  GetDeepResearchRunArgs,
+  ApproveDeepResearchPlanArgs,
+  ReviseDeepResearchPlanArgs,
+  CancelDeepResearchRunArgs,
+} from './deep-research.ts';
+
 // Create Agent (agent-creator skill)
 export { handleCreateAgent } from './create-agent.ts';
 export type {

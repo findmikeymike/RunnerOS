@@ -2,7 +2,16 @@
  * Regression tests for metadata-driven session tool safe-mode classification.
  */
 import { describe, it, expect } from 'bun:test';
-import { shouldAllowToolInMode } from '../../agent/mode-manager.ts';
+import { setPermissionMode, shouldAllowToolInMode } from '../../agent/mode-manager.ts';
+import { runPreToolUseChecks, type PermissionManagerLike } from '../core/pre-tool-use.ts';
+
+const permissionManager: PermissionManagerLike = {
+  isCommandWhitelisted: () => false,
+  isDangerousCommand: () => false,
+  getBaseCommand: (command) => command.split(/\s+/)[0] ?? command,
+  extractDomainFromNetworkCommand: () => null,
+  isDomainWhitelisted: () => false,
+};
 
 describe('session tool safe-mode classification', () => {
   it('allows read-only session tools in safe mode', () => {
@@ -34,5 +43,71 @@ describe('session tool safe-mode classification', () => {
         expect(result.reason).toContain('Session configuration changes are blocked in');
       }
     }
+  });
+
+  it('allows trusted worker session tools in safe mode without broadening global safe mode', () => {
+    const globallyBlocked = shouldAllowToolInMode('mcp__session__start_deep_research', {}, 'safe');
+    expect(globallyBlocked.allowed).toBe(false);
+    setPermissionMode('trusted-industry-hunter', 'safe');
+
+    const trusted = runPreToolUseChecks({
+      toolName: 'mcp__session__start_deep_research',
+      input: { topic: 'Find relevant A&Rs', planPolicy: 'auto' },
+      sessionId: 'trusted-industry-hunter',
+      permissionMode: 'safe',
+      workspaceRootPath: '/tmp/ws',
+      workspaceId: 'ws',
+      activeSourceSlugs: [],
+      allSourceSlugs: [],
+      hasSourceActivation: false,
+      trustedWorkerTools: ['start_deep_research', 'create_output'],
+      permissionManager,
+    });
+    expect(trusted.type).toBe('allow');
+
+    const untrustedSend = runPreToolUseChecks({
+      toolName: 'mcp__session__send_agent_message',
+      input: { sessionId: 'target', message: 'Go do this.' },
+      sessionId: 'trusted-industry-hunter',
+      permissionMode: 'safe',
+      workspaceRootPath: '/tmp/ws',
+      workspaceId: 'ws',
+      activeSourceSlugs: [],
+      allSourceSlugs: [],
+      hasSourceActivation: false,
+      trustedWorkerTools: ['start_deep_research', 'create_output'],
+      permissionManager,
+    });
+    expect(untrustedSend.type).toBe('block');
+
+    const explicitlyTrustedSend = runPreToolUseChecks({
+      toolName: 'mcp__session__send_agent_message',
+      input: { sessionId: 'target', message: 'Go do this.' },
+      sessionId: 'trusted-industry-hunter',
+      permissionMode: 'safe',
+      workspaceRootPath: '/tmp/ws',
+      workspaceId: 'ws',
+      activeSourceSlugs: [],
+      allSourceSlugs: [],
+      hasSourceActivation: false,
+      trustedWorkerTools: ['send_agent_message'],
+      permissionManager,
+    });
+    expect(explicitlyTrustedSend.type).toBe('block');
+
+    const explicitlyTrustedApproval = runPreToolUseChecks({
+      toolName: 'mcp__session__approve_deep_research_plan',
+      input: { runId: 'run_123' },
+      sessionId: 'trusted-industry-hunter',
+      permissionMode: 'safe',
+      workspaceRootPath: '/tmp/ws',
+      workspaceId: 'ws',
+      activeSourceSlugs: [],
+      allSourceSlugs: [],
+      hasSourceActivation: false,
+      trustedWorkerTools: ['approve_deep_research_plan'],
+      permissionManager,
+    });
+    expect(explicitlyTrustedApproval.type).toBe('block');
   });
 });

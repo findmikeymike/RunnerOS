@@ -185,6 +185,7 @@ export async function createSession(
     llmConnection?: string;
     customSystemPrompt?: string;
     agentSkillSlugs?: string[];
+    trustedWorkerTools?: string[];
     spawnedFromAgent?: SessionConfig['spawnedFromAgent'];
     launchReceipt?: SessionConfig['launchReceipt'];
     hidden?: boolean;
@@ -220,6 +221,7 @@ export async function createSession(
     llmConnection: options?.llmConnection,
     customSystemPrompt: options?.customSystemPrompt,
     agentSkillSlugs: options?.agentSkillSlugs,
+    trustedWorkerTools: options?.trustedWorkerTools,
     spawnedFromAgent: options?.spawnedFromAgent,
     launchReceipt: options?.launchReceipt,
     hidden: options?.hidden,

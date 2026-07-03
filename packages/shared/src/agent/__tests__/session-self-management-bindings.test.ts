@@ -182,6 +182,46 @@ describe('attachSessionSelfManagementBindings', () => {
     expect(results[0]!.name).toBe('preferred-style');
   });
 
+  it('deep research callbacks resolve through the lazy session callback registry', async () => {
+    const ctx = createBaseContext(sessionId);
+    attachSessionSelfManagementBindings(ctx, sessionId);
+
+    expect(ctx.startDeepResearch).toBeUndefined();
+    expect(ctx.listDeepResearchRuns).toBeUndefined();
+    expect(ctx.getDeepResearchRun).toBeUndefined();
+    expect(ctx.approveDeepResearchPlan).toBeUndefined();
+    expect(ctx.reviseDeepResearchPlan).toBeUndefined();
+    expect(ctx.cancelDeepResearchRun).toBeUndefined();
+
+    registerSessionScopedToolCallbacks(sessionId, {
+      startDeepResearchFn: async (input) => ({ id: 'run-1', topic: input.topic, state: 'awaiting_plan_approval' }),
+      listDeepResearchRunsFn: () => ({
+        total: 1,
+        returned: 1,
+        runs: [{
+          id: 'run-1',
+          title: 'Industry hunt',
+          topic: 'Find A&Rs',
+          state: 'succeeded',
+          planPolicy: 'approve',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }],
+      }),
+      getDeepResearchRunFn: (runId) => ({ id: runId, state: 'succeeded' }),
+      approveDeepResearchPlanFn: async (runId) => ({ id: runId, state: 'running' }),
+      reviseDeepResearchPlanFn: async (runId, feedback) => ({ id: runId, feedback }),
+      cancelDeepResearchRunFn: async (runId) => ({ id: runId, state: 'cancelled' }),
+    });
+
+    await expect(ctx.startDeepResearch!({ topic: 'Find A&Rs' })).resolves.toMatchObject({ id: 'run-1' });
+    expect(ctx.listDeepResearchRuns!().runs[0]!.id).toBe('run-1');
+    expect(ctx.getDeepResearchRun!('run-1')).toEqual({ id: 'run-1', state: 'succeeded' });
+    await expect(ctx.approveDeepResearchPlan!('run-1')).resolves.toMatchObject({ state: 'running' });
+    await expect(ctx.reviseDeepResearchPlan!('run-1', 'Focus indie labels')).resolves.toMatchObject({ feedback: 'Focus indie labels' });
+    await expect(ctx.cancelDeepResearchRun!('run-1')).resolves.toMatchObject({ state: 'cancelled' });
+  });
+
   it('callback replacement is visible without recreating the context', () => {
     const ctx = createBaseContext(sessionId);
     attachSessionSelfManagementBindings(ctx, sessionId);

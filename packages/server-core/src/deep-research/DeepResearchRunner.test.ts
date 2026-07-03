@@ -63,9 +63,10 @@ describe('DeepResearchRunner', () => {
     })
 
     await waitFor(() => events.some((event) => event.type === 'run.completed'))
-    const completed = [...events].reverse().find((event): event is Extract<DeepResearchRunnerEvent, { type: 'run.completed' }> => (
-      event.type === 'run.completed'
-    ))?.run as DeepResearchRunSnapshot | undefined
+    const completedEvent = [...events].reverse().find((event) => event.type === 'run.completed')
+    const completed = completedEvent && 'run' in completedEvent
+      ? completedEvent.run as DeepResearchRunSnapshot
+      : undefined
 
     expect(started.state).toBe('running')
     expect(completed?.state).toBe('succeeded')

@@ -29,12 +29,18 @@ export function buildAgentCreateSessionOptions(
   },
 ): CreateSessionOptions {
   let skillSlugs = agent.metadata.skills ?? []
-  let sourceSlugs = agent.metadata.sources ?? []
+  let sourceSlugs = [
+    ...(agent.metadata.sources ?? []),
+    ...(agent.metadata.optionalSources ?? []),
+  ]
+  let promptSources = context?.sources ?? []
 
   if (context) {
     const resolution = resolveAgentReferences(agent, context.skills, context.sources)
     skillSlugs = resolution.resolvedSkills
-    sourceSlugs = resolution.resolvedSources
+    sourceSlugs = [...resolution.resolvedSources, ...resolution.resolvedOptionalSources]
+    const includedSourceSlugs = new Set(sourceSlugs)
+    promptSources = context.sources.filter((source) => includedSourceSlugs.has(source.config.slug))
   }
 
   // Compose the prompt: persona body + workspace context + bundle footer.
@@ -43,7 +49,7 @@ export function buildAgentCreateSessionOptions(
     ? composeAgentSystemPrompt(
         agent,
         context.skills,
-        context.sources,
+        promptSources,
         context.contextDocs ?? [],
         (context.agentCatalog ?? []).map((a) => ({
           slug: a.slug,
@@ -67,6 +73,7 @@ export function buildAgentCreateSessionOptions(
     customSystemPrompt: composedPrompt || undefined,
     agentSkillSlugs: skillSlugs.length ? skillSlugs : undefined,
     enabledSourceSlugs: sourceSlugs.length ? sourceSlugs : undefined,
+    trustedWorkerTools: agent.metadata.trustedWorkerTools?.length ? agent.metadata.trustedWorkerTools : undefined,
     llmConnection: agent.metadata.llmConnection,
     model: agent.metadata.model,
     permissionMode: agent.metadata.permissionMode,
@@ -98,6 +105,7 @@ export function buildAgentCreateSessionOptions(
         systemPromptChars: composedPrompt.length,
         skills: skillSlugs,
         sources: sourceSlugs,
+        trustedWorkerTools: agent.metadata.trustedWorkerTools ?? [],
         contextDocs: (context?.contextDocs ?? []).map((doc) => ({
           slug: doc.slug,
           name: doc.metadata.name,

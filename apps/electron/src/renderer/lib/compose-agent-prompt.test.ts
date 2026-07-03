@@ -132,6 +132,24 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).not.toContain('You have these skills bundled')
   })
 
+  test('appends resolved optional sources to the source footer', () => {
+    const agent = makeAgent({
+      metadata: {
+        name: 'X', description: 'Y',
+        sources: ['zero'],
+        optionalSources: ['gmail'],
+      },
+    })
+    const sources = [
+      makeSource('zero', 'Zero', 'Paid capability runner.'),
+      makeSource('gmail', 'Gmail', 'Draft and send email.'),
+    ]
+    const result = composeAgentSystemPrompt(agent, [], sources)
+
+    expect(result).toContain('@zero')
+    expect(result).toContain('@gmail')
+  })
+
   test('appends both sections when both are bundled', () => {
     const agent = makeAgent({
       metadata: {

@@ -10,6 +10,8 @@ export interface CreateAgentToolMetadata {
   thinkingLevel?: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   skills?: string[];
   sources?: string[];
+  optionalSources?: string[];
+  trustedWorkerTools?: string[];
   visualAgent?: boolean;
   inputs?: string;
   outputs?: string;

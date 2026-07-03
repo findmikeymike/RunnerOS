@@ -34,7 +34,7 @@ export const SESSION_PERSISTENT_FIELDS = [
   'lastReadMessageId', 'hasUnread',
   // Config
   'enabledSourceSlugs', 'permissionMode', 'previousPermissionMode', 'workingDirectory',
-  'customSystemPrompt', 'agentSkillSlugs',
+  'customSystemPrompt', 'agentSkillSlugs', 'trustedWorkerTools',
   // Model/Connection
   'model', 'llmConnection', 'connectionLocked', 'thinkingLevel',
   // Sharing
@@ -128,6 +128,7 @@ export interface SessionLaunchReceipt {
     systemPromptChars?: number;
     skills: string[];
     sources: string[];
+    trustedWorkerTools?: string[];
     contextDocs: Array<{ slug: string; name: string }>;
     agentCatalog?: Array<{
       slug: string;
@@ -215,6 +216,8 @@ export interface SessionConfig {
   customSystemPrompt?: string;
   /** Saved Agent skills applied implicitly to every turn in this session. */
   agentSkillSlugs?: string[];
+  /** Session tool names preauthorized for this trusted worker session. */
+  trustedWorkerTools?: string[];
   /**
    * Pending plan execution state - tracks "Accept & Compact" flow.
    * When set, indicates a plan needs to be executed after compaction completes.
@@ -343,6 +346,8 @@ export interface SessionHeader {
   customSystemPrompt?: string;
   /** Saved Agent skills applied implicitly to every turn in this session. */
   agentSkillSlugs?: string[];
+  /** Session tool names preauthorized for this trusted worker session. */
+  trustedWorkerTools?: string[];
   /**
    * Pending plan execution state - tracks "Accept & Compact" flow.
    * When set, indicates a plan needs to be executed after compaction completes.

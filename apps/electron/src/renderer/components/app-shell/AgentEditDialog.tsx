@@ -77,6 +77,7 @@ interface FormState {
   visualAgent: boolean
   skills: string[]
   sources: string[]
+  optionalSources: string[]
   inputs: string
   outputs: string
   tagsCsv: string
@@ -233,6 +234,7 @@ export function AgentEditDialog({ open, onOpenChange, agent, workspaceId }: Agen
       visualAgent: form.visualAgent || undefined,
       skills: form.skills.length > 0 ? form.skills : undefined,
       sources: form.sources.length > 0 ? form.sources : undefined,
+      optionalSources: form.optionalSources.length > 0 ? form.optionalSources : undefined,
       greeting: form.greeting.trim() || undefined,
       inputs: form.inputs.trim() || undefined,
       outputs: form.outputs.trim() || undefined,
@@ -496,6 +498,7 @@ function buildInitialState(agent: AgentDefinitionDTO | undefined): FormState {
       visualAgent: false,
       skills: [],
       sources: [],
+      optionalSources: [],
       inputs: '',
       outputs: '',
       tagsCsv: '',
@@ -515,6 +518,7 @@ function buildInitialState(agent: AgentDefinitionDTO | undefined): FormState {
     visualAgent: agent.metadata.visualAgent === true,
     skills: agent.metadata.skills ?? [],
     sources: agent.metadata.sources ?? [],
+    optionalSources: agent.metadata.optionalSources ?? [],
     inputs: agent.metadata.inputs ?? '',
     outputs: agent.metadata.outputs ?? '',
     tagsCsv: (agent.metadata.tags ?? []).join(', '),

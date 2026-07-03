@@ -44,6 +44,10 @@ export interface AgentMetadata {
   skills?: string[];
   /** Source slugs auto-activated when this agent runs. Validated at run time. */
   sources?: string[];
+  /** Source slugs used when already connected, but never required to launch the agent. */
+  optionalSources?: string[];
+  /** Session tool names this trusted worker may run without per-tool babysitting. */
+  trustedWorkerTools?: string[];
   /** When true, runtime prompts encourage proactive Canvas use for visual artifacts. */
   visualAgent?: boolean;
   /**
@@ -93,6 +97,8 @@ export type AgentParseWarningCode =
   | 'invalid-thinking-level'
   | 'invalid-skills'
   | 'invalid-sources'
+  | 'invalid-optional-sources'
+  | 'invalid-trusted-worker-tools'
   | 'invalid-tags';
 
 export interface AgentParseWarning {

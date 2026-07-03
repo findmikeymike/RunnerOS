@@ -42,7 +42,8 @@ Use this skill when the user wants to **create a new agent**.
 A complete AGENT.md saved at \`~/.agents/agents/<slug>/\`. Mandatory fields:
 \`name\`, \`description\`, \`systemPrompt\`. Strongly preferred fields:
 \`avatar\`, \`inputs\`, \`outputs\`, \`tags\`, \`permissionMode\`, \`thinkingLevel\`.
-Optional: \`skills\`, \`sources\`, \`model\`, \`llmConnection\`, \`greeting\`.
+Optional: \`skills\`, \`sources\`, \`optionalSources\`, \`trustedWorkerTools\`,
+\`model\`, \`llmConnection\`, \`greeting\`.
 
 ## Minimum interview
 
@@ -62,6 +63,7 @@ Most fields you can infer:
 - **Avatar** — pick a single emoji that matches the job. Don't ask.
 - **Permission mode** — default to \`ask\`. Use \`safe\` only for read-only/research roles. Never default to \`allow-all\`; only set it if the user explicitly opts in and understands the risk.
 - **Thinking level** — \`medium\` for most agents; \`high\` for research/critique/planning; \`low\` only when latency matters.
+- **Trusted worker tools** — only set \`trustedWorkerTools\` for safe internal RunnerOS work the user should not have to babysit, like starting/checking deep research and creating an output doc. Never use it for email, posting, publishing, auth/account connection, spend, delete, send, or external side effects. If the agent needs autonomous research, use only these by default: \`start_deep_research\`, \`list_deep_research_runs\`, \`get_deep_research_run\`, \`create_output\`. Do not include \`approve_deep_research_plan\`, \`revise_deep_research_plan\`, or \`cancel_deep_research_run\`; those stay human-gated.
 - **Tags** — pull 2–4 from the description. Use lowercase, hyphenated.
 
 ## System prompt
@@ -86,6 +88,8 @@ Don't bundle anything by default. Suggest bundles only when obvious:
 - A research-style agent → suggest the user add their web-search tool / source.
 - A coder agent → suggest the project's MCP server.
 - A writer → suggest a "voice and style" workspace context doc instead.
+- Use \`sources\` for required connections that must be present to do the core job.
+- Use \`optionalSources\` for nice-to-have integrations that should attach only when already connected.
 
 If the user hasn't activated a relevant skill or source, mention it but don't add a slug that won't resolve.
 
