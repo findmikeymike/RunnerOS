@@ -16,7 +16,11 @@ const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
 const HYPERMOTION_SLUG = 'hypermotion';
 const LOTTIE_SLUG = 'lottie';
 const VIDEO_STUDIO_SLUG = 'video-studio';
+const RAW_VIDEO_EDITOR_SLUG = 'raw-video-editor';
 const GOOGLE_ADS_SLUG = 'google-ads';
+const GOOGLE_CALENDAR_SLUG = 'google-calendar';
+const GMAIL_SLUG = 'gmail';
+const GOOGLE_DRIVE_SLUG = 'google-drive';
 const META_ADS_SLUG = 'meta-ads';
 const NOTEBOOKLM_SLUG = 'notebooklm';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
@@ -159,6 +163,21 @@ function getVideoStudioPath(): string {
   );
 }
 
+function getRawVideoEditorPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'raw-video-editor') : '',
+      join(appRoot, 'tools', 'raw-video-editor'),
+      join(REPO_ROOT, 'tools', 'raw-video-editor'),
+      join(process.cwd(), 'tools', 'raw-video-editor'),
+    ],
+    join('tools', 'raw-video-editor')
+  );
+}
+
 function getGoogleAdsPath(): string {
   const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
   const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
@@ -275,7 +294,11 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getHypermotionSource(workspaceId, workspaceRootPath),
     getLottieSource(workspaceId, workspaceRootPath),
     getVideoStudioSource(workspaceId, workspaceRootPath),
+    getRawVideoEditorSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
+    getGoogleCalendarSource(workspaceId, workspaceRootPath),
+    getGmailSource(workspaceId, workspaceRootPath),
+    getGoogleDriveSource(workspaceId, workspaceRootPath),
     getMetaAdsSource(workspaceId, workspaceRootPath),
     getNotebookLmSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
@@ -590,6 +613,189 @@ export function getVideoStudioSource(workspaceId: string, workspaceRootPath: str
         '8. `node bin/video-studio.mjs export` can render video, image, audio, and text clips. SVG/Lottie/HTML clips fail loudly until the fuller renderer lands.',
         '',
         'Do not use Computer Use to click a video editor UI unless the user explicitly asks. The project JSON is the source of truth.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
+ * Built-in source for deterministic raw footage editing.
+ */
+export function getRawVideoEditorSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getRawVideoEditorPath();
+  const config: FolderSourceConfig = {
+    id: 'builtin-raw-video-editor',
+    name: 'Raw Video Editor',
+    slug: RAW_VIDEO_EDITOR_SLUG,
+    enabled: true,
+    provider: 'runner-raw-video-editor',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Bundled local CLI for editing existing footage into MP4 cuts.',
+    icon: '🎞️',
+    isAuthenticated: true,
+    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
+    connectionError: existsSync(toolPath) ? undefined : 'Bundled Raw Video Editor tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Raw Video Editor',
+        '',
+        'Use this source for editing existing raw footage into rendered MP4 cuts. Do not use it for AI-generated video production.',
+        '',
+        'Workflow:',
+        '1. Run `node bin/raw-video-editor.mjs doctor --json` to verify FFmpeg readiness.',
+        '2. Run `node bin/raw-video-editor.mjs inspect <footage-dir> --json` to write `edit/inventory.json` and `edit/takes_packed.md`.',
+        '3. Run `node bin/raw-video-editor.mjs transcribe <footage-dir> --model base --json` when speech-accurate cuts matter.',
+        '4. Run `node bin/raw-video-editor.mjs plan <footage-dir> --max-duration 45 --aspect 9:16 --json` to write `edit/edl.json`.',
+        '5. Run `node bin/raw-video-editor.mjs render <footage-dir> --out <footage-dir>/edit/preview.mp4 --json` to render a preview.',
+        '6. Review `edit/render-report.json` before claiming the edit is done.',
+        '',
+        'The tool preserves source media. All generated files live under `<footage-dir>/edit/`.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+export function getGoogleCalendarSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-google-calendar',
+    name: 'Google Calendar',
+    slug: GOOGLE_CALENDAR_SLUG,
+    enabled: true,
+    provider: 'google',
+    type: 'api',
+    api: {
+      baseUrl: 'https://calendar.googleapis.com/calendar/v3',
+      authType: 'oauth',
+      googleService: 'calendar',
+      googleScopes: [
+        'https://www.googleapis.com/auth/calendar.events',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+    },
+    tagline: 'Sync Artist HQ dates, deadlines, meetings, releases, and reminders to Google Calendar.',
+    icon: '📅',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Google Calendar',
+        '',
+        'Use this source for Artist HQ calendar sync and approval-gated calendar event updates.',
+        '',
+        'Rules:',
+        '- Calendar writes must come from explicit user actions like Sync Google Calendar.',
+        '- Use calendar.events scope, not full calendar access.',
+        '- Store returned Google event IDs back on the Artist Calendar context doc.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+export function getGmailSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-gmail',
+    name: 'Gmail',
+    slug: GMAIL_SLUG,
+    enabled: true,
+    provider: 'google',
+    type: 'api',
+    api: {
+      baseUrl: 'https://gmail.googleapis.com/gmail/v1',
+      authType: 'oauth',
+      googleService: 'gmail',
+      googleScopes: [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.compose',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+    },
+    tagline: 'Draft artist outreach, inspect requested threads, and prepare approval-gated fan or partner emails.',
+    icon: '✉️',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Gmail',
+        '',
+        'Use this source for drafting emails and reading specific user-requested threads.',
+        '',
+        'Rules:',
+        '- Do not send email without explicit approval.',
+        '- Prefer drafts over sends.',
+        '- Do not bulk-read inbox content by default.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+export function getGoogleDriveSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-google-drive',
+    name: 'Google Drive',
+    slug: GOOGLE_DRIVE_SLUG,
+    enabled: true,
+    provider: 'google',
+    type: 'api',
+    api: {
+      baseUrl: 'https://drive.googleapis.com/drive/v3',
+      authType: 'oauth',
+      googleService: 'drive',
+      googleScopes: [
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive.metadata.readonly',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+    },
+    tagline: 'Attach selected Drive files and folders as workspace context without granting full-drive access.',
+    icon: '🗂️',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Google Drive',
+        '',
+        'Use this source for selected Drive file and folder context.',
+        '',
+        'Rules:',
+        '- Prefer file picker / selected files over broad Drive scans.',
+        '- Use drive.file and metadata scopes first.',
+        '- Do not treat Drive as a default raw dump for agents.',
       ].join('\n'),
     },
     isBuiltin: true,
@@ -1195,7 +1401,11 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === HYPERMOTION_SLUG
     || slug === LOTTIE_SLUG
     || slug === VIDEO_STUDIO_SLUG
+    || slug === RAW_VIDEO_EDITOR_SLUG
     || slug === GOOGLE_ADS_SLUG
+    || slug === GOOGLE_CALENDAR_SLUG
+    || slug === GMAIL_SLUG
+    || slug === GOOGLE_DRIVE_SLUG
     || slug === META_ADS_SLUG
     || slug === NOTEBOOKLM_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG

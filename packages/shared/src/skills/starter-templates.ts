@@ -573,6 +573,101 @@ their fit obvious, look up their guide.md content via the existing source-info w
 before recommending. A wrong source bundle is worse than asking.
 `;
 
+const ARTIST_OS_GUIDE_SKILL = `---
+name: Artist OS Guide
+description: "Use when the user asks what Artist OS/Runner is, where something lives, how to use a feature, how to connect accounts, what a worker/workflow/automation/session/context doc means, or says they are confused, stuck, missing something, or unsure what to do next in the app."
+tags: [system, guide, support, onboarding, artist-os]
+metadata:
+  version: 0.1.0
+---
+
+# Artist OS Guide
+
+Use this skill when HNIC is acting as the user's in-app guide.
+
+## What Artist OS is
+
+Artist OS is a command center for an artist/team. It keeps the artist's profile,
+voice, brand, calendar, people, community, assets, workers, workflows,
+automations, and sessions in one workspace so agents can act with context
+instead of asking from scratch every time.
+
+## Mental model
+
+- **HQ**: the artist home base. Use it for global artist memory and always-on
+  operating surfaces: Spotify pulse, Intel pulse, calendar, agenda, profile,
+  voice, branding, people, community, vault, and work.
+- **Campaign workspace**: a focused rollout/project space. Use it for release
+  plans, campaign assets, campaign chat, project-specific sessions, workers,
+  workflows, and automations.
+- **Chat / HNIC**: the front door. Use it when the user does not know which
+  worker, workflow, setting, or page they need.
+- **Sessions**: saved chats/runs. Agent chats and HNIC chats become sessions.
+- **Workers**: specialist agents for a job, like Branding, Comms, Social
+  Publisher, Spotify Analyst, YouTube Research, Shopify, Print, Ads.
+- **Workflows**: repeatable multi-step processes. A workflow can use multiple
+  workers and usually has inputs, steps, and a run history.
+- **Automations**: triggers that run when something happens or on a schedule.
+- **Connections**: account/API setup for Google, Resend, Spotify, YouTube,
+  Shopify, Printify, ads, messaging, and other services.
+- **Context docs**: reusable knowledge cards that agents can read, such as
+  Profile, Voice, Branding, Community, Calendar, and Artist Intel.
+- **Canvas / Outputs**: durable artifacts created by workers: reports, files,
+  previews, decks, images, receipts, and visual outputs.
+
+## Navigation map
+
+- **HQ**: global artist dashboard and pulse cards.
+- **Plan**: Agenda and Calendar.
+- **People**: Network and Community.
+- **Vault**: assets and files.
+- **Work**: Chat/HNIC, Workers, Workflows, Automations, Sessions.
+- **Brain**: artist intel, profile, voice, branding, context docs, memory-like
+  artist knowledge.
+- **Settings**:
+  - Models: AI/model defaults.
+  - Connections: API keys, OAuth, Resend, Google, Spotify, commerce, ads.
+  - Messaging: phone-style channels like WhatsApp/Telegram.
+  - Workspace: folder, working directory, permissions/modes.
+  - App: appearance, input, shortcuts, profile preferences.
+  - Advanced: memory, labels, server/developer settings.
+
+## How to answer users
+
+1. Translate the user's confusion into a location or next action.
+2. Give the shortest path: "Go to X → Y → click Z."
+3. If a connection is missing, send them to **Settings → Connections** or
+   **Settings → Messaging** for phone channels.
+4. If the task belongs to a worker, name the worker and provide a handoff
+   prompt.
+5. If the task repeats, suggest a workflow or automation.
+6. If the issue sounds like a bug, say what should happen, what likely broke,
+   and offer to inspect/fix it.
+
+## Common guidance
+
+- "Where do I connect email?" → Community sending uses Resend in
+  Settings → Connections → Community Email. Gmail/Google account features live
+  under Google/Workspace connections when available.
+- "Where do phone messages connect?" → Settings → Messaging.
+- "Where did my agent chat go?" → Sessions. Agent chats are saved as sessions.
+- "Where do I add fans?" → People → Community.
+- "Where do I send fan emails?" → People → Community, then selected segment,
+  Send With Resend.
+- "Where do I change artist voice?" → Brain/Profile area, Voice page/card.
+- "Where do I create a worker?" → Work → Workers → New worker, or ask HNIC.
+- "Where do I create a workflow?" → Work → Workflows → Manage/New workflow, or
+  ask HNIC to design it.
+- "What should be in HQ vs campaign?" → HQ is global artist operating memory;
+  campaign workspaces are for a specific rollout/project.
+
+## Tone
+
+Be concrete and calm. Do not overwhelm. Use the user's language. Prefer one
+clear path over explaining every option. If the user is frustrated, skip
+apologies and solve the navigation/problem directly.
+`;
+
 const RUNNEROS_SELF_EDIT_SKILL = `---
 name: RunnerOS Self Edit
 description: Guides Concierge when the user wants RunnerOS to inspect, edit, verify, and hot-reload its own app code through a configured local repo path.
@@ -618,12 +713,131 @@ without explicit user intent. If the working tree has unrelated edits, work
 around them and call out any conflict that blocks the fix.
 `;
 
+const RAW_VIDEO_EDITOR_SKILL = `---
+name: raw-video-editor
+description: Edit user-shot raw video footage into polished clips, reels, shorts, interviews, tutorials, talking-head cuts, BTS edits, podcast clips, and social videos. Use when the user provides existing media files or a footage folder and wants transcript-based cutting, filler removal, captions, color/audio cleanup, or final MP4 exports rather than AI-generated video production.
+---
+
+# Raw Video Editor
+
+## Role
+
+Edit existing footage. Do not treat this as a generative video job.
+
+Use this skill for raw phone/camera footage, talking-head clips, interviews, podcasts, BTS/event footage, tutorials, demos, and social cutdowns from longer footage.
+
+Route storyboard-first, AI-generated, or provider-produced video work to Squad or Video Editor Agent instead.
+
+## Legal Note
+
+This workflow is inspired by Browser Use \`video-use\`, which is MIT licensed. If you reuse substantial code from that project, include its MIT copyright/license notice in the shipped bundle. If you only use the workflow idea, write Runner-native code and do not copy their helper implementation.
+
+## Operating Rules
+
+1. Preserve source files. Never overwrite, delete, or destructively modify raw footage.
+2. Put outputs in an \`edit/\` folder next to the source media unless the user specifies another working folder.
+3. Inspect before editing: list files, run \`ffprobe\`, and identify aspect ratio, duration, audio streams, and likely content type.
+4. Transcribe before making speech cuts. Prefer word-level timestamps. Use ElevenLabs Scribe, WhisperX, Whisper, or an available local transcript source.
+5. Build a compact edit surface, usually \`edit/takes_packed.md\`, with phrase-level timestamps grouped by source file.
+6. Ask for strategy confirmation before rendering: target length, platform/aspect, pacing, must-keep moments, must-cut moments, caption style, and grade direction.
+7. Never cut inside a word. Snap cuts to transcript word boundaries when word timestamps exist.
+8. Pad cut edges by roughly 30-200ms to avoid chopped syllables.
+9. Add short audio fades at cut boundaries to avoid pops.
+10. Apply subtitles last so overlays do not cover them.
+11. Self-check preview renders before presenting them: cut boundaries, first/last seconds, caption readability, audio pops, aspect framing, and final duration.
+
+## Workflow
+
+### 1. Inventory
+
+Run:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs doctor --json
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs inspect <footage-dir> --json
+\`\`\`
+
+Create \`edit/\` and write:
+- \`inventory.json\` with source files, durations, codecs, dimensions, audio streams.
+- \`project.md\` with the user request, working assumptions, and session notes.
+
+Use \`ffprobe\` for objective media facts.
+
+### 2. Transcript Pack
+
+Run when speech-accurate cuts matter and local Whisper is available:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs transcribe <footage-dir> --model base --json
+\`\`\`
+
+If speech matters, create:
+- \`edit/transcripts/<source>.json\` for raw transcription output.
+- \`edit/takes_packed.md\` for the working edit view.
+
+The packed transcript should keep filler words and false starts visible because they are editorial signal.
+
+### 3. Strategy
+
+Before editing, give the user a plain-English plan:
+- Intended structure
+- Best takes or moments
+- Cut style and pacing
+- Caption treatment
+- Color/audio cleanup
+- Target runtime and aspect ratio
+
+Wait for confirmation before rendering anything expensive or time-consuming.
+
+### 4. EDL
+
+Run:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs plan <footage-dir> --max-duration <seconds> --aspect 9:16 --json
+\`\`\`
+
+Write \`edit/edl.json\` as the source of truth with \`aspect\`, \`target_duration_s\`, \`segments\`, \`captions\`, and \`grade\`.
+
+### 5. Render
+
+Run:
+
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs render <footage-dir> --out <footage-dir>/edit/preview.mp4 --json
+\`\`\`
+
+Use FFmpeg or Runner Video Studio tools. Prefer simple, reliable renders first:
+- Extract selected segments.
+- Apply light grade/audio cleanup per segment when needed.
+- Concatenate.
+- Add overlays.
+- Burn captions last.
+- Export \`edit/preview.mp4\`, then \`edit/final.mp4\` after approval.
+
+### 6. Verify
+
+Before calling the edit done:
+- Check output duration with \`ffprobe\`.
+- Review every cut boundary when practical.
+- Check first 2s, last 2s, and several middle points.
+- Confirm captions are readable and not hidden.
+- Confirm no audio pops or clipped words.
+- If quality is uncertain, say exactly what needs manual review.
+
+## Output
+
+Return final path, preview/final status, runtime, aspect ratio, what was cut, known limitations, and the next suggested edit pass.
+`;
+
 export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'agent-creator', files: [{ path: 'SKILL.md', content: AGENT_CREATOR_SKILL }] },
   { slug: 'automation-creator', files: [{ path: 'SKILL.md', content: AUTOMATION_CREATOR_SKILL }] },
   { slug: 'workflow-creator', files: [{ path: 'SKILL.md', content: WORKFLOW_CREATOR_SKILL }] },
   { slug: 'source-recipe', files: [{ path: 'SKILL.md', content: SOURCE_RECIPE_SKILL }] },
+  { slug: 'artist-os-guide', files: [{ path: 'SKILL.md', content: ARTIST_OS_GUIDE_SKILL }] },
   { slug: 'runneros-self-edit', files: [{ path: 'SKILL.md', content: RUNNEROS_SELF_EDIT_SKILL }] },
+  { slug: 'raw-video-editor', files: [{ path: 'SKILL.md', content: RAW_VIDEO_EDITOR_SKILL }] },
 ];
 
 export { SYSTEM_GLOBAL_SKILL_SLUGS } from './system.ts';
