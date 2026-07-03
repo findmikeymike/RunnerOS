@@ -443,6 +443,13 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspaceContext.DELETE,
   RPC_CHANNELS.workspaceContext.CHANGED,
 
+  // Google Workspace actions
+  RPC_CHANNELS.googleWorkspace.GET_CALENDAR_STATUS,
+  RPC_CHANNELS.googleWorkspace.SYNC_CALENDAR,
+
+  // Community/email actions on the workspace server
+  RPC_CHANNELS.community.SEND_RESEND_EMAIL,
+
   // memory — global USER.md + per-agent MEMORY.md on the owning server
   RPC_CHANNELS.memory.LIST_AGENT,
   RPC_CHANNELS.memory.LIST_USER,

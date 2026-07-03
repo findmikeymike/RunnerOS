@@ -411,6 +411,16 @@ export const RPC_CHANNELS = {
     /** Push event when a workspace's context docs changed. */
     CHANGED: 'workspaceContext:changed',
   },
+  googleWorkspace: {
+    /** Read Google Calendar credential status for the active workspace. */
+    GET_CALENDAR_STATUS: 'googleWorkspace:getCalendarStatus',
+    /** Sync Artist HQ calendar events to Google Calendar. */
+    SYNC_CALENDAR: 'googleWorkspace:syncCalendar',
+  },
+  community: {
+    /** Send an approval-gated community email through Resend. */
+    SEND_RESEND_EMAIL: 'community:sendResendEmail',
+  },
   missionAssets: {
     GET: 'missionAssets:get',
     PLAN_IMPORT: 'missionAssets:planImport',

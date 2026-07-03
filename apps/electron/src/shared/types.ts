@@ -360,6 +360,21 @@ import type {
   ImportRemoteSessionTransferResult,
 } from '@craft-agent/shared/protocol'
 
+export interface CommunityEmailSendInput {
+  from: string
+  to: string[]
+  subject: string
+  text: string
+  replyTo?: string
+}
+
+export interface CommunityEmailSendResult {
+  ok: boolean
+  id?: string
+  sent?: number
+  error?: string
+}
+
 export interface ElectronAPI {
   // Session management
   getSessions(): Promise<Session[]>
@@ -850,6 +865,9 @@ export interface ElectronAPI {
   }): Promise<ContextDocDTO>
   deleteWorkspaceContextDoc(workspaceId: string, slug: string): Promise<boolean>
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
+  getGoogleCalendarStatus(workspaceId: string): Promise<{ ok: boolean; connected: boolean; error?: string }>
+  syncGoogleCalendar(workspaceId: string): Promise<{ ok: boolean; synced: number; deleted?: number; failed: number; error?: string }>
+  sendCommunityEmailViaResend(input: CommunityEmailSendInput): Promise<CommunityEmailSendResult>
 
   // Mission assets (workspace-local source files mirrored into context)
   getMissionAssetManifest(workspaceId: string): Promise<MissionAssetManifest>
@@ -1106,6 +1124,11 @@ export interface SessionsNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface CampaignNavigationState {
+  navigator: 'campaign'
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Source type filter for sources navigation
  */
@@ -1239,6 +1262,7 @@ export interface VideoStudioNavigationState {
  * Unified navigation state
  */
 export type NavigationState =
+  | CampaignNavigationState
   | SessionsNavigationState
   | SourcesNavigationState
   | SettingsNavigationState
@@ -1258,6 +1282,10 @@ export type NavigationState =
 export const isSessionsNavigation = (
   state: NavigationState
 ): state is SessionsNavigationState => state.navigator === 'sessions'
+
+export const isCampaignNavigation = (
+  state: NavigationState
+): state is CampaignNavigationState => state.navigator === 'campaign'
 
 export const isSourcesNavigation = (
   state: NavigationState
@@ -1322,6 +1350,9 @@ export const DEFAULT_NAVIGATION_STATE: NavigationState = {
 }
 
 export const getNavigationStateKey = (state: NavigationState): string => {
+  if (state.navigator === 'campaign') {
+    return 'campaign'
+  }
   if (state.navigator === 'sources') {
     if (state.details) {
       return `sources/source/${state.details.sourceSlug}`
@@ -1395,6 +1426,8 @@ export const getNavigationStateKey = (state: NavigationState): string => {
 }
 
 export const parseNavigationStateKey = (key: string): NavigationState | null => {
+  if (key === 'campaign') return { navigator: 'campaign' }
+
   // Handle sources
   if (key === 'sources') return { navigator: 'sources', details: null }
   if (key.startsWith('sources/source/')) {
@@ -1474,7 +1507,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   }
 
   // Handle settings
-  if (key === 'settings') return { navigator: 'settings', subpage: 'app' }
+  if (key === 'settings') return { navigator: 'settings', subpage: 'ai' }
   if (key.startsWith('settings:')) {
     const subpage = key.slice(9)
     if (isValidSettingsSubpage(subpage)) {

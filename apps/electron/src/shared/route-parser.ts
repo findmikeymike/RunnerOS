@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'community' | 'vault' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
+export type NavigatorType = 'campaign' | 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'community' | 'vault' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -69,7 +69,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 export const COMPOUND_ROUTE_PREFIXES = [
-  'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'agenda', 'community', 'vault', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
+  'campaign', 'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'agenda', 'community', 'vault', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
 ] as const
 
 /**
@@ -93,7 +93,7 @@ export function isCompoundRoute(route: string): boolean {
  *   'sources/local' -> { navigator: 'sources', sourceFilter: { kind: 'type', sourceType: 'local' }, details: null }
  *   'sources/source/github' -> { navigator: 'sources', details: { type: 'source', id: 'github' } }
  *   'sources/api/source/gmail' -> { navigator: 'sources', sourceFilter: { kind: 'type', sourceType: 'api' }, details: { type: 'source', id: 'gmail' } }
- *   'settings' -> { navigator: 'settings', details: { type: 'app', id: 'app' } }
+ *   'settings' -> { navigator: 'settings', details: { type: 'ai', id: 'ai' } }
  *   'settings/shortcuts' -> { navigator: 'settings', details: { type: 'shortcuts', id: 'shortcuts' } }
  */
 export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
@@ -102,9 +102,13 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   const first = segments[0]
 
+  if (first === 'campaign') {
+    return { navigator: 'campaign', details: null }
+  }
+
   // Settings navigator
   if (first === 'settings') {
-    const subpage = segments[1] || 'app'
+    const subpage = segments[1] || 'ai'
     if (!isValidSettingsSubpage(subpage)) return null
     return {
       navigator: 'settings',
@@ -357,8 +361,12 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
  * Build a compound route string from parsed state
  */
 export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
+  if (parsed.navigator === 'campaign') {
+    return 'campaign'
+  }
+
   if (parsed.navigator === 'settings') {
-    const detailsType = parsed.details?.type || 'app'
+    const detailsType = parsed.details?.type || 'ai'
     return `settings/${detailsType}`
   }
 
@@ -531,8 +539,8 @@ export function parseRoute(route: string): ParsedRoute | null {
 function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute {
   // Settings
   if (compound.navigator === 'settings') {
-    const subpage = compound.details?.type || 'app'
-    if (subpage === 'app') {
+    const subpage = compound.details?.type || 'ai'
+    if (subpage === 'ai') {
       return { type: 'view', name: 'settings', params: {} }
     }
     return { type: 'view', name: subpage, params: {} }
@@ -699,9 +707,13 @@ export function parseRouteToNavigationState(
  * Convert a ParsedCompoundRoute to NavigationState
  */
 function convertCompoundToNavigationState(compound: ParsedCompoundRoute): NavigationState {
+  if (compound.navigator === 'campaign') {
+    return { navigator: 'campaign' }
+  }
+
   // Settings
   if (compound.navigator === 'settings') {
-    const subpage = (compound.details?.type || 'app') as SettingsSubpage
+    const subpage = (compound.details?.type || 'ai') as SettingsSubpage
     return { navigator: 'settings', subpage }
   }
 
@@ -832,8 +844,10 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
   }
 
   switch (parsed.name) {
+    case 'campaign':
+      return { navigator: 'campaign' }
     case 'settings':
-      return { navigator: 'settings', subpage: 'app' }
+      return { navigator: 'settings', subpage: 'ai' }
     case 'workspace':
       return { navigator: 'settings', subpage: 'workspace' }
     case 'permissions':
@@ -1005,6 +1019,13 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
  * Convert NavigationState to ParsedCompoundRoute
  */
 function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundRoute {
+  if (state.navigator === 'campaign') {
+    return {
+      navigator: 'campaign',
+      details: null,
+    }
+  }
+
   if (state.navigator === 'settings') {
     return {
       navigator: 'settings',

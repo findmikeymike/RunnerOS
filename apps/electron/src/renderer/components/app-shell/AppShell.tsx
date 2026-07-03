@@ -26,6 +26,7 @@ import {
   Calendar,
   Mail,
   Layers,
+  Briefcase,
   Bot,
   MessageSquare,
   Workflow as WorkflowIcon,
@@ -100,6 +101,7 @@ import { navigate, routes } from "@/lib/navigate"
 import {
   useNavigation,
   useNavigationState,
+  isCampaignNavigation,
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
@@ -147,6 +149,7 @@ import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { useOutputs } from "@/hooks/useOutputs"
 import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace } from "@/lib/artist-workspace"
+import { getArtistHqNavActiveState, isConciergeSessionLike } from "@/lib/artist-hq-nav-state"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 
@@ -1711,17 +1714,6 @@ function AppShellContent({
     })
   }, [])
 
-  const handleMainNavGroupClick = React.useCallback((group: string, action: () => void) => {
-    const wasExpanded = expandedMainNavGroups.has(group)
-    setExpandedMainNavGroups((current) => {
-      const next = new Set(current)
-      if (next.has(group)) next.delete(group)
-      else next.add(group)
-      return next
-    })
-    if (!wasExpanded) action()
-  }, [expandedMainNavGroups])
-
   const handleNewProjectClick = useCallback(() => {
     const targetSessionId = focusedSessionId ?? (isSessionsNavigation(navState) ? session.selected : undefined)
     if (!targetSessionId) {
@@ -1788,6 +1780,15 @@ function AppShellContent({
   // Handler for agents view (saved agent personas)
   const handleAgentsClick = useCallback(() => {
     navigate(routes.view.agents())
+  }, [])
+
+  const handleCampaignHomeClick = useCallback(() => {
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+    setSessionsNavExpanded(false)
+    navigate(routes.view.campaign())
   }, [])
 
   const handleWorkChatClick = useCallback(async () => {
@@ -2065,11 +2066,30 @@ function AppShellContent({
     action?: () => void
   }
 
-  const hqHomeActive = isArtistHQWorkspace && isSessionsNavigation(navState) && !['#artist-hq/calendar', '#artist-hq/network', '#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash)
-  const vaultActive = isVaultNavigation(navState)
+  const activeSessionRouteId = isSessionsNavigation(navState) ? navState.details?.sessionId : undefined
+  const activeSessionIsConcierge = !!activeSessionRouteId
+    && isConciergeSessionLike({
+      conciergeSlug: CONCIERGE_SLUG,
+      ...sessionMetaMap.get(activeSessionRouteId),
+    })
   const workChatActive = isSessionsNavigation(navState)
-    && !!navState.details?.sessionId
-    && sessionMetaMap.get(navState.details.sessionId)?.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
+    && !!activeSessionRouteId
+    && (
+      activeSessionIsConcierge
+      || (isArtistHQWorkspace && !artistHqHash.startsWith('#artist-hq/'))
+    )
+  const { hqHomeActive, hqSessionsActive } = getArtistHqNavActiveState({
+    isArtistHQWorkspace,
+    isSessionsNavigation: isSessionsNavigation(navState),
+    artistHqHash,
+    hasSessionRoute: !!activeSessionRouteId,
+    isConciergeChat: workChatActive,
+  })
+  const vaultActive = isVaultNavigation(navState)
+  const campaignHomeActive = !isArtistHQWorkspace && isCampaignNavigation(navState)
+  const campaignSessionsActive = !isArtistHQWorkspace
+    && isSessionsNavigation(navState)
+    && !workChatActive
   const planExpanded = expandedMainNavGroups.has('plan')
   const peopleExpanded = expandedMainNavGroups.has('people')
   const workExpanded = expandedMainNavGroups.has('work')
@@ -2079,34 +2099,39 @@ function AppShellContent({
     const result: KeyboardSidebarItem[] = []
 
     if (!isArtistHQWorkspace) {
+      result.push({ id: 'nav:campaign', type: 'nav', action: handleCampaignHomeClick })
       result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
-      result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
-      result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
-      result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
+      result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
+      if (workExpanded) {
+        result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
+        result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
+        result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
+      }
       result.push({ id: 'nav:sessions', type: 'nav', action: handleSessionsNavClick })
       return result
     }
 
     result.push({ id: 'nav:hq', type: 'nav', action: () => handleArtistHQNavClick('home') })
-    result.push({ id: 'nav:plan', type: 'nav', action: () => handleMainNavGroupClick('plan', handleAgendaNavClick) })
+    result.push({ id: 'nav:work-chat', type: 'nav', action: handleWorkChatClick })
+    result.push({ id: 'nav:plan', type: 'nav', action: () => toggleMainNavGroup('plan') })
     if (planExpanded) {
       result.push({ id: 'nav:agenda', type: 'nav', action: handleAgendaNavClick })
       result.push({ id: 'nav:calendar', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
     }
-    result.push({ id: 'nav:people', type: 'nav', action: () => handleMainNavGroupClick('people', () => handleArtistHQNavClick('network')) })
+    result.push({ id: 'nav:people', type: 'nav', action: () => toggleMainNavGroup('people') })
     if (peopleExpanded) {
       result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
       result.push({ id: 'nav:community', type: 'nav', action: () => navigate(routes.view.community()) })
     }
     result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
-    result.push({ id: 'nav:work', type: 'nav', action: () => handleMainNavGroupClick('work', handleWorkChatClick) })
+    result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
     if (workExpanded) {
-      result.push({ id: 'nav:work-chat', type: 'nav', action: handleWorkChatClick })
       result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
       result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
       result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
+      result.push({ id: 'nav:sessions', type: 'nav', action: handleSessionsNavClick })
     }
-    result.push({ id: 'nav:brain', type: 'nav', action: () => handleMainNavGroupClick('brain', () => handleArtistHQNavClick('profile')) })
+    result.push({ id: 'nav:brain', type: 'nav', action: () => toggleMainNavGroup('brain') })
     if (brainExpanded) {
       result.push({ id: 'nav:profile', type: 'nav', action: () => handleArtistHQNavClick('profile') })
       result.push({ id: 'nav:voice', type: 'nav', action: () => handleArtistHQNavClick('voice') })
@@ -2115,7 +2140,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleMainNavGroupClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2358,8 +2383,9 @@ function AppShellContent({
   }, [sessionFilter, labelCounts, activeWorkspace?.id, handleLabelClick, isExpanded, toggleExpanded, openConfigureLabels, handleAddLabel, handleDeleteLabel, t])
 
   const shouldShowNavigator = useMemo(() => {
-    if (isAutoCompact) return true
     if (effectiveSidebarAndNavigatorHidden) return false
+    if (isCampaignNavigation(navState)) return false
+    if (isAutoCompact) return true
     if (isSessionsNavigation(navState)) return false
     if (isAgentsNavigation(navState)) return false
     if (isWorkflowsNavigation(navState)) return false
@@ -2379,37 +2405,56 @@ function AppShellContent({
     if (!isArtistHQWorkspace) {
       return [
         {
-          id: "nav:chat",
+          id: "nav:campaign",
           title: "Campaign",
+          icon: Globe,
+          variant: campaignHomeActive ? "default" : "ghost",
+          onClick: handleCampaignHomeClick,
+        },
+        {
+          id: "nav:chat",
+          title: "Chat",
           icon: MessageSquare,
           variant: workChatActive ? "default" : "ghost",
           onClick: handleWorkChatClick,
         },
         {
-          id: "nav:agents",
-          title: "Workers",
-          icon: Bot,
-          variant: isAgentsNavigation(navState) ? "default" : "ghost",
-          onClick: handleAgentsClick,
-        },
-        {
-          id: "nav:workflows",
-          title: t("sidebar.workflows"),
-          icon: WorkflowIcon,
-          variant: (isWorkflowsNavigation(navState) || isWorkflowRunNavigation(navState)) ? "default" : "ghost",
-          onClick: () => navigate(routes.view.workflows()),
-        },
-        {
-          id: "nav:automations",
-          title: t("sidebar.automations"),
-          label: String(automations.length),
-          icon: ListTodo,
-          variant: isAutomationsNavigation(navState) ? "default" : "ghost",
-          onClick: () => navigate(routes.view.automations()),
-          contextMenu: {
-            type: 'automations' as const,
-            onAddAutomation: openAddAutomation,
-          },
+          id: "nav:work",
+          title: "Work",
+          icon: Briefcase,
+          variant: "ghost",
+          onClick: () => toggleMainNavGroup('work'),
+          onToggle: () => toggleMainNavGroup('work'),
+          expandable: true,
+          expanded: workExpanded,
+          items: workExpanded ? [
+            {
+              id: "nav:agents",
+              title: "Workers",
+              icon: Bot,
+              variant: isAgentsNavigation(navState) ? "default" : "ghost",
+              onClick: handleAgentsClick,
+            },
+            {
+              id: "nav:workflows",
+              title: t("sidebar.workflows"),
+              icon: WorkflowIcon,
+              variant: (isWorkflowsNavigation(navState) || isWorkflowRunNavigation(navState)) ? "default" : "ghost",
+              onClick: () => navigate(routes.view.workflows()),
+            },
+            {
+              id: "nav:automations",
+              title: t("sidebar.automations"),
+              label: String(automations.length),
+              icon: ListTodo,
+              variant: isAutomationsNavigation(navState) ? "default" : "ghost",
+              onClick: () => navigate(routes.view.automations()),
+              contextMenu: {
+                type: 'automations' as const,
+                onAddAutomation: openAddAutomation,
+              },
+            },
+          ] : [],
         },
         { id: "separator:sessions", type: "separator" },
         {
@@ -2417,7 +2462,7 @@ function AppShellContent({
           title: "Sessions",
           label: String(workspaceSessionMetas.length),
           icon: MessageSquare,
-          variant: sessionsNavExpanded ? "default" : "ghost",
+          variant: campaignSessionsActive ? "default" : "ghost",
           onClick: handleSessionsNavClick,
         },
       ]
@@ -2432,6 +2477,13 @@ function AppShellContent({
         onClick: () => handleArtistHQNavClick('home'),
       },
       {
+        id: "nav:work-chat",
+        title: "Chat",
+        icon: MessageSquare,
+        variant: workChatActive ? "default" : "ghost",
+        onClick: handleWorkChatClick,
+      },
+      {
         id: "nav:plan",
         title: "Plan",
         icon: Calendar,
@@ -2439,7 +2491,7 @@ function AppShellContent({
         expandable: true,
         expanded: planExpanded,
         onToggle: () => toggleMainNavGroup('plan'),
-        onClick: () => handleMainNavGroupClick('plan', handleAgendaNavClick),
+        onClick: () => toggleMainNavGroup('plan'),
         items: [
           {
             id: "nav:agenda",
@@ -2465,7 +2517,7 @@ function AppShellContent({
         expandable: true,
         expanded: peopleExpanded,
         onToggle: () => toggleMainNavGroup('people'),
-        onClick: () => handleMainNavGroupClick('people', () => handleArtistHQNavClick('network')),
+        onClick: () => toggleMainNavGroup('people'),
         items: [
           {
             id: "nav:network",
@@ -2498,15 +2550,8 @@ function AppShellContent({
         expandable: true,
         expanded: workExpanded,
         onToggle: () => toggleMainNavGroup('work'),
-        onClick: () => handleMainNavGroupClick('work', handleWorkChatClick),
+        onClick: () => toggleMainNavGroup('work'),
         items: [
-          {
-            id: "nav:work-chat",
-            title: "Chat",
-            icon: MessageSquare,
-            variant: workChatActive ? "default" : "ghost",
-            onClick: handleWorkChatClick,
-          },
           {
             id: "nav:agents",
             title: "Workers",
@@ -2528,6 +2573,14 @@ function AppShellContent({
             variant: isWorkflowsNavigation(navState) ? "default" : "ghost",
             onClick: () => navigate(routes.view.workflows()),
           },
+          {
+            id: "nav:sessions",
+            title: "Sessions",
+            label: String(workspaceSessionMetas.length),
+            icon: MessageSquare,
+            variant: hqSessionsActive ? "default" : "ghost",
+            onClick: handleSessionsNavClick,
+          },
         ],
       },
       { id: "nav:brain-separator", type: 'separator' },
@@ -2539,7 +2592,7 @@ function AppShellContent({
         expandable: true,
         expanded: brainExpanded,
         onToggle: () => toggleMainNavGroup('brain'),
-        onClick: () => handleMainNavGroupClick('brain', () => handleArtistHQNavClick('profile')),
+        onClick: () => toggleMainNavGroup('brain'),
         items: [
           {
             id: "nav:profile",
@@ -2572,7 +2625,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleMainNavGroupClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, navigate, navState, openAddAutomation, peopleExpanded, planExpanded, sessionsNavExpanded, t, vaultActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainExpanded, campaignHomeActive, campaignSessionsActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, hqSessionsActive, isArtistHQWorkspace, navigate, navState, openAddAutomation, peopleExpanded, planExpanded, sessionsNavExpanded, t, vaultActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -2631,7 +2684,7 @@ function AppShellContent({
               <div className="flex-1 flex flex-col min-h-0">
                 {/* Primary Nav */}
                 {/* pb-4 provides clearance so the last item scrolls above the mask-fade-bottom gradient */}
-                <div className="flex-1 w-full overflow-y-auto min-h-0 mask-fade-bottom pt-[18px] pb-4">
+                <div className="flex-1 w-full overflow-y-auto overflow-x-hidden min-h-0 mask-fade-bottom pt-[18px] pb-4">
                 <LeftSidebar
                   isCollapsed={false}
                   getItemProps={getSidebarItemProps}

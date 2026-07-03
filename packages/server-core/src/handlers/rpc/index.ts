@@ -5,6 +5,8 @@ import { registerAuthHandlers } from './auth'
 import { registerAutomationsHandlers } from './automations'
 import { registerAgentDefinitionsHandlers } from './agent-definitions'
 import { registerWorkspaceContextHandlers } from './workspace-context'
+import { registerGoogleWorkspaceHandlers } from './google-workspace'
+import { registerCommunityEmailHandlers } from './community-email'
 import { registerMemoryHandlers } from './memory'
 import { registerMissionAssetsHandlers } from './mission-assets'
 import { registerWorkflowsHandlers } from './workflows'
@@ -44,6 +46,8 @@ export function registerCoreRpcHandlers(
   registerAutomationsHandlers(server, deps)
   registerAgentDefinitionsHandlers(server, deps)
   registerWorkspaceContextHandlers(server, deps)
+  registerGoogleWorkspaceHandlers(server, deps)
+  registerCommunityEmailHandlers(server, deps)
   registerMemoryHandlers(server, deps)
   registerMissionAssetsHandlers(server, deps)
   registerWorkflowsHandlers(server, deps)

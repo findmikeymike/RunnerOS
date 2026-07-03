@@ -29,6 +29,7 @@ export interface ArtistCalendarEvent {
   workspaceLinks: ArtistWorkspaceLink[]
   relatedPersonIds: string[]
   google?: GoogleCalendarSyncState
+  deletedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -191,6 +192,7 @@ function normalizeCalendarEvent(event: ArtistCalendarEvent): ArtistCalendarEvent
     workspaceLinks: normalizeWorkspaceLinks(event.workspaceLinks),
     relatedPersonIds: normalizeIds(event.relatedPersonIds),
     google: normalizeGoogleSync(event.google),
+    deletedAt: clean(event.deletedAt),
     updatedAt: typeof event.updatedAt === 'string' ? event.updatedAt : new Date().toISOString(),
     createdAt: typeof event.createdAt === 'string' ? event.createdAt : new Date().toISOString(),
   }

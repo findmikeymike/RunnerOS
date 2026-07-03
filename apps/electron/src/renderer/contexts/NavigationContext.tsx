@@ -63,6 +63,7 @@ import type {
   ContentBadge,
 } from '../../shared/types'
 import {
+  isCampaignNavigation,
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
@@ -96,7 +97,7 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, SessionFilter }
-export { isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAgentsNavigation, isAutomationsNavigation, isWorkspaceContextNavigation, isAgendaNavigation, isCommunityNavigation, isVaultNavigation, isOutputsNavigation }
+export { isCampaignNavigation, isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAgentsNavigation, isAutomationsNavigation, isWorkspaceContextNavigation, isAgendaNavigation, isCommunityNavigation, isVaultNavigation, isOutputsNavigation }
 
 // =============================================================================
 // Context

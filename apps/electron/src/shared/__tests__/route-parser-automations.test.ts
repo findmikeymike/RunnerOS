@@ -94,6 +94,13 @@ describe('route-parser: automations routes', () => {
 })
 
 describe('route-parser: library routes', () => {
+  it('parses "campaign" as the campaign home navigator', () => {
+    const parsed = parseCompoundRoute('campaign')
+    expect(parsed).toEqual({ navigator: 'campaign', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('campaign')
+    expect(parseRouteToNavigationState('campaign')).toEqual({ navigator: 'campaign' })
+  })
+
   it('parses "agents" as the agents navigator', () => {
     const state = parseRouteToNavigationState('agents')
     expect(state).toEqual({ navigator: 'agents', details: null })

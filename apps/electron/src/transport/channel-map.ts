@@ -413,6 +413,9 @@ export const CHANNEL_MAP = {
   upsertWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.UPSERT),
   deleteWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.DELETE),
   onWorkspaceContextChanged: listener(RPC_CHANNELS.workspaceContext.CHANGED),
+  getGoogleCalendarStatus: invoke(RPC_CHANNELS.googleWorkspace.GET_CALENDAR_STATUS),
+  syncGoogleCalendar: invoke(RPC_CHANNELS.googleWorkspace.SYNC_CALENDAR),
+  sendCommunityEmailViaResend: invoke(RPC_CHANNELS.community.SEND_RESEND_EMAIL),
 
   // Mission assets
   getMissionAssetManifest: invoke(RPC_CHANNELS.missionAssets.GET),

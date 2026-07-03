@@ -11,6 +11,7 @@ import {
   FolderKanban,
   MessageSquareText,
   Music2,
+  Pencil,
   Plus,
   RefreshCw,
   Radio,
@@ -122,6 +123,9 @@ type CalendarDraft = {
   time: string
   notes: string
 }
+type CalendarEditDraft = CalendarDraft & {
+  date: string
+}
 type ProfileDraft = Omit<ArtistProfile, 'version' | 'updatedAt'>
 type BrandingDraft = Omit<ArtistBranding, 'version' | 'updatedAt'>
 type VoiceDraft = Omit<ArtistVoice, 'version' | 'updatedAt'>
@@ -133,6 +137,16 @@ const SPOTIFY_SYNC_CRON = '0 9 * * 1'
 const INTEL_SYNC_AUTOMATION_NAME = 'Weekly YouTube Intel Pulse'
 const INTEL_SYNC_CRON = '0 10 * * 1'
 const YOUTUBE_RESEARCH_AGENT_SLUG = 'youtube-research-agent'
+const GOOGLE_CALENDAR_SOURCE_SLUG = 'google-calendar'
+function googleCalendarSyncMessage(result: { synced: number; deleted?: number }): string {
+  const deleted = result.deleted ?? 0
+  const parts = [
+    result.synced > 0 ? `synced ${result.synced}` : '',
+    deleted > 0 ? `deleted ${deleted}` : '',
+  ].filter(Boolean)
+  return parts.length > 0 ? `Google Calendar ${parts.join(', ')}` : 'Google Calendar already up to date'
+}
+
 const emptyNetworkDraft: NetworkDraft = {
   name: '',
   category: 'key',
@@ -143,6 +157,12 @@ const emptyNetworkDraft: NetworkDraft = {
   notes: '',
 }
 const emptyCalendarDraft: CalendarDraft = {
+  title: '',
+  time: '',
+  notes: '',
+}
+const emptyCalendarEditDraft: CalendarEditDraft = {
+  date: '',
   title: '',
   time: '',
   notes: '',
@@ -239,11 +259,15 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   const [draft, setDraft] = React.useState<NetworkDraft>(emptyNetworkDraft)
   const [editDraft, setEditDraft] = React.useState<NetworkDraft>(emptyNetworkDraft)
   const [calendarDraft, setCalendarDraft] = React.useState<CalendarDraft>(emptyCalendarDraft)
+  const [calendarEditId, setCalendarEditId] = React.useState<string | null>(null)
+  const [calendarEditDraft, setCalendarEditDraft] = React.useState<CalendarEditDraft>(emptyCalendarEditDraft)
   const [profileDraft, setProfileDraft] = React.useState<ProfileDraft>(emptyProfileDraft)
   const [brandingDraft, setBrandingDraft] = React.useState<BrandingDraft>(emptyBrandingDraft)
   const [voiceDraft, setVoiceDraft] = React.useState<VoiceDraft>(emptyVoiceDraft)
   const [automations, setAutomations] = React.useState<AutomationListItem[]>([])
   const [spotifySyncBusy, setSpotifySyncBusy] = React.useState(false)
+  const [googleCalendarBusy, setGoogleCalendarBusy] = React.useState(false)
+  const [googleCalendarConnected, setGoogleCalendarConnected] = React.useState(false)
   const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
   const { outputs, loading: outputsLoading } = useOutputs(workspaceId)
   const profileResult = React.useMemo(
@@ -313,14 +337,87 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
     () => outputs.filter(isResearchOutput),
     [outputs],
   )
+  const activeCalendarEvents = React.useMemo(
+    () => calendar.events.filter((event) => !event.deletedAt),
+    [calendar.events],
+  )
   const selectedDateEvents = React.useMemo(
-    () => calendar.events.filter((event) => event.date === selectedDate),
-    [calendar.events, selectedDate],
+    () => activeCalendarEvents.filter((event) => event.date === selectedDate),
+    [activeCalendarEvents, selectedDate],
   )
   const selectedPerson = React.useMemo(
     () => network.people.find((person) => person.id === selectedPersonId) ?? null,
     [network.people, selectedPersonId],
   )
+
+  const refreshGoogleCalendarStatus = React.useCallback(async () => {
+    try {
+      const status = await window.electronAPI.getGoogleCalendarStatus(workspaceId)
+      setGoogleCalendarConnected(Boolean(status.ok && status.connected))
+    } catch {
+      setGoogleCalendarConnected(false)
+    }
+  }, [workspaceId])
+
+  React.useEffect(() => {
+    void refreshGoogleCalendarStatus()
+  }, [refreshGoogleCalendarStatus])
+
+  const connectGoogleCalendar = React.useCallback(async () => {
+    setGoogleCalendarBusy(true)
+    try {
+      const result = await window.electronAPI.performOAuth({
+        sourceSlug: GOOGLE_CALENDAR_SOURCE_SLUG,
+        credentialScope: 'workspace',
+      })
+      if (!result.success) throw new Error(result.error || 'Google Calendar sign-in failed.')
+      setGoogleCalendarConnected(true)
+      await refreshGoogleCalendarStatus()
+      toast.success(result.email ? `Connected Google Calendar as ${result.email}` : 'Connected Google Calendar')
+    } catch (error) {
+      toast.error('Google Calendar connection failed', {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setGoogleCalendarBusy(false)
+    }
+  }, [refreshGoogleCalendarStatus])
+
+  const syncGoogleCalendar = React.useCallback(async () => {
+    if (!calendarResult.ok) {
+      toast.error('Calendar context needs repair before syncing.')
+      return
+    }
+    setGoogleCalendarBusy(true)
+    try {
+      const result = await window.electronAPI.syncGoogleCalendar(workspaceId)
+      if (!result.ok) {
+        if (/not connected/i.test(result.error ?? '')) {
+          const auth = await window.electronAPI.performOAuth({
+            sourceSlug: GOOGLE_CALENDAR_SOURCE_SLUG,
+            credentialScope: 'workspace',
+          })
+          if (!auth.success) throw new Error(auth.error || result.error || 'Google Calendar sign-in failed.')
+          setGoogleCalendarConnected(true)
+          const retry = await window.electronAPI.syncGoogleCalendar(workspaceId)
+          if (!retry.ok) throw new Error(retry.error || 'Google Calendar sync failed.')
+          toast.success(googleCalendarSyncMessage(retry))
+        } else {
+          throw new Error(result.error || 'Google Calendar sync failed.')
+        }
+      } else {
+        toast.success(googleCalendarSyncMessage(result))
+      }
+      await refreshContext()
+      await refreshGoogleCalendarStatus()
+    } catch (error) {
+      toast.error('Google Calendar sync failed', {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setGoogleCalendarBusy(false)
+    }
+  }, [calendarResult.ok, refreshContext, refreshGoogleCalendarStatus, workspaceId])
 
   React.useEffect(() => {
     const onHashChange = () => setTab(readTabFromHash())
@@ -621,11 +718,77 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
     }
   }, [calendar.events, calendarDraft, saveCalendar, selectedDate])
 
-  const deleteCalendarEvent = React.useCallback(async (eventId: string) => {
+  const openCalendarEventEdit = React.useCallback((event: ArtistCalendarEvent) => {
+    setCalendarEditId(event.id)
+    setCalendarEditDraft({
+      date: event.date,
+      title: event.title,
+      time: event.time ?? '',
+      notes: event.notes ?? '',
+    })
+  }, [])
+
+  const cancelCalendarEventEdit = React.useCallback(() => {
+    setCalendarEditId(null)
+    setCalendarEditDraft(emptyCalendarEditDraft)
+  }, [])
+
+  const saveCalendarEventEdit = React.useCallback(async (eventId: string) => {
+    if (!calendarEditDraft.title.trim()) {
+      toast.error('Add an event title first.')
+      return
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(calendarEditDraft.date)) {
+      toast.error('Use a valid event date.')
+      return
+    }
+    const now = new Date().toISOString()
     const nextCalendar: ArtistCalendar = {
       version: 1,
-      events: calendar.events.filter((event) => event.id !== eventId),
-      updatedAt: new Date().toISOString(),
+      events: calendar.events.map((event) => {
+        if (event.id !== eventId) return event
+        return {
+          ...event,
+          date: calendarEditDraft.date,
+          title: calendarEditDraft.title.trim(),
+          time: calendarEditDraft.time.trim() || undefined,
+          notes: calendarEditDraft.notes.trim() || undefined,
+          google: event.google?.eventId
+            ? { ...event.google, syncStatus: 'local-change' as const, error: undefined }
+            : event.google,
+          updatedAt: now,
+        }
+      }),
+      updatedAt: now,
+    }
+    try {
+      await saveCalendar(nextCalendar)
+      cancelCalendarEventEdit()
+      toast.success('Event updated')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [calendar.events, calendarEditDraft, cancelCalendarEventEdit, saveCalendar])
+
+  const deleteCalendarEvent = React.useCallback(async (eventId: string) => {
+    const now = new Date().toISOString()
+    const nextCalendar: ArtistCalendar = {
+      version: 1,
+      events: calendar.events.flatMap((event) => {
+        if (event.id !== eventId) return [event]
+        if (!event.google?.eventId) return []
+        return [{
+          ...event,
+          deletedAt: now,
+          google: {
+            ...event.google,
+            syncStatus: 'local-change' as const,
+            error: undefined,
+          },
+          updatedAt: now,
+        }]
+      }),
+      updatedAt: now,
     }
     try {
       await saveCalendar(nextCalendar)
@@ -994,16 +1157,26 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
               </div>
             ) : null}
             <ArtistCalendarView
-              events={calendar.events}
+              events={activeCalendarEvents}
               selectedDate={selectedDate}
               visibleMonth={visibleMonth}
               draft={calendarDraft}
               disabled={!calendarResult.ok}
+              googleConnected={googleCalendarConnected}
+              googleBusy={googleCalendarBusy}
               onSelectDate={setSelectedDate}
               onChangeMonth={setVisibleMonth}
               onChangeDraft={setCalendarDraft}
+              editingEventId={calendarEditId}
+              editDraft={calendarEditDraft}
+              onChangeEditDraft={setCalendarEditDraft}
+              onEditEvent={openCalendarEventEdit}
+              onCancelEditEvent={cancelCalendarEventEdit}
+              onSaveEditEvent={saveCalendarEventEdit}
               onAddEvent={addCalendarEvent}
               onDeleteEvent={deleteCalendarEvent}
+              onConnectGoogle={connectGoogleCalendar}
+              onSyncGoogle={syncGoogleCalendar}
               selectedDateEvents={selectedDateEvents}
             />
           </HQCard>
@@ -1713,24 +1886,44 @@ function ArtistCalendarView({
   visibleMonth,
   draft,
   disabled,
+  googleConnected,
+  googleBusy,
   selectedDateEvents,
+  editingEventId,
+  editDraft,
   onSelectDate,
   onChangeMonth,
   onChangeDraft,
+  onChangeEditDraft,
+  onEditEvent,
+  onCancelEditEvent,
+  onSaveEditEvent,
   onAddEvent,
   onDeleteEvent,
+  onConnectGoogle,
+  onSyncGoogle,
 }: {
   events: ArtistCalendarEvent[]
   selectedDate: string
   visibleMonth: Date
   draft: CalendarDraft
   disabled?: boolean
+  googleConnected?: boolean
+  googleBusy?: boolean
   selectedDateEvents: ArtistCalendarEvent[]
+  editingEventId: string | null
+  editDraft: CalendarEditDraft
   onSelectDate: (date: string) => void
   onChangeMonth: (month: Date) => void
   onChangeDraft: (draft: CalendarDraft) => void
+  onChangeEditDraft: (draft: CalendarEditDraft) => void
+  onEditEvent: (event: ArtistCalendarEvent) => void
+  onCancelEditEvent: () => void
+  onSaveEditEvent: (eventId: string) => void
   onAddEvent: () => void
   onDeleteEvent: (eventId: string) => void
+  onConnectGoogle: () => void
+  onSyncGoogle: () => void
 }) {
   const days = React.useMemo(() => buildMonthDays(visibleMonth), [visibleMonth])
   const eventCounts = React.useMemo(() => {
@@ -1808,9 +2001,30 @@ function ArtistCalendarView({
       </div>
 
       <div className="rounded-[16px] border border-white/[0.05] bg-black/20 p-3">
-        <div className="mb-3">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Selected Date</div>
-          <div className="mt-1 text-base font-semibold text-white/80">{selectedLabel}</div>
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Selected Date</div>
+            <div className="mt-1 text-base font-semibold text-white/80">{selectedLabel}</div>
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onConnectGoogle}
+              disabled={googleBusy}
+              className="h-8 rounded-full border border-white/[0.07] px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {googleConnected ? 'Reconnect' : 'Connect'}
+            </button>
+            <button
+              type="button"
+              onClick={onSyncGoogle}
+              disabled={disabled || googleBusy}
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/90 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', googleBusy && 'animate-spin')} />
+              Sync
+            </button>
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -1820,27 +2034,76 @@ function ArtistCalendarView({
             </div>
           ) : selectedDateEvents.map((event) => (
             <div key={event.id} className="rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-sm font-semibold text-white/76">{event.title}</div>
-                  {event.time ? <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-orange-200/65">{event.time}</div> : null}
-                  {event.notes ? <div className="mt-2 text-xs leading-5 text-white/38">{event.notes}</div> : null}
-                  <ContextBadges
-                    workspaceLinks={event.workspaceLinks}
-                    googleStatus={event.google?.syncStatus}
-                    relatedCount={event.relatedPersonIds.length}
+              {editingEventId === event.id ? (
+                <div className="space-y-2">
+                  <input
+                    type="date"
+                    value={editDraft.date}
+                    onChange={(input) => onChangeEditDraft({ ...editDraft, date: input.target.value })}
+                    className="h-9 w-full rounded-[10px] border border-white/[0.06] bg-black/25 px-3 text-xs text-white/75 outline-none focus:border-white/16"
                   />
+                  <Input value={editDraft.title} onChange={(title) => onChangeEditDraft({ ...editDraft, title })} placeholder="Title" />
+                  <Input value={editDraft.time} onChange={(time) => onChangeEditDraft({ ...editDraft, time })} placeholder="Time, optional" />
+                  <textarea
+                    value={editDraft.notes}
+                    onChange={(input) => onChangeEditDraft({ ...editDraft, notes: input.target.value })}
+                    placeholder="Notes, optional"
+                    className="min-h-[74px] w-full rounded-[10px] border border-white/[0.06] bg-black/25 px-3 py-2 text-xs leading-5 text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={onCancelEditEvent}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/[0.07] px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55 hover:bg-white/[0.04]"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSaveEditEvent(event.id)}
+                      disabled={disabled}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/90 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Save
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onDeleteEvent(event.id)}
-                  disabled={disabled}
-                  className="rounded-full p-1.5 text-white/28 hover:bg-white/[0.05] hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
-                  aria-label="Delete event"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              ) : (
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-white/76">{event.title}</div>
+                    {event.time ? <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-orange-200/65">{event.time}</div> : null}
+                    {event.notes ? <div className="mt-2 text-xs leading-5 text-white/38">{event.notes}</div> : null}
+                    <ContextBadges
+                      workspaceLinks={event.workspaceLinks}
+                      googleStatus={event.google?.syncStatus}
+                      relatedCount={event.relatedPersonIds.length}
+                    />
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => onEditEvent(event)}
+                      disabled={disabled}
+                      className="rounded-full p-1.5 text-white/28 hover:bg-white/[0.05] hover:text-white/70 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="Edit event"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteEvent(event.id)}
+                      disabled={disabled}
+                      className="rounded-full p-1.5 text-white/28 hover:bg-white/[0.05] hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label="Delete event"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

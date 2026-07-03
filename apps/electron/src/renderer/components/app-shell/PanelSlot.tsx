@@ -62,6 +62,7 @@ export function PanelSlot({
   const isCreatorCommandCenter = navState?.navigator === 'sessions'
   const isFullWidthRoute = isCreatorCommandCenter
     || navState?.navigator === 'agenda'
+    || navState?.navigator === 'community'
     || navState?.navigator === 'vault'
     || navState?.navigator === 'agents'
     || navState?.navigator === 'automations'

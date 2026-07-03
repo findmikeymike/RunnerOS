@@ -7,6 +7,7 @@
 
 // Import shared types - single source of truth
 import type { SessionFilter, SettingsSubpage } from '../../../shared/types'
+import { isValidSettingsSubpage } from '../../../shared/settings-registry'
 export type { SessionFilter, SettingsSubpage }
 
 /**
@@ -63,12 +64,12 @@ export const parseSidebarModeKey = (key: string): SidebarMode | null => {
     if (stateId) return { type: 'sessions', filter: { kind: 'state', stateId } }
   }
   if (key.startsWith('settings:')) {
-    const subpage = key.slice(9) as SettingsSubpage
-    if (['app', 'appearance', 'workspace', 'permissions', 'labels', 'memory', 'shortcuts', 'preferences'].includes(subpage)) {
+    const subpage = key.slice(9)
+    if (isValidSettingsSubpage(subpage)) {
       return { type: 'settings', subpage }
     }
   }
-  if (key === 'settings') return { type: 'settings', subpage: 'app' }
+  if (key === 'settings') return { type: 'settings', subpage: 'ai' }
   return null
 }
 
