@@ -481,9 +481,11 @@ body
     expect(hnic?.metadata.name).toBe('HNIC')
     expect(hnic?.metadata.tags).toContain('routing')
     expect(hnic?.metadata.tags).toContain('workflows')
+    expect(hnic?.metadata.skills).toContain('artist-os-guide')
     expect(hnic?.metadata.skills).toContain('workflow-creator')
     expect(hnic?.metadata.skills).toContain('automation-creator')
     expect(hnic?.systemPrompt).toContain('current active-agent capability catalog')
+    expect(hnic?.systemPrompt).toContain('artist-os-guide')
     expect(hnic?.systemPrompt).toContain('suggest an automation')
     expect(hnic?.systemPrompt).toContain('suggest a workflow')
     expect(hnic?.systemPrompt).toContain('Handoff target')
@@ -622,6 +624,24 @@ body
     expect(videoAgent?.systemPrompt).toContain('video_clip_add')
     expect(videoAgent?.systemPrompt).toContain('video_export')
     expect(videoAgent?.systemPrompt).toContain('placeholder')
+  })
+
+  test('starter library includes the Raw Video Editor for existing footage', () => {
+    const rawVideoAgent = STARTER_AGENTS.find((agent) => agent.slug === 'raw-video-editor')
+
+    expect(rawVideoAgent).toBeDefined()
+    expect(rawVideoAgent?.metadata.name).toBe('Raw Video Editor')
+    expect(rawVideoAgent?.metadata.visualAgent).toBe(true)
+    expect(rawVideoAgent?.metadata.permissionMode).toBe('ask')
+    expect(rawVideoAgent?.metadata.skills).toContain('raw-video-editor')
+    expect(rawVideoAgent?.metadata.sources).toContain('raw-video-editor')
+    expect(rawVideoAgent?.metadata.sources).toContain('video-studio')
+    expect(rawVideoAgent?.metadata.tags).toContain('raw-footage')
+    expect(rawVideoAgent?.systemPrompt).toContain('post-production, not AI video generation')
+    expect(rawVideoAgent?.systemPrompt).toContain('Preserve originals')
+    expect(rawVideoAgent?.systemPrompt).toContain('raw-video-editor')
+    expect(rawVideoAgent?.systemPrompt).toContain('takes_packed.md')
+    expect(rawVideoAgent?.systemPrompt).toContain('edl.json')
   })
 
   test('starter library includes the Shopify Agent with bundled Shopify source', () => {

@@ -48,6 +48,7 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   'content-genius',
   'video-director',
   'video-editor-agent',
+  'raw-video-editor',
   'ads-agent',
   'trypost-agent',
   'spotify-analyst',

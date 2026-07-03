@@ -65,6 +65,15 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content).toContain('apps/electron');
   });
 
+  it('includes the Artist OS guide starter skill for HNIC support', () => {
+    const skill = STARTER_SKILLS.find(s => s.slug === 'artist-os-guide');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('Artist OS Guide');
+    expect(parsed.content).toContain('What Artist OS is');
+    expect(parsed.content).toContain('Settings → Messaging');
+  });
+
   it('workflow-creator can save confirmed workflow drafts', () => {
     const skill = STARTER_SKILLS.find(s => s.slug === 'workflow-creator');
     expect(skill).toBeDefined();
@@ -77,5 +86,17 @@ describe('STARTER_SKILLS', () => {
     expect(parsed.content).toContain('## Reliability defaults');
     expect(parsed.content).toContain('`image`, `video`, `audio`');
     expect(parsed.content).not.toContain('`media`');
+  });
+
+  it('includes raw-video-editor for existing footage edits', () => {
+    const skill = STARTER_SKILLS.find(s => s.slug === 'raw-video-editor');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('raw-video-editor');
+    expect(parsed.content).toContain('Edit existing footage');
+    expect(parsed.content).toContain('ffprobe');
+    expect(parsed.content).toContain('takes_packed.md');
+    expect(parsed.content).toContain('edl.json');
+    expect(parsed.content).toContain('MIT licensed');
   });
 });

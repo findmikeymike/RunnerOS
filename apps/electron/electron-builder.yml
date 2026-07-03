@@ -63,6 +63,7 @@ files:
   - tools/hypermotion/**/*
   - tools/lottie/**/*
   - tools/video-studio/**/*
+  - tools/raw-video-editor/**/*
   - tools/google-ads/**/*
   - tools/shopify/**/*
   - tools/printify/**/*
@@ -129,6 +130,11 @@ mac:
     # Managed local Video Studio project/render wrapper.
     - from: ../../tools/video-studio
       to: app/tools/video-studio
+      filter:
+        - "**/*"
+    # Managed local raw footage editor wrapper.
+    - from: ../../tools/raw-video-editor
+      to: app/tools/raw-video-editor
       filter:
         - "**/*"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
@@ -242,6 +248,11 @@ win:
       to: app/tools/video-studio
       filter:
         - "**/*"
+    # Managed local raw footage editor wrapper.
+    - from: ../../tools/raw-video-editor
+      to: app/tools/raw-video-editor
+      filter:
+        - "**/*"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
     - from: ../../tools/google-ads
       to: app/tools/google-ads
@@ -314,6 +325,11 @@ linux:
     # Managed local Video Studio project/render wrapper.
     - from: ../../tools/video-studio
       to: app/tools/video-studio
+      filter:
+        - "**/*"
+    # Managed local raw footage editor wrapper.
+    - from: ../../tools/raw-video-editor
+      to: app/tools/raw-video-editor
       filter:
         - "**/*"
     # Managed local Google Ads CLI wrapper and bundled platform binary.
