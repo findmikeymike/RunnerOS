@@ -1,0 +1,17 @@
+{
+  "name": "@runneros/raw-video-editor-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-raw-video-editor": "bin/raw-video-editor.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/raw-video-editor.mjs doctor --json",
+    "inspect": "node bin/raw-video-editor.mjs inspect",
+    "transcribe": "node bin/raw-video-editor.mjs transcribe",
+    "plan": "node bin/raw-video-editor.mjs plan",
+    "render": "node bin/raw-video-editor.mjs render"
+  },
+  "license": "UNLICENSED"
+}

@@ -15,8 +15,11 @@ const PRINTING_PRESS_SOCIAL_SLUG = 'printing-press-social';
 const HYPERMOTION_SLUG = 'hypermotion';
 const LOTTIE_SLUG = 'lottie';
 const VIDEO_STUDIO_SLUG = 'video-studio';
-const SQUAD_SLUG = 'squad';
+const RAW_VIDEO_EDITOR_SLUG = 'raw-video-editor';
 const GOOGLE_ADS_SLUG = 'google-ads';
+const GOOGLE_CALENDAR_SLUG = 'google-calendar';
+const GMAIL_SLUG = 'gmail';
+const GOOGLE_DRIVE_SLUG = 'google-drive';
 const META_ADS_SLUG = 'meta-ads';
 const NOTEBOOKLM_SLUG = 'notebooklm';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
@@ -162,51 +165,19 @@ export function getVideoStudioPath(): string {
   );
 }
 
-export function getSquadPath(): string {
+function getRawVideoEditorPath(): string {
   const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
   const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
 
   return firstExistingPath(
     [
-      resourcesBase ? join(resourcesBase, 'tools', 'squad') : '',
-      join(appRoot, 'tools', 'squad'),
-      join(process.cwd(), 'tools', 'squad'),
+      resourcesBase ? join(resourcesBase, 'tools', 'raw-video-editor') : '',
+      join(appRoot, 'tools', 'raw-video-editor'),
+      join(REPO_ROOT, 'tools', 'raw-video-editor'),
+      join(process.cwd(), 'tools', 'raw-video-editor'),
     ],
-    join('tools', 'squad')
+    join('tools', 'raw-video-editor')
   );
-}
-
-function getSquadRuntimeStatus(toolPath: string): { ok: boolean; error?: string } {
-  if (!existsSync(toolPath)) {
-    return { ok: false, error: 'Bundled Squad wrapper folder not found' };
-  }
-
-  const squadHomeRaw = process.env.SQUAD_HOME || (existsSync(DEFAULT_SQUAD_HOME) ? DEFAULT_SQUAD_HOME : '');
-  if (!squadHomeRaw) {
-    return { ok: false, error: 'Squad checkout not configured. Set SQUAD_HOME=/absolute/path/to/Squad.' };
-  }
-
-  const squadHome = resolve(squadHomeRaw);
-  if (!existsSync(squadHome)) {
-    return { ok: false, error: `Squad checkout not found at ${squadHome}. Set SQUAD_HOME=/absolute/path/to/Squad.` };
-  }
-
-  const missing = [
-    join(squadHome, 'scripts', 'build_storyboard_plan_board.py'),
-    join(squadHome, 'scripts', 'run_creative_production.py'),
-    join(squadHome, 'scripts', 'show_creative_production_run.py'),
-  ].filter((path) => !existsSync(path));
-
-  if (missing.length > 0) {
-    return { ok: false, error: `Squad checkout is missing required script(s): ${missing.map((path) => basename(path)).join(', ')}` };
-  }
-
-  return { ok: true };
-}
-
-function shellArg(value: string): string {
-  if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value)) return value;
-  return `'${value.replace(/'/g, String.raw`'\''`)}'`;
 }
 
 function getGoogleAdsPath(): string {
@@ -325,8 +296,11 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getHypermotionSource(workspaceId, workspaceRootPath),
     getLottieSource(workspaceId, workspaceRootPath),
     getVideoStudioSource(workspaceId, workspaceRootPath),
-    getSquadSource(workspaceId, workspaceRootPath),
+    getRawVideoEditorSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
+    getGoogleCalendarSource(workspaceId, workspaceRootPath),
+    getGmailSource(workspaceId, workspaceRootPath),
+    getGoogleDriveSource(workspaceId, workspaceRootPath),
     getMetaAdsSource(workspaceId, workspaceRootPath),
     getNotebookLmSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
@@ -648,32 +622,26 @@ export function getVideoStudioSource(workspaceId: string, workspaceRootPath: str
 }
 
 /**
- * Built-in source for the RunnerOS Squad wrapper.
- *
- * Squad itself stays as an external checkout configured by SQUAD_HOME. The
- * Runner wrapper normalizes command shape and stages previewable artifacts
- * under the active workspace so Output previews can render them safely.
+ * Built-in source for deterministic raw footage editing.
  */
-export function getSquadSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
-  const toolPath = getSquadPath();
-  const runtimeStatus = getSquadRuntimeStatus(toolPath);
-  const squadCli = `node ${shellArg(join(toolPath, 'bin', 'squad.mjs'))}`;
+export function getRawVideoEditorSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getRawVideoEditorPath();
   const config: FolderSourceConfig = {
-    id: 'builtin-squad',
-    name: 'Squad',
-    slug: SQUAD_SLUG,
+    id: 'builtin-raw-video-editor',
+    name: 'Raw Video Editor',
+    slug: RAW_VIDEO_EDITOR_SLUG,
     enabled: true,
-    provider: 'squad',
+    provider: 'runner-raw-video-editor',
     type: 'local',
     local: {
       path: toolPath,
       format: 'cli-tool',
     },
-    tagline: 'Runner wrapper for Squad storyboard boards, preflight, and approval-gated video production.',
-    icon: '🎬',
-    isAuthenticated: runtimeStatus.ok,
-    connectionStatus: runtimeStatus.ok ? 'connected' : 'failed',
-    connectionError: runtimeStatus.error,
+    tagline: 'Bundled local CLI for editing existing footage into MP4 cuts.',
+    icon: '🎞️',
+    isAuthenticated: true,
+    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
+    connectionError: existsSync(toolPath) ? undefined : 'Bundled Raw Video Editor tool folder not found',
   };
 
   return {
@@ -683,20 +651,153 @@ export function getSquadSource(workspaceId: string, workspaceRootPath: string): 
     config,
     guide: {
       raw: [
-        '# Squad',
+        '# Raw Video Editor',
         '',
-        'Use this source for Squad creative production: no-spend storyboards, preflight, budget video runs, review packets, carousels, and agent-readable production receipts.',
+        'Use this source for editing existing raw footage into rendered MP4 cuts. Do not use it for AI-generated video production.',
         '',
         'Workflow:',
-        '1. Run commands from the Runner workspace root so artifacts land inside the workspace.',
-        `2. Run \`${squadCli} doctor --json\` before production work.`,
-        `3. Run \`${squadCli} storyboard --brief-file brief.json --json\` before spend. This emits a \`create_output\` payload for artifact-window display.`,
-        `4. Run \`${squadCli} preflight --brief-file brief.json --json\` before provider spend.`,
-        `5. Only after explicit approval, run \`${squadCli} run --brief-file brief.json --approved --budget-cap-usd 1.00 --json\`.`,
-        '6. Pass the returned `create_output` payload to `create_output` with `showInCanvas: true` to display storyboard HTML or final MP4 in the artifact window.',
+        '1. Run `node bin/raw-video-editor.mjs doctor --json` to verify FFmpeg readiness.',
+        '2. Run `node bin/raw-video-editor.mjs inspect <footage-dir> --json` to write `edit/inventory.json` and `edit/takes_packed.md`.',
+        '3. Run `node bin/raw-video-editor.mjs transcribe <footage-dir> --model base --json` when speech-accurate cuts matter.',
+        '4. Run `node bin/raw-video-editor.mjs plan <footage-dir> --max-duration 45 --aspect 9:16 --json` to write `edit/edl.json`.',
+        '5. Run `node bin/raw-video-editor.mjs render <footage-dir> --out <footage-dir>/edit/preview.mp4 --json` to render a preview.',
+        '6. Review `edit/render-report.json` before claiming the edit is done.',
         '',
-        'Default local Squad path: `/Users/michaelb.williams/CAS4/Squad`. Other installs should set `SQUAD_HOME=/absolute/path/to/Squad`.',
-        'Never expose `.env.local`, provider keys, or raw secrets. Do not raise budget or quality without approval.',
+        'The tool preserves source media. All generated files live under `<footage-dir>/edit/`.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+export function getGoogleCalendarSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-google-calendar',
+    name: 'Google Calendar',
+    slug: GOOGLE_CALENDAR_SLUG,
+    enabled: true,
+    provider: 'google',
+    type: 'api',
+    api: {
+      baseUrl: 'https://calendar.googleapis.com/calendar/v3',
+      authType: 'oauth',
+      googleService: 'calendar',
+      googleScopes: [
+        'https://www.googleapis.com/auth/calendar.events',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+    },
+    tagline: 'Sync Artist HQ dates, deadlines, meetings, releases, and reminders to Google Calendar.',
+    icon: '📅',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Google Calendar',
+        '',
+        'Use this source for Artist HQ calendar sync and approval-gated calendar event updates.',
+        '',
+        'Rules:',
+        '- Calendar writes must come from explicit user actions like Sync Google Calendar.',
+        '- Use calendar.events scope, not full calendar access.',
+        '- Store returned Google event IDs back on the Artist Calendar context doc.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+export function getGmailSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-gmail',
+    name: 'Gmail',
+    slug: GMAIL_SLUG,
+    enabled: true,
+    provider: 'google',
+    type: 'api',
+    api: {
+      baseUrl: 'https://gmail.googleapis.com/gmail/v1',
+      authType: 'oauth',
+      googleService: 'gmail',
+      googleScopes: [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.compose',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+    },
+    tagline: 'Draft artist outreach, inspect requested threads, and prepare approval-gated fan or partner emails.',
+    icon: '✉️',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Gmail',
+        '',
+        'Use this source for drafting emails and reading specific user-requested threads.',
+        '',
+        'Rules:',
+        '- Do not send email without explicit approval.',
+        '- Prefer drafts over sends.',
+        '- Do not bulk-read inbox content by default.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+export function getGoogleDriveSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-google-drive',
+    name: 'Google Drive',
+    slug: GOOGLE_DRIVE_SLUG,
+    enabled: true,
+    provider: 'google',
+    type: 'api',
+    api: {
+      baseUrl: 'https://drive.googleapis.com/drive/v3',
+      authType: 'oauth',
+      googleService: 'drive',
+      googleScopes: [
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive.metadata.readonly',
+        'https://www.googleapis.com/auth/userinfo.email',
+      ],
+    },
+    tagline: 'Attach selected Drive files and folders as workspace context without granting full-drive access.',
+    icon: '🗂️',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Google Drive',
+        '',
+        'Use this source for selected Drive file and folder context.',
+        '',
+        'Rules:',
+        '- Prefer file picker / selected files over broad Drive scans.',
+        '- Use drive.file and metadata scopes first.',
+        '- Do not treat Drive as a default raw dump for agents.',
       ].join('\n'),
     },
     isBuiltin: true,
@@ -1310,8 +1411,11 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === HYPERMOTION_SLUG
     || slug === LOTTIE_SLUG
     || slug === VIDEO_STUDIO_SLUG
-    || slug === SQUAD_SLUG
+    || slug === RAW_VIDEO_EDITOR_SLUG
     || slug === GOOGLE_ADS_SLUG
+    || slug === GOOGLE_CALENDAR_SLUG
+    || slug === GMAIL_SLUG
+    || slug === GOOGLE_DRIVE_SLUG
     || slug === META_ADS_SLUG
     || slug === NOTEBOOKLM_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG

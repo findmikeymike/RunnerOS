@@ -1,0 +1,24 @@
+{
+  "allowedCommands": [
+    {
+      "pattern": "^cd\\s+tools/raw-video-editor\\s+&&\\s+node\\s+bin/raw-video-editor\\.mjs\\s+doctor\\s+--json$",
+      "comment": "Check Raw Video Editor readiness"
+    },
+    {
+      "pattern": "^cd\\s+tools/raw-video-editor\\s+&&\\s+node\\s+bin/raw-video-editor\\.mjs\\s+inspect\\s+.+\\s+--json$",
+      "comment": "Inspect raw footage folder and write inventory"
+    },
+    {
+      "pattern": "^cd\\s+tools/raw-video-editor\\s+&&\\s+node\\s+bin/raw-video-editor\\.mjs\\s+transcribe\\s+.+\\s+--json$",
+      "comment": "Transcribe raw footage folder with local Whisper"
+    },
+    {
+      "pattern": "^cd\\s+tools/raw-video-editor\\s+&&\\s+node\\s+bin/raw-video-editor\\.mjs\\s+plan\\s+.+\\s+--json$",
+      "comment": "Create raw footage EDL plan"
+    },
+    {
+      "pattern": "^cd\\s+tools/raw-video-editor\\s+&&\\s+node\\s+bin/raw-video-editor\\.mjs\\s+render\\s+.+\\s+--json$",
+      "comment": "Render raw footage edit"
+    }
+  ]
+}

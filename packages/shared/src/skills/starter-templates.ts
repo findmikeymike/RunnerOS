@@ -643,6 +643,101 @@ Use email-marketing + content-strategy. No new skill needed yet.
 \`\`\`
 `;
 
+const ARTIST_OS_GUIDE_SKILL = `---
+name: Artist OS Guide
+description: "Use when the user asks what Artist OS/Runner is, where something lives, how to use a feature, how to connect accounts, what a worker/workflow/automation/session/context doc means, or says they are confused, stuck, missing something, or unsure what to do next in the app."
+tags: [system, guide, support, onboarding, artist-os]
+metadata:
+  version: 0.1.0
+---
+
+# Artist OS Guide
+
+Use this skill when HNIC is acting as the user's in-app guide.
+
+## What Artist OS is
+
+Artist OS is a command center for an artist/team. It keeps the artist's profile,
+voice, brand, calendar, people, community, assets, workers, workflows,
+automations, and sessions in one workspace so agents can act with context
+instead of asking from scratch every time.
+
+## Mental model
+
+- **HQ**: the artist home base. Use it for global artist memory and always-on
+  operating surfaces: Spotify pulse, Intel pulse, calendar, agenda, profile,
+  voice, branding, people, community, vault, and work.
+- **Campaign workspace**: a focused rollout/project space. Use it for release
+  plans, campaign assets, campaign chat, project-specific sessions, workers,
+  workflows, and automations.
+- **Chat / HNIC**: the front door. Use it when the user does not know which
+  worker, workflow, setting, or page they need.
+- **Sessions**: saved chats/runs. Agent chats and HNIC chats become sessions.
+- **Workers**: specialist agents for a job, like Branding, Comms, Social
+  Publisher, Spotify Analyst, YouTube Research, Shopify, Print, Ads.
+- **Workflows**: repeatable multi-step processes. A workflow can use multiple
+  workers and usually has inputs, steps, and a run history.
+- **Automations**: triggers that run when something happens or on a schedule.
+- **Connections**: account/API setup for Google, Resend, Spotify, YouTube,
+  Shopify, Printify, ads, messaging, and other services.
+- **Context docs**: reusable knowledge cards that agents can read, such as
+  Profile, Voice, Branding, Community, Calendar, and Artist Intel.
+- **Canvas / Outputs**: durable artifacts created by workers: reports, files,
+  previews, decks, images, receipts, and visual outputs.
+
+## Navigation map
+
+- **HQ**: global artist dashboard and pulse cards.
+- **Plan**: Agenda and Calendar.
+- **People**: Network and Community.
+- **Vault**: assets and files.
+- **Work**: Chat/HNIC, Workers, Workflows, Automations, Sessions.
+- **Brain**: artist intel, profile, voice, branding, context docs, memory-like
+  artist knowledge.
+- **Settings**:
+  - Models: AI/model defaults.
+  - Connections: API keys, OAuth, Resend, Google, Spotify, commerce, ads.
+  - Messaging: phone-style channels like WhatsApp/Telegram.
+  - Workspace: folder, working directory, permissions/modes.
+  - App: appearance, input, shortcuts, profile preferences.
+  - Advanced: memory, labels, server/developer settings.
+
+## How to answer users
+
+1. Translate the user's confusion into a location or next action.
+2. Give the shortest path: "Go to X → Y → click Z."
+3. If a connection is missing, send them to **Settings → Connections** or
+   **Settings → Messaging** for phone channels.
+4. If the task belongs to a worker, name the worker and provide a handoff
+   prompt.
+5. If the task repeats, suggest a workflow or automation.
+6. If the issue sounds like a bug, say what should happen, what likely broke,
+   and offer to inspect/fix it.
+
+## Common guidance
+
+- "Where do I connect email?" → Community sending uses Resend in
+  Settings → Connections → Community Email. Gmail/Google account features live
+  under Google/Workspace connections when available.
+- "Where do phone messages connect?" → Settings → Messaging.
+- "Where did my agent chat go?" → Sessions. Agent chats are saved as sessions.
+- "Where do I add fans?" → People → Community.
+- "Where do I send fan emails?" → People → Community, then selected segment,
+  Send With Resend.
+- "Where do I change artist voice?" → Brain/Profile area, Voice page/card.
+- "Where do I create a worker?" → Work → Workers → New worker, or ask HNIC.
+- "Where do I create a workflow?" → Work → Workflows → Manage/New workflow, or
+  ask HNIC to design it.
+- "What should be in HQ vs campaign?" → HQ is global artist operating memory;
+  campaign workspaces are for a specific rollout/project.
+
+## Tone
+
+Be concrete and calm. Do not overwhelm. Use the user's language. Prefer one
+clear path over explaining every option. If the user is frustrated, skip
+apologies and solve the navigation/problem directly.
+`;
+
 const RUNNEROS_SELF_EDIT_SKILL = `---
 name: RunnerOS Self Edit
 description: Guides Concierge when the user wants RunnerOS to inspect, edit, verify, and hot-reload its own app code through a configured local repo path.
@@ -688,224 +783,121 @@ without explicit user intent. If the working tree has unrelated edits, work
 around them and call out any conflict that blocks the fix.
 `;
 
-const POD_PRODUCT_STRATEGY_SKILL = `---
-name: POD Product Strategy
-description: Turn artwork into a sellable print-on-demand product brief with audience, garment, placement, variants, price band, and launch risks.
-tags: [pod, print-on-demand, product, strategy]
+const RAW_VIDEO_EDITOR_SKILL = `---
+name: raw-video-editor
+description: Edit user-shot raw video footage into polished clips, reels, shorts, interviews, tutorials, talking-head cuts, BTS edits, podcast clips, and social videos. Use when the user provides existing media files or a footage folder and wants transcript-based cutting, filler removal, captions, color/audio cleanup, or final MP4 exports rather than AI-generated video production.
 ---
 
-# POD Product Strategy
+# Raw Video Editor
 
-Use this skill when a design, artwork folder, or product idea needs to become a concrete POD offer.
+## Role
 
-Return:
+Edit existing footage. Do not treat this as a generative video job.
 
-1. Audience: who would buy this and why now.
-2. Product: recommended garment or product type.
-3. Placement: front, back, left chest, sleeve, oversized, or other.
-4. Variants: color and size guidance. Keep color sprawl tight.
-5. Listing angle: title direction, description angle, tags.
-6. Price band: conservative launch range and margin assumptions.
-7. Risks: print quality, weak audience, brand fit, platform risk.
-8. Decision: launch, hold, revise, or needs human review.
+Use this skill for raw phone/camera footage, talking-head clips, interviews, podcasts, BTS/event footage, tutorials, demos, and social cutdowns from longer footage.
 
-Default stance: simple products beat bloated catalogs. Reject weak products early.
-`;
+Route storyboard-first, AI-generated, or provider-produced video work to Squad or Video Editor Agent instead.
 
-const POD_LISTING_COPY_SKILL = `---
-name: POD Listing Copy
-description: Write Shopify and POD listing copy, titles, tags, product descriptions, collection blurbs, captions, and landing-page sections.
-tags: [pod, copy, listings, shopify]
----
+## Legal Note
 
-# POD Listing Copy
+This workflow is inspired by Browser Use \`video-use\`, which is MIT licensed. If you reuse substantial code from that project, include its MIT copyright/license notice in the shipped bundle. If you only use the workflow idea, write Runner-native code and do not copy their helper implementation.
 
-Use this skill for print-on-demand product copy.
+## Operating Rules
 
-Input rule:
+1. Preserve source files. Never overwrite, delete, or destructively modify raw footage.
+2. Put outputs in an \`edit/\` folder next to the source media unless the user specifies another working folder.
+3. Inspect before editing: list files, run \`ffprobe\`, and identify aspect ratio, duration, audio streams, and likely content type.
+4. Transcribe before making speech cuts. Prefer word-level timestamps. Use ElevenLabs Scribe, WhisperX, Whisper, or an available local transcript source.
+5. Build a compact edit surface, usually \`edit/takes_packed.md\`, with phrase-level timestamps grouped by source file.
+6. Ask for strategy confirmation before rendering: target length, platform/aspect, pacing, must-keep moments, must-cut moments, caption style, and grade direction.
+7. Never cut inside a word. Snap cuts to transcript word boundaries when word timestamps exist.
+8. Pad cut edges by roughly 30-200ms to avoid chopped syllables.
+9. Add short audio fades at cut boundaries to avoid pops.
+10. Apply subtitles last so overlays do not cover them.
+11. Self-check preview renders before presenting them: cut boundaries, first/last seconds, caption readability, audio pops, aspect framing, and final duration.
 
-- Prefer real product data: product brief, garment, print placement, colors, price, material, shipping/fulfillment notes, and target buyer.
-- If the task is updating an existing Shopify product, fetch or request the current product/handle first.
-- Do not write final publish-ready copy from vibes only; mark missing facts.
+## Workflow
 
-Copy rules:
+### 1. Inventory
 
-- Write clear buyer-facing copy. No vague hype.
-- Do not invent product claims, delivery promises, scarcity, or discounts.
-- Keep SEO useful but human-readable.
-- Separate Shopify product copy, social captions, and internal notes.
-- Include a short reason for each title or angle.
-- Ban empty hype: "high-quality", "premium", "best-in-class", "amazing", "perfect", "revolutionary", "game-changing".
-- Use clean Shopify HTML for full descriptions. No inline styles.
+Run:
 
-Shopify HTML shape:
-
-\`\`\`html
-<div class="product-description">
-  <p class="product-hook">One concrete opening sentence.</p>
-  <p class="product-body">Two or three sentences on buyer, feeling, use, or identity.</p>
-  <ul class="product-features">
-    <li>Feature or fit note.</li>
-    <li>Print/product detail.</li>
-    <li>Care, styling, or collection fit.</li>
-  </ul>
-  <p class="product-cta">Subtle closing line.</p>
-</div>
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs doctor --json
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs inspect <footage-dir> --json
 \`\`\`
 
-SEO/PDP checks:
+Create \`edit/\` and write:
+- \`inventory.json\` with source files, durations, codecs, dimensions, audio streams.
+- \`project.md\` with the user request, working assumptions, and session notes.
 
-- Title should be readable and include the core product/search phrase.
-- Description should support Product/Offer schema facts when the storefront has them.
-- Image alt text should describe the design and product, not keyword-stuff.
-- Category/collection fit should be explicit.
-- If variants/colors create duplicate pages, recommend canonical/category handling instead of writing duplicate copy.
+Use \`ffprobe\` for objective media facts.
 
-Default output:
+### 2. Transcript Pack
 
-1. Product title options.
-2. Short description.
-3. Full product description.
-4. SEO title/meta description.
-5. Image alt text.
-6. Tags and collection fit.
-7. Social caption variants.
-8. Missing facts and approval notes.
-`;
+Run when speech-accurate cuts matter and local Whisper is available:
 
-const POD_PRICING_MARGIN_SKILL = `---
-name: POD Pricing Margin
-description: Price POD products conservatively using product cost, shipping assumptions, marketplace fees, discount room, and contribution margin floors.
-tags: [pod, pricing, margin, commerce]
----
-
-# POD Pricing Margin
-
-Use this skill before recommending a live price or price change.
-
-Rules:
-
-- Never recommend pricing below contribution floor.
-- State assumptions when costs, shipping, or fees are missing.
-- Leave room for discounts and bundles when possible.
-- Treat ad spend as CM2, not product gross margin.
-- Mark every live price change as approval-required.
-
-Margin waterfall:
-
-\`\`\`text
-Gross revenue
-- discounts/coupons
-- returns/refunds allowance
-= net revenue
-- product COGS
-= gross profit
-- outbound shipping or shipping subsidy
-- payment processing fees
-- marketplace/platform fees
-- packaging/materials if known
-= fulfillment-adjusted gross profit
-- attributed marketing spend
-= contribution margin
-- allocated overhead if needed
-= operating profit estimate
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs transcribe <footage-dir> --model base --json
 \`\`\`
 
-Decision rules:
+If speech matters, create:
+- \`edit/transcripts/<source>.json\` for raw transcription output.
+- \`edit/takes_packed.md\` for the working edit view.
 
-- Use contribution margin for scale decisions, not gross margin alone.
-- If a product is single-item low AOV, flag cold ads as risky unless CM supports expected CPA.
-- Reconcile cost assumptions monthly or whenever provider/product costs change.
-- Recommend bundles, premium garment options, or cross-sells when single-SKU economics are weak.
-- Show price floor, conservative launch price, and stretch price.
+The packed transcript should keep filler words and false starts visible because they are editorial signal.
 
-Return:
+### 3. Strategy
 
-1. Known costs.
-2. Unknown assumptions.
-3. Margin waterfall.
-4. Price floor.
-5. Recommended launch price.
-6. Bundle/discount room.
-7. Contribution margin estimate.
-8. Approval-needed changes.
-`;
+Before editing, give the user a plain-English plan:
+- Intended structure
+- Best takes or moments
+- Cut style and pacing
+- Caption treatment
+- Color/audio cleanup
+- Target runtime and aspect ratio
 
-const POD_CONTENT_CALENDAR_SKILL = `---
-name: POD Content Calendar
-description: Turn POD products into daily social hooks, captions, carousel concepts, short-video briefs, and posting priorities.
-tags: [pod, social, content, growth]
----
+Wait for confirmation before rendering anything expensive or time-consuming.
 
-# POD Content Calendar
+### 4. EDL
 
-Use this skill when live or planned products need organic content.
+Run:
 
-Calendar rules:
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs plan <footage-dir> --max-duration <seconds> --aspect 9:16 --json
+\`\`\`
 
-- Start with 2-4 weekly themes: product, customer identity, proof/use case, behind-the-design, trend/reactive.
-- Map source assets to multiple posts instead of starting from scratch every time.
-- Every calendar item needs: date, platform, theme, product/source, format, owner, status, CTA, and asset need.
-- Include cross-post notes when one idea becomes a TikTok, Reel, Short, carousel, or X post.
-- Reserve open slots for trends, launches, and customer proof. Do not overbook.
-- Match platform mix to the product and audience. Do not post everywhere by habit.
-- This skill plans content. It does not dispatch live posts.
+Write \`edit/edl.json\` as the source of truth with \`aspect\`, \`target_duration_s\`, \`segments\`, \`captions\`, and \`grade\`.
 
-Return:
+### 5. Render
 
-1. Product/context summary.
-2. Weekly themes.
-3. Calendar entries as markdown table or YAML.
-4. Hooks and captions.
-5. Carousel frame outlines.
-6. Short-video briefs.
-7. Cross-post plan.
-8. Capacity/open-slot notes.
-9. Posting approval packet.
+Run:
 
-Keep content tied to product URLs, collection themes, or business goals. Do not generate spammy volume just to fill a calendar.
-`;
+\`\`\`bash
+cd tools/raw-video-editor && node bin/raw-video-editor.mjs render <footage-dir> --out <footage-dir>/edit/preview.mp4 --json
+\`\`\`
 
-const POD_GROWTH_REVIEW_SKILL = `---
-name: POD Growth Review
-description: Review POD sales, listings, content output, traffic, and margin signals to produce daily/weekly next actions.
-tags: [pod, analytics, growth, review]
----
+Use FFmpeg or Runner Video Studio tools. Prefer simple, reliable renders first:
+- Extract selected segments.
+- Apply light grade/audio cleanup per segment when needed.
+- Concatenate.
+- Add overlays.
+- Burn captions last.
+- Export \`edit/preview.mp4\`, then \`edit/final.mp4\` after approval.
 
-# POD Growth Review
+### 6. Verify
 
-Use this skill for daily and weekly print-on-demand business reviews.
+Before calling the edit done:
+- Check output duration with \`ffprobe\`.
+- Review every cut boundary when practical.
+- Check first 2s, last 2s, and several middle points.
+- Confirm captions are readable and not hidden.
+- Confirm no audio pops or clipped words.
+- If quality is uncertain, say exactly what needs manual review.
 
-Review hierarchy:
+## Output
 
-- Sales: orders, revenue, AOV, refunds, product/channel mix.
-- Catalog: new listings, drafts, stuck launches, low-margin SKUs, out-of-stock/provider drift.
-- Content: posts shipped, platforms, winners, misses, asset bottlenecks.
-- Traffic: Shopify sessions, product-page conversion, add-to-cart, checkout completion when available.
-- Economics: gross margin, fulfillment-adjusted margin, contribution margin, ad spend exposure.
-- Operations: failed automations, missing approvals, blocked credentials, broken receipts.
-
-Rules:
-
-- Separate signal from noise. One sale is a clue, not proof.
-- Flag products that need refresh, bundle, price change, more content, or pause.
-- Any price, ad, listing, product, or publishing change is approval-required.
-- Prefer next actions with owners and workflow names.
-
-Return:
-
-1. What launched.
-2. What sold or got signal.
-3. What content shipped.
-4. What stalled.
-5. Winners.
-6. Losers.
-7. Margin/watchlist issues.
-8. Next product/content ideas.
-9. Workflow recommendations.
-10. Approval-needed actions.
-
-Judge the business by profitable repeatable velocity, not vanity automation.
+Return final path, preview/final status, runtime, aspect ratio, what was cut, known limitations, and the next suggested edit pass.
 `;
 
 export const STARTER_SKILLS: StarterSkill[] = [
@@ -914,12 +906,9 @@ export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'workflow-creator', files: [{ path: 'SKILL.md', content: WORKFLOW_CREATOR_SKILL }] },
   { slug: 'source-recipe', files: [{ path: 'SKILL.md', content: SOURCE_RECIPE_SKILL }] },
   { slug: 'skill-scout', files: [{ path: 'SKILL.md', content: SKILL_SCOUT_SKILL }] },
+  { slug: 'artist-os-guide', files: [{ path: 'SKILL.md', content: ARTIST_OS_GUIDE_SKILL }] },
   { slug: 'runneros-self-edit', files: [{ path: 'SKILL.md', content: RUNNEROS_SELF_EDIT_SKILL }] },
-  { slug: 'pod-product-strategy', files: [{ path: 'SKILL.md', content: POD_PRODUCT_STRATEGY_SKILL }] },
-  { slug: 'pod-listing-copy', files: [{ path: 'SKILL.md', content: POD_LISTING_COPY_SKILL }] },
-  { slug: 'pod-pricing-margin', files: [{ path: 'SKILL.md', content: POD_PRICING_MARGIN_SKILL }] },
-  { slug: 'pod-content-calendar', files: [{ path: 'SKILL.md', content: POD_CONTENT_CALENDAR_SKILL }] },
-  { slug: 'pod-growth-review', files: [{ path: 'SKILL.md', content: POD_GROWTH_REVIEW_SKILL }] },
+  { slug: 'raw-video-editor', files: [{ path: 'SKILL.md', content: RAW_VIDEO_EDITOR_SKILL }] },
 ];
 
 export { SYSTEM_GLOBAL_SKILL_SLUGS } from './system.ts';

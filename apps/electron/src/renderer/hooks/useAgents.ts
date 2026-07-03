@@ -41,7 +41,26 @@ export interface UseAgentsResult {
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const SYSTEM_AGENT_SLUGS = [CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SOCIAL_PUBLISHER_SLUG] as const
+const BUILTIN_VISIBLE_AGENT_SLUGS = [
+  CONCIERGE_SLUG,
+  ORCHESTRATOR_SLUG,
+  SOCIAL_PUBLISHER_SLUG,
+  'content-genius',
+  'video-director',
+  'video-editor-agent',
+  'raw-video-editor',
+  'ads-agent',
+  'trypost-agent',
+  'spotify-analyst',
+  'shopify-agent',
+  'print-agent',
+  'gaygent-master',
+  'persona-agent',
+  'branding-agent',
+  'comms-agent',
+  'youtube-research-agent',
+  'youtube-intelligence-agent',
+] as const
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalDefinitionsCleanup: (() => void) | null = null

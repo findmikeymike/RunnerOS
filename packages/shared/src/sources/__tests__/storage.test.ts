@@ -404,46 +404,16 @@ describe('loadAllSources', () => {
     expect(found!.config.local?.path).toContain('tools/video-studio');
   });
 
-  test('includes squad as a project local source', () => {
+  test('includes raw-video-editor as a project local source', () => {
     const ws = makeWorkspace();
     const all = loadAllSources(ws);
-    const found = all.find((s: LoadedSource) => s.config.slug === 'squad');
+    const found = all.find((s: LoadedSource) => s.config.slug === 'raw-video-editor');
 
     expect(found).toBeDefined();
     expect(found!.tier).toBe('project');
     expect(found!.config.type).toBe('local');
     expect(found!.config.local?.format).toBe('cli-tool');
-    expect(found!.config.local?.path).toContain('tools/squad');
-  });
-
-  test('bundled squad permissions parse into allowed bash patterns', () => {
-    const permissionsPath = resolve(import.meta.dir, '../../../../../sources/squad/permissions.json');
-    const raw = readFileSync(permissionsPath, 'utf-8');
-    const json = JSON.parse(raw) as Record<string, unknown>;
-    const parsed = parsePermissionsJson(raw);
-    const allowedPatterns = parsed.allowedBashPatterns as Array<{ pattern: string }>;
-    const blockedHints = parsed.blockedCommandHints as Array<{ command: string }>;
-
-    expect(json.allowedCommands).toBeUndefined();
-    expect(allowedPatterns.length).toBeGreaterThanOrEqual(4);
-    expect(allowedPatterns.some((entry) => entry.pattern.includes('storyboard'))).toBe(true);
-    expect(blockedHints.some((hint) => hint.command.includes('squad.mjs run'))).toBe(true);
-  });
-
-  test('built-in squad permissions merge without a workspace source folder', () => {
-    const ws = makeWorkspace();
-    const permissionsPath = join(ws, 'sources', 'squad', 'permissions.json');
-    const sourceConfig = loadSourcePermissionsConfig(ws, 'squad');
-    const merged = permissionsConfigCache.getMergedConfig({
-      workspaceRootPath: ws,
-      activeSourceSlugs: ['squad'],
-    });
-    const absoluteDoctor = `node ${resolve('tools/squad/bin/squad.mjs')} doctor --json`;
-
-    expect(existsSync(permissionsPath)).toBe(false);
-    expect(sourceConfig).toBeTruthy();
-    expect(sourceConfig?.allowedBashPatterns.some((entry: PatternWithComment) => entry.pattern.includes('tools/squad/bin/squad'))).toBe(true);
-    expect(merged.readOnlyBashPatterns.some((entry: { regex: RegExp }) => entry.regex.test(absoluteDoctor))).toBe(true);
+    expect(found!.config.local?.path).toContain('tools/raw-video-editor');
   });
 
   test('includes shopify as a project local source', () => {
@@ -566,37 +536,16 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.local?.path).toContain('tools/video-studio');
   });
 
-  test('resolves squad by slug without workspace activation', () => {
+  test('resolves raw-video-editor by slug without workspace activation', () => {
     const ws = makeWorkspace();
-    const sources = getSourcesBySlugs(ws, ['squad']);
+    const sources = getSourcesBySlugs(ws, ['raw-video-editor']);
 
     expect(sources.length).toBe(1);
     expect(sources[0]!.tier).toBe('project');
-    expect(sources[0]!.config.slug).toBe('squad');
+    expect(sources[0]!.config.slug).toBe('raw-video-editor');
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.type).toBe('local');
-    expect(sources[0]!.config.local?.path).toContain('tools/squad');
-  });
-
-  test('marks squad source failed when SQUAD_HOME is invalid', () => {
-    const previousSquadHome = process.env.SQUAD_HOME;
-    process.env.SQUAD_HOME = join(tmpdir(), `missing-squad-${Date.now()}`);
-    try {
-      const ws = makeWorkspace();
-      const sources = getSourcesBySlugs(ws, ['squad']);
-
-      expect(sources.length).toBe(1);
-      expect(sources[0]!.config.slug).toBe('squad');
-      expect(sources[0]!.config.isAuthenticated).toBe(false);
-      expect(sources[0]!.config.connectionStatus).toBe('failed');
-      expect(sources[0]!.config.connectionError).toContain('Squad checkout not found');
-    } finally {
-      if (previousSquadHome === undefined) {
-        delete process.env.SQUAD_HOME;
-      } else {
-        process.env.SQUAD_HOME = previousSquadHome;
-      }
-    }
+    expect(sources[0]!.config.local?.path).toContain('tools/raw-video-editor');
   });
 
   test('resolves google-ads by slug without workspace activation', () => {
@@ -611,16 +560,19 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.local?.path).toContain('tools/google-ads');
   });
 
-  test('resolves meta-ads by slug without workspace activation', () => {
+  test('resolves google-calendar by slug without workspace activation', () => {
     const ws = makeWorkspace();
-    const sources = getSourcesBySlugs(ws, ['meta-ads']);
+    const sources = getSourcesBySlugs(ws, ['google-calendar']);
 
     expect(sources.length).toBe(1);
     expect(sources[0]!.tier).toBe('project');
-    expect(sources[0]!.config.slug).toBe('meta-ads');
+    expect(sources[0]!.config.slug).toBe('google-calendar');
     expect(sources[0]!.config.enabled).toBe(true);
-    expect(sources[0]!.config.type).toBe('mcp');
-    expect(sources[0]!.config.mcp?.url).toBe('https://mcp.facebook.com/ads');
+    expect(sources[0]!.config.type).toBe('api');
+    expect(sources[0]!.config.provider).toBe('google');
+    expect(sources[0]!.config.api?.authType).toBe('oauth');
+    expect(sources[0]!.config.api?.googleService).toBe('calendar');
+    expect(sources[0]!.config.api?.googleScopes).toContain('https://www.googleapis.com/auth/calendar.events');
   });
 
   test('resolves youtube-research by slug without workspace activation', () => {

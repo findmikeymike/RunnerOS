@@ -1,0 +1,16 @@
+{
+  "id": "raw-video-editor_20260702",
+  "name": "Raw Video Editor",
+  "slug": "raw-video-editor",
+  "enabled": true,
+  "provider": "runner-raw-video-editor",
+  "type": "local",
+  "tagline": "Bundled local CLI for editing existing footage into MP4 cuts.",
+  "local": {
+    "path": "tools/raw-video-editor",
+    "format": "cli-tool"
+  },
+  "icon": "🎞️",
+  "isAuthenticated": true,
+  "connectionStatus": "untested"
+}

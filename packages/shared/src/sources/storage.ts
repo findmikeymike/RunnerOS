@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getSquadSource, getGoogleAdsSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getGoogleAdsSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import { getSourceCredentialManager } from './credential-manager.ts';
@@ -535,10 +535,16 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getHypermotionSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'video-studio') {
         sources.push({ ...getVideoStudioSource(workspaceId, workspaceRootPath), tier: 'project' });
-      } else if (slug === 'squad') {
-        sources.push({ ...getSquadSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'raw-video-editor') {
+        sources.push({ ...getRawVideoEditorSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'google-ads') {
         sources.push({ ...getGoogleAdsSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'google-calendar') {
+        sources.push({ ...getGoogleCalendarSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'gmail') {
+        sources.push({ ...getGmailSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'google-drive') {
+        sources.push({ ...getGoogleDriveSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'meta-ads') {
         sources.push({ ...getMetaAdsSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'notebooklm') {
