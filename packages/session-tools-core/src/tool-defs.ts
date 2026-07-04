@@ -55,6 +55,7 @@ import {
   handleRecallMemory,
 } from './handlers/memory.ts';
 import { handleCreateOutput } from './handlers/outputs.ts';
+import { handleArtworkCompose } from './handlers/artwork-compose.ts';
 import { handleVisualSurface } from './handlers/visual-surface.ts';
 import { handleVisualSurfaceState } from './handlers/visual-surface-state.ts';
 import {
@@ -552,6 +553,55 @@ export const CreateOutputSchema = z.object({
   tags: z.array(z.string()).optional(),
   showInCanvas: z.boolean().optional().describe('Set true when the user should see this Output in Canvas immediately. The backend marks and pins the same-session Output when Canvas is available.'),
   show_in_canvas: z.boolean().optional().describe('Alias for showInCanvas. Prefer showInCanvas in new calls.'),
+});
+
+export const ArtworkComposeSchema = z.object({
+  title: z.string().min(1).describe('Human-readable artwork title for the output.'),
+  width: z.number().int().min(256).max(8000).optional().describe('Canvas width in pixels. Defaults to 3000.'),
+  height: z.number().int().min(256).max(8000).optional().describe('Canvas height in pixels. Defaults to 3000.'),
+  outputDir: z.string().optional().describe('Output folder. Relative paths resolve from the session working directory. Defaults to a unique .artifacts/artwork/<title>/<revision> folder. Must stay inside the working directory.'),
+  fileName: z.string().optional().describe('Base filename without extension. Defaults to title slug.'),
+  baseImagePath: z.string().optional().describe('Optional local base image path inside the working directory. Embedded into the SVG layer for stable preview/export.'),
+  backgroundColor: z.string().optional().describe('Background fill color. Defaults to #111111.'),
+  texts: z.array(z.object({
+    text: z.string().min(1),
+    x: z.number(),
+    y: z.number(),
+    fontSize: z.number().positive(),
+    fontFamily: z.string().optional(),
+    fontWeight: z.union([z.string(), z.number()]).optional(),
+    fill: z.string().optional(),
+    anchor: z.enum(['start', 'middle', 'end']).optional(),
+    uppercase: z.boolean().optional(),
+    maxWidth: z.number().positive().optional(),
+    lineHeight: z.number().positive().optional(),
+    letterSpacing: z.number().optional(),
+    opacity: z.number().min(0).max(1).optional(),
+  })).optional().describe('Editable typography layers rendered after the base image.'),
+  shapes: z.array(z.object({
+    type: z.enum(['rect', 'circle', 'line']),
+    x: z.number().optional(),
+    y: z.number().optional(),
+    width: z.number().optional(),
+    height: z.number().optional(),
+    cx: z.number().optional(),
+    cy: z.number().optional(),
+    r: z.number().optional(),
+    x1: z.number().optional(),
+    y1: z.number().optional(),
+    x2: z.number().optional(),
+    y2: z.number().optional(),
+    fill: z.string().optional(),
+    stroke: z.string().optional(),
+    strokeWidth: z.number().optional(),
+    opacity: z.number().min(0).max(1).optional(),
+    radius: z.number().optional(),
+  })).optional().describe('Simple vector composition layers behind or around type.'),
+  exportPng: z.boolean().optional().describe('Render a PNG preview beside the SVG. Defaults to true.'),
+  publishOutput: z.boolean().optional().describe('Publish the artwork as an Output. Defaults to true when create_output is available.'),
+  showInCanvas: z.boolean().optional().describe('Show the published artwork in Canvas. Defaults to true.'),
+  summary: z.string().optional().describe('Optional Output summary.'),
+  tags: z.array(z.string()).optional().describe('Optional Output tags.'),
 });
 
 export const VideoProjectCreateSchema = z.object({
@@ -1138,6 +1188,17 @@ Use Browser Pane or browser tools, not Canvas, when the user wants to test, debu
 
 Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
 
+  artwork_compose: `Create an editable artwork composition and optionally publish it to Canvas.
+
+Use this after a cover-art, merch, poster, or campaign-visual concept has an approved base image or an approved layout direction. It writes:
+- an editable SVG source with deterministic typography/vector layers
+- a PNG preview export by default
+- a JSON layout spec so future revisions can adjust type/composition without regenerating base art
+
+Use this instead of asking an image model to bake final artist/title typography into the image. Good uses: album/single cover type pass, merch graphic type/shape layout, poster lockup, clean PNG preview, transparent-feeling SVG handoff, and Canvas-visible review artifacts.
+
+For visual agents, publish the result and keep \`showInCanvas: true\` unless the user explicitly asks for files only. Use \`baseImagePath\` for a locally generated/imported base image. Keep all paths inside the session working directory.`,
+
   video_project_create: `Create a local RunnerOS Video Studio project file.
 
 Use this before timeline edits. The project file is the source of truth for both agents and the future Video Studio UI.
@@ -1290,6 +1351,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
+  { name: 'artwork_compose', description: TOOL_DESCRIPTIONS.artwork_compose, inputSchema: ArtworkComposeSchema, executionMode: 'registry', safeMode: 'block', handler: handleArtworkCompose },
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
   { name: 'video_project_update', description: TOOL_DESCRIPTIONS.video_project_update, inputSchema: VideoProjectUpdateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUpdate },
   { name: 'video_media_import', description: TOOL_DESCRIPTIONS.video_media_import, inputSchema: VideoMediaImportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoMediaImport },

@@ -181,6 +181,12 @@ export type {
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
 } from './outputs.ts';
+export { handleArtworkCompose } from './artwork-compose.ts';
+export type {
+  ArtworkComposeInput,
+  ArtworkComposeShapeLayer,
+  ArtworkComposeTextLayer,
+} from './artwork-compose.ts';
 
 // Video Studio
 export {

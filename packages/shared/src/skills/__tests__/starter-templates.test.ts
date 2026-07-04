@@ -138,4 +138,47 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain('POST /users/me/drafts/send');
     expect(parsed.content).not.toContain('Runner');
   });
+
+  it('includes artist-art-direction for taste-led artwork concepts', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'artist-art-direction');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('Artist Art Direction');
+    expect(parsed.content).toContain('70s Vinyl Cover');
+    expect(parsed.content).toContain('Tasteful Collage');
+    expect(parsed.content).toContain('FADER Mag');
+    expect(parsed.content).toContain('Far Out');
+    expect(parsed.content).toContain('Album / Single Art Mode');
+    expect(parsed.content).toContain('Merch Design Mode');
+    expect(parsed.content).toContain('Typography / Layout Execution');
+    expect(parsed.content).toContain('artwork_compose');
+    expect(parsed.content).toContain('export PNG preview');
+    expect(parsed.content).toContain('showInCanvas: true');
+    expect(parsed.content).toContain('Artwork Builder Handoff');
+    expect(parsed.content).toContain('Never fake a real artist likeness');
+    expect(parsed.content).toContain('Do not generate immediately');
+    expect(parsed.content).not.toContain('Runner');
+  });
+
+  it('includes artist-typography-taste for cover, merch, and poster type direction', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'artist-typography-taste');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('Artist Typography Taste');
+    expect(parsed.content).toContain('70s Vinyl');
+    expect(parsed.content).toContain('Editorial / FADER');
+    expect(parsed.content).toContain('Psychedelic / Far Out');
+    expect(parsed.content).toContain('Luxury / Minimal');
+    expect(parsed.content).toContain('Zine / Punk / Grunge');
+    expect(parsed.content).toContain('Street Poster / Mixtape');
+    expect(parsed.content).toContain('Open-Source Font Kit');
+    expect(parsed.content).toContain('Fraunces');
+    expect(parsed.content).toContain('Archivo Black');
+    expect(parsed.content).toContain('Bebas Neue');
+    expect(parsed.content).toContain('Exact font asset available');
+    expect(parsed.content).toContain('artwork_compose');
+    expect(parsed.content).toContain('showInCanvas: true');
+    expect(parsed.content).toContain('Georgia, Times New Roman, serif');
+    expect(parsed.content).not.toContain('Runner');
+  });
 });

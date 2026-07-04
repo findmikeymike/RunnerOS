@@ -2445,7 +2445,7 @@ export class SessionManager implements ISessionManager {
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
         // Chat nav entry), Social Publisher, TryPost, Hypermotion, Lottie Animation,
-        // Video Editor, promotion helpers, Shopify, Print Agent, Outreach, Industry Hunter, Record Doctor, and Update System Agent.
+        // Video Editor, promotion helpers, Shopify, Print Agent, Outreach, Industry Hunter, Art Director, Record Doctor, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
@@ -2465,6 +2465,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'comms-agent'
             || a.slug === 'outreach-agent'
             || a.slug === 'industry-hunter'
+            || a.slug === 'art-director'
             || a.slug === 'record-doctor'
             || a.slug === 'update-system-agent',
         )

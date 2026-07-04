@@ -3014,6 +3014,319 @@ See \`examples/\` for before/after narrative surgeries across domains (SaaS land
     ],
   },
   {
+    slug: "artist-art-direction",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: Artist Art Direction
+description: Create taste-led single, album, campaign, and promo artwork concepts from Artist HQ context, style lanes, reference images, and approval-gated image generation.
+tags: [artist, art-direction, album-art, image-generation, design, typography, visuals, svg, png]
+category: media-design
+---
+
+# Artist Art Direction
+
+Use this skill when an artist wants cover art, single art, campaign visuals, poster concepts, editorial images, or AI-assisted artwork that should feel culturally literate and designed, not generic.
+
+## Context To Pull First
+
+Use saved Artist HQ context before asking the user to repeat it:
+
+- \`artist-profile\`
+- \`artist-voice\`
+- \`artist-branding\`
+- themes/topics
+- similar artists
+- music style, genre, production texture
+- release/campaign goal
+- relevant lyrics, song title, demos, visual references, moodboards, press photos, prior covers, and campaign notes
+
+Ask only for missing specifics: format, song/project, deadline, must-use assets, references, and what the artist does not want.
+
+## Core Doctrine
+
+- Be an art director first, not a prompt machine.
+- Propose visual worlds before generating images.
+- Every concept needs a strong first-read at thumbnail size.
+- One dominant focal point beats decorative clutter.
+- Taste comes from composition, restraint, reference literacy, and tension.
+- Use AI image generation for the image base. Do not trust it for final typography unless the user explicitly wants baked-in text.
+- Plan typography, artist name, title, labels, advisory marks, and layout as a separate design layer.
+
+## Mode Routing
+
+Start by classifying the job into one of two production modes. If unclear, ask: "Is this for cover art or merch?"
+
+### Album / Single Art Mode
+
+Use for album covers, single covers, EP covers, playlist covers, campaign key art, posters, and editorial release visuals.
+
+Default specs:
+- master square: 3000x3000 px
+- social square: 1080x1080 px
+- vertical story/reel crop: 1080x1920 px when useful
+- optional clean art base without type
+- optional final cover with type
+
+Design priorities:
+- strong thumbnail read at streaming size
+- clear artist/title hierarchy
+- cover must still work if cropped in platform UI
+- no tiny critical detail near edges
+- typography can be minimal, loud, hidden, or absent, but it must be intentional
+- parental advisory, label logo, catalog marks, and sticker treatments are optional design elements, not defaults
+
+### Merch Design Mode
+
+Use for shirts, hoodies, hats, posters, stickers, tour merch, and print-on-demand concepts.
+
+Default specs:
+- transparent PNG/SVG mindset when possible
+- front chest, full front, back print, sleeve, hat, and poster placement options
+- screen-print-safe color count when relevant
+- high contrast at distance
+- no hairline detail that dies on fabric
+- no tiny type unless it is decorative texture, not required reading
+
+Design priorities:
+- graphic mark first, product mockup second
+- must survive fabric, scale, and imperfect printing
+- typography should behave like a logo/graphic, not a caption
+- avoid square album-art pasted on a shirt unless the user explicitly wants that
+
+## Typography / Layout Execution
+
+Default rule: do not ask the image generator to render final title text, artist name, or long typography.
+
+Use this two-layer production path:
+
+1. **Image base layer** — generated photo, illustration, collage, texture, or symbolic scene with no final title text.
+2. **Design/type layer** — deterministic layout added after generation using \`artwork_compose\` when available, or HTML/CSS, SVG, Canvas, Sharp, or a design tool/export path.
+
+The design/type layer must specify:
+- canvas size and safe margins
+- artist name
+- project/song title
+- font category and fallback font idea
+- type case: uppercase, lowercase, title case, handwritten, condensed, serif, grotesk, script, etc.
+- placement: top, bottom, spine-like edge, centered, hidden, sticker, stamp, label strip, magazine masthead, no type
+- hierarchy: artist first, title first, symbol first, or no hierarchy
+- color/contrast
+- spacing/tracking
+- optional marks: parental advisory, label mark, catalog number, price tag, tour date, edition stamp
+
+When \`artwork_compose\` is available, use it for approved type/composition passes:
+
+- create editable SVG source
+- export PNG preview
+- attach layout JSON as the revision source
+- publish the result with \`showInCanvas: true\` unless the user asks for files only
+- revise type, placement, color, shape, and hierarchy through the composition layer before regenerating the base image
+
+Only use baked-in generated typography when:
+- the user explicitly wants imperfect poster/flyer text as part of the image
+- the chosen model is known to handle text well
+- the text is short
+- a deterministic final type pass is still planned if quality fails
+
+## Artwork Builder Handoff
+
+After the user approves a concept, hand off to an Artwork Builder-style execution plan.
+
+The builder plan must include:
+
+1. Base art generation brief.
+2. Reference image requirements.
+3. Exact model/tool routing.
+4. Typography/layout spec.
+5. Export sizes.
+6. Revision handles: what can change without regenerating base art.
+7. Approval gate before any paid generation or external API call.
+
+If a local compositor/export tool exists, use it after the base image is ready. Prefer \`artwork_compose\` for SVG/PNG/type exports. If it does not exist, produce a precise layout spec that can be rendered by HTML/SVG/Canvas later.
+
+All user-facing visual creations should become Canvas-visible artifacts when possible:
+
+- image concepts can be markdown outputs
+- generated base images can be image outputs
+- final covers/posters/merch graphics should use \`artwork_compose\`
+- set \`showInCanvas: true\` so the user can review and iterate beside chat
+
+## Face / Artist Reference Rule
+
+If the user wants the artist's actual face, body, or likeness:
+
+1. Ask for or pull an approved artist reference image.
+2. Use only a model/tool that supports image reference, face reference, or identity reference.
+3. Warn that likeness quality depends on the model and reference quality.
+4. Never fake a real artist likeness from text alone.
+5. If no suitable tool/reference exists, create a non-likeness concept instead: silhouette, hands, styling, objects, environment, back-of-head, symbolic portrait, or obscured editorial crop.
+
+## Image Generation Routing
+
+Do not generate immediately.
+
+First deliver concepts. When the user approves one:
+
+1. Write the exact generation brief.
+2. Name whether it needs text-to-image, image-reference, face-reference, image editing, or typography-capable generation.
+3. If connected image generation tools are available, use the best fit.
+4. If using Zero, inspect the capability first with \`zero search\` and \`zero get\`; do not assume schema. Use a max-pay cap.
+5. If no suitable generation path is available, return a production-ready prompt and layout spec the user can use elsewhere.
+
+Never spend, call paid APIs, or queue generation without explicit approval.
+
+## Commanding Visual Design
+
+Every concept should create a reaction:
+
+- beautiful
+- unsettling
+- expensive
+- intimate
+- dangerous
+- sacred
+- lonely
+- iconic
+- sensual
+- chaotic
+- cinematic
+
+Use contrast: delicate vs aggressive, sacred vs trashy, luxury vs damaged, nostalgic vs futuristic, polished vs chaotic, natural vs synthetic.
+
+Reject slop:
+
+- generic neon smoke
+- random chrome faces
+- fake vintage filters
+- meaningless symbols
+- AI surreal mush
+- over-cluttered collage
+- illegible or fake text
+- fake album wear/ring marks
+- copied album covers
+- "cinematic moody aesthetic" without a concrete idea
+
+## Style Lanes
+
+### 70s Vinyl Cover
+
+Visual DNA:
+- warm analog palette, restrained layout, period-specific spacing, strong negative space
+- photography or illustration that feels designed, not filtered
+- earth tones, muted primaries, cream/black accents, aged but not fake-damaged
+- record-label sophistication, folk/soul/rock/jazz sleeve intelligence
+
+Typography:
+- confident serif, soft grotesk, hand-lettered accent only when earned
+- generous tracking, simple hierarchy, no fake distressed type
+
+Best for:
+- timeless records, songwriter projects, soul, folk, rock, intimate albums, warm psych, analog-feeling releases
+
+Avoid:
+- fake dust, fake ring wear, sepia filter abuse, costume-retro gimmicks
+
+### Tasteful Collage
+
+Visual DNA:
+- symbolic assembled world around the song
+- objects, places, lyric fragments, paper, photos, textures, artifacts, scenes
+- abstract but intentional; each element must connect to song, artist, mythology, or release story
+
+Typography:
+- either minimal anchor type or integrated editorial fragments
+- keep text hierarchy clean if the image is busy
+
+Best for:
+- concept-heavy songs, emotional complexity, mythology, fragmented memory, campaign worlds
+
+Avoid:
+- Pinterest scrapbook clutter, random cutouts, literal overexplaining, too many equal focal points
+
+### FADER Mag
+
+Visual DNA:
+- artist-forward editorial image
+- 90s/early-2000s film realism, flash, grain, raw styling, strong crop
+- confident portrait, real location, direct gaze or charged off-camera energy
+- artist image references when available
+
+Typography:
+- magazine-grade hierarchy, bold masthead logic, clear artist/title placement
+- never parody a magazine unless requested
+
+Best for:
+- artist identity, press-ready visuals, image-centric campaigns, singles where the artist is the signal
+
+Avoid:
+- fake magazine cover jokes, over-retouched skin, generic fashion editorial, fake likeness
+
+### Far Out
+
+Visual DNA:
+- elevated psychedelic language: surreal scale, dream color, optical rhythm, cosmic/nature/mind-expansion cues
+- cultural gravity from Pink Floyd, Jimi Hendrix, Tame Impala, Frank Zappa, Nick Drake, and analog poster art without copying
+- trippy but composed, with a clear symbol or spatial idea
+
+Typography:
+- organic type, fluid serif, 60s/70s poster influence, or dead-simple modern type against wild imagery
+
+Best for:
+- psychedelic music, introspection, existential songs, dream pop, guitar records, spiritual/strange releases
+
+Avoid:
+- lava-lamp mush, random galaxies, cheap fractals, over-saturated AI hallucination
+
+## Concept Output
+
+Default to three options:
+
+1. Safe/clean
+2. Strong/recommended
+3. Risky/iconic
+
+For each concept include:
+
+- title
+- mode: Album / Single Art or Merch Design
+- style lane
+- format
+- cover idea
+- focal point
+- composition
+- typography direction
+- palette
+- texture/photo treatment
+- reference logic
+- why it fits this artist/song
+- generation route
+- type/layout route
+- anti-slop guardrails
+
+## Generation Brief Output
+
+When the user picks a concept, output:
+
+\`\`\`markdown
+Approved direction:
+Generation type:
+Reference images needed:
+Model/tool recommendation:
+Prompt:
+Negative prompt / avoid:
+Typography/layout layer:
+Compositor/export plan:
+Export sizes:
+Revision handles:
+Approval needed before generation:
+\`\`\`
+`,
+      },
+    ],
+  },
+  {
     slug: "artist-industry-hunter",
     files: [
       {
@@ -3131,6 +3444,264 @@ Create a markdown doc titled \`Industry Hunter Target List\`. If \`create_output
 \`\`\`
 
 Keep the list tight by default: 10-20 strong targets beat 100 weak names.
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-typography-taste",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: Artist Typography Taste
+description: Choose culturally literate type direction for artist cover art, merch, posters, and campaign visuals, then translate it into SVG/PNG composition specs.
+tags: [artist, typography, album-art, merch, design, fonts, layout]
+category: media-design
+---
+
+# Artist Typography Taste
+
+Use this skill when an artist visual needs font direction, title treatment, album-cover type, merch lettering, poster hierarchy, editorial masthead logic, or SVG/PNG layout execution.
+
+## Core Rule
+
+Typography is not a caption. It is part of the artwork's identity system.
+
+Default to a deterministic type layer using \`artwork_compose\` after the base image exists. Do not ask an image model to render final artist/title type unless the user explicitly wants messy baked-in poster text and you have a cleanup fallback.
+
+## How To Choose Type
+
+Choose from the visual world, not from generic genre labels:
+
+- If the music feels warm, analog, soulful, songwriter, folk, psych-rock, or timeless: use 70s vinyl logic.
+- If the artist is the signal and image matters: use editorial/FADER logic.
+- If the work is surreal, spiritual, strange, druggy, cosmic, existential, or guitar-psych: use psychedelic poster logic.
+- If the artist is premium, icy, minimal, fashion, nightlife, or high-status: use luxury/minimal logic.
+- If the artist is raw, local, angry, anti-polish, DIY, or underground: use zine/punk logic.
+- If the work is street, mixtape, club, trap, rap, or pop chaos: use street-poster/mixtape logic with restraint.
+
+## Style Lanes
+
+### 70s Vinyl
+
+Feel: record-store classic, warm, composed, adult, analog.
+
+Use:
+- soft serif, Cooper/Windsor/Bookman energy without parody
+- rounded grotesk or humanist sans for supporting type
+- generous tracking, centered lockups, label-strip details
+- cream, black, deep red, muted green, brown, gold, washed primary accents
+
+Avoid:
+- fake distressed fonts
+- fake ring wear
+- Halloween-retro costume typography
+- too many period signifiers at once
+
+### Editorial / FADER
+
+Feel: artist-forward, press-ready, confident, direct.
+
+Use:
+- Helvetica/Franklin/Trade Gothic-style bold sans hierarchy
+- masthead logic, strong crop, left rail or bottom-third type
+- tight but readable spacing
+- one bold display move and otherwise restraint
+
+Avoid:
+- fake magazine parody unless requested
+- too many text boxes
+- ironic "cover story" clutter
+- generic fashion-mag elegance with no attitude
+
+### Psychedelic / Far Out
+
+Feel: trippy, strange, spiritual, optic, mythic, but composed.
+
+Use:
+- organic serif, hand-lettered curves, poster lettering, warping only when readable
+- radial or wave placement if the image supports it
+- high color intelligence: acid accent against disciplined base palette
+- title as symbol, not label
+
+Avoid:
+- illegible lava-lamp text
+- cheap fractal/groovy fonts
+- random rainbow gradients
+- over-busy type fighting the image
+
+### Luxury / Minimal
+
+Feel: expensive, icy, clean, controlled.
+
+Use:
+- high-contrast serif, Didot/Bodoni energy, or exacting Swiss sans
+- small type with large negative space
+- black/white/metallic/off-white, one accent max
+- precise alignment, restrained case, calm hierarchy
+
+Avoid:
+- generic luxury perfume ad
+- thin type over low-contrast images
+- fake premium spacing that becomes unreadable
+- decorative flourishes without concept
+
+### Zine / Punk / Grunge
+
+Feel: photocopied, blunt, local, agitated, imperfect.
+
+Use:
+- condensed sans, ransom-note fragments, stamped type, xerox blocks
+- roughness from layout logic, not fake distress filters
+- high contrast black/white/red or dirty paper tones
+- asymmetry that still has hierarchy
+
+Avoid:
+- random distressed font packs
+- illegibility as an excuse
+- fake rebellion on a polished image
+- too many competing type voices
+
+### Street Poster / Mixtape
+
+Feel: loud, immediate, nightlife, flyer wall, block-party, bootleg energy.
+
+Use:
+- condensed bold sans, chrome/sticker/badge/price-tag logic when earned
+- warning-label hierarchy, show-poster placement, big title/readable artist
+- strong outline or shadow only for readability
+- one loud trick, not five
+
+Avoid:
+- fake cash/chains/fire clutter
+- unreadable chrome
+- default mixtape template nostalgia
+- type effects that look like preset thumbnails
+
+## Pairing Rules
+
+- Pair one display voice with one quiet support voice.
+- If image is busy, type gets simpler.
+- If image is minimal, type can carry more personality.
+- If artist name is already visually known, title can lead.
+- If the song title is the hook, title leads.
+- If merch, the mark must read from six feet away.
+- If cover art, it must read as a thumbnail.
+
+## User Requested Styles
+
+When the user requests a style, translate it into constraints:
+
+- "vintage" means period spacing, color, and type proportion; not fake damage.
+- "grungy" means xerox logic, imperfect alignment, and contrast; not random distressed font.
+- "psychedelic" means organic rhythm and controlled weirdness; not illegibility.
+- "luxury" means restraint, negative space, and exact alignment; not generic perfume type.
+- "bold" means hierarchy and scale; not simply bigger text.
+- "minimal" means fewer decisions, not absence of design.
+- "merch" means print survival, distance readability, and shape-first composition.
+
+## SVG / PNG Composition Spec
+
+When calling \`artwork_compose\`, provide:
+
+- canvas size
+- base image path if available
+- text layers with \`text\`, \`x\`, \`y\`, \`fontSize\`, \`fontFamily\`, \`fontWeight\`, \`fill\`, \`anchor\`, \`letterSpacing\`, \`maxWidth\`
+- shape layers for labels, strips, frames, badges, stickers, or editorial rules
+- \`exportPng: true\`
+- \`publishOutput: true\`
+- \`showInCanvas: true\`
+
+Use font families as practical system stacks, not impossible assumptions:
+
+- serif: \`"Georgia, Times New Roman, serif"\`
+- high contrast: \`"Didot, Bodoni 72, Georgia, serif"\`
+- grotesk: \`"Helvetica Neue, Arial, sans-serif"\`
+- condensed: \`"Arial Narrow, Helvetica Neue Condensed, Impact, sans-serif"\`
+- mono/industrial: \`"Courier New, ui-monospace, monospace"\`
+
+If an exact font is not installed, name the aesthetic target and use a fallback stack. Do not claim an exact font rendered unless a font file is available or the runtime confirms the font exists.
+
+## Open-Source Font Kit
+
+Prefer open-source font families when the user wants assets that may later be packaged, sold, embedded, or handed off. Google Fonts families are generally open-source and commercially usable, but always keep license files/notices with any bundled font assets.
+
+Use these as taste targets and fallback directions:
+
+### Warm / 70s / Vinyl
+
+- Fraunces: expressive soft-serif energy, useful for warm classic covers.
+- Libre Baskerville: literary, adult, timeless; good for songwriter and soul-adjacent covers.
+- Cormorant Garamond: elegant, fragile, romantic, slightly old-world.
+- DM Serif Display: bold vintage editorial title energy.
+- Josefin Sans: geometric 30s/70s-adjacent support sans.
+
+### Editorial / FADER / Press
+
+- Archivo / Archivo Black: strong grotesk headline weight, works for bold artist-forward covers.
+- Work Sans: clean contemporary support face with good spacing.
+- Inter: neutral UI/editorial utility when the image carries personality.
+- Space Grotesk: modern, slightly strange, good for alt-pop/electronic identity.
+- Oswald: condensed poster/editorial hierarchy when used with restraint.
+
+### Psychedelic / Far Out
+
+- Fraunces: use heavier/wonky optical styles as an organic display direction.
+- Cormorant Garamond: spiritual, literary, ornate without cheap trippy cliche.
+- Grenze Gotisch: gothic/ritual edge; use sparingly.
+- Syne: art-school oddness for modern psych and experimental pop.
+- Unbounded: futuristic/psychedelic tension when paired with simple layout.
+
+### Luxury / Minimal
+
+- Playfair Display: high-contrast fashion/editorial energy.
+- Cormorant Garamond: delicate luxury with more restraint than fake Didot clones.
+- Libre Bodoni: sharper premium title direction.
+- Instrument Serif: modern boutique serif, useful for tasteful minimal covers.
+- Inter or Work Sans: exacting support sans.
+
+### Zine / Punk / Grunge
+
+- Archivo Narrow / Oswald: condensed blunt poster type.
+- Special Elite: typewriter/zine texture; use only when concept earns it.
+- Rubik Mono One: loud block letter direction; use sparingly.
+- Barlow Condensed: utilitarian flyer hierarchy.
+- Space Mono: mechanical DIY captions, labels, catalog marks.
+
+### Street Poster / Mixtape / Merch
+
+- Bebas Neue: tall bold merch/poster display; watch overuse.
+- Anton: heavy direct headline, useful for short titles.
+- Archivo Black: muscular but cleaner than default impact-style type.
+- Barlow Condensed: flexible street-poster hierarchy.
+- Black Ops One: stencil/military energy; only for concepts that justify it.
+
+Pairing examples:
+
+- Fraunces display + Work Sans support.
+- Libre Baskerville title + Archivo caption.
+- Archivo Black title + Space Mono catalog marks.
+- Playfair Display title + Inter support.
+- Bebas Neue merch mark + Space Grotesk support.
+
+When exact font assets are not available, say: "Target font direction: [family/style]. Render fallback: [stack]." When exact assets are available, pass the real family name and keep the font license with the project/export.
+
+## Output Shape
+
+\`\`\`markdown
+Typography read:
+Recommended lane:
+Artist/title hierarchy:
+Font direction:
+Exact font asset available:
+Fallback stack:
+Layout:
+Color/contrast:
+SVG/PNG composition notes:
+What to avoid:
+Ready for artwork_compose:
+\`\`\`
 `,
       },
     ],

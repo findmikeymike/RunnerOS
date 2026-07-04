@@ -1279,7 +1279,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Outreach'
   }
 
-  if (slug === 'persona-agent' || slug === 'content-genius' || slug === 'record-doctor') {
+  if (slug === 'persona-agent' || slug === 'content-genius' || slug === 'record-doctor' || slug === 'art-director') {
     return 'Creative'
   }
 

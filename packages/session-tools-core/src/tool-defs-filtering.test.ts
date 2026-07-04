@@ -52,6 +52,7 @@ describe('session tool filtering helpers', () => {
 
   it('teaches output tools Canvas publishing format rules', () => {
     const createOutput = SESSION_TOOL_DEFS.find((def) => def.name === 'create_output');
+    const artworkCompose = SESSION_TOOL_DEFS.find((def) => def.name === 'artwork_compose');
     const visualSurface = SESSION_TOOL_DEFS.find((def) => def.name === 'visual_surface');
 
     expect(createOutput?.description).toContain('Set `showInCanvas: true` when the user asks to see, preview, compare, review, present, open, or iterate');
@@ -60,6 +61,9 @@ describe('session tool filtering helpers', () => {
     expect(createOutput?.description).toContain('The Output system infers the Canvas web preview');
     expect(createOutput?.description).toContain('Workflow diagrams: `.workflow.json`');
     expect(createOutput?.description).toContain('If an Output already exists, use visual_surface_state and visual_surface');
+    expect(artworkCompose?.description).toContain('editable SVG source');
+    expect(artworkCompose?.description).toContain('PNG preview export');
+    expect(artworkCompose?.description).toContain('showInCanvas: true');
     expect(visualSurface?.description).toContain('avoid duplicate cards and just reference what is already on Canvas');
   });
 
