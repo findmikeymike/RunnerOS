@@ -35,7 +35,14 @@ export interface SharedIntelNote {
   revision: number;
   confidence: SharedIntelConfidence;
   evidence?: string;
+  routeReasons?: SharedIntelRouteReason[];
   superseded?: boolean;
+}
+
+export interface SharedIntelRouteReason {
+  agentSlug: string;
+  matchedTags: string[];
+  reason: string;
 }
 
 export interface SharedIntelCandidate {
@@ -75,12 +82,22 @@ export interface ShareIntelResultNote {
   targetAgents: Array<{ slug: string; name: string }>;
   action: SharedIntelAction;
   contextDocSlug?: string;
+  routeReasons?: SharedIntelRouteReason[];
+}
+
+export interface ShareIntelAudit {
+  sourceSessionId: string;
+  sourceAgentSlug?: string;
+  created: number;
+  updated: number;
+  skipped: number;
 }
 
 export interface ShareIntelResult {
   ok: boolean;
   status: ShareIntelStatus;
   notes: ShareIntelResultNote[];
+  audit?: ShareIntelAudit;
   toast: {
     title: string;
     description?: string;

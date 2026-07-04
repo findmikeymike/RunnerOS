@@ -40,6 +40,20 @@ const agents: SharedIntelAgentCatalogEntry[] = [
     active: true,
   },
   {
+    slug: 'comms-agent',
+    name: 'Comms Agent',
+    description: 'Draft fan, press, newsletter, caption, and community messages.',
+    tags: ['comms', 'community'],
+    active: true,
+  },
+  {
+    slug: 'industry-hunter',
+    name: 'Industry Hunter',
+    description: 'Research labels, playlists, supervisors, curators, and industry opportunities.',
+    tags: ['industry', 'research'],
+    active: true,
+  },
+  {
     slug: 'dormant-worker',
     name: 'Dormant Worker',
     description: 'Dormant brand worker.',
@@ -70,6 +84,8 @@ describe('shared intel router', () => {
     expect(doc.note.targetAgents).toContain('branding-agent');
     expect(doc.note.targetAgents).toContain('art-director');
     expect(doc.note.targetAgents).not.toContain('dormant-worker');
+    expect(doc.note.routeReasons?.some((reason) => reason.agentSlug === 'branding-agent')).toBe(true);
+    expect(doc.body).toContain('## Routing Reasons');
     expect(doc.body).toContain('```json shared-intel');
   });
 
@@ -87,16 +103,43 @@ describe('shared intel router', () => {
   });
 
   test('does not save secrets or credentials', () => {
-    const docs = buildSharedIntelDocs({
-      sessionId: 'secret-chat',
-      agentCatalog: agents,
-      messages: [
-        message('user', 'Remember this API key for the campaign: sk-abc1234567890secretkey and route it to the branding agent.', 1),
-        message('assistant', 'I cannot store secrets, but we can talk about branding safely.', 2),
-      ],
-    });
+    const secretMessages = [
+      'Remember this API key for the campaign: sk-abc1234567890secretkey and route it to the branding agent.',
+      'OPENAI_API_KEY=sk-abc1234567890secretkey should be used for the artist rollout.',
+      'Save this login for outreach: manager@example.com:supersecretpassword.',
+      '-----BEGIN PRIVATE KEY----- abcdef -----END PRIVATE KEY----- Save this for the campaign.',
+    ];
 
-    expect(docs).toEqual([]);
+    for (const content of secretMessages) {
+      const docs = buildSharedIntelDocs({
+        sessionId: 'secret-chat',
+        agentCatalog: agents,
+        messages: [
+          message('user', content, 1),
+          message('assistant', 'I cannot store secrets, but we can talk about branding safely.', 2),
+        ],
+      });
+
+      expect(docs).toEqual([]);
+    }
+  });
+
+  test('does not save transient runtime junk or personal mood scraps', () => {
+    const junkMessages = [
+      'The local dev server at localhost:5173 failed. TypeError stack trace says the campaign route crashed.',
+      'Remember that I am tired and angry today but still want the rollout to be good.',
+    ];
+
+    for (const content of junkMessages) {
+      expect(buildSharedIntelDocs({
+        sessionId: 'junk-chat',
+        agentCatalog: agents,
+        messages: [
+          message('user', content, 1),
+          message('assistant', 'Temporary note acknowledged.', 2),
+        ],
+      })).toEqual([]);
+    }
   });
 
   test('updates an existing note from the same session instead of duplicating', () => {
@@ -132,6 +175,54 @@ describe('shared intel router', () => {
     expect(secondDoc.slug).toBe(firstDoc.slug);
     expect(secondDoc.note.revision).toBe(2);
     expect(secondDoc.note.summary).toContain('spiritual recklessness');
+    expect(secondDoc.note.routeReasons?.length).toBeGreaterThan(0);
+  });
+
+  test('keeps distinct ideas from the same session as separate notes when forceNew is set', () => {
+    const first = buildSharedIntelDocs({
+      sessionId: 'same-session-force',
+      agentCatalog: agents,
+      now: new Date('2026-07-04T12:00:00.000Z'),
+      messages: [
+        message('user', 'Save this visual direction.', 1),
+        message('assistant', 'The campaign visual world should use stark cover art, severe typography, and one recurring red symbol across every asset.', 2),
+      ],
+    });
+
+    const second = buildSharedIntelDocs({
+      sessionId: 'same-session-force',
+      agentCatalog: agents,
+      existingNotes: first.map((doc) => ({ slug: doc.slug, note: doc.note })),
+      forceNew: true,
+      now: new Date('2026-07-04T12:05:00.000Z'),
+      messages: [
+        message('user', 'Save a separate outreach idea.', 3),
+        message('assistant', 'For outreach, pitch playlist curators with a short personal note about the cinematic underdog angle and the single release timing.', 4),
+      ],
+    });
+
+    expect(second).toHaveLength(1);
+    expect(second[0]?.action).toBe('created');
+    expect(second[0]?.slug).not.toBe(first[0]?.slug);
+    expect(second[0]?.note.targetAgents).toContain('outreach-agent');
+  });
+
+  test('routes overlapping terms to the precise worker set', () => {
+    const docs = buildSharedIntelDocs({
+      sessionId: 'precision-chat',
+      agentCatalog: agents,
+      now: new Date('2026-07-04T12:00:00.000Z'),
+      messages: [
+        message('user', 'Save this industry outreach angle.', 1),
+        message('assistant', 'The industry play is to research playlist curators and label contacts first, then draft high-rapport outreach emails around the single release story. Do not route this as a brand mythology task.', 2),
+      ],
+    });
+
+    expect(docs).toHaveLength(1);
+    const targets = docs[0]!.note.targetAgents;
+    expect(targets).toContain('outreach-agent');
+    expect(targets).toContain('industry-hunter');
+    expect(targets).not.toContain('art-director');
   });
 
   test('renders compact shared intel prompt section', () => {
@@ -149,6 +240,7 @@ describe('shared intel router', () => {
     const parsed = parseSharedIntelNote(doc.body);
 
     expect(parsed?.title).toBe(doc.note.title);
+    expect(parsed?.routeReasons?.[0]?.reason).toContain('Matched');
     const prompt = buildSharedIntelPromptSection([{
       slug: doc.slug,
       metadata: { name: 'Shared Intel', enabled: true },
@@ -160,5 +252,27 @@ describe('shared intel router', () => {
     expect(prompt).toContain('Tags:');
     expect(prompt).toContain('Summary:');
     expect(prompt.length).toBeLessThan(1400);
+  });
+
+  test('caps prompt bloat across many shared intel docs', () => {
+    const docs = Array.from({ length: 12 }, (_, index) => buildSharedIntelDocs({
+      sessionId: `prompt-bloat-${index}`,
+      sourceAgentName: 'Legendary Minds',
+      agentCatalog: agents,
+      now: new Date(`2026-07-04T12:${String(index).padStart(2, '0')}:00.000Z`),
+      messages: [
+        message('user', 'Save this rollout and visual-world rule.', 1),
+        message('assistant', `The rollout rule ${index} is to keep the campaign visually strict, use one recurring symbol, keep captions compact, and avoid explaining the mythology directly. `.repeat(8), 2),
+      ],
+    })[0]!).filter(Boolean);
+
+    const prompt = buildSharedIntelPromptSection(docs.map((doc) => ({
+      slug: doc.slug,
+      metadata: { name: 'Shared Intel', enabled: true },
+      body: doc.body,
+    })));
+
+    expect(prompt).toContain('Shared Intel for this worker:');
+    expect(prompt.length).toBeLessThanOrEqual(2600);
   });
 });

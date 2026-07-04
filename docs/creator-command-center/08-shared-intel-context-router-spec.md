@@ -808,18 +808,39 @@ It does not save to Branding unless the insight generalizes beyond that person.
 
 | Failure | Protection |
 |---|---|
-| Saves too much brainstorming | recency weighting, max 3 notes, durable-only rule |
-| Routes to every agent | active catalog targeting, no broadcast fallback |
+| Saves too much brainstorming | recency weighting, max 3 notes, durable-only rule, transient-junk rejection |
+| Routes to every agent | active catalog targeting, text-evidenced scoring, no broadcast fallback |
 | Stale early idea overrides final idea | latest wins rule |
-| User cannot see what happened | toast + later history |
+| User cannot see what happened | toast + route reasons + RPC audit payload |
 | Wrong note saved | optional Undo, editable context docs |
-| Context bloat | note length limits, injection limits, staleness |
+| Context bloat | note length limits, 240-char prompt summaries, 2600-char Shared Intel prompt cap, staleness |
 | New agents ignored | read active agent catalog fresh each run |
 | Bad agent metadata hurts routing | metadata quality requirement |
-| Sensitive info saved | sensitive-content filter |
+| Sensitive info saved | sensitive-content filter for API keys, named env keys, email/password pairs, private keys |
 | Prompt injection from chat | transcript is untrusted; strict router contract |
 | Shared intel triggers real-world action | router has no external-action permissions |
 | Cross-workspace leakage | workspace context docs, not global memory |
+
+## Implemented Hardening - 2026-07-04
+
+Shared Intel is now closer to release quality. The router stores a small `routeReasons` array on each note so future agents and reviewers can answer "why did this worker get this note?" without reverse-engineering the scorer.
+
+Key files:
+
+- `packages/shared/src/shared-intel/types.ts` - `SharedIntelRouteReason`, RPC note route reasons, and `ShareIntelAudit`.
+- `packages/shared/src/shared-intel/router.ts` - target scoring, secret/junk filters, route-reason rendering/parsing, and prompt budget cap.
+- `packages/shared/src/shared-intel/router.test.ts` - target precision, duplicate/update behavior, force-new behavior, secret/junk rejection, route reasons, and prompt bloat tests.
+- `packages/server-core/src/handlers/rpc/shared-intel.ts` - returns audit counts and route reasons from `sharedIntel:share`.
+- `packages/server-core/src/handlers/rpc/shared-intel.test.ts` - verifies the RPC contract.
+
+Production behavior now covered:
+
+- Only active matching workers are targeted.
+- Weak catalog-only matches no longer pull in extra workers without evidence in the chat text.
+- Same-session repeat clicks update the existing note unless `forceNew` is set.
+- Secrets, env-key names, email/password pairs, private keys, stack traces, localhost errors, failing-test scraps, and personal mood scraps are rejected.
+- Shared Intel prompt injection is capped so notes cannot quietly eat the whole launch context.
+- RPC result includes created/updated/skipped counts for a minimal audit trail.
 
 ## Implementation Plan
 

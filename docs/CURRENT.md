@@ -11,7 +11,7 @@ source_of_truth: true
 
 - Date: 2026-07-04
 - Branch: `codex/creator-command-center`
-- Current goal: harden Artist HQ State of Play into a proactive, user-controlled routing surface.
+- Current goal: harden Shared Intel routing and Artist HQ proactive routing toward release confidence.
 - Overall state: active Creator Command Center worktree with many feature docs; docs are now routed through this map instead of loose root files.
 
 ## Recently Completed
@@ -20,6 +20,7 @@ source_of_truth: true
 - Added machine-readable HQ route hints so the generated next move now carries target agent, action, prompt, confidence, context docs, and launch blocker state.
 - Added a per-workspace proactive HQ mode toggle and validated Start Route action in Artist HQ Home.
 - Hardened proactive HQ mode with per-workspace preference storage and tested route-readiness helpers.
+- Hardened Shared Intel routing with route reasons, audit counts, tighter target scoring, duplicate/update tests, secret/junk rejection, and a 2600-character prompt cap.
 - Added `docs/creator-command-center/09-hq-state-of-play-proactive-routing.md` as the feature contract and future-agent map.
 - Moved root audit reports into `docs/audits/2026-07-04/`.
 - Moved standalone references into clearer folders:
@@ -46,6 +47,7 @@ source_of_truth: true
 
 ## Verification State
 
+- Verified Shared Intel hardening with router/RPC tests, shared typecheck, and server-core typecheck.
 - Verified HQ State of Play with focused composer/refresh/Google Workspace/proactive helper tests, shared typecheck, server-core typecheck, Electron typecheck, and `git diff --check`.
 - Verified git branch before cleanup.
 - Verified moved paths with `rg` and updated stale references.

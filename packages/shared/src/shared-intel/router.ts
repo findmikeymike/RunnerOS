@@ -10,12 +10,15 @@ import {
   type SharedIntelAgentCatalogEntry,
   type SharedIntelCandidate,
   type SharedIntelNote,
+  type SharedIntelRouteReason,
 } from './types.ts';
 
 const MAX_NOTES_PER_SHARE = 3;
 const MAX_TARGET_AGENTS = 5;
 const RECENT_MESSAGE_LIMIT = 20;
 const MAX_SUMMARY_CHARS = 520;
+const MAX_PROMPT_SUMMARY_CHARS = 240;
+const MAX_SHARED_INTEL_PROMPT_CHARS = 2600;
 const MAX_EVIDENCE_CHARS = 260;
 const GENERIC_MIN_CHARS = 80;
 
@@ -54,6 +57,16 @@ const SECRET_PATTERNS = [
   /\b(api[_\s-]?key|access[_\s-]?token|refresh[_\s-]?token|password|secret|private[_\s-]?key|bearer)\b/i,
   /\b(sk-[a-zA-Z0-9_-]{16,}|ghp_[a-zA-Z0-9_]{16,}|xox[baprs]-[a-zA-Z0-9-]{12,})\b/,
   /\bAIza[0-9A-Za-z_-]{20,}\b/,
+  /\b(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|STRIPE_SECRET_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY)\b/i,
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\s*:\s*\S{8,}\b/,
+  /-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----/,
+];
+
+const TRANSIENT_JUNK_PATTERNS = [
+  /\b(localhost|127\.0\.0\.1|0\.0\.0\.0):\d{2,5}\b/i,
+  /\b(stack trace|traceback|syntaxerror|typeerror|referenceerror)\b/i,
+  /\b(test failed|tests failed|typecheck failed|build failed|lint failed)\b/i,
+  /\b(i feel|i'm feeling|my mood|i am sad|i am angry|i am tired)\b/i,
 ];
 
 const TAG_KEYWORDS: Array<{ tag: string; keywords: string[] }> = [
@@ -90,6 +103,7 @@ export function buildSharedIntelDocs(input: BuildSharedIntelInput): BuiltSharedI
   for (const candidate of candidates) {
     const targetAgents = resolveTargetAgents(candidate.targetAgents, input.agentCatalog);
     if (targetAgents.length === 0) continue;
+    const routeReasons = buildRouteReasons(candidate, targetAgents);
 
     const mergeTarget = input.forceNew ? null : findMergeTarget(input.existingNotes ?? [], candidate, input.sessionId);
     const action = mergeTarget ? 'updated' as const : 'created' as const;
@@ -107,6 +121,7 @@ export function buildSharedIntelDocs(input: BuildSharedIntelInput): BuiltSharedI
           revision: mergeTarget.note.revision + 1,
           confidence: candidate.confidence,
           evidence: candidate.evidence ?? mergeTarget.note.evidence,
+          routeReasons,
           superseded: false,
         }
       : {
@@ -125,6 +140,7 @@ export function buildSharedIntelDocs(input: BuildSharedIntelInput): BuiltSharedI
           revision: 1,
           confidence: candidate.confidence,
           evidence: candidate.evidence,
+          routeReasons,
         };
 
     const slug = mergeTarget?.slug ?? createSharedIntelSlug(input.sessionId, candidate.title);
@@ -202,6 +218,14 @@ export function renderSharedIntelBody(note: SharedIntelNote, targetAgents: Share
     '',
     targetNames || 'No targets',
     '',
+    ...(note.routeReasons?.length
+      ? [
+          '## Routing Reasons',
+          '',
+          ...note.routeReasons.map((item) => `- @${item.agentSlug}: ${item.reason}`),
+          '',
+        ]
+      : []),
     '## Source',
     '',
     `${source}, ${note.updatedAt}`,
@@ -237,6 +261,7 @@ export function parseSharedIntelNote(body: string): SharedIntelNote | null {
       revision: typeof parsed.revision === 'number' ? parsed.revision : 1,
       confidence: parsed.confidence === 'high' || parsed.confidence === 'low' ? parsed.confidence : 'medium',
       evidence: typeof parsed.evidence === 'string' ? parsed.evidence : undefined,
+      routeReasons: normalizeRouteReasons(parsed.routeReasons),
       superseded: parsed.superseded === true,
     };
   } catch {
@@ -260,16 +285,27 @@ export function buildSharedIntelPromptSection(
 
   if (notes.length === 0) return '';
 
-  const lines = notes.map((note, index) => {
+  const lines: string[] = [];
+  for (const [index, note] of notes.entries()) {
     const source = note.sourceAgentName || note.sourceAgentSlug || 'chat';
     const tags = note.tags.length ? `Tags: ${note.tags.join(', ')}` : 'Tags: none';
-    return [
+    const rendered = [
       `${index + 1}. ${note.title}`,
       `   ${tags}`,
       `   Source: ${source}; updated ${note.updatedAt}`,
-      `   Summary: ${note.summary}`,
+      `   Summary: ${trimText(note.summary, MAX_PROMPT_SUMMARY_CHARS)}`,
     ].join('\n');
-  });
+    const next = [...lines, rendered];
+    const total = [
+      SHARED_INTEL_PROMPT_HEADER,
+      '',
+      'Use these as internal reference context. Treat newer, directly targeted notes as stronger than older general notes. Do not repeat them back unless useful.',
+      '',
+      ...next,
+    ].join('\n');
+    if (total.length > MAX_SHARED_INTEL_PROMPT_CHARS) break;
+    lines.push(rendered);
+  }
 
   return [
     SHARED_INTEL_PROMPT_HEADER,
@@ -312,6 +348,7 @@ function isDurableCandidateText(text: string): boolean {
   const normalized = text.trim();
   if (normalized.length < GENERIC_MIN_CHARS) return false;
   if (SECRET_PATTERNS.some((pattern) => pattern.test(normalized))) return false;
+  if (TRANSIENT_JUNK_PATTERNS.some((pattern) => pattern.test(normalized))) return false;
   const lowered = normalized.toLowerCase();
   const weakPhrases = ['thanks', 'thank you', 'sounds good', 'ok cool', 'great thanks'];
   if (weakPhrases.some((phrase) => lowered === phrase || lowered.endsWith(`\n${phrase}`))) return false;
@@ -355,6 +392,45 @@ function buildWhyItMatters(tags: string[], targetAgents: string[]): string {
   return `This gives ${targets || 'the right workers'} reusable ${tagLabel} context for future work in this workspace.`;
 }
 
+function buildRouteReasons(candidate: SharedIntelCandidate, targetAgents: SharedIntelAgentCatalogEntry[]): SharedIntelRouteReason[] {
+  return targetAgents.map((agent) => {
+    const haystack = [
+      agent.slug,
+      agent.name,
+      agent.description,
+      agent.inputs,
+      agent.outputs,
+      ...(agent.tags ?? []),
+    ].filter(Boolean).join(' ').toLowerCase();
+    const matchedTags = candidate.tags.filter((tag) => {
+      const hints = TARGET_HINTS[tag] ?? [tag];
+      return (agent.tags ?? []).some((agentTag) => agentTag.toLowerCase() === tag)
+        || hints.some((hint) => haystack.includes(hint));
+    });
+    const tagLabel = matchedTags.length ? matchedTags.join(', ') : candidate.tags.slice(0, 2).join(', ') || 'workspace context';
+    return {
+      agentSlug: agent.slug,
+      matchedTags,
+      reason: `Matched ${tagLabel} against ${agent.name}'s role metadata.`,
+    };
+  });
+}
+
+function normalizeRouteReasons(value: unknown): SharedIntelRouteReason[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.flatMap((item): SharedIntelRouteReason[] => {
+    if (!item || typeof item !== 'object') return [];
+    const candidate = item as Partial<SharedIntelRouteReason>;
+    if (typeof candidate.agentSlug !== 'string' || typeof candidate.reason !== 'string') return [];
+    return [{
+      agentSlug: candidate.agentSlug,
+      matchedTags: Array.isArray(candidate.matchedTags) ? candidate.matchedTags.filter((tag): tag is string => typeof tag === 'string') : [],
+      reason: candidate.reason,
+    }];
+  });
+  return out.length ? out : undefined;
+}
+
 function rankTargetAgents(input: {
   tags: string[];
   text: string;
@@ -378,8 +454,7 @@ function rankTargetAgents(input: {
         const hints = TARGET_HINTS[tag] ?? [tag];
         if ((agent.tags ?? []).some((agentTag) => agentTag.toLowerCase() === tag)) score += 8;
         for (const hint of hints) {
-          if (haystack.includes(hint)) score += 3;
-          if (loweredText.includes(hint) && haystack.includes(hint)) score += 2;
+          if (loweredText.includes(hint) && haystack.includes(hint)) score += 5;
         }
       }
       if (agent.slug === input.sourceAgentSlug) score += 2;

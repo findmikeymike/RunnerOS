@@ -190,6 +190,8 @@ export function registerSharedIntelHandlers(server: RpcServer, deps: HandlerDeps
 
       const targetNames = Array.from(new Set(docs.flatMap((doc) => doc.targetAgents.map((agent) => agent.name))))
       const updatedOnly = docs.every((doc) => doc.action === 'updated')
+      const created = docs.filter((doc) => doc.action === 'created').length
+      const updated = docs.filter((doc) => doc.action === 'updated').length
       return {
         ok: true,
         status: updatedOnly ? 'updated' : 'shared',
@@ -201,7 +203,15 @@ export function registerSharedIntelHandlers(server: RpcServer, deps: HandlerDeps
           targetAgents: doc.targetAgents.map((agent) => ({ slug: agent.slug, name: agent.name })),
           action: doc.action,
           contextDocSlug: doc.slug,
+          routeReasons: doc.note.routeReasons,
         })),
+        audit: {
+          sourceSessionId: input.sessionId,
+          sourceAgentSlug,
+          created,
+          updated,
+          skipped: candidates.length - docs.length,
+        },
         toast: {
           title: updatedOnly ? 'Updated shared intel' : `Shared to ${targetNames.slice(0, 3).join(', ')}`,
           description: targetNames.length > 3 ? `Also routed to ${targetNames.length - 3} more.` : undefined,
