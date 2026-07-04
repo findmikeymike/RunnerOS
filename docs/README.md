@@ -11,17 +11,18 @@ Start here when you need project context without reading the whole repo.
 
 ## Read First
 
-1. [CURRENT.md](./CURRENT.md) — live branch/status notes.
-2. [creator-command-center](./creator-command-center/) — Artist HQ / campaign workspace specs.
-3. [workflows](./workflows/) — workflow runtime, UX, examples, and recovery notes.
+1. [CURRENT.md](./CURRENT.md) - live branch/status notes.
+2. [HANDOFF-2026-07-04.md](./HANDOFF-2026-07-04.md) - zero-context takeover brief for the current build.
+3. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
+4. [workflows](./workflows/) - workflow runtime, UX, examples, and recovery notes.
 
 ## Main Areas
 
-- [specs](./specs/) — standalone specs that do not belong to a larger feature folder.
-- [backlog](./backlog/) — accepted future work, deferred integrations, and cleanup ideas.
-- [audits](./audits/) — security, runtime, and technical debt reports.
-- [development](./development/) — local commands, CLI docs, setup-adjacent references.
-- [archive](./archive/) — historical docs that should not guide current decisions.
+- [specs](./specs/) - standalone specs that do not belong to a larger feature folder.
+- [backlog](./backlog/) - accepted future work, deferred integrations, and cleanup ideas.
+- [audits](./audits/) - security, runtime, and technical debt reports.
+- [development](./development/) - local commands, CLI docs, setup-adjacent references.
+- [archive](./archive/) - historical docs that should not guide current decisions.
 
 ## Feature Docs
 
