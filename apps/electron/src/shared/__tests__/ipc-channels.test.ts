@@ -305,6 +305,7 @@ const EXPECTED_CHANNELS: string[] = [
   "settings:setServerConfig",
   "settings:setupLlmConnection",
   "settings:testLlmConnectionSetup",
+  "sharedIntel:share",
   "shell:openFile",
   "shell:openUrl",
   "shell:showInFolder",

@@ -91,7 +91,8 @@
     "./workspace-context/types": "./src/workspace-context/types.ts",
     "./protocol": "./src/protocol/index.ts",
     "./i18n": "./src/i18n/index.ts",
-    "./resources": "./src/resources/index.ts"
+    "./resources": "./src/resources/index.ts",
+    "./shared-intel": "./src/shared-intel/index.ts"
   },
   "dependencies": {
     "@craft-agent/core": "workspace:*",

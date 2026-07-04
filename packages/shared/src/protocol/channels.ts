@@ -411,6 +411,10 @@ export const RPC_CHANNELS = {
     /** Push event when a workspace's context docs changed. */
     CHANGED: 'workspaceContext:changed',
   },
+  sharedIntel: {
+    /** Distill the current chat into targeted internal worker context notes. */
+    SHARE: 'sharedIntel:share',
+  },
   googleWorkspace: {
     /** Read Google Calendar credential status for the active workspace. */
     GET_CALENDAR_STATUS: 'googleWorkspace:getCalendarStatus',

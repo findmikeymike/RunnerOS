@@ -451,6 +451,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspaceContext.UPSERT,
   RPC_CHANNELS.workspaceContext.DELETE,
   RPC_CHANNELS.workspaceContext.CHANGED,
+  RPC_CHANNELS.sharedIntel.SHARE,
 
   // Google Workspace actions
   RPC_CHANNELS.googleWorkspace.GET_CALENDAR_STATUS,

@@ -23,6 +23,7 @@
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
 import { buildMemorySectionsText } from '@craft-agent/shared/memory/render'
 import { buildCanvasGuidanceSection } from '@craft-agent/shared/agent-definitions/canvas-guidance'
+import { buildSharedIntelPromptSection, isSharedIntelContextSlug } from '@craft-agent/shared/shared-intel'
 import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
 const SECTION_DELIMITER = '\n\n---\n\n'
@@ -75,6 +76,7 @@ export function composeAgentSystemPrompt(
   memory: AgentPromptMemoryOptions = {},
 ): string {
   const body = (agent.systemPrompt ?? '').trimEnd()
+  const sharedIntelSection = buildSharedIntelPromptSection(contextDocs)
   const contextSection = buildWorkspaceContextSection(contextDocs)
   const memorySection = buildMemorySection(memory.userMemoryEntries ?? [], memory.agentMemoryEntries ?? [])
   const agentCatalogSection = buildAgentCatalogSection(agentCatalog)
@@ -83,6 +85,7 @@ export function composeAgentSystemPrompt(
 
   const parts: string[] = [body]
   if (contextSection) parts.push(contextSection)
+  if (sharedIntelSection) parts.push(sharedIntelSection)
   if (memorySection) parts.push(memorySection)
   if (agentCatalogSection) parts.push(agentCatalogSection)
   if (canvasGuidanceSection) parts.push(canvasGuidanceSection)
@@ -126,7 +129,7 @@ export function buildAgentBundleFooter(
  * Routing has already been resolved upstream — this helper just renders.
  */
 export function buildWorkspaceContextSection(docs: ContextDocDTO[]): string {
-  const usable = docs.filter((d) => d.metadata.enabled !== false && d.body.trim().length > 0)
+  const usable = docs.filter((d) => d.metadata.enabled !== false && !isSharedIntelContextSlug(d.slug) && d.body.trim().length > 0)
   if (usable.length === 0) return ''
   const blocks = usable.map((doc) => {
     const heading = doc.metadata.name.trim() || doc.slug

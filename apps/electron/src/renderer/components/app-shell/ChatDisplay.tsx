@@ -509,6 +509,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const visualSidecar = useAtomValue(visualSidecarAtom)
   const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
   const currentWorkspaceId = workspaceId ?? session?.workspaceId
+  const [isSharingIntel, setIsSharingIntel] = React.useState(false)
   const { outputs, loading: outputsLoading } = useOutputs(currentWorkspaceId)
   const openSubagentSession = useCallback((childSessionId: string) => {
     if (!currentWorkspaceId) return
@@ -1322,6 +1323,45 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     })
   }
 
+  const handleShareIntel = React.useCallback(async () => {
+    if (!session?.id || !currentWorkspaceId || isSharingIntel) return
+
+    setIsSharingIntel(true)
+    try {
+      const result = await window.electronAPI.shareSessionIntel({
+        workspaceId: currentWorkspaceId,
+        sessionId: session.id,
+        sourceAgentSlug: session.spawnedFromAgent?.agentSlug ?? session.launchReceipt?.agent?.slug,
+        sourceAgentName: session.spawnedFromAgent?.agentName ?? session.launchReceipt?.agent?.name,
+        agentCatalog: (appShellContext.activeAgents ?? []).map((agent) => ({
+          slug: agent.slug,
+          name: agent.metadata.name,
+          description: agent.metadata.description,
+          inputs: agent.metadata.inputs,
+          outputs: agent.metadata.outputs,
+          tags: agent.metadata.tags,
+          visualAgent: agent.metadata.visualAgent,
+          active: true,
+        })),
+      })
+
+      const toastOptions = result.toast.description ? { description: result.toast.description } : undefined
+      if (!result.ok) {
+        toast.error(result.toast.title, toastOptions)
+      } else if (result.status === 'shared' || result.status === 'updated') {
+        toast.success(result.toast.title, toastOptions)
+      } else {
+        toast(result.toast.title, toastOptions)
+      }
+    } catch (error) {
+      toast.error('Could not share intel', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setIsSharingIntel(false)
+    }
+  }, [appShellContext.activeAgents, currentWorkspaceId, isSharingIntel, session])
+
   const handleSaveAndSendFollowUp = useCallback((_target: {
     messageId: string
     annotationId: string
@@ -1343,7 +1383,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
         detail: { sessionId: session.id },
       }))
     }, 0)
-  }, [session, isInputDisabled, disableSend, connectionUnavailable])
+  }, [session, isInputDisabled, disableSend, connectionUnavailable, t])
 
   // Handle stop request from InputContainer
   // silent=true when redirecting (sending new message), silent=false when user clicks Stop button
@@ -2013,6 +2053,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
               followUpItems: followUpInputItems,
               onFollowUpClick: handleFollowUpChipClick,
               onFollowUpIndexClick: handleFollowUpIndexClick,
+              onShareIntel: handleShareIntel,
+              shareIntelBusy: isSharingIntel,
+              shareIntelDisabled: !currentWorkspaceId || session.messages.length === 0,
             }}
           />
           </div>

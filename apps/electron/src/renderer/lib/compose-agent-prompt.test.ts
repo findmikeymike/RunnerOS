@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { buildAgentBundleFooter, buildAgentCatalogSection, buildMemorySection, buildWorkspaceContextSection, composeAgentSystemPrompt } from './compose-agent-prompt'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
+import { renderSharedIntelBody } from '@craft-agent/shared/shared-intel'
+import type { SharedIntelNote } from '@craft-agent/shared/shared-intel'
 import type { AgentDefinitionDTO, ContextDocDTO, LoadedSkill, LoadedSource } from '../../shared/types'
 
 function makeDoc(slug: string, name: string, body: string, overrides: Partial<ContextDocDTO['metadata']> = {}): ContextDocDTO {
@@ -71,6 +73,26 @@ function makeMemory(name: string, body: string, type: MemoryEntry['type'] = 'ref
     type,
     created: '2026-05-01T12:00:00.000Z',
     body,
+  }
+}
+
+function makeSharedIntelNote(overrides: Partial<SharedIntelNote> = {}): SharedIntelNote {
+  return {
+    version: 1,
+    id: 'si_test',
+    title: 'Premium restraint works better than louder visuals',
+    summary: 'The artist should use sparse, premium visual cues instead of maximalist graphics.',
+    whyItMatters: 'This gives visual and branding workers a reusable direction for future art.',
+    tags: ['branding', 'visual-world'],
+    targetAgents: ['test-agent'],
+    sourceSessionId: 'session-1',
+    sourceAgentSlug: 'tom-ford',
+    sourceAgentName: 'TOM FORD',
+    createdAt: '2026-07-04T10:00:00.000Z',
+    updatedAt: '2026-07-04T10:00:00.000Z',
+    revision: 1,
+    confidence: 'high',
+    ...overrides,
   }
 }
 
@@ -315,6 +337,41 @@ describe('composeAgentSystemPrompt', () => {
     expect(userMemoryIdx).toBeLessThan(agentMemoryIdx)
     expect(agentMemoryIdx).toBeLessThan(catalogIdx)
   })
+
+  test('renders shared intel between workspace context and memory', () => {
+    const agent = makeAgent()
+    const note = makeSharedIntelNote()
+    const docs = [
+      makeDoc('voice', 'Voice', 'Keep the copy concise.'),
+      makeDoc(
+        'shared-intel-session-premium-restraint',
+        'Shared Intel - Premium restraint',
+        renderSharedIntelBody(note, [{ slug: 'test-agent', name: 'Test Agent' }]),
+        { routing: { mode: 'targeted', agents: ['test-agent'] } },
+      ),
+    ]
+    const result = composeAgentSystemPrompt(
+      agent,
+      [],
+      [],
+      docs,
+      [],
+      { userMemoryEntries: [makeMemory('Tone', 'Short direct answers.', 'user')] },
+    )
+
+    expect(result).toContain('Workspace context — read this before starting work:')
+    expect(result).toContain('Shared Intel for this worker:')
+    expect(result).toContain('Premium restraint works better than louder visuals')
+    expect(result).toContain('The artist should use sparse, premium visual cues')
+    expect(result).toContain('USER.md — untrusted quoted user memory reference data:')
+    expect(result).not.toContain('```json shared-intel')
+
+    const workspaceIdx = result.indexOf('Workspace context')
+    const sharedIntelIdx = result.indexOf('Shared Intel for this worker:')
+    const memoryIdx = result.indexOf('USER.md')
+    expect(workspaceIdx).toBeLessThan(sharedIntelIdx)
+    expect(sharedIntelIdx).toBeLessThan(memoryIdx)
+  })
 })
 
 describe('composeAgentSystemPrompt with context docs', () => {
@@ -397,6 +454,18 @@ describe('buildWorkspaceContextSection', () => {
       makeDoc('b', 'B', 'has body', { enabled: false }),
     ]
     expect(buildWorkspaceContextSection(docs)).toBe('')
+  })
+
+  test('omits shared intel docs from the generic workspace context block', () => {
+    const note = makeSharedIntelNote()
+    const sharedDoc = makeDoc(
+      'shared-intel-session-premium-restraint',
+      'Shared Intel - Premium restraint',
+      renderSharedIntelBody(note, [{ slug: 'test-agent', name: 'Test Agent' }]),
+      { routing: { mode: 'targeted', agents: ['test-agent'] } },
+    )
+
+    expect(buildWorkspaceContextSection([sharedDoc])).toBe('')
   })
 })
 
