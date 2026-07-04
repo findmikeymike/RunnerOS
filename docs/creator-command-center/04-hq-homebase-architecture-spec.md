@@ -92,7 +92,7 @@ What actually exists in the codebase today (not aspiration):
 agentic are present but applied only to the campaign/mission path. HQ (the global space) does not yet
 have its own composer or its own pulses. That's the gap this spec closes.
 
-> Out of scope but flagged: `AUDIT_CONTROL_PLANE.md` (2026-06-30) found a **critical** browser→agent
+> Out of scope but flagged: `docs/audits/2026-07-04/control-plane.md` (2026-06-30) found a **critical** browser→agent
 > RCE bridge (no `Origin`/`Host` check on the loopback WS control plane). It is unrelated to this
 > homebase work but should be fixed before any web-UI exposure. Do not let it ride under this spec.
 

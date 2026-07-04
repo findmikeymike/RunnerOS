@@ -123,7 +123,7 @@ steps:
 ---
 # Email Triage
 
-Pair this with the eventual EmailReceive trigger (Phase 4 + future external trigger from `docs/future-external-triggers.md`).
+Pair this with the eventual EmailReceive trigger (Phase 4 + future external trigger from `docs/backlog/future-external-triggers.md`).
 
 Until then, paste an email manually to test the routing logic.
 ```

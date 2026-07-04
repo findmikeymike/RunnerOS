@@ -44,7 +44,7 @@ Three facts from the codebase make this work, and two facts set the limits:
    "who runs the morning brief?" problem solved by the *runner-machine rule* (§4).
 
 **Bonus:** the no-server route **sidesteps the critical control-plane security hole**
-(`AUDIT_CONTROL_PLANE.md`) entirely, because nothing is exposed to a browser or network. Local
+(`docs/audits/2026-07-04/control-plane.md`) entirely, because nothing is exposed to a browser or network. Local
 files only. This is the *safer* path, not just the simpler one.
 
 ---
@@ -235,7 +235,7 @@ spec: because the data spine is file-based and already shared cleanly, that futu
 
 - **No-server models (A/B): no new exposure.** Local files only; the control-plane WS hole is
   not reachable because nothing listens for a browser. Safe today.
-- **Any server/web-UI path: blocked until fixed.** `AUDIT_CONTROL_PLANE.md` (2026-06-30) found a
+- **Any server/web-UI path: blocked until fixed.** `docs/audits/2026-07-04/control-plane.md` (2026-06-30) found a
   Critical browser→agent RCE bridge (no `Origin`/`Host` check on the loopback WS control plane)
   and no per-channel authorization. Do **not** expose the hub over a network — even to teammates
   — until that fix ships. This is the hard gate on Tier 2/Tier 3.

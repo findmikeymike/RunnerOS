@@ -10,7 +10,7 @@
 
 ## Verdict
 
-The architecture is sound and more mature than the existing `TECH_DEBT_AUDIT.md` implies — the agent → source → backend dispatch path is clean, the credential manager is real (not a doc), token refresh is implemented, and the core packages typecheck clean. But there are **five high-severity wiring/security issues** that will bite real users and one of which (secret baking) is a genuine secret-disclosure risk for any distributed build. There is also **1 failing test** and **49 dependency vulnerabilities (1 critical, 13 high)** in a clean checkout.
+The architecture is sound and more mature than the existing `tech-debt.md` implies — the agent → source → backend dispatch path is clean, the credential manager is real (not a doc), token refresh is implemented, and the core packages typecheck clean. But there are **five high-severity wiring/security issues** that will bite real users and one of which (secret baking) is a genuine secret-disclosure risk for any distributed build. There is also **1 failing test** and **49 dependency vulnerabilities (1 critical, 13 high)** in a clean checkout.
 
 This is not "broken," but it is **not safe to ship a public/distributable build as-is**, and two starter agents are wired to capabilities that don't exist.
 

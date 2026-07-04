@@ -121,4 +121,4 @@ Every High/Critical this round is the same shape: **`allow-all` + content/trigge
 7. Confirm the open thread: does the IPC layer single-flight `sendMessage`? (decides audit-#2 SM-2 severity).
 
 ---
-*Third in the series: `AUDIT_AGENTS_AUTH_CONNECTIONS.md` (#1), `AUDIT_EXECUTION_MCP_SESSIONMANAGER.md` (#2), this file (#3). Housekeeping from #2 still pending: delete the stray `_probe.cjs` at repo root.*
+*Third in the series: `agents-auth-connections.md` (#1), `execution-mcp-sessionmanager.md` (#2), this file (#3). Housekeeping from #2 still pending: delete the stray `_probe.cjs` at repo root.*

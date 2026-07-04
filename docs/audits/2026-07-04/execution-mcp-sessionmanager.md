@@ -116,4 +116,4 @@ The same root issue shows up in all three areas: **authorization/validation deci
 9. Low items (EXE-4, MCP-8, SM-9) as cleanup.
 
 ---
-*Companion to `AUDIT_AGENTS_AUTH_CONNECTIONS.md` (audit #1). Housekeeping: delete the stray `_probe.cjs` at repo root left by a sub-pass.*
+*Companion to `agents-auth-connections.md` (audit #1). Housekeeping: delete the stray `_probe.cjs` at repo root left by a sub-pass.*

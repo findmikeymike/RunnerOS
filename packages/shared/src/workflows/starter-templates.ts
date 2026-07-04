@@ -122,7 +122,7 @@ const emailTriage = {
   } satisfies WorkflowMetadata,
   body:
     '# Email Triage\n\n' +
-    'Pair this with the eventual EmailReceive trigger (Phase 4 + future external trigger from `docs/future-external-triggers.md`).\n\n' +
+    'Pair this with the eventual EmailReceive trigger (Phase 4 + future external trigger from `docs/backlog/future-external-triggers.md`).\n\n' +
     'Until then, paste an email manually to test the routing logic.\n',
 };
 

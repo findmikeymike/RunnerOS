@@ -68,4 +68,4 @@ These weren't in this sweep — could be fixed, partial, or open: **SM-1** (memo
 5. **Run `typecheck:all` + targeted tests + a build** to harden all the "fixed" claims and exercise `assertNoBundledSecretValues`.
 6. Housekeeping: delete the stray `_probe.cjs` at repo root.
 
-*Companion to AUDIT_AGENTS_AUTH_CONNECTIONS.md (#1), AUDIT_EXECUTION_MCP_SESSIONMANAGER.md (#2), AUDIT_TRIGGERS_WORKFLOWS_DEEPRESEARCH.md (#3).*
+*Companion to agents-auth-connections.md (#1), execution-mcp-sessionmanager.md (#2), triggers-workflows-deepresearch.md (#3).*
