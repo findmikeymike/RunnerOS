@@ -703,6 +703,21 @@ body
     expect(brandingAgent?.systemPrompt).toContain('artist-intel-report')
   })
 
+  test('starter library includes World Builder with world immersion skill', () => {
+    const worldBuilder = STARTER_AGENTS.find((agent) => agent.slug === 'world-builder')
+
+    expect(worldBuilder).toBeDefined()
+    expect(worldBuilder?.metadata.name).toBe('World Builder')
+    expect(worldBuilder?.metadata.permissionMode).toBe('ask')
+    expect(worldBuilder?.metadata.skills).toContain('world-immersion')
+    expect(worldBuilder?.metadata.skills).toContain('artist-narrative-universe')
+    expect(worldBuilder?.metadata.skills).toContain('artist-campaign-angle-builder')
+    expect(worldBuilder?.metadata.tags).toContain('worldbuilding')
+    expect(worldBuilder?.systemPrompt).toContain('campaign-worker-context')
+    expect(worldBuilder?.systemPrompt).toContain('one central immersive mechanic')
+    expect(worldBuilder?.systemPrompt).toContain('The artist builds; fans enter')
+  })
+
   test('starter library includes the Comms Agent with artist comms skill', () => {
     const commsAgent = STARTER_AGENTS.find((agent) => agent.slug === 'comms-agent')
 
@@ -727,6 +742,7 @@ body
     expect(outreachAgent?.metadata.permissionMode).toBe('ask')
     expect(outreachAgent?.metadata.skills).toContain('zero')
     expect(outreachAgent?.metadata.skills).toContain('artist-comms-strategist')
+    expect(outreachAgent?.metadata.skills).toContain('magnetic-outreach')
     expect(outreachAgent?.metadata.sources).toContain('zero')
     expect(outreachAgent?.metadata.sources).not.toContain('gmail')
     expect(outreachAgent?.metadata.optionalSources).toContain('gmail')
@@ -738,6 +754,8 @@ body
     expect(outreachAgent?.systemPrompt).toContain('POST /users/me/drafts')
     expect(outreachAgent?.systemPrompt).toContain('POST /users/me/drafts/send')
     expect(outreachAgent?.systemPrompt).toContain('copy-paste packet')
+    expect(outreachAgent?.systemPrompt).toContain('cold first-contact')
+    expect(outreachAgent?.systemPrompt).toContain('magnetic-outreach')
     expect(outreachAgent?.systemPrompt).toContain('opt-out')
     expect(outreachAgent?.systemPrompt).toContain('explicit approval')
   })

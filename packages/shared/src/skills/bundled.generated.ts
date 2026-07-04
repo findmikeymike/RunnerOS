@@ -10399,6 +10399,311 @@ When creating a lead magnet strategy, provide:
     ],
   },
   {
+    slug: "magnetic-outreach",
+    files: [
+      {
+        path: "references/captivation-craft.md",
+        content: `# Engine A: Universal Captivation Craft
+
+Language mechanics that pull on any human, independent of who they are. This is the engine. Learn these as *physics*, not tricks — and note each one's quiet-delivery form, because a mechanic deployed loudly becomes a headfuck (see guard.md). The tone throughout stays cool and unhurried — never salesy, never hype. The research these are drawn from is written by marketers; strip their used-car register and keep the mechanism.
+
+## The core mechanism: the information gap
+
+Loewenstein's finding: curiosity is *felt deprivation*. When a person senses there's something they don't know but should, it produces an itch — a small discomfort that demands to be scratched, and resolving it releases dopamine. Every captivation technique below is a way of opening that gap.
+
+The gap has a sweet spot. Too small (you told them everything) and there's no itch. Too large or too vague ("you won't believe this") and it reads as cheap bait — sophisticated readers bounce instantly. The magnetic gap is *specific enough to feel real, incomplete enough to itch.* You know something particular they'd want to know, and you've shown just enough that they feel the absence of the rest.
+
+## The open loop (Zeigarnik)
+
+Unfinished things haunt the mind more than finished ones. A sentence that starts a thought and doesn't close it, a reference to something you haven't explained yet, a question posed and left hanging — these create tension the reader carries forward. The reader keeps going to *close the loop*.
+
+- **Loud (bad):** "I'm about to tell you the ONE thing that changes everything..."
+- **Quiet (good):** state a specific, slightly surprising fact as if in passing, and let its implication hang. The loop opens without announcing itself.
+
+Rule: open one loop, maybe two. A pile of open loops reads as manipulation and creates confusion, not pull.
+
+## The slippery slope (Sugarman)
+
+The only job of the first sentence is to get them to read the second. The only job of the second is to get them to the third. Captivation is *sequential* — you're not writing a message, you're writing a chain where each link's sole purpose is the next link. This is why the opener matters more than everything else combined: if they don't read sentence two, nothing else you wrote exists.
+
+Practical consequence: front-load. The most interesting thing goes first, not after context. Never make them wade through setup to reach the hook — there is no setup in cold outreach, only hook and consequence.
+
+## Specificity over abstraction
+
+The single biggest separator between amateur and professional language. Concrete, particular detail lands; abstraction slides off. "23 pounds in 9 weeks" beats "lost weight fast." A named, exact observation about their work beats "I admire what you're doing." Specificity does double duty in cold outreach: it captivates *and* it proves you're a real human who actually looked, not a template. The specific detail is the fingerprint that says *this was written to you.*
+
+When research is rich, specificity comes from the gold nugget. When research is thin, specificity comes from the *pitch* — name the exact mechanism, the exact number, the exact unexpected consequence of what you're offering. Never retreat to the abstract; there is always a more specific version.
+
+## Compression
+
+The line that says less and implies more. Cut every word that isn't load-bearing. Compression reads as confidence and intelligence; over-explanation reads as nerves. A short, dense line has more force than a long explanatory one — and leaves room for the reader's mind to lean in and complete it (which is itself engagement). Strunk's discipline: omit needless words. In cold outreach, needless words are most words.
+
+## Rhythm
+
+How a line *sounds* determines whether it feels inevitable or clumsy. Vary sentence length — a short line after a longer one lands like a snare hit. End on the strong word (the verb, the surprising noun), not on a limp qualifier. Read every draft aloud in your head; if it stumbles, the reader feels the stumble as friction and friction breaks the slope. The best lines have a slight musicality that makes them pleasurable to read, which is its own form of pull.
+
+## The confident declarative
+
+A statement made without hedging assumes intimacy and authority. "You already know the sync-library model is dying" pulls harder than "I think maybe the sync-library model might be declining." Hedges are cowardice the reader can smell. The declarative — when it's *true* and *earned* — creates the feeling that the writer sees clearly, and people lean toward those who see clearly. (Guard: an unearned or wrong declarative is arrogance and detonates. The confidence must be backed by a real read.)
+
+## The unexpected-but-right word
+
+One word in the slot where a duller word was expected. Not thesaurus-showing-off (that's headfuck), but the precise, slightly surprising choice that makes a line snap awake. "The sync-library model is *dying*" not "declining." "Nobody's *built* the obvious thing" not "created." The unexpected-but-right word is the texture of a mind worth reading. One or two per message; more and it becomes performance.
+
+## How they combine
+
+A magnetic opener is usually *two or three of these at once, invisibly*: a specific concrete detail (specificity) stated as a confident declarative (declarative) that opens a loop (Zeigarnik) and lands on a strong beat (rhythm). The reader can't parse why it pulls — they just can't stop. That opacity is the goal. When the technique is visible, it's failed.
+
+**The test for Engine A:** could this line have been written by a template, or does it read as a specific human thinking a specific thought? If a template could produce it, it's not captivating yet — it's just competent.
+`,
+      },
+      {
+        path: "references/guard.md",
+        content: `# The Guard: Earned, Not Performed
+
+The governing constraint over all output. Its job is not to prevent intensity — it's to ensure intensity is *earned* and *invisible*. It calibrates by status, but one rule holds at every altitude: **substance under every bold line, and never let the technique show.**
+
+## The headfuck (the failure this prevents)
+
+Writing so obviously engineered that the reader feels the machinery and recoils. The tells:
+
+- Every sentence a mic-drop. No breathing room; relentless intensity.
+- Italicized *significance*, ellipses for false drama, one-line paragraphs stacked for "impact."
+- Naked curiosity gaps ("what I'm about to say will change how you see this...").
+- Portentous throat-clearing dressed as boldness ("Let me be direct." "Here's the truth nobody tells you.").
+- Thesaurus performance — showing off vocabulary instead of choosing the precise word.
+- Trying visibly hard to be seductive/deep/badass. The effort is the tell.
+
+The research is blunt about why this fails: a curiosity gap that becomes a lie makes the reader "mark you as an enemy combatant," and sophisticated readers *bounce* on cheap technique. Performed seductiveness repels. The machinery must be invisible.
+
+## The core rule: effort disguised as effortlessness
+
+The most powerful message reads like a quietly confident person who just talks this way and happened to think of you. It should feel *tossed off* — like the writer didn't sweat it — even though every word was chosen. A line that visibly cost effort is dead; the same line delivered like a shrug is lethal. **Low energy, high voltage.** The quietest, most confident person in the room doesn't perform; they say one unexpectedly true thing, lightly, and you can't stop thinking about it.
+
+## Status calibration (a light lean — NOT a quality dial)
+
+Critical framing: the writing and psychology are the meat. Status is a *subtle lean on delivery register*, never a meter that determines how good the writing is. A great line is great at any altitude. Keep this nuanced; do not turn it into a 0–100 intensity slider — that produces limp casual filler at the low end and try-hard intensity at the high end, both treating craft as garnish. Craft is the plate; status is the seasoning.
+
+The underlying principle (from the audience-sophistication ladder in direct-response research): the more attention a target commands, the more casual-confident pitches they've already seen, so the more the *language itself* must do to earn the interruption.
+
+### Mid-status, not heavily courted
+(e.g. a coordinator at a mid-size firm, a working professional who isn't flooded)
+- **Lean casual, warm, peer-to-peer.** Being courted at all is disarming. The effortless peer who didn't sweat it is the magnetic move.
+- Voltage low, specificity high. A quiet, specific, human message stands out precisely because they're not used to being courted well.
+- Headfuck risk here is high — intensity reads as trying way too hard because there's no status reason to go big. Keep it light.
+
+### High-status, attention-saturated
+(e.g. a major figure, a titan, a widely-courted name)
+- **Lean denser and more audacious.** Casual disappears in their flood; a soft peer note is invisible. The language must carry compressed force — a real perceptual or intellectual jolt that stops someone who scrolls past everything.
+- Higher voltage is permitted and often necessary — BUT the earned-substance floor gets *stricter, not looser.* A hollow-but-bold line is *more* fatal here, because a high-status target detects performance instantly and it insults them. Audacious yes; empty never.
+- The audacity must be backed by a genuine idea, a real insight, or a truly sharp read. Bold + substantial = captures a titan. Bold + hollow = the fastest possible deletion at this level.
+
+### Status is multidimensional (don't misread it)
+- A mid-title person can be cult-status in their niche (everyone pitches them) → treat closer to high-status.
+- A titan can be quietly reachable in a domain where they're genuinely curious or insecure → a lower-voltage, genuinely-curious approach can outperform audacity.
+- Infer the lean from research (how courted are they? what register do they themselves use? where's their status secure vs. hungry?), **state the lean and the reason, and let the operator override.** Auto-calibrated, human-overridable. Never hard-lock it.
+
+## The meta-cliché problem (do not skip this)
+
+Be honest about a hard truth: the techniques in this skill — start mid-thought, specific observation, confident declarative, low-friction walk-away close — *are the current cold-outreach playbook.* A lot of people have read the same sources. Against a sophisticated, heavily-courted target, executing the playbook *well* can still read as "someone who studied the same threads I did." The style itself is becoming a tell.
+
+There is no clean escape, but the mitigations are real:
+- **Substance is the only durable moat.** A genuine, non-obvious *idea* in the message can't be reduced to a technique. When the target could recognize the form, the *content* has to be too specific and too smart to have come from a template. Lean harder on Engine B's gold and on a real insight in the frame.
+- **Break your own pattern sometimes.** If every message you write opens with a confident declarative about their world, that consistency is itself detectable to anyone who gets two of them. Vary the move.
+- **When in doubt against a saturated target, the winning move is usually a real idea plainly stated, not a better-executed hook.** The hook gets you read; only substance gets you answered. If you can't bring an actual idea, a plainer honest message may outperform a slicker one that pattern-matches to "cold outreach."
+
+Do not pretend the skill's techniques are invisible to everyone. Against the most sophisticated targets, assume they can see the form — and win on what's inside it.
+
+## Running the guard (do this on every draft)
+
+Read the finished draft cold and ask:
+1. **Does this feel performed?** If any line reads as "look how clever/deep/bold I'm being," de-intensify it. Cut the italics, the drama-ellipses, the mic-drop stacking.
+2. **Is every bold line earned?** For each high-voltage line, is there real substance under it — a true observation, a genuine idea? If it's bold for boldness's sake, either put substance under it or cut it.
+3. **Right register for this status?** Too intense for a mid-status target → soften toward casual. Too soft/casual for a saturated titan → it'll be invisible; add compressed force (with substance).
+4. **Could a template have written it?** If yes, it's not there yet.
+5. **Does it sound like one human talking to one human?** If it sounds like "outreach," it failed the core test.
+
+De-intensifying is almost always the fix. When in doubt, quieter and more specific beats louder and vaguer — except against a saturated titan, where the fix is *sharper and more substantial*, not louder.
+`,
+      },
+      {
+        path: "references/openers-and-moves.md",
+        content: `# Openers and the Four Moves
+
+## The opener is everything
+
+Per the slippery slope: if they don't finish the first line, nothing else in the message exists. The opener is worth more than the rest of the message combined. Write ten opener variations and keep the one that pulls hardest — professionals draft many and select; amateurs write one and send.
+
+### What a magnetic opener does
+It starts *mid-thought*, on *them* or on a *live idea* — never on you, never on ritual. It's a specific concrete observation or claim, stated with confidence, that opens a loop. The reader's mind snags on it and has to continue.
+
+### Opener patterns that work (deploy quietly, never announce them)
+
+- **The specific observation about their world.** Name something true and particular about what they're doing/thinking that they'll recognize instantly — ideally something they suspect but haven't heard said. "The sync-library model you're building on is quietly dying, and I think you already know it." (Confident declarative + their world + open loop.)
+- **The true thing others are too polite to say.** A candid, accurate read that most people wouldn't voice. Risky, high-voltage — earns respect from the right target when it's *right*. Requires real substance behind it.
+- **Mid-story / mid-motion.** Drop them into something already moving. "Spent last night taking apart how you sequence your releases." Implies you've already invested effort, before any ask.
+- **The unexpected connection.** Two things they wouldn't expect linked, one of which is their world. Creates the "where is this going" loop.
+- **The earned contrarian.** Disagree with something they said — intelligently, specifically, with respect. Only for the provocation frequency, and only if the disagreement is genuinely sharp.
+
+### What kills an opener (never do these)
+- Starting with "I" / "My name is" / "I'm reaching out" / "Hope this finds you well." Ritual throat-clearing. Instant delete — it signals a template and a supplicant.
+- Announcing the technique: "Here's a pattern interrupt for you," "I'll be quick," "This isn't your typical cold email." Naming the move kills the move.
+- Generic flattery: "big fan," "love your work." Says nothing, proves nothing, marks you as the crowd.
+- Burying the hook after context. There's no setup in cold outreach. Hook first.
+- Cheap bait: "You won't believe..." / naked curiosity gaps. Sophisticated readers bounce; it reads as clickbait.
+
+## The four moves
+
+A magnetic cold message is short and moves in four beats. Not four paragraphs — often four *sentences*, or fewer. Brevity is non-negotiable; a long cold message is a deletion.
+
+1. **Open** — the line that stops them (above). On them or a live idea, specific, confident, loop-opening.
+
+2. **Frame** — cast the pitch at its most magnetic: relevance at high voltage. Connect what you're offering to their gold nugget and frequency, made vivid and concrete. This is *not* a feature list and *not* hype — it's the precise, surprising version of why this matters *to them specifically*. One or two sentences. The frame answers "why should this person care" before they've had to ask, and answers it in the register their frequency responds to.
+
+3. **Pull** — the open loop that makes stopping feel like leaving something unfinished. Often folded into the open or frame rather than separate. Something implied but not resolved, that only continuing (i.e., replying) closes. One loop, held lightly.
+
+4. **Leave room** — the close. Low-friction, non-needy, walk-away. The ask is almost embarrassingly easy to say yes to, or easy to ignore without friction ("if it's useless, no loss — keep building"). The signal that you're fine either way is itself magnetic: neediness reads as low value, calibrated indifference reads as high value. Never "30 minutes?", never "would love to hop on a call," never chase.
+
+## Assembly note
+
+The four moves often compress. A great cold message can be three sentences where the first opens+pulls, the second frames, the third leaves room. Do not pad to four beats if three carry it. Compression is confidence. The shortest version that still lands all the moves is the strongest version.
+`,
+      },
+      {
+        path: "references/the-read.md",
+        content: `# Engine B: The Read
+
+What speaks to *this specific person*. This engine doesn't create pull — it aims it. Craft leads; the read points the craft at the right target. Works from research already gathered by another agent.
+
+## Part 1: Extract the gold
+
+From the raw research, most of what you find is worthless for outreach (facts, titles, dates, achievements everyone already congratulates them on). The **gold** is the small number of high-voltage signals worth building a message around. Gold is almost always *emotional or identity signal, not factual.*
+
+What to mine for:
+
+- **A conviction they hold that most in their field don't.** A stated belief, a contrarian take, a thing they keep arguing for. Building on this says "I think the way you think" — rare and magnetic.
+- **Something they're proud of that's under-recognized.** The work they clearly care about that didn't get the attention they feel it deserved. Naming it precisely is being *seen*.
+- **A visible frustration.** What they complain about, push against, seem tired of. A message that names their frustration back to them (accurately, not pandering) lands hard.
+- **The thing they keep circling.** A theme, obsession, or question they return to across posts/interviews. This is what's alive in them right now.
+- **The status they're climbing toward or defending.** Where they're trying to go, or what position they're protecting. Ambition and insecurity are both levers.
+
+### Fool's gold (ignore these)
+- Recent public wins everyone congratulates ("congrats on the funding/placement/award") — zero signal, maximum cliché, marks you as one of the crowd.
+- Generic admiration hooks ("big fan of your work") — says nothing, proves nothing.
+- Surface facts (their title, their company, where they went to school) — labeling, not insight.
+- Anything you'd say to ten different people. Gold is singular to them.
+
+**The test for gold:** does this nugget let you write a line that could *only* be sent to this person? If yes, it's gold. If it could be pasted into ten other messages, it's fool's gold.
+
+## Part 2: Diagnose the frequency
+
+Different people are captivated on different frequencies. The same message pitched on the wrong one dies. Diagnose from the research which frequency this person is most on — often it's one dominant with a second underneath.
+
+- **Being seen.** Moved when someone understands something about their work/thinking that others missed. Captivated by *accurate perception* of them. Pitch: demonstrate you actually get the thing they care about, specifically, before you ask for anything.
+- **Status / ambition.** Moved by levers to where they're trying to go, by association with height, by being treated as a player. Captivated by *a credible path up or a peer-of-peers tone.* Pitch: frame the offer as leverage toward their trajectory, and address them as an equal or near-equal, never as a supplicant.
+- **Intellectual provocation.** Moved by a good disagreement, a sharp idea, a puzzle. Captivated by *being made to think.* Pitch: lead with a genuine, intelligent challenge to something they've said, or an idea they haven't considered. These people are bored and want a worthy interlocutor.
+- **Belonging / the few who get it.** Moved by being part of a small circle that understands what the masses don't. Captivated by *insider recognition.* Pitch: signal that you and they are among the few who see a certain truth — shared-secret framing, not broadcast.
+
+### Reading the frequency from signal
+- Someone who writes a lot of "here's what everyone gets wrong" → intellectual provocation.
+- Someone who showcases affiliations, milestones, who-they-know → status.
+- Someone pouring care into under-noticed craft → being seen.
+- Someone who talks about "real ones," in-groups, "if you know you know" → belonging.
+
+## Part 3: Aim the craft
+
+Once you have the gold and the frequency: the gold becomes the *content* of your specific line (usually the opener or the frame), and the frequency sets *how you angle it*. Same offer, same gold, angled four ways for four frequencies, lands four different ways. Engine A makes the line magnetic; the gold makes it specific to them; the frequency makes it hit their particular nerve.
+
+## When the research is thin
+
+Say so to the operator. Do not manufacture a fake nugget — a specific claim about them that's wrong or generic is *worse* than honest craft, because it exposes the outreach as a guess. With thin research: lean fully on Engine A, make the *pitch itself* the source of specificity (exact mechanism, exact consequence), and keep the message shorter — a short sharp message with no fake personalization beats a longer one padded with hollow "I saw that you..." filler. Honest universal craft outperforms fabricated intimacy every time.
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: magnetic-outreach
+description: Write a cold message so captivating the recipient can't help but read it and reply. Use when composing cold outreach, a cold email, a first-contact DM, a pitch to a stranger, or any opening message meant to start real engagement with someone who doesn't know the sender — and when the goal is to captivate, hook, or command attention rather than send a standard professional note. Takes as input whatever research has already been gathered about the target (interviews, posts, bio, work — collected by a separate agent) plus what is being pitched, and produces a magnetic message. This skill is about the craft of the words — the opening line that stops them, the framing that makes the pitch magnetic, the psychology of curiosity and pull, calibrated to who is receiving it. It does NOT gather research and does NOT explain research tools; another agent does that. Not for warm contacts, existing relationships, mass/templated blasts, or standard business correspondence.
+---
+
+# Magnetic Outreach
+
+Write the cold message that gets read and answered. The craft of captivating language is the engine; the read of the specific person aims it; a status-aware sense of register lands it.
+
+## What this is
+
+The operator hands you two things: **research already gathered** about the target (their words, work, posts, interviews — collected by another agent, not this one) and **what's being pitched**. You return a message built to be genuinely hard to stop reading.
+
+This skill is about *the words*. Not research mechanics (someone else did that). Not mirroring gimmicks. The actual craft: how a first line detonates curiosity, how a pitch gets framed at its most magnetic, how word-sequence pulls a cold reader into warm engagement — tuned to the person receiving it.
+
+## The two engines (co-equal — this is the whole thing)
+
+Captivation comes from two forces working together. Neither alone is enough. Most outreach fails at both.
+
+**Engine A — universal captivation craft.** Language mechanics that pull on *any* human nervous system, regardless of who they are. The information gap (Loewenstein: curiosity is felt *deprivation*, an itch that demands scratching). The open loop (Zeigarnik: unfinished things haunt the mind). The slippery slope (Sugarman: each sentence's only job is to get them to the next). Concrete specificity beating abstraction every time. Rhythm and compression — the line that says less and implies more. The confident declarative that assumes intimacy. This is craft that works even with zero knowledge of the target. **When research is thin, this engine carries the whole message** — and it can.
+
+**Engine B — the read.** What speaks to *this specific person*. The gold nugget in their research worth building around. The frequency they're on (being seen / status / provocation / belonging). This doesn't generate the pull — it *aims* it. A captivating line pointed slightly off-target still pulls; a perfectly-targeted flat line doesn't. So craft leads, the read aims.
+
+**The blend, stated plainly: craft leads, context flavors and lands.** Write something magnetic on pure craft, then aim it with the read, then set the register by status. Never lead with the read and dress it in craft afterward — that produces relevant, forgettable messages. Lead with the line that pulls.
+
+See \`references/captivation-craft.md\` (Engine A) and \`references/the-read.md\` (Engine B).
+
+## The governing constraint: earned, not performed (the anti-headfuck guard)
+
+The failure mode of this entire genre is the **headfuck**: writing so obviously engineered — so loaded with technique, so *intense* — that the reader feels the machinery working on them and recoils. Every sentence a mic-drop. Italicized *significance*. Curiosity gaps so naked they insult. The research is blunt on this: a curiosity gap that becomes a lie makes the reader mark you as an enemy combatant, and sophisticated readers *bounce* on cheap technique. Performed seductiveness is the opposite of seductive.
+
+The guard: **the technique must be invisible.** The most powerful version reads like a quietly confident person who just talks this way and happened to think of you. Effort disguised as effortlessness. A line that's visibly been sweated over is dead; the same line delivered like a shrug is lethal. Low energy, high voltage.
+
+This guard is not "always be casual" — its strictness is **calibrated by status** (below). But one rule is absolute at every level: **intensity must be earned by substance.** Voltage without a real idea underneath is the worst failure, and the higher you push it, the faster an empty line gets detected. See \`references/guard.md\`.
+
+## Status calibration (a light lean, not a meter)
+
+This is the nuance, and it must stay nuanced — a subtle lean on register, never a 0–100 dial that determines quality. **The writing and psychology are the meat; status just flavors delivery.** A great line is great at any altitude; status shifts *how* it's delivered, not *whether* it's good.
+
+The principle (grounded in the audience-sophistication ladder from direct-response research): the more attention a target commands, the more they've seen every casual-confident pitch, so the more the language must actually *do* to earn the interruption.
+
+- **Mid-status, not heavily courted** (e.g. a coordinator at a mid-size firm): lean casual, warm, effort-as-effortlessness. Being courted at all is disarming; the peer-who-didn't-sweat-it is magnetic. Low voltage, high specificity. Casual is the weapon.
+- **High-status, attention-saturated** (e.g. a major figure, a titan, a cult-respected name): casual disappears in their flood, so the language must carry more compressed force — denser, more audacious, a real perceptual or intellectual jolt. Higher voltage — *but the earned-substance floor gets stricter, not looser.* At this altitude a hollow-but-bold line is more fatal, because they detect performance instantly. Audacious, never empty.
+
+Status is multidimensional (a mid-title person can be cult-status in their niche; a titan can be quietly reachable in a domain where they're genuinely curious). **Infer a register-lean from the research, state it and why, and let the operator override it.** Auto-calibrated, human-overridable. See \`references/guard.md\` for the calibration detail.
+
+## Workflow
+
+1. **Read what you were given.** The research and the pitch. If the research is rich, mine it for the gold nugget and the frequency (Engine B). If it's thin, note that plainly and lean on Engine A — do not fake specificity, which reads as a mail-merge that guessed wrong and is worse than honest generality.
+
+2. **Set the register-lean.** From status signals in the research, infer where on the casual↔audacious lean this target sits, and *why*. State it. This is a light touch, not a verdict.
+
+3. **Build the four moves** (each draws on both engines, each passes the guard at the right register):
+   - **Open** — the first line that stops them. Highest-leverage sentence in the message. See \`references/openers-and-moves.md\`.
+   - **Frame** — cast what you're pitching in its most magnetic light: relevance at high voltage, connected to their frequency and the gold nugget. Not hype — precision made vivid.
+   - **Pull** — the open loop / information gap that makes stopping feel like leaving something unfinished. One or two, never a pile.
+   - **Leave room** — the low-friction, non-needy close. The walk-away that signals you're fine either way, which is itself magnetic. Never beg, never over-ask.
+
+4. **Run the guard.** Read the draft cold and ask: does this feel like a human who talks this way, or like technique being performed? Is every bold line carrying real substance? De-intensify anything that trips the headfuck tells for this register. (See \`references/guard.md\`.)
+
+5. **Deliver clean, then show the work.** Output the message first, clean, with nothing around it. Then, underneath, briefly: the gold nugget you built on, the frequency you aimed at, the register-lean and why, and the key mechanic in the opener. So the operator can see the machinery and redirect — without the machinery contaminating the message itself.
+
+## Output shape
+
+The message, clean, first — subject line (if email) and body, nothing else touching it. Then a short, plainly-labeled "the read" section beneath it (gold nugget / frequency / register-lean / opener mechanic). Keep messages SHORT — cold messages live or die on brevity; a long cold message is a deletion. Prose, no bullet-pointed pitches inside the message, no corporate scaffolding. The message should sound like one specific human wrote it to one specific human.
+
+## Hard nevers
+
+- Never open with "I" or with throat-clearing ("Hope this finds you well," "My name is," "I'm reaching out"). Start mid-thought, on *them* or on a live idea.
+- Never fake specificity when research is thin. Honest craft beats a wrong guess.
+- Never let curiosity tip into a lie or a bait-and-switch — it detonates trust the instant it's noticed.
+- Never pile up open loops or stack five techniques in one message. Restraint reads as confidence.
+- Never sound automated. Sounding like a tool is the one unrecoverable death.
+- Never over-ask in a cold message (no "30 minutes?"). The ask should be almost embarrassingly easy to say yes to, or easy to ignore without friction.
+
+## When this is the wrong tool
+
+Say so if it is. This is for cold first-contact meant to captivate. It's not for warm relationships (over-crafting a message to someone who already likes you reads as strange), not for mass templated sending (the whole point is one-to-one specificity), and not for standard transactional correspondence. If the honest move is a plain, clear, unclever note, say that.
+`,
+      },
+    ],
+  },
+  {
     slug: "marketing-ideas",
     files: [
       {
@@ -24827,6 +25132,127 @@ Write high-performing X/Twitter posts using research-backed, algorithm-optimized
 
 - **[formulas.md](references/formulas.md)** — All 23 formats with templates, psychology, and examples. Load when drafting posts.
 - **[cheatsheet.md](references/cheatsheet.md)** — 15 copy-paste hook openers, weekly posting rhythm. Load for quick inspiration or scheduling.
+`,
+      },
+    ],
+  },
+  {
+    slug: "world-immersion",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: world-immersion
+description: Design a psychologically compelling, low-budget immersive release campaign that pulls fans inside the WORLD of a song, not its marketing. Use when an artist, manager, or creative wants a release to feel like an experience fans can enter and be part of, rather than a promo cycle of lyric clips and countdown posts. Trigger on requests like design a campaign for this song, how do we make this release immersive, build a world around this track, make fans feel part of this, or any ask for creative rollout, fan activation, or experiential release ideas that must avoid corny generic engagement tactics. Takes rich song and campaign context (voice, ethos, theme, lyrics) as input. Assumes near-zero budget (roughly 0 to a couple hundred dollars) and pure-creativity solutions unless the artist states a real budget. Produces one central immersive mechanic grounded in the song's world plus honest feasibility, not a checklist of tactics. This is an experience-design engine, not an idea generator.
+---
+
+# World Immersion
+
+Design a release campaign that makes fans feel they've entered the *world* of a song. The output is one central, psychologically-grounded immersive mechanic that could only exist for this specific song — scaled honestly to a near-zero budget — not a list of activation tactics.
+
+## Read this first: why most fan campaigns are corny
+
+The failure mode is singular and it has one root cause: **the activation is decoration bolted onto a finished song instead of an extension of the song's actual world.** Everything corny flows from this — lyric-clip countdowns, "drop an emoji," unlock-at-100k-likes, dead Discords, filters no one uses. They're generic engagement mechanics wearing the song's cover art. They'd work identically for any other release. That interchangeability *is* the corniness.
+
+You cannot fix this by generating better activation ideas. The average of all activation ideas *is* the corny stuff — it's what everyone already does, which is why it reads as corny. So this skill does not generate activations. It reasons from **the song's specific world** and **documented psychological mechanisms** down to the one activation where they intersect. The order is the whole method. Skipping to "here are some ideas" is the thing that produces fluff.
+
+## The generative ethos (imagine from this — it comes before any judging)
+
+Before the laws, which only *reject*, hold the spirit that generates. The laws are subtractive gates applied at the end; this is the pull applied at the start. Get this backwards — lead with the filters — and you'll strangle the best ideas before they form.
+
+**Imagine things that excite people with surprise, curiosity, emotion, or experience outside the mundane.** Reach for wonder. The strongest release moments make someone feel they've stumbled onto something alive and unexpected — a form nobody saw coming from a song (a pirate radio station, not a music video), a gesture that stirs curiosity or feeling, a door into an experience outside the ordinary scroll. Let that pull shape what you dream up.
+
+But hold two honest balances, because this is a pull, not a mandate:
+
+- **Unexpected, yet connected.** Surprise earns attention; connection earns belief. A surprising form whose every detail snaps back to *this* song feels inevitable in hindsight — that's the sweet spot. The twin dangers are the on-the-nose obvious (surprising nothing) and the weird-for-its-own-sake stunt with no root in the song (which fans smell instantly as hollow). Aim between them.
+- **Simple is allowed — sometimes simple wins.** Do NOT mistake "unexpected" for a requirement that every idea be elaborate or novel in form. Some of the strongest moves are simple, even familiar in shape, and land entirely on execution, conviction, and emotional truth. A quiet, ordinary-looking gesture done with total commitment can beat a baroque concept. Never reject or steer away from a strong idea merely because it isn't surprising enough. Novelty is a pull, never a gate. If the emotional truth is there and the connection is real, that can be the best idea in the room even if its form is plain.
+
+This ethos generates candidates. The four laws below then remove the ones that are actually corny, needy, or disconnected — but they never remove an idea for being *simple*, because simplicity isn't a failure mode.
+
+## The four anti-corny laws (hard rejection criteria)
+
+Every proposed activation must pass all four. If it fails one, it's rejected — no exceptions. (These are genuine pass/fail tests. "Is it surprising enough" is deliberately NOT among them — that's a matter of degree handled by the ethos above, not a gate, precisely so a strong simple idea is never filtered out.)
+
+1. **Discovered, not shown.** The FedEx-arrow principle: people love the hidden arrow because they *find* it; being shown it does nothing. Corny campaigns hand everything over and beg for engagement. Immersive ones hide something in plain sight and let curiosity do the pulling. If the activation announces itself, it fails.
+2. **Never wink at the fan.** The world is treated as real and continuous — it existed before the fan arrived and continues past what they can see. The instant the campaign winks, nudges, or says "isn't this fun marketing," the spell breaks and it's corny. (Reznor on Year Zero: it's "not some kind of gimmick to get you to buy a record — it IS the art form." That posture is the mechanism, not the budget.)
+3. **The artist builds; the fan enters.** This is the most important law and the one most campaigns get backwards. The artist constructs a world — a real, made thing — and the fan's role is to *step into it, follow it, witness it, or map it*. The fan is NEVER asked to supply the world's content. Any activation whose engine is "fans submit / fans share their story / fans tell us their ___" is REJECTED. That is a prompt, not a world — it's needy, it's labor disguised as participation, and it's an admission the artist built nothing. **The test: if the activation would collapse into nothing without fan submissions, it fails.** The world must fully stand on its own whether or not a single fan shows up. Participation, when it exists at all, is stepping into something already built and already moving (see the "evolving built artifact" pattern below) — not filling an empty room the artist left blank.
+4. **Withhold more than you reveal.** The world must have edges the fan can't immediately see past. Mystery, incompleteness, a detail implying a larger structure — deliberate "gaps and excesses" that hint at more than is shown (Jenkins). A world that explains itself fully has nothing to pull anyone in. But withholding is not the same as absence: hide the depths of a world that visibly *exists*, don't just gesture at a void.
+
+
+
+## The psychological engine (reason from these mechanisms)
+
+Immersion on no budget is bought with *attention and curiosity*, not spectacle. These are the documented mechanisms that make a human lean in. Select the one(s) the song's world naturally activates — don't apply all of them.
+
+- **Curiosity gap.** The space between what someone knows and wants to know drives action. Hint at something valuable without revealing it. A partial reveal is more powerful than a full one.
+- **Zeigarnik effect / open loops.** The brain remembers and keeps chewing on *unfinished* things far more than finished ones. An unresolved question, a story cut off mid-arc, a countdown to something unnamed — creates a "mental itch that demands scratching." Unresolved questions measurably raise dopamine and make the eventual resolution more rewarding.
+- **Apophenia / pattern-finding.** The brain compulsively finds patterns in noise. Minimal, coded, abstract, or fragmented signals *invite* the fan to construct meaning — and the meaning they build themselves is stickier than any you hand them. Leave connectable dots; don't connect them.
+- **Earned discovery.** Discovery triggers a dopamine hit that being told does not. Anything the fan *works* to find (a hidden layer in the audio, a coded detail in the artwork, a URL spelled in something they already own) is worth more than the same thing handed over.
+- **Insider / outsider line.** Participation that confers membership — "I'm one of the few who noticed / got in / understood" — converts a listener into an inhabitant. The line between those inside the world and those outside is a powerful, free engine.
+- **Collective sense-making.** People pool effort to *map and master* a world that already exists — producing theories, timelines, charts about a thing the artist built. Community forms as a *byproduct* of a rich world, never as a forced "join our Discord" or "submit yours."
+
+## The forms a built world can take (reason toward these, not toward prompts)
+
+The output is a *creative act the artist commits*, at a scale of effort that proves the world is real. These are the families of that act. Pick the one the song's world implies; combine sparingly. None of these ask the fan to supply content.
+
+- **Non-musical media in the song's world.** Express the world through a medium that is *not* "artist sings at camera." A short web series, a fake documentary or news broadcast, an in-world radio show or podcast, a faux corporate/institutional website, a printed object (a zine, a field guide, a classified ad, a missing-person flyer) that behaves as if the world is real. The music becomes the *soundtrack to a world* rather than the content. (Gorillaz's fictional band histories; Spinal Tap existing as a "real" touring band; Blair Witch's fake documents.) Cheapest and often strongest on no budget — it's made of writing, a camera, and commitment.
+- **A committed real-world action.** The artist *does a real thing in the world* that dramatizes the song's ethos at full, un-winking commitment — the more absurd-yet-sincere, the better. Runs for local office. Opens a one-day storefront for a business that only exists in the song. Stages a real event the song's character would stage. The power is that it's *actually happening*, not depicted. Fans witness or encounter it; they don't build it. (This is the highest-risk, highest-reward form; commitment is everything — the instant it winks, it dies.)
+- **An evolving built artifact.** The artist builds a *structure* that grows or changes across the campaign — and this is the ONE place fans may be involved, because they're stepping into a machine that's already running, not supplying the idea. A version of the song that visibly blossoms over weeks (layers, verses, or voices added on a schedule the artist controls). A map that fills in. A site that changes daily. A story told in serialized drops. The artist built the vessel and the rules; fans enter an ongoing thing. Involvement is optional and additive — the artifact is compelling to *watch* even if you never touch it.
+- **A persistent world-object or place.** A single artifact treated as real and continuous: a phone number that's always answerable in-world, a location that accrues meaning, a character's social presence that lives independently of the artist's, an address people can send things to or visit. Small, cheap, and durable — it deepens by simply *continuing to exist* in character.
+
+Cross-check every candidate against Law 3: does the world stand on its own if no fan participates? If the answer is no, it's a prompt wearing a world's costume — discard it.
+
+## Workflow
+
+Do these in order. Do not jump to step 3.
+
+### Step 1: Map the song's world
+
+Before proposing anything, interrogate the material you were given (voice, ethos, theme, lyrics). Establish:
+
+- **The central tension.** Every song worth releasing has one unresolved thing at its core. Name it. (This becomes the open loop.)
+- **The emotional weather.** Not the topic — the *feeling-state*. Paranoid? Euphoric-then-hollow? Defiant? Nostalgic in a specific decade? Tender and claustrophobic?
+- **What the listener becomes inside it.** When someone is fully inside this song, who do they feel they are? (This is what the activation lets them inhabit.)
+- **Sensory and temporal texture.** If this song were a place: what time is it, what does it smell like, who else is there, what year, what light?
+- **What it withholds.** What does the song *not* say, leave ambiguous, or only imply? This is the raw material for the curiosity gap — the edge of the world.
+
+If the provided context is too thin to answer these, ask 2–3 sharp questions before continuing. Do not invent a world the artist didn't imply.
+
+### Step 2: Select the mechanism
+
+Given the world you mapped, which psychological mechanism does it *naturally* activate? A paranoid surveillance song wants apophenia and hidden-layer discovery. A song about a love that's already over wants the Zeigarnik open loop — a story cut off. A defiant outsider anthem wants the insider/outsider line. Choose the mechanism the world *implies*, not the one that's flashiest. Name why this song calls for this mechanism and not another.
+
+### Step 3: Design the single central activation
+
+Design **one** central creative act — a built thing the artist commits — where the world (step 1) and the mechanism (step 2) meet, drawn from one of the built-world forms above. Not a campaign checklist, not a prompt to fans: one true world-object that everything else hangs off. Requirements:
+
+- It must pass all four anti-corny laws. State how it passes each — especially Law 3 (state plainly what the artist *builds*, and confirm the world stands on its own with zero fan participation). Then, separately from the laws, note how the idea honors the generative ethos: where its surprise/curiosity/emotion lives and how it stays connected to this specific song — while remembering a strong simple idea is valid and is never rejected for being unsurprising.
+- **The needy-prompt check:** does the core mechanic depend on fans submitting, sharing, or supplying content? If yes, it's rejected — redesign it as something the artist builds and the fan enters. (An evolving built artifact fans can *join* is allowed; a blank prompt asking fans to *fill it* is not. The difference: is the machine already running before anyone arrives?)
+- **The reskin test:** could this exact act be reused for a *different* song by swapping the art? If yes, it's rejected — go back. A world for a paranoid track and a world for a warm nostalgic track should be unrecognizable as the same category of thing. Weld it to *this* song's specific world — ideally to specific images or lines in the lyric.
+- Budget $0–$200 unless the artist stated otherwise. Favor things made of writing, performance, commitment, timing, and free/cheap tools (a camera, a domain, a phone line, the artist's own audio and channels). Non-musical media and committed real-world action are usually the cheapest *and* the least corny, because they're made of creativity and nerve, not spend. If an idea needs real money or a dev team, find the version made of pure creativity.
+
+Then, briefly, the **spokes**: 2–4 smaller extensions of the same built world — additional touchpoints in the same universe (an in-world artifact, a timed reveal, a second medium). Not separate ideas; each deepens the one world and each must pass the laws, including Law 3.
+
+### Step 4: Feasibility, sequence, and honest failure modes
+
+- **Scale to the real artist.** A bedroom artist with 2,000 real fans needs a fundamentally different execution than someone with a label push. If you don't know the fanbase size and the artist's own willingness (to be cryptic, to not explain, to hold the line for weeks), ask. Pretending an activation will land at a scale the artist doesn't have is the dishonest failure this skill must avoid.
+- **Sequence it.** Immersion is usually a slow reveal, not a single drop. Rough timeline from first planted seed to release to resolution.
+- **Name what makes it fall flat.** Every immersive campaign has failure modes: fans don't notice the seed (too subtle), fans feel tricked (winked wrong), the mystery outlasts patience (open loop held too long), the reveal disappoints (resolution weaker than the buildup), or the artist breaks character and explains it (kills the world). State the specific risks for *this* design and how to de-risk. Do not present the campaign as guaranteed.
+
+## Output shape
+
+Lead with the world you mapped (brief — a few sharp sentences, not an essay), because the built act only makes sense once the world is named. Then the mechanism and why. Then the one central creative act — stating clearly what the artist *builds* — with the four-law check, the needy-prompt check, and the reskin test shown, plus a brief note on how it honors the generative ethos (surprise/emotion, connection) without forcing novelty. Then the spokes. Then feasibility, sequence, and honest failure modes. Prose, specific, no filler. This is a design document an artist can act on, not a pitch deck. Never celebrate the idea as flawless; the failure-modes section is mandatory and honest.
+
+## Two hard truths the withholding philosophy must not ignore
+
+These correct the skill's own biggest blind spots. Apply them every time.
+
+- **Subtle at small scale can mean invisible, not mysterious.** A hidden seed only becomes a mystery if enough people notice it to start pooling curiosity. For a bedroom artist with a small real fanbase, a too-quiet planted clue produces *silence* — nobody finds it, nothing happens, and it reads as the artist doing nothing. Calibrate the visibility of the seed to the actual audience: the smaller the fanbase, the more you must *point at the door* even while keeping what's behind it hidden. Discovered-not-shown means hide the *treasure*, not the *map's existence*. At small scale, tell people there's something to find; never tell them what it is.
+- **Immersion is almost always a layer, not the whole campaign.** Fans still need to plainly know the song exists, when it drops, and where to hear it. The immersive world sits *on top of* normal release mechanics, not instead of them. A campaign so cryptic that the song never gets heard has failed at the one job that matters. Design the immersive layer to reward the fans who lean in, while the ordinary release still reaches everyone who won't. Never let the mystery swallow the basic clarity of "this exists, here's where."
+
+## When this skill is the wrong tool
+
+Say so if it is. This is for making a *release* immersive. It's not a general marketing plan, not a growth-hacking tool, not a substitute for the music being good. If the artist's real problem is that the song isn't finished or isn't strong, immersion won't save it — say that. If they want straightforward promo (which is legitimate and sometimes correct), this skill's cryptic withholding approach may be wrong for their goal; name that honestly rather than forcing mystery onto something that wants directness.
 `,
       },
     ],

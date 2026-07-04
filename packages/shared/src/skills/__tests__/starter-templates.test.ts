@@ -139,6 +139,33 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).not.toContain('Runner');
   });
 
+  it('includes magnetic-outreach for cold first-contact draft craft', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'magnetic-outreach');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('magnetic-outreach');
+    expect(parsed.content).toContain('cold message');
+    expect(parsed.content).toContain('Engine A');
+    expect(parsed.content).toContain('Engine B');
+    expect(parsed.content).toContain('status-aware');
+    expect(parsed.content).toContain('earned, not performed');
+    expect(parsed.content).toContain('Never fake specificity');
+    expect(parsed.content).toContain('not for warm relationships');
+  });
+
+  it('includes world-immersion for immersive release campaign worlds', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'world-immersion');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('world-immersion');
+    expect(parsed.content).toContain('The artist builds; the fan enters');
+    expect(parsed.content).toContain('one central, psychologically-grounded immersive mechanic');
+    expect(parsed.content).toContain('The four anti-corny laws');
+    expect(parsed.content).toContain('needy-prompt check');
+    expect(parsed.content).toContain('reskin test');
+    expect(parsed.content).toContain('failure modes');
+  });
+
   it('includes artist-art-direction for taste-led artwork concepts', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'artist-art-direction');
     expect(skill).toBeDefined();

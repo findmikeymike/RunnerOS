@@ -403,7 +403,10 @@ export function MainContentPanel({
     }
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <AgentsLaunchpad workspaceId={activeWorkspaceId} />
+        <AgentsLaunchpad
+          workspaceId={activeWorkspaceId}
+          includeCampaignDefaultWorkers={!isArtistHQWorkspace(activeWorkspace, workspaces)}
+        />
       </Panel>
     )
   }

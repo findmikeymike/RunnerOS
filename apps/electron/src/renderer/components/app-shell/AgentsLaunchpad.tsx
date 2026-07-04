@@ -39,10 +39,13 @@ import type { AgentDefinitionDTO, ContextDocDTO, LlmConnectionWithStatus } from 
 
 interface AgentsLaunchpadProps {
   workspaceId: string | null | undefined
+  includeCampaignDefaultWorkers?: boolean
 }
 
-export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
-  const { activeAgents, allAgents, loading } = useAgents(workspaceId)
+export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = false }: AgentsLaunchpadProps) {
+  const { activeAgents, allAgents, loading } = useAgents(workspaceId, {
+    defaultVisibleSlugs: includeCampaignDefaultWorkers ? CAMPAIGN_DEFAULT_WORKER_SLUGS : [],
+  })
   const { getDisplayName } = useAgentDisplayNames()
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
@@ -1279,7 +1282,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Outreach'
   }
 
-  if (slug === 'persona-agent' || slug === 'content-genius' || slug === 'record-doctor' || slug === 'art-director') {
+  if (slug === 'persona-agent' || slug === 'content-genius' || slug === 'record-doctor' || slug === 'art-director' || slug === 'world-builder') {
     return 'Creative'
   }
 
@@ -1345,6 +1348,10 @@ const HIDDEN_WORKER_HOME_AGENT_SLUGS = new Set([
   'playlisting-power-up',
   'spotify-playlist-creator',
 ])
+
+const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
+  'world-builder',
+] as const
 
 function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
   const bestByKey = new Map<string, AgentDefinitionDTO>()

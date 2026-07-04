@@ -40,7 +40,12 @@ export interface UseAgentsResult {
   remove: (slug: string) => Promise<boolean>
 }
 
+export interface UseAgentsOptions {
+  defaultVisibleSlugs?: readonly string[]
+}
+
 const NULL_WORKSPACE_KEY = '__no_workspace__'
+const EMPTY_DEFAULT_VISIBLE_SLUGS: readonly string[] = []
 const BUILTIN_VISIBLE_AGENT_SLUGS = [
   CONCIERGE_SLUG,
   ORCHESTRATOR_SLUG,
@@ -76,17 +81,22 @@ function sortAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
   return [...agents].sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
 }
 
-function withSystemActiveSlugs(slugs: string[], agents: AgentDefinitionDTO[]): string[] {
+function withSystemActiveSlugs(slugs: string[], agents: AgentDefinitionDTO[], extraDefaultVisibleSlugs: readonly string[] = EMPTY_DEFAULT_VISIBLE_SLUGS): string[] {
   const next = new Set(slugs)
-  for (const systemSlug of BUILTIN_VISIBLE_AGENT_SLUGS) {
+  for (const systemSlug of [...BUILTIN_VISIBLE_AGENT_SLUGS, ...extraDefaultVisibleSlugs]) {
     if (agents.some((agent) => agent.slug === systemSlug)) next.add(systemSlug)
   }
   return Array.from(next)
 }
 
-export function useAgents(activeWorkspaceId: string | null | undefined): UseAgentsResult {
+export function useAgents(activeWorkspaceId: string | null | undefined, options: UseAgentsOptions = {}): UseAgentsResult {
   const workspaceKey = getWorkspaceKey(activeWorkspaceId)
   const [state, setState] = useAtom(agentsStateAtomFamily(workspaceKey))
+  const defaultVisibleKey = (options.defaultVisibleSlugs ?? EMPTY_DEFAULT_VISIBLE_SLUGS).join('\u0000')
+  const defaultVisibleSlugs = useMemo(
+    () => defaultVisibleKey ? defaultVisibleKey.split('\u0000') : EMPTY_DEFAULT_VISIBLE_SLUGS,
+    [defaultVisibleKey],
+  )
 
   const refresh = useCallback(async () => {
     const existing = inFlightRefreshes.get(workspaceKey)
@@ -104,7 +114,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined): UseAgen
         const allAgents = sortAgents(libraryRaw)
         const next: AgentsState = {
           allAgents,
-          activeSlugs: withSystemActiveSlugs(activeRaw, allAgents),
+          activeSlugs: withSystemActiveSlugs(activeRaw, allAgents, defaultVisibleSlugs),
           loading: false,
           error: null,
         }
@@ -122,7 +132,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined): UseAgen
 
     inFlightRefreshes.set(workspaceKey, run)
     return run
-  }, [activeWorkspaceId, setState, workspaceKey])
+  }, [activeWorkspaceId, defaultVisibleSlugs, setState, workspaceKey])
 
   useEffect(() => {
     refreshersByWorkspaceKey.set(workspaceKey, refresh)
@@ -160,13 +170,13 @@ export function useAgents(activeWorkspaceId: string | null | undefined): UseAgen
 
   const setActive = useCallback(async (slug: string, active: boolean) => {
     if (!activeWorkspaceId) return
-    if ((BUILTIN_VISIBLE_AGENT_SLUGS as readonly string[]).includes(slug) && !active) {
-      setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(prev.activeSlugs, prev.allAgents) }))
+    if ([...BUILTIN_VISIBLE_AGENT_SLUGS, ...defaultVisibleSlugs].includes(slug) && !active) {
+      setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(prev.activeSlugs, prev.allAgents, defaultVisibleSlugs) }))
       return
     }
     const result = await window.electronAPI.setAgentDefinitionActive(activeWorkspaceId, slug, active)
-    setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(result.active, prev.allAgents) }))
-  }, [activeWorkspaceId, setState])
+    setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(result.active, prev.allAgents, defaultVisibleSlugs) }))
+  }, [activeWorkspaceId, defaultVisibleSlugs, setState])
 
   const upsert = useCallback(async (input: {
     slug: string

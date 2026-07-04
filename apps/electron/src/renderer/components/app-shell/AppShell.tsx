@@ -1445,7 +1445,9 @@ function AppShellContent({
   // Agents library powers chat routing and the main Agents screen.
   const {
     activeAgents,
-  } = useAgents(activeWorkspaceId)
+  } = useAgents(activeWorkspaceId, {
+    defaultVisibleSlugs: isArtistHQWorkspace ? [] : ['world-builder'],
+  })
   const {
     outputs,
     loading: outputsLoading,
