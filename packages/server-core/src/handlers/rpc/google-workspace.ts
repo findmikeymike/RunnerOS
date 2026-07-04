@@ -9,6 +9,7 @@ import {
 } from '@craft-agent/shared/workspace-context'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
 
 const ARTIST_CALENDAR_CONTEXT_SLUG = 'artist-calendar'
 const GOOGLE_CALENDAR_SOURCE_SLUG = 'google-calendar'
@@ -181,6 +182,7 @@ export function registerGoogleWorkspaceHandlers(server: RpcServer, deps: Handler
       },
       body: serializeArtistCalendar(nextCalendar),
     })
+    refreshHqStateContextDocBestEffort(workspace.rootPath)
     broadcastContextChanged(deps, workspaceId, loadAllContextDocs(workspace.rootPath))
 
     return { ok: failed === 0, synced, deleted, failed, ...(failed > 0 ? { error: `${failed} event${failed === 1 ? '' : 's'} failed to sync.` } : {}) }

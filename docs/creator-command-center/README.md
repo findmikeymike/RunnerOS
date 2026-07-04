@@ -16,5 +16,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [05 Team Access Without A Server](./05-team-access-without-a-server-spec.md)
 - [06 Team Mode Shared Storage Architecture](./06-team-mode-shared-storage-architecture-spec.md)
 - [07 Artist Vault Architecture](./07-artist-vault-architecture-spec.md)
+- [08 Shared Intel Context Router](./08-shared-intel-context-router-spec.md)
+- [09 HQ State Of Play / Proactive Routing](./09-hq-state-of-play-proactive-routing.md)
 
 Add new Creator Command Center specs here unless they clearly belong in another feature folder.

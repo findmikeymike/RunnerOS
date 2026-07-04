@@ -29,6 +29,7 @@ import {
 } from '@craft-agent/shared/shared-intel'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
 
 const workspaceMutexes = new Map<string, Promise<void>>()
 
@@ -184,6 +185,7 @@ export function registerSharedIntelHandlers(server: RpcServer, deps: HandlerDeps
         })
       }
 
+      refreshHqStateContextDocBestEffort(workspace.rootPath)
       broadcastContextChanged(deps, input.workspaceId, loadAllContextDocs(workspace.rootPath))
 
       const targetNames = Array.from(new Set(docs.flatMap((doc) => doc.targetAgents.map((agent) => agent.name))))

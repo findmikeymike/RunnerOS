@@ -16,6 +16,10 @@ Start here when you need project context without reading the whole repo.
 3. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
 4. [workflows](./workflows/) - workflow runtime, UX, examples, and recovery notes.
 
+Current active feature spec:
+
+- [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md) - generated HQ operating brief, route hint contract, proactive toggle, launch guards, and key files.
+
 ## Main Areas
 
 - [specs](./specs/) - standalone specs that do not belong to a larger feature folder.

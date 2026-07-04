@@ -34,8 +34,21 @@ import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import { openAgentSessionComposer } from '@/lib/run-agent'
+import {
+  dedupeAgentsBySlug,
+  proactiveHqModeStorageKey,
+  resolveHqRouteReadiness,
+  selectHqRouteContextDocs,
+} from '@/lib/artist-hq-proactive'
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Switch } from '@/components/ui/switch'
+import {
+  HQ_STATE_CONTEXT_SLUG,
+  parseHqStateOfPlay,
+  type HqStateOfPlay,
+  type HqStateRouteHint,
+} from '@craft-agent/shared/hq-state'
 import {
   ARTIST_CALENDAR_CONTEXT_SLUG,
   artistCalendarMetadata,
@@ -268,6 +281,8 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   const [spotifySyncBusy, setSpotifySyncBusy] = React.useState(false)
   const [googleCalendarBusy, setGoogleCalendarBusy] = React.useState(false)
   const [googleCalendarConnected, setGoogleCalendarConnected] = React.useState(false)
+  const [proactiveMode, setProactiveMode] = React.useState(() => readBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), false))
+  const [hqRouteBusy, setHqRouteBusy] = React.useState(false)
   const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
   const { outputs, loading: outputsLoading } = useOutputs(workspaceId)
   const profileResult = React.useMemo(
@@ -297,6 +312,10 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   const spotifySyncAutomation = React.useMemo(
     () => automations.find(isSpotifySyncAutomation) ?? null,
     [automations],
+  )
+  const hqState = React.useMemo(
+    () => parseHqStateOfPlay(docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG)?.body ?? ''),
+    [docs],
   )
   const spotifySyncActive = Boolean(spotifySyncAutomation?.enabled)
   const intelSyncAutomation = React.useMemo(
@@ -329,6 +348,10 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
       .find((agent) => agent.slug === YOUTUBE_RESEARCH_AGENT_SLUG),
     [allAgents, shellActiveAgents, workspaceActiveAgents],
   )
+  const availableAgents = React.useMemo(
+    () => dedupeAgentsBySlug([...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]),
+    [allAgents, shellActiveAgents, workspaceActiveAgents],
+  )
   const researchDocs = React.useMemo(
     () => docs.filter((doc) => /research|report|intel|analysis/i.test(`${doc.slug} ${doc.metadata.name} ${doc.metadata.description ?? ''}`)),
     [docs],
@@ -349,6 +372,14 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
     () => network.people.find((person) => person.id === selectedPersonId) ?? null,
     [network.people, selectedPersonId],
   )
+
+  React.useEffect(() => {
+    setProactiveMode(readBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), false))
+  }, [workspaceId])
+
+  React.useEffect(() => {
+    writeBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), proactiveMode)
+  }, [proactiveMode, workspaceId])
 
   const refreshGoogleCalendarStatus = React.useCallback(async () => {
     try {
@@ -664,6 +695,55 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
     workspaceId,
     workspaceName,
     youtubeResearchAgent,
+  ])
+
+  const launchHqRoute = React.useCallback(async (route: HqStateRouteHint) => {
+    if (route.target !== 'agent' || !route.agentSlug) {
+      toast.error(route.blockedReason ?? 'This recommendation needs review first.')
+      return
+    }
+    const agent = availableAgents.find((candidate) => candidate.slug === route.agentSlug)
+    if (!agent) {
+      toast.error(`@${route.agentSlug} is not active in this workspace`)
+      return
+    }
+    setHqRouteBusy(true)
+    try {
+      const contextSelection = selectHqRouteContextDocs(route, docs)
+      if (contextSelection.missingSlugs.length > 0 || contextSelection.disabledSlugs.length > 0) {
+        throw new Error(formatRouteContextSelectionError(contextSelection.missingSlugs, contextSelection.disabledSlugs))
+      }
+      const contextDocs = contextSelection.contextDocs.length > 0
+        ? contextSelection.contextDocs
+        : await window.electronAPI.listWorkspaceContextDocsForAgent(workspaceId, agent.slug)
+      const session = await openAgentSessionComposer({
+        agent,
+        workspaceId,
+        onCreateSession,
+        onInputChange,
+        skills,
+        sources,
+        contextDocs,
+        agentCatalog: availableAgents,
+      })
+      await Promise.resolve(onSendMessage(session.id, route.prompt))
+      toast.success(`Started @${agent.slug}`)
+    } catch (error) {
+      toast.error('Failed to launch HQ route', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setHqRouteBusy(false)
+    }
+  }, [
+    availableAgents,
+    docs,
+    onCreateSession,
+    onInputChange,
+    onSendMessage,
+    skills,
+    sources,
+    workspaceId,
   ])
 
   const toggleSpotifySync = React.useCallback(async () => {
@@ -997,6 +1077,15 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
 
         {tab === 'home' && (
           <>
+            <StateOfPlayPanel
+              state={hqState}
+              proactiveMode={proactiveMode}
+              routeBusy={hqRouteBusy}
+              availableAgentSlugs={new Set(availableAgents.map((agent) => agent.slug))}
+              onToggleProactiveMode={setProactiveMode}
+              onLaunchRoute={launchHqRoute}
+            />
+
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
               <HQCard className="lg:col-span-1">
                 <div className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.04] pb-2.5">
@@ -1400,6 +1489,164 @@ function Metric({ label, value }: { label: string; value: string }) {
       <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-white/32">{label}</div>
       <div title={value} className="mt-2 truncate text-lg font-medium text-white/80">{value}</div>
     </div>
+  )
+}
+
+function StateOfPlayPanel({
+  state,
+  proactiveMode,
+  routeBusy,
+  availableAgentSlugs,
+  onToggleProactiveMode,
+  onLaunchRoute,
+}: {
+  state: HqStateOfPlay | null
+  proactiveMode: boolean
+  routeBusy: boolean
+  availableAgentSlugs: Set<string>
+  onToggleProactiveMode: (enabled: boolean) => void
+  onLaunchRoute: (route: HqStateRouteHint) => void
+}) {
+  if (!state) {
+    return (
+      <HQCard>
+        <div className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.04] pb-2.5">
+          <div className="flex min-w-0 items-center gap-2">
+            <Sparkles className="h-3 w-3 text-white/40" />
+            <h3 className="truncate text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">State of Play</h3>
+          </div>
+          <Switch
+            checked={proactiveMode}
+            onCheckedChange={onToggleProactiveMode}
+            aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
+            className="data-[state=checked]:bg-orange-300"
+          />
+        </div>
+        <EmptyLine
+          title="No HQ brief generated yet"
+          detail="Save artist context, share intel, sync calendar, or update Vault to generate the operating brief."
+        />
+      </HQCard>
+    )
+  }
+
+  const attention = state.attention.slice(0, 3)
+  const missing = state.missing.slice(0, 5)
+  const generatedLabel = formatShortDate(state.generatedAt)
+  const route = state.nextMove.route
+  const routeReadiness = resolveHqRouteReadiness(route, availableAgentSlugs, proactiveMode)
+  const canLaunchRoute = routeReadiness.canLaunch
+
+  return (
+    <HQCard>
+      <div className="mb-4 flex flex-col gap-3 border-b border-white/[0.04] pb-3 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="mb-2 flex items-center gap-2">
+            <Sparkles className="h-3.5 w-3.5 text-orange-200/70" />
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/45">State of Play</span>
+          </div>
+          <h2 className="line-clamp-2 text-xl font-medium tracking-tight text-white/88 md:text-2xl">
+            {state.nextMove.title}
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm leading-6 text-white/48">{state.nextMove.why}</p>
+        </div>
+        <div className="flex shrink-0 flex-wrap gap-2 md:justify-end">
+          {state.nextMove.worker ? <Pill label={`@${state.nextMove.worker}`} /> : null}
+          {state.nextMove.action ? <Pill label={state.nextMove.action} /> : null}
+          {route ? <Pill label={canLaunchRoute ? `${route.confidence} route` : 'review needed'} muted={!canLaunchRoute} /> : null}
+          <Pill label={generatedLabel} muted />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1.35fr_0.8fr]">
+        <div className="space-y-2">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Attention</div>
+          {attention.length > 0 ? (
+            attention.map((item) => (
+              <div key={`${item.kind}-${item.source}-${item.text}`} className="rounded-[13px] border border-white/[0.045] bg-white/[0.018] p-3">
+                <div className="flex items-start gap-2">
+                  <Circle className="mt-1.5 h-1.5 w-1.5 shrink-0 fill-orange-300 text-orange-300" />
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium leading-5 text-white/74">{item.text}</div>
+                    <div className="mt-1 text-[10px] uppercase tracking-[0.12em] text-white/28">{item.kind} / {item.source}</div>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <EmptyLine title="No urgent attention items" detail="The generated brief did not flag immediate risks." />
+          )}
+        </div>
+
+        <div className="space-y-3">
+          {route ? (
+            <div className="rounded-[14px] border border-white/[0.045] bg-black/20 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Proactive</div>
+                <Switch
+                  checked={proactiveMode}
+                  onCheckedChange={onToggleProactiveMode}
+                  aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
+                  className="data-[state=checked]:bg-orange-300"
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Pill label={route.target === 'agent' && route.agentSlug ? `@${route.agentSlug}` : 'manual'} muted={!routeReadiness.agentAvailable && route.target === 'agent'} />
+                <Pill label={route.confidence} muted={route.confidence !== 'high'} />
+                <Pill label={`${route.contextDocSlugs.length} docs`} muted />
+              </div>
+              <p className="mt-3 line-clamp-3 text-xs leading-5 text-white/44">
+                {routeReadiness.blockedReason ?? route.prompt}
+              </p>
+              <button
+                type="button"
+                onClick={() => onLaunchRoute(route)}
+                disabled={!canLaunchRoute || routeBusy}
+                className={cn(
+                  'mt-3 inline-flex h-8 w-full items-center justify-center rounded-[10px] border px-3 text-xs font-medium transition-colors',
+                  canLaunchRoute
+                    ? 'border-orange-300/25 bg-orange-300/10 text-orange-100/82 hover:bg-orange-300/16'
+                    : 'cursor-not-allowed border-white/[0.055] bg-white/[0.018] text-white/28',
+                  routeBusy && 'cursor-wait opacity-70',
+                )}
+              >
+                {routeBusy ? 'Starting...' : proactiveMode ? 'Start Route' : 'Proactive Off'}
+              </button>
+            </div>
+          ) : null}
+
+          <div className="rounded-[14px] border border-white/[0.045] bg-black/20 p-3">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Gaps</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {missing.length > 0 ? (
+                missing.map((item) => <Pill key={item} label={item} muted />)
+              ) : (
+                <span className="text-xs leading-5 text-white/42">No blocking context gaps.</span>
+              )}
+            </div>
+            {state.momentum.up.length > 0 ? (
+              <div className="mt-4">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">Momentum</div>
+                <p className="mt-2 line-clamp-3 text-xs leading-5 text-white/44">{state.momentum.up.join(' ')}</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </HQCard>
+  )
+}
+
+function Pill({ label, muted }: { label: string; muted?: boolean }) {
+  return (
+    <span className={cn(
+      'inline-flex max-w-full items-center rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em]',
+      muted
+        ? 'border-white/[0.055] bg-white/[0.018] text-white/34'
+        : 'border-orange-300/18 bg-orange-300/8 text-orange-100/76',
+    )}>
+      <span className="truncate">{label}</span>
+    </span>
   )
 }
 
@@ -2423,6 +2670,33 @@ function isResearchOutput(output: OutputSummaryDTO): boolean {
   return output.kind === 'report'
     || output.origin?.source === 'deep-research'
     || /\b(research|report|intel|analysis|spotify|youtube|trend)\b/.test(text)
+}
+
+function readBooleanLocalStorage(key: string, fallback: boolean): boolean {
+  try {
+    const value = window.localStorage.getItem(key)
+    if (value === '1') return true
+    if (value === '0') return false
+    return fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writeBooleanLocalStorage(key: string, value: boolean): void {
+  try {
+    window.localStorage.setItem(key, value ? '1' : '0')
+  } catch {
+    // Non-critical preference; keep the UI usable if storage is unavailable.
+  }
+}
+
+function formatRouteContextSelectionError(missingSlugs: string[], disabledSlugs: string[]): string {
+  const parts = [
+    missingSlugs.length > 0 ? `missing: ${missingSlugs.join(', ')}` : '',
+    disabledSlugs.length > 0 ? `disabled: ${disabledSlugs.join(', ')}` : '',
+  ].filter(Boolean)
+  return `Route context is stale (${parts.join('; ')}). Update HQ context and try again.`
 }
 
 function createSpotifySyncMatcher(): Record<string, unknown> {

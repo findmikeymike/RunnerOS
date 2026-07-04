@@ -2,8 +2,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import * as actualConfig from '@craft-agent/shared/config'
 import * as actualSources from '@craft-agent/shared/sources'
 import * as actualWorkspaceContext from '@craft-agent/shared/workspace-context'
+import type { ContextDocMetadata, LoadedContextDoc } from '@craft-agent/shared/workspace-context'
 
-let currentDocBody = ''
+let contextDocs = new Map<string, LoadedContextDoc>()
 let fetchCalls: Array<{ url: string; init?: RequestInit }> = []
 let tokenValue: string | null = 'google-token'
 let refreshValue: string | null = 'refreshed-token'
@@ -40,23 +41,22 @@ mock.module('@craft-agent/shared/sources', () => ({
 
 mock.module('@craft-agent/shared/workspace-context', () => ({
   ...actualWorkspaceContext,
-  loadContextDoc: (rootPath: string, slug: string) => rootPath === workspaceRoot ? ({
-    slug,
-    metadata: { name: 'Artist Calendar', routing: { mode: 'broadcast' }, enabled: true },
-    body: currentDocBody,
-    path: `${workspaceRoot}/${slug}.md`,
-  }) : actualWorkspaceContext.loadContextDoc(rootPath, slug),
-  upsertContextDoc: (rootPath: string, doc: { body: string }) => {
+  loadContextDoc: (rootPath: string, slug: string) => rootPath === workspaceRoot
+    ? contextDocs.get(slug) ?? null
+    : actualWorkspaceContext.loadContextDoc(rootPath, slug),
+  upsertContextDoc: (rootPath: string, doc: { slug: string; metadata: ContextDocMetadata; body: string }) => {
     if (rootPath !== workspaceRoot) return actualWorkspaceContext.upsertContextDoc(rootPath, doc as never)
-    currentDocBody = doc.body
-    return {
-      slug: 'artist-calendar',
-      metadata: { name: 'Artist Calendar', routing: { mode: 'broadcast' }, enabled: true },
-      body: currentDocBody,
-      path: `${workspaceRoot}/artist-calendar.md`,
+    const loaded: LoadedContextDoc = {
+      slug: doc.slug,
+      metadata: doc.metadata,
+      body: doc.body,
+      path: `${workspaceRoot}/${doc.slug}.md`,
+      workspaceRootPath: workspaceRoot,
     }
+    contextDocs.set(doc.slug, loaded)
+    return loaded
   },
-  loadAllContextDocs: (rootPath: string) => rootPath === workspaceRoot ? [] : actualWorkspaceContext.loadAllContextDocs(rootPath),
+  loadAllContextDocs: (rootPath: string) => rootPath === workspaceRoot ? [...contextDocs.values()] : actualWorkspaceContext.loadAllContextDocs(rootPath),
 }))
 
 function calendarBody(events: unknown[]): string {
@@ -68,9 +68,20 @@ function calendarBody(events: unknown[]): string {
 }
 
 function parseCalendarEvents(): Array<Record<string, unknown>> {
-  const match = currentDocBody.match(/```json\s*([\s\S]*?)```/i)
+  const body = contextDocs.get('artist-calendar')?.body ?? ''
+  const match = body.match(/```json\s*([\s\S]*?)```/i)
   if (!match?.[1]) throw new Error('No calendar JSON was written')
   return (JSON.parse(match[1]) as { events: Array<Record<string, unknown>> }).events
+}
+
+function seedArtistCalendar(body: string): void {
+  contextDocs.set('artist-calendar', {
+    slug: 'artist-calendar',
+    metadata: { name: 'Artist Calendar', routing: { mode: 'broadcast' }, enabled: true },
+    body,
+    path: `${workspaceRoot}/artist-calendar.md`,
+    workspaceRootPath: workspaceRoot,
+  })
 }
 
 async function registerServer(): Promise<{
@@ -95,7 +106,7 @@ async function registerServer(): Promise<{
 
 describe('google workspace calendar sync', () => {
   beforeEach(() => {
-    currentDocBody = ''
+    contextDocs = new Map()
     fetchCalls = []
     tokenValue = 'google-token'
     refreshValue = 'refreshed-token'
@@ -114,7 +125,7 @@ describe('google workspace calendar sync', () => {
   })
 
   test('sync creates Google events and writes sync metadata back to artist calendar context', async () => {
-    currentDocBody = calendarBody([{
+    seedArtistCalendar(calendarBody([{
       id: 'event-1',
       date: '2026-07-03',
       title: 'Video shoot',
@@ -123,7 +134,7 @@ describe('google workspace calendar sync', () => {
       relatedPersonIds: [],
       createdAt: '2026-07-02T00:00:00.000Z',
       updatedAt: '2026-07-02T00:00:00.000Z',
-    }])
+    }]))
     const server = await registerServer()
 
     const result = await server.invoke('googleWorkspace:syncCalendar', workspace.id)
@@ -145,7 +156,7 @@ describe('google workspace calendar sync', () => {
   })
 
   test('sync deletes tombstoned Google events and removes them from calendar context', async () => {
-    currentDocBody = calendarBody([{
+    seedArtistCalendar(calendarBody([{
       id: 'event-1',
       date: '2026-07-03',
       title: 'Video shoot',
@@ -155,7 +166,7 @@ describe('google workspace calendar sync', () => {
       google: { calendarId: 'primary', eventId: 'google-event-1', syncStatus: 'local-change' },
       createdAt: '2026-07-02T00:00:00.000Z',
       updatedAt: '2026-07-02T10:00:00.000Z',
-    }])
+    }]))
     const server = await registerServer()
 
     const result = await server.invoke('googleWorkspace:syncCalendar', workspace.id)
@@ -178,7 +189,7 @@ describe('google workspace calendar sync', () => {
   })
 
   test('invalid time fails the event instead of silently creating an all-day event', async () => {
-    currentDocBody = calendarBody([{
+    seedArtistCalendar(calendarBody([{
       id: 'event-1',
       date: '2026-07-03',
       title: 'Video shoot',
@@ -187,7 +198,7 @@ describe('google workspace calendar sync', () => {
       relatedPersonIds: [],
       createdAt: '2026-07-02T00:00:00.000Z',
       updatedAt: '2026-07-02T00:00:00.000Z',
-    }])
+    }]))
     const server = await registerServer()
 
     const result = await server.invoke('googleWorkspace:syncCalendar', workspace.id)

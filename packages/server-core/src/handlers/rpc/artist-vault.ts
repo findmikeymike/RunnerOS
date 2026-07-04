@@ -33,6 +33,7 @@ import {
 } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { OutputService } from '../../outputs/OutputService'
+import { refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.artistVault.GET,
@@ -91,6 +92,7 @@ function mirrorManifestToContext(workspaceRootPath: string, workspaceId: string,
     metadata: artistVaultContextMetadata(),
     body: serializeArtistVaultContext(manifest),
   })
+  refreshHqStateContextDocBestEffort(workspaceRootPath)
   broadcastContextChanged(deps, workspaceId, loadAllContextDocs(workspaceRootPath))
 }
 

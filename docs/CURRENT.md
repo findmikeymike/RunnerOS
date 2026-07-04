@@ -11,11 +11,16 @@ source_of_truth: true
 
 - Date: 2026-07-04
 - Branch: `codex/creator-command-center`
-- Current goal: clean project/docs clutter and make docs easier for agents to navigate.
+- Current goal: harden Artist HQ State of Play into a proactive, user-controlled routing surface.
 - Overall state: active Creator Command Center worktree with many feature docs; docs are now routed through this map instead of loose root files.
 
 ## Recently Completed
 
+- Added HQ State of Play infrastructure: deterministic composer, generated `hq-state-of-play` context doc, and automatic refresh after workspace context, Shared Intel, Artist Vault, and Google Calendar context writes.
+- Added machine-readable HQ route hints so the generated next move now carries target agent, action, prompt, confidence, context docs, and launch blocker state.
+- Added a per-workspace proactive HQ mode toggle and validated Start Route action in Artist HQ Home.
+- Hardened proactive HQ mode with per-workspace preference storage and tested route-readiness helpers.
+- Added `docs/creator-command-center/09-hq-state-of-play-proactive-routing.md` as the feature contract and future-agent map.
 - Moved root audit reports into `docs/audits/2026-07-04/`.
 - Moved standalone references into clearer folders:
   - `docs/development/cli.md`
@@ -37,13 +42,14 @@ source_of_truth: true
 
 ## Blockers / External Dependencies
 
-- None for docs organization.
+- None for current Artist HQ route hardening.
 
 ## Verification State
 
+- Verified HQ State of Play with focused composer/refresh/Google Workspace/proactive helper tests, shared typecheck, server-core typecheck, Electron typecheck, and `git diff --check`.
 - Verified git branch before cleanup.
 - Verified moved paths with `rg` and updated stale references.
-- No app build required for docs-only cleanup.
+- Electron typecheck required for Artist HQ UI changes.
 
 ## Notes For Next Agent
 

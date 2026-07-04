@@ -15,6 +15,10 @@ import {
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import {
+  refreshHqStateContextDocBestEffort,
+  shouldRefreshHqStateForContextSlug,
+} from '../../hq-state/refresh'
 
 /**
  * One mutex per workspace. Context docs are tiny and the contention surface
@@ -81,6 +85,9 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
         metadata: payload.metadata,
         body: payload.body,
       })
+      if (shouldRefreshHqStateForContextSlug(payload.slug)) {
+        refreshHqStateContextDocBestEffort(rootPath)
+      }
       broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
       return loaded
     })
@@ -90,7 +97,12 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
     const rootPath = resolveRootPath(workspaceId)
     return withWorkspaceMutex(rootPath, async () => {
       const ok = deleteContextDoc(rootPath, slug)
-      if (ok) broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+      if (ok) {
+        if (shouldRefreshHqStateForContextSlug(slug)) {
+          refreshHqStateContextDocBestEffort(rootPath)
+        }
+        broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+      }
       return ok
     })
   })

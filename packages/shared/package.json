@@ -29,6 +29,7 @@
     "./credentials": "./src/credentials/index.ts",
     "./deep-research": "./src/deep-research/index.ts",
     "./deep-research/source-profile": "./src/deep-research/source-profile.ts",
+    "./hq-state": "./src/hq-state/index.ts",
     "./artist-vault": "./src/artist-vault/index.ts",
     "./memory": "./src/memory/index.ts",
     "./memory/render": "./src/memory/render.ts",
