@@ -114,7 +114,7 @@ export function buildSharedIntelDocs(input: BuildSharedIntelInput): BuiltSharedI
           summary: candidate.summary,
           whyItMatters: candidate.whyItMatters,
           tags: mergeTags(mergeTarget.note.tags, candidate.tags),
-          targetAgents: mergeTags(mergeTarget.note.targetAgents, targetAgents.map((agent) => agent.slug)),
+          targetAgents: targetAgents.map((agent) => agent.slug),
           sourceAgentSlug: input.sourceAgentSlug ?? mergeTarget.note.sourceAgentSlug,
           sourceAgentName: input.sourceAgentName ?? mergeTarget.note.sourceAgentName,
           updatedAt: now,
@@ -318,7 +318,8 @@ export function buildSharedIntelPromptSection(
 
 export function createSharedIntelSlug(sessionId: string, title: string): string {
   const sessionPart = slugify(sessionId).slice(0, 8) || 'session';
-  const titlePart = slugify(title).slice(0, 54) || 'note';
+  const maxTitleLength = Math.max(4, 64 - SHARED_INTEL_CONTEXT_PREFIX.length - sessionPart.length - 1);
+  const titlePart = slugify(title).slice(0, maxTitleLength) || 'note';
   return `${SHARED_INTEL_CONTEXT_PREFIX}${sessionPart}-${titlePart}`;
 }
 
@@ -438,6 +439,7 @@ function rankTargetAgents(input: {
   agentCatalog: SharedIntelAgentCatalogEntry[];
 }): SharedIntelAgentCatalogEntry[] {
   const loweredText = input.text.toLowerCase();
+  const explicitOnlyTags = inferExplicitOnlyTargetTags(loweredText);
   const scored = input.agentCatalog
     .filter((agent) => agent.slug && agent.slug !== CONCIERGE_SLUG && agent.active !== false)
     .map((agent) => {
@@ -464,7 +466,33 @@ function rankTargetAgents(input: {
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.agent.name.localeCompare(b.agent.name));
 
-  return scored.slice(0, MAX_TARGET_AGENTS).map((entry) => entry.agent);
+  const filtered = explicitOnlyTags.size
+    ? scored.filter((entry) => agentMatchesExplicitTargetTags(entry.agent, explicitOnlyTags))
+    : scored;
+
+  return filtered.slice(0, MAX_TARGET_AGENTS).map((entry) => entry.agent);
+}
+
+function inferExplicitOnlyTargetTags(loweredText: string): Set<string> {
+  if (!/\bonly\b/.test(loweredText)) return new Set();
+  const out = new Set<string>();
+  if (/\bbrand(?:ing)?\b|branding agent/.test(loweredText)) out.add('branding');
+  if (/\bart direction\b|\bart director\b|\bvisual(?:s| world)?\b|\bcover art\b/.test(loweredText)) out.add('visual-world');
+  if (/\boutreach\b|\bemail\b|\bpitch\b/.test(loweredText)) out.add('outreach');
+  if (/\bcomms?\b|\bcommunications?\b|\bcopy\b|\bcaption\b/.test(loweredText)) out.add('comms');
+  if (/\bindustry\b|\ba&r\b|\blabel\b|\bcurator\b|\bsupervisor\b/.test(loweredText)) out.add('industry');
+  return out;
+}
+
+function agentMatchesExplicitTargetTags(agent: SharedIntelAgentCatalogEntry, tags: Set<string>): boolean {
+  const agentTags = new Set((agent.tags ?? []).map((tag) => tag.toLowerCase()));
+  const label = `${agent.slug} ${agent.name}`.toLowerCase();
+  if (tags.has('branding') && (agentTags.has('branding') || /\bbrand(?:ing)?\b/.test(label))) return true;
+  if (tags.has('visual-world') && (agentTags.has('visual-world') || /\bart\b|\bvisual\b|\bdesign\b/.test(label))) return true;
+  if (tags.has('outreach') && (agentTags.has('outreach') || /\boutreach\b/.test(label))) return true;
+  if (tags.has('comms') && (agentTags.has('comms') || /\bcomms?\b|\bcommunications?\b/.test(label))) return true;
+  if (tags.has('industry') && (agentTags.has('industry') || /\bindustry\b/.test(label))) return true;
+  return false;
 }
 
 function resolveTargetAgents(slugs: string[], agentCatalog: SharedIntelAgentCatalogEntry[]): SharedIntelAgentCatalogEntry[] {

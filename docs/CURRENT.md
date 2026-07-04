@@ -21,6 +21,7 @@ source_of_truth: true
 - Added a per-workspace proactive HQ mode toggle and validated Start Route action in Artist HQ Home.
 - Hardened proactive HQ mode with per-workspace preference storage and tested route-readiness helpers.
 - Hardened Shared Intel routing with route reasons, audit counts, tighter target scoring, duplicate/update tests, secret/junk rejection, and a 2600-character prompt cap.
+- Live-smoked the real Electron app from this worktree. Fixed HQ nav active-state drift, Shared Intel slug overflow, stale over-route preservation on update, and explicit "only route this to..." targeting.
 - Added `docs/creator-command-center/09-hq-state-of-play-proactive-routing.md` as the feature contract and future-agent map.
 - Moved root audit reports into `docs/audits/2026-07-04/`.
 - Moved standalone references into clearer folders:
@@ -43,12 +44,13 @@ source_of_truth: true
 
 ## Blockers / External Dependencies
 
-- None for current Artist HQ route hardening.
+- Chat model response path hit expired OAuth during smoke (`Session Expired`). Share Intel still validated because it reads the local transcript, but live model generation needs re-auth before release smoke is complete.
 
 ## Verification State
 
 - Verified Shared Intel hardening with router/RPC tests, shared typecheck, and server-core typecheck.
 - Verified HQ State of Play with focused composer/refresh/Google Workspace/proactive helper tests, shared typecheck, server-core typecheck, Electron typecheck, and `git diff --check`.
+- Verified live Share Intel click updates an existing context note and narrows targets to the matching available worker instead of creating duplicates or keeping stale over-routes.
 - Verified git branch before cleanup.
 - Verified moved paths with `rg` and updated stale references.
 - Electron typecheck required for Artist HQ UI changes.

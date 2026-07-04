@@ -34,7 +34,6 @@ export function getArtistHqNavActiveState(input: {
   const artistHqTabActive = input.isArtistHQWorkspace && input.artistHqHash.startsWith('#artist-hq/')
   const hqHomeActive = input.isArtistHQWorkspace
     && input.isSessionsNavigation
-    && !input.isConciergeChat
     && (
       input.artistHqHash === '#artist-hq/home'
       || (!artistHqTabActive && !input.hasSessionRoute && !input.isConciergeChat)

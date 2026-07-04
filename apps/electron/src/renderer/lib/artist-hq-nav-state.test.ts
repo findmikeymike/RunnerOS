@@ -31,7 +31,7 @@ describe('getArtistHqNavActiveState', () => {
     })
   })
 
-  test('does not highlight HQ while HNIC chat is active even if the HQ home hash is stale', () => {
+  test('highlights HQ when an explicit HQ tab is open over a stale HNIC session route', () => {
     expect(getArtistHqNavActiveState({
       isArtistHQWorkspace: true,
       isSessionsNavigation: true,
@@ -39,7 +39,7 @@ describe('getArtistHqNavActiveState', () => {
       hasSessionRoute: true,
       isConciergeChat: true,
     })).toMatchObject({
-      hqHomeActive: false,
+      hqHomeActive: true,
       hqSessionsActive: false,
     })
   })

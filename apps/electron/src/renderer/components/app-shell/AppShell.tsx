@@ -1703,7 +1703,9 @@ function AppShellContent({
       void onSelectWorkspace(hqWorkspace.id)
     }
     setSessionsNavExpanded(false)
-    window.location.hash = `#artist-hq/${tab}`
+    const nextHash = `#artist-hq/${tab}`
+    window.location.hash = nextHash
+    setArtistHqHash(nextHash)
     navigate(routes.view.allSessions(), { skipAutoSelect: true })
   }, [activeWorkspaceId, onSelectWorkspace, workspaces])
 
@@ -2074,11 +2076,13 @@ function AppShellContent({
       conciergeSlug: CONCIERGE_SLUG,
       ...sessionMetaMap.get(activeSessionRouteId),
     })
+  const artistHqTabOpen = isArtistHQWorkspace && artistHqHash.startsWith('#artist-hq/')
   const workChatActive = isSessionsNavigation(navState)
     && !!activeSessionRouteId
+    && !artistHqTabOpen
     && (
       activeSessionIsConcierge
-      || (isArtistHQWorkspace && !artistHqHash.startsWith('#artist-hq/'))
+      || isArtistHQWorkspace
     )
   const { hqHomeActive, hqSessionsActive } = getArtistHqNavActiveState({
     isArtistHQWorkspace,

@@ -3,6 +3,7 @@ import type { Message } from '@craft-agent/core/types';
 import {
   buildSharedIntelDocs,
   buildSharedIntelPromptSection,
+  createSharedIntelSlug,
   parseSharedIntelNote,
   type SharedIntelAgentCatalogEntry,
 } from './index.ts';
@@ -178,6 +179,37 @@ describe('shared intel router', () => {
     expect(secondDoc.note.routeReasons?.length).toBeGreaterThan(0);
   });
 
+  test('updates replace target workers instead of preserving stale over-routes', () => {
+    const first = buildSharedIntelDocs({
+      sessionId: 'same-session-retarget',
+      sourceAgentSlug: 'concierge',
+      sourceAgentName: 'HNIC',
+      agentCatalog: agents,
+      now: new Date('2026-07-04T12:00:00.000Z'),
+      messages: [
+        message('user', 'Save this broad artist rollout idea.', 1),
+        message('assistant', 'The rollout should connect brand mythology, fan communications, label outreach, and visual assets into one campaign system.', 2),
+      ],
+    });
+
+    const second = buildSharedIntelDocs({
+      sessionId: 'same-session-retarget',
+      sourceAgentSlug: 'concierge',
+      sourceAgentName: 'HNIC',
+      agentCatalog: agents,
+      existingNotes: first.map((doc) => ({ slug: doc.slug, note: doc.note })),
+      now: new Date('2026-07-04T12:05:00.000Z'),
+      messages: [
+        message('user', 'Narrow that note.', 3),
+        message('assistant', 'The useful durable rule is only for branding and art direction: stark cover art, severe typography, and one recurring red symbol across campaign assets.', 4),
+      ],
+    });
+
+    expect(second).toHaveLength(1);
+    expect(second[0]!.action).toBe('updated');
+    expect(new Set(second[0]!.note.targetAgents)).toEqual(new Set(['branding-agent', 'art-director']));
+  });
+
   test('keeps distinct ideas from the same session as separate notes when forceNew is set', () => {
     const first = buildSharedIntelDocs({
       sessionId: 'same-session-force',
@@ -223,6 +255,23 @@ describe('shared intel router', () => {
     expect(targets).toContain('outreach-agent');
     expect(targets).toContain('industry-hunter');
     expect(targets).not.toContain('art-director');
+  });
+
+  test('honors explicit only-target wording over broad inferred routing', () => {
+    const docs = buildSharedIntelDocs({
+      sessionId: 'explicit-only-chat',
+      sourceAgentSlug: 'concierge',
+      sourceAgentName: 'HNIC',
+      agentCatalog: agents,
+      now: new Date('2026-07-04T12:00:00.000Z'),
+      messages: [
+        message('user', 'Save this Artist HQ rollout note.', 1),
+        message('user', 'The next artist rollout should use stark black-and-white cover art, severe typography, and one recurring red symbol across campaign assets. Route this to branding and art direction only.', 2),
+      ],
+    });
+
+    expect(docs).toHaveLength(1);
+    expect(new Set(docs[0]!.note.targetAgents)).toEqual(new Set(['branding-agent', 'art-director']));
   });
 
   test('renders compact shared intel prompt section', () => {
@@ -274,5 +323,15 @@ describe('shared intel router', () => {
 
     expect(prompt).toContain('Shared Intel for this worker:');
     expect(prompt.length).toBeLessThanOrEqual(2600);
+  });
+
+  test('keeps generated context slugs inside the workspace context limit', () => {
+    const slug = createSharedIntelSlug(
+      '260605-tall-chrome',
+      'Hey what we need do to connect my google agent USER: Smoke test note for Artist HQ with a very long title',
+    );
+
+    expect(slug).toMatch(/^shared-intel-[a-z0-9-]+$/);
+    expect(slug.length).toBeLessThanOrEqual(64);
   });
 });
