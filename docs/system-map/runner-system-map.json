@@ -6,7 +6,11 @@
     "systemSkills": "packages/shared/src/skills/system.ts",
     "workersLaunchpad": "apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx",
     "runAgent": "apps/electron/src/renderer/lib/run-agent.ts",
+    "composeAgentPrompt": "apps/electron/src/renderer/lib/compose-agent-prompt.ts",
     "sessionManager": "packages/server-core/src/sessions/SessionManager.ts",
+    "sharedIntelHandler": "packages/server-core/src/handlers/rpc/shared-intel.ts",
+    "sharedIntelRouter": "packages/shared/src/shared-intel/router.ts",
+    "sharedIntelTypes": "packages/shared/src/shared-intel/types.ts",
     "sessionTools": "packages/session-tools-core/src/tool-defs.ts",
     "bundledSkills": "packages/shared/src/skills/bundled.generated.ts",
     "builtinSources": "packages/shared/src/sources/builtin-sources.ts",
@@ -34,7 +38,8 @@
     "campaignDefaultWorkerSlugs": [
       "world-builder"
     ],
-    "workflowCount": 2
+    "workflowCount": 2,
+    "sharedIntelPromptWired": true
   },
   "referenceHealth": {
     "knownSkillCount": 102,
@@ -182,6 +187,8 @@
     "Campaign workspaces can pass defaultVisibleSlugs, currently world-builder.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
+    "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
+    "Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.",
     "message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.",
     "trustedWorkerTools are for bounded internal work only, not sends/posts/publishing."
   ],

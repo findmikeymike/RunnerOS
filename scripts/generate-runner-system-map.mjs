@@ -10,7 +10,11 @@ const AGENT_TYPES_FILE = join(ROOT, 'packages/shared/src/agent-definitions/types
 const SYSTEM_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/system.ts');
 const LAUNCHPAD_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx');
 const RUN_AGENT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/run-agent.ts');
+const COMPOSE_AGENT_PROMPT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/compose-agent-prompt.ts');
 const SESSION_MANAGER_FILE = join(ROOT, 'packages/server-core/src/sessions/SessionManager.ts');
+const SHARED_INTEL_HANDLER_FILE = join(ROOT, 'packages/server-core/src/handlers/rpc/shared-intel.ts');
+const SHARED_INTEL_ROUTER_FILE = join(ROOT, 'packages/shared/src/shared-intel/router.ts');
+const SHARED_INTEL_TYPES_FILE = join(ROOT, 'packages/shared/src/shared-intel/types.ts');
 const TOOL_DEFS_FILE = join(ROOT, 'packages/session-tools-core/src/tool-defs.ts');
 const BUNDLED_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/bundled.generated.ts');
 const BUILTIN_SOURCES_FILE = join(ROOT, 'packages/shared/src/sources/builtin-sources.ts');
@@ -348,7 +352,11 @@ function main() {
       systemSkills: rel(SYSTEM_SKILLS_FILE),
       workersLaunchpad: rel(LAUNCHPAD_FILE),
       runAgent: rel(RUN_AGENT_FILE),
+      composeAgentPrompt: rel(COMPOSE_AGENT_PROMPT_FILE),
       sessionManager: rel(SESSION_MANAGER_FILE),
+      sharedIntelHandler: rel(SHARED_INTEL_HANDLER_FILE),
+      sharedIntelRouter: rel(SHARED_INTEL_ROUTER_FILE),
+      sharedIntelTypes: rel(SHARED_INTEL_TYPES_FILE),
       sessionTools: rel(TOOL_DEFS_FILE),
       bundledSkills: rel(BUNDLED_SKILLS_FILE),
       builtinSources: rel(BUILTIN_SOURCES_FILE),
@@ -361,6 +369,8 @@ function main() {
       hiddenWorkerHomeCount: hiddenSlugs.length,
       campaignDefaultWorkerSlugs: campaignDefaultSlugs,
       workflowCount: Array.isArray(starterWorkflows) ? starterWorkflows.length : 0,
+      sharedIntelPromptWired: text(COMPOSE_AGENT_PROMPT_FILE).includes('buildSharedIntelPromptSection')
+        && text(SESSION_MANAGER_FILE).includes('buildSharedIntelPromptSection'),
     },
     referenceHealth: referenceHealth(agents, skillScopes, knownSources),
     workflows: Array.isArray(starterWorkflows) ? workflowHealth(starterWorkflows, agents) : [],
@@ -370,6 +380,8 @@ function main() {
       'Campaign workspaces can pass defaultVisibleSlugs, currently world-builder.',
       'run-agent drops missing skills/sources before session creation and includes a launch receipt.',
       'Concierge receives broad workspace context and an active-agent capability catalog for routing.',
+      'Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.',
+      'Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.',
       'message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.',
       'trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.',
     ],
@@ -418,6 +430,7 @@ function renderMarkdown(map) {
   lines.push(`- Hidden from Workers home: ${map.summary.hiddenWorkerHomeCount}`);
   lines.push(`- Campaign default workers: ${formatList(map.summary.campaignDefaultWorkerSlugs)}`);
   lines.push(`- Starter workflows mapped: ${map.summary.workflowCount}`);
+  lines.push(`- Shared Intel prompt injection: ${map.summary.sharedIntelPromptWired ? 'wired' : 'not detected'}`);
   lines.push(`- Domains: ${Object.entries(map.summary.domains).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`- Permission modes: ${Object.entries(map.summary.permissionModes).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`- Known skills: ${map.referenceHealth.knownSkillCount} (${map.referenceHealth.bundledSkillCount} bundled, ${map.referenceHealth.systemSkillCount} system, ${map.referenceHealth.userGlobalSkillCount} user-global on this machine)`);
@@ -443,6 +456,15 @@ function renderMarkdown(map) {
   lines.push('## Runtime Rules Agents Should Not Miss');
   lines.push('');
   for (const rule of map.inferredRuntimeRules) lines.push(`- ${rule}`);
+  lines.push('');
+  lines.push('## Shared Intel Awareness');
+  lines.push('');
+  lines.push('- User action: chat `Share Intel` calls the shared-intel RPC for the current workspace/session.');
+  lines.push('- Router action: the backend reads recent session messages, scores durable nuggets, picks target agents from the active agent catalog, and upserts targeted workspace context docs.');
+  lines.push('- Storage: shared notes use the shared-intel context slug prefix and `routing: { mode: "targeted", agents: [...] }`.');
+  lines.push('- Agent launch: `loadActiveContextDocsForAgent` filters docs for the launched agent; Concierge/HNIC keeps the broad context override.');
+  lines.push('- Prompt delivery: `composeAgentSystemPrompt` and workflow prompt composition inject matching notes into a dedicated `Shared Intel for this worker:` section and remove them from generic workspace context to avoid duplicate/bloat.');
+  lines.push('- Practical result: agents know to check it because the runtime places the relevant notes in their system prompt at launch. Individual saved agent prompts do not need to be edited.');
   lines.push('');
   lines.push('## Starter Workflows');
   lines.push('');
@@ -500,6 +522,11 @@ function renderMermaid(map) {
   lines.push('  Launch --> Session["SessionManager.createSession"]');
   lines.push('  Session --> Permissions["Permission Mode + Trusted Tools"]');
   lines.push('  Session --> Context["Workspace Context + Memory"]');
+  lines.push('  ShareIntel["Share Intel Button"] --> SharedIntelRpc["sharedIntel:share RPC"]');
+  lines.push('  SharedIntelRpc --> SharedIntelRouter["Shared Intel Router"]');
+  lines.push('  SharedIntelRouter --> Context');
+  lines.push('  Context --> SharedIntelPrompt["Shared Intel Prompt Section"]');
+  lines.push('  SharedIntelPrompt --> Session');
   lines.push('  Session --> Sources["Enabled Sources"]');
   lines.push('  Session --> Skills["Agent Skills"]');
   for (const agent of map.agents) {

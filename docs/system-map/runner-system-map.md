@@ -20,7 +20,11 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - systemSkills: `packages/shared/src/skills/system.ts`
 - workersLaunchpad: `apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx`
 - runAgent: `apps/electron/src/renderer/lib/run-agent.ts`
+- composeAgentPrompt: `apps/electron/src/renderer/lib/compose-agent-prompt.ts`
 - sessionManager: `packages/server-core/src/sessions/SessionManager.ts`
+- sharedIntelHandler: `packages/server-core/src/handlers/rpc/shared-intel.ts`
+- sharedIntelRouter: `packages/shared/src/shared-intel/router.ts`
+- sharedIntelTypes: `packages/shared/src/shared-intel/types.ts`
 - sessionTools: `packages/session-tools-core/src/tool-defs.ts`
 - bundledSkills: `packages/shared/src/skills/bundled.generated.ts`
 - builtinSources: `packages/shared/src/sources/builtin-sources.ts`
@@ -32,6 +36,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Hidden from Workers home: 9
 - Campaign default workers: `world-builder`
 - Starter workflows mapped: 2
+- Shared Intel prompt injection: wired
 - Domains: Command 2, Content Creation 4, Creative 4, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
 - Permission modes: ask 25, safe 7
 - Known skills: 102 (48 bundled, 6 system, 100 user-global on this machine)
@@ -57,8 +62,19 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Campaign workspaces can pass defaultVisibleSlugs, currently world-builder.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
+- Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
+- Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.
 - message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.
 - trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.
+
+## Shared Intel Awareness
+
+- User action: chat `Share Intel` calls the shared-intel RPC for the current workspace/session.
+- Router action: the backend reads recent session messages, scores durable nuggets, picks target agents from the active agent catalog, and upserts targeted workspace context docs.
+- Storage: shared notes use the shared-intel context slug prefix and `routing: { mode: "targeted", agents: [...] }`.
+- Agent launch: `loadActiveContextDocsForAgent` filters docs for the launched agent; Concierge/HNIC keeps the broad context override.
+- Prompt delivery: `composeAgentSystemPrompt` and workflow prompt composition inject matching notes into a dedicated `Shared Intel for this worker:` section and remove them from generic workspace context to avoid duplicate/bloat.
+- Practical result: agents know to check it because the runtime places the relevant notes in their system prompt at launch. Individual saved agent prompts do not need to be edited.
 
 ## Starter Workflows
 

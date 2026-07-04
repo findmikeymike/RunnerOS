@@ -6,6 +6,11 @@ flowchart LR
   Launch --> Session["SessionManager.createSession"]
   Session --> Permissions["Permission Mode + Trusted Tools"]
   Session --> Context["Workspace Context + Memory"]
+  ShareIntel["Share Intel Button"] --> SharedIntelRpc["sharedIntel:share RPC"]
+  SharedIntelRpc --> SharedIntelRouter["Shared Intel Router"]
+  SharedIntelRouter --> Context
+  Context --> SharedIntelPrompt["Shared Intel Prompt Section"]
+  SharedIntelPrompt --> Session
   Session --> Sources["Enabled Sources"]
   Session --> Skills["Agent Skills"]
   Registry --> A_concierge["HNIC\nsafe\nCommand"]
