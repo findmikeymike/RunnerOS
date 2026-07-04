@@ -75,4 +75,11 @@ describe('channel routing behavior', () => {
       expect(REMOTE_ELIGIBLE_CHANNELS.has(ch)).toBe(false)
     }
   })
+
+  test('artist vault channels stay local for native file picking and workspace folders', () => {
+    for (const ch of Object.values(RPC_CHANNELS.artistVault)) {
+      expect(LOCAL_ONLY_CHANNELS.has(ch)).toBe(true)
+      expect(REMOTE_ELIGIBLE_CHANNELS.has(ch)).toBe(false)
+    }
+  })
 })

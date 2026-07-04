@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Layers, Maximize2, PanelRight, PanelTopOpen } from 'lucide-react'
+import { Archive, Layers, Loader2, Maximize2, PanelRight, PanelTopOpen } from 'lucide-react'
 import { VISUAL_BOARD_TAG } from '@craft-agent/shared/visual-board'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -49,6 +49,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     ?? (activeSurface?.kind === 'canvas' ? latestDisplayOutput?.id ?? boardOutput?.id : undefined)
   const [selectedManifest, setSelectedManifest] = React.useState<OutputManifestDTO | null>(null)
   const [manifestError, setManifestError] = React.useState<string | null>(null)
+  const [savingToVault, setSavingToVault] = React.useState(false)
   const selectedCaptureVersion = React.useMemo(
     () => selectedManifest ? visualCaptureVersion(selectedManifest) : null,
     [selectedManifest],
@@ -139,6 +140,25 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }, [activeSurface?.sessionId, activeSurface?.workspaceId, openDemoVisualSurface, selectedManifest])
+
+  const saveSelectedOutputToVault = React.useCallback(async () => {
+    if (!activeSurface?.workspaceId || !selectedManifest) return
+    setSavingToVault(true)
+    try {
+      const result = await window.electronAPI.saveOutputAssetToVault(activeSurface.workspaceId, selectedManifest.id, undefined, {
+        kindHint: vaultKindHintForOutput(selectedManifest),
+      })
+      if (result.imported.length > 0) {
+        toast.success('Saved to Artist Vault.')
+      } else {
+        toast.warning(result.skipped[0]?.reason ?? 'Nothing was saved to Artist Vault.')
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSavingToVault(false)
+    }
+  }, [activeSurface?.workspaceId, selectedManifest])
 
   const handlePreviewSettled = React.useCallback(() => {
     if (selectedCaptureKey) setPreviewSettledKey(selectedCaptureKey)
@@ -326,6 +346,19 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
 
           {presentation === 'rollup' ? null : (
             <div className="flex shrink-0 gap-2">
+              {selectedManifest && !selectedIsBoard ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 flex-1 justify-center"
+                  disabled={savingToVault}
+                  onClick={() => void saveSelectedOutputToVault()}
+                >
+                  {savingToVault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+                  Vault
+                </Button>
+              ) : null}
               {canSendSelectedOutputToCanvas ? (
                 <Button
                   type="button"
@@ -380,6 +413,13 @@ function visualCaptureVersion(manifest: OutputManifestDTO): string {
     assets,
     links,
   })
+}
+
+function vaultKindHintForOutput(manifest: OutputManifestDTO): 'master-final' | 'raw-footage' | 'cover-art' | 'any' {
+  if (manifest.kind === 'audio') return 'master-final'
+  if (manifest.kind === 'video') return 'raw-footage'
+  if (manifest.kind === 'image') return 'cover-art'
+  return 'any'
 }
 
 function OutputSelector({

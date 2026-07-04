@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, PanelTopOpen, ReceiptText, Route } from 'lucide-react'
+import { AlertTriangle, Archive, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, Loader2, PanelTopOpen, ReceiptText, Route } from 'lucide-react'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ type OutputsElectronAPI = typeof window.electronAPI & {
     sessionId: string,
     input: { action: 'add_image' | 'add_video'; outputId: string },
   ) => Promise<{ ok: boolean; receipt?: string; error?: string }>
+  saveOutputAssetToVault?: (workspaceId: string, outputId: string, assetId?: string, options?: { kindHint?: 'master-final' | 'demo' | 'raw-footage' | 'cover-art' | 'artist-photo' | 'contract' | 'any' }) => Promise<{ imported: unknown[]; skipped: Array<{ path: string; reason: string }> }>
 }
 
 export default function OutputDetailPage({ workspaceId, outputId }: Props) {
@@ -33,6 +34,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
   const openDemoVisualSurface = useSetAtom(openDemoVisualSurfaceAtom)
   const [manifest, setManifest] = React.useState<OutputManifestDTO | null>(null)
   const [detailError, setDetailError] = React.useState<string | null>(null)
+  const [savingToVault, setSavingToVault] = React.useState(false)
 
   React.useEffect(() => {
     if (!outputId) {
@@ -129,6 +131,10 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
             )}
             {primary && (
               <>
+                <Button size="sm" variant="outline" disabled={savingToVault} className="border-[#f97316]/25 bg-[#f97316]/12 text-white/82 hover:bg-[#f97316]/20 hover:text-white disabled:cursor-wait disabled:opacity-60" onClick={() => void saveOutputToVault(workspaceId, manifest, primary, setSavingToVault)}>
+                  {savingToVault ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Archive className="mr-1.5 h-3.5 w-3.5" />}
+                  Save to Vault
+                </Button>
                 <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => openAsset(workspaceId, manifest, primary)}>
                   <FileText className="mr-1.5 h-3.5 w-3.5" />
                   Open
@@ -349,6 +355,41 @@ function showAsset(workspaceId: string, manifest: OutputManifestDTO, asset: Outp
     return
   }
   electronAPI.showOutputInFolder(workspaceId, manifest.id, asset.id).catch(reportActionError)
+}
+
+async function saveOutputToVault(
+  workspaceId: string,
+  manifest: OutputManifestDTO,
+  asset: OutputAssetDTO,
+  setSaving: (saving: boolean) => void,
+) {
+  const electronAPI = window.electronAPI as OutputsElectronAPI
+  if (typeof electronAPI.saveOutputAssetToVault !== 'function') {
+    toast.error('Save to Vault is unavailable in this window.')
+    return
+  }
+  setSaving(true)
+  try {
+    const result = await electronAPI.saveOutputAssetToVault(workspaceId, manifest.id, asset.id, {
+      kindHint: vaultKindHintForOutput(manifest),
+    })
+    if (result.imported.length > 0) {
+      toast.success('Saved to Artist Vault.')
+    } else {
+      toast.warning(result.skipped[0]?.reason ?? 'Nothing was saved to Artist Vault.')
+    }
+  } catch (err) {
+    reportActionError(err)
+  } finally {
+    setSaving(false)
+  }
+}
+
+function vaultKindHintForOutput(manifest: OutputManifestDTO): 'master-final' | 'raw-footage' | 'cover-art' | 'any' {
+  if (manifest.kind === 'audio') return 'master-final'
+  if (manifest.kind === 'video') return 'raw-footage'
+  if (manifest.kind === 'image') return 'cover-art'
+  return 'any'
 }
 
 function reportActionError(err: unknown) {

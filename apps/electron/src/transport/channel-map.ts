@@ -417,6 +417,17 @@ export const CHANNEL_MAP = {
   syncGoogleCalendar: invoke(RPC_CHANNELS.googleWorkspace.SYNC_CALENDAR),
   sendCommunityEmailViaResend: invoke(RPC_CHANNELS.community.SEND_RESEND_EMAIL),
 
+  // Artist Vault
+  getArtistVaultManifest: invoke(RPC_CHANNELS.artistVault.GET),
+  planArtistVaultImports: invoke(RPC_CHANNELS.artistVault.PLAN_IMPORT),
+  chooseArtistVaultAssetFiles: invoke(RPC_CHANNELS.artistVault.CHOOSE_FILES),
+  importArtistVaultAssets: invoke(RPC_CHANNELS.artistVault.IMPORT),
+  linkArtistVaultFolder: invoke(RPC_CHANNELS.artistVault.LINK_FOLDER),
+  updateArtistVaultAsset: invoke(RPC_CHANNELS.artistVault.UPDATE_ASSET),
+  saveOutputAssetToVault: invoke(RPC_CHANNELS.artistVault.SAVE_OUTPUT_ASSET),
+  scanArtistVault: invoke(RPC_CHANNELS.artistVault.SCAN),
+  openArtistVaultFolder: invoke(RPC_CHANNELS.artistVault.OPEN_FOLDER),
+
   // Mission assets
   getMissionAssetManifest: invoke(RPC_CHANNELS.missionAssets.GET),
   planMissionAssetImports: invoke(RPC_CHANNELS.missionAssets.PLAN_IMPORT),

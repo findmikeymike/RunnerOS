@@ -429,6 +429,17 @@ export const RPC_CHANNELS = {
     SCAN: 'missionAssets:scan',
     OPEN_FOLDER: 'missionAssets:openFolder',
   },
+  artistVault: {
+    GET: 'artistVault:get',
+    PLAN_IMPORT: 'artistVault:planImport',
+    CHOOSE_FILES: 'artistVault:chooseFiles',
+    IMPORT: 'artistVault:import',
+    LINK_FOLDER: 'artistVault:linkFolder',
+    UPDATE_ASSET: 'artistVault:updateAsset',
+    SAVE_OUTPUT_ASSET: 'artistVault:saveOutputAsset',
+    SCAN: 'artistVault:scan',
+    OPEN_FOLDER: 'artistVault:openFolder',
+  },
   memory: {
     /** List one agent's MEMORY.md entries. */
     LIST_AGENT: 'memory:listAgent',

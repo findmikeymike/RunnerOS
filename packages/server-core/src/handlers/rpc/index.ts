@@ -8,6 +8,7 @@ import { registerWorkspaceContextHandlers } from './workspace-context'
 import { registerGoogleWorkspaceHandlers } from './google-workspace'
 import { registerCommunityEmailHandlers } from './community-email'
 import { registerMemoryHandlers } from './memory'
+import { registerArtistVaultHandlers } from './artist-vault'
 import { registerMissionAssetsHandlers } from './mission-assets'
 import { registerWorkflowsHandlers } from './workflows'
 import { registerWorkflowRunsHandlers } from './workflow-runs'
@@ -49,6 +50,7 @@ export function registerCoreRpcHandlers(
   registerGoogleWorkspaceHandlers(server, deps)
   registerCommunityEmailHandlers(server, deps)
   registerMemoryHandlers(server, deps)
+  registerArtistVaultHandlers(server, deps)
   registerMissionAssetsHandlers(server, deps)
   registerWorkflowsHandlers(server, deps)
   registerWorkflowRunsHandlers(server, deps)

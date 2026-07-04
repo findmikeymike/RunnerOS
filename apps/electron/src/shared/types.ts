@@ -121,6 +121,29 @@ import type { LoadedContextDoc as ContextDocDTO, ContextDocMetadata, ContextDocR
 export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 
 import type {
+  VaultAssetImportCandidate,
+  VaultAssetImportOptions,
+  VaultAssetImportResult,
+  VaultAssetRecord,
+  VaultAssetScanResult,
+  VaultAssetUpdatePatch,
+  VaultFolderLinkResult,
+  VaultKindHint,
+  VaultManifest,
+} from '@craft-agent/shared/artist-vault';
+export type {
+  VaultAssetImportCandidate,
+  VaultAssetImportOptions,
+  VaultAssetImportResult,
+  VaultAssetRecord,
+  VaultAssetScanResult,
+  VaultAssetUpdatePatch,
+  VaultFolderLinkResult,
+  VaultKindHint,
+  VaultManifest,
+};
+
+import type {
   MissionAssetImportCandidate,
   MissionAssetImportOptions,
   MissionAssetImportResult,
@@ -868,6 +891,20 @@ export interface ElectronAPI {
   getGoogleCalendarStatus(workspaceId: string): Promise<{ ok: boolean; connected: boolean; error?: string }>
   syncGoogleCalendar(workspaceId: string): Promise<{ ok: boolean; synced: number; deleted?: number; failed: number; error?: string }>
   sendCommunityEmailViaResend(input: CommunityEmailSendInput): Promise<CommunityEmailSendResult>
+
+  // Artist Vault (global artist library mirrored into workspace context)
+  getArtistVaultManifest(workspaceId: string): Promise<VaultManifest>
+  planArtistVaultImports(workspaceId: string, filePaths: string[], options?: VaultAssetImportOptions): Promise<{
+    candidates: VaultAssetImportCandidate[]
+    skipped: Array<{ path: string; reason: string }>
+  }>
+  chooseArtistVaultAssetFiles(workspaceId: string, kindHint?: VaultKindHint): Promise<string[]>
+  importArtistVaultAssets(workspaceId: string, filePaths: string[], options?: VaultAssetImportOptions): Promise<VaultAssetImportResult>
+  linkArtistVaultFolder(workspaceId: string, folderPath: string): Promise<VaultFolderLinkResult>
+  updateArtistVaultAsset(workspaceId: string, assetId: string, patch: VaultAssetUpdatePatch): Promise<VaultManifest>
+  saveOutputAssetToVault(workspaceId: string, outputId: string, assetId?: string, options?: VaultAssetImportOptions): Promise<VaultAssetImportResult>
+  scanArtistVault(workspaceId: string): Promise<VaultAssetScanResult>
+  openArtistVaultFolder(workspaceId: string): Promise<boolean>
 
   // Mission assets (workspace-local source files mirrored into context)
   getMissionAssetManifest(workspaceId: string): Promise<MissionAssetManifest>

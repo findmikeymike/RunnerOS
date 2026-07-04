@@ -56,6 +56,15 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.missionAssets.IMPORT,
   RPC_CHANNELS.missionAssets.SCAN,
   RPC_CHANNELS.missionAssets.OPEN_FOLDER,
+  RPC_CHANNELS.artistVault.GET,
+  RPC_CHANNELS.artistVault.PLAN_IMPORT,
+  RPC_CHANNELS.artistVault.CHOOSE_FILES,
+  RPC_CHANNELS.artistVault.IMPORT,
+  RPC_CHANNELS.artistVault.LINK_FOLDER,
+  RPC_CHANNELS.artistVault.UPDATE_ASSET,
+  RPC_CHANNELS.artistVault.SAVE_OUTPUT_ASSET,
+  RPC_CHANNELS.artistVault.SCAN,
+  RPC_CHANNELS.artistVault.OPEN_FOLDER,
 
   // auth — local auth state + native dialogs
   RPC_CHANNELS.auth.LOGOUT,
