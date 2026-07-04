@@ -135,6 +135,7 @@ import {
   type UpdateMemoryInput,
 } from '@craft-agent/shared/memory'
 import { buildCanvasGuidanceSection } from '@craft-agent/shared/agent-definitions/canvas-guidance'
+import { buildSharedIntelPromptSection, isSharedIntelContextSlug } from '@craft-agent/shared/shared-intel'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
@@ -227,7 +228,7 @@ function isPrerequisiteRetryResult(result: string): boolean {
 }
 
 function buildWorkflowWorkspaceContextSection(docs: Array<{ slug: string; metadata: { name: string; enabled?: boolean }; body: string }>): string {
-  const usable = docs.filter((d) => d.metadata.enabled !== false && d.body.trim().length > 0)
+  const usable = docs.filter((d) => d.metadata.enabled !== false && !isSharedIntelContextSlug(d.slug) && d.body.trim().length > 0)
   if (usable.length === 0) return ''
   return `${WORKSPACE_CONTEXT_HEADER}\n\n${usable.map((doc) => {
     const heading = doc.metadata.name.trim() || doc.slug
@@ -413,6 +414,7 @@ function buildWorkflowAgentPrompt(
 ): string {
   const body = (agent.systemPrompt ?? '').trimEnd()
   const contextSection = buildWorkflowWorkspaceContextSection(contextDocs)
+  const sharedIntelSection = buildSharedIntelPromptSection(contextDocs)
   const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
   const sourceBySlug = new Map(sources.map((s) => [s.config.slug, s]))
   const skillBullets = (agent.metadata.skills ?? [])
@@ -436,6 +438,7 @@ function buildWorkflowAgentPrompt(
   if (footerParts.length > 0) footerParts.push(PLANNING_NUDGE)
   const parts = [body]
   if (contextSection) parts.push(contextSection)
+  if (sharedIntelSection) parts.push(sharedIntelSection)
   const memorySection = buildWorkflowMemoryText(memory)
   if (memorySection) parts.push(memorySection)
   parts.push(buildCanvasGuidanceSection(agent))

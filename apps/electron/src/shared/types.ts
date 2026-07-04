@@ -231,6 +231,10 @@ export type { NotificationEntry };
 import type { PulseTickEntry, PulseAction, PulseDecisionAction } from '@craft-agent/shared/pulses';
 export type { PulseTickEntry, PulseAction, PulseDecisionAction };
 
+// Shared Intel — internal context-router notes created from chats.
+import type { ShareIntelRequest, ShareIntelResult } from '@craft-agent/shared/shared-intel';
+export type { ShareIntelRequest, ShareIntelResult };
+
 // Resource bundle types (cross-workspace export/import)
 import type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult } from '@craft-agent/shared/resources';
 export type { ExportResourcesOptions, ExportResult, ResourceImportMode, ResourceBundle, ResourceImportResult };
@@ -888,6 +892,7 @@ export interface ElectronAPI {
   }): Promise<ContextDocDTO>
   deleteWorkspaceContextDoc(workspaceId: string, slug: string): Promise<boolean>
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
+  shareSessionIntel(input: ShareIntelRequest): Promise<ShareIntelResult>
   getGoogleCalendarStatus(workspaceId: string): Promise<{ ok: boolean; connected: boolean; error?: string }>
   syncGoogleCalendar(workspaceId: string): Promise<{ ok: boolean; synced: number; deleted?: number; failed: number; error?: string }>
   sendCommunityEmailViaResend(input: CommunityEmailSendInput): Promise<CommunityEmailSendResult>

@@ -7,6 +7,7 @@ import { registerAgentDefinitionsHandlers } from './agent-definitions'
 import { registerWorkspaceContextHandlers } from './workspace-context'
 import { registerGoogleWorkspaceHandlers } from './google-workspace'
 import { registerCommunityEmailHandlers } from './community-email'
+import { registerSharedIntelHandlers } from './shared-intel'
 import { registerMemoryHandlers } from './memory'
 import { registerArtistVaultHandlers } from './artist-vault'
 import { registerMissionAssetsHandlers } from './mission-assets'
@@ -49,6 +50,7 @@ export function registerCoreRpcHandlers(
   registerWorkspaceContextHandlers(server, deps)
   registerGoogleWorkspaceHandlers(server, deps)
   registerCommunityEmailHandlers(server, deps)
+  registerSharedIntelHandlers(server, deps)
   registerMemoryHandlers(server, deps)
   registerArtistVaultHandlers(server, deps)
   registerMissionAssetsHandlers(server, deps)
