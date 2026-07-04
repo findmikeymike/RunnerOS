@@ -22,6 +22,7 @@ Start here when you need project context without reading the whole repo.
 - [backlog](./backlog/) - accepted future work, deferred integrations, and cleanup ideas.
 - [audits](./audits/) - security, runtime, and technical debt reports.
 - [development](./development/) - local commands, CLI docs, setup-adjacent references.
+- [system-map](./system-map/) - generated map of workers, skills, sources, launch surfaces, and approval boundaries.
 - [archive](./archive/) - historical docs that should not guide current decisions.
 
 ## Feature Docs

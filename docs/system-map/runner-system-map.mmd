@@ -1,0 +1,144 @@
+flowchart LR
+  App["App Shell"] --> Workers["Workers Page"]
+  App --> Chat["HNIC Chat"]
+  Registry["Starter Agent Registry"] --> Workers
+  Workers --> Launch["openAgentSessionComposer"]
+  Launch --> Session["SessionManager.createSession"]
+  Session --> Permissions["Permission Mode + Trusted Tools"]
+  Session --> Context["Workspace Context + Memory"]
+  Session --> Sources["Enabled Sources"]
+  Session --> Skills["Agent Skills"]
+  Registry --> A_concierge["HNIC\nsafe\nCommand"]
+  Chat --> A_concierge
+  A_concierge --> S_agent_creator["skill:agent-creator"]
+  A_concierge --> S_automation_creator["skill:automation-creator"]
+  A_concierge --> S_workflow_creator["skill:workflow-creator"]
+  A_concierge --> S_source_recipe["skill:source-recipe"]
+  A_concierge --> S_artist_os_guide["skill:artist-os-guide"]
+  A_concierge --> S_runneros_self_edit["skill:runneros-self-edit"]
+  Registry --> A_orchestrator["Orchestrator\nask\nCommand"]
+  A_orchestrator --> S_agent_creator["skill:agent-creator"]
+  A_orchestrator --> S_automation_creator["skill:automation-creator"]
+  A_orchestrator --> S_workflow_creator["skill:workflow-creator"]
+  A_orchestrator --> S_source_recipe["skill:source-recipe"]
+  Registry --> A_hypermotion_agent["Hypermotion Agent\nask\nContent Creation"]
+  A_hypermotion_agent --> S_hyperframes["skill:hyperframes"]
+  A_hypermotion_agent --> T_hypermotion["source:hypermotion"]
+  A_hypermotion_agent -. hidden .-> Workers
+  Registry --> A_lottie_animation_agent["Lottie Animation Agent\nask\nContent Creation"]
+  A_lottie_animation_agent --> T_lottie["source:lottie"]
+  A_lottie_animation_agent -. hidden .-> Workers
+  Registry --> A_raw_video_editor["Raw Video Editor\nask\nContent Creation"]
+  Workers --> A_raw_video_editor
+  A_raw_video_editor --> S_raw_video_editor["skill:raw-video-editor"]
+  A_raw_video_editor --> T_raw_video_editor["source:raw-video-editor"]
+  A_raw_video_editor --> T_video_studio["source:video-studio"]
+  Registry --> A_video_editor_agent["Video Editor Agent\nask\nContent Creation"]
+  Workers --> A_video_editor_agent
+  A_video_editor_agent --> T_video_studio["source:video-studio"]
+  Registry --> A_art_director["Art Director\nask\nCreative"]
+  Workers --> A_art_director
+  A_art_director --> S_artist_art_direction["skill:artist-art-direction"]
+  A_art_director --> S_artist_typography_taste["skill:artist-typography-taste"]
+  A_art_director --> S_artist_visual_world_director["skill:artist-visual-world-director"]
+  A_art_director --> S_ad_creative["skill:ad-creative"]
+  A_art_director --> S_zero["skill:zero"]
+  Registry --> A_persona_agent["Legendary Minds\nask\nCreative"]
+  Workers --> A_persona_agent
+  A_persona_agent --> S_steve_jobs_perspective["skill:steve-jobs-perspective"]
+  A_persona_agent --> S_mrbeast_perspective["skill:mrbeast-perspective"]
+  A_persona_agent --> S_tom_ford["skill:tom-ford"]
+  Registry --> A_record_doctor["Record Doctor\nask\nCreative"]
+  Workers --> A_record_doctor
+  A_record_doctor --> S_record_doctor_handoff["skill:record-doctor-handoff"]
+  A_record_doctor --> S_artist_comms_strategist["skill:artist-comms-strategist"]
+  Registry --> A_world_builder["World Builder\nask\nCreative"]
+  Workers --> A_world_builder
+  A_world_builder --> S_world_immersion["skill:world-immersion"]
+  A_world_builder --> S_artist_narrative_universe["skill:artist-narrative-universe"]
+  A_world_builder --> S_artist_campaign_angle_builder["skill:artist-campaign-angle-builder"]
+  Campaign["Campaign Workspace"] --> A_world_builder
+  Registry --> A_print_agent["Print Agent\nask\nMerch"]
+  Workers --> A_print_agent
+  A_print_agent --> S_printify_commerce["skill:printify-commerce"]
+  A_print_agent --> S_print_product_assets["skill:print-product-assets"]
+  A_print_agent --> T_printify["source:printify"]
+  Registry --> A_shopify_agent["Shopify Agent\nask\nMerch"]
+  Workers --> A_shopify_agent
+  A_shopify_agent --> S_shopify_commerce["skill:shopify-commerce"]
+  A_shopify_agent --> T_shopify["source:shopify"]
+  Registry --> A_coder["Coder\nask\nOperators"]
+  Workers --> A_coder
+  Registry --> A_update_system_agent["Update System Agent\nsafe\nOperators"]
+  Registry --> A_open_slide_agent["Open Slide\nask\nOther Workers"]
+  A_open_slide_agent --> S_open_slide_decks["skill:open-slide-decks"]
+  A_open_slide_agent --> S_slide_design_taste["skill:slide-design-taste"]
+  A_open_slide_agent --> T_open_slide["source:open-slide"]
+  A_open_slide_agent -. hidden .-> Workers
+  Registry --> A_writer["Writer\nask\nOther Workers"]
+  Workers --> A_writer
+  Registry --> A_comms_agent["Comms Agent\nask\nOutreach"]
+  Workers --> A_comms_agent
+  A_comms_agent --> S_artist_comms_strategist["skill:artist-comms-strategist"]
+  Registry --> A_industry_hunter["Industry Hunter\nsafe\nOutreach"]
+  Workers --> A_industry_hunter
+  A_industry_hunter --> S_artist_industry_hunter["skill:artist-industry-hunter"]
+  Registry --> A_outreach_agent["Outreach Agent\nask\nOutreach"]
+  Workers --> A_outreach_agent
+  A_outreach_agent --> S_zero["skill:zero"]
+  A_outreach_agent --> S_artist_comms_strategist["skill:artist-comms-strategist"]
+  A_outreach_agent --> S_magnetic_outreach["skill:magnetic-outreach"]
+  A_outreach_agent --> T_zero["source:zero"]
+  Registry --> A_triager["Triager\nsafe\nOutreach"]
+  Workers --> A_triager
+  Registry --> A_ads_agent["Ads Agent\nask\nPromotion"]
+  Workers --> A_ads_agent
+  A_ads_agent --> S_ad_creative["skill:ad-creative"]
+  A_ads_agent --> S_google_ads["skill:google-ads"]
+  A_ads_agent --> T_google_ads["source:google-ads"]
+  Registry --> A_branding_agent["Branding Agent\nask\nPromotion"]
+  Workers --> A_branding_agent
+  A_branding_agent --> S_artist_brand_dna_audit["skill:artist-brand-dna-audit"]
+  A_branding_agent --> S_artist_narrative_universe["skill:artist-narrative-universe"]
+  A_branding_agent --> S_artist_belief_system["skill:artist-belief-system"]
+  A_branding_agent --> S_artist_campaign_angle_builder["skill:artist-campaign-angle-builder"]
+  A_branding_agent --> S_artist_visual_world_director["skill:artist-visual-world-director"]
+  A_branding_agent --> S_artist_brand_expression_strategist["skill:artist-brand-expression-strategist"]
+  Registry --> A_critic["Critic\nsafe\nPromotion"]
+  Workers --> A_critic
+  Registry --> A_ig_trending_power_up["IG Music Trending\nask\nPromotion"]
+  A_ig_trending_power_up -. hidden .-> Workers
+  Registry --> A_influencer_campaign_power_up["Influencer Campaign\nask\nPromotion"]
+  A_influencer_campaign_power_up -. hidden .-> Workers
+  Registry --> A_playlisting_power_up["Playlisting\nask\nPromotion"]
+  A_playlisting_power_up -. hidden .-> Workers
+  Registry --> A_spotify_playlist_creator["Spotify Playlist Creator\nask\nPromotion"]
+  A_spotify_playlist_creator --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
+  A_spotify_playlist_creator -. hidden .-> Workers
+  Registry --> A_researcher["Researcher\nsafe\nResearch"]
+  A_researcher -. hidden .-> Workers
+  Registry --> A_spotify_analyst["Spotify Analyst\nask\nResearch"]
+  Workers --> A_spotify_analyst
+  A_spotify_analyst --> S_spotify_growth_intake["skill:spotify-growth-intake"]
+  A_spotify_analyst --> S_spotify_analytics_snapshot["skill:spotify-analytics-snapshot"]
+  A_spotify_analyst --> S_spotify_anomaly_watch["skill:spotify-anomaly-watch"]
+  A_spotify_analyst --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
+  Registry --> A_youtube_research_agent["YouTube Research Agent\nsafe\nResearch"]
+  Workers --> A_youtube_research_agent
+  A_youtube_research_agent --> S_youtube_research["skill:youtube-research"]
+  A_youtube_research_agent --> S_create_viral_content["skill:create-viral-content"]
+  A_youtube_research_agent --> T_youtube_research["source:youtube-research"]
+  Registry --> A_social_publisher["Social Publisher\nask\nSocials"]
+  Workers --> A_social_publisher
+  A_social_publisher --> S_social_publishing["skill:social-publishing"]
+  A_social_publisher --> T_printing_press_social["source:printing-press-social"]
+  Registry --> A_trypost_agent["TryPost\nask\nSocials"]
+  Workers --> A_trypost_agent
+  Workflows["Starter Workflows"] --> W_weekly_content_pipeline["workflow:Weekly Content Pipeline"]
+  W_weekly_content_pipeline --> A_researcher["researcher"]
+  W_weekly_content_pipeline --> A_writer["writer"]
+  W_weekly_content_pipeline --> A_critic["critic"]
+  W_weekly_content_pipeline --> A_writer["writer"]
+  Workflows["Starter Workflows"] --> W_email_triage["workflow:Email Triage"]
+  W_email_triage --> A_triager["triager"]
+  W_email_triage --> A_writer["writer"]

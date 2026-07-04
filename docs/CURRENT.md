@@ -22,6 +22,7 @@ source_of_truth: true
   - `docs/backlog/future-external-triggers.md`
   - `docs/specs/hypermotion-agent.md`
 - Removed local runtime clutter from this worktree: `.omc/`, `docs/creator-command-center/.omc/`, and `docs/.DS_Store`.
+- Added generated system map docs under `docs/system-map/` plus `npm run docs:system-map`.
 
 ## In Progress
 
@@ -30,8 +31,9 @@ source_of_truth: true
 ## Next Actions
 
 1. Keep new specs in the right feature folder or `docs/specs/`.
-2. Archive stale docs only when a newer source of truth is clear.
-3. Re-run focused tests when code, not docs, changes.
+2. Regenerate `docs/system-map/` after changing starter agents, worker visibility, workflow templates, or launch routing.
+3. Archive stale docs only when a newer source of truth is clear.
+4. Re-run focused tests when code, not docs, changes.
 
 ## Blockers / External Dependencies
 
