@@ -164,8 +164,8 @@ const SECRET_PRESETS: SecretPreset[] = [
   {
     group: 'Promotion',
     name: 'POSTIZ_BASE_URL',
-    label: 'Postiz workspace URL',
-    description: 'Optional. Use when your Postiz instance is self-hosted or not the default cloud endpoint.',
+    label: 'Postiz URL (self-hosted only)',
+    description: 'Optional. Leave blank for Postiz cloud unless you have a custom Postiz app URL.',
     placeholder: 'https://postiz.example.com',
     storage: 'env',
   },
