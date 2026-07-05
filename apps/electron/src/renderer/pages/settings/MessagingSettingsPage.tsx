@@ -297,8 +297,8 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
         <div className="flex items-center gap-3 px-4 py-3.5">
           <MessagingPlatformIcon platform={platform} size={22} />
           <div className="min-w-0 flex-1">
-            <div className="text-sm font-medium">{label}</div>
-            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+            <div className="text-sm font-medium text-white/86">{label}</div>
+            <div className="mt-0.5 truncate text-xs text-white/38">
               {PLATFORM_API_DESCRIPTION[platform]} · {description}
             </div>
           </div>
@@ -311,7 +311,7 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
                   data-state={menuOpen ? 'open' : 'closed'}
                   aria-label={t('common.more', { defaultValue: 'More' })}
                 >
-                  <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                  <MoreHorizontal className="h-4 w-4 text-white/38" />
                 </button>
               </DropdownMenuTrigger>
               <StyledDropdownMenuContent align="end">
@@ -409,7 +409,7 @@ function PlatformRow({ platform, workspaceId }: { platform: Platform; workspaceI
                   <Route className="h-3.5 w-3.5 text-accent" />
                   Campaign intake
                 </div>
-                <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                <div className="mt-0.5 truncate text-xs text-white/38">
                   New unbound WhatsApp messages become Campaign triage sessions.
                 </div>
               </div>

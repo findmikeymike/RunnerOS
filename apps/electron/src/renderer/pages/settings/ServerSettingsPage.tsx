@@ -214,7 +214,7 @@ export default function ServerSettingsPage() {
                   <>
                     <SettingsRow label={t("common.url")}>
                       <div className="flex items-center gap-1.5">
-                        <code className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
+                        <code className="text-xs font-mono text-white/38 bg-muted px-2 py-0.5 rounded">
                           {status.url}
                         </code>
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => handleCopy(status.url, 'URL')}>
@@ -225,7 +225,7 @@ export default function ServerSettingsPage() {
 
                     <SettingsRow label={t("settings.server.token")}>
                       <div className="flex items-center gap-1.5">
-                        <code className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded max-w-[180px] truncate">
+                        <code className="text-xs font-mono text-white/38 bg-muted px-2 py-0.5 rounded max-w-[180px] truncate">
                           {tokenVisible ? status.token : '••••••••••••••••'}
                         </code>
                         <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setTokenVisible(v => !v)}>
@@ -241,7 +241,7 @@ export default function ServerSettingsPage() {
 
                 <SettingsRow label={t("settings.server.certificate")}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                    <span className="text-xs text-white/38 truncate max-w-[200px]">
                       {form.tlsCertPath || 'Not configured'}
                     </span>
                     <Button variant="outline" size="sm" className="h-6 text-[11px] px-2 shrink-0" onClick={handleBrowseCert}>
@@ -252,7 +252,7 @@ export default function ServerSettingsPage() {
 
                 <SettingsRow label={t("settings.server.privateKey")}>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">
+                    <span className="text-xs text-white/38 truncate max-w-[200px]">
                       {form.tlsKeyPath || 'Not configured'}
                     </span>
                     <Button variant="outline" size="sm" className="h-6 text-[11px] px-2 shrink-0" onClick={handleBrowseKey}>

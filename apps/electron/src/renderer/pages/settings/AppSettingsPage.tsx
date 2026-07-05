@@ -300,7 +300,7 @@ export default function AppSettingsPage() {
                 <SettingsCard>
                   <SettingsRow label={t("settings.about.version")}>
                     <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">
+                      <span className="text-white/38">
                         {electronPackage.version}
                       </span>
                     </div>

@@ -303,7 +303,7 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <ConnectionIcon connection={connection} size={16} />
-            <span className="font-medium text-sm text-foreground/88">{connection.name}</span>
+            <span className="font-medium text-sm text-white/86">{connection.name}</span>
             {connection.isDefault && (
               <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] border border-[#fb923c]/20 bg-[#fb923c]/12 text-[#fdba74]">
                 {t("common.default")}
@@ -313,12 +313,12 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
               "inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px]",
               status.tone === 'good' && "bg-emerald-500/12 text-emerald-600 dark:text-emerald-400",
               status.tone === 'bad' && "bg-destructive/10 text-destructive",
-              status.tone === 'muted' && "bg-foreground/[0.06] text-muted-foreground",
+              status.tone === 'muted' && "bg-foreground/[0.06] text-white/38",
             )}>
               {status.label}
             </span>
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">
+          <div className="mt-1 text-xs text-white/38">
             {showProviderLabel && `${providerLabel} · `}{endpointLabel}
             {connection.credentialSource === 'environment' && ' · Read from environment'}
           </div>
@@ -370,7 +370,7 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
                 className="p-1.5 rounded-md hover:bg-foreground/[0.05] data-[state=open]:bg-foreground/[0.05] transition-colors"
                 data-state={menuOpen ? 'open' : 'closed'}
               >
-                <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                <MoreHorizontal className="h-4 w-4 text-white/38" />
               </button>
             </DropdownMenuTrigger>
             <StyledDropdownMenuContent align="end">
@@ -537,22 +537,22 @@ function WorkspaceOverrideCard({ workspace, llmConnections, onSettingsChange }: 
             {iconUrl ? (
               <img src={iconUrl} alt="" className="w-full h-full object-cover" />
             ) : (
-              <span className="text-xs font-medium text-muted-foreground">
+              <span className="text-xs font-medium text-white/38">
                 {workspace.name?.charAt(0)?.toUpperCase() || 'W'}
               </span>
             )}
           </div>
           <div className="text-left">
-            <div className="text-sm font-medium">{workspace.name}</div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm font-medium text-white/86">{workspace.name}</div>
+            <div className="text-xs text-white/38">
               {isLoading ? t("common.loading") : getSummary()}
             </div>
           </div>
         </div>
         {isExpanded ? (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          <ChevronDown className="h-4 w-4 text-white/38" />
         ) : (
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <ChevronRight className="h-4 w-4 text-white/38" />
         )}
       </button>
 
@@ -993,10 +993,10 @@ export default function AiSettingsPage() {
                   {llmConnections.length === 0 ? (
                     <div className="px-4 py-8 text-center">
                       <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-foreground/[0.04]">
-                        <Plus className="h-4 w-4 text-muted-foreground" />
+                        <Plus className="h-4 w-4 text-white/38" />
                       </div>
-                      <div className="text-sm font-medium">No AI provider connected</div>
-                      <div className="mt-1 text-xs text-muted-foreground">Add one provider, then choose its models from the chat dropdown.</div>
+                      <div className="text-sm font-medium text-white/86">No AI provider connected</div>
+                      <div className="mt-1 text-xs text-white/38">Add one provider, then choose its models from the chat dropdown.</div>
                     </div>
                   ) : (
                     [...llmConnections]
@@ -1164,7 +1164,7 @@ export default function AiSettingsPage() {
                 >
                   <button
                     onClick={handleCloseApiSetup}
-                    className="p-1.5 rounded-[6px] transition-all bg-background shadow-minimal text-muted-foreground/50 hover:text-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    className="p-1.5 rounded-[6px] transition-all bg-background shadow-minimal text-white/28 hover:text-white/78 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     title={t("common.closeEsc")}
                   >
                     <X className="w-3.5 h-3.5" />

@@ -50,7 +50,7 @@ function SettingsItemRow({ item, isSelected, onSelect }: SettingsItemRowProps) {
           <Icon
             className={cn(
               'w-3.5 h-3.5 shrink-0',
-              isSelected ? 'text-[#9b8cff]' : 'text-white/30'
+              isSelected ? 'text-white/82' : 'text-white/30'
             )}
           />
         </div>

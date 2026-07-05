@@ -124,7 +124,7 @@ export function SearchableModelInput({
           >
             {/* Search input */}
             <div className="relative mb-1.5">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-white/38" />
               <input
                 ref={searchInputRef}
                 type="text"
@@ -134,7 +134,7 @@ export function SearchableModelInput({
                 className={cn(
                   'w-full h-8 pl-8 pr-3 text-sm rounded-md',
                   'bg-foreground/5 border-0',
-                  'placeholder:text-muted-foreground/50',
+                  'placeholder:text-white/28',
                   'focus:outline-none focus:ring-1 focus:ring-foreground/20'
                 )}
               />
@@ -142,7 +142,7 @@ export function SearchableModelInput({
             {/* Model list */}
             <div className="max-h-64 overflow-auto space-y-0.5">
               {filteredModels.length === 0 ? (
-                <div className="px-2.5 py-3 text-sm text-muted-foreground text-center">
+                <div className="px-2.5 py-3 text-sm text-white/38 text-center">
                   No models found
                 </div>
               ) : (

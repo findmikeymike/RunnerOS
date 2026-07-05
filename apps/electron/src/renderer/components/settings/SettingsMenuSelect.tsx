@@ -135,7 +135,7 @@ export function SettingsMenuSelect({
       >
         {showSearch && (
           <div className="relative mb-1.5">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-white/38" />
             <input
               ref={searchInputRef}
               type="text"

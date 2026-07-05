@@ -370,7 +370,7 @@ export default function WorkspaceSettingsPage() {
       <div className="h-full flex flex-col">
         <PanelHeader />
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-sm text-muted-foreground">{t("settings.workspace.noWorkspaceSelected")}</p>
+          <p className="text-sm text-white/38">{t("settings.workspace.noWorkspaceSelected")}</p>
         </div>
       </div>
     )
@@ -382,7 +382,7 @@ export default function WorkspaceSettingsPage() {
       <div className="h-full flex flex-col">
         <PanelHeader />
         <div className="flex-1 flex items-center justify-center">
-          <Spinner className="text-muted-foreground" />
+          <Spinner className="text-white/38" />
         </div>
       </div>
     )
@@ -452,13 +452,13 @@ export default function WorkspaceSettingsPage() {
                     )}
                   >
                     {isUploadingIcon ? (
-                      <Spinner className="text-muted-foreground text-[8px]" />
+                      <Spinner className="text-white/38 text-[8px]" />
                     ) : isHQWorkspace ? (
                       <Home className="h-3.5 w-3.5 text-white/62" />
                     ) : wsIconUrl ? (
                       <img src={wsIconUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <span className="text-xs font-medium text-muted-foreground">
+                      <span className="text-xs font-medium text-white/38">
                         {displayWorkspaceName?.charAt(0)?.toUpperCase() || 'W'}
                       </span>
                     )}
@@ -565,7 +565,7 @@ export default function WorkspaceSettingsPage() {
                     ))}
                   </SettingsCard>
                 ) : (
-                  <p className="text-sm text-muted-foreground">{t("settings.workspace.noSourcesConfigured")}</p>
+                  <p className="text-sm text-white/38">{t("settings.workspace.noSourcesConfigured")}</p>
                 )}
               </SettingsSection>
 

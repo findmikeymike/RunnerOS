@@ -212,7 +212,7 @@ export default function PreferencesPage() {
   if (isLoading) {
     return (
       <div className="h-full flex items-center justify-center">
-        <Spinner className="text-lg text-muted-foreground" />
+        <Spinner className="text-lg text-white/38" />
       </div>
     )
   }
