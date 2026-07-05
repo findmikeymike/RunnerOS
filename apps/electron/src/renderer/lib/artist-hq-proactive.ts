@@ -42,7 +42,7 @@ export function resolveHqRouteReadiness(
   return {
     agentAvailable,
     blockedReason,
-    canLaunch: proactiveMode && route.target === 'agent' && agentAvailable,
+    canLaunch: proactiveMode && route.target === 'agent' && agentAvailable && !blockedReason,
   }
 }
 

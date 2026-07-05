@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-04
+last_verified: 2026-07-05
 source_of_truth: true
 ---
 
@@ -9,7 +9,7 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-04
+- Date: 2026-07-05
 - Branch: `codex/creator-command-center`
 - Current goal: harden Shared Intel routing and Artist HQ proactive routing toward release confidence.
 - Overall state: active Creator Command Center worktree with many feature docs; docs are now routed through this map instead of loose root files.
@@ -30,6 +30,9 @@ source_of_truth: true
   - `docs/specs/hypermotion-agent.md`
 - Removed local runtime clutter from this worktree: `.omc/`, `docs/creator-command-center/.omc/`, and `docs/.DS_Store`.
 - Added generated system map docs under `docs/system-map/` plus `npm run docs:system-map`.
+- Hardened HQ route readiness so generated route blockers now prevent `Start Route` launch instead of allowing a blocked proactive route through.
+- Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
+- Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, and refreshes Pi/OpenAI model lists without the prior immediate `Session Expired` startup failure.
 
 ## In Progress
 
@@ -44,7 +47,7 @@ source_of_truth: true
 
 ## Blockers / External Dependencies
 
-- Chat model response path hit expired OAuth during smoke (`Session Expired`). Share Intel still validated because it reads the local transcript, but live model generation needs re-auth before release smoke is complete.
+- Live chat send still needs an explicit end-to-end prompt smoke. Startup model refresh now succeeds, but a fresh assistant response was not sent in this pass.
 
 ## Verification State
 
@@ -54,6 +57,21 @@ source_of_truth: true
 - Verified git branch before cleanup.
 - Verified moved paths with `rg` and updated stale references.
 - Electron typecheck required for Artist HQ UI changes.
+- Verified on 2026-07-05:
+  - `bun test apps/electron/src/renderer/lib/artist-hq-proactive.test.ts packages/shared/src/hq-state/composer.test.ts packages/server-core/src/hq-state/refresh.test.ts packages/server-core/src/handlers/rpc/google-workspace.test.ts packages/shared/src/shared-intel/router.test.ts packages/server-core/src/handlers/rpc/shared-intel.test.ts apps/electron/src/renderer/lib/compose-agent-prompt.test.ts` -> `65 pass`.
+  - `(cd packages/shared && ../../node_modules/.bin/tsc --noEmit)` passed.
+  - `(cd packages/server-core && ../../node_modules/.bin/tsc --noEmit)` passed.
+  - `bun run typecheck:electron` passed.
+  - `bun run typecheck:all` passed.
+  - `bun run docs:system-map` passed with no generated diff.
+  - `bun run electron:dev` launched successfully; Runner server listened on `127.0.0.1:55268`, trigger server on `127.0.0.1:9101`, renderer connected, and model refresh fetched provider model lists.
+
+## Remaining Release Smoke
+
+- Send one fresh HNIC chat prompt through the live app and confirm a non-expired model response.
+- Visually click through HQ, campaign nav, Workers, Workflows, Community, Vault, Settings, and Outputs in the running app.
+- Confirm `Start Route` from the HQ State of Play panel opens/sends the intended worker route when launch-safe.
+- Computer Use could inspect the Runner accessibility tree, but automated nav clicks did not change routes in this pass; treat click-through as still manually unverified rather than fixed.
 
 ## Notes For Next Agent
 
