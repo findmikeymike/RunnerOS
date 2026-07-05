@@ -1,8 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
 import { SettingsCard, SettingsSection } from '@/components/settings'
 import { MemoryReviewQueuePanel } from '@/components/agents/MemoryReviewQueuePanel'
@@ -22,7 +20,7 @@ export default function MemorySettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader actions={<HeaderMenu route={routes.view.settings('memory')} />} />
+      <PanelHeader />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="mx-auto max-w-[1600px] space-y-6 px-6 pb-8 pt-10">

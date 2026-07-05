@@ -12,9 +12,7 @@ import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
-import { HeaderMenu } from '@/components/ui/HeaderMenu'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { routes } from '@/lib/navigate'
 import { Spinner } from '@craft-agent/ui'
 import {
   SettingsSection,
@@ -221,7 +219,7 @@ export default function PreferencesPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader actions={<HeaderMenu route={routes.view.settings('preferences')} helpFeature="preferences" />} />
+      <PanelHeader />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
           <div className="px-6 pt-10 pb-8 max-w-[1600px] mx-auto space-y-6">

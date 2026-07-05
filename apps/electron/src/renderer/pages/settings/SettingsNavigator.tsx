@@ -7,16 +7,8 @@
  * Styling follows SessionList/SourcesListPanel patterns for visual consistency.
  */
 
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { MoreHorizontal, AppWindow } from 'lucide-react'
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  StyledDropdownMenuContent,
-  StyledDropdownMenuItem,
-} from '@/components/ui/styled-dropdown'
-import { DropdownMenuProvider } from '@/components/ui/menu-context'
 import { cn } from '@/lib/utils'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { SettingsSubpage } from '../../../shared/types'
@@ -48,19 +40,8 @@ interface SettingsItemRowProps {
   onSelect: () => void
 }
 
-/**
- * SettingsItemRow - Individual settings item with dropdown menu
- * Tracks menu open state to keep "..." button visible when menu is open
- */
 function SettingsItemRow({ item, isSelected, onSelect }: SettingsItemRowProps) {
-  const { t } = useTranslation()
-  const [menuOpen, setMenuOpen] = useState(false)
   const Icon = item.icon
-
-  // Open settings page in a new window via deep link
-  const handleOpenInNewWindow = () => {
-    window.electronAPI.openUrl(`craftagents://settings/${item.id}?window=focused`)
-  }
 
   return (
     <div data-selected={isSelected || undefined}>
@@ -77,7 +58,7 @@ function SettingsItemRow({ item, isSelected, onSelect }: SettingsItemRowProps) {
           type="button"
           onClick={onSelect}
           className={cn(
-            'flex w-full items-start gap-2 rounded-[11px] py-2 pl-9 pr-9 text-left outline-none',
+            'flex w-full items-start gap-2 rounded-[11px] py-2 pl-9 pr-3 text-left outline-none',
             'border transition-[background-color,border-color] duration-100',
             isSelected
               ? 'border-white/[0.085] bg-white/[0.055]'
@@ -98,30 +79,6 @@ function SettingsItemRow({ item, isSelected, onSelect }: SettingsItemRowProps) {
             </span>
           </div>
         </button>
-        <div
-          className={cn(
-            'absolute right-1.5 top-1.5 transition-opacity z-10',
-            menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          )}
-        >
-          <div className="flex items-center rounded-[8px] overflow-hidden border border-transparent hover:border-white/[0.06]">
-            <DropdownMenu modal={true} onOpenChange={setMenuOpen}>
-              <DropdownMenuTrigger asChild>
-                <div className="p-1.5 hover:bg-white/[0.06] data-[state=open]:bg-white/[0.06] cursor-pointer">
-                  <MoreHorizontal className="h-3.5 w-3.5 text-white/36" />
-                </div>
-              </DropdownMenuTrigger>
-              <StyledDropdownMenuContent align="end">
-                <DropdownMenuProvider>
-                  <StyledDropdownMenuItem onClick={handleOpenInNewWindow}>
-                    <AppWindow className="h-3.5 w-3.5" />
-                    <span className="flex-1">{t("sessionMenu.openInNewWindow")}</span>
-                  </StyledDropdownMenuItem>
-                </DropdownMenuProvider>
-              </StyledDropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </div>
       </div>
     </div>
   )

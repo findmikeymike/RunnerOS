@@ -21,8 +21,6 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@craft-agent/ui'
 import { Save, RotateCcw, Check, ExternalLink } from 'lucide-react'
-import { HeaderMenu } from '@/components/ui/HeaderMenu'
-import { routes } from '@/lib/navigate'
 import { getFileManagerName } from '@/lib/platform'
 
 interface PreferencesFormState {
@@ -218,7 +216,6 @@ export default function PreferencesPage() {
           {t("common.save")}
         </Button>
       </div>
-      <HeaderMenu route={routes.view.settings('preferences')} />
     </div>
   )
 
