@@ -6,6 +6,7 @@
 
 import { atom } from 'jotai'
 import { parseRouteToNavigationState } from '../../shared/route-parser'
+import { routes } from '../../shared/routes'
 import type { ViewRoute } from '../../shared/routes'
 
 let nextPanelId = 0
@@ -158,6 +159,12 @@ export const closePanelAtom = atom(
     const idx = stack.findIndex(p => p.id === id)
     if (idx === -1) return
     const remaining = [...stack.slice(0, idx), ...stack.slice(idx + 1)]
+    if (remaining.length === 0) {
+      const fallback = createEntry(routes.view.allSessions(), 1)
+      set(panelStackAtom, [fallback])
+      set(focusedPanelIdAtom, fallback.id)
+      return
+    }
 
     set(panelStackAtom, normalizeProportions(remaining))
 

@@ -3,6 +3,7 @@ import { createStore } from 'jotai'
 import {
   panelStackAtom,
   focusedPanelIdAtom,
+  closePanelAtom,
   pushPanelAtom,
   reconcilePanelStackAtom,
   updateFocusedPanelRouteAtom,
@@ -75,6 +76,21 @@ describe('panel stack single-lane behavior', () => {
     expect(stack[0].route).toBe('allSessions/session/s1')
     expect(stack[1].route).toBe('sources/source/linear')
     expect(stack[2].route).toBe('allSessions/session/s2')
+  })
+
+  it('closing the last panel falls back to the session list', () => {
+    const store = createStore()
+
+    store.set(pushPanelAtom, { route: 'allSessions/session/s1' })
+    const onlyPanel = getStack(store)[0]
+
+    store.set(closePanelAtom, onlyPanel.id)
+
+    const stack = getStack(store)
+    expect(stack).toHaveLength(1)
+    expect(stack[0].route).toBe('allSessions')
+    expect(stack[0].proportion).toBe(1)
+    expect(store.get(focusedPanelIdAtom)).toBe(stack[0].id)
   })
 
   it('reconcile focuses by focusedIndex first when duplicate routes exist', () => {

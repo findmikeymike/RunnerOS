@@ -8,9 +8,8 @@
  * combined with min-width to prevent shrinking below PANEL_MIN_WIDTH.
  *
  * Each PanelSlot overrides AppShellContext to inject a per-panel close button
- * into PanelHeader's rightSidebarButton slot. All panels are equal — closing
- * any panel removes it from the stack. A reactive effect handles window close
- * when the stack becomes empty.
+ * into PanelHeader's rightSidebarButton slot. The last panel remains anchored
+ * so the shell never collapses to an empty content area.
  */
 
 import { useCallback, useMemo } from 'react'
@@ -74,6 +73,7 @@ export function PanelSlot({
 
   // Build close button for PanelHeader (via context override)
   const closeButton = useMemo(() => {
+    if (isOnly) return undefined
     return (
       <PanelHeaderCenterButton
         icon={<X className="h-4 w-4" />}
@@ -81,7 +81,7 @@ export function PanelSlot({
         tooltip={t("common.close")}
       />
     )
-  }, [handleClose, t])
+  }, [handleClose, isOnly, t])
 
   // Build back button for compact mode — closes the panel to reveal the session list.
   // Same PanelHeaderCenterButton style as X and share, just on the left side.
