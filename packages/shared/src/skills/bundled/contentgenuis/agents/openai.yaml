@@ -1,0 +1,5 @@
+interface:
+  display_name: "ContentGenuis"
+  short_description: "Use ContentGenuis creator cowriter voice"
+  brand_color: "#F97316"
+  default_prompt: "Use $contentgenuis to help me shape a short-form content idea in Manny's main chat style."

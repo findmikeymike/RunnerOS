@@ -1,9 +1,10 @@
 {
-  "generatedAt": "2026-07-04",
+  "generatedAt": "2026-07-05",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
     "systemSkills": "packages/shared/src/skills/system.ts",
+    "starterSkills": "packages/shared/src/skills/starter-templates.ts",
     "workersLaunchpad": "apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx",
     "runAgent": "apps/electron/src/renderer/lib/run-agent.ts",
     "composeAgentPrompt": "apps/electron/src/renderer/lib/compose-agent-prompt.ts",
@@ -17,11 +18,11 @@
     "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts"
   },
   "summary": {
-    "agentCount": 32,
+    "agentCount": 33,
     "domains": {
       "Command": 2,
       "Content Creation": 4,
-      "Creative": 4,
+      "Creative": 5,
       "Merch": 2,
       "Operators": 2,
       "Other Workers": 2,
@@ -31,98 +32,27 @@
       "Socials": 2
     },
     "permissionModes": {
-      "ask": 25,
+      "ask": 26,
       "safe": 7
     },
     "hiddenWorkerHomeCount": 9,
     "campaignDefaultWorkerSlugs": [
-      "world-builder"
+      "world-builder",
+      "content-genius"
     ],
     "workflowCount": 2,
     "sharedIntelPromptWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 102,
-    "bundledSkillCount": 48,
+    "knownSkillCount": 103,
+    "bundledSkillCount": 64,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 100,
+    "userGlobalSkillCount": 103,
     "knownSourceCount": 19,
     "missingSkills": [],
-    "machineLocalOnlySkills": [
-      "artist-belief-system",
-      "artist-brand-dna-audit",
-      "artist-brand-expression-strategist",
-      "artist-campaign-angle-builder",
-      "artist-comms-strategist",
-      "artist-narrative-universe",
-      "artist-visual-world-director",
-      "raw-video-editor"
-    ],
+    "machineLocalOnlySkills": [],
     "missingSources": [],
-    "agentsWithMissingRefs": [
-      {
-        "slug": "raw-video-editor",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "raw-video-editor"
-        ],
-        "missingSources": []
-      },
-      {
-        "slug": "art-director",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "artist-visual-world-director"
-        ],
-        "missingSources": []
-      },
-      {
-        "slug": "record-doctor",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "artist-comms-strategist"
-        ],
-        "missingSources": []
-      },
-      {
-        "slug": "world-builder",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "artist-narrative-universe",
-          "artist-campaign-angle-builder"
-        ],
-        "missingSources": []
-      },
-      {
-        "slug": "comms-agent",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "artist-comms-strategist"
-        ],
-        "missingSources": []
-      },
-      {
-        "slug": "outreach-agent",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "artist-comms-strategist"
-        ],
-        "missingSources": []
-      },
-      {
-        "slug": "branding-agent",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "artist-brand-dna-audit",
-          "artist-narrative-universe",
-          "artist-belief-system",
-          "artist-campaign-angle-builder",
-          "artist-visual-world-director",
-          "artist-brand-expression-strategist"
-        ],
-        "missingSources": []
-      }
-    ]
+    "agentsWithMissingRefs": []
   },
   "workflows": [
     {
@@ -184,7 +114,7 @@
   "inferredRuntimeRules": [
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
-    "Campaign workspaces can pass defaultVisibleSlugs, currently world-builder.",
+    "Campaign workspaces can pass defaultVisibleSlugs, currently world-builder, content-genius.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
@@ -459,6 +389,39 @@
       ],
       "inputs": "Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos, cover/merch mode, format, and generation approval.",
       "outputs": "Taste-led visual concepts, style-lane recommendations, album/single art prompts, merch graphic specs, reference-image requirements, typography/layout direction, SVG/PNG artwork composition exports, Canvas-visible artifacts, anti-slop checks, and approved image-generation/layout briefs."
+    },
+    {
+      "slug": "content-genius",
+      "name": "Content Genius",
+      "description": "Plan short-form content ideas, then finish locked ideas with captions and overlays that command attention.",
+      "domain": "Creative",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "contentgenuis",
+        "captions-and-overlays"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "creative",
+        "content",
+        "shortform",
+        "campaigns",
+        "copy"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "external-action-boundary"
+      ],
+      "inputs": "Campaign context, artist/profile voice, audience, platform, rough idea, clip notes, script, trend, post goal, or content pillar.",
+      "outputs": "Short-form content concepts, hook angles, scene/opening ideas, caption hooks, on-screen text overlays, and native caption variants ready for approval or handoff."
     },
     {
       "slug": "persona-agent",

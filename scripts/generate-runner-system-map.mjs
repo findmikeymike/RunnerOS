@@ -8,6 +8,7 @@ const OUT_DIR = join(ROOT, 'docs', 'system-map');
 const STARTER_AGENTS_FILE = join(ROOT, 'packages/shared/src/agent-definitions/starter-templates.ts');
 const AGENT_TYPES_FILE = join(ROOT, 'packages/shared/src/agent-definitions/types.ts');
 const SYSTEM_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/system.ts');
+const STARTER_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/starter-templates.ts');
 const LAUNCHPAD_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx');
 const RUN_AGENT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/run-agent.ts');
 const COMPOSE_AGENT_PROMPT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/compose-agent-prompt.ts');
@@ -309,12 +310,17 @@ function main() {
   const constants = { ...typeConstants, ...skillConstants };
   const starterAgents = findExportedConst(STARTER_AGENTS_FILE, 'STARTER_AGENTS', constants);
   if (!Array.isArray(starterAgents)) throw new Error('STARTER_AGENTS did not parse to an array');
+  const starterSkills = findExportedConst(STARTER_SKILLS_FILE, 'STARTER_SKILLS', constants);
+  if (!Array.isArray(starterSkills)) throw new Error('STARTER_SKILLS did not parse to an array');
 
   const hiddenSlugs = extractSetLiteral(LAUNCHPAD_FILE, 'HIDDEN_WORKER_HOME_AGENT_SLUGS');
   const campaignDefaultSlugs = findExportedConst(LAUNCHPAD_FILE, 'CAMPAIGN_DEFAULT_WORKER_SLUGS', constants);
   const systemSlugs = ['concierge', 'orchestrator', 'update-system-agent'];
   const skillScopes = {
-    bundled: extractQuotedSlugs(BUNDLED_SKILLS_FILE, /slug:\s*"([^"]+)"/g),
+    bundled: [
+      ...extractQuotedSlugs(BUNDLED_SKILLS_FILE, /slug:\s*"([^"]+)"/g),
+      ...starterSkills.map((skill) => skill.slug).filter(Boolean),
+    ].filter((slug, index, arr) => arr.indexOf(slug) === index).sort(),
     system: skillConstants.SYSTEM_GLOBAL_SKILL_SLUGS ?? [],
     userGlobal: listSkillDirs(USER_GLOBAL_SKILLS_DIR),
   };
@@ -350,6 +356,7 @@ function main() {
       starterAgents: rel(STARTER_AGENTS_FILE),
       agentTypes: rel(AGENT_TYPES_FILE),
       systemSkills: rel(SYSTEM_SKILLS_FILE),
+      starterSkills: rel(STARTER_SKILLS_FILE),
       workersLaunchpad: rel(LAUNCHPAD_FILE),
       runAgent: rel(RUN_AGENT_FILE),
       composeAgentPrompt: rel(COMPOSE_AGENT_PROMPT_FILE),
@@ -377,7 +384,7 @@ function main() {
     inferredRuntimeRules: [
       'Saved agents live in the global library and are activated per workspace.',
       'Workers page shows active agents, except system agents and hidden worker-home slugs.',
-      'Campaign workspaces can pass defaultVisibleSlugs, currently world-builder.',
+      `Campaign workspaces can pass defaultVisibleSlugs, currently ${campaignDefaultSlugs.join(', ')}.`,
       'run-agent drops missing skills/sources before session creation and includes a launch receipt.',
       'Concierge receives broad workspace context and an active-agent capability catalog for routing.',
       'Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.',

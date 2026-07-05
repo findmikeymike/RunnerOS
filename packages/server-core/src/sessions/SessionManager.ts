@@ -2448,7 +2448,9 @@ export class SessionManager implements ISessionManager {
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
         // Chat nav entry), Social Publisher, TryPost, Hypermotion, Lottie Animation,
-        // Video Editor, promotion helpers, Shopify, Print Agent, Outreach, Industry Hunter, Art Director, World Builder, Record Doctor, and Update System Agent.
+        // Video Editor, Content Genius, promotion helpers, Shopify, Print Agent,
+        // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
+        // and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
@@ -2457,6 +2459,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'hypermotion-agent'
             || a.slug === 'lottie-animation-agent'
             || a.slug === 'video-editor-agent'
+            || a.slug === 'content-genius'
             || a.slug === 'ig-trending-power-up'
             || a.slug === 'influencer-campaign-power-up'
             || a.slug === 'playlisting-power-up'
@@ -2545,6 +2548,37 @@ export class SessionManager implements ISessionManager {
             }
           } else if (missingBrandingSkills.length > 0) {
             sessionLog.warn(`[agent-definitions] Branding Agent skill bundle incomplete: ${missingBrandingSkills.join(', ')}`)
+          }
+          const contentGeniusAgent = STARTER_AGENTS.find(agent => agent.slug === 'content-genius')
+          const contentGeniusSkillSlugs = contentGeniusAgent?.metadata.skills ?? []
+          const missingContentGeniusSkills = contentGeniusSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
+          if (contentGeniusAgent && missingContentGeniusSkills.length === 0) {
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+            let updatedWorkspaces = 0
+            for (const ws of getWorkspaces()) {
+              if (ws.remoteServer) continue
+              let workspaceUpdated = false
+              if (!readActivatedAgents(ws.rootPath).active.includes('content-genius')) {
+                setAgentActive(ws.rootPath, 'content-genius', true)
+                workspaceUpdated = true
+              }
+              const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
+              for (const slug of contentGeniusSkillSlugs) {
+                if (!enabledSkills.has(slug)) {
+                  setGlobalSkillEnabled(ws.rootPath, slug, true)
+                  workspaceUpdated = true
+                }
+              }
+              if (workspaceUpdated) {
+                updatedWorkspaces += 1
+              }
+            }
+            if (updatedWorkspaces > 0) {
+              sessionLog.info(`[agent-definitions] Activated Content Genius skill bundle in ${updatedWorkspaces} workspace(s)`)
+            }
+          } else if (missingContentGeniusSkills.length > 0) {
+            sessionLog.warn(`[agent-definitions] Content Genius skill bundle incomplete: ${missingContentGeniusSkills.join(', ')}`)
           }
         } catch (err) {
           sessionLog.warn('[skills] Built-in skill seed skipped:', err as Error)

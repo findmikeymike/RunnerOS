@@ -1446,7 +1446,7 @@ function AppShellContent({
   const {
     activeAgents,
   } = useAgents(activeWorkspaceId, {
-    defaultVisibleSlugs: isArtistHQWorkspace ? [] : ['world-builder'],
+    defaultVisibleSlugs: isArtistHQWorkspace ? [] : ['world-builder', 'content-genius'],
   })
   const {
     outputs,

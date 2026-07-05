@@ -1,0 +1,6 @@
+name: Artist Comms Strategist
+slug: artist-comms-strategist
+description: Draft fan, press, and partner comms in voice.
+default_prompt: Use artist-comms-strategist to draft artist communications from Profile, Voice, Branding, and campaign context.
+skills:
+  - artist-comms-strategist

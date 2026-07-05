@@ -7,7 +7,7 @@ source_of_truth: true
 
 # Runner System Map
 
-Generated: 2026-07-04
+Generated: 2026-07-05
 
 ## Why This Exists
 
@@ -18,6 +18,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - starterAgents: `packages/shared/src/agent-definitions/starter-templates.ts`
 - agentTypes: `packages/shared/src/agent-definitions/types.ts`
 - systemSkills: `packages/shared/src/skills/system.ts`
+- starterSkills: `packages/shared/src/skills/starter-templates.ts`
 - workersLaunchpad: `apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx`
 - runAgent: `apps/electron/src/renderer/lib/run-agent.ts`
 - composeAgentPrompt: `apps/electron/src/renderer/lib/compose-agent-prompt.ts`
@@ -32,34 +33,25 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Summary
 
-- Agents mapped: 32
+- Agents mapped: 33
 - Hidden from Workers home: 9
-- Campaign default workers: `world-builder`
+- Campaign default workers: `world-builder`, `content-genius`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
-- Domains: Command 2, Content Creation 4, Creative 4, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
-- Permission modes: ask 25, safe 7
-- Known skills: 102 (48 bundled, 6 system, 100 user-global on this machine)
+- Domains: Command 2, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
+- Permission modes: ask 26, safe 7
+- Known skills: 103 (64 bundled, 6 system, 103 user-global on this machine)
 - Known builtin sources: 19
 
 ## Reference Health
 
-- Missing skills: none
-- Machine-local-only skills: `artist-belief-system`, `artist-brand-dna-audit`, `artist-brand-expression-strategist`, `artist-campaign-angle-builder`, `artist-comms-strategist`, `artist-narrative-universe`, `artist-visual-world-director`, `raw-video-editor`
-- Missing sources: none
-- raw-video-editor: missing skills none; machine-local-only skills `raw-video-editor`; missing sources none
-- art-director: missing skills none; machine-local-only skills `artist-visual-world-director`; missing sources none
-- record-doctor: missing skills none; machine-local-only skills `artist-comms-strategist`; missing sources none
-- world-builder: missing skills none; machine-local-only skills `artist-narrative-universe`, `artist-campaign-angle-builder`; missing sources none
-- comms-agent: missing skills none; machine-local-only skills `artist-comms-strategist`; missing sources none
-- outreach-agent: missing skills none; machine-local-only skills `artist-comms-strategist`; missing sources none
-- branding-agent: missing skills none; machine-local-only skills `artist-brand-dna-audit`, `artist-narrative-universe`, `artist-belief-system`, `artist-campaign-angle-builder`, `artist-visual-world-director`, `artist-brand-expression-strategist`; missing sources none
+- All mapped starter-agent skill/source references resolve to repo-bundled/system skills or builtin sources.
 
 ## Runtime Rules Agents Should Not Miss
 
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
-- Campaign workspaces can pass defaultVisibleSlugs, currently world-builder.
+- Campaign workspaces can pass defaultVisibleSlugs, currently world-builder, content-genius.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -200,6 +192,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `trusted-worker-tools`
 - Inputs: Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos, cover/merch mode, format, and generation approval.
 - Outputs: Taste-led visual concepts, style-lane recommendations, album/single art prompts, merch graphic specs, reference-image requirements, typography/layout direction, SVG/PNG artwork composition exports, Canvas-visible artifacts, anti-slop checks, and approved image-generation/layout briefs.
+
+#### Content Genius (`content-genius`)
+
+- Description: Plan short-form content ideas, then finish locked ideas with captions and overlays that command attention.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Skills: `contentgenuis`, `captions-and-overlays`
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `creative`, `content`, `shortform`, `campaigns`, `copy`
+- Signals: `approval-capable`, `external-action-boundary`
+- Inputs: Campaign context, artist/profile voice, audience, platform, rough idea, clip notes, script, trend, post goal, or content pillar.
+- Outputs: Short-form content concepts, hook angles, scene/opening ideas, caption hooks, on-screen text overlays, and native caption variants ready for approval or handoff.
 
 #### Legendary Minds (`persona-agent`)
 

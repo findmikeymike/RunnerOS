@@ -1351,6 +1351,7 @@ const HIDDEN_WORKER_HOME_AGENT_SLUGS = new Set([
 
 const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
   'world-builder',
+  'content-genius',
 ] as const
 
 function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {

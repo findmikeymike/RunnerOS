@@ -24,6 +24,7 @@ import {
 } from './storage.ts'
 import { STARTER_AGENTS } from './starter-templates.ts'
 import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
+import { BUNDLED_STARTER_SKILLS, STARTER_SKILLS } from '../skills/index.ts'
 
 function tmpWorkspace(): string {
   return mkdtempSync(join(tmpdir(), 'craft-agent-defs-test-'))
@@ -510,6 +511,21 @@ body
     expect(hnic?.systemPrompt).toContain('Handoff target')
   })
 
+  test('every starter agent skill reference resolves to a shipped starter skill', () => {
+    const skillSlugs = new Set([
+      ...STARTER_SKILLS.map((skill) => skill.slug),
+      ...BUNDLED_STARTER_SKILLS.map((skill) => skill.slug),
+    ])
+
+    const missing = STARTER_AGENTS.flatMap((agent) =>
+      (agent.metadata.skills ?? [])
+        .filter((skill) => !skillSlugs.has(skill))
+        .map((skill) => `${agent.slug}:${skill}`)
+    )
+
+    expect(missing).toEqual([])
+  })
+
   test('starter library includes the social publisher with the Printing Press source', () => {
     const socialPublisher = STARTER_AGENTS.find((agent) => agent.slug === SOCIAL_PUBLISHER_SLUG)
 
@@ -661,6 +677,21 @@ body
     expect(rawVideoAgent?.systemPrompt).toContain('raw-video-editor')
     expect(rawVideoAgent?.systemPrompt).toContain('takes_packed.md')
     expect(rawVideoAgent?.systemPrompt).toContain('edl.json')
+  })
+
+  test('starter library includes Content Genius with captions and overlays', () => {
+    const contentGenius = STARTER_AGENTS.find((agent) => agent.slug === 'content-genius')
+
+    expect(contentGenius).toBeDefined()
+    expect(contentGenius?.metadata.name).toBe('Content Genius')
+    expect(contentGenius?.metadata.permissionMode).toBe('ask')
+    expect(contentGenius?.metadata.skills).toContain('contentgenuis')
+    expect(contentGenius?.metadata.skills).toContain('captions-and-overlays')
+    expect(contentGenius?.metadata.tags).toContain('content')
+    expect(contentGenius?.metadata.tags).toContain('campaigns')
+    expect(contentGenius?.systemPrompt).toContain('Own the idea layer first')
+    expect(contentGenius?.systemPrompt).toContain('Once the idea, scene, or clip is locked')
+    expect(contentGenius?.systemPrompt).toContain('Do not treat this as video editing or publishing')
   })
 
   test('starter library includes the Shopify Agent with bundled Shopify source', () => {

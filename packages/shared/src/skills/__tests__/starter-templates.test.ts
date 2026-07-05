@@ -109,6 +109,15 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     return f.content;
   }
 
+  it('every bundled skill parses to valid SKILL.md frontmatter', () => {
+    for (const skill of BUNDLED_STARTER_SKILLS) {
+      const parsed = matter(getSkillMd(skill));
+      expect(parsed.data.name, skill.slug).toBeTruthy();
+      expect(parsed.data.description, skill.slug).toBeTruthy();
+      expect(parsed.content.trim().length, skill.slug).toBeGreaterThan(0);
+    }
+  });
+
   it('includes the Branding Agent skill bundle', () => {
     const requiredSlugs = [
       'artist-brand-dna-audit',
@@ -183,6 +192,18 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain('needy-prompt check');
     expect(parsed.content).toContain('reskin test');
     expect(parsed.content).toContain('failure modes');
+  });
+
+  it('includes captions-and-overlays for Content Genius finishing copy', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'captions-and-overlays');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('captions-and-overlays');
+    expect(typeof parsed.data.description).toBe('string');
+    expect(parsed.content).toContain('This is a finishing skill for Content Genius');
+    expect(parsed.content).toContain('on-screen overlay');
+    expect(parsed.content).toContain('first caption line');
+    expect(parsed.content).toContain('promise a payoff the video can deliver');
   });
 
   it('includes artist-art-direction for taste-led artwork concepts', () => {

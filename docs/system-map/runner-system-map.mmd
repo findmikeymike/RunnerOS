@@ -48,6 +48,11 @@ flowchart LR
   A_art_director --> S_artist_visual_world_director["skill:artist-visual-world-director"]
   A_art_director --> S_ad_creative["skill:ad-creative"]
   A_art_director --> S_zero["skill:zero"]
+  Registry --> A_content_genius["Content Genius\nask\nCreative"]
+  Workers --> A_content_genius
+  A_content_genius --> S_contentgenuis["skill:contentgenuis"]
+  A_content_genius --> S_captions_and_overlays["skill:captions-and-overlays"]
+  Campaign["Campaign Workspace"] --> A_content_genius
   Registry --> A_persona_agent["Legendary Minds\nask\nCreative"]
   Workers --> A_persona_agent
   A_persona_agent --> S_steve_jobs_perspective["skill:steve-jobs-perspective"]
