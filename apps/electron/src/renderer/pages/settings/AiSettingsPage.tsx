@@ -272,7 +272,7 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
             <ConnectionIcon connection={connection} size={16} />
             <span className="font-medium text-sm text-foreground/88">{connection.name}</span>
             {connection.isDefault && (
-              <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-white/[0.08] text-white/80">
+              <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] border border-[#fb923c]/20 bg-[#fb923c]/12 text-[#fdba74]">
                 {t("common.default")}
               </span>
             )}
