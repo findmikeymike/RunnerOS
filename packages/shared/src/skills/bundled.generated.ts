@@ -3327,6 +3327,565 @@ Approval needed before generation:
     ],
   },
   {
+    slug: "artist-belief-system",
+    files: [
+      {
+        path: "references/belief-system.md",
+        content: `# Artist Belief System Reference
+
+## Core thesis
+
+Fans become loyal when the artist helps them say "I am this." The belief system converts attention into belonging.
+
+## Define the enemy
+
+The enemy gives the tribe a boundary. It can be:
+- mediocrity
+- fake perfection
+- the old guard
+- small-town shame
+- numbness
+- disposable culture
+- algorithmic sameness
+- fear of being seen
+- polished lies
+
+Avoid lazy enemies that punch down. The enemy should clarify values, not create cheap hostility.
+
+## Five Billboards
+
+Ask: if five billboards stood for 500 years, what would they say?
+
+Write belief statements as:
+- "We believe..."
+- "We do not believe..."
+- "We choose..."
+- "We refuse..."
+
+Good beliefs are specific enough that someone could disagree.
+
+## Stress tests
+
+Hater Test:
+Would someone be clearly opposed to this?
+
+Flip Test:
+If reversed, would anyone choose the opposite? If not, the belief is generic.
+
+T-Shirt Test:
+Would a fan wear this as identity, not just merch copy?
+
+Time Test:
+Could this remain true for 5 to 15 years?
+
+Pledge Test:
+Could a fan use this as a personal rule for living?
+
+Unique Test:
+Could this belong to any artist? If yes, sharpen it.
+
+## Output quality
+
+Weak:
+"We believe in being yourself."
+
+Stronger:
+"We believe the parts of you that embarrassed your hometown are the parts that build your future."
+
+Weak:
+"We reject negativity."
+
+Stronger:
+"We reject any room that asks you to shrink before it lets you in."
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-belief-system
+description: Create or audit an artist's brand belief system. Use when defining the enemy, values, fan pledge, tribe language, community identity, 5 billboards, belief stress tests, and the shift from "I like this artist" to "I am this kind of person."
+---
+
+# Artist Belief System
+
+Use this skill to turn an artist brand into a flag fans can carry. Do not write vague mission statements. Build identity-level beliefs with opposition, specificity, and staying power.
+
+## Workflow
+
+1. Read the artist context.
+   Use profile, voice, branding, lyrics, interviews, posts, audience notes, and campaign goals.
+
+2. Define the enemy.
+   The enemy can be cultural, emotional, aesthetic, social, or personal. It should not require cruelty toward a group of people.
+
+3. Extract shared values.
+   Write what the artist and fans believe, reject, protect, chase, mourn, or refuse.
+
+4. Write the five billboards.
+   Create 6 to 12 belief statements that could stand for years.
+
+5. Stress test.
+   Apply hater, flip, t-shirt, time, pledge, and uniqueness tests.
+
+6. Translate into fan identity.
+   Describe who the fan becomes by joining the world.
+
+## Output
+
+\`\`\`markdown
+Enemy:
+Core belief:
+We believe:
+We do not believe:
+Fan identity:
+Initiation moments:
+Community language:
+Stress test:
+Weak/generic beliefs to avoid:
+\`\`\`
+
+## Reference
+
+Read \`references/belief-system.md\` when building final brand doctrine.
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-brand-dna-audit",
+    files: [
+      {
+        path: "references/framework.md",
+        content: `# Artist Brand DNA Audit Framework
+
+## Core thesis
+
+Most artist branding fails because it asks for identity before evidence. The better job is to reverse-engineer gravity: the signals, contradictions, symbols, beliefs, and environments that make people remember and identify with the artist.
+
+## Evidence hierarchy
+
+Strongest evidence:
+- repeated lyrics, titles, visual motifs, production choices, wardrobe, locations, phrases, comments from fans
+- things the artist repeatedly returns to without being prompted
+- choices that create instant reaction
+
+Weaker evidence:
+- one-off preferences
+- generic moodboard words
+- aspirational positioning copied from bigger artists
+
+## The seven layers
+
+1. Creative DNA
+   Musical influences, non-musical references, films, fashion, books, places, childhood media, internet rabbit holes, visual taste, production style, voice, emotional palette.
+
+2. Tension
+   Memorable artists embody contradiction. Search for poles that create friction: delicate/aggressive, spiritual/reckless, luxury/trailer-park, hopeful/nihilistic, futuristic/nostalgic, polished/chaotic.
+
+3. Fascination map
+   Originality often lives in what the artist can talk about for hours, what makes them angry or jealous, what they secretly admire, what weird details they notice, and what friends get tired of hearing about.
+
+4. Reaction
+   Attention comes from choices that make people instantly have an opinion: never showing the face, recording outdoors, every song referencing history, cowboy aesthetic with hyperpop, only sampling machinery, releasing songs as chapters.
+
+5. Mythology
+   Notice recurring symbols instead of inventing them from nothing: rain, motels, ocean, highways, satellites, ghosts, chrome, roses, religion, animals, specific cities, specific rooms.
+
+6. Emotional territory
+   Own feelings before genres: longing, triumph, escape, decay, wonder, seduction, isolation, freedom, grief, revenge, awe.
+
+7. Audience gravity
+   Define who feels seen: lonely overachievers, small-town dreamers, recovering addicts, new fathers, artists with imposter syndrome, women leaving bad relationships.
+
+## Neuroscience lens
+
+- Encoding: the brain notices pattern breaks.
+- Storage: narrative structure helps the brand get filed instead of discarded.
+- Retrieval: emotional intensity and environmental cues bring the artist back to mind.
+
+Use the von Restorff effect: being different is more memorable than being marginally better. Look for distinct but repeatable differences, not stunts.
+
+## Archetype guardrail
+
+Use at most two archetypes:
+- 80 percent primary motivation
+- 20 percent secondary spice
+
+Common music-useful archetypes:
+- Hero: greatness, sacrifice, overcoming
+- Creator: imagination, craft, invention
+- Rebel: freedom, rule-breaking, opposition
+- Explorer: discovery, motion, new territory
+- Ruler: excellence, status, control
+- Everyman: intimacy, relatability, shared life
+
+## Quality bar
+
+Good findings feel like:
+"This artist is not just sad pop. The gravity is small-town escape told through luxury objects that feel stolen, with a recurring tension between innocence and criminal fantasy."
+
+Bad findings feel like:
+"The artist is authentic, emotional, and genre-bending."
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-brand-dna-audit
+description: Audit an artist's brand DNA from profile, voice, branding cards, lyrics, references, visuals, posts, interviews, or notes. Use when identifying creative gravity, tensions, fascinations, emotional territory, audience psychology, archetypes, mythology, pattern breaks, and what makes an artist memorable or obsession-worthy.
+---
+
+# Artist Brand DNA Audit
+
+Use this skill to reverse-engineer brand gravity. Do not ask "who are you?" Start from evidence and infer what creates obsession.
+
+## Inputs
+
+Prefer these sources when available:
+- \`artist-profile\`
+- \`artist-voice\`
+- \`artist-branding\`
+- songs, lyrics, demos, titles, visuals, photos, saved references, posts, interviews, notes, comments, moodboards
+
+If evidence is thin, label conclusions as hypotheses and list the missing signal.
+
+## Workflow
+
+1. Inventory the raw signals.
+   Separate facts, repeated patterns, strong emotional cues, visual cues, and user-stated preferences.
+
+2. Find Creative DNA.
+   Identify musical influences, non-musical influences, films, fashion, books, places, childhood signals, internet rabbit holes, visual taste, production style, voice, and emotional palette.
+
+3. Extract tensions.
+   Find contradictions, not slogans. Strong brands often sit between two poles: delicate/aggressive, spiritual/reckless, luxury/gritty, futuristic/nostalgic, polished/chaotic.
+
+4. Map fascinations.
+   Infer what the artist could talk about for hours, what they notice, envy, resent, admire, binge, or keep returning to.
+
+5. Identify memory hooks.
+   Look for pattern breaks, symbols, rituals, character choices, sound signatures, visual anchors, and "Halloween Test" identifiers.
+
+6. Define audience gravity.
+   Describe who feels seen psychologically, not demographically.
+
+7. Score confidence.
+   Separate clear signal from promising hypotheses.
+
+## Output
+
+Return:
+
+\`\`\`markdown
+Brand gravity:
+Core tensions:
+Creative DNA:
+Fascination map:
+Mythology and symbols:
+Emotional territory:
+Audience gravity:
+Archetype hypothesis:
+Memory hooks:
+Missing evidence:
+Next questions:
+\`\`\`
+
+Keep it specific. Avoid generic words like authentic, unique, bold, cinematic, or vulnerable unless you define exactly how they show up.
+
+## Reference
+
+Read \`references/framework.md\` when doing a serious audit or when the output needs depth.
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-brand-expression-strategist",
+    files: [
+      {
+        path: "references/expression-strategy.md",
+        content: `# Artist Brand Expression Strategy
+
+## What this skill solves
+
+Brand docs often die because they never become behavior. This skill turns brand DNA into small public choices that build myth through repetition.
+
+## The subtle signal stack
+
+Use signals that can recur naturally:
+- one object: motel key, lighter, flower, receipt, book, machine part
+- one place type: diner, parking lot, church basement, studio floor, highway shoulder
+- one phrase shape: short confession, rule, threat, prayer, joke, refusal
+- one visual habit: flash photo, no face, mirror crop, wide empty frame, hand detail
+- one response pattern: reward fan theories, never explain symbols, answer praise with understatement
+- one ritual: weekly voice note, post-show object photo, handwritten lyric, fan confession prompt
+
+Signals should feel like the artist would do them anyway.
+
+## Reactive brand moves
+
+For trends:
+- only join if the trend can be bent into the artist's universe
+- preserve the artist voice and visual laws
+- never chase a trend that makes the artist look like a fan of their own brand
+
+For criticism:
+- decide if the brand ignores, jokes, sharpens, reframes, or weaponizes it
+- never over-defend unless vulnerability itself is the brand
+
+For wins:
+- celebrate in-world, not generically
+- use the mythology: same object, same phrase, same place, same emotional tone
+
+For losses:
+- turn setbacks into lore only if true to the brand
+- avoid fake adversity theater
+
+For fan behavior:
+- notice and reward the behavior you want repeated
+- give fans symbols and language they can use without needing permission
+
+## Cult-building mechanics
+
+Use ethically: the goal is belonging and identity, not cheap manipulation.
+
+Mechanics:
+- initiation: first show, first merch item, first confession, first fan-made symbol
+- insider language: phrases fans can repeat to signal they get it
+- ritual: recurring fan action around release nights, live shows, comments, or stories
+- artifact: object fans can photograph, wear, recreate, or hunt for
+- enemy: a vague cultural force the tribe rejects
+- badge: a visual or verbal marker fans use to identify each other
+
+## Machiavellian cleverness filter
+
+Good clever:
+- layered
+- plausible
+- deniable
+- repeatable
+- emotionally coherent
+- makes fans feel smart for noticing
+
+Bad clever:
+- fake mysterious
+- overly planned in public
+- "lore" with no emotional reason
+- obvious engagement bait
+- copied from a larger artist
+- so subtle no one can notice
+- so loud it becomes costume
+
+## Try-hard detector
+
+Kill the idea if:
+- it requires an explanation caption
+- it uses words like "era," "lore," or "universe" too directly
+- it makes the artist behave unlike themselves
+- it turns daily life into a stage play
+- it asks fans to care before they have a reason
+- it cannot survive repetition
+
+## Better output examples
+
+Weak:
+"Use more mysterious visuals."
+
+Stronger:
+"Never explain the motel key. Put it in one frame per release week: on the dashboard, beside the mic, in a fan package. Let fans name it before the artist does."
+
+Weak:
+"Build community."
+
+Stronger:
+"Every Friday, repost one fan's 'thing I had to leave behind' note. No design template. Just a screenshot and the same three-word reply. Turn leaving into the tribe's ritual."
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-brand-expression-strategist
+description: Turn an artist's brand DNA into subtle, clever, repeatable public behavior. Use when deciding how an artist should express, reinforce, react from, or live their brand through content, replies, rituals, wardrobe, locations, captions, fan interactions, controversy, wins, losses, and daily life without looking try-hard, theatrical, fake-mysterious, or overexplained.
+---
+
+# Artist Brand Expression Strategist
+
+Use this skill to make brand strategy show up in behavior. The output should feel intelligent, layered, and naturally repeatable, not like cosplay or marketing theater.
+
+## Principle
+
+Brand is not only what the artist says. It is what they repeatedly do, notice, avoid, reward, wear, photograph, revisit, joke about, defend, and refuse to explain.
+
+Think like a myth architect:
+- subtle enough to feel real
+- repeated enough to become memory
+- clever enough to create insider recognition
+- restrained enough to avoid cringe
+
+## Inputs
+
+Use:
+- \`artist-profile\`
+- \`artist-voice\`
+- \`artist-branding\`
+- brand DNA audits, visual-world notes, campaign plans, lyrics, posts, comments, fan behavior, real life constraints
+
+If the context is thin, create hypotheses and ask for one concrete source: recent captions, photos, lyrics, or references.
+
+## Workflow
+
+1. Extract the brand laws.
+   Identify the artist's tensions, emotional territory, symbols, audience gravity, voice, and visual rules.
+
+2. Translate laws into behavior.
+   Define how the artist posts, replies, celebrates, disappears, shows work, handles criticism, chooses rooms, chooses objects, and lets fans participate.
+
+3. Design subtle signals.
+   Choose recurring objects, locations, phrases, formats, gestures, wardrobe details, camera habits, rituals, or timing patterns.
+
+4. Build reactive rules.
+   Define how the artist responds to trends, comments, conflict, praise, wins, losses, memes, fan edits, and platform moments while staying in-world.
+
+5. Add cult mechanics.
+   Create insider language, fan rituals, initiation moments, shared symbols, identity cues, and belonging loops.
+
+6. Run the restraint filter.
+   Remove anything that is overexplained, fake deep, too mysterious, too costume-like, copied, manipulative without taste, or impossible to repeat.
+
+## Output
+
+\`\`\`markdown
+Brand behavior thesis:
+Subtle recurring signals:
+Content habits:
+Reactive rules:
+Fan rituals:
+Insider language:
+Life-as-brand moves:
+What to never overdo:
+3 clever moves this month:
+Try-hard risks:
+\`\`\`
+
+## Reference
+
+Read \`references/expression-strategy.md\` for the full operating lens.
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-campaign-angle-builder",
+    files: [
+      {
+        path: "references/campaign-angles.md",
+        content: `# Artist Campaign Angle Reference
+
+## Core thesis
+
+Campaigns work when they dramatize the brand world. Do not promote a song as content inventory. Turn the release into a scene, ritual, argument, mystery, or identity marker.
+
+## Angle sources
+
+Use these source materials:
+- core tension
+- belief system
+- mythology or recurring symbols
+- emotional territory
+- audience pain or desire
+- narrative universe rules
+- visual world constraints
+- public-facing reaction hook
+
+## Word-of-mouth tests
+
+An angle is strong if a fan can explain it in one sentence:
+- "She never shows her face, but every video has the same red motel room."
+- "Every song is a chapter from the same doomed road trip."
+- "He only samples machines from places he has worked."
+- "The whole rollout is fans confessing what they had to leave behind."
+
+## Memory hooks
+
+Stack at least two:
+- visual anchor: mask, mustache, color, object, uniform, setting
+- sonic anchor: tag, texture, sample source, recurring sound
+- physical anchor: movement, ritual, live behavior
+- narrative anchor: chapters, case files, postcards, diary entries, broadcasts
+- community anchor: name, pledge, challenge, shared phrase
+- environmental anchor: road trips, workouts, rainy nights, late drives, getting ready, post-breakup walks
+
+## Practical filters
+
+Reject ideas that:
+- could apply to any artist
+- require budget or access the artist does not have
+- contradict the artist voice
+- feel like a borrowed aesthetic with no personal evidence
+- create reaction but cannot be repeated
+
+Prefer ideas that:
+- can start this week
+- produce multiple content formats
+- build a repeatable symbol or ritual
+- make the artist easier to describe
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-campaign-angle-builder
+description: Turn artist brand DNA into campaign angles, rollout concepts, content pillars, release-world ideas, hooks, social prompts, fan rituals, and word-of-mouth moments. Use when planning artist campaigns from profile, voice, branding cards, songs, lyrics, visuals, or intel reports.
+---
+
+# Artist Campaign Angle Builder
+
+Use this skill to turn brand strategy into campaign ideas people can talk about. Campaigns should feel like scenes from the artist's movie, not disconnected promo tasks.
+
+## Workflow
+
+1. Anchor in brand DNA.
+   Pull tensions, mythology, emotional territory, audience gravity, belief system, visual rules, and voice.
+
+2. Choose the campaign job.
+   Awareness, release narrative, fan activation, visual world launch, community ritual, controversy/reaction, conversion, or retention.
+
+3. Create angles from tension.
+   Campaign angles should dramatize a contradiction or belief.
+
+4. Stack memory hooks.
+   Include at least two: visual symbol, sonic cue, physical action, recurring phrase, fan ritual, environmental trigger, public constraint.
+
+5. Make it executable.
+   Convert each angle into posts, videos, visuals, captions, rollout beats, and fan participation.
+
+6. Filter.
+   Remove ideas that do not match the universe, voice, audience, or resources.
+
+## Output
+
+\`\`\`markdown
+Campaign thesis:
+Audience trigger:
+Angles:
+Best angle:
+Rollout beats:
+Content pillars:
+Specific posts/videos:
+Fan ritual or participation:
+Visual and sonic hooks:
+Why people talk:
+Risks:
+\`\`\`
+
+## Reference
+
+Read \`references/campaign-angles.md\` for campaign generation rules.
+`,
+      },
+    ],
+  },
+  {
     slug: "artist-industry-hunter",
     files: [
       {
@@ -3444,6 +4003,115 @@ Create a markdown doc titled \`Industry Hunter Target List\`. If \`create_output
 \`\`\`
 
 Keep the list tight by default: 10-20 strong targets beat 100 weak names.
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-narrative-universe",
+    files: [
+      {
+        path: "references/brand-house.md",
+        content: `# Brand House Reference
+
+## Core thesis
+
+Music without narrative context is a soundtrack with no movie. The audience needs a world to inhabit. The brand world should reduce cognitive dissonance between sound, visuals, character, and story.
+
+## The eight-step house
+
+1. Land: genre and style
+   Choose the universe that houses the music. Action, horror, romance, sci-fi, documentary, street realism, comedy, western, noir, fantasy.
+
+2. Foundation: uniqueness and blending
+   Break the pattern by combining elements. Examples: hero's journey shot like reality TV; high-energy action filtered through street-race culture; horror mixed with ego struggle.
+
+3. Blueprints: rules of the universe
+   Define what can and cannot happen. A raw-authentic artist should not suddenly use hyper-rendered robot visuals unless there is a narrative reason. A futuristic avatar world should not randomly switch into handheld confessional realism unless it is part of the rules.
+
+4. Framing: character archetypes
+   Decide the primary motivation and secondary spice. Keep an 80/20 split.
+
+5. Walls: sandbox
+   Define the ongoing show. Is the artist a documentary, a road movie, a luxury revenge drama, a haunted motel diary, a future-city rebellion?
+
+6. Setting: specific context
+   Specificity creates memory. "Brooklyn bodega at 2 AM" beats "urban." "A rain-soaked motel off I-40" beats "sad Americana."
+
+7. Design and details
+   Styling, typography, color, photo language, video pace, symbols, release format, platform behavior.
+
+8. Finishing
+   The last 5 percent creates professional gravity: consistency across grid, Spotify banners, covers, merch, flyers, captions, videos, and live moments.
+
+## Pattern break rule
+
+The brain filters out average. Use surprise inside structure: familiar enough to understand, strange enough to remember.
+
+## Halloween Test
+
+If someone dressed as this artist for Halloween, what would make them recognizable without a logo?
+
+## 3-sentence pitch model
+
+Sentence 1: Who/what is the artist as a world.
+Sentence 2: The tension, enemy, or emotional promise.
+Sentence 3: How it appears in sound, visuals, content, and fan identity.
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-narrative-universe
+description: Build the narrative world around an artist's music. Use when turning sound, taste, references, profile, voice, branding cards, lyrics, visuals, or campaign notes into a cinematic universe, brand house, rules of the world, archetype, setting, sandbox, and elevator pitch.
+---
+
+# Artist Narrative Universe
+
+Use this skill to build "the movie" around the soundtrack. The goal is not lore for its own sake. The goal is a coherent universe that makes the music easier to feel, remember, and talk about.
+
+## Workflow
+
+1. Match sound to land.
+   Choose the narrative land: action, horror, romance, tragedy, sci-fi, documentary, street realism, western, noir, fantasy, luxury drama, road movie, etc.
+
+2. Build the foundation.
+   Add the twist that breaks the pattern. Mix one familiar story structure with one unexpected aesthetic or setting.
+
+3. Write rules of the universe.
+   Define what belongs and what violates the world. Use positive constraints.
+
+4. Choose character mode.
+   Decide whether the artist is playing the person, playing the brand, or balancing both.
+
+5. Define the sandbox.
+   Name the recurring "show" the audience is watching. Every post, video, song, cover, and flyer should feel like a scene.
+
+6. Make the setting specific.
+   Move from generic to concrete: not "city," but "a laundromat in Queens at 2 AM"; not "future," but "wet chrome gas station in 2041."
+
+7. Produce the pitch.
+   Give a clear 3-sentence brand movie pitch.
+
+## Output
+
+\`\`\`markdown
+Narrative land:
+Foundation twist:
+Rules of the universe:
+Character mode:
+Archetype split:
+Specific setting:
+Sandbox:
+What belongs:
+What breaks the world:
+3-sentence pitch:
+First scenes to make:
+\`\`\`
+
+## Reference
+
+Read \`references/brand-house.md\` for the full house framework and quality checks.
 `,
       },
     ],
@@ -3702,6 +4370,123 @@ SVG/PNG composition notes:
 What to avoid:
 Ready for artwork_compose:
 \`\`\`
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-visual-world-director",
+    files: [
+      {
+        path: "references/visual-world.md",
+        content: `# Artist Visual World Reference
+
+## Core thesis
+
+Visual consistency creates brand gravity. The audience judges value before hearing the song. The storefront must make the music feel heavier, clearer, and more intentional.
+
+## Art direction pillars
+
+Typography:
+Fonts carry subconscious weight. One cheap or mismatched font can devalue a serious artist.
+
+Color:
+Color sets emotional temperature before sound. Define when color is muted, when it pops, and what each key color means.
+
+Photography:
+Choose the camera's relationship to the artist: documentary, surveillance, luxury editorial, fan-shot intimacy, mythic distance, gritty flash, staged tableau.
+
+Wardrobe:
+The artist should wear the brand. The brand should not look like costume pasted on top.
+
+Environment:
+Setting is memory. Use specific places: motel bathroom, county fair parking lot, empty church basement, chrome studio, desert highway, laundromat, future city rain.
+
+Symbols:
+Repeat objects until they become retrieval cues: roses, satellites, rain, keys, machines, horses, motel signs, gloves, receipts, cigarettes, mirrors, masks.
+
+## Halloween Test
+
+Ask:
+- What would the fan wear?
+- What object would they carry?
+- What location/background would make it obvious?
+- What pose or behavior would signal the artist?
+- Could another fan recognize it without text?
+
+## Storefront checklist
+
+Align:
+- artist profile photo
+- Spotify banner
+- Instagram grid
+- release covers
+- thumbnails
+- live visuals
+- flyers
+- merch
+- captions and typography
+
+## Quality bar
+
+Good direction:
+"Flash-lit motel Americana with chrome religious objects, cheap roses, wet highways, black serif type, and one recurring red motel key."
+
+Weak direction:
+"Dark, cinematic, edgy, modern."
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-visual-world-director
+description: Define or audit an artist's visual world, art direction, mythology, symbols, styling, typography, color logic, photo/video language, storefront consistency, and Halloween Test recognizability. Use for artist visuals, branding, campaigns, covers, moodboards, social grids, merch, or creative direction.
+---
+
+# Artist Visual World Director
+
+Use this skill to make the artist visually recognizable without a logo. Visual direction should encode value, story, and memory.
+
+## Workflow
+
+1. Read the world.
+   Use profile, voice, branding, songs, lyrics, references, moodboards, photos, covers, posts, and campaign goals.
+
+2. Identify the visual laws.
+   Define what belongs, what does not, and why.
+
+3. Build symbols.
+   Pull recurring objects, locations, colors, textures, wardrobe, typography, camera behavior, and formats.
+
+4. Pass the Halloween Test.
+   Say what a fan would wear, hold, stand in, or repeat to be recognized as this artist.
+
+5. Create the storefront system.
+   Align Spotify banners, Instagram grid, covers, flyers, thumbnails, merch, live visuals, and press photos.
+
+6. Give production rules.
+   Make the direction usable by designers, photographers, editors, and content agents.
+
+## Output
+
+\`\`\`markdown
+Visual thesis:
+Core symbols:
+Color logic:
+Typography direction:
+Wardrobe/styling:
+Photography rules:
+Video rules:
+Textures and environments:
+Halloween Test:
+Storefront checklist:
+Do not use:
+First assets to make:
+\`\`\`
+
+## Reference
+
+Read \`references/visual-world.md\` for the art-direction framework.
 `,
       },
     ],

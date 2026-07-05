@@ -109,6 +109,25 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     return f.content;
   }
 
+  it('includes the Branding Agent skill bundle', () => {
+    const requiredSlugs = [
+      'artist-brand-dna-audit',
+      'artist-narrative-universe',
+      'artist-belief-system',
+      'artist-campaign-angle-builder',
+      'artist-visual-world-director',
+      'artist-brand-expression-strategist',
+    ];
+
+    for (const slug of requiredSlugs) {
+      const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === slug);
+      expect(skill).toBeDefined();
+      const parsed = matter(getSkillMd(skill!));
+      expect(typeof parsed.data.description).toBe('string');
+      expect(parsed.content.trim().length).toBeGreaterThan(0);
+    }
+  });
+
   it('includes artist-industry-hunter for the Industry Hunter worker', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'artist-industry-hunter');
     expect(skill).toBeDefined();

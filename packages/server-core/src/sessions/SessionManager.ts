@@ -2483,7 +2483,10 @@ export class SessionManager implements ISessionManager {
         try {
           const {
             ensureRequiredGlobalSkills,
+            listEnabledGlobalSkillSlugs,
+            loadGlobalSkillBySlug,
             replaceRequiredGlobalSkillFileIfContains,
+            setGlobalSkillEnabled,
             STARTER_SKILLS,
             BUNDLED_STARTER_SKILLS,
           } = await import('@craft-agent/shared/skills')
@@ -2511,6 +2514,37 @@ export class SessionManager implements ISessionManager {
             if (updated) {
               sessionLog.info('[skills] Updated built-in workflow-creator skill')
             }
+          }
+          const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
+          const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
+          const missingBrandingSkills = brandingSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
+          if (brandingAgent && missingBrandingSkills.length === 0) {
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+            let updatedWorkspaces = 0
+            for (const ws of getWorkspaces()) {
+              if (ws.remoteServer) continue
+              let workspaceUpdated = false
+              if (!readActivatedAgents(ws.rootPath).active.includes('branding-agent')) {
+                setAgentActive(ws.rootPath, 'branding-agent', true)
+                workspaceUpdated = true
+              }
+              const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
+              for (const slug of brandingSkillSlugs) {
+                if (!enabledSkills.has(slug)) {
+                  setGlobalSkillEnabled(ws.rootPath, slug, true)
+                  workspaceUpdated = true
+                }
+              }
+              if (workspaceUpdated) {
+                updatedWorkspaces += 1
+              }
+            }
+            if (updatedWorkspaces > 0) {
+              sessionLog.info(`[agent-definitions] Activated Branding Agent skill bundle in ${updatedWorkspaces} workspace(s)`)
+            }
+          } else if (missingBrandingSkills.length > 0) {
+            sessionLog.warn(`[agent-definitions] Branding Agent skill bundle incomplete: ${missingBrandingSkills.join(', ')}`)
           }
         } catch (err) {
           sessionLog.warn('[skills] Built-in skill seed skipped:', err as Error)
