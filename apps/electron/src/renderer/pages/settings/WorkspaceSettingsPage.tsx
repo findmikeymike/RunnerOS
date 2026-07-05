@@ -15,6 +15,7 @@ import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'motion/react'
+import { Home, Lock } from 'lucide-react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -28,6 +29,7 @@ import { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/mode-types'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import { SourceAvatar } from '@/components/ui/source-avatar'
 import { toast } from 'sonner'
+import { isArtistHQWorkspace } from '@/lib/artist-workspace'
 
 import {
   SettingsSection,
@@ -42,6 +44,8 @@ export const meta: DetailsPageMeta = {
   slug: 'workspace',
 }
 
+const quietButtonClass = 'inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76'
+
 // ============================================
 // Main Component
 // ============================================
@@ -53,6 +57,8 @@ export default function WorkspaceSettingsPage() {
   const appShellContext = useAppShellContext()
   const activeWorkspaceId = appShellContext.activeWorkspaceId
   const onRefreshWorkspaces = appShellContext.onRefreshWorkspaces
+  const activeWorkspace = appShellContext.workspaces.find((workspace) => workspace.id === activeWorkspaceId)
+  const isHQWorkspace = isArtistHQWorkspace(activeWorkspace, appShellContext.workspaces)
 
   // Workspace settings state
   const [wsName, setWsName] = useState('')
@@ -72,6 +78,7 @@ export default function WorkspaceSettingsPage() {
   // Mode cycling state
   const [enabledModes, setEnabledModes] = useState<PermissionMode[]>(['safe', 'ask', 'allow-all'])
   const [modeCyclingError, setModeCyclingError] = useState<string | null>(null)
+  const displayWorkspaceName = isHQWorkspace ? 'HQ' : wsName || t("settings.workspace.untitled")
 
   // Load workspace settings when active workspace changes
   useEffect(() => {
@@ -358,35 +365,49 @@ export default function WorkspaceSettingsPage() {
               <SettingsCard>
                 <SettingsRow
                   label={t("common.name")}
-                  description={wsName || t("settings.workspace.untitled")}
+                  description={displayWorkspaceName}
                   action={
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setWsNameEditing(wsName)
-                        setRenameDialogOpen(true)
-                      }}
-                      className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
-                    >
-                      {t("common.edit")}
-                    </button>
+                    isHQWorkspace ? (
+                      <span className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.055] bg-white/[0.025] px-2.5 text-xs font-medium text-white/38">
+                        <Lock className="h-3.5 w-3.5" />
+                        Locked
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setWsNameEditing(wsName)
+                          setRenameDialogOpen(true)
+                        }}
+                        className={quietButtonClass}
+                      >
+                        {t("common.edit")}
+                      </button>
+                    )
                   }
                 />
                 <SettingsRow
                   label={t("settings.workspace.icon")}
                   action={
-                    <label className="cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif"
-                        onChange={handleIconUpload}
-                        className="sr-only"
-                        disabled={isUploadingIcon}
-                      />
-                      <span className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors">
-                        {isUploadingIcon ? t("common.uploading") : t("common.change")}
+                    isHQWorkspace ? (
+                      <span className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.055] bg-white/[0.025] px-2.5 text-xs font-medium text-white/38">
+                        <Lock className="h-3.5 w-3.5" />
+                        Locked
                       </span>
-                    </label>
+                    ) : (
+                      <label className="cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif"
+                          onChange={handleIconUpload}
+                          className="sr-only"
+                          disabled={isUploadingIcon}
+                        />
+                        <span className={quietButtonClass}>
+                          {isUploadingIcon ? t("common.uploading") : t("common.change")}
+                        </span>
+                      </label>
+                    )
                   }
                 >
                   <div
@@ -397,11 +418,13 @@ export default function WorkspaceSettingsPage() {
                   >
                     {isUploadingIcon ? (
                       <Spinner className="text-muted-foreground text-[8px]" />
+                    ) : isHQWorkspace ? (
+                      <Home className="h-3.5 w-3.5 text-white/62" />
                     ) : wsIconUrl ? (
                       <img src={wsIconUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <span className="text-xs font-medium text-muted-foreground">
-                        {wsName?.charAt(0)?.toUpperCase() || 'W'}
+                        {displayWorkspaceName?.charAt(0)?.toUpperCase() || 'W'}
                       </span>
                     )}
                   </div>
@@ -522,7 +545,7 @@ export default function WorkspaceSettingsPage() {
                         <button
                           type="button"
                           onClick={handleClearWorkingDirectory}
-                          className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors text-foreground/60 hover:text-foreground"
+                          className={quietButtonClass}
                         >
                           {t("common.clear")}
                         </button>
@@ -530,7 +553,7 @@ export default function WorkspaceSettingsPage() {
                       <button
                         type="button"
                         onClick={handleChangeWorkingDirectory}
-                        className="inline-flex items-center h-8 px-3 text-sm rounded-lg bg-background shadow-minimal hover:bg-foreground/[0.02] transition-colors"
+                        className={quietButtonClass}
                       >
                         {t("common.change")}
                       </button>
