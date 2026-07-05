@@ -15,6 +15,7 @@ Start here when you need project context without reading the whole repo.
 2. [HANDOFF-2026-07-04.md](./HANDOFF-2026-07-04.md) - zero-context takeover brief for the current build.
 3. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
 4. [workflows](./workflows/) - workflow runtime, UX, examples, and recovery notes.
+5. [user](./user/) - concise user-facing guides for surfaces, advanced abilities, and service keys.
 
 Current active feature spec:
 
@@ -28,6 +29,7 @@ Current active feature spec:
 - [audits](./audits/) - security, runtime, and technical debt reports.
 - [development](./development/) - local commands, CLI docs, setup-adjacent references.
 - [system-map](./system-map/) - generated map of workers, skills, sources, launch surfaces, and approval boundaries.
+- [user](./user/) - general-user docs for learning the product without reading implementation specs.
 - [archive](./archive/) - historical docs that should not guide current decisions.
 
 ## Feature Docs
@@ -47,6 +49,7 @@ Feature folders stay in place to avoid breaking existing links:
 - `pulses/`
 - `skill-recipes/`
 - `tts-agent/`
+- `user/`
 - `video-studio/`
 - `visual-agent-os/`
 - `workflows/`
