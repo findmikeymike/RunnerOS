@@ -241,12 +241,11 @@ export default function AppearanceSettingsPage() {
   return (
     <div className="h-full flex flex-col">
       <PanelHeader
-        title={t("settings.appearance.title")}
         actions={<HeaderMenu route={routes.view.settings('appearance')} helpFeature="themes" />}
       />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
-          <div className="px-6 pt-24 pb-8 max-w-[760px] mx-auto">
+          <div className="px-6 pt-10 pb-8 max-w-[760px] mx-auto">
             <div className="space-y-6">
 
               {/* Default Theme */}

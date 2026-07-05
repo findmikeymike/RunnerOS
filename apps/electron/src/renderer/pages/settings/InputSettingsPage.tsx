@@ -84,10 +84,10 @@ export default function InputSettingsPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title={t("settings.input.title")} actions={<HeaderMenu route={routes.view.settings('input')} />} />
+      <PanelHeader actions={<HeaderMenu route={routes.view.settings('input')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
-          <div className="px-6 pt-24 pb-8 max-w-[760px] mx-auto">
+          <div className="px-6 pt-10 pb-8 max-w-[760px] mx-auto">
             <div className="space-y-6">
               {/* Typing Behavior */}
               <SettingsSection title={t("settings.input.typing")} description={t("settings.input.typingDesc")}>

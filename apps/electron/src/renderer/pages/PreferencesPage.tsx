@@ -224,7 +224,7 @@ export default function PreferencesPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <PanelHeader title={t("settings.preferences.title")} actions={headerActions} />
+      <PanelHeader actions={headerActions} />
       <Separator />
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-6">
