@@ -806,7 +806,7 @@ export default function SecretsSettingsPage() {
   return (
     <div className="flex h-full flex-col">
       <PanelHeader />
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="mx-auto w-full max-w-[1600px] space-y-5 px-6 pb-8 pt-4">
           <div className="rounded-[18px] border border-white/[0.07] bg-white/[0.025] p-5">
             <div className="flex items-start justify-between gap-4">

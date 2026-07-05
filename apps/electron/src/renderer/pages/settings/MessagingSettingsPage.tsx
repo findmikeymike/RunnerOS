@@ -97,7 +97,7 @@ export default function MessagingSettingsPage() {
   return (
     <div className="flex h-full flex-col">
       <PanelHeader />
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-6 p-6">
           <SettingsSection title={t('settings.messaging.title')}>
             <SettingsCard>

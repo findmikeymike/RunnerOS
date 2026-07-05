@@ -297,7 +297,9 @@ export function MainContentPanel({
             <SettingsPageSwitcher activeSubpage={navState.subpage} />
           </div>
         </div>
-        <SettingsPageComponent />
+        <div className="min-h-0 flex-1">
+          <SettingsPageComponent />
+        </div>
       </Panel>
     )
   }

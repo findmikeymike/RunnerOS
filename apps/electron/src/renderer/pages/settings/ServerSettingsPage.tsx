@@ -169,7 +169,7 @@ export default function ServerSettingsPage() {
   return (
     <div className="flex flex-col h-full">
       <PanelHeader />
-      <ScrollArea className="flex-1">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="px-6 pt-10 pb-8 max-w-[1600px] mx-auto space-y-4">
 
           {/* Enable toggle + restart banner */}
