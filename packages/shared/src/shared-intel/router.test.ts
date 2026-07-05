@@ -90,6 +90,34 @@ describe('shared intel router', () => {
     expect(doc.body).toContain('```json shared-intel');
   });
 
+  test('prefers explicit user intel over assistant mode/blocking meta text', () => {
+    const docs = buildSharedIntelDocs({
+      sessionId: '260704-cover-routing',
+      agentCatalog: agents,
+      now: new Date('2026-07-04T12:00:00.000Z'),
+      messages: [
+        message(
+          'user',
+          'Durable smoke intel: For the next Artist HQ rollout, route cover-art visual direction notes only to branding and art-direction workers. Do not route this note to finance, trading, or engineering workers.',
+          1,
+        ),
+        message(
+          'assistant',
+          "Blocked in Explore mode. I heard you: cover-art direction notes go to branding and art-direction only; no finance/trading/engineering. If you want this persisted, switch to Ask or Allow All mode and I'll save it to durable memory.",
+          2,
+        ),
+      ],
+    });
+
+    expect(docs).toHaveLength(1);
+    expect(docs[0]!.note.title).toContain('Durable smoke intel');
+    expect(docs[0]!.note.summary).toContain('route cover-art visual direction notes only');
+    expect(docs[0]!.note.summary).not.toContain('Blocked in Explore mode');
+    expect(docs[0]!.note.targetAgents).toContain('branding-agent');
+    expect(docs[0]!.note.targetAgents).toContain('art-director');
+    expect(docs[0]!.note.targetAgents).not.toContain('industry-hunter');
+  });
+
   test('does not save generic short chatter', () => {
     const docs = buildSharedIntelDocs({
       sessionId: 'short-chat',

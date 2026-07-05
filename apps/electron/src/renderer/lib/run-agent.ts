@@ -206,6 +206,9 @@ export async function openAgentSessionComposer(params: {
     params.workspaceId,
     buildAgentCreateSessionOptions(params.agent, context),
   )
+  if (window.location.hash.startsWith('#artist-hq/')) {
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+  }
   navigate(routes.view.allSessions(session.id))
 
   const draft = params.draftInput?.trim()

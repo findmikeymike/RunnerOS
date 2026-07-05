@@ -165,7 +165,7 @@ export function extractSharedIntelCandidates(input: BuildSharedIntelInput): Shar
 
   const assistantText = [...messages].reverse().find((message) => message.role === 'assistant')?.content.trim();
   const userText = [...messages].reverse().find((message) => message.role === 'user')?.content.trim();
-  const sourceText = assistantText && assistantText.length >= GENERIC_MIN_CHARS ? assistantText : focusText;
+  const sourceText = chooseSharedIntelSourceText({ assistantText, userText, focusText });
   const tags = inferTags(`${focusText}\n${input.sourceAgentName ?? ''}\n${input.sourceAgentSlug ?? ''}`);
   if (tags.length === 0) return [];
 
@@ -354,6 +354,27 @@ function isDurableCandidateText(text: string): boolean {
   const weakPhrases = ['thanks', 'thank you', 'sounds good', 'ok cool', 'great thanks'];
   if (weakPhrases.some((phrase) => lowered === phrase || lowered.endsWith(`\n${phrase}`))) return false;
   return true;
+}
+
+function chooseSharedIntelSourceText(input: {
+  assistantText?: string;
+  userText?: string;
+  focusText: string;
+}): string {
+  const userText = input.userText?.trim();
+  const assistantText = input.assistantText?.trim();
+  if (userText && userText.length >= GENERIC_MIN_CHARS && isExplicitUserIntel(userText)) return userText;
+  if (assistantText && assistantText.length >= GENERIC_MIN_CHARS && !isAssistantMetaResponse(assistantText)) return assistantText;
+  if (userText && userText.length >= GENERIC_MIN_CHARS) return userText;
+  return input.focusText;
+}
+
+function isExplicitUserIntel(text: string): boolean {
+  return /\b(durable|remember|save|route|routing|preference|rule|note|intel)\b/i.test(text);
+}
+
+function isAssistantMetaResponse(text: string): boolean {
+  return /\b(blocked in|switch to ask|allow all mode|if you want this persisted|i can(?:not|'t) store|i cannot save|permission|mode)\b/i.test(text);
 }
 
 function inferTags(text: string): string[] {
