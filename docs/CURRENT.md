@@ -82,10 +82,11 @@ source_of_truth: true
   - `bun test apps/electron/src/renderer/lib/artist-workspace.test.ts` -> `5 pass`.
   - `bun run typecheck:electron` passed after the HQ project card route wiring.
   - Live HQ project card smoke passed: clicking `Current Release` from HQ opened workspace `Trading` at `route=campaign` with the campaign command center visible.
+  - Live HQ route smoke passed with a temporary restored fixture: `Start Route` created a `branding-agent` session, sent `LIVE HQ ROUTE SMOKE: reply with exactly: HQ route smoke passed.`, and the assistant replied `HQ route smoke passed.` Original HQ State context was restored and the smoke session folder was removed.
 
 ## Remaining Release Smoke
 
-- Confirm a launch-safe HQ State of Play route opens/sends the intended worker route. Current workspace correctly disables `Start Review` because artist profile context is still incomplete.
+- No remaining release smoke items are currently listed here. Next pass should review packaging/release gates and any external-service smokes that require provider keys/accounts.
 
 ## Notes For Next Agent
 
