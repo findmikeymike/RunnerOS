@@ -62,6 +62,10 @@ pnpm-lock.yaml
 # Craft Agent local data (sessions, credentials, config)
 .craft-agent/
 
+# Local owner smoke profile: real keys, artist context, campaign context.
+# Keep templates in smoke/templates/ tracked; keep filled values here ignored.
+smoke/local/
+
 # SSH keys and secrets
 *.pem
 *.key

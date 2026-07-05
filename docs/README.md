@@ -28,6 +28,7 @@ Current active feature spec:
 - [backlog](./backlog/) - accepted future work, deferred integrations, and cleanup ideas.
 - [audits](./audits/) - security, runtime, and technical debt reports.
 - [development](./development/) - local commands, CLI docs, setup-adjacent references.
+- [development/local-smoke-profile.md](./development/local-smoke-profile.md) - local-only real-key smoke setup that keeps private data out of the app and repo.
 - [system-map](./system-map/) - generated map of workers, skills, sources, launch surfaces, and approval boundaries.
 - [user](./user/) - general-user docs for learning the product without reading implementation specs.
 - [archive](./archive/) - historical docs that should not guide current decisions.
