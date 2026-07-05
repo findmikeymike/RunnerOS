@@ -2580,6 +2580,37 @@ export class SessionManager implements ISessionManager {
           } else if (missingContentGeniusSkills.length > 0) {
             sessionLog.warn(`[agent-definitions] Content Genius skill bundle incomplete: ${missingContentGeniusSkills.join(', ')}`)
           }
+          const worldBuilderAgent = STARTER_AGENTS.find(agent => agent.slug === 'world-builder')
+          const worldBuilderSkillSlugs = worldBuilderAgent?.metadata.skills ?? []
+          const missingWorldBuilderSkills = worldBuilderSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
+          if (worldBuilderAgent && missingWorldBuilderSkills.length === 0) {
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+            let updatedWorkspaces = 0
+            for (const ws of getWorkspaces()) {
+              if (ws.remoteServer) continue
+              let workspaceUpdated = false
+              if (!readActivatedAgents(ws.rootPath).active.includes('world-builder')) {
+                setAgentActive(ws.rootPath, 'world-builder', true)
+                workspaceUpdated = true
+              }
+              const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
+              for (const slug of worldBuilderSkillSlugs) {
+                if (!enabledSkills.has(slug)) {
+                  setGlobalSkillEnabled(ws.rootPath, slug, true)
+                  workspaceUpdated = true
+                }
+              }
+              if (workspaceUpdated) {
+                updatedWorkspaces += 1
+              }
+            }
+            if (updatedWorkspaces > 0) {
+              sessionLog.info(`[agent-definitions] Activated World Builder skill bundle in ${updatedWorkspaces} workspace(s)`)
+            }
+          } else if (missingWorldBuilderSkills.length > 0) {
+            sessionLog.warn(`[agent-definitions] World Builder skill bundle incomplete: ${missingWorldBuilderSkills.join(', ')}`)
+          }
         } catch (err) {
           sessionLog.warn('[skills] Built-in skill seed skipped:', err as Error)
         }
