@@ -299,10 +299,19 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
             </Button>
           )}
           {connection.authType === 'oauth' ? (
-            <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={onReauthenticate}>
-              <RefreshCcw className="mr-1.5 h-3.5 w-3.5" />
-              Reconnect
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onReauthenticate}
+                  aria-label="Refresh sign-in"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-white/36 transition-colors hover:bg-white/[0.045] hover:text-white/68"
+                >
+                  <RefreshCcw className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Refresh sign-in</TooltipContent>
+            </Tooltip>
           ) : (
             <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={onEdit}>
               <Settings2 className="mr-1.5 h-3.5 w-3.5" />
