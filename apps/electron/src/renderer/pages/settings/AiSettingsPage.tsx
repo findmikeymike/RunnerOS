@@ -98,15 +98,6 @@ function getModelOptionsForConnection(
   }))
 }
 
-function stripPiPrefixForSettings(modelId: string): string {
-  return modelId.startsWith('pi/') ? modelId.slice(3) : modelId
-}
-
-function getSettingsModelLabel(model: string | ModelDefinition): string {
-  if (typeof model === 'string') return getModelShortName(stripPiPrefixForSettings(model))
-  return model.name || getModelShortName(stripPiPrefixForSettings(model.id))
-}
-
 function getConnectionProviderLabel(connection: LlmConnectionWithStatus): string {
   const provider = connection.providerType || connection.type
   const isSubscription = connection.authType === 'oauth'
@@ -121,17 +112,6 @@ function getConnectionProviderLabel(connection: LlmConnectionWithStatus): string
   }
   if (provider === 'pi_compat') return 'OpenAI-compatible endpoint'
   return provider || 'AI provider'
-}
-
-function getConnectionModelSummary(connection: LlmConnectionWithStatus): Array<{ label: string; value: string }> {
-  const models = connection.models && connection.models.length > 0
-    ? connection.models
-    : (connection.defaultModel ? [connection.defaultModel] : [])
-  const tierLabels = ['Best', 'Balanced', 'Fast']
-  return models.slice(0, 3).map((model, index) => ({
-    label: models.length > 1 ? tierLabels[index] ?? `Model ${index + 1}` : 'Default',
-    value: getSettingsModelLabel(model as string | ModelDefinition),
-  }))
 }
 
 export const meta: DetailsPageMeta = {
@@ -234,7 +214,6 @@ interface ConnectionRowProps {
 }
 
 function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, onSetDefault, onValidate, onReauthenticate, onEdit, validationState, validationError }: ConnectionRowProps) {
-  const [modelsExpanded, setModelsExpanded] = useState(false)
   const { t } = useTranslation()
   const [menuOpen, setMenuOpen] = useState(false)
   const [piBaseUrl, setPiBaseUrl] = useState<string | undefined>(undefined)
@@ -282,18 +261,18 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
     return { tone: 'good', label: 'Ready' }
   }, [connection.credentialSource, connection.isAuthenticated, t, validationError, validationState])
 
-  const modelSummary = getConnectionModelSummary(connection)
   const providerLabel = getConnectionProviderLabel(connection)
+  const showProviderLabel = providerLabel !== connection.name
 
   return (
-    <div className="border-b border-border/50 last:border-b-0 px-4 py-4">
+    <div className="border-b border-border/50 last:border-b-0 px-4 py-3">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <ConnectionIcon connection={connection} size={16} />
-            <span className="font-medium text-sm">{connection.name}</span>
+            <span className="font-medium text-sm text-foreground/88">{connection.name}</span>
             {connection.isDefault && (
-              <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-foreground text-background">
+              <span className="inline-flex items-center h-5 px-2 text-[11px] font-medium rounded-[4px] bg-white/[0.08] text-white/80">
                 {t("common.default")}
               </span>
             )}
@@ -307,42 +286,9 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
             </span>
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            {providerLabel} · {endpointLabel}
+            {showProviderLabel && `${providerLabel} · `}{endpointLabel}
             {connection.credentialSource === 'environment' && ' · Read from environment'}
           </div>
-
-          {modelSummary.length > 0 && (
-            <div className="mt-3">
-              <button 
-                onClick={() => setModelsExpanded(!modelsExpanded)}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ChevronRight className={cn("h-3 w-3 transition-transform", modelsExpanded && "rotate-90")} />
-                {modelsExpanded ? "Hide available models" : `View ${modelSummary.length} available models`}
-              </button>
-              
-              <AnimatePresence>
-                {modelsExpanded && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                      {modelSummary.map((model) => (
-                        <div key={`${model.label}:${model.value}`} className="rounded-lg border border-border/60 bg-foreground/[0.015] px-3 py-2">
-                          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">{model.label}</div>
-                          <div className="mt-0.5 truncate text-xs font-medium">{model.value}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
@@ -970,14 +916,14 @@ export default function AiSettingsPage() {
       <PanelHeader title={t("settings.ai.title")} actions={<HeaderMenu route={routes.view.settings('ai')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
-          <div className="px-6 pt-24 pb-8 max-w-[760px] mx-auto">
+          <div className="px-6 pt-10 pb-8 max-w-[760px] mx-auto">
             {/* Credential Health Warning Banner */}
             <CredentialHealthBanner
               issues={credentialHealthIssues}
               onReauthenticate={handleReauthenticate}
             />
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* Connections Management */}
               <SettingsSection
                 title={
