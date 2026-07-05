@@ -664,6 +664,8 @@ export default function SecretsSettingsPage() {
   const [installing, setInstalling] = React.useState(false)
   const [busyServiceId, setBusyServiceId] = React.useState<string | null>(null)
   const [expandedServiceId, setExpandedServiceId] = React.useState<string | null>(null)
+  const [zeroAction, setZeroAction] = React.useState<string | null>(null)
+  const [zeroImportOpen, setZeroImportOpen] = React.useState(false)
 
   const services = React.useMemo(
     () => SERVICES.filter((service) => service.group === selectedGroup),
@@ -731,6 +733,56 @@ export default function SecretsSettingsPage() {
       await load()
     } finally {
       setInstalling(false)
+    }
+  }
+
+  const initZero = async () => {
+    setZeroAction('init')
+    try {
+      const result = await window.electronAPI.initZero()
+      if (!result.success) {
+        toast.error(result.error || 'Zero init failed')
+        return
+      }
+      toast.success('Zero initialized')
+      await load()
+    } finally {
+      setZeroAction(null)
+    }
+  }
+
+  const fundZero = async () => {
+    setZeroAction('fund')
+    try {
+      const result = await window.electronAPI.fundZero()
+      if (!result.success) {
+        toast.error(result.error || 'Could not create Zero funding link')
+        return
+      }
+      if (result.fundingUrl) {
+        await window.electronAPI.openUrl(result.fundingUrl)
+        toast.success('Opened Zero funding link')
+      } else {
+        toast.info(result.output || 'Zero funding command finished')
+      }
+      await load()
+    } finally {
+      setZeroAction(null)
+    }
+  }
+
+  const claimZeroWelcome = async () => {
+    setZeroAction('welcome')
+    try {
+      const result = await window.electronAPI.claimZeroWelcome()
+      if (!result.success) {
+        toast.error(result.error || 'Could not claim Zero welcome bonus')
+        return
+      }
+      toast.success(result.output || 'Zero welcome bonus claimed')
+      await load()
+    } finally {
+      setZeroAction(null)
     }
   }
 
@@ -942,42 +994,78 @@ export default function SecretsSettingsPage() {
                                 </div>
                               </div>
                             </div>
+                            <div className="grid gap-2 sm:grid-cols-3">
+                              <button
+                                type="button"
+                                onClick={initZero}
+                                disabled={!zero?.installed || zeroAction !== null}
+                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
+                              >
+                                {zeroAction === 'init' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WalletCards className="h-3.5 w-3.5" />}
+                                Initialize
+                              </button>
+                              <button
+                                type="button"
+                                onClick={fundZero}
+                                disabled={!zero?.installed || !zero?.walletConfigured || zeroAction !== null}
+                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.045] hover:text-white/74 disabled:opacity-50"
+                              >
+                                {zeroAction === 'fund' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+                                Fund wallet
+                              </button>
+                              <button
+                                type="button"
+                                onClick={claimZeroWelcome}
+                                disabled={!zero?.installed || !zero?.walletConfigured || zeroAction !== null}
+                                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.045] hover:text-white/74 disabled:opacity-50"
+                              >
+                                {zeroAction === 'welcome' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                                Claim welcome
+                              </button>
+                            </div>
                             {zeroPrivateKeyPreset ? (
                               <div className="rounded-[10px] border border-white/[0.055] bg-black/20 p-3">
-                                <div className="mb-2 flex items-center justify-between gap-2">
-                                  <label className="text-xs font-medium text-white/70">{zeroPrivateKeyPreset.label}</label>
+                                <button
+                                  type="button"
+                                  onClick={() => setZeroImportOpen((open) => !open)}
+                                  className="flex w-full items-center justify-between gap-3 text-left"
+                                >
+                                  <span className="text-xs font-medium text-white/70">Import existing wallet</span>
                                   <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-white/26">
                                     {savedByName.has(zeroPrivateKeyPreset.name) ? 'Saved' : 'Optional'}
                                   </span>
-                                </div>
-                                <div className="flex gap-2">
-                                  <input
-                                    value={draftValues[zeroPrivateKeyPreset.name] ?? ''}
-                                    onChange={(event) => setDraftValues((current) => ({ ...current, [zeroPrivateKeyPreset.name]: event.target.value }))}
-                                    placeholder={savedByName.has(zeroPrivateKeyPreset.name) ? savedPlaceholder(zeroPrivateKeyPreset, savedByName) : zeroPrivateKeyPreset.placeholder}
-                                    type="password"
-                                    className="h-8 min-w-0 flex-1 rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none placeholder:text-white/22 focus:border-[#fb923c]/45"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => saveService(service)}
-                                    disabled={busy || !draftValues[zeroPrivateKeyPreset.name]?.trim()}
-                                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
-                                  >
-                                    {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                                    Save
-                                  </button>
-                                </div>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button type="button" className="mt-2 text-left text-[11px] leading-4 text-white/30 transition-colors hover:text-white/52">
-                                      Guide
+                                  <ChevronDown className={`h-3.5 w-3.5 text-white/38 transition-transform ${zeroImportOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                <AnimateServiceFields open={zeroImportOpen}>
+                                  <div className="flex gap-2">
+                                    <input
+                                      value={draftValues[zeroPrivateKeyPreset.name] ?? ''}
+                                      onChange={(event) => setDraftValues((current) => ({ ...current, [zeroPrivateKeyPreset.name]: event.target.value }))}
+                                      placeholder={savedByName.has(zeroPrivateKeyPreset.name) ? savedPlaceholder(zeroPrivateKeyPreset, savedByName) : zeroPrivateKeyPreset.placeholder}
+                                      type="password"
+                                      className="h-8 min-w-0 flex-1 rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none placeholder:text-white/22 focus:border-[#fb923c]/45"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => saveService(service)}
+                                      disabled={busy || !draftValues[zeroPrivateKeyPreset.name]?.trim()}
+                                      className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
+                                    >
+                                      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                      Import
                                     </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent side="top" className="max-w-[280px] text-xs">
-                                    {zeroPrivateKeyPreset.description}
-                                  </TooltipContent>
-                                </Tooltip>
+                                  </div>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <button type="button" className="mt-2 text-left text-[11px] leading-4 text-white/30 transition-colors hover:text-white/52">
+                                        Guide
+                                      </button>
+                                    </TooltipTrigger>
+                                    <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                      {zeroPrivateKeyPreset.description}
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </AnimateServiceFields>
                               </div>
                             ) : null}
                           </div>

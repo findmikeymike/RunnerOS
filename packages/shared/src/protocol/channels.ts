@@ -170,6 +170,9 @@ export const RPC_CHANNELS = {
     DELETE: 'secrets:delete',
     ZERO_STATUS: 'secrets:zeroStatus',
     INSTALL_ZERO: 'secrets:installZero',
+    INIT_ZERO: 'secrets:initZero',
+    FUND_ZERO: 'secrets:fundZero',
+    CLAIM_ZERO_WELCOME: 'secrets:claimZeroWelcome',
   },
   onboarding: {
     GET_AUTH_STATE: 'onboarding:getAuthState',

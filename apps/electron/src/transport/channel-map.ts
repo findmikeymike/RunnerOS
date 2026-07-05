@@ -129,6 +129,9 @@ export const CHANNEL_MAP = {
   deleteSecret: invoke(RPC_CHANNELS.secrets.DELETE),
   getZeroStatus: invoke(RPC_CHANNELS.secrets.ZERO_STATUS),
   installZero: invoke(RPC_CHANNELS.secrets.INSTALL_ZERO),
+  initZero: invoke(RPC_CHANNELS.secrets.INIT_ZERO),
+  fundZero: invoke(RPC_CHANNELS.secrets.FUND_ZERO),
+  claimZeroWelcome: invoke(RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME),
 
   // Onboarding
   getAuthState: invoke(RPC_CHANNELS.onboarding.GET_AUTH_STATE),

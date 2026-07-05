@@ -113,6 +113,9 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.secrets.DELETE,
   RPC_CHANNELS.secrets.ZERO_STATUS,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
+  RPC_CHANNELS.secrets.INIT_ZERO,
+  RPC_CHANNELS.secrets.FUND_ZERO,
+  RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME,
   RPC_CHANNELS.dialog.OPEN_FOLDER,
 ] as const
 
@@ -158,6 +161,47 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       }
       await execFileAsync(npmPath, ['i', '-g', '@zeroxyz/cli'], { timeout: 120_000 })
       return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  server.handle(RPC_CHANNELS.secrets.INIT_ZERO, async () => {
+    try {
+      const zeroPath = await commandExists('zero')
+      if (!zeroPath) return { success: false, error: 'Zero CLI is not installed.' }
+      await execFileAsync(zeroPath, ['init'], { timeout: 60_000 })
+      await applyStoredSecretsToProcessEnv()
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  server.handle(RPC_CHANNELS.secrets.FUND_ZERO, async (_ctx, amount?: string) => {
+    try {
+      await applyStoredSecretsToProcessEnv()
+      const zeroPath = await commandExists('zero')
+      if (!zeroPath) return { success: false, error: 'Zero CLI is not installed.' }
+      const args = ['wallet', 'fund', '--no-open']
+      const trimmedAmount = typeof amount === 'string' ? amount.trim() : ''
+      if (trimmedAmount) args.push(trimmedAmount)
+      const result = await execFileAsync(zeroPath, args, { timeout: 30_000 })
+      const output = `${result.stdout}\n${result.stderr}`.trim()
+      const fundingUrl = output.match(/https?:\/\/\S+/)?.[0]
+      return { success: true, fundingUrl, output }
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
+
+  server.handle(RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME, async () => {
+    try {
+      await applyStoredSecretsToProcessEnv()
+      const zeroPath = await commandExists('zero')
+      if (!zeroPath) return { success: false, error: 'Zero CLI is not installed.' }
+      const result = await execFileAsync(zeroPath, ['welcome'], { timeout: 30_000 })
+      return { success: true, output: `${result.stdout}\n${result.stderr}`.trim() }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) }
     }
