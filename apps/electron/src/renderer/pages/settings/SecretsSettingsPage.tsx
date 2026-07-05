@@ -569,14 +569,6 @@ const SERVICES: SecretService[] = [
     presetNames: ['RESEND_API_KEY'],
   },
   {
-    id: 'spotify',
-    group: 'Promotion',
-    title: 'Spotify',
-    description: 'Credentials for public Spotify API snapshots and playlist workflows. Spotify for Artists stream/listener stats require browser access.',
-    presetNames: ['SPOTIFY_CLIENT_ID', 'SPOTIFY_CLIENT_SECRET', 'SPOTIFY_REDIRECT_URI'],
-    optionalPresetNames: ['SPOTIFY_REDIRECT_URI'],
-  },
-  {
     id: 'social-publishing',
     group: 'Promotion',
     title: 'Social Publishing',
