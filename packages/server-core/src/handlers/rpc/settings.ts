@@ -170,9 +170,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     try {
       const zeroPath = await commandExists('zero')
       if (!zeroPath) return { success: false, error: 'Zero CLI is not installed.' }
-      await execFileAsync(zeroPath, ['init'], { timeout: 60_000 })
+      const result = await execFileAsync(zeroPath, ['init'], { timeout: 60_000 })
       await applyStoredSecretsToProcessEnv()
-      return { success: true }
+      return { success: true, output: `${result.stdout}\n${result.stderr}`.trim() }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) }
     }

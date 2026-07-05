@@ -588,7 +588,7 @@ export interface ElectronAPI {
   deleteSecret(name: string): Promise<{ success: boolean }>
   getZeroStatus(): Promise<ZeroStatus>
   installZero(): Promise<{ success: boolean; error?: string }>
-  initZero(): Promise<{ success: boolean; error?: string }>
+  initZero(): Promise<{ success: boolean; output?: string; error?: string }>
   fundZero(amount?: string): Promise<{ success: boolean; fundingUrl?: string; output?: string; error?: string }>
   claimZeroWelcome(): Promise<{ success: boolean; output?: string; error?: string }>
 
