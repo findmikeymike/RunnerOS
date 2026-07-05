@@ -40,6 +40,8 @@ type SecretPreset = {
   storage: 'env' | 'source' | 'managed-source'
   sourceSlug?: string
   sourceType?: 'api' | 'mcp' | 'local'
+  setupUrl?: string
+  setupLabel?: string
 }
 
 type SecretService = {
@@ -59,10 +61,12 @@ const SECRET_PRESETS: SecretPreset[] = [
     group: 'Ads',
     name: 'META_ADS_OAUTH',
     label: 'Meta Ads credential',
-    description: 'Meta Ads connects through its source setup. Use the connect button here to open the Meta Ads source directly.',
+    description: 'Open Meta\'s token tool, generate a Marketing API access token, then paste it into the Meta Ads source when ready.',
     storage: 'managed-source',
     sourceSlug: 'meta-ads',
     sourceType: 'mcp',
+    setupUrl: 'https://developers.facebook.com/tools/explorer/',
+    setupLabel: 'Get token',
   },
   {
     group: 'Ads',
@@ -701,6 +705,10 @@ export default function SecretsSettingsPage() {
   }, [load])
 
   const openSource = React.useCallback((preset: SecretPreset) => {
+    if (preset.setupUrl) {
+      void window.electronAPI.openUrl(preset.setupUrl)
+      return
+    }
     if (!preset.sourceSlug) return
     if (preset.sourceType === 'mcp') {
       navigate(routes.view.sourcesMcp(preset.sourceSlug))
@@ -884,7 +892,7 @@ export default function SecretsSettingsPage() {
                                   className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76"
                                 >
                                   <ExternalLink className="h-3.5 w-3.5" />
-                                  Open source
+                                  {managedPreset.setupLabel ?? 'Open source'}
                                 </button>
                               </TooltipTrigger>
                               <TooltipContent side="top" className="max-w-[260px] text-xs">
