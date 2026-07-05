@@ -284,6 +284,12 @@ describe('composeAgentSystemPrompt', () => {
     expect(result).toContain('"tags": [')
     expect(result).toContain('"research"')
     expect(result).toContain('"cite"')
+    expect(result).toContain('Agent messaging doctrine:')
+    expect(result).toContain('Use `message_agent` only for a bounded specialist subtask')
+    expect(result).toContain('Do not delegate vague brainstorming, social chatter, loops')
+    expect(result).toContain('The parent agent owns the final user answer')
+    expect(result).toContain('Use `background: true` for longer non-blocking work')
+    expect(result).toContain('Delegation never bypasses approval')
   })
 
   test('frames malicious catalog metadata as capped untrusted JSON data', () => {
