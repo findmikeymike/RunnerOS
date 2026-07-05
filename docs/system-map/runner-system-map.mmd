@@ -11,6 +11,12 @@ flowchart LR
   SharedIntelRouter --> Context
   Context --> SharedIntelPrompt["Shared Intel Prompt Section"]
   SharedIntelPrompt --> Session
+  CreateOutput["create_output"] --> Outputs["Output Manifests"]
+  Outputs --> WorkProducts["HQ/Campaign Work Products Widgets"]
+  Outputs --> OutputIndex["context/output-index"]
+  OutputIndex --> Context
+  WorkProducts --> ApprovalRpc["outputs:updateApproval"]
+  ApprovalRpc --> Outputs
   Session --> Sources["Enabled Sources"]
   Session --> Skills["Agent Skills"]
   Registry --> A_concierge["HNIC\nsafe\nCommand"]

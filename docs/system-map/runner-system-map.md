@@ -7,7 +7,7 @@ source_of_truth: true
 
 # Runner System Map
 
-Generated: 2026-07-04
+Generated: 2026-07-05
 
 ## Why This Exists
 
@@ -25,6 +25,13 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - sharedIntelHandler: `packages/server-core/src/handlers/rpc/shared-intel.ts`
 - sharedIntelRouter: `packages/shared/src/shared-intel/router.ts`
 - sharedIntelTypes: `packages/shared/src/shared-intel/types.ts`
+- outputTypes: `packages/shared/src/outputs/types.ts`
+- outputService: `packages/server-core/src/outputs/OutputService.ts`
+- outputRpc: `packages/server-core/src/handlers/rpc/outputs.ts`
+- outputIndex: `packages/shared/src/outputs/output-index.ts`
+- outputToolHandler: `packages/session-tools-core/src/handlers/outputs.ts`
+- artistHqHome: `apps/electron/src/renderer/components/app-shell/ArtistHQHome.tsx`
+- campaignHome: `apps/electron/src/renderer/components/app-shell/ArtistCommandCenterHome.tsx`
 - sessionTools: `packages/session-tools-core/src/tool-defs.ts`
 - bundledSkills: `packages/shared/src/skills/bundled.generated.ts`
 - builtinSources: `packages/shared/src/sources/builtin-sources.ts`
@@ -37,23 +44,21 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Campaign default workers: `world-builder`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
+- Work Products / output-index: wired
 - Domains: Command 2, Content Creation 4, Creative 4, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
 - Permission modes: ask 25, safe 7
-- Known skills: 102 (48 bundled, 6 system, 100 user-global on this machine)
+- Known skills: 102 (54 bundled, 6 system, 102 user-global on this machine)
 - Known builtin sources: 19
 
 ## Reference Health
 
 - Missing skills: none
-- Machine-local-only skills: `artist-belief-system`, `artist-brand-dna-audit`, `artist-brand-expression-strategist`, `artist-campaign-angle-builder`, `artist-comms-strategist`, `artist-narrative-universe`, `artist-visual-world-director`, `raw-video-editor`
+- Machine-local-only skills: `artist-comms-strategist`, `raw-video-editor`
 - Missing sources: none
 - raw-video-editor: missing skills none; machine-local-only skills `raw-video-editor`; missing sources none
-- art-director: missing skills none; machine-local-only skills `artist-visual-world-director`; missing sources none
 - record-doctor: missing skills none; machine-local-only skills `artist-comms-strategist`; missing sources none
-- world-builder: missing skills none; machine-local-only skills `artist-narrative-universe`, `artist-campaign-angle-builder`; missing sources none
 - comms-agent: missing skills none; machine-local-only skills `artist-comms-strategist`; missing sources none
 - outreach-agent: missing skills none; machine-local-only skills `artist-comms-strategist`; missing sources none
-- branding-agent: missing skills none; machine-local-only skills `artist-brand-dna-audit`, `artist-narrative-universe`, `artist-belief-system`, `artist-campaign-angle-builder`, `artist-visual-world-director`, `artist-brand-expression-strategist`; missing sources none
 
 ## Runtime Rules Agents Should Not Miss
 
@@ -64,6 +69,8 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
 - Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.
+- Work Products are Outputs with tiny context/approval metadata; HQ and campaign widgets read Outputs directly while agents read the compact generated output-index context doc.
+- Approval is an Output state, not a separate inbox/database. Pending approvals route through Work Products widgets and can influence HQ State of Play.
 - message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.
 - trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.
 
@@ -75,6 +82,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Agent launch: `loadActiveContextDocsForAgent` filters docs for the launched agent; Concierge/HNIC keeps the broad context override.
 - Prompt delivery: `composeAgentSystemPrompt` and workflow prompt composition inject matching notes into a dedicated `Shared Intel for this worker:` section and remove them from generic workspace context to avoid duplicate/bloat.
 - Practical result: agents know to check it because the runtime places the relevant notes in their system prompt at launch. Individual saved agent prompts do not need to be edited.
+
+## Work Products / Output Awareness
+
+- Durable deliverables live as Outputs under `outputs/<output-id>/output.json` with optional `context` and `approval` fields.
+- `create_output` accepts `context.scope`, `context.campaignId`, and `approval.state` so agents can file HQ/campaign Work Products without a separate approval database.
+- HQ and campaign homes read Outputs directly through `useOutputs`, split them into `Needs Approval` and `Recent Work`, and open an in-place drawer for approval or inspection.
+- Approval changes use `outputs:updateApproval`, rewrite the manifest, emit `outputs:updated`, and refresh the compact `context/output-index` doc.
+- HNIC/agents should use `output-index` for awareness, not a dump of every Output manifest.
 
 ## Starter Workflows
 

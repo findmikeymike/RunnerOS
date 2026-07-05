@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-04",
+  "generatedAt": "2026-07-05",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -11,6 +11,13 @@
     "sharedIntelHandler": "packages/server-core/src/handlers/rpc/shared-intel.ts",
     "sharedIntelRouter": "packages/shared/src/shared-intel/router.ts",
     "sharedIntelTypes": "packages/shared/src/shared-intel/types.ts",
+    "outputTypes": "packages/shared/src/outputs/types.ts",
+    "outputService": "packages/server-core/src/outputs/OutputService.ts",
+    "outputRpc": "packages/server-core/src/handlers/rpc/outputs.ts",
+    "outputIndex": "packages/shared/src/outputs/output-index.ts",
+    "outputToolHandler": "packages/session-tools-core/src/handlers/outputs.ts",
+    "artistHqHome": "apps/electron/src/renderer/components/app-shell/ArtistHQHome.tsx",
+    "campaignHome": "apps/electron/src/renderer/components/app-shell/ArtistCommandCenterHome.tsx",
     "sessionTools": "packages/session-tools-core/src/tool-defs.ts",
     "bundledSkills": "packages/shared/src/skills/bundled.generated.ts",
     "builtinSources": "packages/shared/src/sources/builtin-sources.ts",
@@ -39,23 +46,18 @@
       "world-builder"
     ],
     "workflowCount": 2,
-    "sharedIntelPromptWired": true
+    "sharedIntelPromptWired": true,
+    "workProductsWired": true
   },
   "referenceHealth": {
     "knownSkillCount": 102,
-    "bundledSkillCount": 48,
+    "bundledSkillCount": 54,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 100,
+    "userGlobalSkillCount": 102,
     "knownSourceCount": 19,
     "missingSkills": [],
     "machineLocalOnlySkills": [
-      "artist-belief-system",
-      "artist-brand-dna-audit",
-      "artist-brand-expression-strategist",
-      "artist-campaign-angle-builder",
       "artist-comms-strategist",
-      "artist-narrative-universe",
-      "artist-visual-world-director",
       "raw-video-editor"
     ],
     "missingSources": [],
@@ -69,27 +71,10 @@
         "missingSources": []
       },
       {
-        "slug": "art-director",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "artist-visual-world-director"
-        ],
-        "missingSources": []
-      },
-      {
         "slug": "record-doctor",
         "missingSkills": [],
         "machineLocalOnlySkills": [
           "artist-comms-strategist"
-        ],
-        "missingSources": []
-      },
-      {
-        "slug": "world-builder",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "artist-narrative-universe",
-          "artist-campaign-angle-builder"
         ],
         "missingSources": []
       },
@@ -106,19 +91,6 @@
         "missingSkills": [],
         "machineLocalOnlySkills": [
           "artist-comms-strategist"
-        ],
-        "missingSources": []
-      },
-      {
-        "slug": "branding-agent",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "artist-brand-dna-audit",
-          "artist-narrative-universe",
-          "artist-belief-system",
-          "artist-campaign-angle-builder",
-          "artist-visual-world-director",
-          "artist-brand-expression-strategist"
         ],
         "missingSources": []
       }
@@ -189,6 +161,8 @@
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
     "Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.",
+    "Work Products are Outputs with tiny context/approval metadata; HQ and campaign widgets read Outputs directly while agents read the compact generated output-index context doc.",
+    "Approval is an Output state, not a separate inbox/database. Pending approvals route through Work Products widgets and can influence HQ State of Play.",
     "message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.",
     "trustedWorkerTools are for bounded internal work only, not sends/posts/publishing."
   ],

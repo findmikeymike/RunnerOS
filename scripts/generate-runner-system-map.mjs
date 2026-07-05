@@ -15,6 +15,13 @@ const SESSION_MANAGER_FILE = join(ROOT, 'packages/server-core/src/sessions/Sessi
 const SHARED_INTEL_HANDLER_FILE = join(ROOT, 'packages/server-core/src/handlers/rpc/shared-intel.ts');
 const SHARED_INTEL_ROUTER_FILE = join(ROOT, 'packages/shared/src/shared-intel/router.ts');
 const SHARED_INTEL_TYPES_FILE = join(ROOT, 'packages/shared/src/shared-intel/types.ts');
+const OUTPUT_TYPES_FILE = join(ROOT, 'packages/shared/src/outputs/types.ts');
+const OUTPUT_SERVICE_FILE = join(ROOT, 'packages/server-core/src/outputs/OutputService.ts');
+const OUTPUT_RPC_FILE = join(ROOT, 'packages/server-core/src/handlers/rpc/outputs.ts');
+const OUTPUT_INDEX_FILE = join(ROOT, 'packages/shared/src/outputs/output-index.ts');
+const OUTPUT_TOOL_HANDLER_FILE = join(ROOT, 'packages/session-tools-core/src/handlers/outputs.ts');
+const ARTIST_HQ_HOME_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/ArtistHQHome.tsx');
+const CAMPAIGN_HOME_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/ArtistCommandCenterHome.tsx');
 const TOOL_DEFS_FILE = join(ROOT, 'packages/session-tools-core/src/tool-defs.ts');
 const BUNDLED_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/bundled.generated.ts');
 const BUILTIN_SOURCES_FILE = join(ROOT, 'packages/shared/src/sources/builtin-sources.ts');
@@ -357,6 +364,13 @@ function main() {
       sharedIntelHandler: rel(SHARED_INTEL_HANDLER_FILE),
       sharedIntelRouter: rel(SHARED_INTEL_ROUTER_FILE),
       sharedIntelTypes: rel(SHARED_INTEL_TYPES_FILE),
+      outputTypes: rel(OUTPUT_TYPES_FILE),
+      outputService: rel(OUTPUT_SERVICE_FILE),
+      outputRpc: rel(OUTPUT_RPC_FILE),
+      outputIndex: rel(OUTPUT_INDEX_FILE),
+      outputToolHandler: rel(OUTPUT_TOOL_HANDLER_FILE),
+      artistHqHome: rel(ARTIST_HQ_HOME_FILE),
+      campaignHome: rel(CAMPAIGN_HOME_FILE),
       sessionTools: rel(TOOL_DEFS_FILE),
       bundledSkills: rel(BUNDLED_SKILLS_FILE),
       builtinSources: rel(BUILTIN_SOURCES_FILE),
@@ -371,6 +385,11 @@ function main() {
       workflowCount: Array.isArray(starterWorkflows) ? starterWorkflows.length : 0,
       sharedIntelPromptWired: text(COMPOSE_AGENT_PROMPT_FILE).includes('buildSharedIntelPromptSection')
         && text(SESSION_MANAGER_FILE).includes('buildSharedIntelPromptSection'),
+      workProductsWired: text(OUTPUT_TYPES_FILE).includes('OutputApproval')
+        && text(OUTPUT_SERVICE_FILE).includes('updateApproval')
+        && text(OUTPUT_INDEX_FILE).includes('buildOutputIndexBody')
+        && text(ARTIST_HQ_HOME_FILE).includes('WorkProductsWidget')
+        && text(CAMPAIGN_HOME_FILE).includes('CampaignWorkProductsCard'),
     },
     referenceHealth: referenceHealth(agents, skillScopes, knownSources),
     workflows: Array.isArray(starterWorkflows) ? workflowHealth(starterWorkflows, agents) : [],
@@ -382,6 +401,8 @@ function main() {
       'Concierge receives broad workspace context and an active-agent capability catalog for routing.',
       'Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.',
       'Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.',
+      'Work Products are Outputs with tiny context/approval metadata; HQ and campaign widgets read Outputs directly while agents read the compact generated output-index context doc.',
+      'Approval is an Output state, not a separate inbox/database. Pending approvals route through Work Products widgets and can influence HQ State of Play.',
       'message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.',
       'trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.',
     ],
@@ -431,6 +452,7 @@ function renderMarkdown(map) {
   lines.push(`- Campaign default workers: ${formatList(map.summary.campaignDefaultWorkerSlugs)}`);
   lines.push(`- Starter workflows mapped: ${map.summary.workflowCount}`);
   lines.push(`- Shared Intel prompt injection: ${map.summary.sharedIntelPromptWired ? 'wired' : 'not detected'}`);
+  lines.push(`- Work Products / output-index: ${map.summary.workProductsWired ? 'wired' : 'not detected'}`);
   lines.push(`- Domains: ${Object.entries(map.summary.domains).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`- Permission modes: ${Object.entries(map.summary.permissionModes).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`- Known skills: ${map.referenceHealth.knownSkillCount} (${map.referenceHealth.bundledSkillCount} bundled, ${map.referenceHealth.systemSkillCount} system, ${map.referenceHealth.userGlobalSkillCount} user-global on this machine)`);
@@ -465,6 +487,14 @@ function renderMarkdown(map) {
   lines.push('- Agent launch: `loadActiveContextDocsForAgent` filters docs for the launched agent; Concierge/HNIC keeps the broad context override.');
   lines.push('- Prompt delivery: `composeAgentSystemPrompt` and workflow prompt composition inject matching notes into a dedicated `Shared Intel for this worker:` section and remove them from generic workspace context to avoid duplicate/bloat.');
   lines.push('- Practical result: agents know to check it because the runtime places the relevant notes in their system prompt at launch. Individual saved agent prompts do not need to be edited.');
+  lines.push('');
+  lines.push('## Work Products / Output Awareness');
+  lines.push('');
+  lines.push('- Durable deliverables live as Outputs under `outputs/<output-id>/output.json` with optional `context` and `approval` fields.');
+  lines.push('- `create_output` accepts `context.scope`, `context.campaignId`, and `approval.state` so agents can file HQ/campaign Work Products without a separate approval database.');
+  lines.push('- HQ and campaign homes read Outputs directly through `useOutputs`, split them into `Needs Approval` and `Recent Work`, and open an in-place drawer for approval or inspection.');
+  lines.push('- Approval changes use `outputs:updateApproval`, rewrite the manifest, emit `outputs:updated`, and refresh the compact `context/output-index` doc.');
+  lines.push('- HNIC/agents should use `output-index` for awareness, not a dump of every Output manifest.');
   lines.push('');
   lines.push('## Starter Workflows');
   lines.push('');
@@ -527,6 +557,12 @@ function renderMermaid(map) {
   lines.push('  SharedIntelRouter --> Context');
   lines.push('  Context --> SharedIntelPrompt["Shared Intel Prompt Section"]');
   lines.push('  SharedIntelPrompt --> Session');
+  lines.push('  CreateOutput["create_output"] --> Outputs["Output Manifests"]');
+  lines.push('  Outputs --> WorkProducts["HQ/Campaign Work Products Widgets"]');
+  lines.push('  Outputs --> OutputIndex["context/output-index"]');
+  lines.push('  OutputIndex --> Context');
+  lines.push('  WorkProducts --> ApprovalRpc["outputs:updateApproval"]');
+  lines.push('  ApprovalRpc --> Outputs');
   lines.push('  Session --> Sources["Enabled Sources"]');
   lines.push('  Session --> Skills["Agent Skills"]');
   for (const agent of map.agents) {
