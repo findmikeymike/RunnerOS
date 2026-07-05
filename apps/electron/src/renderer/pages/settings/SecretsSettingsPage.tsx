@@ -644,7 +644,7 @@ const SERVICES: SecretService[] = [
     id: 'zero',
     group: 'Miscellaneous',
     title: 'Zero CLI',
-    description: 'Zero lets you call external services that aren\'t natively supported. It requires a valid wallet setup.',
+    description: 'Zero lets agents call paid external services. Set up the CLI, import a wallet, then fund it.',
     presetNames: ['ZERO_PRIVATE_KEY'],
     optionalPresetNames: ['ZERO_PRIVATE_KEY'],
   },
@@ -1002,7 +1002,7 @@ export default function SecretsSettingsPage() {
                                 className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
                               >
                                 {zeroAction === 'init' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WalletCards className="h-3.5 w-3.5" />}
-                                Initialize
+                                Setup CLI
                               </button>
                               <button
                                 type="button"
@@ -1030,7 +1030,7 @@ export default function SecretsSettingsPage() {
                                   onClick={() => setZeroImportOpen((open) => !open)}
                                   className="flex w-full items-center justify-between gap-3 text-left"
                                 >
-                                  <span className="text-xs font-medium text-white/70">Import existing wallet</span>
+                                  <span className="text-xs font-medium text-white/70">Import wallet private key</span>
                                   <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-white/26">
                                     {savedByName.has(zeroPrivateKeyPreset.name) ? 'Saved' : 'Optional'}
                                   </span>
