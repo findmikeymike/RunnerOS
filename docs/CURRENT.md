@@ -11,7 +11,7 @@ source_of_truth: true
 
 - Date: 2026-07-05
 - Branch: `codex/creator-command-center`
-- Current goal: harden Shared Intel routing and Artist HQ proactive routing toward release confidence.
+- Current goal: harden Setup Concierge, service-key setup, Settings, and release smoke paths toward release confidence.
 - Overall state: active Creator Command Center worktree with many feature docs; docs are now routed through this map instead of loose root files.
 
 ## Recently Completed
@@ -38,6 +38,12 @@ source_of_truth: true
 - Refreshed the startup migration test fixture to use a current bundled Pi/OpenRouter model ID after the old Grok fixture aged out of the catalog.
 - Updated HyperMotion's Remotion dependency and transitive lockfile so the production audit is clean.
 - Corrected the local smoke profile plan: real keys are entered through the app UI and persist in local RunnerOS credential storage; `smoke/local/` only holds ignored artist/campaign/service smoke context.
+- Added Setup Concierge as the app/setup specialist worker. HNIC routes app guidance, connection setup, service-key, and "how do I use this?" questions to `@setup-concierge`.
+- Gave Setup Concierge the app-guide/source-setup skill bundle: `artist-os-guide` plus `source-recipe`.
+- Added `save_secret` so approved setup sessions can save encrypted app/source credentials through RunnerOS instead of telling users to copy values into files.
+- Hardened `save_secret`: only HNIC and Setup Concierge can save RunnerOS secrets; ordinary workers and manual sessions are blocked from directly writing credentials.
+- Hardened global-source credential saves from agent setup so app/global keys refresh every workspace using that global source, matching the Settings credential path.
+- Updated Setup Concierge guidance to default to app-level/global credentials so the same keys work across the whole app unless a user explicitly wants a workspace override.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
 
@@ -47,14 +53,15 @@ source_of_truth: true
 
 ## Next Actions
 
-1. Keep new specs in the right feature folder or `docs/specs/`.
-2. Regenerate `docs/system-map/` after changing starter agents, worker visibility, workflow templates, or launch routing.
-3. Archive stale docs only when a newer source of truth is clear.
+1. Continue release hardening from Settings/Connections and real-key smoke paths.
+2. Keep the user guide current as features stabilize; do the final user-guide polish near release.
+3. Regenerate `docs/system-map/` after changing starter agents, worker visibility, workflow templates, or launch routing.
 4. Re-run focused tests when code, not docs, changes.
 
 ## Blockers / External Dependencies
 
 - No current auth blocker for the basic live chat path. Remaining external-service smokes still need connected provider accounts/keys.
+- External-service smokes need real keys/accounts entered through the app. Do not hardcode user credentials into tracked app data.
 
 ## Verification State
 
@@ -91,6 +98,10 @@ source_of_truth: true
   - `bun run electron:build` passed: skills generated, main/preload/renderer/resources/assets built.
   - `(cd tools/hypermotion && npm audit --omit=dev)` -> `found 0 vulnerabilities`.
   - `bun run smoke:profile:check` verifies local smoke context/checklist files without touching or printing credentials.
+  - `bun test packages/server-core/src/sessions/memory-policy.test.ts packages/session-tools-core/src/handlers/save-secret.test.ts packages/session-tools-core/src/tool-defs-filtering.test.ts` -> `19 pass`.
+  - `bun test packages/shared/src/agent/backend/claude/session-tool-parity.test.ts packages/shared/src/agent/backend/pi/session-tool-parity.test.ts packages/shared/src/agent-definitions/storage.test.ts apps/electron/src/shared/__tests__/ipc-channels.test.ts` -> `67 pass`.
+  - `bun run typecheck:electron` passed after the Setup Concierge secret-save hardening.
+  - `(cd packages/server-core && bun run tsc --noEmit)` passed after the Setup Concierge secret-save hardening.
 
 ## Remaining Release Smoke
 

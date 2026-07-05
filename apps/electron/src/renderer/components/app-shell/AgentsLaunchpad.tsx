@@ -43,8 +43,11 @@ interface AgentsLaunchpadProps {
 }
 
 export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = false }: AgentsLaunchpadProps) {
+  const defaultVisibleSlugs = includeCampaignDefaultWorkers
+    ? [...BASE_DEFAULT_WORKER_SLUGS, ...CAMPAIGN_DEFAULT_WORKER_SLUGS]
+    : BASE_DEFAULT_WORKER_SLUGS
   const { activeAgents, allAgents, loading } = useAgents(workspaceId, {
-    defaultVisibleSlugs: includeCampaignDefaultWorkers ? CAMPAIGN_DEFAULT_WORKER_SLUGS : [],
+    defaultVisibleSlugs,
   })
   const { getDisplayName } = useAgentDisplayNames()
   const skills = useAtomValue(skillsAtom)
@@ -1286,7 +1289,11 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Outreach'
   }
 
-  if (slug === 'persona-agent' || slug === 'content-genius' || slug === 'record-doctor' || slug === 'art-director' || slug === 'world-builder') {
+  if (slug === 'branding-agent' || slug === 'world-builder') {
+    return 'Brand & Story'
+  }
+
+  if (slug === 'persona-agent' || slug === 'content-genius' || slug === 'record-doctor' || slug === 'art-director') {
     return 'Creative'
   }
 
@@ -1318,12 +1325,13 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
 
 function agentDomainRank(domain: string) {
   const order = [
+    'Creative',
+    'Brand & Story',
     'Content Creation',
     'Socials',
     'Promotion',
     'Outreach',
     'Merch',
-    'Creative',
     'Research',
     'Command',
     'Operators',
@@ -1347,15 +1355,21 @@ const HIDDEN_WORKER_HOME_AGENT_SLUGS = new Set([
   'lottie-animation-agent',
   'open-slide-agent',
   'researcher',
-  'ig-trending-power-up',
-  'influencer-campaign-power-up',
-  'playlisting-power-up',
   'spotify-playlist-creator',
 ])
 
-const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
+const BASE_DEFAULT_WORKER_SLUGS = [
+  'branding-agent',
   'world-builder',
+] as const
+
+const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
   'content-genius',
+  'art-director',
+  'ig-trending-power-up',
+  'influencer-campaign-power-up',
+  'playlisting-power-up',
+  'record-doctor',
 ] as const
 
 function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {

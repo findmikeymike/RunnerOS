@@ -9,7 +9,9 @@ source_of_truth: false
 
 Some workers need outside accounts or API keys. You do not need all of these on day one. Add only what you plan to use.
 
-Never paste secrets into normal chat or workspace notes. Put them in Settings/Secrets when the app provides a field for them.
+Never paste secrets into normal chat or workspace notes. Use Settings/Connections or Setup Concierge when the app provides a save path.
+
+Setup Concierge can save approved keys into RunnerOS encrypted credential storage. For most users, keys should be app/global credentials so the same services work across HQ and every campaign workspace. Use workspace-specific overrides only when one workspace must use a different account or key.
 
 ## LLM Providers
 
@@ -88,12 +90,13 @@ Commerce actions should create drafts/approval packets before changing a live st
 Do:
 - use restricted keys when possible
 - name keys by app/workspace
+- save keys through Settings/Connections or Setup Concierge
 - rotate keys if exposed
 - delete keys you no longer use
 - keep billing limits/alerts on
 
 Do not:
-- paste keys into chat
+- paste keys into ordinary chat or docs
 - store secrets in campaign notes
 - commit keys into files
 - share keys between unrelated clients/accounts

@@ -73,7 +73,7 @@ import {
   type SessionLaunchReceipt,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
-import { loadAllSources, loadGlobalSource, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
+import { loadAllSources, loadGlobalSource, getSourcesBySlugs, readGlobalSourcesManifest, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
@@ -145,7 +145,7 @@ import { AutomationSystem, createPromptHistoryEntry, appendAutomationHistoryEntr
 import type { PulseAction } from '@craft-agent/shared/pulses'
 import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { filterAttachmentsForModelInput } from './runtime-config'
 
 function isConversationContextMessage(message: Message): boolean {
@@ -212,6 +212,7 @@ type WorkflowMemoryInputs = {
 type SpawnedAgentRef = { agentSlug: string; agentName?: string; timestamp?: number }
 
 const DIRECT_USER_MEMORY_AGENT_SLUGS = new Set([CONCIERGE_SLUG, ORCHESTRATOR_SLUG])
+const SECRET_WRITE_AGENT_SLUGS = new Set([CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG])
 
 export function canDirectlyMutateUserMemory(spawnedFromAgent?: SpawnedAgentRef): boolean {
   if (!spawnedFromAgent) return true
@@ -221,6 +222,15 @@ export function canDirectlyMutateUserMemory(spawnedFromAgent?: SpawnedAgentRef):
 export function directUserMemoryPolicyError(spawnedFromAgent?: SpawnedAgentRef): string {
   const actor = spawnedFromAgent?.agentSlug ? `Agent "${spawnedFromAgent.agentSlug}"` : 'This session'
   return `${actor} cannot directly write USER.md. Save agent-scoped memory instead, or let the memory review queue propose the user-level change for approval.`
+}
+
+export function canSaveRunnerSecrets(spawnedFromAgent?: SpawnedAgentRef): boolean {
+  return Boolean(spawnedFromAgent?.agentSlug && SECRET_WRITE_AGENT_SLUGS.has(spawnedFromAgent.agentSlug))
+}
+
+export function runnerSecretPolicyError(spawnedFromAgent?: SpawnedAgentRef): string {
+  const actor = spawnedFromAgent?.agentSlug ? `Agent "${spawnedFromAgent.agentSlug}"` : 'This session'
+  return `${actor} cannot save RunnerOS secrets directly. Route credential setup through HNIC or Setup Concierge.`
 }
 
 function isPrerequisiteRetryResult(result: string): boolean {
@@ -2190,6 +2200,28 @@ export class SessionManager implements ISessionManager {
     this.eventSink(RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
   }
 
+  private broadcastSourcesChangedGlobal(workspaceId: string | null = null): void {
+    if (!this.eventSink) return
+    this.eventSink(RPC_CHANNELS.sources.CHANGED_GLOBAL, { to: 'all' }, workspaceId)
+  }
+
+  private async reloadAndBroadcastGlobalCredentialChange(sourceSlug: string, originWorkspace: Workspace): Promise<void> {
+    this.broadcastSourcesChangedGlobal(null)
+
+    for (const workspace of getWorkspaces()) {
+      const activatedSlugs = readGlobalSourcesManifest(workspace.rootPath).activatedSlugs
+      if (!activatedSlugs.includes(sourceSlug)) continue
+
+      await this.reloadSourcesForWorkspace(workspace.rootPath)
+      this.broadcastSourcesChanged(workspace.id, loadAllSources(workspace.rootPath))
+    }
+
+    const originActivatedSlugs = readGlobalSourcesManifest(originWorkspace.rootPath).activatedSlugs
+    if (!originActivatedSlugs.includes(sourceSlug)) {
+      this.broadcastSourcesChanged(originWorkspace.id, loadAllSources(originWorkspace.rootPath))
+    }
+  }
+
   private broadcastSecretsChanged(): void {
     if (!this.eventSink) return
     this.eventSink(RPC_CHANNELS.secrets.CHANGED, { to: 'all' })
@@ -2555,6 +2587,107 @@ export class SessionManager implements ISessionManager {
             }
           } else if (missingBrandingSkills.length > 0) {
             sessionLog.warn(`[agent-definitions] Branding Agent skill bundle incomplete: ${missingBrandingSkills.join(', ')}`)
+          }
+          const setupConciergeAgent = STARTER_AGENTS.find(agent => agent.slug === SETUP_CONCIERGE_SLUG)
+          const setupConciergeSkillSlugs = setupConciergeAgent?.metadata.skills ?? []
+          const missingSetupConciergeSkills = setupConciergeSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
+          if (setupConciergeAgent && missingSetupConciergeSkills.length === 0) {
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+            let updatedWorkspaces = 0
+            for (const ws of getWorkspaces()) {
+              if (ws.remoteServer) continue
+              let workspaceUpdated = false
+              if (!readActivatedAgents(ws.rootPath).active.includes(SETUP_CONCIERGE_SLUG)) {
+                setAgentActive(ws.rootPath, SETUP_CONCIERGE_SLUG, true)
+                workspaceUpdated = true
+              }
+              const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
+              for (const slug of setupConciergeSkillSlugs) {
+                if (!enabledSkills.has(slug)) {
+                  setGlobalSkillEnabled(ws.rootPath, slug, true)
+                  workspaceUpdated = true
+                }
+              }
+              if (workspaceUpdated) {
+                updatedWorkspaces += 1
+              }
+            }
+            if (updatedWorkspaces > 0) {
+              sessionLog.info(`[agent-definitions] Activated Setup Concierge skill bundle in ${updatedWorkspaces} workspace(s)`)
+            }
+          } else if (missingSetupConciergeSkills.length > 0) {
+            sessionLog.warn(`[agent-definitions] Setup Concierge skill bundle incomplete: ${missingSetupConciergeSkills.join(', ')}`)
+          }
+          const artDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'art-director')
+          const artDirectorSkillSlugs = artDirectorAgent?.metadata.skills ?? []
+          const missingArtDirectorSkills = artDirectorSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
+          if (artDirectorAgent && missingArtDirectorSkills.length === 0) {
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+            let updatedWorkspaces = 0
+            for (const ws of getWorkspaces()) {
+              if (ws.remoteServer) continue
+              let workspaceUpdated = false
+              if (!readActivatedAgents(ws.rootPath).active.includes('art-director')) {
+                setAgentActive(ws.rootPath, 'art-director', true)
+                workspaceUpdated = true
+              }
+              const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
+              for (const slug of artDirectorSkillSlugs) {
+                if (!enabledSkills.has(slug)) {
+                  setGlobalSkillEnabled(ws.rootPath, slug, true)
+                  workspaceUpdated = true
+                }
+              }
+              if (workspaceUpdated) {
+                updatedWorkspaces += 1
+              }
+            }
+            if (updatedWorkspaces > 0) {
+              sessionLog.info(`[agent-definitions] Activated Art Director skill bundle in ${updatedWorkspaces} workspace(s)`)
+            }
+          } else if (missingArtDirectorSkills.length > 0) {
+            sessionLog.warn(`[agent-definitions] Art Director skill bundle incomplete: ${missingArtDirectorSkills.join(', ')}`)
+          }
+          const defaultPowerUpAgentSlugs = [
+            'ig-trending-power-up',
+            'influencer-campaign-power-up',
+            'playlisting-power-up',
+            'record-doctor',
+          ]
+          for (const agentSlug of defaultPowerUpAgentSlugs) {
+            const agent = STARTER_AGENTS.find(candidate => candidate.slug === agentSlug)
+            const skillSlugs = agent?.metadata.skills ?? []
+            const missingSkills = skillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
+            if (agent && missingSkills.length === 0) {
+              const { getWorkspaces } = await import('@craft-agent/shared/config')
+              const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
+              let updatedWorkspaces = 0
+              for (const ws of getWorkspaces()) {
+                if (ws.remoteServer) continue
+                let workspaceUpdated = false
+                if (!readActivatedAgents(ws.rootPath).active.includes(agentSlug)) {
+                  setAgentActive(ws.rootPath, agentSlug, true)
+                  workspaceUpdated = true
+                }
+                const enabledSkills = new Set(listEnabledGlobalSkillSlugs(ws.rootPath))
+                for (const slug of skillSlugs) {
+                  if (!enabledSkills.has(slug)) {
+                    setGlobalSkillEnabled(ws.rootPath, slug, true)
+                    workspaceUpdated = true
+                  }
+                }
+                if (workspaceUpdated) {
+                  updatedWorkspaces += 1
+                }
+              }
+              if (updatedWorkspaces > 0) {
+                sessionLog.info(`[agent-definitions] Activated ${agent.metadata.name} skill bundle in ${updatedWorkspaces} workspace(s)`)
+              }
+            } else if (missingSkills.length > 0) {
+              sessionLog.warn(`[agent-definitions] ${agent?.metadata.name ?? agentSlug} skill bundle incomplete: ${missingSkills.join(', ')}`)
+            }
           }
           const contentGeniusAgent = STARTER_AGENTS.find(agent => agent.slug === 'content-genius')
           const contentGeniusSkillSlugs = contentGeniusAgent?.metadata.skills ?? []
@@ -5015,6 +5148,10 @@ user a clickable link to where the thing now lives.`
           return outputService.getVisualSurfaceState(managed.workspace.id, managed.id)
         },
         saveSecretFn: async (input) => {
+          if (!canSaveRunnerSecrets(managed.spawnedFromAgent)) {
+            return { ok: false, target: input.target, name: input.name, sourceSlug: input.sourceSlug, error: runnerSecretPolicyError(managed.spawnedFromAgent) }
+          }
+
           if (input.target === 'env') {
             const normalized = normalizeUserSecretName(input.name ?? '')
             if (!isValidUserSecretName(normalized)) {
@@ -5066,8 +5203,12 @@ user a clickable link to where the thing now lives.`
             sessionLog.warn(`save_secret: credential cache sync failed for ${sourceSlug}:`, error as Error)
           }
 
-          await this.reloadSourcesForWorkspace(managed.workspace.rootPath)
-          this.broadcastSourcesChanged(managed.workspace.id, loadAllSources(managed.workspace.rootPath))
+          if (input.target === 'global-source') {
+            await this.reloadAndBroadcastGlobalCredentialChange(sourceSlug, managed.workspace)
+          } else {
+            await this.reloadSourcesForWorkspace(managed.workspace.rootPath)
+            this.broadcastSourcesChanged(managed.workspace.id, loadAllSources(managed.workspace.rootPath))
+          }
           this.broadcastSecretsChanged()
           return { ok: true, target: input.target, sourceSlug }
         },

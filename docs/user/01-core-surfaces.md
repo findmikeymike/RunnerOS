@@ -48,6 +48,21 @@ Use HNIC when:
 
 HNIC is not just chat. It can route to workers, suggest workflows, and help set up reusable systems.
 
+For setup, keys, connections, and "how do I use this?" questions, HNIC should hand you to **Setup Concierge**.
+
+## Setup Concierge
+
+Setup Concierge is the app/setup helper.
+
+Use it when:
+- connecting services
+- adding API keys
+- setting up Google, YouTube, Zero, commerce, media, or messaging tools
+- understanding what a page/button/workflow does
+- testing whether a connection works
+
+Setup Concierge can save approved credentials into RunnerOS encrypted credential storage. It should not ask for account passwords, 2FA codes, recovery codes, cookies, or raw browser sessions.
+
 ## Workers / Agents
 
 Workers are saved specialists. Each worker has a job, a prompt, optional skills, optional sources/tools, and a permission mode.

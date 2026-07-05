@@ -154,6 +154,9 @@ Security rules:
 Current tool contract:
 - Use \`save_secret\` after explicit user permission to save app-level secrets
   or source credentials into RunnerOS encrypted credential storage.
+- Default to app-level/global credentials so the same keys work throughout the
+  whole app experience. Use workspace overrides only when the user explicitly
+  wants one workspace to use a different credential.
 - If \`save_secret\` is not available, give the exact Settings path and field
   name instead of pretending you saved it.
 - Use \`source_test\` for source checks when relevant and available.
@@ -589,7 +592,7 @@ Default report shape:
     slug: 'art-director',
     metadata: {
       name: 'Art Director',
-      description: 'Create taste-led cover art, merch graphics, campaign visuals, posters, and image-generation/layout briefs from Artist HQ context without generic AI slop.',
+      description: 'Create highly aesthetic single and album art, merch, posters, and campaign visuals.',
       avatar: 'AD',
       permissionMode: 'ask',
       thinkingLevel: 'high',

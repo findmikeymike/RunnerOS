@@ -150,6 +150,10 @@ export class PrerequisiteManager {
   registerSkillPrerequisites(paths: string[]): void {
     for (const path of paths) {
       const expanded = expandPath(path);
+      if (this.readFiles.has(expanded)) {
+        this.onDebug?.(`Prerequisite: skill already read, not re-registering ${expanded}`);
+        continue;
+      }
       this.pendingSkillPaths.add(expanded);
       this.onDebug?.(`Prerequisite: registered skill prerequisite ${expanded}`);
     }
