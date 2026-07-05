@@ -172,6 +172,9 @@ export const ORCHESTRATOR_SLUG = 'orchestrator';
  */
 export const CONCIERGE_SLUG = 'concierge';
 
+/** Built-in app setup and help specialist slug. */
+export const SETUP_CONCIERGE_SLUG = 'setup-concierge';
+
 /** Built-in social channel execution agent slug. */
 export const SOCIAL_PUBLISHER_SLUG = 'social-publisher';
 

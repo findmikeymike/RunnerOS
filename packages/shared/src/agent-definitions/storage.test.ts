@@ -501,14 +501,25 @@ body
     expect(hnic?.metadata.name).toBe('HNIC')
     expect(hnic?.metadata.tags).toContain('routing')
     expect(hnic?.metadata.tags).toContain('workflows')
-    expect(hnic?.metadata.skills).toContain('artist-os-guide')
     expect(hnic?.metadata.skills).toContain('workflow-creator')
     expect(hnic?.metadata.skills).toContain('automation-creator')
     expect(hnic?.systemPrompt).toContain('current active-agent capability catalog')
-    expect(hnic?.systemPrompt).toContain('artist-os-guide')
+    expect(hnic?.systemPrompt).toContain('@setup-concierge')
     expect(hnic?.systemPrompt).toContain('suggest an automation')
     expect(hnic?.systemPrompt).toContain('suggest a workflow')
     expect(hnic?.systemPrompt).toContain('Handoff target')
+  })
+
+  test('starter library includes Setup Concierge for app setup and help', () => {
+    const setupConcierge = STARTER_AGENTS.find((agent) => agent.slug === 'setup-concierge')
+
+    expect(setupConcierge).toBeDefined()
+    expect(setupConcierge?.metadata.name).toBe('Setup Concierge')
+    expect(setupConcierge?.metadata.skills).toContain('artist-os-guide')
+    expect(setupConcierge?.metadata.skills).toContain('source-recipe')
+    expect(setupConcierge?.metadata.tags).toContain('setup')
+    expect(setupConcierge?.systemPrompt).toContain('Save credentials')
+    expect(setupConcierge?.systemPrompt).toContain('Never ask for account passwords')
   })
 
   test('every starter agent skill reference resolves to a shipped starter skill', () => {

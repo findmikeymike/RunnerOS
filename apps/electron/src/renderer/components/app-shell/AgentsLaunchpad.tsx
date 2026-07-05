@@ -1278,6 +1278,10 @@ function isContextDocVisibleToAgent(doc: ContextDocDTO, agentSlug: string) {
 }
 
 function getAgentDomain(tags: string[] | undefined, slug: string, name: string, description?: string) {
+  if (slug === 'setup-concierge') {
+    return 'Command'
+  }
+
   if (slug === 'industry-hunter' || slug === 'comms-agent' || slug === 'outreach-agent') {
     return 'Outreach'
   }
@@ -1393,6 +1397,7 @@ function launchpadAgentRank(slug: string): number {
     'persona-agent',
     'youtube-intelligence-agent',
     'youtube-research-agent',
+    'setup-concierge',
   ]
   const index = preferred.indexOf(slug)
   return index === -1 ? preferred.length : index

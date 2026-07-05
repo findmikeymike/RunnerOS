@@ -2439,6 +2439,7 @@ export class SessionManager implements ISessionManager {
           STARTER_AGENTS,
           ORCHESTRATOR_SLUG,
           CONCIERGE_SLUG,
+          SETUP_CONCIERGE_SLUG,
           SOCIAL_PUBLISHER_SLUG,
         } = await import('@craft-agent/shared/agent-definitions')
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
@@ -2447,13 +2448,14 @@ export class SessionManager implements ISessionManager {
         }
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
-        // Chat nav entry), Social Publisher, TryPost, Hypermotion, Lottie Animation,
+        // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Hypermotion, Lottie Animation,
         // Video Editor, Content Genius, promotion helpers, Shopify, Print Agent,
         // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
         // and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
+            || a.slug === SETUP_CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
             || a.slug === 'trypost-agent'
             || a.slug === 'hypermotion-agent'

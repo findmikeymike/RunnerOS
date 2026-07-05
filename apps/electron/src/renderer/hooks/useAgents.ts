@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAtom } from 'jotai'
 import { agentsStateAtomFamily, type AgentsState } from '@/atoms/agents'
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SOCIAL_PUBLISHER_SLUG } from '@craft-agent/shared/agent-definitions/types'
+import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO } from '../../shared/types'
 
 export interface UseAgentsResult {
@@ -49,6 +49,7 @@ const EMPTY_DEFAULT_VISIBLE_SLUGS: readonly string[] = []
 const BUILTIN_VISIBLE_AGENT_SLUGS = [
   CONCIERGE_SLUG,
   ORCHESTRATOR_SLUG,
+  SETUP_CONCIERGE_SLUG,
   SOCIAL_PUBLISHER_SLUG,
   'content-genius',
   'video-director',
