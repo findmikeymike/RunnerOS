@@ -29,7 +29,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     id: 'models',
     label: 'Models',
-    description: 'AI providers and defaults',
+    description: 'AI and providers',
     icon: Sparkles,
     landing: 'ai',
     pages: [{ id: 'ai', label: 'Models' }],
@@ -37,7 +37,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     id: 'connections',
     label: 'Connections',
-    description: 'Google, Resend, Spotify, commerce',
+    description: 'Apps and services',
     icon: KeyRound,
     landing: 'secrets',
     pages: [{ id: 'secrets', label: 'Services' }],
@@ -45,7 +45,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     id: 'messaging',
     label: 'Messaging',
-    description: 'Phone, WhatsApp, Telegram',
+    description: 'Mobile connect',
     icon: MessageCircle,
     landing: 'messaging',
     pages: [{ id: 'messaging', label: 'Phone channels' }],
@@ -53,7 +53,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     id: 'workspace',
     label: 'Workspace',
-    description: 'Folder, modes, permissions',
+    description: 'Info',
     icon: BriefcaseBusiness,
     landing: 'workspace',
     pages: [
@@ -64,7 +64,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     id: 'app',
     label: 'App',
-    description: 'Look, feel, keyboard',
+    description: 'Look',
     icon: AppWindow,
     landing: 'appearance',
     pages: [
@@ -78,7 +78,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
   {
     id: 'advanced',
     label: 'Advanced',
-    description: 'Memory, labels, server',
+    description: 'Memory etc',
     icon: Brain,
     landing: 'memory',
     pages: [
