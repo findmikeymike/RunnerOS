@@ -1611,6 +1611,60 @@ function modelSetEquals(a: string[], b: string[]): boolean {
   return true;
 }
 
+const SINGLETON_PI_OAUTH_CONNECTION_NAMES: Record<string, string> = {
+  'openai-codex': 'GPT/Codex',
+  'github-copilot': 'GitHub Copilot',
+};
+
+function normalizeSingletonPiOAuthConnections(config: StoredConfig): boolean {
+  if (!config.llmConnections) return false;
+
+  let changed = false;
+  const keepByProvider = new Map<string, LlmConnection>();
+  const removedToKeptSlug = new Map<string, string>();
+
+  for (const connection of config.llmConnections) {
+    const provider = connection.piAuthProvider;
+    const singletonName = provider ? SINGLETON_PI_OAUTH_CONNECTION_NAMES[provider] : undefined;
+    const isSingleton = isPiProvider(connection.providerType)
+      && connection.authType === 'oauth'
+      && !!provider
+      && !!singletonName;
+
+    if (!isSingleton) continue;
+
+    if (connection.name !== singletonName) {
+      connection.name = singletonName;
+      changed = true;
+    }
+
+    const existing = keepByProvider.get(provider);
+    if (!existing) {
+      keepByProvider.set(provider, connection);
+      continue;
+    }
+
+    const currentIsDefault = config.defaultLlmConnection === connection.slug;
+    const existingIsDefault = config.defaultLlmConnection === existing.slug;
+    const keep = currentIsDefault && !existingIsDefault ? connection : existing;
+    const remove = keep === connection ? existing : connection;
+
+    keepByProvider.set(provider, keep);
+    removedToKeptSlug.set(remove.slug, keep.slug);
+    changed = true;
+  }
+
+  if (removedToKeptSlug.size > 0) {
+    config.llmConnections = config.llmConnections.filter((connection) => !removedToKeptSlug.has(connection.slug));
+    const keptDefault = config.defaultLlmConnection ? removedToKeptSlug.get(config.defaultLlmConnection) : undefined;
+    if (keptDefault) {
+      config.defaultLlmConnection = keptDefault;
+    }
+  }
+
+  return changed;
+}
+
 export function inferModelSelectionMode(
   connection: Pick<LlmConnection, 'models'>,
   providerDefaultModelIds: string[],
@@ -2206,6 +2260,9 @@ export function migrateLegacyLlmConnectionsConfig(): void {
     if (migrateCodexCopilotToPi(config)) {
       needsSave = true;
     }
+    if (normalizeSingletonPiOAuthConnections(config)) {
+      needsSave = true;
+    }
 
     // Phase 1b: Backfill models/defaultModel on ALL connections (not just compat)
     // This ensures built-in connections (anthropic, openai) always have models populated
@@ -2355,6 +2412,7 @@ export function migrateLegacyLlmConnectionsConfig(): void {
 
   // Run the same backfill and migration on newly created connections
   migrateCodexCopilotToPi(config);
+  normalizeSingletonPiOAuthConnections(config);
   backfillAllConnectionModels(config);
   migrateModelDefaultsToConnections(config);
 

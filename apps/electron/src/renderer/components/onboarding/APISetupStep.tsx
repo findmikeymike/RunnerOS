@@ -215,7 +215,7 @@ export function APISetupStep({
     },
     {
       id: 'pi_chatgpt_oauth',
-      name: 'ChatGPT Plus',
+      name: 'GPT/Codex',
       description: t("onboarding.apiSetup.chatGPTPlusDesc"),
       icon: API_SETUP_ICONS.pi_chatgpt_oauth,
       providerType: 'pi',

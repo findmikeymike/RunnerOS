@@ -116,7 +116,7 @@ export const BUILT_IN_CONNECTION_TEMPLATES: Record<string, {
     authType: 'oauth',
   },
   'chatgpt-plus': {
-    name: 'ChatGPT Plus',
+    name: 'GPT/Codex',
     providerType: 'pi',
     authType: 'oauth',
     piAuthProvider: 'openai-codex',

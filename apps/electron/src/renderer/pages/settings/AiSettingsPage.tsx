@@ -116,7 +116,7 @@ function getConnectionProviderLabel(connection: LlmConnectionWithStatus): string
       return PI_AUTH_PROVIDER_LABELS[connection.piAuthProvider] ?? connection.piAuthProvider
     }
     if (connection.piAuthProvider === 'github-copilot') return 'GitHub Copilot'
-    if (connection.piAuthProvider === 'openai-codex') return 'Codex / ChatGPT'
+    if (connection.piAuthProvider === 'openai-codex') return 'GPT/Codex'
     return 'Runner backend'
   }
   if (provider === 'pi_compat') return 'OpenAI-compatible endpoint'
@@ -198,7 +198,7 @@ function CredentialHealthBanner({ issues, onReauthenticate }: CredentialHealthBa
 const PI_AUTH_PROVIDER_LABELS: Record<string, string> = {
   anthropic: 'Anthropic API',
   openai: 'OpenAI API',
-  'openai-codex': 'OpenAI API',
+  'openai-codex': 'GPT/Codex',
   google: 'Google AI Studio',
   openrouter: 'OpenRouter',
   'azure-openai-responses': 'Azure OpenAI',

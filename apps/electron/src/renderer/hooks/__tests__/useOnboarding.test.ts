@@ -123,14 +123,14 @@ describe('apiSetupMethodToConnectionSetup', () => {
     expect(setup.slug).toBe('existing-connection')
   })
 
-  it('generates unique slug when base is taken', () => {
+  it('reuses singleton OAuth slug when base is taken', () => {
     const setup = apiSetupMethodToConnectionSetup(
       'claude_oauth',
       {},
       null,
       new Set(['claude-max']),
     )
-    expect(setup.slug).toBe('claude-max-2')
+    expect(setup.slug).toBe('claude-max')
   })
 })
 
@@ -139,18 +139,14 @@ describe('apiSetupMethodToConnectionSetup', () => {
 // ============================================================
 
 describe('reauth slug resolution', () => {
-  it('slug override wins over null editingSlug (stale closure scenario)', () => {
-    // Simulates the reauth bug: editingSlug is null (stale closure),
-    // but connectionSlugOverride provides the correct slug.
+  it('reuses the existing singleton slug even when editingSlug is null', () => {
     const existingSlugs = new Set(['chatgpt-plus'])
 
-    // Without override: generates -2 (the bug)
-    const wrongSlug = resolveSlugForMethod('pi_chatgpt_oauth', null, existingSlugs)
-    expect(wrongSlug).toBe('chatgpt-plus-2')
+    const resolvedSlug = resolveSlugForMethod('pi_chatgpt_oauth', null, existingSlugs)
+    expect(resolvedSlug).toBe('chatgpt-plus')
 
-    // With override: reuses existing slug (the fix)
-    const correctSlug = resolveSlugForMethod('pi_chatgpt_oauth', 'chatgpt-plus', existingSlugs)
-    expect(correctSlug).toBe('chatgpt-plus')
+    const overrideSlug = resolveSlugForMethod('pi_chatgpt_oauth', 'chatgpt-plus', existingSlugs)
+    expect(overrideSlug).toBe('chatgpt-plus')
   })
 
   it('apiSetupMethodToConnectionSetup uses override slug for reauth', () => {
@@ -164,12 +160,23 @@ describe('reauth slug resolution', () => {
     expect(setup.slug).toBe('chatgpt-plus')
   })
 
-  it('new connection flow still generates unique slugs when base is taken', () => {
+  it('new ChatGPT OAuth connection reuses the existing singleton slot', () => {
     const existingSlugs = new Set(['chatgpt-plus'])
     const setup = apiSetupMethodToConnectionSetup(
       'pi_chatgpt_oauth',
       {},
       null,  // no editing slug (new connection)
+      existingSlugs,
+    )
+    expect(setup.slug).toBe('chatgpt-plus')
+  })
+
+  it('new ChatGPT OAuth connection reuses a suffixed singleton slot', () => {
+    const existingSlugs = new Set(['chatgpt-plus-2'])
+    const setup = apiSetupMethodToConnectionSetup(
+      'pi_chatgpt_oauth',
+      {},
+      null,
       existingSlugs,
     )
     expect(setup.slug).toBe('chatgpt-plus-2')

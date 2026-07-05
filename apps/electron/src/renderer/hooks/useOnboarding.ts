@@ -99,6 +99,20 @@ export const BASE_SLUG_FOR_METHOD: Record<ApiSetupMethod, string> = {
   pi_api_key: 'pi-api-key',
 }
 
+const SINGLETON_METHODS = new Set<ApiSetupMethod>([
+  'claude_oauth',
+  'pi_chatgpt_oauth',
+  'pi_copilot_oauth',
+])
+
+function findExistingSingletonSlug(base: string, existingSlugs: Set<string>): string | null {
+  if (existingSlugs.has(base)) return base
+  for (const slug of existingSlugs) {
+    if (new RegExp(`^${base}-\\d+$`).test(slug)) return slug
+  }
+  return null
+}
+
 /**
  * Generate a unique slug for a new connection.
  * If the base slug is taken, appends -2, -3, etc.
@@ -113,6 +127,11 @@ export function resolveSlugForMethod(
   if (editingSlug) return editingSlug
 
   const base = BASE_SLUG_FOR_METHOD[method]
+  const existingSingletonSlug = SINGLETON_METHODS.has(method)
+    ? findExistingSingletonSlug(base, existingSlugs)
+    : null
+  if (existingSingletonSlug) return existingSingletonSlug
+
   if (!existingSlugs.has(base)) return base
 
   let i = 2
