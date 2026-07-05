@@ -326,10 +326,14 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
 
         <div className="flex shrink-0 items-center gap-2">
           {!connection.isDefault && (
-            <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={onSetDefault}>
-              <Star className="mr-1.5 h-3.5 w-3.5" />
-              Make default
-            </Button>
+            <button
+              type="button"
+              onClick={onSetDefault}
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/50 transition-colors hover:bg-white/[0.055] hover:text-white/74"
+            >
+              <Star className="h-3.5 w-3.5" />
+              Default
+            </button>
           )}
           {connection.authType === 'oauth' ? (
             <Tooltip>
@@ -346,10 +350,19 @@ function ConnectionRow({ connection, isLastConnection, onRenameClick, onDelete, 
               <TooltipContent side="top">Refresh sign-in</TooltipContent>
             </Tooltip>
           ) : (
-            <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={onEdit}>
-              <Settings2 className="mr-1.5 h-3.5 w-3.5" />
-              Edit
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  aria-label="Edit provider"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-[8px] text-white/36 transition-colors hover:bg-white/[0.045] hover:text-white/68"
+                >
+                  <Settings2 className="h-3.5 w-3.5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Edit provider</TooltipContent>
+            </Tooltip>
           )}
           <DropdownMenu modal={false} onOpenChange={setMenuOpen}>
             <DropdownMenuTrigger asChild>
