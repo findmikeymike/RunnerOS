@@ -66,13 +66,13 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     label: 'App',
     description: 'Look',
     icon: AppWindow,
-    landing: 'appearance',
+    landing: 'preferences',
     pages: [
+      { id: 'preferences', label: 'Profile' },
       { id: 'appearance', label: 'Appearance' },
       { id: 'app', label: 'Behavior' },
       { id: 'input', label: 'Input' },
       { id: 'shortcuts', label: 'Shortcuts' },
-      { id: 'preferences', label: 'Profile' },
     ],
   },
   {
