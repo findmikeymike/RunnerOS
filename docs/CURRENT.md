@@ -32,6 +32,7 @@ source_of_truth: true
 - Added generated system map docs under `docs/system-map/` plus `npm run docs:system-map`.
 - Hardened HQ route readiness so generated route blockers now prevent `Start Route` launch instead of allowing a blocked proactive route through.
 - Hardened Pi subprocess JSONL parsing so terminal notification prefixes on stdout do not drop valid mini-completion results after a chat turn.
+- Hardened Artist Profile parsing so the starter markdown intake template opens as an editable Profile form instead of blocking with a missing-JSON warning.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
 
@@ -69,12 +70,16 @@ source_of_truth: true
   - Live prompt smoke passed through the visible Electron composer on session `260704-frosty-basalt`: user prompt `LIVE RELEASE SMOKE: reply with exactly: HNIC live smoke passed.` produced assistant response `HNIC live smoke passed.` Logs showed `agent.chat()` completed and no `Session Expired`.
   - `bun test packages/shared/src/agent/__tests__/pi-agent-error-handling.test.ts packages/shared/src/agent/__tests__/pi-query-llm.test.ts` -> `10 pass`.
   - `(cd packages/shared && ../../node_modules/.bin/tsc --noEmit)` passed after the Pi JSONL parser hardening.
+  - Live visual smoke with Computer Use passed for: HQ home, Outputs, Agenda, Calendar, Network, Community, Vault, Workers, Automations, Workflows, Sessions sidebar expansion, Profile, Voice, Intel Docs, Branding, and Settings.
+  - Live Profile re-check confirmed the markdown starter template now renders as a usable editable form with `Save Profile` enabled.
+  - `bun test apps/electron/src/renderer/lib/artist-profile.test.ts apps/electron/src/renderer/lib/artist-hq-nav-state.test.ts apps/electron/src/renderer/lib/artist-hq-proactive.test.ts` -> `13 pass`.
+  - `bun run typecheck:electron` passed after the Artist Profile parser hardening.
 
 ## Remaining Release Smoke
 
-- Visually click through HQ, campaign nav, Workers, Workflows, Community, Vault, Settings, and Outputs in the running app.
-- Confirm `Start Route` from the HQ State of Play panel opens/sends the intended worker route when launch-safe.
-- Computer Use could inspect the Runner accessibility tree, but automated nav clicks did not change routes in this pass; treat click-through as still manually unverified rather than fixed.
+- Confirm a launch-safe HQ State of Play route opens/sends the intended worker route. Current workspace correctly disables `Start Review` because artist profile context is still incomplete.
+- Confirm the HQ project cards / campaign workspace jump are intentionally text-only or wire them to a real campaign workspace route.
+- Chat nav currently opens an older session with a stale `Session Expired` error, even though the fresh live smoke session works. Consider choosing the latest healthy session or a clean new chat for release polish.
 
 ## Notes For Next Agent
 
