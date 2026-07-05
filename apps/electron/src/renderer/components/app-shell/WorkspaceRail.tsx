@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence } from "motion/react"
-import { Cloud, CloudOff, FolderOpen, FolderPlus } from "lucide-react"
+import { Cloud, CloudOff, FolderOpen, FolderPlus, Home } from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import {
   DropdownMenu,
@@ -20,6 +20,7 @@ import { WorkspaceCreationScreen } from "@/components/workspace"
 import { waitForTransportConnected } from "@/lib/transport-wait"
 import { useWorkspaceIcons } from "@/hooks/useWorkspaceIcon"
 import { useTransportConnectionState } from "@/hooks/useTransportConnectionState"
+import { isArtistHQWorkspace } from "@/lib/artist-workspace"
 import type { Workspace } from "../../../shared/types"
 
 interface WorkspaceRailProps {
@@ -47,6 +48,10 @@ export function WorkspaceRail({
   const workspaceIconMap = useWorkspaceIcons(workspaces)
   const connectionState = useTransportConnectionState()
   const isRemote = connectionState?.mode === 'remote'
+  const hqWorkspace = workspaces.find((workspace) => isArtistHQWorkspace(workspace, workspaces))
+  const railWorkspaces = hqWorkspace
+    ? workspaces.filter((workspace) => workspace.id !== hqWorkspace.id)
+    : workspaces
 
   const checkRemoteHealth = useCallback(() => {
     healthCheckAbort.current?.abort()
@@ -149,6 +154,63 @@ export function WorkspaceRail({
     onSelect(workspace.id, openInNewWindow)
   }, [isRemoteDisconnected, onSelect, setFullscreenOverlayOpen])
 
+  const renderWorkspaceButton = (workspace: Workspace, variant: 'workspace' | 'home' = 'workspace') => {
+    const active = workspace.id === activeWorkspaceId
+    const disconnected = isRemoteDisconnected(workspace.id)
+    const unread = workspaceUnreadMap?.[workspace.id]
+    const label = variant === 'home' ? 'Artist HQ Home' : workspace.name
+
+    return (
+      <Tooltip key={workspace.id}>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={(e) => handleWorkspaceSelect(workspace, e.metaKey || e.ctrlKey)}
+            className={cn(
+              "group relative flex h-8 w-8 items-center justify-center rounded-[10px] border transition-all duration-200",
+              active
+                ? "border-[#fb923c]/70 bg-transparent text-white"
+                : "border-white/[0.08] bg-transparent text-white/42 hover:border-white/16 hover:bg-white/[0.035] hover:text-white/75",
+              disconnected && "opacity-55",
+            )}
+            aria-current={active ? "page" : undefined}
+            aria-label={`Switch to ${label}`}
+          >
+            {variant === 'home' ? (
+              <Home className={cn("h-4 w-4", active ? "text-white" : "text-white/55")} />
+            ) : (
+              <CrossfadeAvatar
+                src={workspaceIconMap.get(workspace.id)}
+                alt={workspace.name}
+                className="h-5 w-5 rounded-[7px]"
+                fallbackClassName={cn(
+                  "text-[10px] rounded-[7px]",
+                  active ? "bg-transparent text-white" : "bg-transparent text-white/55",
+                )}
+                fallback={workspace.name.charAt(0)}
+              />
+            )}
+            {unread && (
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-[#050507] bg-[#fb923c]" />
+            )}
+            {workspace.remoteServer && (
+              <span
+                title={disconnected ? getDisconnectTooltip(workspace.id) : undefined}
+                className={cn(
+                  "absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-[5px] border border-background",
+                  active ? "bg-background text-foreground" : "bg-muted text-muted-foreground",
+                )}
+              >
+                {disconnected ? <CloudOff className="h-2.5 w-2.5 text-destructive" /> : <Cloud className="h-2.5 w-2.5" />}
+              </span>
+            )}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="right">{label}</TooltipContent>
+      </Tooltip>
+    )
+  }
+
   return (
     <>
       <AnimatePresence>
@@ -165,58 +227,14 @@ export function WorkspaceRail({
 
       <aside className="titlebar-no-drag -mb-16 flex h-[calc(100%+64px)] w-[56px] shrink-0 flex-col items-center justify-end">
         <div className="runneros-workspace-dock flex max-h-full min-h-0 flex-col items-center gap-1.5 overflow-y-auto px-1.5 pb-2.5 pt-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {workspaces.map((workspace) => {
-            const active = workspace.id === activeWorkspaceId
-            const disconnected = isRemoteDisconnected(workspace.id)
-            const unread = workspaceUnreadMap?.[workspace.id]
-
-            return (
-              <Tooltip key={workspace.id}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={(e) => handleWorkspaceSelect(workspace, e.metaKey || e.ctrlKey)}
-                    className={cn(
-                      "group relative flex h-8 w-8 items-center justify-center rounded-[10px] border transition-all duration-200",
-                      active
-                        ? "border-[#fb923c]/70 bg-transparent text-white"
-                        : "border-white/[0.08] bg-transparent text-white/42 hover:border-white/16 hover:bg-white/[0.035] hover:text-white/75",
-                      disconnected && "opacity-55",
-                    )}
-                    aria-current={active ? "page" : undefined}
-                    aria-label={`Switch to ${workspace.name}`}
-                  >
-                    <CrossfadeAvatar
-                      src={workspaceIconMap.get(workspace.id)}
-                      alt={workspace.name}
-                      className="h-5 w-5 rounded-[7px]"
-                      fallbackClassName={cn(
-                        "text-[10px] rounded-[7px]",
-                        active ? "bg-transparent text-white" : "bg-transparent text-white/55",
-                      )}
-                      fallback={workspace.name.charAt(0)}
-                    />
-                    {unread && (
-                      <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border border-[#050507] bg-[#fb923c]" />
-                    )}
-                    {workspace.remoteServer && (
-                      <span
-                        title={disconnected ? getDisconnectTooltip(workspace.id) : undefined}
-                        className={cn(
-                          "absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-[5px] border border-background",
-                          active ? "bg-background text-foreground" : "bg-muted text-muted-foreground",
-                        )}
-                      >
-                        {disconnected ? <CloudOff className="h-2.5 w-2.5 text-destructive" /> : <Cloud className="h-2.5 w-2.5" />}
-                      </span>
-                    )}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">{workspace.name}</TooltipContent>
-              </Tooltip>
-            )
-          })}
+          {railWorkspaces.map((workspace) => renderWorkspaceButton(workspace))}
         </div>
+
+        {hqWorkspace && (
+          <div className="mb-1.5 flex flex-col items-center border-t border-white/[0.06] pt-1.5">
+            {renderWorkspaceButton(hqWorkspace, 'home')}
+          </div>
+        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
