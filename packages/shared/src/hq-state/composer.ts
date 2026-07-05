@@ -313,11 +313,11 @@ function buildRouteHint(input: HqInputState, nextMove: HqStateNextMove): HqState
   const contextDocSlugs = routeContextDocSlugs(input, action, nextMove);
   const blockedReason = routeBlockedReason(input, nextMove);
   return {
-    target: agentSlug && !blockedReason ? 'agent' : 'manual',
+    target: agentSlug ? 'agent' : 'manual',
     action,
     prompt: buildRoutePrompt(nextMove, contextDocSlugs),
     confidence: routeConfidence(nextMove, blockedReason),
-    agentSlug: blockedReason ? undefined : agentSlug,
+    agentSlug: agentSlug || undefined,
     contextDocSlugs,
     blockedReason,
   };

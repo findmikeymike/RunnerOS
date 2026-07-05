@@ -1534,7 +1534,10 @@ function StateOfPlayPanel({
   const missing = state.missing.slice(0, 5)
   const generatedLabel = formatShortDate(state.generatedAt)
   const route = state.nextMove.route
-  const routeReadiness = resolveHqRouteReadiness(route, availableAgentSlugs, proactiveMode)
+  const launchableRoute = route?.target === 'manual' && state.nextMove.worker
+    ? { ...route, target: 'agent' as const, agentSlug: state.nextMove.worker }
+    : route
+  const routeReadiness = resolveHqRouteReadiness(launchableRoute, availableAgentSlugs, proactiveMode)
   const canLaunchRoute = routeReadiness.canLaunch
 
   return (
@@ -1600,7 +1603,7 @@ function StateOfPlayPanel({
               </p>
               <button
                 type="button"
-                onClick={() => onLaunchRoute(route)}
+                onClick={() => launchableRoute ? onLaunchRoute(launchableRoute) : undefined}
                 disabled={!canLaunchRoute || routeBusy}
                 className={cn(
                   'mt-3 inline-flex h-8 w-full items-center justify-center rounded-[10px] border px-3 text-xs font-medium transition-colors',
@@ -1610,7 +1613,7 @@ function StateOfPlayPanel({
                   routeBusy && 'cursor-wait opacity-70',
                 )}
               >
-                {routeBusy ? 'Starting...' : proactiveMode ? 'Start Route' : 'Proactive Off'}
+                {routeBusy ? 'Starting...' : proactiveMode ? (routeReadiness.blockedReason ? 'Start Review' : 'Start Route') : 'Proactive Off'}
               </button>
             </div>
           ) : null}

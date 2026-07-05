@@ -25,7 +25,8 @@ describe('HQ State of Play composer', () => {
 
     expect(state.nextMove.title).toBe('Complete Artist Profile');
     expect(state.nextMove.worker).toBe('branding-agent');
-    expect(state.nextMove.route?.target).toBe('manual');
+    expect(state.nextMove.route?.target).toBe('agent');
+    expect(state.nextMove.route?.agentSlug).toBe('branding-agent');
     expect(state.nextMove.route?.blockedReason).toContain('Artist profile');
     expect(state.missing).toContain('artist sound');
     expect(state.sources['artist-profile']).toBe('2026-07-04T00:00:00.000Z');
@@ -54,7 +55,8 @@ describe('HQ State of Play composer', () => {
 
     expect(state.nextMove.title).toBe('Close asset gaps before Single release');
     expect(state.nextMove.worker).toBe('art-director');
-    expect(state.nextMove.route?.target).toBe('manual');
+    expect(state.nextMove.route?.target).toBe('agent');
+    expect(state.nextMove.route?.agentSlug).toBe('art-director');
     expect(state.nextMove.route?.contextDocSlugs).toEqual(['artist-calendar', 'artist-profile', 'artist-vault']);
     expect(state.attention.some((item) => item.kind === 'calendar')).toBe(true);
     expect(state.attention.some((item) => item.kind === 'vault')).toBe(true);
