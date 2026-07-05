@@ -81,7 +81,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { navigate, routes } from '@/lib/navigate'
-import { findArtistHQWorkspace, isArtistHQWorkspace } from '@/lib/artist-workspace'
+import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -120,6 +120,7 @@ export function MainContentPanel({
     onToggleAutomation,
     onDuplicateAutomation,
     onDeleteAutomation,
+    onSelectWorkspace,
     enabledSources,
     skills,
   } = useAppShellContext()
@@ -131,6 +132,15 @@ export function MainContentPanel({
     () => findArtistHQWorkspace(workspaces),
     [workspaces],
   )
+  const primaryCampaignWorkspace = useMemo(
+    () => findPrimaryCampaignWorkspace(workspaces),
+    [workspaces],
+  )
+  const handleOpenPrimaryCampaignWorkspace = useCallback(async () => {
+    if (!primaryCampaignWorkspace) return
+    await Promise.resolve(onSelectWorkspace(primaryCampaignWorkspace.id))
+    navigation.navigate(routes.view.campaign())
+  }, [navigation, onSelectWorkspace, primaryCampaignWorkspace])
 
   // Session multi-select state
   const isMultiSelectActive = useIsMultiSelectActive()
@@ -588,7 +598,12 @@ export function MainContentPanel({
     if (isArtistHQWorkspace(activeWorkspace, workspaces) && window.location.hash.startsWith('#artist-hq/')) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
-          <ArtistHQHome workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
+          <ArtistHQHome
+            workspaceId={activeWorkspaceId || ''}
+            workspaceName={activeWorkspace?.name}
+            primaryCampaignWorkspaceName={primaryCampaignWorkspace?.name}
+            onOpenPrimaryCampaignWorkspace={primaryCampaignWorkspace ? handleOpenPrimaryCampaignWorkspace : undefined}
+          />
         </Panel>
       )
     }
@@ -606,7 +621,12 @@ export function MainContentPanel({
     if (isArtistHQWorkspace(activeWorkspace, workspaces)) {
       return wrapWithStoplight(
         <Panel variant="grow" className={className}>
-          <ArtistHQHome workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
+          <ArtistHQHome
+            workspaceId={activeWorkspaceId || ''}
+            workspaceName={activeWorkspace?.name}
+            primaryCampaignWorkspaceName={primaryCampaignWorkspace?.name}
+            onOpenPrimaryCampaignWorkspace={primaryCampaignWorkspace ? handleOpenPrimaryCampaignWorkspace : undefined}
+          />
         </Panel>
       )
     }

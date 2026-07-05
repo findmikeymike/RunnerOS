@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { findArtistHQWorkspace, isArtistHQWorkspace } from './artist-workspace'
+import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistHQWorkspace } from './artist-workspace'
 
 describe('artist workspace helpers', () => {
   test('recognizes the global artist HQ workspace', () => {
@@ -20,5 +20,29 @@ describe('artist workspace helpers', () => {
 
     expect(isArtistHQWorkspace(workspaces[0], workspaces)).toBe(false)
     expect(findArtistHQWorkspace(workspaces)).toBeUndefined()
+  })
+
+  test('selects the first non-HQ workspace as the primary campaign workspace', () => {
+    const workspaces = [
+      { id: 'hq', name: 'My Workspace' },
+      { id: 'release', name: 'Current Release' },
+      { id: 'next', name: 'Next Campaign' },
+    ]
+
+    expect(findPrimaryCampaignWorkspace(workspaces)?.id).toBe('release')
+  })
+
+  test('prefers campaign-like workspace names before the plain fallback', () => {
+    const workspaces = [
+      { id: 'hq', name: 'My Workspace' },
+      { id: 'trading', name: 'Trading' },
+      { id: 'single', name: 'Next Single Rollout' },
+    ]
+
+    expect(findPrimaryCampaignWorkspace(workspaces)?.id).toBe('single')
+  })
+
+  test('returns no campaign workspace when only HQ exists', () => {
+    expect(findPrimaryCampaignWorkspace([{ id: 'hq', name: 'Artist HQ' }])).toBeUndefined()
   })
 })

@@ -34,6 +34,7 @@ source_of_truth: true
 - Hardened Pi subprocess JSONL parsing so terminal notification prefixes on stdout do not drop valid mini-completion results after a chat turn.
 - Hardened Artist Profile parsing so the starter markdown intake template opens as an editable Profile form instead of blocking with a missing-JSON warning.
 - Hardened the Chat nav shortcut so it skips stale expired/error HNIC sessions instead of reopening an old `Session Expired` thread.
+- Wired the HQ `Current Release` project card to open the primary campaign workspace instead of remaining text-only.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
 
@@ -78,11 +79,13 @@ source_of_truth: true
   - `bun test apps/electron/src/renderer/lib/artist-hq-nav-state.test.ts` -> `9 pass`.
   - `bun run typecheck:electron` passed after the Chat nav expired-session filter.
   - Live Chat nav re-check passed: starting from HQ, clicking `Chat` opened clean session `260605-fair-quartz` instead of stale expired session `260605-tall-chrome`.
+  - `bun test apps/electron/src/renderer/lib/artist-workspace.test.ts` -> `5 pass`.
+  - `bun run typecheck:electron` passed after the HQ project card route wiring.
+  - Live HQ project card smoke passed: clicking `Current Release` from HQ opened workspace `Trading` at `route=campaign` with the campaign command center visible.
 
 ## Remaining Release Smoke
 
 - Confirm a launch-safe HQ State of Play route opens/sends the intended worker route. Current workspace correctly disables `Start Review` because artist profile context is still incomplete.
-- Confirm the HQ project cards / campaign workspace jump are intentionally text-only or wire them to a real campaign workspace route.
 
 ## Notes For Next Agent
 

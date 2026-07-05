@@ -119,6 +119,8 @@ import {
 interface ArtistHQHomeProps {
   workspaceId: string
   workspaceName?: string
+  primaryCampaignWorkspaceName?: string
+  onOpenPrimaryCampaignWorkspace?: () => void
 }
 
 type ArtistHQTab = 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding'
@@ -222,7 +224,7 @@ const projectColumns = [
     id: 'focus',
     label: 'Focus',
     cards: [
-      { title: 'Current Release', detail: 'Open the active campaign workspace', status: 'active' },
+      { title: 'Current Release', detail: 'Open the active campaign workspace', status: 'active', action: 'open-campaign' },
       { title: 'Spotify Pulse', detail: 'Connect analytics and review listener movement', status: 'waiting' },
     ],
   },
@@ -250,7 +252,12 @@ const projectColumns = [
   },
 ]
 
-export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) {
+export function ArtistHQHome({
+  workspaceId,
+  workspaceName,
+  primaryCampaignWorkspaceName,
+  onOpenPrimaryCampaignWorkspace,
+}: ArtistHQHomeProps) {
   const {
     activeAgents: shellActiveAgents = [],
     onCreateSession,
@@ -1175,7 +1182,10 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
 
             <HQCard>
               <SectionTitle icon={FolderKanban} title="Projects" meta="global" />
-              <ProjectBoard />
+              <ProjectBoard
+                primaryCampaignWorkspaceName={primaryCampaignWorkspaceName}
+                onOpenPrimaryCampaignWorkspace={onOpenPrimaryCampaignWorkspace}
+              />
             </HQCard>
           </>
         )}
@@ -2384,7 +2394,13 @@ function ArtistCalendarView({
   )
 }
 
-function ProjectBoard() {
+function ProjectBoard({
+  primaryCampaignWorkspaceName,
+  onOpenPrimaryCampaignWorkspace,
+}: {
+  primaryCampaignWorkspaceName?: string
+  onOpenPrimaryCampaignWorkspace?: () => void
+}) {
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
       {projectColumns.map((column) => (
@@ -2394,12 +2410,51 @@ function ProjectBoard() {
             <span className="text-[10px] text-white/28">{column.cards.length}</span>
           </div>
           <div className="space-y-2">
-            {column.cards.map((card) => (
-              <div key={card.title} className="rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3">
-                <div className="text-sm font-semibold text-white/76">{card.title}</div>
-                <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/38">{card.detail}</div>
-              </div>
-            ))}
+            {column.cards.map((card) => {
+              const isCampaignAction = card.action === 'open-campaign'
+              const disabled = isCampaignAction && !onOpenPrimaryCampaignWorkspace
+              const detail = isCampaignAction
+                ? primaryCampaignWorkspaceName
+                  ? `Open ${primaryCampaignWorkspaceName}`
+                  : 'No campaign workspace yet'
+                : card.detail
+
+              const content = (
+                <>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="truncate text-sm font-semibold text-white/76">{card.title}</div>
+                    {isCampaignAction ? <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/28" /> : null}
+                  </div>
+                  <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/38">{detail}</div>
+                </>
+              )
+
+              if (isCampaignAction) {
+                return (
+                  <button
+                    key={card.title}
+                    type="button"
+                    onClick={onOpenPrimaryCampaignWorkspace}
+                    disabled={disabled}
+                    className={cn(
+                      'w-full rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3 text-left transition-colors',
+                      disabled
+                        ? 'cursor-not-allowed opacity-55'
+                        : 'hover:border-[#fb923c]/35 hover:bg-[#fb923c]/[0.055]',
+                    )}
+                    aria-label={primaryCampaignWorkspaceName ? `Open ${primaryCampaignWorkspaceName}` : 'No campaign workspace available'}
+                  >
+                    {content}
+                  </button>
+                )
+              }
+
+              return (
+                <div key={card.title} className="rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3">
+                  {content}
+                </div>
+              )
+            })}
           </div>
         </div>
       ))}

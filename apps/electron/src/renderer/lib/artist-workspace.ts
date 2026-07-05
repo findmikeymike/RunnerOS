@@ -16,3 +16,11 @@ export function isArtistHQWorkspace(
 export function findArtistHQWorkspace(workspaces: ArtistWorkspaceLike[]): ArtistWorkspaceLike | undefined {
   return workspaces.find((workspace) => isArtistHQWorkspace(workspace, workspaces))
 }
+
+export function findPrimaryCampaignWorkspace(workspaces: ArtistWorkspaceLike[]): ArtistWorkspaceLike | undefined {
+  const campaignWorkspaces = workspaces.filter((workspace) => !isArtistHQWorkspace(workspace, workspaces))
+  return campaignWorkspaces.find((workspace) => {
+    const text = `${workspace.name} ${workspace.slug ?? ''}`.toLowerCase()
+    return /\b(campaign|release|rollout|single|album|ep)\b/.test(text)
+  }) ?? campaignWorkspaces[0]
+}
