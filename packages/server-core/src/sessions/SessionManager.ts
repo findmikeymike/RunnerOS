@@ -73,14 +73,14 @@ import {
   type SessionLaunchReceipt,
   pickSessionFields,
 } from '@craft-agent/shared/sessions'
-import { loadAllSources, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
+import { loadAllSources, loadGlobalSource, getSourcesBySlugs, isSourceUsable, type LoadedSource, type McpServerConfig, getSourcesNeedingAuth, getSourceCredentialManager, getSourceServerBuilder, type SourceWithCredential, isApiOAuthProvider, hasRenewEndpoint, SERVER_BUILD_ERRORS, TokenRefreshManager, createTokenGetter } from '@craft-agent/shared/sources'
 import { ConfigWatcher, type ConfigWatcherCallbacks } from '@craft-agent/shared/config'
 import { getValidClaudeOAuthToken } from '@craft-agent/shared/auth'
 import { resolveAuthEnvVars } from '@craft-agent/shared/config'
 import { toolMetadataStore, getLastApiError } from '@craft-agent/shared/interceptor'
 import { isParentTaskTool } from '@craft-agent/shared/utils/toolNames'
 import { restoreFiles } from '@craft-agent/shared/utils/bundle-files'
-import { getCredentialManager } from '@craft-agent/shared/credentials'
+import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
 import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/shared/mcp'
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type AgentMessageNoticeMetadata, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
@@ -2188,6 +2188,11 @@ export class SessionManager implements ISessionManager {
   private broadcastSourcesChanged(workspaceId: string, sources: LoadedSource[]): void {
     if (!this.eventSink) return
     this.eventSink(RPC_CHANNELS.sources.CHANGED, { to: 'workspace', workspaceId }, workspaceId, sources)
+  }
+
+  private broadcastSecretsChanged(): void {
+    if (!this.eventSink) return
+    this.eventSink(RPC_CHANNELS.secrets.CHANGED, { to: 'all' })
   }
 
   private broadcastStatusesChanged(workspaceId: string): void {
@@ -5008,6 +5013,63 @@ user a clickable link to where the thing now lives.`
             },
           })
           return outputService.getVisualSurfaceState(managed.workspace.id, managed.id)
+        },
+        saveSecretFn: async (input) => {
+          if (input.target === 'env') {
+            const normalized = normalizeUserSecretName(input.name ?? '')
+            if (!isValidUserSecretName(normalized)) {
+              return { ok: false, target: input.target, name: input.name, error: 'Use ENV_VAR format: uppercase letters, numbers, and underscores.' }
+            }
+            await getCredentialManager().setUserSecret(normalized, input.value)
+            process.env[normalized] = input.value
+            this.broadcastSecretsChanged()
+            return { ok: true, target: input.target, name: normalized }
+          }
+
+          const sourceSlug = input.sourceSlug
+          if (!sourceSlug) {
+            return { ok: false, target: input.target, error: 'sourceSlug is required.' }
+          }
+
+          const credManager = getSourceCredentialManager()
+          if (input.target === 'global-source') {
+            const source = loadGlobalSource(sourceSlug)
+            if (!source) {
+              return { ok: false, target: input.target, sourceSlug, error: `Global source not found: ${sourceSlug}` }
+            }
+            await credManager.save(source, { value: input.value })
+          } else {
+            const [source] = getSourcesBySlugs(managed.workspace.rootPath, [sourceSlug])
+            if (!source) {
+              return { ok: false, target: input.target, sourceSlug, error: `Source not found: ${sourceSlug}` }
+            }
+            if (input.target === 'source-override' && source.tier !== 'global') {
+              return { ok: false, target: input.target, sourceSlug, error: 'source-override only applies to activated global sources.' }
+            }
+            await credManager.save(source, {
+              value: input.value,
+              ...(input.target === 'source-override' ? { override: true } : {}),
+            })
+          }
+
+          try {
+            const [source] = input.target === 'global-source'
+              ? [loadGlobalSource(sourceSlug)].filter(Boolean) as LoadedSource[]
+              : getSourcesBySlugs(managed.workspace.rootPath, [sourceSlug])
+            if (source) {
+              const { syncGoogleAdsCredentialCache } = await import('../handlers/rpc/google-ads-credential-cache')
+              const { syncYouTubeResearchCredentialCache } = await import('../handlers/rpc/youtube-research-credential-cache')
+              await syncGoogleAdsCredentialCache(source)
+              await syncYouTubeResearchCredentialCache(source)
+            }
+          } catch (error) {
+            sessionLog.warn(`save_secret: credential cache sync failed for ${sourceSlug}:`, error as Error)
+          }
+
+          await this.reloadSourcesForWorkspace(managed.workspace.rootPath)
+          this.broadcastSourcesChanged(managed.workspace.id, loadAllSources(managed.workspace.rootPath))
+          this.broadcastSecretsChanged()
+          return { ok: true, target: input.target, sourceSlug }
         },
         listSessionsFn: (options) => {
           const DEFAULT_LIMIT = 20

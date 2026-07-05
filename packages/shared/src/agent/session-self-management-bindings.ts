@@ -316,6 +316,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'saveSecret', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.saveSecretFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   // listSources is implemented inline (not via the callback registry):
   // it reads the workspace + global tiers via loadAllSources and projects
   // each LoadedSource into the SourceListItem shape declared in

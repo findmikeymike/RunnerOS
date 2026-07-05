@@ -253,6 +253,7 @@ const EXPECTED_CHANNELS: string[] = [
   "remote:testConnection",
   "resources:export",
   "resources:import",
+  "secrets:changed",
   "secrets:claimZeroWelcome",
   "secrets:delete",
   "secrets:fundZero",

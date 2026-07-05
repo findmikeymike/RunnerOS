@@ -700,6 +700,13 @@ export default function SecretsSettingsPage() {
     void load()
   }, [load])
 
+  React.useEffect(() => {
+    if (!window.electronAPI?.onSecretsChanged) return
+    return window.electronAPI.onSecretsChanged(() => {
+      void load()
+    })
+  }, [load])
+
   const openSource = React.useCallback((preset: SecretPreset) => {
     if (preset.setupUrl) {
       void window.electronAPI.openUrl(preset.setupUrl)

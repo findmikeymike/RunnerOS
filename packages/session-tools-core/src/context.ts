@@ -451,6 +451,12 @@ export interface SessionToolContext {
    */
   getVisualSurfaceState?(): Promise<import('./handlers/visual-surface-state.ts').VisualSurfaceStateToolResult>;
 
+  /**
+   * Save an encrypted RunnerOS secret or source credential.
+   * Backend owns credential storage, workspace scoping, process env refresh, and UI broadcasts.
+   */
+  saveSecret?(input: import('./handlers/save-secret.ts').SaveSecretToolInput): Promise<import('./handlers/save-secret.ts').SaveSecretResult>;
+
   // ============================================================
   // Inter-Session Messaging
   // ============================================================

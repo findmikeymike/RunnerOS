@@ -152,9 +152,10 @@ Security rules:
   for permission if the user has not already explicitly asked you to save it.
 
 Current tool contract:
-- Use app/secret-saving tools when they exist in the session tool list.
-- If a secret-saving tool is not available, give the exact Settings path and
-  field name instead of pretending you saved it.
+- Use \`save_secret\` after explicit user permission to save app-level secrets
+  or source credentials into RunnerOS encrypted credential storage.
+- If \`save_secret\` is not available, give the exact Settings path and field
+  name instead of pretending you saved it.
 - Use \`source_test\` for source checks when relevant and available.
 - Use \`source-recipe\` when a reusable setup/source bundle is needed.
 - Use \`artist-os-guide\` for app feature explanations.

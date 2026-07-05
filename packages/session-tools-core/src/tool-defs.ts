@@ -29,6 +29,7 @@ import {
   handleMicrosoftOAuthTrigger,
 } from './handlers/source-oauth.ts';
 import { handleCredentialPrompt } from './handlers/credential-prompt.ts';
+import { handleSaveSecret } from './handlers/save-secret.ts';
 import { handleUpdatePreferences } from './handlers/update-preferences.ts';
 import { handleTransformData } from './handlers/transform-data.ts';
 import { handleScriptSandbox } from './handlers/script-sandbox.ts';
@@ -132,6 +133,15 @@ export const CredentialPromptSchema = z.object({
   hint: z.string().optional().describe('Hint about where to find credentials'),
   headerNames: z.array(z.string()).optional().describe('Header names for multi-header auth (e.g., ["DD-API-KEY", "DD-APPLICATION-KEY"])'),
   passwordRequired: z.boolean().optional().describe('For basic auth: whether password is required'),
+});
+
+export const SaveSecretSchema = z.object({
+  target: z.enum(['env', 'source', 'global-source', 'source-override'])
+    .describe('Where to save the credential: env for app-level ENV_VAR secrets, source for this workspace source, global-source for global source credentials, source-override for a workspace override of a global source'),
+  name: z.string().optional().describe('ENV_VAR name for target env, e.g. YOUTUBE_API_KEY'),
+  sourceSlug: z.string().optional().describe('Source slug for source/global-source/source-override targets'),
+  value: z.string().describe('Credential value to save. Never include account passwords, cookies, recovery codes, 2FA codes, or browser session dumps.'),
+  confirmed: z.boolean().describe('Must be true only after the user explicitly asked/confirmed that this credential should be saved'),
 });
 
 export const CallLlmSchema = z.object({
@@ -808,6 +818,21 @@ The user will see a secure input UI with appropriate fields based on the auth mo
 
 **IMPORTANT:** After calling this tool, execution will be paused for user input.`,
 
+  save_secret: `Save an encrypted RunnerOS credential after explicit user confirmation.
+
+Use this when the user pasted an API key, token, OAuth client ID/secret, webhook URL, or source credential and clearly wants RunnerOS to save it.
+
+Targets:
+- \`env\`: app-level ENV_VAR style secret, e.g. \`YOUTUBE_API_KEY\`, \`RESEND_API_KEY\`.
+- \`source\`: credential for a source in the current workspace.
+- \`global-source\`: credential for a global source.
+- \`source-override\`: workspace override credential for an activated global source.
+
+Rules:
+- Set \`confirmed: true\` only after the user explicitly confirms saving.
+- Never save account passwords, cookies, recovery codes, 2FA codes, or browser session dumps.
+- After saving source credentials, call \`source_test\` when relevant.`,
+
   update_user_preferences: `Update stored user preferences. Use this when you learn information about the user that would be helpful to remember for future conversations. This includes their name, timezone, location, preferred language, or any other relevant notes. Only update fields you have confirmed information about - don't guess.`,
 
   transform_data: `Transform data files using a script and write structured output for datatable/spreadsheet blocks, or extract HTML content for html-preview blocks.
@@ -1317,6 +1342,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'source_slack_oauth_trigger', description: TOOL_DESCRIPTIONS.source_slack_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', safeMode: 'block', handler: handleSlackOAuthTrigger },
   { name: 'source_microsoft_oauth_trigger', description: TOOL_DESCRIPTIONS.source_microsoft_oauth_trigger, inputSchema: SourceOAuthTriggerSchema, executionMode: 'registry', safeMode: 'block', handler: handleMicrosoftOAuthTrigger },
   { name: 'source_credential_prompt', description: TOOL_DESCRIPTIONS.source_credential_prompt, inputSchema: CredentialPromptSchema, executionMode: 'registry', safeMode: 'block', handler: handleCredentialPrompt },
+  { name: 'save_secret', description: TOOL_DESCRIPTIONS.save_secret, inputSchema: SaveSecretSchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveSecret },
   { name: 'update_user_preferences', description: TOOL_DESCRIPTIONS.update_user_preferences, inputSchema: UpdatePreferencesSchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdatePreferences },
   { name: 'transform_data', description: TOOL_DESCRIPTIONS.transform_data, inputSchema: TransformDataSchema, executionMode: 'registry', safeMode: 'allow', handler: handleTransformData },
   { name: 'script_sandbox', description: TOOL_DESCRIPTIONS.script_sandbox, inputSchema: ScriptSandboxSchema, executionMode: 'registry', safeMode: 'allow', handler: handleScriptSandbox },
