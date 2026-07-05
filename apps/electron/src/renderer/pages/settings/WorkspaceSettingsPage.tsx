@@ -15,7 +15,7 @@ import * as React from 'react'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { motion, AnimatePresence } from 'motion/react'
-import { Home, Lock } from 'lucide-react'
+import { ChevronRight, Home, Lock } from 'lucide-react'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useAppShellContext } from '@/context/AppShellContext'
@@ -45,6 +45,41 @@ export const meta: DetailsPageMeta = {
 }
 
 const quietButtonClass = 'inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76'
+
+function AdvancedWorkspaceDisclosure({ children }: { children: React.ReactNode }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  return (
+    <section className="space-y-3">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((value) => !value)}
+        className="group flex w-full items-center justify-between rounded-[12px] border border-white/[0.06] bg-white/[0.018] px-4 py-3 text-left transition-colors hover:bg-white/[0.032]"
+      >
+        <div>
+          <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-white/48">Advanced</div>
+          <div className="mt-0.5 text-[12px] leading-4 text-white/34">Mode cycling, sources, folders, and local tools.</div>
+        </div>
+        <ChevronRight className={cn("h-4 w-4 text-white/34 transition-transform group-hover:text-white/58", isExpanded && "rotate-90")} />
+      </button>
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.16 }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-6 pt-1">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+  )
+}
 
 // ============================================
 // Main Component
@@ -467,107 +502,109 @@ export default function WorkspaceSettingsPage() {
               </SettingsCard>
             </SettingsSection>
 
-            {/* Mode Cycling */}
-            <SettingsSection
-              title={t("settings.workspace.modeCycling")}
-              description={t("settings.workspace.modeCyclingDesc")}
-            >
-              <SettingsCard>
-                {(['safe', 'ask', 'allow-all'] as const).map((m) => {
-                  const modeTranslations: Record<string, { label: string; desc: string }> = {
-                    'safe': { label: t("mode.explore"), desc: t("mode.exploreFullDesc") },
-                    'ask': { label: t("mode.askToEdit"), desc: t("mode.askFullDesc") },
-                    'allow-all': { label: t("mode.execute"), desc: t("mode.executeFullDesc") },
-                  }
-                  const isEnabled = enabledModes.includes(m)
-                  return (
-                    <SettingsToggle
-                      key={m}
-                      label={modeTranslations[m].label}
-                      description={modeTranslations[m].desc}
-                      checked={isEnabled}
-                      onCheckedChange={(checked) => handleModeToggle(m, checked)}
-                    />
-                  )
-                })}
-              </SettingsCard>
-              <AnimatePresence>
-                {modeCyclingError && (
-                  <motion.p
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-                    className="text-xs text-destructive mt-1 overflow-hidden"
-                  >
-                    {modeCyclingError}
-                  </motion.p>
-                )}
-              </AnimatePresence>
-            </SettingsSection>
-
-            {/* Default Sources */}
-            <SettingsSection
-              title={t("settings.workspace.defaultSources")}
-              description={t("settings.workspace.defaultSourcesDesc")}
-            >
-              {availableSources.length > 0 ? (
+            <AdvancedWorkspaceDisclosure>
+              {/* Mode Cycling */}
+              <SettingsSection
+                title={t("settings.workspace.modeCycling")}
+                description={t("settings.workspace.modeCyclingDesc")}
+              >
                 <SettingsCard>
-                  {availableSources.map((source) => (
-                    <SettingsToggle
-                      key={source.config.slug}
-                      label={
-                        <span className="inline-flex items-center gap-2">
-                          <SourceAvatar source={source} size="xs" />
-                          {source.config.name}
-                        </span>
-                      }
-                      description={source.config.tagline}
-                      checked={enabledSourceSlugs.includes(source.config.slug)}
-                      onCheckedChange={(checked) => handleSourceToggle(source.config.slug, checked)}
-                    />
-                  ))}
+                  {(['safe', 'ask', 'allow-all'] as const).map((m) => {
+                    const modeTranslations: Record<string, { label: string; desc: string }> = {
+                      'safe': { label: t("mode.explore"), desc: t("mode.exploreFullDesc") },
+                      'ask': { label: t("mode.askToEdit"), desc: t("mode.askFullDesc") },
+                      'allow-all': { label: t("mode.execute"), desc: t("mode.executeFullDesc") },
+                    }
+                    const isEnabled = enabledModes.includes(m)
+                    return (
+                      <SettingsToggle
+                        key={m}
+                        label={modeTranslations[m].label}
+                        description={modeTranslations[m].desc}
+                        checked={isEnabled}
+                        onCheckedChange={(checked) => handleModeToggle(m, checked)}
+                      />
+                    )
+                  })}
                 </SettingsCard>
-              ) : (
-                <p className="text-sm text-muted-foreground">{t("settings.workspace.noSourcesConfigured")}</p>
-              )}
-            </SettingsSection>
+                <AnimatePresence>
+                  {modeCyclingError && (
+                    <motion.p
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                      className="text-xs text-destructive mt-1 overflow-hidden"
+                    >
+                      {modeCyclingError}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </SettingsSection>
 
-            {/* Advanced */}
-            <SettingsSection title={t("settings.workspace.advanced")}>
-              <SettingsCard>
-                <SettingsRow
-                  label={t("settings.workspace.defaultWorkingDir")}
-                  description={workingDirectory || t("settings.workspace.defaultWorkingDirDesc")}
-                  action={
-                    <div className="flex items-center gap-2">
-                      {workingDirectory && (
+              {/* Default Sources */}
+              <SettingsSection
+                title={t("settings.workspace.defaultSources")}
+                description={t("settings.workspace.defaultSourcesDesc")}
+              >
+                {availableSources.length > 0 ? (
+                  <SettingsCard>
+                    {availableSources.map((source) => (
+                      <SettingsToggle
+                        key={source.config.slug}
+                        label={
+                          <span className="inline-flex items-center gap-2">
+                            <SourceAvatar source={source} size="xs" />
+                            {source.config.name}
+                          </span>
+                        }
+                        description={source.config.tagline}
+                        checked={enabledSourceSlugs.includes(source.config.slug)}
+                        onCheckedChange={(checked) => handleSourceToggle(source.config.slug, checked)}
+                      />
+                    ))}
+                  </SettingsCard>
+                ) : (
+                  <p className="text-sm text-muted-foreground">{t("settings.workspace.noSourcesConfigured")}</p>
+                )}
+              </SettingsSection>
+
+              {/* Advanced */}
+              <SettingsSection title={t("settings.workspace.advanced")}>
+                <SettingsCard>
+                  <SettingsRow
+                    label={t("settings.workspace.defaultWorkingDir")}
+                    description={workingDirectory || t("settings.workspace.defaultWorkingDirDesc")}
+                    action={
+                      <div className="flex items-center gap-2">
+                        {workingDirectory && (
+                          <button
+                            type="button"
+                            onClick={handleClearWorkingDirectory}
+                            className={quietButtonClass}
+                          >
+                            {t("common.clear")}
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={handleClearWorkingDirectory}
+                          onClick={handleChangeWorkingDirectory}
                           className={quietButtonClass}
                         >
-                          {t("common.clear")}
+                          {t("common.change")}
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleChangeWorkingDirectory}
-                        className={quietButtonClass}
-                      >
-                        {t("common.change")}
-                      </button>
-                    </div>
-                  }
-                />
-                <SettingsToggle
-                  label={t("settings.workspace.localMcpServers")}
-                  description={t("settings.workspace.localMcpServersDesc")}
-                  checked={localMcpEnabled}
-                  onCheckedChange={handleLocalMcpEnabledChange}
-                />
-              </SettingsCard>
-            </SettingsSection>
+                      </div>
+                    }
+                  />
+                  <SettingsToggle
+                    label={t("settings.workspace.localMcpServers")}
+                    description={t("settings.workspace.localMcpServersDesc")}
+                    checked={localMcpEnabled}
+                    onCheckedChange={handleLocalMcpEnabledChange}
+                  />
+                </SettingsCard>
+              </SettingsSection>
+            </AdvancedWorkspaceDisclosure>
 
           </div>
         </div>
