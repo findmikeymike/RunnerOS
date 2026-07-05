@@ -25,6 +25,10 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .env.test.local
 .env.production.local
 .env.local
+*.local.env
+
+# Local smoke profiles with private artist/campaign data and service keys.
+.local-smoke/
 
 # caches
 .eslintcache

@@ -1,0 +1,63 @@
+{
+  "workspaceId": "demo-artist-hq",
+  "campaignId": "demo-single",
+  "mission": {
+    "id": "demo-single",
+    "status": "full",
+    "completeness": 92,
+    "missionType": "single",
+    "title": "Demo Single",
+    "goal": "Launch a tight single rollout that proves the artist world and gets the first real audience signals.",
+    "timeline": "Release week: 2026-08-09",
+    "releaseDate": "2026-08-09",
+    "promoBudget": "$500 test budget",
+    "mood": "urgent, nocturnal, self-made",
+    "visualWorld": "noir city lights, direct-to-camera clips, clean cover crop",
+    "references": [
+      { "type": "artist", "value": "Dijon" },
+      { "type": "visual", "value": "street editorial photography" }
+    ],
+    "targetListener": "people who want emotional pop that still feels raw",
+    "channels": ["spotify", "instagram", "tiktok", "youtube"],
+    "openQuestions": ["Which hook is strongest for first 3 seconds?"],
+    "rawNotes": "Keep the rollout simple: cover, captions, outreach, short clips, and a proof receipt."
+  },
+  "releaseBoard": {
+    "version": 1,
+    "workspaceId": "demo-artist-hq",
+    "updatedAt": "2026-07-05T00:00:00.000Z",
+    "categories": [
+      {
+        "id": "music",
+        "label": "Music",
+        "detail": "Audio and song context",
+        "items": [
+          { "id": "master", "label": "Master file", "status": "done" },
+          { "id": "lyrics", "label": "Lyrics", "status": "needed" }
+        ]
+      },
+      {
+        "id": "visuals",
+        "label": "Visuals",
+        "detail": "Artwork, photos, and motion",
+        "items": [
+          { "id": "cover-art", "label": "Single art", "status": "needed" },
+          { "id": "canvas", "label": "Spotify Canvas", "status": "needed" }
+        ]
+      },
+      {
+        "id": "promotion",
+        "label": "Promotion",
+        "detail": "Audience push and spend",
+        "items": [
+          { "id": "press-list", "label": "Press list", "status": "needed" },
+          { "id": "ad-creatives", "label": "Ad creatives", "status": "needed" }
+        ]
+      }
+    ]
+  },
+  "workerContext": {
+    "summary": "Demo Single campaign is ready for worker smoke tests. Prioritize cover approval, press copy, captions, and proof receipts.",
+    "recommendedWorkers": ["art-director", "comms-agent", "outreach-agent"]
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "workspaceId": "demo-artist-hq",
+  "outputs": [
+    {
+      "title": "Spotify Intel Snapshot",
+      "kind": "report",
+      "summary": "HQ-level streaming readout for smoke testing recent Work Products.",
+      "content": "# Spotify Intel Snapshot\n\nDemo Artist is showing early city traction in Los Angeles and Atlanta. Next move: compare hooks and prioritize short-form content tied to the strongest save rate.",
+      "contentMimeType": "text/markdown",
+      "context": { "scope": "hq" },
+      "approval": { "state": "none" },
+      "tags": ["intel", "hq"]
+    },
+    {
+      "title": "Campaign Caption Batch",
+      "kind": "document",
+      "summary": "Three short caption options for Demo Single rollout.",
+      "content": "# Campaign Caption Batch\n\n1. Built this one for the late-night overthinkers.\n2. Some songs are just proof you made it through.\n3. Demo Single out soon. No perfect rollout, just the real one.",
+      "contentMimeType": "text/markdown",
+      "context": { "scope": "campaign", "campaignId": "demo-single" },
+      "approval": { "state": "none" },
+      "tags": ["caption", "campaign"]
+    },
+    {
+      "title": "Press Email Draft",
+      "kind": "document",
+      "summary": "Campaign outreach email waiting for approval.",
+      "content": "# Press Email Draft\n\nSubject: Demo Artist - Demo Single\n\nHey,\n\nSharing Demo Single ahead of release week. It is a raw, cinematic pop record about turning pressure into taste. If it fits an upcoming feature or playlist lane, I can send the private stream and press assets.\n\nBest,\nDemo Team",
+      "contentMimeType": "text/markdown",
+      "context": { "scope": "campaign", "campaignId": "demo-single" },
+      "approval": { "state": "pending", "note": "Approve tone before outreach." },
+      "tags": ["press", "approval", "campaign"]
+    }
+  ]
+}

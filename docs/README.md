@@ -27,6 +27,7 @@ Current active feature spec:
 - [backlog](./backlog/) - accepted future work, deferred integrations, and cleanup ideas.
 - [audits](./audits/) - security, runtime, and technical debt reports.
 - [development](./development/) - local commands, CLI docs, setup-adjacent references.
+  - [Local Smoke Profile](./development/local-smoke-profile.md) - private local artist/campaign context and service-key setup for repeatable smoke tests without shipping user data.
 - [system-map](./system-map/) - generated map of workers, skills, sources, launch surfaces, and approval boundaries.
 - [archive](./archive/) - historical docs that should not guide current decisions.
 

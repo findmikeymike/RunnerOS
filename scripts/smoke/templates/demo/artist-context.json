@@ -1,0 +1,72 @@
+{
+  "workspaceId": "demo-artist-hq",
+  "profile": {
+    "artistName": "Demo Artist",
+    "bio": "Independent artist building a cinematic left-field pop rollout.",
+    "themes": "underdog confidence, late-night momentum, self-made mythology",
+    "sound": "raw vocal hooks over textured pop and soul production",
+    "visualWorld": "noir city lights, worn denim, high contrast editorial frames",
+    "brandWords": "direct, cinematic, grounded, sharp",
+    "audience": "fans who like emotional pop with grit and story",
+    "similarArtists": "Steve Lacy, Dijon, Dominic Fike",
+    "priorityMarkets": "Los Angeles, Atlanta, Chicago",
+    "spotifyProfile": "https://open.spotify.com/artist/demo",
+    "promoBudget": "$500 test budget",
+    "rules": "No fake virality language. Keep copy specific and human."
+  },
+  "branding": {
+    "positioning": "The artist for people turning pressure into taste.",
+    "narrative": "A grounded creator building a world from limited resources and high standards.",
+    "visualTaste": "restrained editorial, tactile textures, minimal color, confident negative space",
+    "do": "specific scenes, concrete claims, clean visual hierarchy",
+    "dont": "generic hustle copy, overproduced luxury clichés, vague inspiration language"
+  },
+  "voice": {
+    "tone": "plainspoken, punchy, emotionally direct",
+    "captionRules": "Lead with a real feeling or scene. Avoid hashtags unless asked.",
+    "emailRules": "Short subject, one clear ask, no hype padding.",
+    "forbiddenPhrases": "game changer, let's go, unmatched, revolutionary"
+  },
+  "spotifySnapshot": {
+    "snapshotDate": "2026-07-05",
+    "windowDays": 28,
+    "metrics": {
+      "streams": 18420,
+      "listeners": 6420,
+      "followers": 1300,
+      "popularity": 28
+    },
+    "geo": {
+      "topCities": [
+        { "city": "Los Angeles", "country": "US", "listeners": 620 },
+        { "city": "Atlanta", "country": "US", "listeners": 410 }
+      ]
+    },
+    "tracks": [
+      { "name": "Demo Single", "streams": 9200, "saves": 640, "playlistAdds": 55 }
+    ]
+  },
+  "calendar": {
+    "events": [
+      { "id": "demo-release", "title": "Demo Single release", "date": "2026-08-09", "workspaceLinks": [] }
+    ]
+  },
+  "network": {
+    "people": [
+      {
+        "id": "alex-manager",
+        "name": "Alex Manager",
+        "category": "industry",
+        "relationship": "warm",
+        "lastTouch": "2026-06-01",
+        "canHelpWith": "playlist introductions"
+      }
+    ]
+  },
+  "community": {
+    "contacts": [
+      { "id": "fans-la", "segment": "fans", "city": "Los Angeles" }
+    ],
+    "emailJobs": []
+  }
+}

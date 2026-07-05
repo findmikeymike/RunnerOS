@@ -535,6 +535,26 @@ Remaining implementation:
 - Existing Outputs page continues to work.
 - No separate approval database exists.
 
+## Local Smoke Profiles
+
+Real artist/campaign context and service keys must not be committed.
+
+Use the local smoke profile system for genuine repeatable testing:
+
+- guide: `docs/development/local-smoke-profile.md`
+- loader: `scripts/smoke/load-local-smoke-profile.ts`
+- safe templates: `scripts/smoke/templates/demo/`
+- private data: `.local-smoke/profile-real/`
+
+Rule:
+
+```text
+Commit demo templates.
+Keep real profile data and keys in .local-smoke/.
+Seed only disposable workspace roots.
+Verify git stays clean before release.
+```
+
 ## Final Product Rule
 
 ```text
