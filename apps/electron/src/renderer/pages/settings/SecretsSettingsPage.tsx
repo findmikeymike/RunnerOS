@@ -864,6 +864,7 @@ export default function SecretsSettingsPage() {
                   const managedPreset = presets.find((preset) => preset.storage === 'managed-source')
                   const busy = busyServiceId === service.id
                   const expanded = expandedServiceId === service.id
+                  const zeroPrivateKeyPreset = presets.find((preset) => preset.name === 'ZERO_PRIVATE_KEY')
                   return (
                     <SettingsCard key={service.id}>
                       <div className="p-3">
@@ -907,38 +908,78 @@ export default function SecretsSettingsPage() {
                         </div>
 
                         {service.id === 'zero' ? (
-                          <div className="mt-4 rounded-[12px] border border-white/[0.06] bg-black/20 p-4">
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 text-sm font-medium">
-                                  <WalletCards className="h-4 w-4 text-white/50" />
-                                  <span>Zero Installation</span>
-                                  {zero?.installed ? (
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
-                                  ) : (
-                                    <AlertCircle className="h-3.5 w-3.5 text-amber-400/80" />
+                          <div className="mt-4 space-y-3">
+                            <div className="rounded-[12px] border border-white/[0.06] bg-black/20 p-4">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 text-sm font-medium">
+                                    <WalletCards className="h-4 w-4 text-white/50" />
+                                    <span>Zero Installation</span>
+                                    {zero?.installed ? (
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/80" />
+                                    ) : (
+                                      <AlertCircle className="h-3.5 w-3.5 text-amber-400/80" />
+                                    )}
+                                  </div>
+                                  <div className="mt-2 grid gap-1 text-xs text-white/45">
+                                    <span>{zero?.installed ? `Installed${zero.version ? ` · ${zero.version}` : ''}` : 'Not installed'}</span>
+                                    {zero?.path && <span className="truncate font-mono text-[10px]">{zero.path}</span>}
+                                    <span>{zero?.walletConfigured ? 'Wallet ready' : 'Wallet missing'}</span>
+                                    {zero?.balance && <span className="truncate">{zero.balance}</span>}
+                                    {zero?.error && <span className="text-amber-300/80">{zero.error}</span>}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 flex-col gap-2">
+                                  <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+                                    {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+                                  </Button>
+                                  {!zero?.installed && (
+                                    <Button size="sm" onClick={installZero} disabled={installing}>
+                                      {installing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
+                                      Install
+                                    </Button>
                                   )}
                                 </div>
-                                <div className="mt-2 grid gap-1 text-xs text-white/45">
-                                  <span>{zero?.installed ? `Installed${zero.version ? ` · ${zero.version}` : ''}` : 'Not installed'}</span>
-                                  {zero?.path && <span className="truncate font-mono text-[10px]">{zero.path}</span>}
-                                  <span>{zero?.walletConfigured ? 'Wallet ready' : 'Wallet missing'}</span>
-                                  {zero?.balance && <span className="truncate">{zero.balance}</span>}
-                                  {zero?.error && <span className="text-amber-300/80">{zero.error}</span>}
-                                </div>
-                              </div>
-                              <div className="flex shrink-0 flex-col gap-2">
-                                <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-                                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
-                                </Button>
-                                {!zero?.installed && (
-                                  <Button size="sm" onClick={installZero} disabled={installing}>
-                                    {installing ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : null}
-                                    Install
-                                  </Button>
-                                )}
                               </div>
                             </div>
+                            {zeroPrivateKeyPreset ? (
+                              <div className="rounded-[10px] border border-white/[0.055] bg-black/20 p-3">
+                                <div className="mb-2 flex items-center justify-between gap-2">
+                                  <label className="text-xs font-medium text-white/70">{zeroPrivateKeyPreset.label}</label>
+                                  <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-white/26">
+                                    {savedByName.has(zeroPrivateKeyPreset.name) ? 'Saved' : 'Optional'}
+                                  </span>
+                                </div>
+                                <div className="flex gap-2">
+                                  <input
+                                    value={draftValues[zeroPrivateKeyPreset.name] ?? ''}
+                                    onChange={(event) => setDraftValues((current) => ({ ...current, [zeroPrivateKeyPreset.name]: event.target.value }))}
+                                    placeholder={savedByName.has(zeroPrivateKeyPreset.name) ? savedPlaceholder(zeroPrivateKeyPreset, savedByName) : zeroPrivateKeyPreset.placeholder}
+                                    type="password"
+                                    className="h-8 min-w-0 flex-1 rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none placeholder:text-white/22 focus:border-[#fb923c]/45"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => saveService(service)}
+                                    disabled={busy || !draftValues[zeroPrivateKeyPreset.name]?.trim()}
+                                    className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
+                                  >
+                                    {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                                    Save
+                                  </button>
+                                </div>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <button type="button" className="mt-2 text-left text-[11px] leading-4 text-white/30 transition-colors hover:text-white/52">
+                                      Guide
+                                    </button>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                    {zeroPrivateKeyPreset.description}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </div>
+                            ) : null}
                           </div>
                         ) : managedPreset ? null : (
                           <AnimateServiceFields open={expanded}>
