@@ -293,7 +293,7 @@ export function MainContentPanel({
         )}
       >
         <div className="shrink-0 px-6 pt-5">
-          <div className="mx-auto w-full max-w-[1120px]">
+          <div className="mx-auto w-full max-w-[1600px]">
             <SettingsPageSwitcher activeSubpage={navState.subpage} />
           </div>
         </div>
