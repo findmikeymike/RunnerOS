@@ -66,6 +66,7 @@ export function PanelSlot({
     || navState?.navigator === 'agents'
     || navState?.navigator === 'automations'
     || navState?.navigator === 'workflows'
+    || navState?.navigator === 'settings'
 
   const handleClose = useCallback(() => {
     closePanel(entry.id)
