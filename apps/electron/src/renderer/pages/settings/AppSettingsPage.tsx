@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@craft-agent/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { NetworkProxySettings } from '../../../shared/types'
+import electronPackage from '../../../../package.json'
 
 import {
   SettingsSection,
@@ -29,12 +30,14 @@ import {
   SettingsToggle,
   SettingsInput,
 } from '@/components/settings'
-import { useUpdateChecker } from '@/hooks/useUpdateChecker'
 
 export const meta: DetailsPageMeta = {
   navigator: 'settings',
   slug: 'app',
 }
+
+const RUNNEROS_UPDATES_URL = 'https://github.com/findmikeymike/RunnerOS/releases'
+const quietButtonClass = 'inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76'
 
 // ============================================
 // Proxy form helpers
@@ -107,20 +110,6 @@ export default function AppSettingsPage() {
   const [savedProxyForm, setSavedProxyForm] = useState<ProxyFormState>(EMPTY_PROXY_FORM)
   const [proxyError, setProxyError] = useState<string | undefined>()
   const [isSavingProxy, setIsSavingProxy] = useState(false)
-
-  // Auto-update state (Check Now / Update Ready only shown in Electron, not WebUI)
-  const isElectron = window.electronAPI.getRuntimeEnvironment() === 'electron'
-  const updateChecker = useUpdateChecker()
-  const [isCheckingForUpdates, setIsCheckingForUpdates] = useState(false)
-
-  const handleCheckForUpdates = useCallback(async () => {
-    setIsCheckingForUpdates(true)
-    try {
-      await updateChecker.checkForUpdates()
-    } finally {
-      setIsCheckingForUpdates(false)
-    }
-  }, [updateChecker])
 
   // Load settings on mount
   const loadSettings = useCallback(async () => {
@@ -312,45 +301,23 @@ export default function AppSettingsPage() {
                   <SettingsRow label={t("settings.about.version")}>
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">
-                        {updateChecker.updateInfo?.currentVersion ?? t("common.loading")}
+                        {electronPackage.version}
                       </span>
-                      {isElectron && updateChecker.isDownloading && updateChecker.updateInfo?.latestVersion && (
-                        <div className="flex items-center gap-2 text-muted-foreground text-sm">
-                          <Spinner className="w-3 h-3" />
-                          <span>{t("settings.about.downloading", { version: updateChecker.updateInfo.latestVersion, percent: updateChecker.downloadProgress })}</span>
-                        </div>
-                      )}
                     </div>
                   </SettingsRow>
-                  {isElectron && (
-                    <SettingsRow label={t("settings.about.checkForUpdates")}>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCheckForUpdates}
-                        disabled={isCheckingForUpdates}
+                  <SettingsRow
+                    label={t("settings.about.futureUpdates")}
+                    description={t("settings.about.futureUpdatesDesc")}
+                    action={
+                      <button
+                        type="button"
+                        onClick={() => window.electronAPI.openUrl(RUNNEROS_UPDATES_URL)}
+                        className={quietButtonClass}
                       >
-                        {isCheckingForUpdates ? (
-                          <>
-                            <Spinner className="mr-1.5" />
-                            {t("common.checking")}
-                          </>
-                        ) : (
-                          t("settings.about.checkNow")
-                        )}
-                      </Button>
-                    </SettingsRow>
-                  )}
-                  {isElectron && updateChecker.isReadyToInstall && updateChecker.updateInfo?.latestVersion && (
-                    <SettingsRow label={t("settings.about.updateReady")}>
-                      <Button
-                        size="sm"
-                        onClick={updateChecker.installUpdate}
-                      >
-                        {t("settings.about.restartToUpdate", { version: updateChecker.updateInfo.latestVersion })}
-                      </Button>
-                    </SettingsRow>
-                  )}
+                        {t("settings.about.openRunnerUpdates")}
+                      </button>
+                    }
+                  />
                 </SettingsCard>
               </SettingsSection>
             </div>
