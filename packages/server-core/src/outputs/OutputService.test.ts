@@ -6,6 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { OutputService } from './OutputService';
 import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
 import { OUTPUT_SHOW_IN_CANVAS_TAG } from '@craft-agent/shared/outputs/constants';
+import { loadContextDoc } from '@craft-agent/shared/workspace-context';
+import { OUTPUT_INDEX_CONTEXT_SLUG } from '@craft-agent/shared/outputs';
 import { VISUAL_BOARD_ASSET_PATH, type VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import { VISUAL_SURFACE_EVENTS_ASSET_PATH } from '@craft-agent/shared/visual-surface-events';
 
@@ -28,6 +30,35 @@ function makeRunSnapshot(runId: string, workspaceId: string): WorkflowRunSnapsho
 }
 
 describe('OutputService run mutex', () => {
+  it('updates approval state and refreshes output-index context', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-work-products-'));
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const created = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 's',
+      agentSlug: 'comms-agent',
+      output: {
+        title: 'Press email draft',
+        kind: 'document',
+        summary: 'Draft email.',
+        context: { scope: 'campaign', campaignId: 'blue-moon' },
+        approval: { state: 'pending' },
+      },
+    });
+
+    expect(created.ok).toBe(true);
+    const index = loadContextDoc(root, OUTPUT_INDEX_CONTEXT_SLUG);
+    expect(index?.body).toContain('Press email draft');
+    expect(index?.body).toContain('campaign:blue-moon');
+
+    const updated = service.updateApproval('ws', created.outputId!, { state: 'approved' });
+    expect(updated.approval?.state).toBe('approved');
+    expect(loadContextDoc(root, OUTPUT_INDEX_CONTEXT_SLUG)?.body).toContain('## Recent Work');
+  });
+
   it('serializes concurrent attaches so both outputIds land', async () => {
     const root = mkdtempSync(join(tmpdir(), 'osvc-mutex-'));
     mkdirSync(join(root, 'outputs'), { recursive: true });

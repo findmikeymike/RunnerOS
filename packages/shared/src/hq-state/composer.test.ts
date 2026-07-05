@@ -109,6 +109,49 @@ describe('HQ State of Play composer', () => {
     expect(state.nextMove.route?.prompt).toContain('Re-open Alex Manager');
   });
 
+  test('routes pending Work Products to manual review', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        profileDoc(),
+        completeVaultDoc(),
+        doc('artist-spotify-snapshot', 'Spotify Snapshot', {
+          version: 1,
+          updatedAt: '2026-07-04T00:00:00.000Z',
+          metrics: { streams: 1000, listeners: 400 },
+        }),
+        doc('artist-calendar', 'Artist Calendar', {
+          version: 1,
+          updatedAt: '2026-07-04T00:00:00.000Z',
+          events: [{ title: 'Release', date: '2026-08-01' }],
+        }),
+        doc('artist-network', 'Artist Network', {
+          version: 1,
+          updatedAt: '2026-07-04T00:00:00.000Z',
+          people: [{ name: 'Alex', relationship: 'manager', lastTouch: '2026-07-01' }],
+        }),
+        doc('artist-community', 'Artist Community', {
+          version: 1,
+          updatedAt: '2026-07-04T00:00:00.000Z',
+          contacts: [{ segment: 'fans' }],
+          emailJobs: [],
+        }),
+        textDoc('output-index', 'Output Index', [
+          '## Needs Approval',
+          '- Press email draft | document | comms-agent | campaign:blue-moon | id:11111111-1111-4111-8111-111111111111',
+          '',
+          '## Recent Work',
+          '- Spotify intel | report | deep-research | hq | id:22222222-2222-4222-8222-222222222222',
+        ].join('\n')),
+      ],
+    });
+
+    expect(state.nextMove.title).toBe('Review pending Work Products');
+    expect(state.nextMove.route?.target).toBe('manual');
+    expect(state.nextMove.route?.contextDocSlugs).toContain('output-index');
+    expect(state.attention.some((item) => item.kind === 'output-approval')).toBe(true);
+  });
+
   test('excludes source and shared-intel docs from goals but includes user goals', () => {
     const sharedIntel: SharedIntelNote = {
       version: 1,

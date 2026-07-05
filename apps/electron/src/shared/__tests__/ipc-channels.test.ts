@@ -235,6 +235,7 @@ const EXPECTED_CHANNELS: string[] = [
   "outputs:recordVisualCapture",
   "outputs:saveVisualBoard",
   "outputs:showInFolder",
+  "outputs:updateApproval",
   "outputs:updated",
   "outputs:writeAssetText",
   "permissions:defaultsChanged",

@@ -1,4 +1,5 @@
 import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/types.ts';
+import { OUTPUT_INDEX_CONTEXT_SLUG } from '../outputs/index.ts';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
 import {
@@ -86,6 +87,7 @@ interface HqInputState {
   calendar: CalendarDoc | null;
   community: CommunityDoc | null;
   vault: VaultManifest | null;
+  outputIndex: LoadedContextDoc | null;
   sharedIntel: NonNullable<ReturnType<typeof parseSharedIntelNote>>[];
   goals: LoadedContextDoc[];
 }
@@ -93,6 +95,7 @@ interface HqInputState {
 const SOURCE_SLUGS = new Set<string>([
   HQ_STATE_CONTEXT_SLUG,
   ARTIST_VAULT_CONTEXT_SLUG,
+  OUTPUT_INDEX_CONTEXT_SLUG,
   ...Object.values(HQ_SOURCE_CONTEXT_SLUGS),
 ]);
 
@@ -131,6 +134,7 @@ export function buildHqStateOfPlay(args: { docs: LoadedContextDoc[]; now?: Date 
     calendar: readJsonObject<CalendarDoc>(docBySlug.get(HQ_SOURCE_CONTEXT_SLUGS.calendar)),
     community: readJsonObject<CommunityDoc>(docBySlug.get(HQ_SOURCE_CONTEXT_SLUGS.community)),
     vault: readJsonObject<VaultManifest>(docBySlug.get(HQ_SOURCE_CONTEXT_SLUGS.vault)),
+    outputIndex: docBySlug.get(OUTPUT_INDEX_CONTEXT_SLUG) ?? null,
     sharedIntel: docs
       .filter((doc) => isSharedIntelContextSlug(doc.slug))
       .map((doc) => parseSharedIntelNote(doc.body))
@@ -233,6 +237,15 @@ function buildNextMove(input: HqInputState, missing: string[]): HqStateNextMove 
       title: 'Complete Artist Profile',
       why: 'The HQ brain cannot make sharp worker recommendations until artist identity, sound, and audience are defined.',
       worker: 'branding-agent',
+      action: 'review',
+      oneClick: false,
+    };
+  }
+
+  if (hasPendingOutputApprovals(input)) {
+    return {
+      title: 'Review pending Work Products',
+      why: 'Output Index shows deliverables waiting for approval, so the next move is a user decision before more agent work piles up.',
       action: 'review',
       oneClick: false,
     };
@@ -351,6 +364,7 @@ function routeContextDocSlugs(input: HqInputState, action: HqStateAction, nextMo
     add(HQ_SOURCE_CONTEXT_SLUGS.vault);
     for (const goal of rankGoals(input).slice(0, 3)) slugs.add(goal.slug);
   }
+  if (hasPendingOutputApprovals(input)) add(OUTPUT_INDEX_CONTEXT_SLUG);
 
   if (slugs.size === 0) {
     for (const slug of Object.values(HQ_SOURCE_CONTEXT_SLUGS)) add(slug);
@@ -441,7 +455,24 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
     });
   }
 
+  if (hasPendingOutputApprovals(input)) {
+    items.unshift({
+      kind: 'output-approval',
+      text: 'Work Products need approval before the queue moves forward.',
+      source: OUTPUT_INDEX_CONTEXT_SLUG,
+    });
+  }
+
   return dedupeAttention(items);
+}
+
+function hasPendingOutputApprovals(input: HqInputState): boolean {
+  const body = input.outputIndex?.body ?? '';
+  const needsApproval = body.match(/## Needs Approval\s+([\s\S]*?)(?:\n## |\n?$)/i)?.[1] ?? '';
+  return needsApproval
+    .split('\n')
+    .map((line) => line.trim())
+    .some((line) => line.startsWith('- ') && line !== '- None');
 }
 
 function buildMomentum(input: HqInputState): HqStateOfPlay['momentum'] {

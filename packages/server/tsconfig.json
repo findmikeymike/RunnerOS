@@ -23,6 +23,7 @@
       "@craft-agent/shared/*": ["../shared/src/*"],
       "@craft-agent/server-core": ["../server-core/src/index.ts"],
       "@craft-agent/server-core/*": ["../server-core/src/*"],
+      "@craft-agent/session-tools-core": ["../session-tools-core/src/index.ts"],
       "@craft-agent/core": ["../core/src/index.ts"],
       "@craft-agent/core/*": ["../core/src/*"]
     }

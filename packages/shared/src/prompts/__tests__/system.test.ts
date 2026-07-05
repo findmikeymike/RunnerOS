@@ -55,6 +55,7 @@ describe('system prompt guidance', () => {
 
     expect(prompt).toContain('## Canvas and Outputs')
     expect(prompt).toContain('Use Outputs for durable user-facing artifacts')
+    expect(prompt).toContain('set `context.scope` to `hq` or `campaign`')
     expect(prompt).toContain('Set `showInCanvas: true` on `create_output`')
     expect(prompt).toContain('Use `visual_surface_state` to see what is already visible')
     expect(prompt).toContain('Use Browser Pane or browser tools when the user asks to test, debug, inspect')

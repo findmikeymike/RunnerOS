@@ -17,6 +17,7 @@ import {
   readOutputManifest,
   resolveOutputAssetPath,
   writeOutputManifest,
+  buildOutputIndexBody,
 } from './index.ts';
 
 const OUTPUT_OLD_ID = '11111111-1111-4111-8111-111111111111';
@@ -55,6 +56,51 @@ function manifest(id: string, overrides: Partial<OutputManifest> = {}): OutputMa
 }
 
 describe('output manifest validation', () => {
+  test('accepts context and approval on manifests and summaries', () => {
+    const output = createOutputBundle(workspace, {
+      id: OUTPUT_OLD_ID,
+      workspaceId: 'workspace-1',
+      title: 'Press email draft',
+      kind: 'document',
+      summary: 'Draft email for approval.',
+      origin: { source: 'session', sessionId: 'session-1', agentSlug: 'comms-agent' },
+      context: { scope: 'campaign', campaignId: 'blue-moon' },
+      approval: { state: 'pending', note: 'Review tone.', updatedAt: '2026-07-05T12:00:00.000Z' },
+    });
+
+    expect(readOutputManifest(workspace, output.id)?.context).toEqual({ scope: 'campaign', campaignId: 'blue-moon' });
+    expect(listOutputs(workspace)[0]?.approval?.state).toBe('pending');
+  });
+
+  test('buildOutputIndexBody lists pending approvals before recent work', () => {
+    const body = buildOutputIndexBody([
+      manifest(OUTPUT_OLD_ID, {
+        title: 'Cover art v2',
+        kind: 'image',
+        approval: { state: 'pending' },
+        context: { scope: 'campaign', campaignId: 'blue-moon' },
+      }),
+      manifest(OUTPUT_NEW_ID, {
+        title: 'Spotify intel',
+        kind: 'report',
+        context: { scope: 'hq' },
+        updatedAt: '2026-05-02T10:00:00.000Z',
+      }),
+      manifest(OUTPUT_OTHER_ID, {
+        title: 'Session board',
+        kind: 'other',
+        tags: ['visual-board'],
+      }),
+    ]);
+
+    expect(body).toContain('## Needs Approval');
+    expect(body).toContain('Cover art v2 | image');
+    expect(body).toContain('campaign:blue-moon');
+    expect(body).toContain('## Recent Work');
+    expect(body).toContain('Spotify intel | report');
+    expect(body).not.toContain('Session board');
+  });
+
   test('accepts a complete manifest with assets, receipts, links, and preview', () => {
     const full = manifest(OUTPUT_OLD_ID, {
       primary: {

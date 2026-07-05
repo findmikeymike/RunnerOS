@@ -13,6 +13,8 @@ export type OutputKind =
   | 'other';
 
 export type OutputStatus = 'draft' | 'published' | 'failed' | 'cancelled';
+export type OutputContextScope = 'hq' | 'campaign';
+export type OutputApprovalState = 'none' | 'pending' | 'approved' | 'changes_requested';
 
 export type OutputAssetRole = 'primary' | 'supporting' | 'source' | 'thumbnail' | 'attachment';
 
@@ -93,6 +95,17 @@ export interface OutputPreview {
   inlineText?: string;
 }
 
+export interface OutputContext {
+  scope: OutputContextScope;
+  campaignId?: string;
+}
+
+export interface OutputApproval {
+  state: OutputApprovalState;
+  note?: string;
+  updatedAt?: string;
+}
+
 export interface OutputManifest {
   schemaVersion: 1;
   id: string;
@@ -129,10 +142,10 @@ export interface OutputSummary {
   completedAt?: string;
   origin: OutputOrigin;
   preview?: OutputPreview;
-  primaryAssetId?: string;
-  previewMode?: OutputPreviewMode;
   context?: OutputContext;
   approval?: OutputApproval;
+  primaryAssetId?: string;
+  previewMode?: OutputPreviewMode;
   assetCount: number;
   receiptCount: number;
   linkCount: number;

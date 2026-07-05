@@ -178,12 +178,13 @@ function isOutputPreview(value: unknown, assetIds: ReadonlySet<string>): value i
 function isOutputContext(value: unknown): value is OutputContext {
   if (!isRecord(value)) return false;
   if (typeof value.scope !== 'string' || !OUTPUT_CONTEXT_SCOPES.has(value.scope as OutputContext['scope'])) return false;
-  if (value.campaignId !== undefined && (typeof value.campaignId !== 'string' || !value.campaignId.trim())) return false;
-  if (value.scope === 'campaign' && typeof value.campaignId !== 'string') return false;
+  if (!isOptionalString(value.campaignId)) return false;
+  if (value.scope === 'campaign' && !value.campaignId?.trim()) return false;
+  if (value.scope === 'hq' && value.campaignId !== undefined) return false;
   return true;
 }
 
-function isOutputApproval(value: unknown): value is OutputApproval {
+export function isOutputApproval(value: unknown): value is OutputApproval {
   if (!isRecord(value)) return false;
   if (typeof value.state !== 'string' || !OUTPUT_APPROVAL_STATES.has(value.state as OutputApproval['state'])) return false;
   if (!isOptionalString(value.note)) return false;

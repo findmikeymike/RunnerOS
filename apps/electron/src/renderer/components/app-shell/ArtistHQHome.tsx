@@ -29,11 +29,12 @@ import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { useAgents } from '@/hooks/useAgents'
-import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
+import { useOutputs, type OutputApprovalDTO, type OutputManifestDTO, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import { openAgentSessionComposer } from '@/lib/run-agent'
+import { VISUAL_BOARD_TAG } from '@craft-agent/shared/visual-board'
 import {
   dedupeAgentsBySlug,
   proactiveHqModeStorageKey,
@@ -284,7 +285,7 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
   const [proactiveMode, setProactiveMode] = React.useState(() => readBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), false))
   const [hqRouteBusy, setHqRouteBusy] = React.useState(false)
   const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
-  const { outputs, loading: outputsLoading } = useOutputs(workspaceId)
+  const { outputs, loading: outputsLoading, getOutput, updateApproval } = useOutputs(workspaceId)
   const profileResult = React.useMemo(
     () => parseArtistProfileDocResult(docs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)),
     [docs],
@@ -1173,6 +1174,13 @@ export function ArtistHQHome({ workspaceId, workspaceName }: ArtistHQHomeProps) 
               </HQCard>
             </div>
 
+            <WorkProductsWidget
+              outputs={outputs}
+              loading={outputsLoading}
+              getOutput={getOutput}
+              updateApproval={updateApproval}
+            />
+
             <HQCard>
               <SectionTitle icon={FolderKanban} title="Projects" meta="global" />
               <ProjectBoard />
@@ -1479,6 +1487,226 @@ function SectionTitle({
         <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">{title}</h3>
       </div>
       {meta ? <span className="text-[8px] font-medium uppercase tracking-widest text-white/30">{meta}</span> : null}
+    </div>
+  )
+}
+
+function WorkProductsWidget({
+  outputs,
+  loading,
+  getOutput,
+  updateApproval,
+}: {
+  outputs: OutputSummaryDTO[]
+  loading: boolean
+  getOutput: (outputId: string) => Promise<OutputManifestDTO | null>
+  updateApproval: (outputId: string, approval: OutputApprovalDTO) => Promise<OutputManifestDTO | null>
+}) {
+  const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  const [selected, setSelected] = React.useState<OutputManifestDTO | null>(null)
+  const [note, setNote] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+
+  const workProducts = React.useMemo(
+    () => outputs
+      .filter((output) => output.status !== 'failed' && output.status !== 'cancelled')
+      .filter((output) => !output.tags?.includes(VISUAL_BOARD_TAG))
+      .sort((a, b) => (b.updatedAt ?? b.createdAt ?? '').localeCompare(a.updatedAt ?? a.createdAt ?? '')),
+    [outputs],
+  )
+  const needsApproval = workProducts.filter((output) => output.approval?.state === 'pending').slice(0, 5)
+  const recent = workProducts.filter((output) => output.approval?.state !== 'pending').slice(0, 6)
+
+  React.useEffect(() => {
+    let cancelled = false
+    if (!selectedId) {
+      setSelected(null)
+      setNote('')
+      return
+    }
+    getOutput(selectedId).then((manifest) => {
+      if (!cancelled) {
+        setSelected(manifest)
+        setNote(manifest?.approval?.note ?? '')
+      }
+    })
+    return () => { cancelled = true }
+  }, [getOutput, selectedId])
+
+  const applyApproval = async (approval: OutputApprovalDTO) => {
+    if (!selected) return
+    setBusy(true)
+    try {
+      const next = await updateApproval(selected.id, approval)
+      setSelected(next)
+      toast.success(approval.state === 'approved' ? 'Work Product approved' : 'Changes requested')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <HQCard>
+      <SectionTitle icon={CheckCircle2} title="Work Products" meta={loading ? 'loading' : `${needsApproval.length} pending`} />
+      {needsApproval.length === 0 && recent.length === 0 ? (
+        <EmptyLine title="No Work Products yet" detail="Reusable drafts, reports, assets, receipts, and approvals will appear here." />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <WorkProductSection title="Needs Approval" outputs={needsApproval} empty="No approvals waiting" onOpen={setSelectedId} />
+          <WorkProductSection title="Recent Work" outputs={recent} empty="No recent work yet" onOpen={setSelectedId} />
+        </div>
+      )}
+
+      <Dialog open={Boolean(selectedId)} onOpenChange={(open) => !open && setSelectedId(null)}>
+        <DialogContent className="border-white/[0.08] bg-[#080808] text-white sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-semibold text-white">{selected?.title ?? 'Work Product'}</DialogTitle>
+            <DialogDescription className="text-xs text-white/42">
+              {selected ? `${selected.kind} · ${selected.origin.agentName ?? selected.origin.agentSlug ?? selected.origin.source}` : 'Loading output'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selected ? (
+            <div className="space-y-4">
+              <p className="text-sm leading-6 text-white/68">{selected.summary || 'No summary.'}</p>
+              <div className="grid grid-cols-2 gap-2 text-xs md:grid-cols-4">
+                <OutputFact label="Context" value={selected.context?.scope === 'campaign' ? `campaign:${selected.context.campaignId}` : 'hq'} />
+                <OutputFact label="Approval" value={selected.approval?.state ?? 'none'} />
+                <OutputFact label="Assets" value={String(selected.assets.length)} />
+                <OutputFact label="Updated" value={formatShortDate(selected.updatedAt ?? selected.createdAt)} />
+              </div>
+
+              {selected.assets.length > 0 ? (
+                <div>
+                  <div className="mb-2 text-[9px] font-medium uppercase tracking-[0.15em] text-white/35">Files</div>
+                  <div className="space-y-2">
+                    {selected.assets.slice(0, 4).map((asset) => (
+                      <div key={asset.id} className="flex items-center justify-between gap-3 rounded-[12px] border border-white/[0.05] bg-white/[0.025] px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-medium text-white/72">{asset.label}</div>
+                          <div className="truncate text-[10px] text-white/32">{asset.path}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => window.electronAPI.openOutputFile?.(selected.workspaceId ?? '', selected.id, asset.id)}
+                          className="shrink-0 rounded-full border border-white/[0.08] px-3 py-1 text-[10px] font-medium text-white/58 hover:bg-white/[0.06] hover:text-white"
+                        >
+                          Open
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {selected.receipts.length > 0 ? (
+                <div className="rounded-[12px] border border-white/[0.05] bg-white/[0.02] p-3 text-xs text-white/58">
+                  {selected.receipts.length} receipt{selected.receipts.length === 1 ? '' : 's'} attached
+                </div>
+              ) : null}
+
+              {selected.approval?.state === 'pending' ? (
+                <div className="rounded-[14px] border border-orange-300/20 bg-orange-400/8 p-3">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => applyApproval({ state: 'approved' })}
+                      className="rounded-full bg-emerald-300 px-4 py-2 text-xs font-semibold text-black disabled:opacity-50"
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => applyApproval({ state: 'changes_requested', note })}
+                      className="rounded-full border border-white/[0.1] px-4 py-2 text-xs font-semibold text-white/76 hover:bg-white/[0.06] disabled:opacity-50"
+                    >
+                      Request Changes
+                    </button>
+                  </div>
+                  <textarea
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    placeholder="Optional change note"
+                    className="mt-3 min-h-[70px] w-full rounded-[10px] border border-white/[0.06] bg-black/30 px-3 py-2 text-xs leading-5 text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
+                  />
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap gap-2 border-t border-white/[0.05] pt-3">
+                <button
+                  type="button"
+                  onClick={() => navigate(routes.view.output(selected.id))}
+                  className="rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-black hover:bg-white"
+                >
+                  Open Output
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.electronAPI.showOutputInFolder?.(selected.workspaceId ?? '', selected.id)}
+                  className="rounded-full border border-white/[0.1] px-4 py-2 text-xs font-semibold text-white/64 hover:bg-white/[0.06] hover:text-white"
+                >
+                  Show Folder
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </HQCard>
+  )
+}
+
+function WorkProductSection({
+  title,
+  outputs,
+  empty,
+  onOpen,
+}: {
+  title: string
+  outputs: OutputSummaryDTO[]
+  empty: string
+  onOpen: (outputId: string) => void
+}) {
+  return (
+    <div>
+      <div className="mb-2 text-[9px] font-medium uppercase tracking-[0.15em] text-white/35">{title}</div>
+      {outputs.length === 0 ? (
+        <div className="rounded-[12px] border border-white/[0.04] bg-white/[0.018] px-3 py-4 text-xs text-white/32">{empty}</div>
+      ) : (
+        <div className="space-y-2">
+          {outputs.map((output) => (
+            <button
+              key={output.id}
+              type="button"
+              onClick={() => onOpen(output.id)}
+              className="w-full rounded-[12px] border border-white/[0.05] bg-black/20 p-3 text-left transition-colors hover:bg-white/[0.035]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-white/78">{output.title}</div>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-white/40">{output.summary || output.kind}</p>
+                </div>
+                <span className="shrink-0 rounded-full border border-white/[0.07] px-2 py-1 text-[9px] font-medium uppercase tracking-[0.12em] text-white/34">
+                  {output.kind}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OutputFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[12px] border border-white/[0.05] bg-white/[0.02] p-3">
+      <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-white/32">{label}</div>
+      <div className="mt-1 truncate text-xs font-medium text-white/70">{value}</div>
     </div>
   )
 }

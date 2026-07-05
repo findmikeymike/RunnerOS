@@ -8,6 +8,7 @@ export function buildCanvasGuidanceSection(agent: { metadata: Pick<AgentMetadata
     '',
     '- Canvas is the in-chat visual/output viewer for durable Outputs.',
     '- When the user asks to show, preview, view, compare, or present an artifact, create or reuse a durable Output and pin/display it in Canvas.',
+    '- For HQ/campaign dashboard work, set Output context.scope/context.campaignId and use approval.state "pending" only when the user must decide.',
     '- Use Canvas for visual, web, media, markdown/document, JSON/data, receipt, and link-style artifacts when seeing the result helps the user.',
     '- Set showInCanvas true when the user asks to see, preview, compare, review, present, open, or iterate on the artifact right away.',
     '- Prefer Canvas-native formats: HTML for local/generated web, PNG/JPG/WebP/SVG for images, MP4/WebM/MOV for video, Markdown for reports, CSV/TSV for tables, .chart.json for charts, .workflow.json for workflow maps, and HTML preview plus PPTX/PDF exports for slide decks.',

@@ -3,7 +3,9 @@ export type {
   OutputApproval,
   OutputAsset,
   OutputAssetRole,
+  OutputApprovalState,
   OutputContext,
+  OutputContextScope,
   OutputKind,
   OutputLink,
   OutputManifest,
@@ -18,6 +20,13 @@ export type {
 export {
   OUTPUT_SHOW_IN_CANVAS_TAG,
 } from './constants.ts';
+
+export {
+  OUTPUT_INDEX_CONTEXT_SLUG,
+  OUTPUT_INDEX_MAX_PENDING,
+  OUTPUT_INDEX_MAX_RECENT,
+  buildOutputIndexBody,
+} from './output-index.ts';
 
 export {
   summarizeOutputContent,
@@ -45,6 +54,7 @@ export type {
 
 export {
   assertOutputManifest,
+  isOutputApproval,
   isOutputManifest,
   isSafeRelativeAssetPath,
 } from './validation.ts';

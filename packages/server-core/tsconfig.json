@@ -24,7 +24,8 @@
       "@craft-agent/core/*": ["../core/src/*"],
       "@craft-agent/shared": ["../shared/src/index.ts"],
       "@craft-agent/shared/agent-messaging": ["../shared/src/agent-messaging/index.ts"],
-      "@craft-agent/shared/*": ["../shared/src/*"]
+      "@craft-agent/shared/*": ["../shared/src/*"],
+      "@craft-agent/session-tools-core": ["../session-tools-core/src/index.ts"]
     }
   },
   "include": ["src/**/*", "../shared/src/agent/bash-parser.d.ts"],

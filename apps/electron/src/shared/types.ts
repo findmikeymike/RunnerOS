@@ -1009,6 +1009,11 @@ export interface ElectronAPI {
   // Outputs
   listOutputs(workspaceId: string): Promise<OutputSummaryDTO[]>
   getOutput(workspaceId: string, outputId: string): Promise<OutputManifestDTO | null>
+  updateOutputApproval(
+    workspaceId: string,
+    outputId: string,
+    approval: NonNullable<OutputManifestDTO['approval']>,
+  ): Promise<OutputManifestDTO>
   deleteOutput(workspaceId: string, outputId: string): Promise<boolean>
   getVisualBoard(workspaceId: string, sessionId: string): Promise<{ output: OutputManifestDTO; board: VisualBoardSnapshot }>
   saveVisualBoard(

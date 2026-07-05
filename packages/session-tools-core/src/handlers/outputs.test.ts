@@ -127,6 +127,28 @@ describe('output handlers', () => {
     expect((result.content[0] as any).text).toContain('Created output "Research brief"');
   });
 
+  it('create_output accepts Work Product context and approval', async () => {
+    let captured: CreateOutputToolInput | undefined;
+    const ctx = makeCtx({
+      createOutput: async (input) => {
+        captured = input;
+        return { ok: true, outputId: '11111111-1111-4111-8111-111111111111' };
+      },
+    });
+
+    const result = await handleCreateOutput(ctx, {
+      title: 'Approval draft',
+      kind: 'document',
+      summary: 'Needs user approval.',
+      context: { scope: 'campaign', campaignId: ' blue-moon ' },
+      approval: { state: 'pending', note: 'Review before sending.' },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(captured?.context).toEqual({ scope: 'campaign', campaignId: 'blue-moon' });
+    expect(captured?.approval).toEqual({ state: 'pending', note: 'Review before sending.' });
+  });
+
   it('create_output accepts show_in_canvas as an alias and normalizes it', async () => {
     let captured: CreateOutputToolInput | undefined;
     const ctx = makeCtx({

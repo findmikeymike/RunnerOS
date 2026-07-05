@@ -527,6 +527,7 @@ export const RPC_CHANNELS = {
   outputs: {
     LIST: 'outputs:list',
     GET: 'outputs:get',
+    UPDATE_APPROVAL: 'outputs:updateApproval',
     DELETE: 'outputs:delete',
     GET_VISUAL_BOARD: 'outputs:getVisualBoard',
     SAVE_VISUAL_BOARD: 'outputs:saveVisualBoard',

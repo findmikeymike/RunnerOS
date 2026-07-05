@@ -17,6 +17,8 @@ export type OutputKind =
   | 'other';
 
 export type OutputAssetRole = 'primary' | 'supporting' | 'source' | 'thumbnail' | 'attachment';
+export type OutputContextScope = 'hq' | 'campaign';
+export type OutputApprovalState = 'none' | 'pending' | 'approved' | 'changes_requested';
 
 export interface CreateOutputFileInput {
   path: string;
@@ -47,12 +49,12 @@ export interface CreateOutputReceiptInput {
 }
 
 export interface CreateOutputContextInput {
-  scope: 'hq' | 'campaign';
+  scope: OutputContextScope;
   campaignId?: string;
 }
 
 export interface CreateOutputApprovalInput {
-  state: 'none' | 'pending' | 'approved' | 'changes_requested';
+  state: OutputApprovalState;
   note?: string;
   updatedAt?: string;
 }
@@ -248,22 +250,31 @@ function validateOutputInput(args: CreateOutputToolInput): string | null {
   }
   if (args.context !== undefined) {
     if (!isRecord(args.context)) return 'context must be an object when provided.';
-    if (!OUTPUT_CONTEXT_SCOPES.has(String(args.context.scope))) return 'context.scope must be hq or campaign.';
-    if (args.context.campaignId !== undefined && (typeof args.context.campaignId !== 'string' || !args.context.campaignId.trim())) {
-      return 'context.campaignId must be a non-empty string when provided.';
+    if (typeof args.context.scope !== 'string' || !OUTPUT_CONTEXT_SCOPES.has(args.context.scope)) {
+      return 'context.scope must be hq or campaign.';
     }
-    if (args.context.scope === 'campaign' && typeof args.context.campaignId !== 'string') {
+    if (args.context.campaignId !== undefined && typeof args.context.campaignId !== 'string') {
+      return 'context.campaignId must be a string when provided.';
+    }
+    if (args.context.scope === 'campaign' && !args.context.campaignId?.trim()) {
       return 'context.campaignId is required when context.scope is campaign.';
+    }
+    if (args.context.scope === 'hq' && args.context.campaignId !== undefined) {
+      return 'context.campaignId must be omitted when context.scope is hq.';
     }
   }
   if (args.approval !== undefined) {
     if (!isRecord(args.approval)) return 'approval must be an object when provided.';
-    if (!OUTPUT_APPROVAL_STATES.has(String(args.approval.state))) {
-      return 'approval.state must be one of: none, pending, approved, changes_requested.';
+    if (typeof args.approval.state !== 'string' || !OUTPUT_APPROVAL_STATES.has(args.approval.state)) {
+      return 'approval.state must be none, pending, approved, or changes_requested.';
     }
-    if (args.approval.note !== undefined && typeof args.approval.note !== 'string') return 'approval.note must be a string when provided.';
-    if (args.approval.updatedAt !== undefined && (typeof args.approval.updatedAt !== 'string' || !Number.isFinite(Date.parse(args.approval.updatedAt)))) {
-      return 'approval.updatedAt must be an ISO-8601 date string when provided.';
+    if (args.approval.note !== undefined && typeof args.approval.note !== 'string') {
+      return 'approval.note must be a string when provided.';
+    }
+    if (args.approval.updatedAt !== undefined) {
+      if (typeof args.approval.updatedAt !== 'string' || !Number.isFinite(Date.parse(args.approval.updatedAt))) {
+        return 'approval.updatedAt must be an ISO-8601 date string when provided.';
+      }
     }
   }
   if (args.showInCanvas !== undefined && typeof args.showInCanvas !== 'boolean') {
@@ -290,6 +301,15 @@ export async function handleCreateOutput(
     ...args,
     title: args.title.trim(),
     summary: args.summary.trim(),
+    context: args.context ? {
+      scope: args.context.scope,
+      ...(args.context.campaignId ? { campaignId: args.context.campaignId.trim() } : {}),
+    } : undefined,
+    approval: args.approval ? {
+      state: args.approval.state,
+      ...(args.approval.note !== undefined ? { note: args.approval.note } : {}),
+      ...(args.approval.updatedAt !== undefined ? { updatedAt: args.approval.updatedAt } : {}),
+    } : undefined,
     showInCanvas: args.showInCanvas ?? args.show_in_canvas,
   };
   delete input.show_in_canvas;

@@ -25,6 +25,8 @@ export type OutputKind =
   | 'other'
 
 export type OutputStatus = 'draft' | 'published' | 'failed' | 'cancelled'
+export type OutputContextScope = 'hq' | 'campaign'
+export type OutputApprovalState = 'none' | 'pending' | 'approved' | 'changes_requested'
 export type OutputPreviewMode = 'markdown' | 'text' | 'json' | 'image' | 'video' | 'audio' | 'model' | 'pdf' | 'excalidraw' | 'presentation' | 'table' | 'chart' | 'workflow' | 'receipt' | 'external-link' | 'web'
 
 export interface OutputAssetDTO {
@@ -70,12 +72,12 @@ export interface OutputOriginDTO {
 }
 
 export interface OutputContextDTO {
-  scope: 'hq' | 'campaign'
+  scope: OutputContextScope
   campaignId?: string
 }
 
 export interface OutputApprovalDTO {
-  state: 'none' | 'pending' | 'approved' | 'changes_requested'
+  state: OutputApprovalState
   note?: string
   updatedAt?: string
 }
@@ -128,11 +130,13 @@ export interface UseOutputsResult {
   available: boolean
   refresh: () => Promise<void>
   getOutput: (outputId: string) => Promise<OutputManifestDTO | null>
+  updateApproval: (outputId: string, approval: OutputApprovalDTO) => Promise<OutputManifestDTO | null>
 }
 
 type OutputsElectronAPI = typeof window.electronAPI & {
   listOutputs?: (workspaceId: string, filter?: unknown) => Promise<unknown[]>
   getOutput?: (workspaceId: string, outputId: string) => Promise<unknown | null>
+  updateOutputApproval?: (workspaceId: string, outputId: string, approval: OutputApprovalDTO) => Promise<unknown>
   openOutputFile?: (workspaceId: string, outputId: string, assetId?: string) => Promise<void>
   showOutputInFolder?: (workspaceId: string, outputId: string, assetId?: string) => Promise<void>
   onOutputsUpdated?: (callback: (workspaceId: string) => void) => () => void
@@ -263,6 +267,16 @@ export function useOutputs(workspaceId: string | null | undefined): UseOutputsRe
     return coerceManifest(await electronAPI.getOutput(workspaceId, outputId))
   }, [electronAPI, workspaceId])
 
+  const updateApproval = useCallback(async (
+    outputId: string,
+    approval: OutputApprovalDTO,
+  ): Promise<OutputManifestDTO | null> => {
+    if (!workspaceId || typeof electronAPI.updateOutputApproval !== 'function') return null
+    const updated = coerceManifest(await electronAPI.updateOutputApproval(workspaceId, outputId, approval))
+    await refresh()
+    return updated
+  }, [electronAPI, refresh, workspaceId])
+
   return {
     outputs: state.outputs,
     loading: state.loading,
@@ -270,5 +284,6 @@ export function useOutputs(workspaceId: string | null | undefined): UseOutputsRe
     available,
     refresh,
     getOutput,
+    updateApproval,
   }
 }

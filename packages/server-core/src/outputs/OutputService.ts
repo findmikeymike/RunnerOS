@@ -11,17 +11,21 @@ import {
   listOutputManifests,
   listOutputs,
   readOutput,
+  buildOutputIndexBody,
+  OUTPUT_INDEX_CONTEXT_SLUG,
   resolveGeneratedHtmlPreviewTarget,
   resolveLocalWebPreviewTarget,
   summarizeOutputContent,
   writeOutputManifest,
   type OutputAsset,
+  type OutputApproval,
   type OutputKind,
   type OutputManifest,
   type OutputSummary,
   type OutputOrigin,
 } from '@craft-agent/shared/outputs';
 import { OUTPUT_SHOW_IN_CANVAS_TAG } from '@craft-agent/shared/outputs/constants';
+import { upsertContextDoc } from '@craft-agent/shared/workspace-context';
 import {
   VISUAL_BOARD_ASSET_ID,
   VISUAL_BOARD_ASSET_PATH,
@@ -94,6 +98,28 @@ export class OutputService {
 
   get(workspaceId: string, outputId: string): OutputManifest | null {
     return readOutput(this.deps.getWorkspaceRootPath(workspaceId), outputId);
+  }
+
+  updateApproval(workspaceId: string, outputId: string, approval: OutputApproval): OutputManifest {
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    const output = readOutput(root, outputId);
+    if (!output) throw new Error(`Output not found: ${outputId}`);
+    if (approval.state === 'none' && approval.note?.trim()) {
+      throw new Error('approval.note is only valid when a decision was made.');
+    }
+    const now = new Date().toISOString();
+    const next: OutputManifest = {
+      ...output,
+      approval: {
+        state: approval.state,
+        ...(approval.note?.trim() ? { note: approval.note.trim() } : {}),
+        updatedAt: approval.updatedAt ?? now,
+      },
+      updatedAt: now,
+    };
+    writeOutputManifest(root, next);
+    this.emitUpdated(workspaceId);
+    return next;
   }
 
   getVisualSurfaceState(workspaceId: string, sessionId: string): VisualSurfaceStateToolResult {
@@ -863,7 +889,26 @@ export class OutputService {
   }
 
   private emitUpdated(workspaceId: string): void {
+    this.refreshOutputIndex(workspaceId);
     this.deps.emitOutputsUpdated?.(workspaceId);
+  }
+
+  private refreshOutputIndex(workspaceId: string): void {
+    try {
+      const root = this.deps.getWorkspaceRootPath(workspaceId);
+      upsertContextDoc(root, {
+        slug: OUTPUT_INDEX_CONTEXT_SLUG,
+        metadata: {
+          name: 'Output Index',
+          description: 'Generated compact summary of recent Work Products and pending approvals.',
+          routing: { mode: 'broadcast' },
+          enabled: true,
+        },
+        body: buildOutputIndexBody(listOutputManifests(root)),
+      });
+    } catch {
+      // Keep Output writes authoritative; the derived agent index can heal on the next update.
+    }
   }
 
   private async detachDeletedOutputFromWorkflowRun(

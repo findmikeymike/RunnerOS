@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
-import type { OutputManifest, OutputSummary } from '@craft-agent/shared/outputs';
+import type { OutputApproval, OutputManifest, OutputSummary } from '@craft-agent/shared/outputs';
+import { isOutputApproval } from '@craft-agent/shared/outputs';
 import { validateRunnerVideoProject } from '@craft-agent/shared/video';
 import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import type { ApplyVisualSurfaceEventResult, VisualSurfaceEventInput, VisualSurfaceEventRecord } from '@craft-agent/shared/visual-surface-events';
@@ -16,6 +17,7 @@ import { OutputService, pushOutputsUpdated, pushWorkflowRunUpdated } from '../..
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.LIST,
   RPC_CHANNELS.outputs.GET,
+  RPC_CHANNELS.outputs.UPDATE_APPROVAL,
   RPC_CHANNELS.outputs.DELETE,
   RPC_CHANNELS.outputs.GET_VISUAL_BOARD,
   RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD,
@@ -61,6 +63,13 @@ function selectAssetPath(output: OutputManifest, assetIdOrPath?: string): string
   const asset = output.assets.find((a) => a.id === assetIdOrPath);
   if (!asset) throw new Error(`Output "${output.id}" has no asset with id "${assetIdOrPath}".`);
   return asset.path;
+}
+
+function assertOutputApproval(value: unknown): OutputApproval {
+  if (!isOutputApproval(value)) {
+    throw new Error('Invalid output approval payload.');
+  }
+  return value;
 }
 
 async function resolveSafeOutputAssetPath(
@@ -150,6 +159,14 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     RPC_CHANNELS.outputs.GET,
     async (_ctx, workspaceId: string, outputId: string): Promise<OutputManifest | null> => {
       return serviceFor(server).get(workspaceId, outputId);
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.UPDATE_APPROVAL,
+    async (_ctx, workspaceId: string, outputId: string, approval: unknown): Promise<OutputManifest> => {
+      assertLocalWorkspace(workspaceId, 'Update output approval');
+      return serviceFor(server).updateApproval(workspaceId, outputId, assertOutputApproval(approval));
     },
   );
 

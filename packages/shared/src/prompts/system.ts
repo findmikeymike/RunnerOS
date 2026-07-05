@@ -444,6 +444,8 @@ const VISUAL_CANVAS_GUIDANCE = `## Canvas and Outputs
 
 Use Outputs for durable user-facing artifacts: images, videos, reports, datasets, charts, slide decks, local web previews, receipts, and links.
 
+When an Output should show up on HQ or a campaign dashboard, treat it as a Work Product: set \`context.scope\` to \`hq\` or \`campaign\`, include \`context.campaignId\` for campaign work, and set \`approval.state: "pending"\` only when the user needs to approve, reject, or request changes.
+
 Use Canvas when seeing the artifact beside chat helps the user think, review, compare, or continue giving instructions. The normal flow is:
 1. Create or identify the relevant Output.
 2. Set \`showInCanvas: true\` on \`create_output\` when the new Output should appear immediately.
