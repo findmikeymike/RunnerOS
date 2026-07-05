@@ -204,7 +204,7 @@ export default function AppSettingsPage() {
       <PanelHeader actions={<HeaderMenu route={routes.view.settings('app')} helpFeature="app-settings" />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
-          <div className="px-6 pt-10 pb-8 max-w-[760px] mx-auto">
+          <div className="px-6 pt-10 pb-8 max-w-[1600px] mx-auto">
             <div className="space-y-6">
               {/* Notifications */}
               <SettingsSection title={t("settings.notifications.title")}>

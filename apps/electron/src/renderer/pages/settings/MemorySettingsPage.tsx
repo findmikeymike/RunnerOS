@@ -25,7 +25,7 @@ export default function MemorySettingsPage() {
       <PanelHeader actions={<HeaderMenu route={routes.view.settings('memory')} />} />
       <div className="flex-1 min-h-0 mask-fade-y">
         <ScrollArea className="h-full">
-          <div className="mx-auto max-w-[860px] space-y-6 px-6 pb-8 pt-10">
+          <div className="mx-auto max-w-[1600px] space-y-6 px-6 pb-8 pt-10">
             <SettingsSection
               title="Review queue"
               description="Approve or reject sidecar suggestions before they become durable memory."
