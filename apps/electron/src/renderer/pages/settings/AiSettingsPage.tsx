@@ -67,6 +67,41 @@ function InfoExplainer({ text }: { text: string }) {
   )
 }
 
+function AdvancedSettingsDisclosure({ children }: { children: React.ReactNode }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  return (
+    <section className="space-y-3">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((value) => !value)}
+        className="group flex w-full items-center justify-between rounded-[12px] border border-white/[0.06] bg-white/[0.018] px-4 py-3 text-left transition-colors hover:bg-white/[0.032]"
+      >
+        <div>
+          <div className="font-mono text-[11px] font-semibold uppercase tracking-[0.18em] text-white/48">Advanced</div>
+          <div className="mt-0.5 text-[12px] leading-4 text-white/34">Defaults, workspace overrides, context, and caching.</div>
+        </div>
+        <ChevronRight className={cn("h-4 w-4 text-white/34 transition-transform group-hover:text-white/58", isExpanded && "rotate-90")} />
+      </button>
+      <AnimatePresence initial={false}>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.16 }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-4 pt-1">
+              {children}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+  )
+}
+
 /**
  * Derive model dropdown options from a connection's models array,
  * falling back to registry models for the connection's provider type.
@@ -987,105 +1022,107 @@ export default function AiSettingsPage() {
                 </div>
               </SettingsSection>
 
-              {/* Default Settings - only show if connections exist */}
-              {llmConnections.length > 0 && (
-              <SettingsSection
-                title={
-                  <div className="flex items-center gap-2">
-                    Default for new chats
-                    <InfoExplainer text="This model is used automatically when you start a new chat. You can always swap models instantly from the chat bar." />
-                  </div>
-                }
-                description="The provider and model used when a chat has no override."
-              >
-                <SettingsCard>
-                  <SettingsMenuSelectRow
-                    label="Provider"
-                    description="The main account powering your general chats."
-                    value={defaultConnection?.slug || ''}
-                    onValueChange={handleSetDefaultConnection}
-                    options={llmConnections.map((conn) => ({
-                      value: conn.slug,
-                      label: conn.name,
-                      description: conn.providerType === 'anthropic' ? 'Anthropic API' :
-                                   conn.providerType === 'pi' ? 'Runner Backend' :
-                                   conn.providerType === 'pi_compat' ? 'Runner Backend Compatible' :
-                                   conn.providerType || 'Unknown',
-                    }))}
-                  />
-                  <SettingsMenuSelectRow
-                    label="Model"
-                    description="The default model used from this provider."
-                    value={defaultModel}
-                    onValueChange={handleDefaultModelChange}
-                    options={getModelOptionsForConnection(defaultConnection).map(o => ({
-                      ...o, description: o.descriptionKey ? t(o.descriptionKey) : o.description,
-                    }))}
-                  />
-                  <SettingsMenuSelectRow
-                    label="Reasoning level"
-                    description="How much computing power the AI should use before answering."
-                    value={defaultThinking}
-                    onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
-                    options={THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => ({
-                      value: id,
-                      label: t(nameKey),
-                      description: t(descriptionKey),
-                    }))}
-                  />
-                </SettingsCard>
-              </SettingsSection>
-              )}
-
-              {/* Workspace Overrides - only show if connections exist */}
-              {workspaces.length > 0 && llmConnections.length > 0 && (
+              <AdvancedSettingsDisclosure>
+                {/* Default Settings - only show if connections exist */}
+                {llmConnections.length > 0 && (
                 <SettingsSection
                   title={
                     <div className="flex items-center gap-2">
-                      {t("settings.ai.workspaceOverrides")}
-                      <InfoExplainer text="Lock a specific workspace to always use a certain model or reasoning level, regardless of your global default." />
+                      Default for new chats
+                      <InfoExplainer text="This model is used automatically when you start a new chat. You can always swap models instantly from the chat bar." />
                     </div>
                   }
-                  description={t("settings.ai.workspaceOverridesDesc")}
+                  description="The provider and model used when a chat has no override."
                 >
-                  <div className="space-y-2">
-                    {workspaces.map((workspace) => (
-                      <WorkspaceOverrideCard
-                        key={workspace.id}
-                        workspace={workspace}
-                        llmConnections={llmConnections}
-                        onSettingsChange={handleWorkspaceSettingsChange}
-                      />
-                    ))}
-                  </div>
+                  <SettingsCard>
+                    <SettingsMenuSelectRow
+                      label="Provider"
+                      description="The main account powering your general chats."
+                      value={defaultConnection?.slug || ''}
+                      onValueChange={handleSetDefaultConnection}
+                      options={llmConnections.map((conn) => ({
+                        value: conn.slug,
+                        label: conn.name,
+                        description: conn.providerType === 'anthropic' ? 'Anthropic API' :
+                                     conn.providerType === 'pi' ? 'Runner Backend' :
+                                     conn.providerType === 'pi_compat' ? 'Runner Backend Compatible' :
+                                     conn.providerType || 'Unknown',
+                      }))}
+                    />
+                    <SettingsMenuSelectRow
+                      label="Model"
+                      description="The default model used from this provider."
+                      value={defaultModel}
+                      onValueChange={handleDefaultModelChange}
+                      options={getModelOptionsForConnection(defaultConnection).map(o => ({
+                        ...o, description: o.descriptionKey ? t(o.descriptionKey) : o.description,
+                      }))}
+                    />
+                    <SettingsMenuSelectRow
+                      label="Reasoning level"
+                      description="How much computing power the AI should use before answering."
+                      value={defaultThinking}
+                      onValueChange={(v) => handleDefaultThinkingChange(v as ThinkingLevel)}
+                      options={THINKING_LEVELS.map(({ id, nameKey, descriptionKey }) => ({
+                        value: id,
+                        label: t(nameKey),
+                        description: t(descriptionKey),
+                      }))}
+                    />
+                  </SettingsCard>
                 </SettingsSection>
-              )}
+                )}
 
-              {/* Performance */}
-              <SettingsSection
-                title={
-                  <div className="flex items-center gap-2">
-                    {t("settings.ai.performance")}
-                    <InfoExplainer text="Advanced parameters. Turn these on only if you understand context window costs and caching behavior." />
-                  </div>
-                }
-                description={t("settings.ai.performanceDesc")}
-              >
-                <SettingsCard>
-                  <SettingsToggle
-                    label={t("settings.ai.extendedContext")}
-                    description={t("settings.ai.extendedContextDesc")}
-                    checked={enable1MContext}
-                    onCheckedChange={handleEnable1MContextChange}
-                  />
-                  <SettingsToggle
-                    label={t("settings.ai.extendedPromptCache")}
-                    description={t("settings.ai.extendedPromptCacheDesc")}
-                    checked={extendedPromptCache}
-                    onCheckedChange={handleExtendedPromptCacheChange}
-                  />
-                </SettingsCard>
-              </SettingsSection>
+                {/* Workspace Overrides - only show if connections exist */}
+                {workspaces.length > 0 && llmConnections.length > 0 && (
+                  <SettingsSection
+                    title={
+                      <div className="flex items-center gap-2">
+                        {t("settings.ai.workspaceOverrides")}
+                        <InfoExplainer text="Lock a specific workspace to always use a certain model or reasoning level, regardless of your global default." />
+                      </div>
+                    }
+                    description={t("settings.ai.workspaceOverridesDesc")}
+                  >
+                    <div className="space-y-2">
+                      {workspaces.map((workspace) => (
+                        <WorkspaceOverrideCard
+                          key={workspace.id}
+                          workspace={workspace}
+                          llmConnections={llmConnections}
+                          onSettingsChange={handleWorkspaceSettingsChange}
+                        />
+                      ))}
+                    </div>
+                  </SettingsSection>
+                )}
+
+                {/* Performance */}
+                <SettingsSection
+                  title={
+                    <div className="flex items-center gap-2">
+                      {t("settings.ai.performance")}
+                      <InfoExplainer text="Advanced parameters. Turn these on only if you understand context window costs and caching behavior." />
+                    </div>
+                  }
+                  description={t("settings.ai.performanceDesc")}
+                >
+                  <SettingsCard>
+                    <SettingsToggle
+                      label={t("settings.ai.extendedContext")}
+                      description={t("settings.ai.extendedContextDesc")}
+                      checked={enable1MContext}
+                      onCheckedChange={handleEnable1MContextChange}
+                    />
+                    <SettingsToggle
+                      label={t("settings.ai.extendedPromptCache")}
+                      description={t("settings.ai.extendedPromptCacheDesc")}
+                      checked={extendedPromptCache}
+                      onCheckedChange={handleExtendedPromptCacheChange}
+                    />
+                  </SettingsCard>
+                </SettingsSection>
+              </AdvancedSettingsDisclosure>
 
               {/* API Setup Fullscreen Overlay */}
               <FullscreenOverlayBase
