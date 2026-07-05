@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { getArtistHqNavActiveState, isConciergeSessionLike } from './artist-hq-nav-state'
+import { getArtistHqNavActiveState, isConciergeSessionLike, isReusableConciergeSession } from './artist-hq-nav-state'
 
 describe('isConciergeSessionLike', () => {
   test('detects concierge sessions from launch receipt origin', () => {
@@ -13,6 +13,28 @@ describe('isConciergeSessionLike', () => {
     expect(isConciergeSessionLike({
       conciergeSlug: '@concierge',
       name: 'HNIC chat session',
+    })).toBe(true)
+  })
+})
+
+describe('isReusableConciergeSession', () => {
+  test('rejects sessions whose latest state is an error', () => {
+    expect(isReusableConciergeSession({
+      lastMessageRole: 'error',
+      preview: 'Ready for campaign planning',
+    })).toBe(false)
+  })
+
+  test('rejects stale expired sessions even if metadata role is missing', () => {
+    expect(isReusableConciergeSession({
+      preview: 'Session Expired: Your session has expired. Please try signing in again.',
+    })).toBe(false)
+  })
+
+  test('allows normal assistant sessions', () => {
+    expect(isReusableConciergeSession({
+      lastMessageRole: 'assistant',
+      preview: 'HNIC live smoke passed.',
     })).toBe(true)
   })
 })

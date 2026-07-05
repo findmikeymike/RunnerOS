@@ -24,6 +24,17 @@ export function isConciergeSessionLike(input: {
   return /\b(hnic|concierge)\b/.test(searchable)
 }
 
+export function isReusableConciergeSession(input: {
+  lastMessageRole?: string
+  preview?: string
+  name?: string
+}) {
+  if (input.lastMessageRole === 'error') return false
+
+  const searchable = [input.preview, input.name].filter(Boolean).join(' ').toLowerCase()
+  return !searchable.includes('session expired')
+}
+
 export function getArtistHqNavActiveState(input: {
   isArtistHQWorkspace: boolean
   isSessionsNavigation: boolean

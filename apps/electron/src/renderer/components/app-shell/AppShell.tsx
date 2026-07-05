@@ -149,7 +149,7 @@ import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { useOutputs } from "@/hooks/useOutputs"
 import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace } from "@/lib/artist-workspace"
-import { getArtistHqNavActiveState, isConciergeSessionLike } from "@/lib/artist-hq-nav-state"
+import { getArtistHqNavActiveState, isConciergeSessionLike, isReusableConciergeSession } from "@/lib/artist-hq-nav-state"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 
@@ -1807,6 +1807,7 @@ function AppShellContent({
         s.spawnedFromAgent?.agentSlug === CONCIERGE_SLUG
         && !s.hidden
         && !s.isArchived
+        && isReusableConciergeSession(s)
         && (s.workspaceId === activeWorkspaceId || (remoteWorkspaceId && s.workspaceId === remoteWorkspaceId))
       ))
       .sort((a, b) => (b.lastMessageAt ?? b.createdAt ?? 0) - (a.lastMessageAt ?? a.createdAt ?? 0))[0]

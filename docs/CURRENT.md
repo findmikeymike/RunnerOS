@@ -33,6 +33,7 @@ source_of_truth: true
 - Hardened HQ route readiness so generated route blockers now prevent `Start Route` launch instead of allowing a blocked proactive route through.
 - Hardened Pi subprocess JSONL parsing so terminal notification prefixes on stdout do not drop valid mini-completion results after a chat turn.
 - Hardened Artist Profile parsing so the starter markdown intake template opens as an editable Profile form instead of blocking with a missing-JSON warning.
+- Hardened the Chat nav shortcut so it skips stale expired/error HNIC sessions instead of reopening an old `Session Expired` thread.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
 
@@ -74,12 +75,14 @@ source_of_truth: true
   - Live Profile re-check confirmed the markdown starter template now renders as a usable editable form with `Save Profile` enabled.
   - `bun test apps/electron/src/renderer/lib/artist-profile.test.ts apps/electron/src/renderer/lib/artist-hq-nav-state.test.ts apps/electron/src/renderer/lib/artist-hq-proactive.test.ts` -> `13 pass`.
   - `bun run typecheck:electron` passed after the Artist Profile parser hardening.
+  - `bun test apps/electron/src/renderer/lib/artist-hq-nav-state.test.ts` -> `9 pass`.
+  - `bun run typecheck:electron` passed after the Chat nav expired-session filter.
+  - Live Chat nav re-check passed: starting from HQ, clicking `Chat` opened clean session `260605-fair-quartz` instead of stale expired session `260605-tall-chrome`.
 
 ## Remaining Release Smoke
 
 - Confirm a launch-safe HQ State of Play route opens/sends the intended worker route. Current workspace correctly disables `Start Review` because artist profile context is still incomplete.
 - Confirm the HQ project cards / campaign workspace jump are intentionally text-only or wire them to a real campaign workspace route.
-- Chat nav currently opens an older session with a stale `Session Expired` error, even though the fresh live smoke session works. Consider choosing the latest healthy session or a clean new chat for release polish.
 
 ## Notes For Next Agent
 
