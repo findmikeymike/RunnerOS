@@ -72,10 +72,12 @@ const SECRET_PRESETS: SecretPreset[] = [
     group: 'Ads',
     name: 'GOOGLE_ADS_OAUTH',
     label: 'Google Ads credential',
-    description: 'Google Ads connects through its source setup because it also needs a developer token and optional login customer ID.',
+    description: 'Open Google\'s setup guide for the developer token, OAuth credentials, and customer ID required by the Google Ads API.',
     storage: 'managed-source',
     sourceSlug: 'google-ads',
     sourceType: 'local',
+    setupUrl: 'https://developers.google.com/google-ads/api/docs/get-started/make-first-call',
+    setupLabel: 'Setup guide',
   },
   {
     group: 'Research',
