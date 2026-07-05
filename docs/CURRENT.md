@@ -35,6 +35,8 @@ source_of_truth: true
 - Hardened Artist Profile parsing so the starter markdown intake template opens as an editable Profile form instead of blocking with a missing-JSON warning.
 - Hardened the Chat nav shortcut so it skips stale expired/error HNIC sessions instead of reopening an old `Session Expired` thread.
 - Wired the HQ `Current Release` project card to open the primary campaign workspace instead of remaining text-only.
+- Refreshed the startup migration test fixture to use a current bundled Pi/OpenRouter model ID after the old Grok fixture aged out of the catalog.
+- Updated HyperMotion's Remotion dependency and transitive lockfile so the production audit is clean.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
 
@@ -83,10 +85,14 @@ source_of_truth: true
   - `bun run typecheck:electron` passed after the HQ project card route wiring.
   - Live HQ project card smoke passed: clicking `Current Release` from HQ opened workspace `Trading` at `route=campaign` with the campaign command center visible.
   - Live HQ route smoke passed with a temporary restored fixture: `Start Route` created a `branding-agent` session, sent `LIVE HQ ROUTE SMOKE: reply with exactly: HQ route smoke passed.`, and the assistant replied `HQ route smoke passed.` Original HQ State context was restored and the smoke session folder was removed.
+  - `bun test packages/shared/src/config/__tests__/storage-startup-migration.test.ts` -> `12 pass`.
+  - `bun run validate:dev` passed: `typecheck:all`, shared LLM connection/model/config tests, and doc-tool tests.
+  - `bun run electron:build` passed: skills generated, main/preload/renderer/resources/assets built.
+  - `(cd tools/hypermotion && npm audit --omit=dev)` -> `found 0 vulnerabilities`.
 
 ## Remaining Release Smoke
 
-- No remaining release smoke items are currently listed here. Next pass should review packaging/release gates and any external-service smokes that require provider keys/accounts.
+- Remaining external-service smokes still require provider keys/accounts.
 
 ## Notes For Next Agent
 

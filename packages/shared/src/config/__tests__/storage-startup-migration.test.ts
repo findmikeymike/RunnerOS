@@ -234,8 +234,8 @@ describe('startup migration (integration)', () => {
         piAuthProvider: 'openrouter',
         modelSelectionMode: 'userDefined3Tier',
         createdAt: Date.now(),
-        models: ['x-ai/grok-4', 'openrouter/auto'],
-        defaultModel: 'x-ai/grok-4',
+        models: ['ai21/jamba-large-1.7', 'openrouter/auto'],
+        defaultModel: 'ai21/jamba-large-1.7',
       },
     ])
 
@@ -245,8 +245,8 @@ describe('startup migration (integration)', () => {
     expect(connection).toBeDefined()
     expect(connection.modelSelectionMode).toBe('userDefined3Tier')
     const modelIds = getModelIds(connection)
-    expect(modelIds).toEqual(['pi/x-ai/grok-4', 'pi/openrouter/auto'])
-    expect(connection.defaultModel).toBe('pi/x-ai/grok-4')
+    expect(modelIds).toEqual(['pi/ai21/jamba-large-1.7', 'pi/openrouter/auto'])
+    expect(connection.defaultModel).toBe('pi/ai21/jamba-large-1.7')
   })
 })
 
