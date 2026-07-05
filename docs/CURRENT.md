@@ -31,8 +31,9 @@ source_of_truth: true
 - Removed local runtime clutter from this worktree: `.omc/`, `docs/creator-command-center/.omc/`, and `docs/.DS_Store`.
 - Added generated system map docs under `docs/system-map/` plus `npm run docs:system-map`.
 - Hardened HQ route readiness so generated route blockers now prevent `Start Route` launch instead of allowing a blocked proactive route through.
+- Hardened Pi subprocess JSONL parsing so terminal notification prefixes on stdout do not drop valid mini-completion results after a chat turn.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
-- Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, and refreshes Pi/OpenAI model lists without the prior immediate `Session Expired` startup failure.
+- Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
 
 ## In Progress
 
@@ -47,7 +48,7 @@ source_of_truth: true
 
 ## Blockers / External Dependencies
 
-- Live chat send still needs an explicit end-to-end prompt smoke. Startup model refresh now succeeds, but a fresh assistant response was not sent in this pass.
+- No current auth blocker for the basic live chat path. Remaining external-service smokes still need connected provider accounts/keys.
 
 ## Verification State
 
@@ -65,10 +66,12 @@ source_of_truth: true
   - `bun run typecheck:all` passed.
   - `bun run docs:system-map` passed with no generated diff.
   - `bun run electron:dev` launched successfully; Runner server listened on `127.0.0.1:55268`, trigger server on `127.0.0.1:9101`, renderer connected, and model refresh fetched provider model lists.
+  - Live prompt smoke passed through the visible Electron composer on session `260704-frosty-basalt`: user prompt `LIVE RELEASE SMOKE: reply with exactly: HNIC live smoke passed.` produced assistant response `HNIC live smoke passed.` Logs showed `agent.chat()` completed and no `Session Expired`.
+  - `bun test packages/shared/src/agent/__tests__/pi-agent-error-handling.test.ts packages/shared/src/agent/__tests__/pi-query-llm.test.ts` -> `10 pass`.
+  - `(cd packages/shared && ../../node_modules/.bin/tsc --noEmit)` passed after the Pi JSONL parser hardening.
 
 ## Remaining Release Smoke
 
-- Send one fresh HNIC chat prompt through the live app and confirm a non-expired model response.
 - Visually click through HQ, campaign nav, Workers, Workflows, Community, Vault, Settings, and Outputs in the running app.
 - Confirm `Start Route` from the HQ State of Play panel opens/sends the intended worker route when launch-safe.
 - Computer Use could inspect the Runner accessibility tree, but automated nav clicks did not change routes in this pass; treat click-through as still manually unverified rather than fixed.

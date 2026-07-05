@@ -21,6 +21,32 @@ function createConfig(): BackendConfig {
 }
 
 describe('PiAgent subprocess error handling', () => {
+  it('parses JSONL with terminal notification noise before the JSON object', () => {
+    const agent = new PiAgent(createConfig())
+
+    let resolvedText: string | null | undefined
+    ;(agent as any).pendingMiniCompletions.set('mini-1', {
+      resolve: (text: string | null) => {
+        resolvedText = text
+      },
+      reject: () => {},
+    })
+
+    ;(agent as any).handleLine(
+      '\x1B]777;notify;Pi;Ready for input\x07' +
+        JSON.stringify({
+          type: 'mini_completion_result',
+          id: 'mini-1',
+          text: 'ok',
+        }),
+    )
+
+    expect(resolvedText).toBe('ok')
+    expect((agent as any).pendingMiniCompletions.size).toBe(0)
+
+    agent.destroy()
+  })
+
   it('maps raw HTML subprocess errors to typed proxy_error events', () => {
     const agent = new PiAgent(createConfig())
 

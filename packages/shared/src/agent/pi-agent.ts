@@ -110,6 +110,22 @@ export const PI_BACKEND_SESSION_TOOL_NAMES = new Set<string>([
   'browser_tool',
 ]);
 
+function normalizeSubprocessJsonlLine(line: string): string {
+  const withoutTerminalControls = line
+    // OSC sequences, e.g. "\x1B]777;notify;Pi;Ready for input\x07".
+    .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, '')
+    // CSI/control sequences, e.g. color/style cursor codes.
+    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+    .trim();
+
+  if (withoutTerminalControls.startsWith('{')) {
+    return withoutTerminalControls;
+  }
+
+  const jsonStart = withoutTerminalControls.indexOf('{');
+  return jsonStart >= 0 ? withoutTerminalControls.slice(jsonStart).trim() : withoutTerminalControls;
+}
+
 /**
  * Backend implementation using the Pi coding agent SDK via subprocess.
  *
@@ -796,9 +812,11 @@ export class PiAgent extends BaseAgent {
   private handleLine(line: string): void {
     if (!line.trim()) return;
 
+    const normalizedLine = normalizeSubprocessJsonlLine(line);
+
     let msg: Record<string, unknown>;
     try {
-      msg = JSON.parse(line);
+      msg = JSON.parse(normalizedLine);
     } catch {
       this.debug(`Invalid JSONL from subprocess: ${line.slice(0, 200)}`);
       return;
