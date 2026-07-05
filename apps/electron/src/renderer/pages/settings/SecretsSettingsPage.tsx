@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertCircle, CheckCircle2, ExternalLink, Info, KeyRound, Loader2, RefreshCcw, Save, Trash2, WalletCards } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronDown, ExternalLink, Info, KeyRound, Loader2, RefreshCcw, Save, Trash2, WalletCards } from 'lucide-react'
 import { toast } from 'sonner'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
@@ -665,6 +665,7 @@ export default function SecretsSettingsPage() {
   const [loading, setLoading] = React.useState(false)
   const [installing, setInstalling] = React.useState(false)
   const [busyServiceId, setBusyServiceId] = React.useState<string | null>(null)
+  const [expandedServiceId, setExpandedServiceId] = React.useState<string | null>(null)
 
   const services = React.useMemo(
     () => SERVICES.filter((service) => service.group === selectedGroup),
@@ -777,6 +778,7 @@ export default function SecretsSettingsPage() {
         for (const preset of presets) delete next[preset.name]
         return next
       })
+      setExpandedServiceId(null)
       toast.success(`${service.title} saved`)
       await load()
     } finally {
@@ -859,24 +861,46 @@ export default function SecretsSettingsPage() {
                   const status = serviceStatus(service, savedByName, sourceBySlug, draftValues)
                   const managedPreset = presets.find((preset) => preset.storage === 'managed-source')
                   const busy = busyServiceId === service.id
+                  const expanded = expandedServiceId === service.id
                   return (
                     <SettingsCard key={service.id}>
-                      <div className="p-4">
-                        <div className="flex items-start justify-between gap-4">
+                      <div className="p-3">
+                        <div className="flex items-center justify-between gap-4">
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <h3 className="text-base font-semibold text-white/90">{service.title}</h3>
+                              <h3 className="text-sm font-semibold text-white/90">{service.title}</h3>
                               {service.id !== 'zero' && (
-                                <StatusPill status={status} serviceId={service.id} />
+                                <StatusIcon status={status} serviceId={service.id} />
                               )}
                             </div>
-                            <p className="mt-1 max-w-2xl text-xs leading-5 text-white/45">{service.description}</p>
+                            <p className="mt-1 line-clamp-1 max-w-3xl text-xs leading-4 text-white/38">{service.description}</p>
                           </div>
                           {managedPreset ? (
-                            <Button size="sm" variant="outline" onClick={() => openSource(managedPreset)}>
-                              <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                              {connectButtonLabel(service)}
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button
+                                  type="button"
+                                  onClick={() => openSource(managedPreset)}
+                                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  Open source
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[260px] text-xs">
+                                {managedPreset.description}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : service.id !== 'zero' ? (
+                            <button
+                              type="button"
+                              onClick={() => setExpandedServiceId(expanded ? null : service.id)}
+                              className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76"
+                            >
+                              <KeyRound className="h-3.5 w-3.5" />
+                              {status === 'ready' ? 'Keys' : 'Add key'}
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                            </button>
                           ) : null}
                         </div>
 
@@ -914,32 +938,17 @@ export default function SecretsSettingsPage() {
                               </div>
                             </div>
                           </div>
-                        ) : managedPreset ? (
-                          <div className="mt-4 flex flex-col gap-3 rounded-[12px] border border-white/[0.06] bg-white/[0.02] p-3 text-xs leading-5 text-white/46 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="flex min-w-0 gap-2">
-                              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-white/35" />
-                              <span>{managedPreset.description}</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => openSource(managedPreset)}
-                              className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-full border border-[#fb923c]/20 bg-[#f97316]/12 px-3 text-[11px] font-medium text-[#fed7aa] transition-colors hover:bg-[#f97316]/20"
-                            >
-                              <ExternalLink className="h-3 w-3" />
-                              {sourceSetupBadgeLabel(service)}
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="mt-4 grid gap-3 md:grid-cols-2">
+                        ) : managedPreset ? null : (
+                          <AnimateServiceFields open={expanded}>
+                            <div className="grid gap-3 md:grid-cols-2">
                               {presets.map((preset) => {
                                 const saved = presetIsSaved(preset, savedByName, sourceBySlug)
                                 const optional = service.optionalPresetNames?.includes(preset.name)
                                 return (
-                                  <div key={preset.name} className="rounded-[12px] border border-white/[0.06] bg-black/20 p-3">
+                                  <div key={preset.name} className="rounded-[10px] border border-white/[0.055] bg-black/20 p-3">
                                     <div className="mb-2 flex items-center justify-between gap-2">
-                                      <label className="text-xs font-medium text-white/72">{preset.label}</label>
-                                      <span className="shrink-0 text-[10px] uppercase tracking-[0.14em] text-white/28">
+                                      <label className="text-xs font-medium text-white/70">{preset.label}</label>
+                                      <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-white/26">
                                         {optional ? 'Optional' : saved ? 'Saved' : 'Required'}
                                       </span>
                                     </div>
@@ -948,25 +957,43 @@ export default function SecretsSettingsPage() {
                                       onChange={(event) => setDraftValues((current) => ({ ...current, [preset.name]: event.target.value }))}
                                       placeholder={saved ? savedPlaceholder(preset, savedByName) : preset.placeholder ?? 'Paste key'}
                                       type={preset.name.includes('DOMAIN') || preset.name.includes('URL') || preset.name.includes('URI') || preset.name.includes('VERSION') || preset.name.includes('ID') ? 'text' : 'password'}
-                                      className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/82 outline-none placeholder:text-white/24 focus:border-[#fb923c]/45"
+                                      className="h-8 w-full rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none placeholder:text-white/22 focus:border-[#fb923c]/45"
                                     />
-                                    <p className="mt-2 line-clamp-2 text-[11px] leading-4 text-white/32">{preset.description}</p>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <button type="button" className="mt-2 text-left text-[11px] leading-4 text-white/30 transition-colors hover:text-white/52">
+                                          Guide
+                                        </button>
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                        {preset.description}
+                                      </TooltipContent>
+                                    </Tooltip>
                                   </div>
                                 )
                               })}
                             </div>
 
-                            <div className="mt-4 flex flex-wrap items-center gap-2">
-                              <Button size="sm" onClick={() => saveService(service)} disabled={busy}>
-                                {busy ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-2 h-3.5 w-3.5" />}
+                            <div className="mt-3 flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => saveService(service)}
+                                disabled={busy}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] bg-white/[0.08] px-3 text-xs font-medium text-white/76 transition-colors hover:bg-white/[0.12] disabled:opacity-50"
+                              >
+                                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
                                 Save
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => testService(service)}>
-                                <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
-                                Test setup
-                              </Button>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => testService(service)}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs font-medium text-white/48 transition-colors hover:bg-white/[0.045] hover:text-white/70"
+                              >
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                Test
+                              </button>
                             </div>
-                          </>
+                          </AnimateServiceFields>
                         )}
                       </div>
                     </SettingsCard>
@@ -1013,28 +1040,36 @@ export default function SecretsSettingsPage() {
   )
 }
 
-function StatusPill({ status, serviceId }: { status: ServiceStatus; serviceId: string }) {
-  const ready = status === 'ready'
-  const optional = status === 'optional'
-  const label = serviceId === 'google-workspace' && ready ? 'Keys saved' : ready ? 'Ready' : optional ? 'Optional' : 'Needs key'
+function AnimateServiceFields({ open, children }: { open: boolean; children: React.ReactNode }) {
   return (
-    <span className={[
-      'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.12em]',
-      ready ? 'bg-emerald-400/10 text-emerald-300/80' : optional ? 'bg-white/[0.04] text-white/42' : 'bg-amber-400/10 text-amber-200/75',
-    ].join(' ')}
-    >
-      {ready ? <CheckCircle2 className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-      {label}
-    </span>
+    <div className={`overflow-hidden transition-all duration-150 ${open ? 'mt-3 max-h-[900px] opacity-100' : 'max-h-0 opacity-0'}`}>
+      {children}
+    </div>
   )
 }
 
-function connectButtonLabel(service: SecretService) {
-  return `Connect ${service.title}`
-}
+function StatusIcon({ status, serviceId }: { status: ServiceStatus; serviceId: string }) {
+  const ready = status === 'ready'
+  const optional = status === 'optional'
+  const label = serviceId === 'google-workspace' && ready ? 'Keys saved' : ready ? 'Ready' : optional ? 'Optional' : 'Needs key'
+  const icon = ready ? (
+    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400/70" />
+  ) : optional ? (
+    <Info className="h-3.5 w-3.5 text-white/28" />
+  ) : (
+    <span className="text-[13px] font-semibold leading-none text-amber-300">!</span>
+  )
 
-function sourceSetupBadgeLabel(service: SecretService) {
-  return `Open ${service.title} source`
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full">
+          {icon}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  )
 }
 
 function savedPlaceholder(preset: SecretPreset, savedByName: Map<string, UserSecretSummary>) {
