@@ -69,6 +69,17 @@ export interface OutputOriginDTO {
   automationId?: string
 }
 
+export interface OutputContextDTO {
+  scope: 'hq' | 'campaign'
+  campaignId?: string
+}
+
+export interface OutputApprovalDTO {
+  state: 'none' | 'pending' | 'approved' | 'changes_requested'
+  note?: string
+  updatedAt?: string
+}
+
 export interface OutputSummaryDTO {
   id: string
   title: string
@@ -90,6 +101,8 @@ export interface OutputSummaryDTO {
     assetId?: string
     inlineText?: string
   }
+  context?: OutputContextDTO
+  approval?: OutputApprovalDTO
   tags?: string[]
   bundlePath?: string
   directoryPath?: string

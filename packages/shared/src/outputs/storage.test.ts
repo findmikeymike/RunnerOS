@@ -376,6 +376,24 @@ describe('output storage', () => {
     expect(second.slug).toBe('weekly-report-v2');
   });
 
+  test('createOutputBundle persists Work Product context and approval metadata', () => {
+    const output = createOutputBundle(workspace, {
+      id: OUTPUT_OLD_ID,
+      workspaceId: 'workspace-1',
+      title: 'Press email draft',
+      kind: 'document',
+      origin: { source: 'manual' },
+      content: '# Draft',
+      context: { scope: 'campaign', campaignId: 'blue-moon' },
+      approval: { state: 'pending', note: 'Approve before send.', updatedAt: '2026-07-05T05:00:00.000Z' },
+    });
+
+    expect(output.context).toEqual({ scope: 'campaign', campaignId: 'blue-moon' });
+    expect(output.approval).toEqual({ state: 'pending', note: 'Approve before send.', updatedAt: '2026-07-05T05:00:00.000Z' });
+    expect(readOutputManifest(workspace, OUTPUT_OLD_ID)?.context).toEqual(output.context);
+    expect(listOutputs(workspace)[0]?.approval).toEqual(output.approval);
+  });
+
   test('createOutputBundle writes content assets under the UUID output directory', () => {
     const output = createOutputBundle(workspace, {
       id: OUTPUT_OLD_ID,

@@ -153,6 +153,55 @@ describe('output handlers', () => {
     });
   });
 
+  it('create_output accepts Work Product context and approval metadata', async () => {
+    let captured: CreateOutputToolInput | undefined;
+    const ctx = makeCtx({
+      createOutput: async (input) => {
+        captured = input;
+        return { ok: true, outputId: '11111111-1111-4111-8111-111111111111' };
+      },
+    });
+
+    const result = await handleCreateOutput(ctx, {
+      title: 'Press email draft',
+      kind: 'document',
+      summary: 'Draft press email for campaign approval.',
+      context: { scope: 'campaign', campaignId: 'blue-moon' },
+      approval: { state: 'pending', note: 'Approve before send.' },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(captured?.context).toEqual({ scope: 'campaign', campaignId: 'blue-moon' });
+    expect(captured?.approval).toEqual({ state: 'pending', note: 'Approve before send.' });
+  });
+
+  it('create_output rejects incomplete Work Product metadata', async () => {
+    let called = false;
+    const ctx = makeCtx({
+      createOutput: async () => {
+        called = true;
+        return { ok: true };
+      },
+    });
+
+    const missingCampaign = await handleCreateOutput(ctx, {
+      title: 'Press email draft',
+      kind: 'document',
+      summary: 'Draft press email.',
+      context: { scope: 'campaign' },
+    });
+    const badApproval = await handleCreateOutput(ctx, {
+      title: 'Press email draft',
+      kind: 'document',
+      summary: 'Draft press email.',
+      approval: { state: 'blocked' as never },
+    });
+
+    expect(missingCampaign.isError).toBe(true);
+    expect(badApproval.isError).toBe(true);
+    expect(called).toBe(false);
+  });
+
   describe('receipt occurredAt validation', () => {
     const baseInput = (receipt: any): CreateOutputToolInput => ({
       title: 'x',

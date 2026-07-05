@@ -69,6 +69,33 @@ describe('OutputService run mutex', () => {
 });
 
 describe('OutputService visual boards', () => {
+  it('persists Work Product context and approval metadata from create_output', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-work-products-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const result = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Press email draft',
+        kind: 'document',
+        summary: 'Draft press email for campaign approval.',
+        content: '# Draft',
+        context: { scope: 'campaign', campaignId: 'blue-moon' },
+        approval: { state: 'pending', note: 'Approve before send.' },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    const output = service.get('ws', result.outputId!);
+    expect(output?.context).toEqual({ scope: 'campaign', campaignId: 'blue-moon' });
+    expect(output?.approval).toEqual({ state: 'pending', note: 'Approve before send.' });
+    expect(service.list('ws')[0]?.approval?.state).toBe('pending');
+  });
+
   it('marks and pins showInCanvas session outputs', async () => {
     const root = mkdtempSync(join(tmpdir(), 'osvc-show-canvas-'));
     mkdirSync(join(root, 'outputs'), { recursive: true });

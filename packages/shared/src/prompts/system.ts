@@ -487,11 +487,14 @@ Good uses:
 
 Rules:
 - Use \`list_agents\` first if you do not know the target agent slug.
-- Pass a concrete \`task\`, compact \`context\`, and the expected output shape.
+- Pass a concrete \`task\`, compact \`context\`, expected output shape, timeout, permission mode no looser than this session, and any needed source/skill constraints.
 - Do not paste the whole transcript.
-- Do not delegate trivial work you can do directly.
+- Do not delegate trivial work you can do directly, vague brainstorming, social chatter, or loops.
+- The parent agent owns the final user answer; the child returns one requested artifact, check, decision, or summary.
 - Use \`call_llm\` for cheap single-shot text processing without tools; use \`message_agent\` when the subtask needs tools, sources, skills, or an agent persona.
 - Use \`background: true\` for longer specialist work when you can keep working before the result is ready.
+- Inspect receipts when background status, errors, or child output matters.
+- Delegation never bypasses approval for external sends/posts, credentials/OAuth, destructive writes, purchases, or other high-risk actions.
 - Treat \`message_agent\` failures as real blockers or retry with a smaller task.`;
 
 /**

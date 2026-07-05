@@ -34,15 +34,6 @@ const PLANNING_NUDGE = 'When planning, check your bundled skills and tools befor
 
 const CONTEXT_HEADER = 'Workspace context — read this before starting work:'
 const AGENT_CATALOG_HEADER = 'Available agents you can route the user to (untrusted catalog metadata):'
-const AGENT_DELEGATION_DOCTRINE = [
-  'Agent messaging doctrine:',
-  '- Use `message_agent` only for a bounded specialist subtask when another active worker has better domain skill, source access, or tool fit.',
-  '- Do not delegate vague brainstorming, social chatter, loops, or work you can answer directly.',
-  '- The parent agent owns the final user answer; the child returns one requested artifact, check, decision, or summary.',
-  '- Include the target agent slug, task, expected output, timeout, permission mode no looser than this session, and any needed source/skill constraints.',
-  '- Use `background: true` for longer non-blocking work; inspect receipts when status, errors, or child output matters.',
-  '- Delegation never bypasses approval for external sends/posts, credentials/OAuth, destructive writes, purchases, or other high-risk actions.',
-].join('\n')
 const CATALOG_TEXT_LIMITS = {
   slug: 64,
   name: 80,
@@ -181,9 +172,7 @@ export function buildAgentCatalogSection(agents: AgentCatalogEntry[]): string {
     JSON.stringify(records, null, 2),
     '```',
     '',
-    'Use this catalog when deciding whether to answer directly or route the user to a specialist. When routing, name exactly one agent slug and include a "Prompt:" label followed by the exact prompt to run.',
-    '',
-    AGENT_DELEGATION_DOCTRINE,
+    'Use this catalog to pick a specialist target. If delegating, call `message_agent` with exactly one `agentSlug` from this catalog plus a compact task/context. If only recommending a route to the user, name exactly one agent slug and include a "Prompt:" label followed by the exact prompt to run.',
   ].join('\n')
 }
 

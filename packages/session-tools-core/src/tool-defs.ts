@@ -550,6 +550,15 @@ export const CreateOutputSchema = z.object({
     displayText: z.string().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })).optional(),
+  context: z.object({
+    scope: z.enum(['hq', 'campaign']).describe('Where this Output should appear. Use hq for general HQ work, campaign for campaign-specific work.'),
+    campaignId: z.string().min(1).optional().describe('Required when scope is campaign.'),
+  }).optional(),
+  approval: z.object({
+    state: z.enum(['none', 'pending', 'approved', 'changes_requested']).describe('User decision state for this Output. Use pending only when the user needs to approve, reject, or request changes.'),
+    note: z.string().optional(),
+    updatedAt: z.string().optional().describe('ISO-8601 timestamp. Defaults can be filled by callers when approval changes.'),
+  }).optional(),
   tags: z.array(z.string()).optional(),
   showInCanvas: z.boolean().optional().describe('Set true when the user should see this Output in Canvas immediately. The backend marks and pins the same-session Output when Canvas is available.'),
   show_in_canvas: z.boolean().optional().describe('Alias for showInCanvas. Prefer showInCanvas in new calls.'),
@@ -1168,6 +1177,8 @@ Defaults to USER.md plus this agent's MEMORY.md when the session has an active a
 Use this when you have produced a durable deliverable or external-action receipt that the user should find later from the Outputs area instead of hunting through chat.
 
 Good outputs include research reports, generated media, exported datasets, code review reports, deployment receipts, published-post receipts, sent-message receipts, and final workflow deliverables.
+
+Use \`context.scope\` / \`context.campaignId\` for HQ or campaign placement, and \`approval.state\` when the Output needs a user decision.
 
 For visual work, create the image/video/web/report Output first. Set \`showInCanvas: true\` when the user asks to see, preview, compare, review, present, open, or iterate on the artifact immediately beside chat. Do not set it for scratch files, internal logs, transient plans, or ordinary text answers.
 

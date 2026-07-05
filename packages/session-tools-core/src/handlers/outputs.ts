@@ -46,6 +46,17 @@ export interface CreateOutputReceiptInput {
   occurredAt?: string;
 }
 
+export interface CreateOutputContextInput {
+  scope: 'hq' | 'campaign';
+  campaignId?: string;
+}
+
+export interface CreateOutputApprovalInput {
+  state: 'none' | 'pending' | 'approved' | 'changes_requested';
+  note?: string;
+  updatedAt?: string;
+}
+
 export interface CreateOutputToolInput {
   title: string;
   kind: OutputKind;
@@ -55,6 +66,8 @@ export interface CreateOutputToolInput {
   files?: CreateOutputFileInput[];
   links?: CreateOutputLinkInput[];
   receipts?: CreateOutputReceiptInput[];
+  context?: CreateOutputContextInput;
+  approval?: CreateOutputApprovalInput;
   tags?: string[];
   /**
    * When true, the backend should mark this Output as intended for Canvas and
@@ -95,6 +108,8 @@ const CONTENT_MIME_TYPES: ReadonlySet<string> = new Set([
   'text/plain',
   'application/json',
 ]);
+const OUTPUT_CONTEXT_SCOPES: ReadonlySet<string> = new Set(['hq', 'campaign']);
+const OUTPUT_APPROVAL_STATES: ReadonlySet<string> = new Set(['none', 'pending', 'approved', 'changes_requested']);
 
 function validateString(value: unknown, field: string): string | null {
   if (typeof value !== 'string' || value.trim().length === 0) return `${field} is required and cannot be empty.`;
@@ -230,6 +245,26 @@ function validateOutputInput(args: CreateOutputToolInput): string | null {
   }
   if (args.tags !== undefined && (!Array.isArray(args.tags) || args.tags.some((tag) => typeof tag !== 'string'))) {
     return 'tags must be an array of strings when provided.';
+  }
+  if (args.context !== undefined) {
+    if (!isRecord(args.context)) return 'context must be an object when provided.';
+    if (!OUTPUT_CONTEXT_SCOPES.has(String(args.context.scope))) return 'context.scope must be hq or campaign.';
+    if (args.context.campaignId !== undefined && (typeof args.context.campaignId !== 'string' || !args.context.campaignId.trim())) {
+      return 'context.campaignId must be a non-empty string when provided.';
+    }
+    if (args.context.scope === 'campaign' && typeof args.context.campaignId !== 'string') {
+      return 'context.campaignId is required when context.scope is campaign.';
+    }
+  }
+  if (args.approval !== undefined) {
+    if (!isRecord(args.approval)) return 'approval must be an object when provided.';
+    if (!OUTPUT_APPROVAL_STATES.has(String(args.approval.state))) {
+      return 'approval.state must be one of: none, pending, approved, changes_requested.';
+    }
+    if (args.approval.note !== undefined && typeof args.approval.note !== 'string') return 'approval.note must be a string when provided.';
+    if (args.approval.updatedAt !== undefined && (typeof args.approval.updatedAt !== 'string' || !Number.isFinite(Date.parse(args.approval.updatedAt)))) {
+      return 'approval.updatedAt must be an ISO-8601 date string when provided.';
+    }
   }
   if (args.showInCanvas !== undefined && typeof args.showInCanvas !== 'boolean') {
     return 'showInCanvas must be a boolean when provided.';

@@ -1,7 +1,9 @@
 export type {
   CreateOutputBundleInput,
+  OutputApproval,
   OutputAsset,
   OutputAssetRole,
+  OutputContext,
   OutputKind,
   OutputLink,
   OutputManifest,

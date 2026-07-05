@@ -45,6 +45,8 @@ describe('system prompt guidance', () => {
     expect(prompt).toContain('Do not paste the whole transcript')
     expect(prompt).toContain('use `message_agent` when the subtask needs tools, sources, skills, or an agent persona')
     expect(prompt).toContain('Use `background: true` for longer specialist work')
+    expect(prompt).toContain('The parent agent owns the final user answer')
+    expect(prompt).toContain('Delegation never bypasses approval')
     expect(prompt).toContain('`message_agent` = saved RunnerOS agent in a hidden child session')
   })
 

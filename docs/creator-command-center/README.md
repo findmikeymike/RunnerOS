@@ -18,5 +18,6 @@ Core Artist HQ and campaign workspace specs live here.
 - [07 Artist Vault Architecture](./07-artist-vault-architecture-spec.md)
 - [08 Shared Intel Context Router](./08-shared-intel-context-router-spec.md)
 - [09 HQ State Of Play / Proactive Routing](./09-hq-state-of-play-proactive-routing.md)
+- [10 Work Products / Output Architecture](./10-work-products-output-architecture-spec.md)
 
 Add new Creator Command Center specs here unless they clearly belong in another feature folder.

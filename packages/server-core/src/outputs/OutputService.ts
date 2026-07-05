@@ -734,6 +734,8 @@ export class OutputService {
         displayText: receipt.displayText,
         metadata: receipt.metadata,
       })),
+      context: input.output.context,
+      approval: input.output.approval,
       tags,
       completedAt: now,
     });

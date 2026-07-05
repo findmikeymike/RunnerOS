@@ -16,6 +16,17 @@ export type OutputStatus = 'draft' | 'published' | 'failed' | 'cancelled';
 
 export type OutputAssetRole = 'primary' | 'supporting' | 'source' | 'thumbnail' | 'attachment';
 
+export interface OutputContext {
+  scope: 'hq' | 'campaign';
+  campaignId?: string;
+}
+
+export interface OutputApproval {
+  state: 'none' | 'pending' | 'approved' | 'changes_requested';
+  note?: string;
+  updatedAt?: string;
+}
+
 export type OutputPreviewMode =
   | 'markdown'
   | 'text'
@@ -100,6 +111,8 @@ export interface OutputManifest {
   receipts: OutputReceipt[];
   links: OutputLink[];
   preview?: OutputPreview;
+  context?: OutputContext;
+  approval?: OutputApproval;
   tags?: string[];
 }
 
@@ -118,6 +131,8 @@ export interface OutputSummary {
   preview?: OutputPreview;
   primaryAssetId?: string;
   previewMode?: OutputPreviewMode;
+  context?: OutputContext;
+  approval?: OutputApproval;
   assetCount: number;
   receiptCount: number;
   linkCount: number;
@@ -137,6 +152,8 @@ export interface CreateOutputBundleInput {
   assets?: OutputAsset[];
   receipts?: OutputReceipt[];
   links?: OutputLink[];
+  context?: OutputContext;
+  approval?: OutputApproval;
   tags?: string[];
   createdAt?: string;
   completedAt?: string;
