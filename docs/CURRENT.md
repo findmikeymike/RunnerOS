@@ -37,7 +37,7 @@ source_of_truth: true
 - Wired the HQ `Current Release` project card to open the primary campaign workspace instead of remaining text-only.
 - Refreshed the startup migration test fixture to use a current bundled Pi/OpenRouter model ID after the old Grok fixture aged out of the catalog.
 - Updated HyperMotion's Remotion dependency and transitive lockfile so the production audit is clean.
-- Added the local smoke profile template: ignored real keys/context live in `.env.local` and `smoke/local/`, tracked starters live in `smoke/templates/`, and `bun run smoke:profile:check` verifies setup without printing secrets.
+- Corrected the local smoke profile plan: real keys are entered through the app UI and persist in local RunnerOS credential storage; `smoke/local/` only holds ignored artist/campaign/service smoke context.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
 
@@ -90,7 +90,7 @@ source_of_truth: true
   - `bun run validate:dev` passed: `typecheck:all`, shared LLM connection/model/config tests, and doc-tool tests.
   - `bun run electron:build` passed: skills generated, main/preload/renderer/resources/assets built.
   - `(cd tools/hypermotion && npm audit --omit=dev)` -> `found 0 vulnerabilities`.
-  - `bun run smoke:profile:check` added for local real-provider smoke readiness checks.
+  - `bun run smoke:profile:check` verifies local smoke context/checklist files without touching or printing credentials.
 
 ## Remaining Release Smoke
 
