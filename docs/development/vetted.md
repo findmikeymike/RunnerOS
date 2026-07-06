@@ -15,7 +15,9 @@ An agent is not vetted because it exists, appears in Workers, or has a prompt. I
 
 | Agent | Workspace | Test job | Required services | Result | Date | Notes |
 | --- | --- | --- | --- | --- | --- | --- |
-| _None yet_ |  |  |  |  |  | Add agents here only after live smoke passes. |
+| Industry Hunter | Campaign | Find outreach-ready industry target from artist/release context and prepare handoff for outreach | Zero for LinkedIn/email enrichment when profile URLs are available | Passed | 2026-07-06 | Verified campaign worker path, target-list output, Zero availability, and no missing-tool blocker after relaunch. |
+| Outreach Agent | Campaign | Use LinkedIn/profile target context to enrich contact route and prepare personalized outreach packet | Zero; Gmail optional for approved send | Passed | 2026-07-06 | Verified Zero-backed enrichment path is available; send remains approval-gated and Gmail is optional until explicit send approval. |
+| Comms Agent | Artist HQ / Campaign | Draft approval-gated artist outreach using Profile, Voice, Branding, Intel, and recipient-specific context | None required; Gmail optional for approved send | Passed | 2026-07-06 | Verified draft-first behavior and updated skill guardrails for hook, recipient bridge, missing facts, and approval checklist. |
 
 ## Pass Standard
 

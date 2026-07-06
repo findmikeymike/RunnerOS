@@ -239,10 +239,10 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Legendary Minds (`persona-agent`)
 
-- Description: Pressure-test ideas through Jobs, MrBeast, and Tom Ford lenses.
+- Description: Pressure-test ideas through Kurt Cobain, David Bowie, Kanye West, Tom Ford, Jobs, and MrBeast lenses.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `steve-jobs-perspective`, `mrbeast-perspective`, `tom-ford`
+- Skills: `creative-oracle`, `steve-jobs-perspective`, `mrbeast-perspective`, `tom-ford`
 - Sources: none
 - Optional sources: none
 - Trusted tools: none
@@ -608,4 +608,3 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Context-doc routing is summarized from launch/runtime code, not enumerated per workspace doc.
 - Live user/global agent overrides in `~/.agents/agents` are not included; this maps starter code, not machine-local mutations.
 - If Reference Health flags a missing skill/source that intentionally lives only in a user workspace, document that exception here.
-

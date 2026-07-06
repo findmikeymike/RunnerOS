@@ -473,11 +473,12 @@
     {
       "slug": "persona-agent",
       "name": "Legendary Minds",
-      "description": "Pressure-test ideas through Jobs, MrBeast, and Tom Ford lenses.",
+      "description": "Pressure-test ideas through Kurt Cobain, David Bowie, Kanye West, Tom Ford, Jobs, and MrBeast lenses.",
       "domain": "Creative",
       "permissionMode": "ask",
       "thinkingLevel": "high",
       "skills": [
+        "creative-oracle",
         "steve-jobs-perspective",
         "mrbeast-perspective",
         "tom-ford"
