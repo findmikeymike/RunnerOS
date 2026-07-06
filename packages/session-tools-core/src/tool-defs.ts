@@ -55,7 +55,7 @@ import {
   handleForgetMemory,
   handleRecallMemory,
 } from './handlers/memory.ts';
-import { handleCreateOutput } from './handlers/outputs.ts';
+import { handleCreateOutput, handlePromoteOutputToFinal } from './handlers/outputs.ts';
 import { handleArtworkCompose } from './handlers/artwork-compose.ts';
 import { handleMediaProviderRequest } from './handlers/media-provider-request.ts';
 import { handleVisualSurface } from './handlers/visual-surface.ts';
@@ -573,6 +573,16 @@ export const CreateOutputSchema = z.object({
   tags: z.array(z.string()).optional(),
   showInCanvas: z.boolean().optional().describe('Set true when the user should see this Output in Canvas immediately. The backend marks and pins the same-session Output when Canvas is available.'),
   show_in_canvas: z.boolean().optional().describe('Alias for showInCanvas. Prefer showInCanvas in new calls.'),
+});
+
+export const PromoteOutputToFinalSchema = z.object({
+  outputId: z.string().min(1).describe('Existing Output id to promote.'),
+  scope: z.enum(['hq', 'campaign']).describe('Promote into the HQ kit or a campaign kit.'),
+  campaignId: z.string().min(1).optional().describe('Required when scope is campaign.'),
+  slot: z.string().min(1).describe('Finals slot, e.g. Cover Art, Shortform Clips, Artist Bio.'),
+  assetId: z.string().min(1).optional().describe('Optional asset id inside the Output. Defaults to the Output primary asset.'),
+  makePrimary: z.boolean().optional().describe('Mark this final as the current primary choice for the slot without removing other finals.'),
+  note: z.string().optional().describe('Optional short note about why this was promoted.'),
 });
 
 export const ArtworkComposeSchema = z.object({
@@ -1236,6 +1246,19 @@ Use Browser Pane or browser tools, not Canvas, when the user wants to test, debu
 
 Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
 
+  promote_output_to_final: `Promote an existing Output into Finals.
+
+Use this only after the user clearly asks or confirms. Do not silently finalize work.
+
+Inputs:
+- outputId: existing Output id.
+- scope: hq or campaign.
+- campaignId: required for campaign.
+- slot: named Finals slot like Cover Art, Shortform Clips, Artist Bio, Press Copy, Captions, Ads, References.
+- makePrimary: optional; marks the current default for that slot without deleting other Finals.
+
+Finals are trusted pointers to Outputs. This does not duplicate files, publish anything, send anything, or delete competing options.`,
+
   artwork_compose: `Create an editable artwork composition and optionally publish it to Canvas.
 
 Use this after a cover-art, merch, poster, or campaign-visual concept has an approved base image or an approved layout direction. It writes:
@@ -1409,6 +1432,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
+  { name: 'promote_output_to_final', description: TOOL_DESCRIPTIONS.promote_output_to_final, inputSchema: PromoteOutputToFinalSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteOutputToFinal },
   { name: 'artwork_compose', description: TOOL_DESCRIPTIONS.artwork_compose, inputSchema: ArtworkComposeSchema, executionMode: 'registry', safeMode: 'block', handler: handleArtworkCompose },
   { name: 'media_provider_request', description: TOOL_DESCRIPTIONS.media_provider_request, inputSchema: MediaProviderRequestSchema, executionMode: 'registry', safeMode: 'block', handler: handleMediaProviderRequest },
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },

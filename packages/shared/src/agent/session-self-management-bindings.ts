@@ -300,6 +300,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'promoteOutputToFinal', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.promoteOutputToFinalFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'applyVisualSurfaceEvent', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.applyVisualSurfaceEventFn;

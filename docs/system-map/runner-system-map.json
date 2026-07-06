@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-05",
+  "generatedAt": "2026-07-06",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -13,6 +13,10 @@
     "sharedIntelRouter": "packages/shared/src/shared-intel/router.ts",
     "sharedIntelTypes": "packages/shared/src/shared-intel/types.ts",
     "sessionTools": "packages/session-tools-core/src/tool-defs.ts",
+    "outputFinals": "packages/shared/src/outputs/finals.ts",
+    "outputService": "packages/server-core/src/outputs/OutputService.ts",
+    "outputsHook": "apps/electron/src/renderer/hooks/useOutputs.ts",
+    "outputFinalActionDialog": "apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx",
     "bundledSkills": "packages/shared/src/skills/bundled.generated.ts",
     "builtinSources": "packages/shared/src/sources/builtin-sources.ts",
     "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts"
@@ -35,20 +39,25 @@
       "ask": 27,
       "safe": 7
     },
-    "hiddenWorkerHomeCount": 9,
+    "hiddenWorkerHomeCount": 6,
     "campaignDefaultWorkerSlugs": [
-      "world-builder",
-      "content-genius"
+      "content-genius",
+      "art-director",
+      "ig-trending-power-up",
+      "influencer-campaign-power-up",
+      "playlisting-power-up",
+      "record-doctor"
     ],
     "workflowCount": 2,
-    "sharedIntelPromptWired": true
+    "sharedIntelPromptWired": true,
+    "finalsPromotionWired": true
   },
   "referenceHealth": {
     "knownSkillCount": 103,
     "bundledSkillCount": 64,
     "systemSkillCount": 6,
     "userGlobalSkillCount": 103,
-    "knownSourceCount": 19,
+    "knownSourceCount": 20,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
     "missingSources": [],
@@ -114,11 +123,13 @@
   "inferredRuntimeRules": [
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
-    "Campaign workspaces can pass defaultVisibleSlugs, currently world-builder, content-genius.",
+    "Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
     "Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.",
+    "Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.",
+    "Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.",
     "message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.",
     "trustedWorkerTools are for bounded internal work only, not sends/posts/publishing."
   ],
@@ -379,7 +390,7 @@
     {
       "slug": "art-director",
       "name": "Art Director",
-      "description": "Create taste-led cover art, merch graphics, campaign visuals, posters, and image-generation/layout briefs from Artist HQ context without generic AI slop.",
+      "description": "Create highly aesthetic single and album art, merch, posters, and campaign visuals.",
       "domain": "Creative",
       "permissionMode": "ask",
       "thinkingLevel": "high",
@@ -392,6 +403,7 @@
       ],
       "sources": [],
       "optionalSources": [
+        "media-generation",
         "zero"
       ],
       "trustedWorkerTools": [
@@ -409,7 +421,8 @@
         "visuals"
       ],
       "launchSurfaces": [
-        "workspace-workers-when-active"
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -516,7 +529,8 @@
         "handoff"
       ],
       "launchSurfaces": [
-        "workspace-workers-when-active"
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -551,8 +565,7 @@
         "creative-direction"
       ],
       "launchSurfaces": [
-        "workspace-workers-when-active",
-        "campaign-workers-default-visible"
+        "workspace-workers-when-active"
       ],
       "riskSignals": [
         "approval-capable",
@@ -1026,7 +1039,8 @@
         "creator-growth"
       ],
       "launchSurfaces": [
-        "hidden-from-workers-home"
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -1056,7 +1070,8 @@
         "creator-growth"
       ],
       "launchSurfaces": [
-        "hidden-from-workers-home"
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -1086,7 +1101,8 @@
         "service-handoff"
       ],
       "launchSurfaces": [
-        "hidden-from-workers-home"
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",

@@ -478,6 +478,19 @@ describe('PiEventAdapter', () => {
       });
     });
 
+    it('should ignore normal WebSocket close messages from Pi', () => {
+      const events = collect(adapter.adaptEvent({
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          stopReason: 'error',
+          errorMessage: 'WebSocket closed 1000',
+        },
+      } as any));
+
+      expect(events).toHaveLength(0);
+    });
+
     it('should emit typed_error for raw HTML proxy pages', () => {
       const events = collect(adapter.adaptEvent({
         type: 'message_end',

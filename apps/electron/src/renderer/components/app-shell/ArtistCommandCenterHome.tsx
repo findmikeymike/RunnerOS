@@ -16,6 +16,9 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { navigate, routes } from '@/lib/navigate'
+import { useOutputs } from '@/hooks/useOutputs'
+import { FinalsWidget } from '@/components/outputs/FinalsWidget'
 import {
   Dialog,
   DialogContent,
@@ -117,6 +120,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
   const lastAutoSavedReleaseBoardBody = React.useRef<string | null>(null)
   const lastAutoSavedWorkerContextBody = React.useRef<string | null>(null)
   const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
+  const { outputs, loading: outputsLoading } = useOutputs(workspaceId)
   const inheritedArtistProfileWorkspaceId = artistProfileWorkspaceId && artistProfileWorkspaceId !== workspaceId
     ? artistProfileWorkspaceId
     : null
@@ -308,7 +312,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
-      <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
+      <div className="flex min-h-full w-full flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
         <section className="relative min-h-[230px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
           <div className="absolute -left-[20%] -top-[40%] h-[600px] w-[600px] rounded-full bg-orange-600/10 blur-[120px]" />
           <div className="absolute -bottom-[40%] -right-[10%] h-[600px] w-[600px] rounded-full bg-indigo-600/5 blur-[120px]" />
@@ -389,6 +393,15 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
         <ReleaseBoardRow
           board={releaseBoard}
           onSelectCategory={setSelectedReleaseCategoryId}
+        />
+
+        <FinalsWidget
+          title="Finals / Campaign Kit"
+          outputs={outputs}
+          scope="campaign"
+          campaignId={workspaceId}
+          loading={outputsLoading}
+          onOpenOutput={(id) => navigate(routes.view.output(id))}
         />
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">

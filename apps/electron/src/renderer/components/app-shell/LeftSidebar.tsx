@@ -486,7 +486,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
         onClick={isOverlay ? undefined : (link.onClick ?? (link.expandable ? link.onToggle : undefined))}
         data-tutorial={link.dataTutorial}
         className={cn(
-          "group flex w-full items-center gap-1.5 rounded-[9px] text-[12px] select-none outline-none",
+          "group flex w-full min-w-0 items-center gap-1.5 overflow-hidden rounded-[9px] text-[12px] select-none outline-none",
           "focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
           link.compact ? "py-[4px]" : "py-[6px]",
           "px-2.5 font-medium tracking-[0.01em]",
@@ -526,7 +526,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
             renderIcon(link)
           )}
         </span>
-        {link.title}
+        <span className="min-w-0 flex-1 truncate text-left">{link.title}</span>
         {/* After-title element: type indicator icon, right-aligned before count badge, revealed on hover */}
         {link.afterTitle && (
           <span className="ml-auto opacity-0 group-hover/section:opacity-100 group-data-[state=open]:opacity-100 group-data-[edit-active=true]:opacity-100 transition-opacity">

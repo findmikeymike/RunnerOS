@@ -1,14 +1,17 @@
 import * as React from 'react'
-import { Box, FileText, Image, Link2, ReceiptText, Search } from 'lucide-react'
+import { Box, CheckCircle2, FileText, Image, Link2, ReceiptText, Search, Star } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { EntityRow } from '@/components/ui/entity-row'
 import { Input } from '@/components/ui/input'
+import { useMenuComponents } from '@/components/ui/menu-context'
 import { cn } from '@/lib/utils'
-import type { OutputKind, OutputSummaryDTO } from '@/hooks/useOutputs'
+import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
+import { useOutputs, type OutputFinalPointerDTO, type OutputKind, type OutputSummaryDTO } from '@/hooks/useOutputs'
 
 type TFn = (key: string, options?: Record<string, unknown>) => string
 
 interface Props {
+  workspaceId: string | null | undefined
   outputs: OutputSummaryDTO[]
   loading: boolean
   error: string | null
@@ -17,6 +20,7 @@ interface Props {
 }
 
 export function OutputsListPanel({
+  workspaceId,
   outputs,
   loading,
   error,
@@ -24,7 +28,12 @@ export function OutputsListPanel({
   onOutputClick,
 }: Props) {
   const { t } = useTranslation()
+  const { promoteToFinal, removeFromFinal } = useOutputs(workspaceId)
   const [query, setQuery] = React.useState('')
+  const [finalAction, setFinalAction] = React.useState<{
+    output: OutputSummaryDTO
+    action: 'promote' | 'primary' | 'remove'
+  } | null>(null)
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return outputs
@@ -80,6 +89,13 @@ export function OutputsListPanel({
                 </div>
               }
               titleTrailing={<span className="text-[11px] text-muted-foreground">{formatRelativeTime(output.createdAt, t)}</span>}
+              titleSuffix={output.finals?.length ? <FinalBadge finals={output.finals} /> : undefined}
+              menuContent={
+                <OutputFinalsMenu
+                  output={output}
+                  onAction={(action) => setFinalAction({ output, action })}
+                />
+              }
               isSelected={selectedOutputId === output.id}
               onClick={() => onOutputClick(output.id)}
               showSeparator={index > 0}
@@ -87,8 +103,76 @@ export function OutputsListPanel({
           ))
         )}
       </div>
+      <OutputFinalActionDialog
+        open={Boolean(finalAction)}
+        action={finalAction?.action ?? 'promote'}
+        output={finalAction?.output ?? null}
+        onOpenChange={(open) => {
+          if (!open) setFinalAction(null)
+        }}
+        promoteToFinal={promoteToFinal}
+        removeFromFinal={removeFromFinal}
+      />
     </div>
   )
+}
+
+function OutputFinalsMenu({
+  output,
+  onAction,
+}: {
+  output: OutputSummaryDTO
+  onAction: (action: 'promote' | 'primary' | 'remove') => void
+}) {
+  const { MenuItem, Separator } = useMenuComponents()
+  const primary = output.finals?.find((entry) => entry.isPrimary)
+  return (
+    <>
+      <MenuItem onClick={() => onAction('promote')}>
+        <CheckCircle2 className="mr-2 h-3.5 w-3.5" />
+        Set as Final
+      </MenuItem>
+      {output.finals?.length ? (
+        <MenuItem onClick={() => onAction('primary')}>
+          <Star className="mr-2 h-3.5 w-3.5" />
+          Set as Primary
+        </MenuItem>
+      ) : null}
+      {output.finals?.length ? (
+        <>
+          <Separator />
+          <MenuItem onClick={() => onAction('remove')}>
+            Remove from Finals
+          </MenuItem>
+        </>
+      ) : null}
+      {primary ? <FinalMenuNote final={primary} /> : null}
+    </>
+  )
+}
+
+function FinalBadge({ finals }: { finals: OutputFinalPointerDTO[] }) {
+  const primary = finals.some((entry) => entry.isPrimary)
+  return (
+    <span className={cn(
+      'inline-flex h-5 items-center gap-1 rounded-[4px] px-1.5 text-[10px] font-medium',
+      primary ? 'bg-sky-500/12 text-sky-300' : 'bg-emerald-500/10 text-emerald-300',
+    )}>
+      {primary ? 'Primary' : 'Final'}
+    </span>
+  )
+}
+
+function FinalMenuNote({ final }: { final: OutputFinalPointerDTO }) {
+  return (
+    <div className="max-w-[220px] px-2 py-1 text-[11px] text-muted-foreground">
+      {formatSlot(final.slot)} · {final.scope === 'hq' ? 'HQ' : 'Campaign'}
+    </div>
+  )
+}
+
+function formatSlot(slot: string): string {
+  return slot.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 export function StatusPill({ status }: { status: string }) {

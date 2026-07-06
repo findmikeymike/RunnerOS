@@ -31,6 +31,7 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { useAgents } from '@/hooks/useAgents'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
+import { FinalsWidget } from '@/components/outputs/FinalsWidget'
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import { openAgentSessionComposer } from '@/lib/run-agent'
@@ -987,7 +988,7 @@ export function ArtistHQHome({
     ].filter(Boolean).join(' ').toLowerCase().includes(needle))
   }, [network.people, query])
 
-  const artistName = workspaceName || 'Artist HQ'
+  const artistName = profile.artistName || workspaceName || 'Artist HQ'
   const nextDate = 'This week'
 
   // Dynamic header properties based on active tab
@@ -1178,6 +1179,14 @@ export function ArtistHQHome({
                 <SectionTitle icon={Bot} title="Workers" meta="quiet" />
                 <EmptyLine title="No active global workers" detail="Spotify sync, research monitors, and calendar jobs will appear here." />
               </HQCard>
+
+              <FinalsWidget
+                title="Artist Kit / Finals"
+                outputs={outputs}
+                scope="hq"
+                loading={outputsLoading}
+                onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
+              />
             </div>
 
             <HQCard>

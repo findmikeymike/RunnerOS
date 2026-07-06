@@ -6,11 +6,16 @@ import type { CreateOutputToolInput, CreateOutputResult, VisualSurfaceStateCaptu
 import {
   createOutputBundle,
   deleteOutput,
+  attachFinalsToOutputs,
   assertOutputAssetPath,
   getOutputDir,
   listOutputManifests,
   listOutputs,
+  promoteOutputToFinalInsideLock,
   readOutput,
+  readOutputFinalsRegistry,
+  removeOutputFromFinalInsideLock,
+  withOutputFinalsRegistryLock,
   resolveGeneratedHtmlPreviewTarget,
   resolveLocalWebPreviewTarget,
   summarizeOutputContent,
@@ -18,6 +23,9 @@ import {
   type OutputAsset,
   type OutputKind,
   type OutputManifest,
+  type OutputFinalPointer,
+  type PromoteOutputToFinalInput,
+  type RemoveOutputFromFinalInput,
   type OutputSummary,
   type OutputOrigin,
 } from '@craft-agent/shared/outputs';
@@ -89,11 +97,39 @@ export class OutputService {
   constructor(private readonly deps: OutputServiceDeps) {}
 
   list(workspaceId: string): OutputSummary[] {
-    return listOutputs(this.deps.getWorkspaceRootPath(workspaceId));
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    return attachFinalsToOutputs(listOutputs(root), readOutputFinalsRegistry(root).finals);
   }
 
   get(workspaceId: string, outputId: string): OutputManifest | null {
-    return readOutput(this.deps.getWorkspaceRootPath(workspaceId), outputId);
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    const output = readOutput(root, outputId);
+    if (!output) return null;
+    const finals = readOutputFinalsRegistry(root).finals.filter((entry) => entry.outputId === output.id);
+    return finals.length ? { ...output, finals } : output;
+  }
+
+  promoteToFinal(workspaceId: string, input: PromoteOutputToFinalInput): Promise<OutputFinalPointer> {
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    return Promise.resolve().then(() => {
+      const final = withOutputFinalsRegistryLock(root, () => {
+        const output = readOutput(root, input.outputId);
+        if (!output) throw new Error(`Output not found: ${input.outputId}`);
+        if (output.workspaceId !== workspaceId) throw new Error(`Output "${input.outputId}" is not in workspace "${workspaceId}".`);
+        return promoteOutputToFinalInsideLock(root, output, input);
+      });
+      this.emitUpdated(workspaceId);
+      return final;
+    });
+  }
+
+  removeFromFinal(workspaceId: string, input: RemoveOutputFromFinalInput): Promise<number> {
+    const root = this.deps.getWorkspaceRootPath(workspaceId);
+    return Promise.resolve().then(() => {
+      const removed = withOutputFinalsRegistryLock(root, () => removeOutputFromFinalInsideLock(root, input));
+      if (removed > 0) this.emitUpdated(workspaceId);
+      return removed;
+    });
   }
 
   getVisualSurfaceState(workspaceId: string, sessionId: string): VisualSurfaceStateToolResult {
@@ -389,13 +425,20 @@ export class OutputService {
 
   async delete(workspaceId: string, outputId: string): Promise<boolean> {
     const root = this.deps.getWorkspaceRootPath(workspaceId);
-    const manifest = readOutput(root, outputId);
-    const deleted = deleteOutput(root, outputId);
-    if (deleted) {
-      await this.detachDeletedOutputFromWorkflowRun(workspaceId, outputId, manifest);
+    const result = withOutputFinalsRegistryLock(root, () => {
+      const finals = readOutputFinalsRegistry(root, { strict: true }).finals.filter((entry) => entry.outputId === outputId);
+      if (finals.length > 0) {
+        throw new Error(`Output "${outputId}" is promoted to Finals. Remove it from Finals before deleting it.`);
+      }
+      const manifest = readOutput(root, outputId);
+      const deleted = deleteOutput(root, outputId);
+      return { deleted, manifest };
+    });
+    if (result.deleted) {
+      await this.detachDeletedOutputFromWorkflowRun(workspaceId, outputId, result.manifest);
       this.emitUpdated(workspaceId);
     }
-    return deleted;
+    return result.deleted;
   }
 
   private withRunMutex<T>(workspaceId: string, runId: string, fn: () => Promise<T>): Promise<T> {

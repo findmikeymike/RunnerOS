@@ -4,6 +4,9 @@ export type {
   OutputAsset,
   OutputAssetRole,
   OutputContext,
+  OutputFinalPointer,
+  OutputFinalScope,
+  OutputFinalsRegistry,
   OutputKind,
   OutputLink,
   OutputManifest,
@@ -13,6 +16,8 @@ export type {
   OutputReceipt,
   OutputStatus,
   OutputSummary,
+  PromoteOutputToFinalInput,
+  RemoveOutputFromFinalInput,
 } from './types.ts';
 
 export {
@@ -48,6 +53,20 @@ export {
   isOutputManifest,
   isSafeRelativeAssetPath,
 } from './validation.ts';
+
+export {
+  OUTPUT_FINALS_CONTEXT_SLUG,
+  attachFinalsToOutputs,
+  displayFinalSlot,
+  makeManualOutputId,
+  promoteOutputToFinal,
+  promoteOutputToFinalInsideLock,
+  readOutputFinalsRegistry,
+  removeOutputFromFinal,
+  removeOutputFromFinalInsideLock,
+  withOutputFinalsRegistryLock,
+  writeOutputFinalsRegistry,
+} from './finals.ts';
 
 export {
   OUTPUT_MANIFEST_FILE,

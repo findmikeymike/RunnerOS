@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-04
+last_verified: 2026-07-06
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-07-05
+Generated: 2026-07-06
 
 ## Why This Exists
 
@@ -27,6 +27,10 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - sharedIntelRouter: `packages/shared/src/shared-intel/router.ts`
 - sharedIntelTypes: `packages/shared/src/shared-intel/types.ts`
 - sessionTools: `packages/session-tools-core/src/tool-defs.ts`
+- outputFinals: `packages/shared/src/outputs/finals.ts`
+- outputService: `packages/server-core/src/outputs/OutputService.ts`
+- outputsHook: `apps/electron/src/renderer/hooks/useOutputs.ts`
+- outputFinalActionDialog: `apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx`
 - bundledSkills: `packages/shared/src/skills/bundled.generated.ts`
 - builtinSources: `packages/shared/src/sources/builtin-sources.ts`
 - starterWorkflows: `packages/shared/src/workflows/starter-templates.ts`
@@ -34,14 +38,15 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 ## Summary
 
 - Agents mapped: 34
-- Hidden from Workers home: 9
-- Campaign default workers: `world-builder`, `content-genius`
+- Hidden from Workers home: 6
+- Campaign default workers: `content-genius`, `art-director`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
+- Outputs -> Finals promotion: wired
 - Domains: Command 3, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
 - Permission modes: ask 27, safe 7
 - Known skills: 103 (64 bundled, 6 system, 103 user-global on this machine)
-- Known builtin sources: 19
+- Known builtin sources: 20
 
 ## Reference Health
 
@@ -51,11 +56,13 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
-- Campaign workspaces can pass defaultVisibleSlugs, currently world-builder, content-genius.
+- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
 - Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.
+- Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.
+- Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.
 - message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.
 - trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.
 
@@ -67,6 +74,15 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Agent launch: `loadActiveContextDocsForAgent` filters docs for the launched agent; Concierge/HNIC keeps the broad context override.
 - Prompt delivery: `composeAgentSystemPrompt` and workflow prompt composition inject matching notes into a dedicated `Shared Intel for this worker:` section and remove them from generic workspace context to avoid duplicate/bloat.
 - Practical result: agents know to check it because the runtime places the relevant notes in their system prompt at launch. Individual saved agent prompts do not need to be edited.
+
+## Outputs -> Finals Promotion
+
+- User action: Output list/detail actions open `OutputFinalActionDialog` for `Set as Final`, `Set as Primary`, or `Remove from Finals`.
+- Agent action: `promote_output_to_final` is exposed through the session tool manifest and calls the same backend promotion path.
+- Backend action: `OutputService.promoteToFinal` validates workspace ownership, then writes through shared Finals registry helpers.
+- Storage: Finals live as JSON pointers in `context/finals/CONTEXT.md`; the Output bundle remains canonical.
+- Safety: writes use `context/.locks/output-finals.lock`, corrupt registry data fails closed, campaign Finals require `campaignId`, and source Output deletion is blocked while referenced.
+- Surfacing: HQ and campaign command-center widgets read Outputs with attached Final pointers; campaign widgets fail closed without a campaign id.
 
 ## Starter Workflows
 
@@ -195,12 +211,12 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Art Director (`art-director`)
 
-- Description: Create taste-led cover art, merch graphics, campaign visuals, posters, and image-generation/layout briefs from Artist HQ context without generic AI slop.
+- Description: Create highly aesthetic single and album art, merch, posters, and campaign visuals.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: `artist-art-direction`, `artist-typography-taste`, `artist-visual-world-director`, `ad-creative`, `zero`
 - Sources: none
-- Optional sources: `zero`
+- Optional sources: `media-generation`, `zero`
 - Trusted tools: `artwork_compose`, `create_output`
 - Tags: `creative`, `art-direction`, `album-art`, `merch`, `design`, `image-generation`, `visuals`
 - Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `trusted-worker-tools`
@@ -239,7 +255,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: `record-doctor-handoff`, `artist-comms-strategist`
 - Sources: none
 - Optional sources: `gmail`
@@ -253,7 +269,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Design immersive low-budget release worlds fans can enter, built from the song's actual emotional world instead of generic promo tactics.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Launch surfaces: `workspace-workers-when-active`
 - Skills: `world-immersion`, `artist-narrative-universe`, `artist-campaign-angle-builder`
 - Sources: none
 - Optional sources: none
@@ -459,7 +475,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Draft an inquiry to a vetted IG music trending provider.
 - Permission: `ask`; thinking: `medium`
-- Launch surfaces: `hidden-from-workers-home`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: none
 - Sources: none
 - Optional sources: none
@@ -473,7 +489,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Draft an inquiry to a vetted influencer campaign provider.
 - Permission: `ask`; thinking: `medium`
-- Launch surfaces: `hidden-from-workers-home`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: none
 - Sources: none
 - Optional sources: none
@@ -487,7 +503,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Draft an inquiry to a vetted playlisting provider.
 - Permission: `ask`; thinking: `medium`
-- Launch surfaces: `hidden-from-workers-home`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: none
 - Sources: none
 - Optional sources: none

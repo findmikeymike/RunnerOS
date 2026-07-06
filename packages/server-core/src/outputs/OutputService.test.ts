@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { OutputService } from './OutputService';
 import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
+import { withOutputFinalsRegistryLock } from '@craft-agent/shared/outputs';
 import { OUTPUT_SHOW_IN_CANVAS_TAG } from '@craft-agent/shared/outputs/constants';
 import { VISUAL_BOARD_ASSET_PATH, type VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import { VISUAL_SURFACE_EVENTS_ASSET_PATH } from '@craft-agent/shared/visual-surface-events';
@@ -68,7 +69,214 @@ describe('OutputService run mutex', () => {
   });
 });
 
+describe('Output finals file lock', () => {
+  it('times out when another process-style lock is already held', () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-finals-lock-'));
+    mkdirSync(join(root, 'context', '.locks', 'output-finals.lock'), { recursive: true });
+
+    expect(() => withOutputFinalsRegistryLock(root, () => undefined, { timeoutMs: 30 })).toThrow('Timed out waiting for Finals registry lock');
+  });
+});
+
 describe('OutputService visual boards', () => {
+  it('promotes multiple outputs into one final slot and keeps primary optional', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-finals-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const emitted: string[] = [];
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+      emitOutputsUpdated: (workspaceId) => emitted.push(workspaceId),
+    });
+
+    const first = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Cover A',
+        kind: 'image',
+        summary: 'First cover option.',
+        content: '<svg />',
+        contentMimeType: 'text/plain',
+      },
+    });
+    const second = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Cover B',
+        kind: 'image',
+        summary: 'Second cover option.',
+        content: '<svg />',
+        contentMimeType: 'text/plain',
+      },
+    });
+
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    const finalA = await service.promoteToFinal('ws', {
+      outputId: first.outputId!,
+      scope: 'campaign',
+      campaignId: 'release-one',
+      slot: 'Cover Art',
+    });
+    const finalB = await service.promoteToFinal('ws', {
+      outputId: second.outputId!,
+      scope: 'campaign',
+      campaignId: 'release-one',
+      slot: 'Cover Art',
+      makePrimary: true,
+    });
+
+    expect(finalA.slot).toBe('cover-art');
+    expect(finalA.isPrimary).toBe(false);
+    expect(finalB.isPrimary).toBe(true);
+
+    const listed = service.list('ws');
+    expect(listed.find((output) => output.id === first.outputId)?.finals?.[0]?.isPrimary).toBe(false);
+    expect(listed.find((output) => output.id === second.outputId)?.finals?.[0]?.isPrimary).toBe(true);
+
+    await service.promoteToFinal('ws', {
+      outputId: first.outputId!,
+      scope: 'campaign',
+      campaignId: 'release-one',
+      slot: 'Cover Art',
+      makePrimary: true,
+    });
+
+    const updated = service.list('ws');
+    expect(updated.find((output) => output.id === first.outputId)?.finals?.[0]?.isPrimary).toBe(true);
+    expect(updated.find((output) => output.id === second.outputId)?.finals?.[0]?.isPrimary).toBe(false);
+    expect(emitted).toContain('ws');
+  });
+
+  it('removes finals without deleting the source output', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-finals-remove-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+
+    const result = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Artist bio',
+        kind: 'document',
+        summary: 'Short artist bio.',
+        content: 'Bio',
+      },
+    });
+    expect(result.ok).toBe(true);
+
+    await service.promoteToFinal('ws', {
+      outputId: result.outputId!,
+      scope: 'hq',
+      slot: 'Artist Bio',
+      makePrimary: true,
+    });
+    expect(service.get('ws', result.outputId!)?.finals).toHaveLength(1);
+
+    const removed = await service.removeFromFinal('ws', { outputId: result.outputId! });
+    expect(removed).toBe(1);
+    expect(service.get('ws', result.outputId!)).toBeTruthy();
+    expect(service.get('ws', result.outputId!)?.finals).toBeUndefined();
+  });
+
+  it('does not overwrite a corrupt finals registry during promotion', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-finals-corrupt-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+    const result = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Cover',
+        kind: 'image',
+        summary: 'Cover option.',
+        content: '<svg />',
+      },
+    });
+    expect(result.ok).toBe(true);
+
+    const finalsDir = join(root, 'context', 'finals');
+    mkdirSync(finalsDir, { recursive: true });
+    const finalsPath = join(finalsDir, 'CONTEXT.md');
+    const corruptBody = '---\nname: Finals\n---\n{ bad json';
+    writeFileSync(finalsPath, corruptBody);
+
+    await expect(service.promoteToFinal('ws', {
+      outputId: result.outputId!,
+      scope: 'hq',
+      slot: 'Cover Art',
+    })).rejects.toThrow('Finals registry is invalid');
+    expect(readFileSync(finalsPath, 'utf-8')).toBe(corruptBody);
+  });
+
+  it('refuses to delete outputs that are still promoted to finals', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-finals-delete-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const service = new OutputService({
+      getWorkspaceRootPath: () => root,
+    });
+    const result = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Final bio',
+        kind: 'document',
+        summary: 'Bio.',
+        content: 'Bio',
+      },
+    });
+    expect(result.ok).toBe(true);
+    await service.promoteToFinal('ws', {
+      outputId: result.outputId!,
+      scope: 'hq',
+      slot: 'Artist Bio',
+    });
+
+    await expect(service.delete('ws', result.outputId!)).rejects.toThrow('Remove it from Finals before deleting it');
+    expect(service.get('ws', result.outputId!)).toBeTruthy();
+  });
+
+  it('keeps concurrent promotions from separate service instances', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-finals-concurrent-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const deps = { getWorkspaceRootPath: () => root };
+    const serviceA = new OutputService(deps);
+    const serviceB = new OutputService(deps);
+    const first = await serviceA.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Cover A',
+        kind: 'image',
+        summary: 'A.',
+        content: '<svg />',
+      },
+    });
+    const second = await serviceB.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session-1',
+      output: {
+        title: 'Cover B',
+        kind: 'image',
+        summary: 'B.',
+        content: '<svg />',
+      },
+    });
+
+    await Promise.all([
+      serviceA.promoteToFinal('ws', { outputId: first.outputId!, scope: 'hq', slot: 'Cover Art' }),
+      serviceB.promoteToFinal('ws', { outputId: second.outputId!, scope: 'hq', slot: 'Cover Art' }),
+    ]);
+
+    const finals = serviceA.list('ws').flatMap((output) => output.finals ?? []);
+    expect(finals.map((entry) => entry.outputId).sort()).toEqual([first.outputId!, second.outputId!].sort());
+  });
+
   it('persists Work Product context and approval metadata from create_output', async () => {
     const root = mkdtempSync(join(tmpdir(), 'osvc-work-products-'));
     mkdirSync(join(root, 'outputs'), { recursive: true });

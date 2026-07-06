@@ -154,6 +154,23 @@ export {
   handleForgetMemory,
   handleRecallMemory,
 } from './memory.ts';
+
+// Outputs
+export {
+  handleCreateOutput,
+  handlePromoteOutputToFinal,
+} from './outputs.ts';
+export type {
+  CreateOutputToolInput,
+  CreateOutputResult,
+  PromoteOutputToFinalToolInput,
+  PromoteOutputToFinalResult,
+  OutputKind,
+  OutputAssetRole,
+  CreateOutputFileInput,
+  CreateOutputLinkInput,
+  CreateOutputReceiptInput,
+} from './outputs.ts';
 export type {
   SaveMemoryToolInput,
   UpdateMemoryToolInput,
@@ -178,17 +195,6 @@ export type {
   ListAgentMessageReceiptsResult,
 } from './list-agent-message-receipts.ts';
 
-// Outputs
-export { handleCreateOutput } from './outputs.ts';
-export type {
-  CreateOutputToolInput,
-  CreateOutputResult,
-  OutputKind,
-  OutputAssetRole,
-  CreateOutputFileInput,
-  CreateOutputLinkInput,
-  CreateOutputReceiptInput,
-} from './outputs.ts';
 export { handleArtworkCompose } from './artwork-compose.ts';
 export type {
   ArtworkComposeInput,

@@ -17,6 +17,10 @@ const SHARED_INTEL_HANDLER_FILE = join(ROOT, 'packages/server-core/src/handlers/
 const SHARED_INTEL_ROUTER_FILE = join(ROOT, 'packages/shared/src/shared-intel/router.ts');
 const SHARED_INTEL_TYPES_FILE = join(ROOT, 'packages/shared/src/shared-intel/types.ts');
 const TOOL_DEFS_FILE = join(ROOT, 'packages/session-tools-core/src/tool-defs.ts');
+const OUTPUT_FINALS_FILE = join(ROOT, 'packages/shared/src/outputs/finals.ts');
+const OUTPUT_SERVICE_FILE = join(ROOT, 'packages/server-core/src/outputs/OutputService.ts');
+const OUTPUTS_HOOK_FILE = join(ROOT, 'apps/electron/src/renderer/hooks/useOutputs.ts');
+const OUTPUT_FINAL_ACTION_DIALOG_FILE = join(ROOT, 'apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx');
 const BUNDLED_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/bundled.generated.ts');
 const BUILTIN_SOURCES_FILE = join(ROOT, 'packages/shared/src/sources/builtin-sources.ts');
 const STARTER_WORKFLOWS_FILE = join(ROOT, 'packages/shared/src/workflows/starter-templates.ts');
@@ -365,6 +369,10 @@ function main() {
       sharedIntelRouter: rel(SHARED_INTEL_ROUTER_FILE),
       sharedIntelTypes: rel(SHARED_INTEL_TYPES_FILE),
       sessionTools: rel(TOOL_DEFS_FILE),
+      outputFinals: rel(OUTPUT_FINALS_FILE),
+      outputService: rel(OUTPUT_SERVICE_FILE),
+      outputsHook: rel(OUTPUTS_HOOK_FILE),
+      outputFinalActionDialog: rel(OUTPUT_FINAL_ACTION_DIALOG_FILE),
       bundledSkills: rel(BUNDLED_SKILLS_FILE),
       builtinSources: rel(BUILTIN_SOURCES_FILE),
       starterWorkflows: rel(STARTER_WORKFLOWS_FILE),
@@ -378,6 +386,10 @@ function main() {
       workflowCount: Array.isArray(starterWorkflows) ? starterWorkflows.length : 0,
       sharedIntelPromptWired: text(COMPOSE_AGENT_PROMPT_FILE).includes('buildSharedIntelPromptSection')
         && text(SESSION_MANAGER_FILE).includes('buildSharedIntelPromptSection'),
+      finalsPromotionWired: text(TOOL_DEFS_FILE).includes('promote_output_to_final')
+        && text(OUTPUT_SERVICE_FILE).includes('promoteToFinal')
+        && text(OUTPUT_FINALS_FILE).includes('withOutputFinalsRegistryLock')
+        && text(OUTPUT_FINAL_ACTION_DIALOG_FILE).includes('Set as Final'),
     },
     referenceHealth: referenceHealth(agents, skillScopes, knownSources),
     workflows: Array.isArray(starterWorkflows) ? workflowHealth(starterWorkflows, agents) : [],
@@ -389,6 +401,8 @@ function main() {
       'Concierge receives broad workspace context and an active-agent capability catalog for routing.',
       'Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.',
       'Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.',
+      'Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.',
+      'Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.',
       'message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.',
       'trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.',
     ],
@@ -407,7 +421,7 @@ function rel(filePath) {
 }
 
 function renderReadme() {
-  return `---\nstatus: current\nowner: agent\nlast_verified: 2026-07-04\nsource_of_truth: true\n---\n\n# Runner System Map\n\nGenerated map of Runner-specific wiring that generic code graphs miss.\n\nFiles:\n\n- [runner-system-map.md](./runner-system-map.md) - human-readable worker/system wiring.\n- [runner-system-map.json](./runner-system-map.json) - machine-readable source for agents.\n- [runner-system-map.mmd](./runner-system-map.mmd) - Mermaid graph for quick visual scans.\n\nRegenerate after changing starter agents, worker visibility, launch routing, or permission/tool rules:\n\n\`\`\`bash\nnode scripts/generate-runner-system-map.mjs\n\`\`\`\n\nThis map is derived from code. If it disagrees with the running app, inspect the source files listed in the generated JSON before editing docs by hand.\n`;
+  return `---\nstatus: current\nowner: agent\nlast_verified: ${GENERATED_AT}\nsource_of_truth: true\n---\n\n# Runner System Map\n\nGenerated map of Runner-specific wiring that generic code graphs miss.\n\nFiles:\n\n- [runner-system-map.md](./runner-system-map.md) - human-readable worker/system wiring.\n- [runner-system-map.json](./runner-system-map.json) - machine-readable source for agents.\n- [runner-system-map.mmd](./runner-system-map.mmd) - Mermaid graph for quick visual scans.\n\nRegenerate after changing starter agents, worker visibility, launch routing, or permission/tool rules:\n\n\`\`\`bash\nnode scripts/generate-runner-system-map.mjs\n\`\`\`\n\nThis map is derived from code. If it disagrees with the running app, inspect the source files listed in the generated JSON before editing docs by hand.\n`;
 }
 
 function renderMarkdown(map) {
@@ -415,7 +429,7 @@ function renderMarkdown(map) {
   lines.push('---');
   lines.push('status: current');
   lines.push('owner: agent');
-  lines.push('last_verified: 2026-07-04');
+  lines.push(`last_verified: ${GENERATED_AT}`);
   lines.push('source_of_truth: true');
   lines.push('---');
   lines.push('');
@@ -438,6 +452,7 @@ function renderMarkdown(map) {
   lines.push(`- Campaign default workers: ${formatList(map.summary.campaignDefaultWorkerSlugs)}`);
   lines.push(`- Starter workflows mapped: ${map.summary.workflowCount}`);
   lines.push(`- Shared Intel prompt injection: ${map.summary.sharedIntelPromptWired ? 'wired' : 'not detected'}`);
+  lines.push(`- Outputs -> Finals promotion: ${map.summary.finalsPromotionWired ? 'wired' : 'not detected'}`);
   lines.push(`- Domains: ${Object.entries(map.summary.domains).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`- Permission modes: ${Object.entries(map.summary.permissionModes).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`- Known skills: ${map.referenceHealth.knownSkillCount} (${map.referenceHealth.bundledSkillCount} bundled, ${map.referenceHealth.systemSkillCount} system, ${map.referenceHealth.userGlobalSkillCount} user-global on this machine)`);
@@ -472,6 +487,15 @@ function renderMarkdown(map) {
   lines.push('- Agent launch: `loadActiveContextDocsForAgent` filters docs for the launched agent; Concierge/HNIC keeps the broad context override.');
   lines.push('- Prompt delivery: `composeAgentSystemPrompt` and workflow prompt composition inject matching notes into a dedicated `Shared Intel for this worker:` section and remove them from generic workspace context to avoid duplicate/bloat.');
   lines.push('- Practical result: agents know to check it because the runtime places the relevant notes in their system prompt at launch. Individual saved agent prompts do not need to be edited.');
+  lines.push('');
+  lines.push('## Outputs -> Finals Promotion');
+  lines.push('');
+  lines.push('- User action: Output list/detail actions open `OutputFinalActionDialog` for `Set as Final`, `Set as Primary`, or `Remove from Finals`.');
+  lines.push('- Agent action: `promote_output_to_final` is exposed through the session tool manifest and calls the same backend promotion path.');
+  lines.push('- Backend action: `OutputService.promoteToFinal` validates workspace ownership, then writes through shared Finals registry helpers.');
+  lines.push('- Storage: Finals live as JSON pointers in `context/finals/CONTEXT.md`; the Output bundle remains canonical.');
+  lines.push('- Safety: writes use `context/.locks/output-finals.lock`, corrupt registry data fails closed, campaign Finals require `campaignId`, and source Output deletion is blocked while referenced.');
+  lines.push('- Surfacing: HQ and campaign command-center widgets read Outputs with attached Final pointers; campaign widgets fail closed without a campaign id.');
   lines.push('');
   lines.push('## Starter Workflows');
   lines.push('');
@@ -536,6 +560,13 @@ function renderMermaid(map) {
   lines.push('  SharedIntelPrompt --> Session');
   lines.push('  Session --> Sources["Enabled Sources"]');
   lines.push('  Session --> Skills["Agent Skills"]');
+  lines.push('  Outputs["Outputs"] --> FinalsDialog["Output Final Dialog"]');
+  lines.push('  FinalsDialog --> FinalsService["OutputService Finals Actions"]');
+  lines.push('  SessionTools["Session Tools"] --> PromoteFinal["promote_output_to_final"]');
+  lines.push('  PromoteFinal --> FinalsService');
+  lines.push('  FinalsService --> FinalsRegistry["context/finals/CONTEXT.md"]');
+  lines.push('  FinalsService --> FinalsLock["context/.locks/output-finals.lock"]');
+  lines.push('  FinalsRegistry --> HQFinals["HQ / Campaign Finals Widgets"]');
   for (const agent of map.agents) {
     const id = `A_${mermaidId(agent.slug)}`;
     const label = `${agent.name}\\n${agent.permissionMode}\\n${agent.domain}`;

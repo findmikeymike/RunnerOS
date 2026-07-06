@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, Archive, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, Loader2, PanelTopOpen, ReceiptText, Route } from 'lucide-react'
+import { AlertTriangle, Archive, CheckCircle2, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, Loader2, PanelTopOpen, ReceiptText, Route, Star } from 'lucide-react'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { OutputInlinePreview } from '@/components/outputs/OutputInlinePreview'
 import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks/useOutputs'
 import { openDemoVisualSurfaceAtom, openOutputVisualSurfaceAtom } from '@/atoms/visual-surfaces'
 import { findVideoProjectAsset } from '@/components/outputs/video-project-output'
+import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
 
 interface Props {
   workspaceId: string
@@ -29,12 +30,13 @@ type OutputsElectronAPI = typeof window.electronAPI & {
 
 export default function OutputDetailPage({ workspaceId, outputId }: Props) {
   const { navigate } = useNavigation()
-  const { getOutput, outputs, loading, error } = useOutputs(workspaceId)
+  const { getOutput, outputs, loading, error, promoteToFinal, removeFromFinal } = useOutputs(workspaceId)
   const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
   const openDemoVisualSurface = useSetAtom(openDemoVisualSurfaceAtom)
   const [manifest, setManifest] = React.useState<OutputManifestDTO | null>(null)
   const [detailError, setDetailError] = React.useState<string | null>(null)
   const [savingToVault, setSavingToVault] = React.useState(false)
+  const [finalAction, setFinalAction] = React.useState<'promote' | 'primary' | 'remove' | null>(null)
 
   React.useEffect(() => {
     if (!outputId) {
@@ -94,6 +96,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
   const videoProjectAsset = findVideoProjectAsset(manifest)
   const sessionId = manifest.origin.sessionId
   const canSendToCanvas = manifest.kind === 'image' || manifest.kind === 'video' || manifest.kind === 'model'
+  const isFinal = Boolean(manifest.finals?.length)
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
@@ -111,6 +114,21 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <Button size="sm" variant="outline" className="border-emerald-400/20 bg-emerald-400/10 text-white/82 hover:bg-emerald-400/15 hover:text-white" onClick={() => setFinalAction('promote')}>
+              <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+              Set as Final
+            </Button>
+            {isFinal && (
+              <Button size="sm" variant="outline" className="border-sky-400/20 bg-sky-400/10 text-white/82 hover:bg-sky-400/15 hover:text-white" onClick={() => setFinalAction('primary')}>
+                <Star className="mr-1.5 h-3.5 w-3.5" />
+                Set as Primary
+              </Button>
+            )}
+            {isFinal && (
+              <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => setFinalAction('remove')}>
+                Remove from Finals
+              </Button>
+            )}
             {sessionId && (
               <Button size="sm" variant="outline" className="border-white/[0.08] bg-white/[0.045] text-white/72 hover:bg-white/[0.08] hover:text-white" onClick={() => focusOutputSurface(workspaceId, manifest, sessionId, openOutputVisualSurface)}>
                 <Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -245,6 +263,16 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
           </div>
         </Section>
       </div>
+      <OutputFinalActionDialog
+        open={Boolean(finalAction)}
+        action={finalAction ?? 'promote'}
+        output={manifest}
+        onOpenChange={(open) => {
+          if (!open) setFinalAction(null)
+        }}
+        promoteToFinal={promoteToFinal}
+        removeFromFinal={removeFromFinal}
+      />
       </div>
     </div>
   )

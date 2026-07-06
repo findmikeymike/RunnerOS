@@ -36,6 +36,8 @@ Work Products
 
 Work Products are existing Outputs shown in HQ and campaign widgets.
 
+Finals are trusted pointers to existing Outputs. They are covered by [11 Outputs, Finals, And Asset Promotion](./11-outputs-finals-asset-promotion-spec.md) and should not be implemented as a separate asset library.
+
 Inside the widget, split them into two simple sections:
 
 - `Needs Approval`

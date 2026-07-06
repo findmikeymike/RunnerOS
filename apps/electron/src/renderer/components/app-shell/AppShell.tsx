@@ -569,7 +569,7 @@ function AppShellContent({
 
   const effectiveSidebarAndNavigatorHidden = isSidebarAndNavigatorHidden || isAutoCompact
   const usesWorkspaceRail = !effectiveSidebarAndNavigatorHidden && !isAutoCompact
-  const effectiveSidebarWidth = usesWorkspaceRail ? 136 : sidebarWidth
+  const effectiveSidebarWidth = usesWorkspaceRail ? 150 : sidebarWidth
 
   // What's New overlay
   const [showWhatsNew, setShowWhatsNew] = React.useState(false)
@@ -3455,6 +3455,7 @@ function AppShellContent({
             )}
             {isOutputsNavigation(navState) && (
               <OutputsListPanel
+                workspaceId={activeWorkspaceId}
                 outputs={outputs}
                 loading={outputsLoading}
                 error={outputsError}

@@ -2,12 +2,16 @@ import { describe, expect, it } from 'bun:test';
 import type { SessionToolContext } from '../context.ts';
 import {
   handleCreateOutput,
+  handlePromoteOutputToFinal,
   type CreateOutputResult,
   type CreateOutputToolInput,
+  type PromoteOutputToFinalResult,
+  type PromoteOutputToFinalToolInput,
 } from './outputs.ts';
 
 function makeCtx(opts?: {
   createOutput?: (input: CreateOutputToolInput) => Promise<CreateOutputResult>;
+  promoteOutputToFinal?: (input: PromoteOutputToFinalToolInput) => Promise<PromoteOutputToFinalResult>;
 }): SessionToolContext {
   const ctx: Partial<SessionToolContext> = {
     sessionId: 't',
@@ -28,6 +32,7 @@ function makeCtx(opts?: {
     get skillsPath() { return '/tmp/skills'; },
   };
   if (opts?.createOutput) ctx.createOutput = opts.createOutput;
+  if (opts?.promoteOutputToFinal) ctx.promoteOutputToFinal = opts.promoteOutputToFinal;
   return ctx as SessionToolContext;
 }
 
@@ -200,6 +205,54 @@ describe('output handlers', () => {
     expect(missingCampaign.isError).toBe(true);
     expect(badApproval.isError).toBe(true);
     expect(called).toBe(false);
+  });
+
+  it('promote_output_to_final validates campaign id before calling capability', async () => {
+    let called = false;
+    const ctx = makeCtx({
+      promoteOutputToFinal: async () => {
+        called = true;
+        return { ok: true, finalId: 'final-1' };
+      },
+    });
+
+    const result = await handlePromoteOutputToFinal(ctx, {
+      outputId: 'output-1',
+      scope: 'campaign',
+      slot: 'Cover Art',
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain('campaignId is required');
+    expect(called).toBe(false);
+  });
+
+  it('promote_output_to_final trims input and returns final id', async () => {
+    let captured: PromoteOutputToFinalToolInput | undefined;
+    const ctx = makeCtx({
+      promoteOutputToFinal: async (input) => {
+        captured = input;
+        return { ok: true, finalId: 'final-1' };
+      },
+    });
+
+    const result = await handlePromoteOutputToFinal(ctx, {
+      outputId: ' output-1 ',
+      scope: 'campaign',
+      campaignId: ' campaign-1 ',
+      slot: ' Cover Art ',
+      makePrimary: true,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(captured).toMatchObject({
+      outputId: 'output-1',
+      scope: 'campaign',
+      campaignId: 'campaign-1',
+      slot: 'Cover Art',
+      makePrimary: true,
+    });
+    expect(result.structuredContent).toEqual({ ok: true, finalId: 'final-1' });
   });
 
   describe('receipt occurredAt validation', () => {

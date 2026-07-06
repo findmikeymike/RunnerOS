@@ -97,7 +97,7 @@ export function PanelStackContainer({
       : null
   const isLeftEdge = !hasSidebar && !hasNavigator
   const shouldCenterSinglePanel = !isCompact && visiblePanels.length === 1 && !hasNavigator && !hasSidebar
-  const stackGap = hasSidebar && !hasNavigator ? 56 : PANEL_GAP
+  const stackGap = hasSidebar && !hasNavigator ? 24 : PANEL_GAP
   const topBreathingRoom = hasSidebar ? 18 : 0
   const bottomBreathingRoom = 2
 

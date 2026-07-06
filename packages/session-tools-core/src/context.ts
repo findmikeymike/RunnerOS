@@ -440,6 +440,12 @@ export interface SessionToolContext {
   createOutput?(input: import('./handlers/outputs.ts').CreateOutputToolInput): Promise<import('./handlers/outputs.ts').CreateOutputResult>;
 
   /**
+   * Promote an existing Output into the current workspace Finals registry.
+   * Backend owns validation and the Finals context doc update.
+   */
+  promoteOutputToFinal?(input: import('./handlers/outputs.ts').PromoteOutputToFinalToolInput): Promise<import('./handlers/outputs.ts').PromoteOutputToFinalResult>;
+
+  /**
    * Apply a validated visual surface operation to the current session Canvas.
    * Backend owns workspace/session resolution; callers cannot supply those IDs.
    */

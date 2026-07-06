@@ -13,6 +13,13 @@ flowchart LR
   SharedIntelPrompt --> Session
   Session --> Sources["Enabled Sources"]
   Session --> Skills["Agent Skills"]
+  Outputs["Outputs"] --> FinalsDialog["Output Final Dialog"]
+  FinalsDialog --> FinalsService["OutputService Finals Actions"]
+  SessionTools["Session Tools"] --> PromoteFinal["promote_output_to_final"]
+  PromoteFinal --> FinalsService
+  FinalsService --> FinalsRegistry["context/finals/CONTEXT.md"]
+  FinalsService --> FinalsLock["context/.locks/output-finals.lock"]
+  FinalsRegistry --> HQFinals["HQ / Campaign Finals Widgets"]
   Registry --> A_concierge["HNIC\nsafe\nCommand"]
   Chat --> A_concierge
   A_concierge --> S_agent_creator["skill:agent-creator"]
@@ -50,6 +57,7 @@ flowchart LR
   A_art_director --> S_artist_visual_world_director["skill:artist-visual-world-director"]
   A_art_director --> S_ad_creative["skill:ad-creative"]
   A_art_director --> S_zero["skill:zero"]
+  Campaign["Campaign Workspace"] --> A_art_director
   Registry --> A_content_genius["Content Genius\nask\nCreative"]
   Workers --> A_content_genius
   A_content_genius --> S_contentgenuis["skill:contentgenuis"]
@@ -64,12 +72,12 @@ flowchart LR
   Workers --> A_record_doctor
   A_record_doctor --> S_record_doctor_handoff["skill:record-doctor-handoff"]
   A_record_doctor --> S_artist_comms_strategist["skill:artist-comms-strategist"]
+  Campaign["Campaign Workspace"] --> A_record_doctor
   Registry --> A_world_builder["World Builder\nask\nCreative"]
   Workers --> A_world_builder
   A_world_builder --> S_world_immersion["skill:world-immersion"]
   A_world_builder --> S_artist_narrative_universe["skill:artist-narrative-universe"]
   A_world_builder --> S_artist_campaign_angle_builder["skill:artist-campaign-angle-builder"]
-  Campaign["Campaign Workspace"] --> A_world_builder
   Registry --> A_print_agent["Print Agent\nask\nMerch"]
   Workers --> A_print_agent
   A_print_agent --> S_printify_commerce["skill:printify-commerce"]
@@ -119,11 +127,14 @@ flowchart LR
   Registry --> A_critic["Critic\nsafe\nPromotion"]
   Workers --> A_critic
   Registry --> A_ig_trending_power_up["IG Music Trending\nask\nPromotion"]
-  A_ig_trending_power_up -. hidden .-> Workers
+  Workers --> A_ig_trending_power_up
+  Campaign["Campaign Workspace"] --> A_ig_trending_power_up
   Registry --> A_influencer_campaign_power_up["Influencer Campaign\nask\nPromotion"]
-  A_influencer_campaign_power_up -. hidden .-> Workers
+  Workers --> A_influencer_campaign_power_up
+  Campaign["Campaign Workspace"] --> A_influencer_campaign_power_up
   Registry --> A_playlisting_power_up["Playlisting\nask\nPromotion"]
-  A_playlisting_power_up -. hidden .-> Workers
+  Workers --> A_playlisting_power_up
+  Campaign["Campaign Workspace"] --> A_playlisting_power_up
   Registry --> A_spotify_playlist_creator["Spotify Playlist Creator\nask\nPromotion"]
   A_spotify_playlist_creator --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
   A_spotify_playlist_creator -. hidden .-> Workers

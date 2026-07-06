@@ -80,8 +80,22 @@ export interface OutputApprovalDTO {
   updatedAt?: string
 }
 
+export interface OutputFinalPointerDTO {
+  id: string
+  scope: 'hq' | 'campaign'
+  campaignId?: string
+  slot: string
+  outputId: string
+  assetId?: string
+  isPrimary: boolean
+  promotedAt: string
+  promotedBy: 'user' | 'agent'
+  note?: string
+}
+
 export interface OutputSummaryDTO {
   id: string
+  workspaceId?: string
   title: string
   kind: OutputKind
   status: OutputStatus
@@ -103,6 +117,7 @@ export interface OutputSummaryDTO {
   }
   context?: OutputContextDTO
   approval?: OutputApprovalDTO
+  finals?: OutputFinalPointerDTO[]
   tags?: string[]
   bundlePath?: string
   directoryPath?: string
@@ -119,6 +134,7 @@ export interface OutputManifestDTO extends OutputSummaryDTO {
   assets: OutputAssetDTO[]
   receipts: OutputReceiptDTO[]
   links: OutputLinkDTO[]
+  finals?: OutputFinalPointerDTO[]
 }
 
 export interface UseOutputsResult {
@@ -128,11 +144,33 @@ export interface UseOutputsResult {
   available: boolean
   refresh: () => Promise<void>
   getOutput: (outputId: string) => Promise<OutputManifestDTO | null>
+  promoteToFinal: (input: PromoteOutputToFinalInputDTO) => Promise<OutputFinalPointerDTO>
+  removeFromFinal: (input: RemoveOutputFromFinalInputDTO) => Promise<number>
+}
+
+export interface PromoteOutputToFinalInputDTO {
+  outputId: string
+  scope: 'hq' | 'campaign'
+  campaignId?: string
+  slot: string
+  assetId?: string
+  makePrimary?: boolean
+  note?: string
+}
+
+export interface RemoveOutputFromFinalInputDTO {
+  outputId: string
+  scope?: 'hq' | 'campaign'
+  campaignId?: string
+  slot?: string
+  assetId?: string
 }
 
 type OutputsElectronAPI = typeof window.electronAPI & {
   listOutputs?: (workspaceId: string, filter?: unknown) => Promise<unknown[]>
   getOutput?: (workspaceId: string, outputId: string) => Promise<unknown | null>
+  promoteOutputToFinal?: (workspaceId: string, input: PromoteOutputToFinalInputDTO) => Promise<OutputFinalPointerDTO>
+  removeOutputFromFinal?: (workspaceId: string, input: RemoveOutputFromFinalInputDTO) => Promise<number>
   openOutputFile?: (workspaceId: string, outputId: string, assetId?: string) => Promise<void>
   showOutputInFolder?: (workspaceId: string, outputId: string, assetId?: string) => Promise<void>
   onOutputsUpdated?: (callback: (workspaceId: string) => void) => () => void
@@ -263,6 +301,20 @@ export function useOutputs(workspaceId: string | null | undefined): UseOutputsRe
     return coerceManifest(await electronAPI.getOutput(workspaceId, outputId))
   }, [electronAPI, workspaceId])
 
+  const promoteToFinal = useCallback(async (input: PromoteOutputToFinalInputDTO): Promise<OutputFinalPointerDTO> => {
+    if (!workspaceId || typeof electronAPI.promoteOutputToFinal !== 'function') throw new Error('Finals API is unavailable.')
+    const result = await electronAPI.promoteOutputToFinal(workspaceId, input)
+    await refresh()
+    return result
+  }, [electronAPI, refresh, workspaceId])
+
+  const removeFromFinal = useCallback(async (input: RemoveOutputFromFinalInputDTO): Promise<number> => {
+    if (!workspaceId || typeof electronAPI.removeOutputFromFinal !== 'function') throw new Error('Finals API is unavailable.')
+    const removed = await electronAPI.removeOutputFromFinal(workspaceId, input)
+    await refresh()
+    return removed
+  }, [electronAPI, refresh, workspaceId])
+
   return {
     outputs: state.outputs,
     loading: state.loading,
@@ -270,5 +322,7 @@ export function useOutputs(workspaceId: string | null | undefined): UseOutputsRe
     available,
     refresh,
     getOutput,
+    promoteToFinal,
+    removeFromFinal,
   }
 }

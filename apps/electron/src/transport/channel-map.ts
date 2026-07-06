@@ -500,6 +500,8 @@ export const CHANNEL_MAP = {
   listOutputs: invoke(RPC_CHANNELS.outputs.LIST),
   getOutput: invoke(RPC_CHANNELS.outputs.GET),
   deleteOutput: invoke(RPC_CHANNELS.outputs.DELETE),
+  promoteOutputToFinal: invoke(RPC_CHANNELS.outputs.PROMOTE_TO_FINAL),
+  removeOutputFromFinal: invoke(RPC_CHANNELS.outputs.REMOVE_FROM_FINAL),
   getVisualBoard: invoke(RPC_CHANNELS.outputs.GET_VISUAL_BOARD),
   saveVisualBoard: invoke(RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD),
   applyVisualSurfaceEvent: invoke(RPC_CHANNELS.outputs.APPLY_VISUAL_SURFACE_EVENT),

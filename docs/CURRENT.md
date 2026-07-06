@@ -9,7 +9,7 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-05
+- Date: 2026-07-06
 - Branch: `codex/creator-command-center`
 - Current goal: harden Setup Concierge, service-key setup, Settings, and release smoke paths toward release confidence.
 - Overall state: active Creator Command Center worktree with many feature docs; docs are now routed through this map instead of loose root files.
@@ -46,6 +46,9 @@ source_of_truth: true
 - Updated Setup Concierge guidance to default to app-level/global credentials so the same keys work across the whole app unless a user explicitly wants a workspace override.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
+- Implemented Outputs -> Finals V1: users can promote Outputs into HQ/campaign Finals, mark optional Primary, remove exact Final pointers, and agents can call `promote_output_to_final`.
+- Hardened Finals storage with a shared filesystem lock, corrupt-registry fail-closed behavior, campaign-id requirements, delete guards for Outputs still referenced by Finals, and direct session-tool tests.
+- Updated user/spec/map docs for Finals behavior and agent tool awareness.
 
 ## In Progress
 
@@ -102,6 +105,12 @@ source_of_truth: true
   - `bun test packages/shared/src/agent/backend/claude/session-tool-parity.test.ts packages/shared/src/agent/backend/pi/session-tool-parity.test.ts packages/shared/src/agent-definitions/storage.test.ts apps/electron/src/shared/__tests__/ipc-channels.test.ts` -> `67 pass`.
   - `bun run typecheck:electron` passed after the Setup Concierge secret-save hardening.
   - `(cd packages/server-core && bun run tsc --noEmit)` passed after the Setup Concierge secret-save hardening.
+- Verified on 2026-07-06:
+  - `bun test packages/server-core/src/outputs/OutputService.test.ts apps/electron/src/renderer/components/outputs/__tests__/FinalsWidget.test.ts packages/session-tools-core/src/handlers/outputs.test.ts` -> `40 pass`.
+  - `bun run typecheck:electron` passed.
+  - `(cd packages/server-core && ../../node_modules/.bin/tsc --noEmit)` passed.
+  - `bun run --cwd packages/session-mcp-server build` passed.
+  - `git diff --check` passed.
 
 ## Remaining Release Smoke
 

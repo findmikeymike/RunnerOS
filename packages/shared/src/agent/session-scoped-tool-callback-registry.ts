@@ -150,6 +150,10 @@ export interface SessionScopedToolCallbacks {
   createOutputFn?: (
     input: import('@craft-agent/session-tools-core').CreateOutputToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').CreateOutputResult>;
+  /** Promote an existing output into Finals. */
+  promoteOutputToFinalFn?: (
+    input: import('@craft-agent/session-tools-core').PromoteOutputToFinalToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').PromoteOutputToFinalResult>;
   /** Apply a safe visual surface operation to the current session Canvas. */
   applyVisualSurfaceEventFn?: (
     input: import('@craft-agent/session-tools-core').VisualSurfaceToolInput,

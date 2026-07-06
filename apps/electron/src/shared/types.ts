@@ -212,8 +212,8 @@ import type {
 export type { DeepResearchRunDTO, ReviseDeepResearchPlanInput, StartDeepResearchRunInput };
 
 // Outputs — DTOs match shared output manifests/summaries.
-import type { OutputManifest as OutputManifestDTO, OutputSummary as OutputSummaryDTO } from '@craft-agent/shared/outputs';
-export type { OutputManifestDTO, OutputSummaryDTO };
+import type { OutputFinalPointer as OutputFinalPointerDTO, OutputManifest as OutputManifestDTO, OutputSummary as OutputSummaryDTO } from '@craft-agent/shared/outputs';
+export type { OutputFinalPointerDTO, OutputManifestDTO, OutputSummaryDTO };
 import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 export type { VisualBoardSnapshot };
 import type {
@@ -1014,6 +1014,22 @@ export interface ElectronAPI {
   listOutputs(workspaceId: string): Promise<OutputSummaryDTO[]>
   getOutput(workspaceId: string, outputId: string): Promise<OutputManifestDTO | null>
   deleteOutput(workspaceId: string, outputId: string): Promise<boolean>
+  promoteOutputToFinal(workspaceId: string, input: {
+    outputId: string
+    scope: 'hq' | 'campaign'
+    campaignId?: string
+    slot: string
+    assetId?: string
+    makePrimary?: boolean
+    note?: string
+  }): Promise<OutputFinalPointerDTO>
+  removeOutputFromFinal(workspaceId: string, input: {
+    outputId: string
+    scope?: 'hq' | 'campaign'
+    campaignId?: string
+    slot?: string
+    assetId?: string
+  }): Promise<number>
   getVisualBoard(workspaceId: string, sessionId: string): Promise<{ output: OutputManifestDTO; board: VisualBoardSnapshot }>
   saveVisualBoard(
     workspaceId: string,

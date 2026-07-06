@@ -5122,6 +5122,24 @@ user a clickable link to where the thing now lives.`
             output: input,
           })
         },
+        promoteOutputToFinalFn: async (input) => {
+          const outputService = new OutputService({
+            getWorkspaceRootPath: (workspaceId) => {
+              if (workspaceId !== managed.workspace.id) {
+                throw new Error(`Workspace not available for this session: ${workspaceId}`)
+              }
+              return managed.workspace.rootPath
+            },
+            emitOutputsUpdated: (workspaceId) => {
+              this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+            },
+          })
+          const final = await outputService.promoteToFinal(managed.workspace.id, {
+            ...input,
+            promotedBy: 'agent',
+          })
+          return { ok: true, finalId: final.id }
+        },
         applyVisualSurfaceEventFn: async (input) => {
           const outputService = new OutputService({
             getWorkspaceRootPath: (workspaceId) => {

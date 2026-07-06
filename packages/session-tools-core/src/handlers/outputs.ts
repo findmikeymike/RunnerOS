@@ -88,6 +88,22 @@ export interface CreateOutputResult {
   error?: string;
 }
 
+export interface PromoteOutputToFinalToolInput {
+  outputId: string;
+  scope: 'hq' | 'campaign';
+  campaignId?: string;
+  slot: string;
+  assetId?: string;
+  makePrimary?: boolean;
+  note?: string;
+}
+
+export interface PromoteOutputToFinalResult {
+  ok: boolean;
+  finalId?: string;
+  error?: string;
+}
+
 const OUTPUT_KINDS: ReadonlySet<string> = new Set([
   'report',
   'document',
@@ -317,5 +333,47 @@ export async function handleCreateOutput(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     return errorResponse(`Failed to create output: ${message}`);
+  }
+}
+
+export async function handlePromoteOutputToFinal(
+  ctx: SessionToolContext,
+  args: PromoteOutputToFinalToolInput,
+): Promise<ToolResult> {
+  if (!ctx.promoteOutputToFinal) {
+    return errorResponse('promote_output_to_final is not available in this context.');
+  }
+
+  const outputIdError = validateString(args.outputId, 'outputId');
+  if (outputIdError) return errorResponse(outputIdError);
+  if (args.scope !== 'hq' && args.scope !== 'campaign') return errorResponse('scope must be hq or campaign.');
+  if (args.scope === 'campaign' && (typeof args.campaignId !== 'string' || !args.campaignId.trim())) {
+    return errorResponse('campaignId is required when scope is campaign.');
+  }
+  const slotError = validateString(args.slot, 'slot');
+  if (slotError) return errorResponse(slotError);
+  if (args.assetId !== undefined && typeof args.assetId !== 'string') return errorResponse('assetId must be a string when provided.');
+  if (args.makePrimary !== undefined && typeof args.makePrimary !== 'boolean') return errorResponse('makePrimary must be a boolean when provided.');
+  if (args.note !== undefined && typeof args.note !== 'string') return errorResponse('note must be a string when provided.');
+
+  try {
+    const result = await ctx.promoteOutputToFinal({
+      ...args,
+      outputId: args.outputId.trim(),
+      slot: args.slot.trim(),
+      campaignId: args.campaignId?.trim(),
+    });
+    if (!result.ok) return errorResponse(result.error ?? 'Failed to promote output to final.');
+    return {
+      content: [{ type: 'text', text: `Promoted output "${args.outputId}" to Finals.` }],
+      structuredContent: {
+        ok: true,
+        finalId: result.finalId,
+      },
+      isError: false,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return errorResponse(`Failed to promote output to final: ${message}`);
   }
 }

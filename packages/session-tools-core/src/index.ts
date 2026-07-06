@@ -296,6 +296,8 @@ export type {
   MemoryType,
   CreateOutputToolInput,
   CreateOutputResult,
+  PromoteOutputToFinalToolInput,
+  PromoteOutputToFinalResult,
   OutputKind,
   OutputAssetRole,
   CreateOutputFileInput,

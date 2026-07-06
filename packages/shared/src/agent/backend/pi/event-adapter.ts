@@ -28,6 +28,10 @@ import { parseError } from '../../errors.ts';
  */
 type PiEvent = PiAgentEvent | AgentSessionEvent;
 
+function isNormalWebSocketCloseError(message: string): boolean {
+  return /\bwebsocket closed 1000\b/i.test(message.trim());
+}
+
 /**
  * Maps Pi SDK events to RunnerEvents for UI compatibility.
  *
@@ -192,6 +196,10 @@ export class PiEventAdapter extends BaseEventAdapter {
 
         // Surface API errors — Pi SDK sets stopReason: 'error' and errorMessage on failures
         if (msg.stopReason === 'error' && msg.errorMessage) {
+          if (isNormalWebSocketCloseError(msg.errorMessage)) {
+            break;
+          }
+
           // Classify the error — auth/billing errors should be typed so SessionManager
           // can trigger its auth-retry pipeline (refresh token + resend).
           const parsed = parseError(new Error(msg.errorMessage));

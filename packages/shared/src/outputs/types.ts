@@ -27,6 +27,46 @@ export interface OutputApproval {
   updatedAt?: string;
 }
 
+export type OutputFinalScope = 'hq' | 'campaign';
+
+export interface OutputFinalPointer {
+  id: string;
+  scope: OutputFinalScope;
+  campaignId?: string;
+  slot: string;
+  outputId: string;
+  assetId?: string;
+  isPrimary: boolean;
+  promotedAt: string;
+  promotedBy: 'user' | 'agent';
+  note?: string;
+}
+
+export interface PromoteOutputToFinalInput {
+  outputId: string;
+  scope: OutputFinalScope;
+  campaignId?: string;
+  slot: string;
+  assetId?: string;
+  makePrimary?: boolean;
+  note?: string;
+  promotedBy?: 'user' | 'agent';
+}
+
+export interface RemoveOutputFromFinalInput {
+  outputId: string;
+  scope?: OutputFinalScope;
+  campaignId?: string;
+  slot?: string;
+  assetId?: string;
+}
+
+export interface OutputFinalsRegistry {
+  schemaVersion: 1;
+  updatedAt: string;
+  finals: OutputFinalPointer[];
+}
+
 export type OutputPreviewMode =
   | 'markdown'
   | 'text'
@@ -113,6 +153,7 @@ export interface OutputManifest {
   preview?: OutputPreview;
   context?: OutputContext;
   approval?: OutputApproval;
+  finals?: OutputFinalPointer[];
   tags?: string[];
 }
 
@@ -133,6 +174,7 @@ export interface OutputSummary {
   previewMode?: OutputPreviewMode;
   context?: OutputContext;
   approval?: OutputApproval;
+  finals?: OutputFinalPointer[];
   assetCount: number;
   receiptCount: number;
   linkCount: number;

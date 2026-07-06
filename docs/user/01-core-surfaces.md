@@ -159,6 +159,26 @@ Outputs should appear on the Outputs page and can also be shown in widgets on HQ
 
 Clicking an output should open the useful thing: preview, file, modal, canvas, or receipt.
 
+## Finals
+
+Finals are Outputs you or an agent mark as trusted enough to reuse.
+
+Use Finals when:
+- a cover option becomes approved campaign cover art
+- a bio draft becomes the artist bio
+- a caption pack becomes the campaign caption set
+- a video cut becomes one of the final clips
+
+How it works:
+- Click an Output card or Output detail page.
+- Choose **Set as Final**.
+- Pick `HQ` or `Campaign`, add the campaign id when needed, and choose a slot like `Cover Art`, `Artist Bio`, `Press Copy`, or `Shortform Clips`.
+- Use **Set as Primary** when one Final should be the default choice.
+
+Finals do not copy or publish files. They point back to the original Output. Removing something from Finals does not delete the Output.
+
+You can also tell an agent, "make this a final." If the agent knows which Output you mean, it can use the Finals tool. If not, it should ask you which Output.
+
 ## Canvas / Visual Display
 
 Canvas is where visual artifacts can be previewed or inspected.
