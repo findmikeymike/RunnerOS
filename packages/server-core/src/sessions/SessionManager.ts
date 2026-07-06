@@ -5231,7 +5231,7 @@ user a clickable link to where the thing now lives.`
             sources: agent.metadata.sources ?? [],
             optionalSources: agent.metadata.optionalSources ?? [],
             trustedWorkerTools: agent.metadata.trustedWorkerTools ?? [],
-            actionGrants: agent.metadata.actionGrants ?? [],
+            actionGrants: agent.metadata.actionGrants,
             inputs: agent.metadata.inputs,
             outputs: agent.metadata.outputs,
             tags: agent.metadata.tags ?? [],

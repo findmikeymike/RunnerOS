@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { AppActionReceipt, AppActionRuntimeContext, AppActionSurface } from './types.ts';
 
@@ -95,6 +95,12 @@ export function writeIdempotency(ctx: AppActionRuntimeContext, idempotencyKey: s
   );
 }
 
+function writeJsonAtomic(file: string, value: unknown): void {
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(tmp, JSON.stringify(value, null, 2) + '\n', 'utf-8');
+  renameSync(tmp, file);
+}
+
 export function appendSurfaceRecord<T extends Record<string, unknown>>(
   ctx: AppActionRuntimeContext,
   surface: AppActionSurface,
@@ -121,6 +127,61 @@ export function appendSurfaceRecord<T extends Record<string, unknown>>(
     ...record,
   };
   existing.push(next);
-  writeFileSync(file, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+  writeJsonAtomic(file, existing);
   return next;
+}
+
+function normalizedComparable(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim().toLowerCase() : null;
+}
+
+export function upsertSurfaceRecord<T extends Record<string, unknown>>(
+  ctx: AppActionRuntimeContext,
+  surface: AppActionSurface,
+  recordType: string,
+  record: T,
+  matchFields: string[],
+): T & { id: string; createdAt: string; updatedAt: string } {
+  const dir = join(appActionsRoot(ctx), 'surfaces', surface);
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${recordType}.json`);
+  let existing: Array<Record<string, unknown>> = [];
+  if (existsSync(file)) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, 'utf-8'));
+      if (Array.isArray(parsed)) existing = parsed as Array<Record<string, unknown>>;
+    } catch {
+      existing = [];
+    }
+  }
+
+  const now = nowIso();
+  const matchIndex = existing.findIndex((entry) => matchFields.some((field) => {
+    const nextValue = normalizedComparable(record[field]);
+    if (!nextValue) return false;
+    return normalizedComparable(entry[field]) === nextValue;
+  }));
+
+  let next: Record<string, unknown>;
+  if (matchIndex >= 0) {
+    const current = existing[matchIndex] ?? {};
+    next = {
+      ...current,
+      ...record,
+      id: typeof current.id === 'string' ? current.id : randomUUID(),
+      createdAt: typeof current.createdAt === 'string' ? current.createdAt : now,
+      updatedAt: now,
+    };
+    existing[matchIndex] = next;
+  } else {
+    next = {
+      id: randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+      ...record,
+    };
+    existing.push(next);
+  }
+  writeJsonAtomic(file, existing);
+  return next as T & { id: string; createdAt: string; updatedAt: string };
 }

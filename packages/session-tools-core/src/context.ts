@@ -16,6 +16,10 @@ import type {
   MicrosoftService,
   McpSourceConfig,
 } from './types.ts';
+import type {
+  AppActionApprovalVerificationInput,
+  AppActionApprovalVerificationResult,
+} from './app-actions/types.ts';
 
 // ============================================================
 // Source Credential Types
@@ -176,6 +180,9 @@ export interface SessionToolContext {
 
   /** Active agent slug when the session is running as a named agent. */
   activeAgentSlug?: string;
+
+  /** Verify that a pending app-action approval was approved by the user/UI. */
+  verifyAppActionApproval?: (input: AppActionApprovalVerificationInput) => Promise<AppActionApprovalVerificationResult> | AppActionApprovalVerificationResult;
 
   // ============================================================
   // Callbacks (transport-agnostic)

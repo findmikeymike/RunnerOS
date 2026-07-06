@@ -94,12 +94,16 @@ Supported grant forms:
 
 - User/HNIC context can discover actions directly.
 - Active agents are checked against their `actionGrants`.
-- `safe` permission mode blocks internal writes.
+- Invalid or explicitly empty `actionGrants` fail closed. Legacy agents with no `actionGrants` field can still use internal actions only.
+- `safe` or missing permission mode blocks internal writes. Internal writes require a bound `ask` or `allow-all` session.
 - External, destructive, credential, publish, purchase actions fail closed unless a real adapter and approval path exist.
 - Duplicate `execute_app_action` calls with the same request/input/actor return the prior receipt.
+- Failed action attempts do not poison idempotency; retrying the same `requestId` can succeed after the adapter/session problem is fixed.
 - Bad approval tokens do not burn the pending approval idempotency record.
+- Approval-required actions cannot execute from the returned token alone; a server-side approval verifier must confirm user approval.
 - Vault imports are serialized with a workspace mutex and refresh the Artist Vault context doc after import.
 - Vault `kindHint` is an enum, not arbitrary model text.
+- Network/Fans V1 `upsert` actions update by stable identity fields instead of blindly appending duplicates.
 
 ## Verification
 
@@ -118,4 +122,4 @@ Note: direct shared/server-core `tsc -p` in this nested worktree resolved `@craf
 1. Add native adapters for Calendar and Output approval updates.
 2. Replace internal JSON surface records with real Kanban/Network/Fans/Campaign stores when those UI stores are ready.
 3. Add renderer UI event consumers for app-action receipts if a visible activity/audit panel is desired.
-4. Add a user-facing approval UI that can pass `approvalToken` back into `execute_app_action`.
+4. Add a user-facing approval UI plus `verifyAppActionApproval` adapter that can approve `approvalToken` execution.

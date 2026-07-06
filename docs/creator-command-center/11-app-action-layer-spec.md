@@ -1,6 +1,6 @@
 # App Action Layer Spec
 
-Status: initial implementation landed
+Status: initial implementation landed and rival-review hardening applied
 Last verified: 2026-07-06
 Branch: codex/app-action-layer
 Owner: RunnerOS system layer

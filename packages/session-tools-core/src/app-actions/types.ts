@@ -149,6 +149,22 @@ export interface AppActionRuntimeContext {
   startWorkflow?: (slug: string, triggerInputs: Record<string, unknown>) => Promise<unknown>;
   addVaultFiles?: (input: AppActionVaultAddFilesInput) => Promise<AppActionVaultResult>;
   addOutputToVault?: (input: AppActionVaultAddFromOutputInput) => Promise<AppActionVaultResult>;
+  verifyAppActionApproval?: (input: AppActionApprovalVerificationInput) => Promise<AppActionApprovalVerificationResult> | AppActionApprovalVerificationResult;
+}
+
+export interface AppActionApprovalVerificationInput {
+  approvalId: string;
+  actionId: string;
+  actionVersion: number;
+  idempotencyKey: string;
+  approvalSnapshotHash: string;
+  requestId: string;
+  redactedInput: unknown;
+}
+
+export interface AppActionApprovalVerificationResult {
+  approved: boolean;
+  reason?: string;
 }
 
 export interface AppActionAdapterResult<TOutput = unknown> {

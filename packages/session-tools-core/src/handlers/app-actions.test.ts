@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { SessionToolContext, ListAgentsResult } from '../context.ts';
 import type { CreateOutputResult, CreateOutputToolInput } from './outputs.ts';
+import type { AppActionDefinition } from '../app-actions/types.ts';
+import { APP_ACTION_DEFINITIONS, APP_ACTION_REGISTRY } from '../app-actions/registry.ts';
 import {
   handleExecuteAppAction,
   handleGetAppActionReceipt,
@@ -23,8 +25,10 @@ function makeCtx(workspacePath: string, opts?: {
   activeAgentSlug?: string;
   listAgents?: () => ListAgentsResult;
   createOutput?: (input: CreateOutputToolInput) => Promise<CreateOutputResult>;
+  permissionMode?: 'safe' | 'ask' | 'allow-all' | null;
+  verifyAppActionApproval?: SessionToolContext['verifyAppActionApproval'];
 }): SessionToolContext {
-  return {
+  const ctx: SessionToolContext = {
     sessionId: 'session-1',
     workspacePath,
     workspaceId: 'workspace-1',
@@ -45,7 +49,20 @@ function makeCtx(workspacePath: string, opts?: {
     get skillsPath() { return join(workspacePath, 'skills'); },
     listAgents: opts?.listAgents,
     createOutput: opts?.createOutput,
+    verifyAppActionApproval: opts?.verifyAppActionApproval,
   };
+  if (opts?.permissionMode !== null) {
+    ctx.getSessionInfo = () => ({
+      id: 'session-1',
+      name: 'Session',
+      labels: [],
+      status: 'todo',
+      permissionMode: opts?.permissionMode ?? 'ask',
+      createdAt: 0,
+      isActive: true,
+    });
+  }
+  return ctx;
 }
 
 describe('app action handlers', () => {
@@ -180,6 +197,178 @@ describe('app action handlers', () => {
       expect(result.isError).toBe(true);
       expect((result.structuredContent as any).status).toBe('failed');
       expect((result.structuredContent as any).errors[0].message).toContain('missing action grant');
+    } finally {
+      cleanup(root);
+    }
+  });
+
+  it('fails closed when active agent grants are invalid', async () => {
+    const root = makeWorkspace();
+    try {
+      const ctx = makeCtx(root, {
+        activeAgentSlug: 'bad-grants',
+        listAgents: () => ({
+          total: 1,
+          returned: 1,
+          agents: [{
+            slug: 'bad-grants',
+            name: 'Bad Grants',
+            description: 'Has malformed grants.',
+            active: true,
+            skills: [],
+            sources: [],
+            tags: [],
+            actionGrants: ['not.a.real.grant'],
+          }],
+        }),
+      });
+
+      const result = await handleExecuteAppAction(ctx, {
+        actionId: 'kanban.create_card',
+        input: { boardId: 'main', columnId: 'todo', title: 'Should not write' },
+        requestId: 'req-invalid-grants',
+      });
+
+      expect(result.isError).toBe(true);
+      expect((result.structuredContent as any).errors[0].message).toContain('invalid action grants');
+      expect(existsSync(join(root, '.runneros', 'app-actions', 'surfaces', 'kanban', 'cards.json'))).toBe(false);
+    } finally {
+      cleanup(root);
+    }
+  });
+
+  it('does not poison idempotency when a transient unavailable failure is retried', async () => {
+    const root = makeWorkspace();
+    try {
+      let calls = 0;
+      const input = {
+        actionId: 'outputs.create',
+        input: { title: 'Retry Brief', kind: 'report', summary: 'Retry after adapter appears.' },
+        requestId: 'req-retry-after-failure',
+      };
+
+      const first = await handleExecuteAppAction(makeCtx(root), input);
+      const second = await handleExecuteAppAction(makeCtx(root, {
+        createOutput: async () => {
+          calls += 1;
+          return { ok: true, outputId: 'out_retry' };
+        },
+      }), input);
+
+      expect(first.isError).toBe(true);
+      expect((first.structuredContent as any).errors[0].code).toBe('ACTION_UNAVAILABLE');
+      expect(second.isError).toBe(false);
+      expect((second.structuredContent as any).status).toBe('succeeded');
+      expect(calls).toBe(1);
+    } finally {
+      cleanup(root);
+    }
+  });
+
+  it('requires a bound permission mode before internal writes execute', async () => {
+    const root = makeWorkspace();
+    try {
+      let calls = 0;
+      const result = await handleExecuteAppAction(makeCtx(root, {
+        permissionMode: null,
+        createOutput: async () => {
+          calls += 1;
+          return { ok: true, outputId: 'out_missing_permission' };
+        },
+      }), {
+        actionId: 'outputs.create',
+        input: { title: 'No Permission Mode', kind: 'report', summary: 'Should fail closed.' },
+        requestId: 'req-no-permission-mode',
+      });
+
+      expect(result.isError).toBe(true);
+      expect((result.structuredContent as any).errors[0].message).toContain('Permission mode');
+      expect(calls).toBe(0);
+    } finally {
+      cleanup(root);
+    }
+  });
+
+  it('requires server-side approval verification before executing approval-required actions', async () => {
+    const root = makeWorkspace();
+    let executed = 0;
+    const action: AppActionDefinition<Record<string, unknown>, Record<string, unknown>> = {
+      id: 'test.external_echo',
+      version: 1,
+      title: 'External Echo',
+      description: 'Test approval-required external action.',
+      surface: 'publishing',
+      kind: 'external_send',
+      risk: 'external_write',
+      inputSchema: { type: 'object' },
+      idempotency: { required: true, keyFields: ['title'], duplicateWindowSeconds: 60, duplicateBehavior: 'return_prior' },
+      approvalPolicy: { mode: 'always', reason: 'External test action.', summaryFields: ['title'], snapshotFields: ['title'] },
+      capability: { defaultGrant: 'none', requiredActionGrants: ['test.external_echo'], allowedBackground: false },
+      audit: { redactInputFields: [], redactOutputFields: [], piiFields: [] },
+      uiEvents: [{ type: 'publishing:updated' }],
+      validate: (input) => ({ ok: true, input: input as Record<string, unknown> }),
+      availability: () => ({ available: true }),
+      execute: async (_ctx, input) => {
+        executed += 1;
+        return { output: input };
+      },
+    };
+    APP_ACTION_DEFINITIONS.push(action);
+    APP_ACTION_REGISTRY.set(action.id, action);
+    try {
+      const input = {
+        actionId: action.id,
+        input: { title: 'External send' },
+        requestId: 'req-approval-verifier',
+      };
+      const pending = await handleExecuteAppAction(makeCtx(root), input);
+      const token = (pending.structuredContent as any).approval.approvalId;
+      const noVerifier = await handleExecuteAppAction(makeCtx(root), { ...input, approvalToken: token });
+      const rejected = await handleExecuteAppAction(makeCtx(root, {
+        verifyAppActionApproval: () => ({ approved: false, reason: 'User has not approved.' }),
+      }), { ...input, approvalToken: token });
+      const approved = await handleExecuteAppAction(makeCtx(root, {
+        verifyAppActionApproval: () => ({ approved: true }),
+      }), { ...input, approvalToken: token });
+
+      expect((pending.structuredContent as any).status).toBe('approval_required');
+      expect(noVerifier.isError).toBe(true);
+      expect((noVerifier.structuredContent as any).errors[0].message).toContain('Approval verification');
+      expect(rejected.isError).toBe(true);
+      expect((rejected.structuredContent as any).errors[0].message).toContain('User has not approved');
+      expect(approved.isError).toBe(false);
+      expect((approved.structuredContent as any).status).toBe('succeeded');
+      expect(executed).toBe(1);
+    } finally {
+      APP_ACTION_REGISTRY.delete(action.id);
+      APP_ACTION_DEFINITIONS.splice(APP_ACTION_DEFINITIONS.findIndex((entry) => entry.id === action.id), 1);
+      cleanup(root);
+    }
+  });
+
+  it('updates existing Network people instead of appending duplicates', async () => {
+    const root = makeWorkspace();
+    try {
+      const ctx = makeCtx(root);
+      const first = await handleExecuteAppAction(ctx, {
+        actionId: 'network.upsert_person',
+        input: { name: 'Riley Park', email: 'riley@example.com', role: 'manager' },
+        requestId: 'req-network-1',
+      });
+      const second = await handleExecuteAppAction(ctx, {
+        actionId: 'network.upsert_person',
+        input: { name: 'Riley Park', email: 'RILEY@example.com', role: 'booking' },
+        requestId: 'req-network-2',
+      });
+      const peoplePath = join(root, '.runneros', 'app-actions', 'surfaces', 'network', 'people.json');
+      const people = JSON.parse(readFileSync(peoplePath, 'utf-8'));
+
+      expect(first.isError).toBe(false);
+      expect(second.isError).toBe(false);
+      expect(people).toHaveLength(1);
+      expect(people[0].role).toBe('booking');
+      expect(people[0].id).toBe((first.structuredContent as any).receipt.target.entityId);
+      expect((second.structuredContent as any).receipt.target.entityId).toBe(people[0].id);
     } finally {
       cleanup(root);
     }

@@ -5,7 +5,7 @@ import type {
   AppActionVaultKindHint,
   JsonSchema,
 } from './types.ts';
-import { appendSurfaceRecord } from './storage.ts';
+import { appendSurfaceRecord, upsertSurfaceRecord } from './storage.ts';
 
 function objectSchema(properties: Record<string, JsonSchema>, required: string[] = []): JsonSchema {
   return {
@@ -100,6 +100,8 @@ function internalRecordAction<TInput extends Record<string, unknown>>(input: {
   description: string;
   surface: AppActionDefinition<TInput>['surface'];
   recordType: string;
+  operation?: 'append' | 'upsert';
+  matchFields?: string[];
   schema: JsonSchema;
   validate: (record: Record<string, unknown>) => TInput | AppActionError;
   summary: (input: TInput) => string;
@@ -124,7 +126,9 @@ function internalRecordAction<TInput extends Record<string, unknown>>(input: {
       target: { surface: input.surface, entityType: input.recordType },
     }),
     execute: async (ctx, normalized) => {
-      const record = appendSurfaceRecord(ctx, input.surface, input.recordType, normalized);
+      const record = input.operation === 'upsert'
+        ? upsertSurfaceRecord(ctx, input.surface, input.recordType, normalized, input.matchFields ?? [])
+        : appendSurfaceRecord(ctx, input.surface, input.recordType, normalized);
       return {
         output: record,
         target: { surface: input.surface, entityType: input.recordType, entityId: record.id },
@@ -491,6 +495,8 @@ export const APP_ACTION_DEFINITIONS: Array<AppActionDefinition<any, any>> = [
     description: 'Create or update an internal Network person record.',
     surface: 'network',
     recordType: 'people',
+    operation: 'upsert',
+    matchFields: ['email', 'socialHandle', 'name'],
     schema: objectSchema({
       name: stringSchema,
       email: optionalStringSchema,
@@ -525,6 +531,8 @@ export const APP_ACTION_DEFINITIONS: Array<AppActionDefinition<any, any>> = [
     description: 'Create or update an internal fan/community record.',
     surface: 'fans',
     recordType: 'fans',
+    operation: 'upsert',
+    matchFields: ['email', 'handle', 'name'],
     schema: objectSchema({
       name: stringSchema,
       email: optionalStringSchema,

@@ -17,8 +17,9 @@
   - `packages/shared/src/agent/session-scoped-tool-callback-registry.ts`
   - `packages/shared/src/agent/session-self-management-bindings.ts`
 - What landed: `list_app_actions`, `preview_app_action`, `execute_app_action`, `get_app_action_receipt`, action receipts/idempotency, agent `actionGrants`, real Output/Workflow/Vault adapters, internal records for Kanban/Campaigns/Network/Fans, starter/migration grants for HNIC/Orchestrator/Art Director.
+- Rival-review hardening fixed invalid-grant fail-open, failed idempotency retry traps, missing permission-mode execution, approval-token echo risk, and append-only upserts.
 - Verified:
-  - `/Users/michaelb.williams/.bun/bin/bun test packages/session-tools-core/src/handlers/app-actions.test.ts packages/session-tools-core/src/handlers/create-agent.test.ts packages/shared/src/agent-definitions/storage.test.ts packages/shared/src/agent/__tests__/session-self-management-bindings.test.ts` -> `86 pass`.
+  - `/Users/michaelb.williams/.bun/bin/bun test packages/session-tools-core/src/handlers/app-actions.test.ts packages/session-tools-core/src/handlers/create-agent.test.ts packages/shared/src/agent-definitions/storage.test.ts packages/shared/src/agent/__tests__/session-self-management-bindings.test.ts` -> `91 pass`.
   - `/Users/michaelb.williams/.bun/bin/bun run --cwd packages/session-tools-core typecheck` passed.
   - `npm run docs:system-map` passed and regenerated `docs/system-map/`.
 - Watchout: direct shared/server-core `tsc -p` in this nested worktree resolves `@craft-agent/session-tools-core` to the main checkout and also hits pre-existing missing Pi SDK type packages. Use the focused tests plus package-local typecheck as this slice's reliable evidence unless the workspace linker is refreshed.

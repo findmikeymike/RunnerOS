@@ -47,29 +47,77 @@ function permissionMode(ctx: AppActionRuntimeContext): string | undefined {
   return agents.find((agent) => agent.slug === ctx.activeAgentSlug)?.permissionMode;
 }
 
-function activeAgentGrants(ctx: AppActionRuntimeContext): string[] | null {
-  if (!ctx.activeAgentSlug) return null;
+type ActiveAgentGrantState =
+  | { kind: 'user' }
+  | { kind: 'missing_agent' }
+  | { kind: 'legacy' }
+  | { kind: 'none' }
+  | { kind: 'invalid'; invalidGrants: string[] }
+  | { kind: 'valid'; grants: string[] };
+
+function activeAgentGrantState(ctx: AppActionRuntimeContext): ActiveAgentGrantState {
+  if (!ctx.activeAgentSlug) return { kind: 'user' };
   const agents = ctx.listAgents?.({ activeOnly: false }).agents ?? [];
   const agent = agents.find((candidate) => candidate.slug === ctx.activeAgentSlug);
-  if (!agent) return [];
-  return agent.actionGrants?.filter(isValidActionGrant) ?? [];
+  if (!agent) return { kind: 'missing_agent' };
+  if (agent.actionGrants === undefined) return { kind: 'legacy' };
+  if (agent.actionGrants.length === 0) return { kind: 'none' };
+  const invalidGrants = agent.actionGrants.filter((grant) => typeof grant !== 'string' || !isValidActionGrant(grant));
+  if (invalidGrants.length > 0) return { kind: 'invalid', invalidGrants };
+  return { kind: 'valid', grants: agent.actionGrants };
 }
 
-function hasActionGrant(ctx: AppActionRuntimeContext, definition: AppActionDefinition): boolean {
-  const grants = activeAgentGrants(ctx);
-  if (grants === null) return true;
-  if (grants.length === 0) {
+function grantAvailability(ctx: AppActionRuntimeContext, definition: AppActionDefinition) {
+  const state = activeAgentGrantState(ctx);
+  if (state.kind === 'user') return { available: true };
+  if (state.kind === 'legacy') {
     // Legacy agents predate actionGrants. Allow internal actions, never external/destructive/credential.
-    return definition.risk === 'internal_safe' || definition.risk === 'internal_write' || definition.risk === 'read';
+    return definition.risk === 'internal_safe' || definition.risk === 'internal_write' || definition.risk === 'read'
+      ? { available: true }
+      : {
+          available: false,
+          reason: `Legacy agent ${ctx.activeAgentSlug} is missing explicit action grants for ${definition.id}.`,
+          repairHint: `Add actionGrants: ["${definition.id}"] to the agent metadata.`,
+        };
   }
-  return grants.some((grant) => actionGrantMatches(grant, definition));
+  if (state.kind === 'missing_agent') {
+    return {
+      available: false,
+      reason: `Active agent ${ctx.activeAgentSlug} is not available in the action grant catalog.`,
+      repairHint: 'Refresh the agent catalog before executing app actions.',
+    };
+  }
+  if (state.kind === 'none') {
+    return {
+      available: false,
+      reason: `Active agent ${ctx.activeAgentSlug} has no action grants.`,
+      repairHint: `Add actionGrants: ["${definition.id}"] to the agent metadata.`,
+    };
+  }
+  if (state.kind === 'invalid') {
+    return {
+      available: false,
+      reason: `Active agent ${ctx.activeAgentSlug} has invalid action grants: ${state.invalidGrants.join(', ')}.`,
+      repairHint: 'Fix or remove invalid actionGrants before executing app actions.',
+    };
+  }
+  return state.grants.some((grant) => actionGrantMatches(grant, definition))
+    ? { available: true }
+    : {
+        available: false,
+        reason: `Actor is missing action grant ${definition.id}.`,
+        repairHint: `Add actionGrants: ["${definition.id}"] to the agent metadata or run from HNIC/user context.`,
+      };
 }
 
 function riskAllowedByPermission(ctx: AppActionRuntimeContext, definition: AppActionDefinition): boolean {
   const mode = permissionMode(ctx);
   if (definition.risk === 'read') return true;
   if (definition.risk === 'internal_safe') return true;
-  if (definition.risk === 'internal_write') return mode !== 'safe';
+  if (definition.risk === 'internal_write') return mode === 'ask' || mode === 'allow-all';
+  if (definition.risk === 'external_write' || definition.risk === 'destructive' || definition.risk === 'credential') {
+    return definition.approvalPolicy.mode !== 'never';
+  }
   return false;
 }
 
@@ -80,18 +128,13 @@ function approvalRequired(definition: AppActionDefinition): boolean {
 }
 
 function getAvailability(ctx: AppActionRuntimeContext, definition: AppActionDefinition) {
-  if (!hasActionGrant(ctx, definition)) {
-    return {
-      available: false,
-      reason: `Actor is missing action grant ${definition.id}.`,
-      repairHint: `Add actionGrants: ["${definition.id}"] to the agent metadata or run from HNIC/user context.`,
-    };
-  }
+  const grant = grantAvailability(ctx, definition);
+  if (!grant.available) return grant;
   if (!riskAllowedByPermission(ctx, definition)) {
     return {
       available: false,
       reason: `Permission mode does not allow ${definition.risk} actions.`,
-      repairHint: 'Use ask/allow-all mode or request user approval through an approval action.',
+      repairHint: 'Run from a session with ask/allow-all permission mode bound, or request user approval through an approval action.',
     };
   }
   if (!definition.execute) {
@@ -241,7 +284,7 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
     normalizedInput: validated.input,
   });
   const existing = readIdempotencyReceipt(ctx, idempotencyKey);
-  if (existing) {
+  if (existing && existing.status !== 'failed') {
     if (existing.status !== 'approval_required' || !input.approvalToken) {
       return {
         status: 'duplicate',
@@ -276,7 +319,6 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
       normalizedInput: validated.input,
       error,
     }));
-    writeIdempotency(ctx, idempotencyKey, receipt.id);
     return { status: 'failed', receipt, errors: [error] };
   }
 
@@ -329,6 +371,57 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
     };
   }
 
+  if (approvalRequired(definition)) {
+    if (!existing || existing.status !== 'approval_required' || !existing.approvalId || !existing.approvalSnapshotHash) {
+      const error = actionError('APPROVAL_REQUIRED', 'This app action requires a pending approval receipt before execution.');
+      const receipt = writeReceipt(ctx, makeReceipt({
+        ctx,
+        definition,
+        requestId: input.requestId,
+        idempotencyKey,
+        status: 'failed',
+        normalizedInput: validated.input,
+        error,
+      }));
+      return { status: 'failed', receipt, errors: [error] };
+    }
+    if (!ctx.verifyAppActionApproval) {
+      const error = actionError('ACTION_UNAVAILABLE', 'Approval verification is not available in this session.', 'Run this action after a user-facing approval verifier is wired.');
+      const receipt = writeReceipt(ctx, makeReceipt({
+        ctx,
+        definition,
+        requestId: input.requestId,
+        idempotencyKey,
+        status: 'failed',
+        normalizedInput: validated.input,
+        error,
+      }));
+      return { status: 'failed', receipt, errors: [error] };
+    }
+    const verification = await ctx.verifyAppActionApproval({
+      approvalId: existing.approvalId,
+      actionId: definition.id,
+      actionVersion: definition.version,
+      idempotencyKey,
+      approvalSnapshotHash: existing.approvalSnapshotHash,
+      requestId: input.requestId,
+      redactedInput: existing.redactedInput,
+    });
+    if (!verification.approved) {
+      const error = actionError('APPROVAL_REQUIRED', verification.reason ?? 'User approval has not been granted for this app action.');
+      const receipt = writeReceipt(ctx, makeReceipt({
+        ctx,
+        definition,
+        requestId: input.requestId,
+        idempotencyKey,
+        status: 'failed',
+        normalizedInput: validated.input,
+        error,
+      }));
+      return { status: 'failed', receipt, errors: [error] };
+    }
+  }
+
   try {
     const result = await definition.execute!(ctx, validated.input as never);
     const receipt = writeReceipt(ctx, makeReceipt({
@@ -357,7 +450,6 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
       normalizedInput: validated.input,
       error: actionFailure,
     }));
-    writeIdempotency(ctx, idempotencyKey, receipt.id);
     return { status: 'failed', receipt, errors: [actionFailure] };
   }
 }

@@ -44,6 +44,7 @@ source_of_truth: true
 - Added action receipts, idempotency pointers, grant checks, approval-required handling, unavailable-action reporting, and internal durable records for Kanban/Campaigns/Network/Fans.
 - Wired real adapters for Outputs, Workflows, and Artist Vault imports; Vault imports refresh the Artist Vault context doc and are serialized by workspace mutex.
 - Added `AgentMetadata.actionGrants`, create-agent validation, starter grants for HNIC/Orchestrator/Art Director, and startup grant migration for existing installed agents.
+- Hardened the App Action Layer after rival review: invalid grants fail closed, failed attempts no longer poison retries, missing permission mode blocks writes, approval execution requires server-side verification, and Network/Fans upserts update existing records.
 - Added `docs/creator-command-center/12-app-action-layer-build.md` as the feature implementation map.
 
 ## In Progress
