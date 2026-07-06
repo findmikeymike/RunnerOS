@@ -71,20 +71,14 @@ function getComputerUseScriptPath(): string {
   return getResourceScriptPath('background-computer-use-mcp.ts');
 }
 
-function getComputerUseClientPath(): string | null {
-  const executable = join(
-    'Codex Computer Use.app',
-    'Contents',
-    'SharedSupport',
-    'SkyComputerUseClient.app',
-    'Contents',
-    'MacOS',
-    'SkyComputerUseClient',
-  );
+function getCopilotComputerUseMcpPath(): string | null {
+  const platformArch = `${process.platform}-${process.arch}`;
+  const executable = process.platform === 'win32' ? 'computer-use-mcp.exe' : 'computer-use-mcp';
   const candidates = [
-    process.env.CRAFT_COMPUTER_USE_CLIENT ?? '',
-    join(homedir(), '.codex', 'computer-use', executable),
-    join(homedir(), '.codex', 'plugins', 'cache', 'openai-bundled', 'computer-use', '1.0.857', executable),
+    process.env.CRAFT_COPILOT_COMPUTER_USE_MCP ?? '',
+    join(process.cwd(), 'node_modules', `@github/copilot-${platformArch}`, 'prebuilds', platformArch, executable),
+    join(REPO_ROOT, 'node_modules', `@github/copilot-${platformArch}`, 'prebuilds', platformArch, executable),
+    join(process.env.CRAFT_APP_ROOT || '', 'node_modules', `@github/copilot-${platformArch}`, 'prebuilds', platformArch, executable),
   ].filter(Boolean);
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
@@ -378,14 +372,14 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
  * session when an agent/session explicitly enables the `computer-use` source.
  */
 export function getComputerUseSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
-  const computerUseClientPath = getComputerUseClientPath();
-  const workflowGuide = computerUseClientPath
+  const copilotComputerUsePath = getCopilotComputerUseMcpPath();
+  const workflowGuide = copilotComputerUsePath
     ? [
         'Workflow:',
         '1. Call `list_apps` to confirm the target app is available.',
-        '2. Call `get_app_state` before every meaningful UI action; it starts the app-use session and returns the screenshot plus accessibility tree.',
+        '2. Call `get_window_state` before every meaningful UI action.',
         '3. Prefer element indexes from the observed accessibility tree. Use coordinates only when needed.',
-        '4. Use `click`, `type_text`, `set_value`, `press_key`, `scroll`, `drag`, `select_text`, or `perform_secondary_action` based on the observed state.',
+        '4. Use `click`, `set_text`, `insert_text`, `type_chars`, `key_chord`, `scroll`, `drag`, `select_option`, or `secondary_action` based on the observed state.',
         '5. Ask the user before submit, send, purchase, delete, credential entry, system settings changes, or any irreversible action.',
       ]
     : [
@@ -401,12 +395,12 @@ export function getComputerUseSource(workspaceId: string, workspaceRootPath: str
     name: 'Computer Use',
     slug: COMPUTER_USE_SLUG,
     enabled: true,
-    provider: computerUseClientPath ? 'computer-use' : 'background-computer-use',
+    provider: copilotComputerUsePath ? 'copilot-computer-use' : 'background-computer-use',
     type: 'mcp',
     mcp: {
       transport: 'stdio',
-      command: computerUseClientPath ?? (process.env.CRAFT_BUN || 'bun'),
-      args: computerUseClientPath ? ['mcp'] : ['run', getComputerUseScriptPath()],
+      command: copilotComputerUsePath ?? (process.env.CRAFT_BUN || 'bun'),
+      args: copilotComputerUsePath ? [] : ['run', getComputerUseScriptPath()],
       authType: 'none',
     },
     tagline: 'Inspect and control local macOS app windows with screenshot-backed tools.',
