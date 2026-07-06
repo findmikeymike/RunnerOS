@@ -215,6 +215,7 @@ export {
   handleRecallMemory,
   // Outputs
   handleCreateOutput,
+  handleMediaProviderRequest,
   // Visual surface
   handleVisualSurface,
   handleVisualSurfaceState,
@@ -300,6 +301,9 @@ export type {
   CreateOutputFileInput,
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
+  MediaProvider,
+  MediaProviderRequestInput,
+  MediaRequestMethod,
   VisualSurfaceToolInput,
   VisualSurfaceToolResult,
   VisualSurfaceStateCapture,
@@ -345,6 +349,7 @@ export {
   ForgetMemorySchema,
   RecallMemorySchema,
   CreateOutputSchema,
+  MediaProviderRequestSchema,
   VisualSurfaceSchema,
   VisualSurfaceStateSchema,
   // Descriptions

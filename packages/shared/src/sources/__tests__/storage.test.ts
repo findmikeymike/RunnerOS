@@ -460,6 +460,83 @@ describe('loadAllSources', () => {
     expect(found!.guide?.raw).toContain('REPLICATE_API_TOKEN');
     expect(found!.guide?.raw).toContain('WAVESPEED_API_KEY');
   });
+
+  test('does not treat media-generation as usable until a provider key exists', () => {
+    const saved = {
+      fal: process.env.FAL_API_KEY,
+      squadFal: process.env.SQUAD_FAL_API_KEY,
+      wavespeed: process.env.WAVESPEED_API_KEY,
+      squadWavespeed: process.env.SQUAD_WAVESPEED_API_KEY,
+      replicate: process.env.REPLICATE_API_TOKEN,
+      heygen: process.env.HEYGEN_API_KEY,
+      squadHeygen: process.env.SQUAD_HEYGEN_API_KEY,
+      muapi: process.env.MUAPI_API_KEY,
+      runpod: process.env.RUNPOD_API_KEY,
+    };
+
+    delete process.env.FAL_API_KEY;
+    delete process.env.SQUAD_FAL_API_KEY;
+    delete process.env.WAVESPEED_API_KEY;
+    delete process.env.SQUAD_WAVESPEED_API_KEY;
+    delete process.env.REPLICATE_API_TOKEN;
+    delete process.env.HEYGEN_API_KEY;
+    delete process.env.SQUAD_HEYGEN_API_KEY;
+    delete process.env.MUAPI_API_KEY;
+    delete process.env.RUNPOD_API_KEY;
+
+    try {
+      const disconnected = loadAllSources(makeWorkspace()).find((s: LoadedSource) => s.config.slug === 'media-generation');
+      expect(disconnected).toBeDefined();
+      expect(disconnected!.config.connectionStatus).toBe('needs_auth');
+      expect(disconnected!.config.isAuthenticated).toBe(false);
+      expect(isSourceUsable(disconnected!)).toBe(false);
+
+      process.env.FAL_API_KEY = 'test-fal-key';
+      const connected = loadAllSources(makeWorkspace()).find((s: LoadedSource) => s.config.slug === 'media-generation');
+      expect(connected).toBeDefined();
+      expect(connected!.config.connectionStatus).toBe('connected');
+      expect(connected!.config.isAuthenticated).toBe(true);
+      expect(isSourceUsable(connected!)).toBe(true);
+    } finally {
+      if (saved.fal === undefined) delete process.env.FAL_API_KEY; else process.env.FAL_API_KEY = saved.fal;
+      if (saved.squadFal === undefined) delete process.env.SQUAD_FAL_API_KEY; else process.env.SQUAD_FAL_API_KEY = saved.squadFal;
+      if (saved.wavespeed === undefined) delete process.env.WAVESPEED_API_KEY; else process.env.WAVESPEED_API_KEY = saved.wavespeed;
+      if (saved.squadWavespeed === undefined) delete process.env.SQUAD_WAVESPEED_API_KEY; else process.env.SQUAD_WAVESPEED_API_KEY = saved.squadWavespeed;
+      if (saved.replicate === undefined) delete process.env.REPLICATE_API_TOKEN; else process.env.REPLICATE_API_TOKEN = saved.replicate;
+      if (saved.heygen === undefined) delete process.env.HEYGEN_API_KEY; else process.env.HEYGEN_API_KEY = saved.heygen;
+      if (saved.squadHeygen === undefined) delete process.env.SQUAD_HEYGEN_API_KEY; else process.env.SQUAD_HEYGEN_API_KEY = saved.squadHeygen;
+      if (saved.muapi === undefined) delete process.env.MUAPI_API_KEY; else process.env.MUAPI_API_KEY = saved.muapi;
+      if (saved.runpod === undefined) delete process.env.RUNPOD_API_KEY; else process.env.RUNPOD_API_KEY = saved.runpod;
+    }
+  });
+
+  test('includes media-generation provider preferences in its guide', () => {
+    const saved = {
+      fal: process.env.FAL_API_KEY,
+      imageProvider: process.env.MEDIA_IMAGE_PROVIDER,
+      videoProvider: process.env.MEDIA_VIDEO_PROVIDER,
+      strategy: process.env.MEDIA_PROVIDER_STRATEGY,
+    };
+
+    process.env.FAL_API_KEY = 'test-fal-key';
+    process.env.MEDIA_IMAGE_PROVIDER = 'replicate';
+    process.env.MEDIA_VIDEO_PROVIDER = 'wavespeed';
+    process.env.MEDIA_PROVIDER_STRATEGY = 'speed';
+
+    try {
+      const found = loadAllSources(makeWorkspace()).find((s: LoadedSource) => s.config.slug === 'media-generation');
+      expect(found).toBeDefined();
+      expect(found!.guide?.raw).toContain('Default image provider: replicate.');
+      expect(found!.guide?.raw).toContain('Default video provider: wavespeed.');
+      expect(found!.guide?.raw).toContain('Generation priority: speed.');
+      expect(found!.guide?.raw).toContain('If the user names a provider, use that provider');
+    } finally {
+      if (saved.fal === undefined) delete process.env.FAL_API_KEY; else process.env.FAL_API_KEY = saved.fal;
+      if (saved.imageProvider === undefined) delete process.env.MEDIA_IMAGE_PROVIDER; else process.env.MEDIA_IMAGE_PROVIDER = saved.imageProvider;
+      if (saved.videoProvider === undefined) delete process.env.MEDIA_VIDEO_PROVIDER; else process.env.MEDIA_VIDEO_PROVIDER = saved.videoProvider;
+      if (saved.strategy === undefined) delete process.env.MEDIA_PROVIDER_STRATEGY; else process.env.MEDIA_PROVIDER_STRATEGY = saved.strategy;
+    }
+  });
 });
 
 describe('getSourcesBySlugs', () => {

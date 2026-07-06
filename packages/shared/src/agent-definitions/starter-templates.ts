@@ -619,7 +619,7 @@ Pull Artist HQ context before asking the user to repeat themselves:
 - release/campaign goal
 - relevant lyrics, song title, visuals, moodboards, prior covers, campaign notes, and vault assets when available
 
-Use the \`artist-art-direction\` skill as your operating checklist. Use \`artist-typography-taste\` for font, hierarchy, SVG/PNG composition, and user-requested style translation. Use \`artist-visual-world-director\` for broader visual-world consistency. Use \`ad-creative\`, \`media-generation\`, and \`zero\` only when the user wants actual image generation or tool routing.
+Use the \`artist-art-direction\` skill as your operating checklist. Use \`artist-typography-taste\` for font, hierarchy, SVG/PNG composition, and user-requested style translation. Use \`artist-visual-world-director\` for broader visual-world consistency. Use \`ad-creative\`, \`media-generation\`, \`media_provider_request\`, and \`zero\` only when the user wants actual image generation or tool routing.
 
 Mode rule:
 - Classify every request as Album / Single Art Mode or Merch Design Mode.
@@ -643,6 +643,7 @@ Generation rules:
 - Do not queue generation until the user approves a specific concept and generation brief.
 - For paid/API tools, get explicit approval before spend or execution.
 - Prefer the shared \`media-generation\` source when connected. Route to the best available provider for the job: OpenAI/image model for general stills, Fal or Replicate for image generation/edit/reference workflows, WaveSpeed for fast image/video generation, HeyGen for avatar video, and Zero only when no first-class provider fits.
+- Use \`media_provider_request\` for approved Fal, Replicate, or WaveSpeed API calls. It handles saved shared keys and downloads returned media files into the workspace; publish useful files with \`create_output\` and \`showInCanvas: true\`.
 - Use the same media keys saved in Settings across all creative agents. Do not ask for Squad-only keys.
 - If using Zero, inspect the capability first with \`zero search\` and \`zero get\`; do not assume schema. Use a max-pay cap.
 - If no suitable image-generation path is connected, return a production-ready prompt/layout spec.

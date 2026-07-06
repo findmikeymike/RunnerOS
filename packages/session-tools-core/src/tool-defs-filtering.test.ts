@@ -53,6 +53,7 @@ describe('session tool filtering helpers', () => {
   it('teaches output tools Canvas publishing format rules', () => {
     const createOutput = SESSION_TOOL_DEFS.find((def) => def.name === 'create_output');
     const artworkCompose = SESSION_TOOL_DEFS.find((def) => def.name === 'artwork_compose');
+    const mediaProviderRequest = SESSION_TOOL_DEFS.find((def) => def.name === 'media_provider_request');
     const visualSurface = SESSION_TOOL_DEFS.find((def) => def.name === 'visual_surface');
 
     expect(createOutput?.description).toContain('Set `showInCanvas: true` when the user asks to see, preview, compare, review, present, open, or iterate');
@@ -64,6 +65,10 @@ describe('session tool filtering helpers', () => {
     expect(artworkCompose?.description).toContain('editable SVG source');
     expect(artworkCompose?.description).toContain('PNG preview export');
     expect(artworkCompose?.description).toContain('showInCanvas: true');
+    expect(mediaProviderRequest?.description).toContain('Fal');
+    expect(mediaProviderRequest?.description).toContain('Replicate');
+    expect(mediaProviderRequest?.description).toContain('WaveSpeed');
+    expect(mediaProviderRequest?.safeMode).toBe('block');
     expect(visualSurface?.description).toContain('avoid duplicate cards and just reference what is already on Canvas');
   });
 
@@ -85,6 +90,7 @@ describe('session tool filtering helpers', () => {
     expect(blocked.has('save_memory')).toBe(true);
     expect(blocked.has('update_memory')).toBe(true);
     expect(blocked.has('forget_memory')).toBe(true);
+    expect(blocked.has('media_provider_request')).toBe(true);
     expect(blocked.has('start_deep_research')).toBe(true);
     expect(blocked.has('approve_deep_research_plan')).toBe(true);
     expect(blocked.has('revise_deep_research_plan')).toBe(true);

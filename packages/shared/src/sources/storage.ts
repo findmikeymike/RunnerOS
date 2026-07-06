@@ -464,6 +464,13 @@ export function isSourceUsable(source: LoadedSource): boolean {
   // Get auth type from MCP or API config
   const authType = source.config.mcp?.authType || source.config.api?.authType;
 
+  // Provider-router local sources represent key-backed external APIs. They do
+  // not spawn a server, but they still require at least one configured key
+  // before they should be injected into an agent session.
+  if (source.config.type === 'local' && source.config.local?.format === 'provider-router') {
+    return source.config.isAuthenticated === true;
+  }
+
   // Sources with no auth requirement are always usable when enabled
   if (authType === 'none' || authType === undefined) return true;
 

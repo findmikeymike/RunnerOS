@@ -37,6 +37,8 @@ type SecretPreset = {
   label: string
   description: string
   placeholder?: string
+  inputType?: 'text' | 'password' | 'select'
+  options?: Array<{ value: string; label: string }>
   storage: 'env' | 'source' | 'managed-source'
   sourceSlug?: string
   sourceType?: 'api' | 'mcp' | 'local'
@@ -402,6 +404,51 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
+    group: 'Media Generation',
+    name: 'MEDIA_IMAGE_PROVIDER',
+    label: 'Default image provider',
+    description: 'Optional. Used when a creative agent needs image generation and the user did not name a provider.',
+    placeholder: 'auto',
+    inputType: 'select',
+    options: [
+      { value: 'auto', label: 'Auto' },
+      { value: 'fal', label: 'Fal' },
+      { value: 'replicate', label: 'Replicate' },
+      { value: 'wavespeed', label: 'WaveSpeed' },
+    ],
+    storage: 'env',
+  },
+  {
+    group: 'Media Generation',
+    name: 'MEDIA_VIDEO_PROVIDER',
+    label: 'Default video provider',
+    description: 'Optional. Used when a creative agent needs video generation and the user did not name a provider.',
+    placeholder: 'auto',
+    inputType: 'select',
+    options: [
+      { value: 'auto', label: 'Auto' },
+      { value: 'fal', label: 'Fal' },
+      { value: 'replicate', label: 'Replicate' },
+      { value: 'wavespeed', label: 'WaveSpeed' },
+    ],
+    storage: 'env',
+  },
+  {
+    group: 'Media Generation',
+    name: 'MEDIA_PROVIDER_STRATEGY',
+    label: 'Generation priority',
+    description: 'Optional. Helps agents choose between connected providers when more than one can do the job.',
+    placeholder: 'balanced',
+    inputType: 'select',
+    options: [
+      { value: 'balanced', label: 'Balanced' },
+      { value: 'speed', label: 'Fastest' },
+      { value: 'quality', label: 'Best quality' },
+      { value: 'cost', label: 'Cheapest' },
+    ],
+    storage: 'env',
+  },
+  {
     group: 'Dev / Cloud',
     name: 'GITHUB_TOKEN',
     label: 'GitHub token',
@@ -613,8 +660,8 @@ const SERVICES: SecretService[] = [
     group: 'AI + Media',
     title: 'Media Generation',
     description: 'Shared image, video, avatar, and render keys for creative agents.',
-    presetNames: ['FAL_API_KEY', 'WAVESPEED_API_KEY', 'REPLICATE_API_TOKEN', 'HEYGEN_API_KEY', 'MUAPI_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_LTX_ENDPOINT_ID'],
-    optionalPresetNames: ['FAL_API_KEY', 'WAVESPEED_API_KEY', 'REPLICATE_API_TOKEN', 'HEYGEN_API_KEY', 'MUAPI_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_LTX_ENDPOINT_ID'],
+    presetNames: ['FAL_API_KEY', 'WAVESPEED_API_KEY', 'REPLICATE_API_TOKEN', 'HEYGEN_API_KEY', 'MUAPI_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_LTX_ENDPOINT_ID', 'MEDIA_IMAGE_PROVIDER', 'MEDIA_VIDEO_PROVIDER', 'MEDIA_PROVIDER_STRATEGY'],
+    optionalPresetNames: ['FAL_API_KEY', 'WAVESPEED_API_KEY', 'REPLICATE_API_TOKEN', 'HEYGEN_API_KEY', 'MUAPI_API_KEY', 'RUNPOD_API_KEY', 'RUNPOD_LTX_ENDPOINT_ID', 'MEDIA_IMAGE_PROVIDER', 'MEDIA_VIDEO_PROVIDER', 'MEDIA_PROVIDER_STRATEGY'],
   },
   {
     id: 'avatar-video',
@@ -1098,13 +1145,28 @@ export default function SecretsSettingsPage() {
                                         {optional ? 'Optional' : saved ? 'Saved' : 'Required'}
                                       </span>
                                     </div>
-                                    <input
-                                      value={draftValues[preset.name] ?? ''}
-                                      onChange={(event) => setDraftValues((current) => ({ ...current, [preset.name]: event.target.value }))}
-                                      placeholder={saved ? savedPlaceholder(preset, savedByName) : preset.placeholder ?? 'Paste key'}
-                                      type={preset.name.includes('DOMAIN') || preset.name.includes('URL') || preset.name.includes('URI') || preset.name.includes('VERSION') || preset.name.includes('ID') ? 'text' : 'password'}
-                                      className="h-8 w-full rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none placeholder:text-white/22 focus:border-[#fb923c]/45"
-                                    />
+                                    {preset.inputType === 'select' ? (
+                                      <select
+                                        value={draftValues[preset.name] ?? ''}
+                                        onChange={(event) => setDraftValues((current) => ({ ...current, [preset.name]: event.target.value }))}
+                                        className="h-8 w-full rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none focus:border-[#fb923c]/45"
+                                      >
+                                        <option value="">{saved ? 'Keep saved setting' : preset.placeholder ?? 'Choose'}</option>
+                                        {preset.options?.map((option) => (
+                                          <option key={option.value} value={option.value}>
+                                            {option.label}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <input
+                                        value={draftValues[preset.name] ?? ''}
+                                        onChange={(event) => setDraftValues((current) => ({ ...current, [preset.name]: event.target.value }))}
+                                        placeholder={saved ? savedPlaceholder(preset, savedByName) : preset.placeholder ?? 'Paste key'}
+                                        type={preset.inputType ?? (preset.name.includes('DOMAIN') || preset.name.includes('URL') || preset.name.includes('URI') || preset.name.includes('VERSION') || preset.name.includes('ID') ? 'text' : 'password')}
+                                        className="h-8 w-full rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none placeholder:text-white/22 focus:border-[#fb923c]/45"
+                                      />
+                                    )}
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <button type="button" className="mt-2 text-left text-[11px] leading-4 text-white/30 transition-colors hover:text-white/52">

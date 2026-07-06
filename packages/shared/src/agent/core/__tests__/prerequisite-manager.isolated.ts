@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, mock } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { resolve, join } from 'node:path';
-import { PrerequisiteManager } from '../prerequisite-manager.ts';
+import type { PrerequisiteManager as PrerequisiteManagerInstance } from '../prerequisite-manager.ts';
 
 // Mock existsSync to control guide.md existence
 const originalExistsSync = existsSync;
@@ -16,10 +16,24 @@ const originalReadFileSync = readFileSync;
 let mockExistsPaths: Set<string> = new Set();
 
 mock.module('node:fs', () => ({
-  existsSync: (path: string) => mockExistsPaths.has(path) || originalExistsSync(path),
+  existsSync: (path: string) =>
+    mockExistsPaths.has(path)
+    || String(path).endsWith('.craft-agent/config-defaults.json')
+    || originalExistsSync(path),
   // Re-export anything else the module needs
-  readFileSync: originalReadFileSync,
+  readFileSync: (path: string, ...args: unknown[]) => {
+    if (String(path).endsWith('.craft-agent/config-defaults.json')) {
+      return JSON.stringify({
+        defaults: { browserToolEnabled: true },
+        workspaceDefaults: {},
+        llmConnections: [],
+      });
+    }
+    return originalReadFileSync(path, ...(args as []));
+  },
 }));
+
+const { PrerequisiteManager } = await import(`../prerequisite-manager.ts?isolated=${process.pid}-${Date.now()}`);
 
 const WORKSPACE_ROOT = '/test/workspace';
 
@@ -32,7 +46,7 @@ function browserDocPath(): string {
 }
 
 describe('PrerequisiteManager', () => {
-  let manager: PrerequisiteManager;
+  let manager: PrerequisiteManagerInstance;
   let debugMessages: string[];
 
   beforeEach(() => {
@@ -40,7 +54,7 @@ describe('PrerequisiteManager', () => {
     mockExistsPaths = new Set();
     manager = new PrerequisiteManager({
       workspaceRootPath: WORKSPACE_ROOT,
-      onDebug: (msg) => debugMessages.push(msg),
+      onDebug: (msg: string) => debugMessages.push(msg),
     });
   });
 

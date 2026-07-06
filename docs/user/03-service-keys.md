@@ -34,12 +34,26 @@ Note: a ChatGPT/Claude/Gemini web subscription is usually not the same as API ac
 
 Use these for image, video, audio, and creative assets.
 
+Save image/video provider keys under **Settings -> Connections -> AI + Media -> Media Generation**. These are shared app credentials, so Art Director, Content Genius, Video workers, and future creative agents can use the same connected services across HQ and campaign workspaces.
+
 | Service | Used for | Where to get key |
 | --- | --- | --- |
-| fal | image/video/audio/3D model APIs | [fal authentication docs](https://fal.ai/docs/documentation/setting-up/authentication) |
+| Fal (`FAL_API_KEY`) | image/video/audio/3D model APIs | [Fal authentication docs](https://fal.ai/docs/api-reference/platform-apis/authentication) |
+| Replicate (`REPLICATE_API_TOKEN`) | model-specific image/video generation and editing | [Replicate HTTP API docs](https://replicate.com/docs/reference/http) |
+| WaveSpeed (`WAVESPEED_API_KEY`) | fast image/video generation APIs | [WaveSpeed authentication docs](https://wavespeed.ai/docs/docs-authentication) |
 | Inworld | character/voice/interactive AI services, if enabled | [Inworld API key docs](https://docs.inworld.ai/quickstart-tts) |
 | ElevenLabs | voice/TTS/SFX, if enabled | [ElevenLabs API authentication](https://elevenlabs.io/docs/api-reference/authentication) |
-| HeyGen | avatar/video generation, if enabled | [HeyGen API key docs](https://developers.heygen.com/docs/api-key) |
+| HeyGen (`HEYGEN_API_KEY`) | avatar/video generation, if enabled | [HeyGen API key docs](https://developers.heygen.com/docs/api-key) |
+
+Older local builds may show `SQUAD_*` media keys. Treat those as legacy aliases. Prefer the shared names above for anything new.
+
+Optional provider defaults live in the same Media Generation card:
+
+- `MEDIA_IMAGE_PROVIDER`: `auto`, `fal`, `replicate`, or `wavespeed`.
+- `MEDIA_VIDEO_PROVIDER`: `auto`, `fal`, `replicate`, or `wavespeed`.
+- `MEDIA_PROVIDER_STRATEGY`: `balanced`, `speed`, `quality`, or `cost`.
+
+Use `auto`/`balanced` unless you have a strong preference. If you ask for a specific provider in chat, that overrides the default.
 
 ## Google Workspace
 
@@ -108,7 +122,7 @@ Start small:
 1. One LLM provider.
 2. Google Workspace if you need Gmail/Calendar/Drive.
 3. Social/profile browser sessions if you publish.
-4. fal or other generation provider if you create media.
+4. Fal, Replicate, WaveSpeed, or another Media Generation provider if you create media.
 5. Shopify/Printify only if you run commerce.
 
 If a worker says a key/source is missing, add only that one.
