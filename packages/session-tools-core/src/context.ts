@@ -181,6 +181,9 @@ export interface SessionToolContext {
   /** Active agent slug when the session is running as a named agent. */
   activeAgentSlug?: string;
 
+  /** Parent/delegating agent slug when this agent was spawned by another agent. */
+  parentAgentSlug?: string;
+
   /** Verify that a pending app-action approval was approved by the user/UI. */
   verifyAppActionApproval?: (input: AppActionApprovalVerificationInput) => Promise<AppActionApprovalVerificationResult> | AppActionApprovalVerificationResult;
 

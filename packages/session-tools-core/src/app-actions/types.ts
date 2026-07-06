@@ -141,8 +141,12 @@ export interface AppActionRuntimeContext {
   workspacePath: string;
   workspaceId?: string;
   activeAgentSlug?: string;
+  parentAgentSlug?: string;
   listAgents?: (options?: { activeOnly?: boolean; search?: string; tags?: string[] }) => {
     agents: Array<{ slug: string; actionGrants?: string[]; permissionMode?: string; tags?: string[] }>;
+  };
+  listSources?: (options?: { activeOnly?: boolean; search?: string; tags?: string[]; type?: 'mcp' | 'api' | 'local' }) => {
+    sources: Array<{ slug: string; enabled: boolean; authStatus?: string }>;
   };
   getSessionInfo?: (sessionId?: string) => { permissionMode?: string } | null;
   createOutput?: (input: CreateOutputToolInput) => Promise<CreateOutputResult>;

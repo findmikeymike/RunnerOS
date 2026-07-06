@@ -54,6 +54,9 @@ export interface SessionScopedToolCallbacks {
   /** Active standalone agent slug for this session, when running as an agent. */
   activeAgentSlug?: string;
 
+  /** Delegating parent agent slug for child/background agent sessions. */
+  parentAgentSlug?: string;
+
   /** Set labels on a session (defaults to current). */
   setSessionLabelsFn?: (sessionId: string | undefined, labels: string[]) => void | Promise<void>;
   /** Set status on a session (defaults to current). */

@@ -193,6 +193,7 @@ export class AgentMessageService {
           agentSlug: input.agentSlug,
           agentName: baseLaunchReceipt?.agent?.name ?? input.agentSlug,
           timestamp: Date.now(),
+          parentAgentSlug: runtime.callerAgentSlug,
         },
         launchReceipt: {
           ...baseLaunchReceipt,

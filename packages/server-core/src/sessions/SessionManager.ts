@@ -209,7 +209,7 @@ type WorkflowMemoryInputs = {
   userEntries?: WorkflowMemoryEntry[]
   agentEntries?: WorkflowMemoryEntry[]
 }
-type SpawnedAgentRef = { agentSlug: string; agentName?: string; timestamp?: number }
+type SpawnedAgentRef = { agentSlug: string; agentName?: string; timestamp?: number; parentAgentSlug?: string }
 
 const DIRECT_USER_MEMORY_AGENT_SLUGS = new Set([CONCIERGE_SLUG, ORCHESTRATOR_SLUG])
 
@@ -458,7 +458,7 @@ function completeLaunchReceipt(
     customSystemPrompt?: string
     agentSkillSlugs?: string[]
     enabledSourceSlugs?: string[]
-    spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+    spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number; parentAgentSlug?: string }
   },
 ): SessionLaunchReceipt {
   const injected = receipt?.injected ?? {
@@ -1302,7 +1302,7 @@ interface ManagedSession {
   // Metadata for sessions created by automations
   triggeredBy?: { automationName?: string; event?: string; timestamp?: number }
   // Provenance for sessions spawned by summoning a saved Agent.
-  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number; parentAgentSlug?: string }
   launchReceipt?: SessionLaunchReceipt
   // Promise that resolves when the agent instance is ready (for title gen to await)
   agentReady?: Promise<void>
@@ -4900,6 +4900,7 @@ user a clickable link to where the thing now lives.`
       // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
       mergeSessionScopedToolCallbacks(managed.id, {
         activeAgentSlug: managed.spawnedFromAgent?.agentSlug,
+        parentAgentSlug: managed.spawnedFromAgent?.parentAgentSlug,
         setSessionLabelsFn: (sessionId: string | undefined, labels: string[]) => {
           this.setSessionLabels(sessionId ?? managed.id, labels)
         },

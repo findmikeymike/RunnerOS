@@ -78,7 +78,7 @@ export interface Session {
   customSystemPrompt?: string
   agentSkillSlugs?: string[]
   trustedWorkerTools?: string[]
-  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number; parentAgentSlug?: string }
   launchReceipt?: SessionLaunchReceipt
   lastMessageRole?: 'user' | 'assistant' | 'plan' | 'tool' | 'error'
   lastFinalMessageId?: string
@@ -141,7 +141,7 @@ export interface CreateSessionOptions {
   /** Session tool names preauthorized for this trusted worker session. */
   trustedWorkerTools?: string[]
   /** Provenance for sessions spawned from a saved Agent. */
-  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number; parentAgentSlug?: string }
   launchReceipt?: SessionLaunchReceipt
   /**
    * Message ID to branch from. This is a hard context cutoff:

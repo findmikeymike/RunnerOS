@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SessionToolContext, ListAgentsResult } from '../context.ts';
+import type { SessionToolContext, ListAgentsResult, ListSourcesResult } from '../context.ts';
 import type { CreateOutputResult, CreateOutputToolInput } from './outputs.ts';
 import type { AppActionDefinition } from '../app-actions/types.ts';
 import { APP_ACTION_DEFINITIONS, APP_ACTION_REGISTRY } from '../app-actions/registry.ts';
@@ -23,7 +23,9 @@ function cleanup(path: string): void {
 
 function makeCtx(workspacePath: string, opts?: {
   activeAgentSlug?: string;
+  parentAgentSlug?: string;
   listAgents?: () => ListAgentsResult;
+  listSources?: () => ListSourcesResult;
   createOutput?: (input: CreateOutputToolInput) => Promise<CreateOutputResult>;
   permissionMode?: 'safe' | 'ask' | 'allow-all' | null;
   verifyAppActionApproval?: SessionToolContext['verifyAppActionApproval'];
@@ -33,6 +35,7 @@ function makeCtx(workspacePath: string, opts?: {
     workspacePath,
     workspaceId: 'workspace-1',
     activeAgentSlug: opts?.activeAgentSlug,
+    parentAgentSlug: opts?.parentAgentSlug,
     plansFolderPath: join(workspacePath, 'plans'),
     callbacks: { onPlanSubmitted: () => {}, onAuthRequest: () => {} },
     fs: {
@@ -48,6 +51,7 @@ function makeCtx(workspacePath: string, opts?: {
     get sourcesPath() { return join(workspacePath, 'sources'); },
     get skillsPath() { return join(workspacePath, 'skills'); },
     listAgents: opts?.listAgents,
+    listSources: opts?.listSources,
     createOutput: opts?.createOutput,
     verifyAppActionApproval: opts?.verifyAppActionApproval,
   };
@@ -146,6 +150,37 @@ describe('app action handlers', () => {
     }
   });
 
+  it('dedupes return-prior actions by natural key across request IDs', async () => {
+    const root = makeWorkspace();
+    try {
+      let calls = 0;
+      const ctx = makeCtx(root, {
+        createOutput: async () => {
+          calls += 1;
+          return { ok: true, outputId: `out_natural_${calls}` };
+        },
+      });
+
+      const first = await handleExecuteAppAction(ctx, {
+        actionId: 'outputs.create',
+        input: { title: 'Same Brief', kind: 'report', summary: 'First summary.' },
+        requestId: 'req-natural-1',
+      });
+      const second = await handleExecuteAppAction(ctx, {
+        actionId: 'outputs.create',
+        input: { title: 'Same Brief', kind: 'report', summary: 'Different summary.' },
+        requestId: 'req-natural-2',
+      });
+
+      expect((first.structuredContent as any).status).toBe('succeeded');
+      expect((second.structuredContent as any).status).toBe('duplicate');
+      expect((second.structuredContent as any).duplicateOfReceiptId).toBe((first.structuredContent as any).receipt.id);
+      expect(calls).toBe(1);
+    } finally {
+      cleanup(root);
+    }
+  });
+
   it('writes internal Kanban records with a receipt', async () => {
     const root = makeWorkspace();
     try {
@@ -162,6 +197,24 @@ describe('app action handlers', () => {
       expect((result.structuredContent as any).receipt.target.surface).toBe('kanban');
       expect(cards).toHaveLength(1);
       expect(cards[0].title).toBe('Follow up');
+    } finally {
+      cleanup(root);
+    }
+  });
+
+  it('serializes concurrent internal surface writes', async () => {
+    const root = makeWorkspace();
+    try {
+      const ctx = makeCtx(root);
+      await Promise.all(Array.from({ length: 12 }, (_, index) => handleExecuteAppAction(ctx, {
+        actionId: 'kanban.create_card',
+        input: { boardId: 'main', columnId: 'todo', title: `Concurrent ${index}` },
+        requestId: `req-kanban-concurrent-${index}`,
+      })));
+      const cardsPath = join(root, '.runneros', 'app-actions', 'surfaces', 'kanban', 'cards.json');
+      const cards = JSON.parse(readFileSync(cardsPath, 'utf-8'));
+
+      expect(cards).toHaveLength(12);
     } finally {
       cleanup(root);
     }
@@ -232,6 +285,64 @@ describe('app action handlers', () => {
       expect(result.isError).toBe(true);
       expect((result.structuredContent as any).errors[0].message).toContain('invalid action grants');
       expect(existsSync(join(root, '.runneros', 'app-actions', 'surfaces', 'kanban', 'cards.json'))).toBe(false);
+    } finally {
+      cleanup(root);
+    }
+  });
+
+  it('requires parent agent grants for delegated app actions', async () => {
+    const root = makeWorkspace();
+    try {
+      const listAgents = (parentGrants: string[]) => () => ({
+        total: 2,
+        returned: 2,
+        agents: [
+          {
+            slug: 'child-worker',
+            name: 'Child Worker',
+            description: 'Can create kanban cards.',
+            active: true,
+            skills: [],
+            sources: [],
+            tags: [],
+            actionGrants: ['kanban.create_card'],
+          },
+          {
+            slug: 'parent-agent',
+            name: 'Parent Agent',
+            description: 'Delegating agent.',
+            active: true,
+            skills: [],
+            sources: [],
+            tags: [],
+            actionGrants: parentGrants,
+          },
+        ],
+      });
+
+      const denied = await handleExecuteAppAction(makeCtx(root, {
+        activeAgentSlug: 'child-worker',
+        parentAgentSlug: 'parent-agent',
+        listAgents: listAgents(['outputs.create']),
+      }), {
+        actionId: 'kanban.create_card',
+        input: { boardId: 'main', columnId: 'todo', title: 'Blocked by parent' },
+        requestId: 'req-parent-denied',
+      });
+      const allowed = await handleExecuteAppAction(makeCtx(root, {
+        activeAgentSlug: 'child-worker',
+        parentAgentSlug: 'parent-agent',
+        listAgents: listAgents(['kanban.create_card']),
+      }), {
+        actionId: 'kanban.create_card',
+        input: { boardId: 'main', columnId: 'todo', title: 'Allowed by parent' },
+        requestId: 'req-parent-allowed',
+      });
+
+      expect(denied.isError).toBe(true);
+      expect((denied.structuredContent as any).errors[0].message).toContain('Parent agent');
+      expect(allowed.isError).toBe(false);
+      expect((allowed.structuredContent as any).receipt.actor.parentAgentSlug).toBe('parent-agent');
     } finally {
       cleanup(root);
     }
@@ -374,6 +485,31 @@ describe('app action handlers', () => {
     }
   });
 
+  it('redacts PII fields from contact receipts', async () => {
+    const root = makeWorkspace();
+    try {
+      const result = await handleExecuteAppAction(makeCtx(root), {
+        actionId: 'network.upsert_person',
+        input: {
+          name: 'Riley Park',
+          email: 'riley@example.com',
+          socialHandle: '@riley',
+          notes: 'Personal phone is private.',
+        },
+        requestId: 'req-network-redaction',
+      });
+      const receipt = (result.structuredContent as any).receipt;
+
+      expect(result.isError).toBe(false);
+      expect(receipt.redactedInput.email).toBe('[redacted]');
+      expect(receipt.redactedInput.socialHandle).toBe('[redacted]');
+      expect(receipt.redactedInput.notes).toBe('[redacted]');
+      expect(receipt.redactedOutput.email).toBe('[redacted]');
+    } finally {
+      cleanup(root);
+    }
+  });
+
   it('rejects unsupported Vault kind hints before adapter execution', async () => {
     const root = makeWorkspace();
     try {
@@ -396,6 +532,96 @@ describe('app action handlers', () => {
       expect((result.structuredContent as any).errors[0].code).toBe('VALIDATION_FAILED');
       expect(called).toBe(false);
     } finally {
+      cleanup(root);
+    }
+  });
+
+  it('redacts vault paths from receipts', async () => {
+    const root = makeWorkspace();
+    try {
+      const ctx = {
+        ...makeCtx(root),
+        addVaultFiles: async () => ({
+          imported: [{ id: 'asset-1', relativePath: '/Users/michael/private/source.wav' }],
+        }),
+      } as SessionToolContext;
+
+      const result = await handleExecuteAppAction(ctx, {
+        actionId: 'vault.add_file',
+        input: { paths: ['/Users/michael/private/source.wav'], kindHint: 'demo' },
+        requestId: 'req-vault-redaction',
+      });
+      const receipt = (result.structuredContent as any).receipt;
+
+      expect(result.isError).toBe(false);
+      expect(receipt.redactedInput.paths).toBe('[redacted]');
+      expect(receipt.redactedOutput.imported[0].relativePath).toBe('[redacted]');
+    } finally {
+      cleanup(root);
+    }
+  });
+
+  it('honors required source availability metadata before execution', async () => {
+    const root = makeWorkspace();
+    let executed = 0;
+    const action: AppActionDefinition<Record<string, unknown>, Record<string, unknown>> = {
+      id: 'test.source_bound',
+      version: 1,
+      title: 'Source Bound',
+      description: 'Test source-gated action.',
+      surface: 'publishing',
+      kind: 'create',
+      risk: 'internal_write',
+      inputSchema: { type: 'object' },
+      idempotency: { required: true, keyFields: ['title'], duplicateWindowSeconds: 60, duplicateBehavior: 'return_prior' },
+      approvalPolicy: { mode: 'never', summaryFields: ['title'], snapshotFields: ['title'] },
+      capability: { defaultGrant: 'all', requiredActionGrants: ['test.source_bound'], requiredSourceSlugs: ['google-calendar'], allowedBackground: true },
+      audit: { redactInputFields: [], redactOutputFields: [], piiFields: [] },
+      uiEvents: [{ type: 'publishing:updated' }],
+      validate: (input) => ({ ok: true, input: input as Record<string, unknown> }),
+      execute: async (_ctx, input) => {
+        executed += 1;
+        return { output: input };
+      },
+    };
+    APP_ACTION_DEFINITIONS.push(action);
+    APP_ACTION_REGISTRY.set(action.id, action);
+    try {
+      const missing = await handleExecuteAppAction(makeCtx(root, {
+        listSources: () => ({ total: 0, returned: 0, sources: [] }),
+      }), {
+        actionId: action.id,
+        input: { title: 'Needs source' },
+        requestId: 'req-source-missing',
+      });
+      const connected = await handleExecuteAppAction(makeCtx(root, {
+        listSources: () => ({
+          total: 1,
+          returned: 1,
+          sources: [{
+            slug: 'google-calendar',
+            name: 'Google Calendar',
+            description: '',
+            tags: [],
+            type: 'api',
+            tier: 'workspace',
+            enabled: true,
+            authStatus: 'connected',
+          }],
+        }),
+      }), {
+        actionId: action.id,
+        input: { title: 'Needs source' },
+        requestId: 'req-source-connected',
+      });
+
+      expect(missing.isError).toBe(true);
+      expect((missing.structuredContent as any).errors[0].message).toContain('Required source');
+      expect(connected.isError).toBe(false);
+      expect(executed).toBe(1);
+    } finally {
+      APP_ACTION_REGISTRY.delete(action.id);
+      APP_ACTION_DEFINITIONS.splice(APP_ACTION_DEFINITIONS.findIndex((entry) => entry.id === action.id), 1);
       cleanup(root);
     }
   });

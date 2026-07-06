@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { AppActionReceipt, AppActionRuntimeContext, AppActionSurface } from './types.ts';
 
@@ -75,11 +75,25 @@ export function readReceipt(ctx: AppActionRuntimeContext, receiptId: string): Ap
 }
 
 export function readIdempotencyReceipt(ctx: AppActionRuntimeContext, idempotencyKey: string): AppActionReceipt | null {
+  return readIdempotencyEntry(ctx, idempotencyKey)?.receipt ?? null;
+}
+
+export function readIdempotencyEntry(
+  ctx: AppActionRuntimeContext,
+  idempotencyKey: string,
+): { receipt: AppActionReceipt; receiptId: string; updatedAt?: string } | null {
   const file = join(idempotencyDir(ctx), `${idempotencyKey}.json`);
   if (!existsSync(file)) return null;
   try {
-    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as { receiptId?: unknown };
-    return typeof parsed.receiptId === 'string' ? readReceipt(ctx, parsed.receiptId) : null;
+    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as { receiptId?: unknown; updatedAt?: unknown };
+    if (typeof parsed.receiptId !== 'string') return null;
+    const receipt = readReceipt(ctx, parsed.receiptId);
+    if (!receipt) return null;
+    return {
+      receipt,
+      receiptId: parsed.receiptId,
+      updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : undefined,
+    };
   } catch {
     return null;
   }
@@ -101,6 +115,44 @@ function writeJsonAtomic(file: string, value: unknown): void {
   renameSync(tmp, file);
 }
 
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function withFileLock<T>(file: string, fn: () => T): T {
+  const lockFile = `${file}.lock`;
+  const startedAt = Date.now();
+  let fd: number | null = null;
+  while (fd === null) {
+    try {
+      fd = openSync(lockFile, 'wx');
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EEXIST') throw error;
+      try {
+        const ageMs = Date.now() - statSync(lockFile).mtimeMs;
+        if (ageMs > 30000) {
+          rmSync(lockFile, { force: true });
+          continue;
+        }
+      } catch {
+        rmSync(lockFile, { force: true });
+        continue;
+      }
+      if (Date.now() - startedAt > 5000) {
+        throw new Error(`Timed out waiting for app action storage lock: ${lockFile}`);
+      }
+      sleepSync(10);
+    }
+  }
+  try {
+    return fn();
+  } finally {
+    closeSync(fd);
+    rmSync(lockFile, { force: true });
+  }
+}
+
 export function appendSurfaceRecord<T extends Record<string, unknown>>(
   ctx: AppActionRuntimeContext,
   surface: AppActionSurface,
@@ -110,25 +162,27 @@ export function appendSurfaceRecord<T extends Record<string, unknown>>(
   const dir = join(appActionsRoot(ctx), 'surfaces', surface);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${recordType}.json`);
-  let existing: Array<Record<string, unknown>> = [];
-  if (existsSync(file)) {
-    try {
-      const parsed = JSON.parse(readFileSync(file, 'utf-8'));
-      if (Array.isArray(parsed)) existing = parsed as Array<Record<string, unknown>>;
-    } catch {
-      existing = [];
+  return withFileLock(file, () => {
+    let existing: Array<Record<string, unknown>> = [];
+    if (existsSync(file)) {
+      try {
+        const parsed = JSON.parse(readFileSync(file, 'utf-8'));
+        if (Array.isArray(parsed)) existing = parsed as Array<Record<string, unknown>>;
+      } catch {
+        existing = [];
+      }
     }
-  }
-  const now = nowIso();
-  const next = {
-    id: randomUUID(),
-    createdAt: now,
-    updatedAt: now,
-    ...record,
-  };
-  existing.push(next);
-  writeJsonAtomic(file, existing);
-  return next;
+    const now = nowIso();
+    const next = {
+      id: randomUUID(),
+      createdAt: now,
+      updatedAt: now,
+      ...record,
+    };
+    existing.push(next);
+    writeJsonAtomic(file, existing);
+    return next;
+  });
 }
 
 function normalizedComparable(value: unknown): string | null {
@@ -145,43 +199,45 @@ export function upsertSurfaceRecord<T extends Record<string, unknown>>(
   const dir = join(appActionsRoot(ctx), 'surfaces', surface);
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `${recordType}.json`);
-  let existing: Array<Record<string, unknown>> = [];
-  if (existsSync(file)) {
-    try {
-      const parsed = JSON.parse(readFileSync(file, 'utf-8'));
-      if (Array.isArray(parsed)) existing = parsed as Array<Record<string, unknown>>;
-    } catch {
-      existing = [];
+  return withFileLock(file, () => {
+    let existing: Array<Record<string, unknown>> = [];
+    if (existsSync(file)) {
+      try {
+        const parsed = JSON.parse(readFileSync(file, 'utf-8'));
+        if (Array.isArray(parsed)) existing = parsed as Array<Record<string, unknown>>;
+      } catch {
+        existing = [];
+      }
     }
-  }
 
-  const now = nowIso();
-  const matchIndex = existing.findIndex((entry) => matchFields.some((field) => {
-    const nextValue = normalizedComparable(record[field]);
-    if (!nextValue) return false;
-    return normalizedComparable(entry[field]) === nextValue;
-  }));
+    const now = nowIso();
+    const matchIndex = existing.findIndex((entry) => matchFields.some((field) => {
+      const nextValue = normalizedComparable(record[field]);
+      if (!nextValue) return false;
+      return normalizedComparable(entry[field]) === nextValue;
+    }));
 
-  let next: Record<string, unknown>;
-  if (matchIndex >= 0) {
-    const current = existing[matchIndex] ?? {};
-    next = {
-      ...current,
-      ...record,
-      id: typeof current.id === 'string' ? current.id : randomUUID(),
-      createdAt: typeof current.createdAt === 'string' ? current.createdAt : now,
-      updatedAt: now,
-    };
-    existing[matchIndex] = next;
-  } else {
-    next = {
-      id: randomUUID(),
-      createdAt: now,
-      updatedAt: now,
-      ...record,
-    };
-    existing.push(next);
-  }
-  writeJsonAtomic(file, existing);
-  return next as T & { id: string; createdAt: string; updatedAt: string };
+    let next: Record<string, unknown>;
+    if (matchIndex >= 0) {
+      const current = existing[matchIndex] ?? {};
+      next = {
+        ...current,
+        ...record,
+        id: typeof current.id === 'string' ? current.id : randomUUID(),
+        createdAt: typeof current.createdAt === 'string' ? current.createdAt : now,
+        updatedAt: now,
+      };
+      existing[matchIndex] = next;
+    } else {
+      next = {
+        id: randomUUID(),
+        createdAt: now,
+        updatedAt: now,
+        ...record,
+      };
+      existing.push(next);
+    }
+    writeJsonAtomic(file, existing);
+    return next as T & { id: string; createdAt: string; updatedAt: string };
+  });
 }

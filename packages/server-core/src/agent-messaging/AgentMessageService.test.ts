@@ -80,6 +80,12 @@ describe('AgentMessageService', () => {
     expect(result.childSessionId).toBe('child-1');
     expect(created[0]).toMatchObject({ hidden: true, permissionMode: 'safe', labels: ['agent-message-depth:1'] });
     expect(created[0]).toMatchObject({
+      spawnedFromAgent: {
+        agentSlug: 'reviewer',
+        parentAgentSlug: 'researcher',
+      },
+    });
+    expect(created[0]).toMatchObject({
       launchReceipt: {
         injected: {
           skills: ['research'],

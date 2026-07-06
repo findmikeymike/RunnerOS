@@ -23,6 +23,7 @@ import {
   buildIdempotencyKey,
   getWorkspaceId,
   nowIso,
+  readIdempotencyEntry,
   readIdempotencyReceipt,
   readReceipt,
   sha256,
@@ -36,7 +37,10 @@ function actionError(code: AppActionError['code'], message: string, repairHint?:
 }
 
 function actorStableId(ctx: AppActionRuntimeContext): string {
-  return ctx.activeAgentSlug ? `agent:${ctx.activeAgentSlug}` : 'user:current';
+  if (!ctx.activeAgentSlug) return 'user:current';
+  return ctx.parentAgentSlug && ctx.parentAgentSlug !== ctx.activeAgentSlug
+    ? `agent:${ctx.parentAgentSlug}->${ctx.activeAgentSlug}`
+    : `agent:${ctx.activeAgentSlug}`;
 }
 
 function permissionMode(ctx: AppActionRuntimeContext): string | undefined {
@@ -55,10 +59,10 @@ type ActiveAgentGrantState =
   | { kind: 'invalid'; invalidGrants: string[] }
   | { kind: 'valid'; grants: string[] };
 
-function activeAgentGrantState(ctx: AppActionRuntimeContext): ActiveAgentGrantState {
-  if (!ctx.activeAgentSlug) return { kind: 'user' };
+function agentGrantState(ctx: AppActionRuntimeContext, agentSlug?: string): ActiveAgentGrantState {
+  if (!agentSlug) return { kind: 'user' };
   const agents = ctx.listAgents?.({ activeOnly: false }).agents ?? [];
-  const agent = agents.find((candidate) => candidate.slug === ctx.activeAgentSlug);
+  const agent = agents.find((candidate) => candidate.slug === agentSlug);
   if (!agent) return { kind: 'missing_agent' };
   if (agent.actionGrants === undefined) return { kind: 'legacy' };
   if (agent.actionGrants.length === 0) return { kind: 'none' };
@@ -67,8 +71,8 @@ function activeAgentGrantState(ctx: AppActionRuntimeContext): ActiveAgentGrantSt
   return { kind: 'valid', grants: agent.actionGrants };
 }
 
-function grantAvailability(ctx: AppActionRuntimeContext, definition: AppActionDefinition) {
-  const state = activeAgentGrantState(ctx);
+function singleAgentGrantAvailability(ctx: AppActionRuntimeContext, definition: AppActionDefinition, agentSlug?: string, label = 'Active agent') {
+  const state = agentGrantState(ctx, agentSlug);
   if (state.kind === 'user') return { available: true };
   if (state.kind === 'legacy') {
     // Legacy agents predate actionGrants. Allow internal actions, never external/destructive/credential.
@@ -76,28 +80,28 @@ function grantAvailability(ctx: AppActionRuntimeContext, definition: AppActionDe
       ? { available: true }
       : {
           available: false,
-          reason: `Legacy agent ${ctx.activeAgentSlug} is missing explicit action grants for ${definition.id}.`,
+          reason: `Legacy agent ${agentSlug} is missing explicit action grants for ${definition.id}.`,
           repairHint: `Add actionGrants: ["${definition.id}"] to the agent metadata.`,
         };
   }
   if (state.kind === 'missing_agent') {
     return {
       available: false,
-      reason: `Active agent ${ctx.activeAgentSlug} is not available in the action grant catalog.`,
+      reason: `${label} ${agentSlug} is not available in the action grant catalog.`,
       repairHint: 'Refresh the agent catalog before executing app actions.',
     };
   }
   if (state.kind === 'none') {
     return {
       available: false,
-      reason: `Active agent ${ctx.activeAgentSlug} has no action grants.`,
+      reason: `${label} ${agentSlug} has no action grants.`,
       repairHint: `Add actionGrants: ["${definition.id}"] to the agent metadata.`,
     };
   }
   if (state.kind === 'invalid') {
     return {
       available: false,
-      reason: `Active agent ${ctx.activeAgentSlug} has invalid action grants: ${state.invalidGrants.join(', ')}.`,
+      reason: `${label} ${agentSlug} has invalid action grants: ${state.invalidGrants.join(', ')}.`,
       repairHint: 'Fix or remove invalid actionGrants before executing app actions.',
     };
   }
@@ -105,9 +109,18 @@ function grantAvailability(ctx: AppActionRuntimeContext, definition: AppActionDe
     ? { available: true }
     : {
         available: false,
-        reason: `Actor is missing action grant ${definition.id}.`,
+        reason: `${label} ${agentSlug} is missing action grant ${definition.id}.`,
         repairHint: `Add actionGrants: ["${definition.id}"] to the agent metadata or run from HNIC/user context.`,
       };
+}
+
+function grantAvailability(ctx: AppActionRuntimeContext, definition: AppActionDefinition) {
+  const active = singleAgentGrantAvailability(ctx, definition, ctx.activeAgentSlug, 'Active agent');
+  if (!active.available) return active;
+  if (ctx.parentAgentSlug && ctx.parentAgentSlug !== ctx.activeAgentSlug) {
+    return singleAgentGrantAvailability(ctx, definition, ctx.parentAgentSlug, 'Parent agent');
+  }
+  return active;
 }
 
 function riskAllowedByPermission(ctx: AppActionRuntimeContext, definition: AppActionDefinition): boolean {
@@ -127,6 +140,50 @@ function approvalRequired(definition: AppActionDefinition): boolean {
   return definition.risk === 'external_write' || definition.risk === 'destructive' || definition.risk === 'credential';
 }
 
+function capabilityAvailability(ctx: AppActionRuntimeContext, definition: AppActionDefinition) {
+  const requiredSourceSlugs = definition.capability.requiredSourceSlugs ?? [];
+  if (requiredSourceSlugs.length > 0) {
+    if (!ctx.listSources) {
+      return {
+        available: false,
+        reason: `Action ${definition.id} requires source(s): ${requiredSourceSlugs.join(', ')}.`,
+        repairHint: 'Run this action from a session with source inventory bindings.',
+      };
+    }
+    try {
+      const sources = ctx.listSources({ activeOnly: true }).sources ?? [];
+      const missing = requiredSourceSlugs.filter((slug) => {
+        const source = sources.find((candidate) => candidate.slug === slug);
+        return !source || !source.enabled || !['connected', 'none'].includes(source.authStatus ?? 'untested');
+      });
+      if (missing.length > 0) {
+        return {
+          available: false,
+          reason: `Required source(s) are not connected or enabled: ${missing.join(', ')}.`,
+          repairHint: 'Connect and enable the required source before executing this action.',
+        };
+      }
+    } catch (error) {
+      return {
+        available: false,
+        reason: error instanceof Error ? error.message : 'Could not verify required sources.',
+        repairHint: 'Refresh source inventory before executing this action.',
+      };
+    }
+  }
+
+  const requiredOAuthScopes = definition.capability.requiredOAuthScopes ?? [];
+  if (requiredOAuthScopes.length > 0) {
+    return {
+      available: false,
+      reason: `Action ${definition.id} requires OAuth scope verification: ${requiredOAuthScopes.join(', ')}.`,
+      repairHint: 'Wire scope-aware source verification before enabling this action.',
+    };
+  }
+
+  return { available: true };
+}
+
 function getAvailability(ctx: AppActionRuntimeContext, definition: AppActionDefinition) {
   const grant = grantAvailability(ctx, definition);
   if (!grant.available) return grant;
@@ -137,6 +194,8 @@ function getAvailability(ctx: AppActionRuntimeContext, definition: AppActionDefi
       repairHint: 'Run from a session with ask/allow-all permission mode bound, or request user approval through an approval action.',
     };
   }
+  const capability = capabilityAvailability(ctx, definition);
+  if (!capability.available) return capability;
   if (!definition.execute) {
     return {
       available: false,
@@ -147,13 +206,107 @@ function getAvailability(ctx: AppActionRuntimeContext, definition: AppActionDefi
   return definition.availability?.(ctx) ?? { available: true };
 }
 
+function redactionFields(...groups: string[][]): string[] {
+  return Array.from(new Set(groups.flat().map((field) => field.trim()).filter(Boolean)));
+}
+
 function redacted(value: unknown, fields: string[]): unknown {
-  if (!fields.length || value === null || typeof value !== 'object' || Array.isArray(value)) return value;
-  const copy = { ...(value as Record<string, unknown>) };
-  for (const field of fields) {
-    if (field in copy) copy[field] = '[redacted]';
+  if (!fields.length || value === null || typeof value !== 'object') return value;
+  const fieldSet = new Set(fields);
+  const visit = (current: unknown, path: string): unknown => {
+    if (current === null || typeof current !== 'object') return current;
+    if (Array.isArray(current)) return current.map((entry, index) => visit(entry, path ? `${path}.${index}` : String(index)));
+    const copy: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(current as Record<string, unknown>)) {
+      const childPath = path ? `${path}.${key}` : key;
+      copy[key] = fieldSet.has(key) || fieldSet.has(childPath) ? '[redacted]' : visit(child, childPath);
+    }
+    return copy;
+  };
+  return visit(value, '');
+}
+
+function valueAtPath(value: unknown, path: string): unknown {
+  if (!path) return undefined;
+  let current = value;
+  for (const segment of path.split('.')) {
+    if (current === null || typeof current !== 'object' || Array.isArray(current)) return undefined;
+    current = (current as Record<string, unknown>)[segment];
   }
-  return copy;
+  return current;
+}
+
+function projectedIdempotencyInput(definition: AppActionDefinition, normalizedInput: unknown): Record<string, unknown> {
+  const projected: Record<string, unknown> = {};
+  for (const field of definition.idempotency.keyFields) {
+    projected[field] = valueAtPath(normalizedInput, field);
+  }
+  return projected;
+}
+
+function actionIdempotencyKeys(input: {
+  ctx: AppActionRuntimeContext;
+  definition: AppActionDefinition;
+  requestId: string;
+  normalizedInput: unknown;
+}): { requestKey: string; naturalKey?: string } {
+  const workspaceId = getWorkspaceId(input.ctx);
+  const base = {
+    workspaceId,
+    actionId: input.definition.id,
+    actorStableId: actorStableId(input.ctx),
+  };
+  const requestKey = buildIdempotencyKey({
+    ...base,
+    requestId: input.requestId,
+    normalizedInput: input.normalizedInput,
+  });
+  const naturalKey = input.definition.idempotency.keyFields.length > 0
+    ? buildIdempotencyKey({
+        ...base,
+        requestId: '',
+        normalizedInput: projectedIdempotencyInput(input.definition, input.normalizedInput),
+      })
+    : undefined;
+  return { requestKey, naturalKey };
+}
+
+function entryWithinDuplicateWindow(
+  entry: { receipt: AppActionReceipt; updatedAt?: string } | null,
+  definition: AppActionDefinition,
+): entry is { receipt: AppActionReceipt; updatedAt?: string } {
+  if (!entry || entry.receipt.status === 'failed') return false;
+  const updatedAtMs = entry.updatedAt ? Date.parse(entry.updatedAt) : Number.NaN;
+  if (!Number.isFinite(updatedAtMs)) return true;
+  return Date.now() - updatedAtMs <= definition.idempotency.duplicateWindowSeconds * 1000;
+}
+
+function writeIdempotencyKeys(
+  ctx: AppActionRuntimeContext,
+  keys: { requestKey: string; naturalKey?: string },
+  receiptId: string,
+): void {
+  writeIdempotency(ctx, keys.requestKey, receiptId);
+  if (keys.naturalKey && keys.naturalKey !== keys.requestKey) {
+    writeIdempotency(ctx, keys.naturalKey, receiptId);
+  }
+}
+
+function existingIdempotencyReceipt(
+  ctx: AppActionRuntimeContext,
+  keys: { requestKey: string; naturalKey?: string },
+  definition: AppActionDefinition,
+  options: { includeRequestKey: boolean },
+): { receipt: AppActionReceipt; source: 'request' | 'natural' } | null {
+  if (options.includeRequestKey) {
+    const requestEntry = readIdempotencyEntry(ctx, keys.requestKey);
+    if (entryWithinDuplicateWindow(requestEntry, definition)) return { receipt: requestEntry.receipt, source: 'request' };
+  }
+  if (keys.naturalKey && definition.idempotency.duplicateBehavior === 'return_prior') {
+    const naturalEntry = readIdempotencyEntry(ctx, keys.naturalKey);
+    if (entryWithinDuplicateWindow(naturalEntry, definition)) return { receipt: naturalEntry.receipt, source: 'natural' };
+  }
+  return null;
 }
 
 function makeReceipt(input: {
@@ -174,6 +327,8 @@ function makeReceipt(input: {
 }): AppActionReceipt {
   const createdAt = nowIso();
   const actorAgentSlug = input.ctx.activeAgentSlug;
+  const inputRedactionFields = redactionFields(input.definition.audit.redactInputFields, input.definition.audit.piiFields);
+  const outputRedactionFields = redactionFields(input.definition.audit.redactOutputFields, input.definition.audit.piiFields);
   return {
     schemaVersion: 1,
     id: `appact_${randomUUID()}`,
@@ -186,6 +341,7 @@ function makeReceipt(input: {
     actor: {
       type: actorAgentSlug ? 'agent' : 'user',
       agentSlug: actorAgentSlug,
+      parentAgentSlug: input.ctx.parentAgentSlug,
       permissionMode: permissionMode(input.ctx),
     },
     status: input.status,
@@ -193,8 +349,8 @@ function makeReceipt(input: {
     approvalId: input.approvalId,
     approvalSnapshotHash: input.approvalSnapshotHash,
     target: input.target,
-    redactedInput: redacted(input.normalizedInput, input.definition.audit.redactInputFields),
-    redactedOutput: redacted(input.output, input.definition.audit.redactOutputFields),
+    redactedInput: redacted(input.normalizedInput, inputRedactionFields),
+    redactedOutput: redacted(input.output, outputRedactionFields),
     error: input.error,
     outputId: input.outputId,
     workProductId: input.workProductId,
@@ -238,15 +394,13 @@ export async function previewAppAction(ctx: AppActionRuntimeContext, input: AppA
   const validated = definition.validate(input.input);
   if (!validated.ok) return { ok: false, actionId: definition.id, errors: validated.errors };
 
-  const workspaceId = getWorkspaceId(ctx);
-  const idempotencyKey = buildIdempotencyKey({
-    workspaceId,
-    actionId: definition.id,
-    actorStableId: actorStableId(ctx),
+  const idempotencyKeys = actionIdempotencyKeys({
+    ctx,
+    definition,
     requestId: input.requestId ?? '',
     normalizedInput: validated.input,
   });
-  const existing = input.requestId ? readIdempotencyReceipt(ctx, idempotencyKey) : null;
+  const existing = existingIdempotencyReceipt(ctx, idempotencyKeys, definition, { includeRequestKey: Boolean(input.requestId) });
   const availability = getAvailability(ctx, definition);
   const expectedChange = definition.preview
     ? await definition.preview(ctx, validated.input as never)
@@ -259,8 +413,8 @@ export async function previewAppAction(ctx: AppActionRuntimeContext, input: AppA
     risk: definition.risk,
     approvalRequired: approvalRequired(definition),
     approvalReason: approvalRequired(definition) ? definition.approvalPolicy.reason ?? `${definition.risk} action requires approval.` : undefined,
-    idempotencyKey,
-    duplicateOfReceiptId: existing?.id,
+    idempotencyKey: idempotencyKeys.requestKey,
+    duplicateOfReceiptId: existing?.receipt.id,
     expectedChange,
     errors: availability.available ? undefined : [actionError('ACTION_UNAVAILABLE', availability.reason ?? 'Action unavailable.', availability.repairHint)],
   };
@@ -275,30 +429,29 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
   const validated = definition.validate(input.input);
   if (!validated.ok) return { status: 'failed', errors: validated.errors };
 
-  const workspaceId = getWorkspaceId(ctx);
-  const idempotencyKey = buildIdempotencyKey({
-    workspaceId,
-    actionId: definition.id,
-    actorStableId: actorStableId(ctx),
+  const idempotencyKeys = actionIdempotencyKeys({
+    ctx,
+    definition,
     requestId: input.requestId,
     normalizedInput: validated.input,
   });
-  const existing = readIdempotencyReceipt(ctx, idempotencyKey);
-  if (existing && existing.status !== 'failed') {
-    if (existing.status !== 'approval_required' || !input.approvalToken) {
+  const existing = existingIdempotencyReceipt(ctx, idempotencyKeys, definition, { includeRequestKey: true });
+  const existingRequest = readIdempotencyReceipt(ctx, idempotencyKeys.requestKey);
+  if (existing && existing.receipt.status !== 'failed') {
+    if (existing.source !== 'request' || existing.receipt.status !== 'approval_required' || !input.approvalToken) {
       return {
         status: 'duplicate',
-        duplicateOfReceiptId: existing.id,
-        receipt: existing,
+        duplicateOfReceiptId: existing.receipt.id,
+        receipt: existing.receipt,
       };
     }
-    if (input.approvalToken !== existing.approvalId) {
+    if (input.approvalToken !== existing.receipt.approvalId) {
       const error = actionError('APPROVAL_STALE', 'Approval token does not match the pending app action approval.');
       const receipt = writeReceipt(ctx, makeReceipt({
         ctx,
         definition,
         requestId: input.requestId,
-        idempotencyKey,
+        idempotencyKey: idempotencyKeys.requestKey,
         status: 'failed',
         normalizedInput: validated.input,
         error,
@@ -314,7 +467,7 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
       ctx,
       definition,
       requestId: input.requestId,
-      idempotencyKey,
+      idempotencyKey: idempotencyKeys.requestKey,
       status: 'failed',
       normalizedInput: validated.input,
       error,
@@ -347,13 +500,13 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
       ctx,
       definition,
       requestId: input.requestId,
-      idempotencyKey,
+      idempotencyKey: idempotencyKeys.requestKey,
       status: 'approval_required',
       normalizedInput: validated.input,
       approvalId,
       approvalSnapshotHash,
     }));
-    writeIdempotency(ctx, idempotencyKey, receipt.id);
+    writeIdempotencyKeys(ctx, idempotencyKeys, receipt.id);
     return {
       status: 'approval_required',
       receipt,
@@ -372,13 +525,13 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
   }
 
   if (approvalRequired(definition)) {
-    if (!existing || existing.status !== 'approval_required' || !existing.approvalId || !existing.approvalSnapshotHash) {
+    if (!existingRequest || existingRequest.status !== 'approval_required' || !existingRequest.approvalId || !existingRequest.approvalSnapshotHash) {
       const error = actionError('APPROVAL_REQUIRED', 'This app action requires a pending approval receipt before execution.');
       const receipt = writeReceipt(ctx, makeReceipt({
         ctx,
         definition,
         requestId: input.requestId,
-        idempotencyKey,
+        idempotencyKey: idempotencyKeys.requestKey,
         status: 'failed',
         normalizedInput: validated.input,
         error,
@@ -391,7 +544,7 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
         ctx,
         definition,
         requestId: input.requestId,
-        idempotencyKey,
+        idempotencyKey: idempotencyKeys.requestKey,
         status: 'failed',
         normalizedInput: validated.input,
         error,
@@ -399,13 +552,13 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
       return { status: 'failed', receipt, errors: [error] };
     }
     const verification = await ctx.verifyAppActionApproval({
-      approvalId: existing.approvalId,
+      approvalId: existingRequest.approvalId,
       actionId: definition.id,
       actionVersion: definition.version,
-      idempotencyKey,
-      approvalSnapshotHash: existing.approvalSnapshotHash,
+      idempotencyKey: idempotencyKeys.requestKey,
+      approvalSnapshotHash: existingRequest.approvalSnapshotHash,
       requestId: input.requestId,
-      redactedInput: existing.redactedInput,
+      redactedInput: existingRequest.redactedInput,
     });
     if (!verification.approved) {
       const error = actionError('APPROVAL_REQUIRED', verification.reason ?? 'User approval has not been granted for this app action.');
@@ -413,7 +566,7 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
         ctx,
         definition,
         requestId: input.requestId,
-        idempotencyKey,
+        idempotencyKey: idempotencyKeys.requestKey,
         status: 'failed',
         normalizedInput: validated.input,
         error,
@@ -428,7 +581,7 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
       ctx,
       definition,
       requestId: input.requestId,
-      idempotencyKey,
+      idempotencyKey: idempotencyKeys.requestKey,
       status: 'succeeded',
       normalizedInput: validated.input,
       output: result.output,
@@ -437,7 +590,7 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
       workProductId: result.workProductId,
       uiEvents: result.uiEvents,
     }));
-    writeIdempotency(ctx, idempotencyKey, receipt.id);
+    writeIdempotencyKeys(ctx, idempotencyKeys, receipt.id);
     return { status: 'succeeded', receipt };
   } catch (error) {
     const actionFailure = actionError('INTERNAL_ERROR', error instanceof Error ? error.message : 'Unknown app action failure.');
@@ -445,7 +598,7 @@ export async function executeAppAction(ctx: AppActionRuntimeContext, input: AppA
       ctx,
       definition,
       requestId: input.requestId,
-      idempotencyKey,
+      idempotencyKey: idempotencyKeys.requestKey,
       status: 'failed',
       normalizedInput: validated.input,
       error: actionFailure,

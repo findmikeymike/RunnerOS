@@ -102,6 +102,9 @@ function internalRecordAction<TInput extends Record<string, unknown>>(input: {
   recordType: string;
   operation?: 'append' | 'upsert';
   matchFields?: string[];
+  idempotencyKeyFields?: string[];
+  duplicateBehavior?: AppActionDefinition<TInput>['idempotency']['duplicateBehavior'];
+  piiFields?: string[];
   schema: JsonSchema;
   validate: (record: Record<string, unknown>) => TInput | AppActionError;
   summary: (input: TInput) => string;
@@ -115,10 +118,10 @@ function internalRecordAction<TInput extends Record<string, unknown>>(input: {
     kind: 'create',
     risk: 'internal_write',
     inputSchema: input.schema,
-    idempotency: { required: true, keyFields: ['title'], duplicateWindowSeconds: 86400, duplicateBehavior: 'return_prior' },
+    idempotency: { required: true, keyFields: input.idempotencyKeyFields ?? ['title'], duplicateWindowSeconds: 86400, duplicateBehavior: input.duplicateBehavior ?? 'return_prior' },
     approvalPolicy: { mode: 'never', summaryFields: ['title'], snapshotFields: ['title'] },
     capability: { defaultGrant: 'specialist', requiredActionGrants: [input.id], allowedBackground: true },
-    audit: { redactInputFields: [], redactOutputFields: [], piiFields: [] },
+    audit: { redactInputFields: [], redactOutputFields: [], piiFields: input.piiFields ?? [] },
     uiEvents: [{ type: `${input.surface}:updated`, target: input.recordType }],
     validate: (raw) => validateRecord(raw, input.validate),
     preview: (_ctx, normalized) => ({
@@ -327,7 +330,7 @@ export const APP_ACTION_DEFINITIONS: Array<AppActionDefinition<any, any>> = [
     idempotency: { required: true, keyFields: ['paths', 'kindHint'], duplicateWindowSeconds: 86400, duplicateBehavior: 'return_prior' },
     approvalPolicy: { mode: 'never', summaryFields: ['paths'], snapshotFields: ['paths', 'kindHint'] },
     capability: { defaultGrant: 'specialist', requiredActionGrants: ['vault.add_file'], allowedBackground: true },
-    audit: { redactInputFields: [], redactOutputFields: [], piiFields: ['paths'] },
+    audit: { redactInputFields: [], redactOutputFields: [], piiFields: ['paths', 'relativePath'] },
     uiEvents: [{ type: 'vault:updated' }],
     availability: callbackAvailability('addVaultFiles', 'Vault'),
     validate: (raw) => validateRecord(raw, (record) => {
@@ -369,7 +372,7 @@ export const APP_ACTION_DEFINITIONS: Array<AppActionDefinition<any, any>> = [
     idempotency: { required: true, keyFields: ['outputId', 'assetId', 'kindHint'], duplicateWindowSeconds: 86400, duplicateBehavior: 'return_prior' },
     approvalPolicy: { mode: 'never', summaryFields: ['outputId'], snapshotFields: ['outputId', 'assetId', 'kindHint'] },
     capability: { defaultGrant: 'specialist', requiredActionGrants: ['vault.add_from_output'], allowedBackground: true },
-    audit: { redactInputFields: [], redactOutputFields: [], piiFields: [] },
+    audit: { redactInputFields: [], redactOutputFields: [], piiFields: ['relativePath'] },
     uiEvents: [{ type: 'vault:updated' }],
     availability: callbackAvailability('addOutputToVault', 'Vault'),
     validate: (raw) => validateRecord(raw, (record) => {
@@ -497,6 +500,9 @@ export const APP_ACTION_DEFINITIONS: Array<AppActionDefinition<any, any>> = [
     recordType: 'people',
     operation: 'upsert',
     matchFields: ['email', 'socialHandle', 'name'],
+    idempotencyKeyFields: ['email', 'socialHandle', 'name'],
+    duplicateBehavior: 'merge',
+    piiFields: ['email', 'socialHandle', 'notes'],
     schema: objectSchema({
       name: stringSchema,
       email: optionalStringSchema,
@@ -533,6 +539,9 @@ export const APP_ACTION_DEFINITIONS: Array<AppActionDefinition<any, any>> = [
     recordType: 'fans',
     operation: 'upsert',
     matchFields: ['email', 'handle', 'name'],
+    idempotencyKeyFields: ['email', 'handle', 'name'],
+    duplicateBehavior: 'merge',
+    piiFields: ['email', 'handle', 'notes'],
     schema: objectSchema({
       name: stringSchema,
       email: optionalStringSchema,

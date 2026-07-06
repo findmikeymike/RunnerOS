@@ -276,7 +276,7 @@ export interface SessionConfig {
    * The middle pane in the Agents navigator filters sessions by this field
    * so each agent becomes its own work-stream.
    */
-  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number };
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number; parentAgentSlug?: string };
   launchReceipt?: SessionLaunchReceipt;
 }
 
@@ -381,7 +381,7 @@ export interface SessionHeader {
    * The middle pane in the Agents navigator filters sessions by this field
    * so each agent becomes its own work-stream.
    */
-  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number };
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number; parentAgentSlug?: string };
   launchReceipt?: SessionLaunchReceipt;
   // Pre-computed fields for fast list loading
   /** Number of messages in session */
@@ -462,6 +462,6 @@ export interface SessionMetadata {
   /** Message ID that this session was branched from (hard context cutoff marker). */
   branchFromMessageId?: string;
   /** Provenance for sessions spawned by summoning a saved Agent. */
-  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number };
+  spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number; parentAgentSlug?: string };
   launchReceipt?: SessionLaunchReceipt;
 }
