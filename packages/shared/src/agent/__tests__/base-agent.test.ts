@@ -6,12 +6,17 @@
  * and lifecycle management.
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { AbortReason } from '../backend/types.ts';
 import { isRunnerOsSelfEditIntent, shouldActivateImplicitSkill } from '../base-agent.ts';
 import {
   TestAgent,
   createMockBackendConfig,
+  createMockSession,
   createMockSource,
+  createMockWorkspace,
   collectEvents,
 } from './test-utils.ts';
 
@@ -185,6 +190,34 @@ describe('BaseAgent', () => {
       await collectEvents(agent.chat('test message'));
       expect(agent.chatCalls).toHaveLength(1);
       expect(agent.chatCalls[0]?.message).toBe('test message');
+    });
+
+    it('does not inject a skill reread directive after that skill was read in the same session', async () => {
+      const root = mkdtempSync(join(tmpdir(), 'runner-base-agent-skill-'));
+      try {
+        const skillDir = join(root, 'skills', 'artist-industry-hunter');
+        mkdirSync(skillDir, { recursive: true });
+        const skillPath = join(skillDir, 'SKILL.md');
+        writeFileSync(skillPath, '---\nname: Artist Industry Hunter\ndescription: Finds outreach targets.\n---\nUse industry research.\n');
+
+        const skillAgent = new TestAgent(createMockBackendConfig({
+          workspace: createMockWorkspace({ rootPath: root }),
+          session: createMockSession({ workspaceRootPath: root }),
+          agentSkillSlugs: ['artist-industry-hunter'],
+        }));
+
+        await collectEvents(skillAgent.chat('Find targets.'));
+        expect(skillAgent.chatCalls.at(-1)?.message).toContain('MUST read the following skill instruction files');
+        expect(skillAgent.chatCalls.at(-1)?.message).toContain(skillPath);
+
+        skillAgent.trackPrerequisiteRead({ file_path: skillPath });
+        await collectEvents(skillAgent.chat('Now enrich the email route.'));
+
+        expect(skillAgent.chatCalls.at(-1)?.message).not.toContain('MUST read the following skill instruction files');
+        expect(skillAgent.chatCalls.at(-1)?.message).not.toContain(skillPath);
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
     });
 
     it('should track abort calls', async () => {

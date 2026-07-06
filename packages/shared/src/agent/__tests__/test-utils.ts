@@ -157,6 +157,9 @@ export class TestAgent extends BaseAgent {
 
   // Expose protected state for testing
   getConfigWatcherManager() { return this.configWatcherManager; }
+  trackPrerequisiteRead(input: Record<string, unknown>): void {
+    this.prerequisiteManager.trackReadTool(input);
+  }
 
   // Helper to reset tracking
   resetTracking(): void {
