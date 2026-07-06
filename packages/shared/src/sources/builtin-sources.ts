@@ -752,13 +752,17 @@ export function getGoogleCalendarSource(workspaceId: string, workspaceRootPath: 
     provider: 'google',
     type: 'api',
     api: {
-      baseUrl: 'https://calendar.googleapis.com/calendar/v3',
+      baseUrl: 'https://www.googleapis.com/calendar/v3',
       authType: 'oauth',
       googleService: 'calendar',
       googleScopes: [
         'https://www.googleapis.com/auth/calendar.events',
         'https://www.googleapis.com/auth/userinfo.email',
       ],
+      testEndpoint: {
+        method: 'GET',
+        path: '/calendars/primary/events?maxResults=1',
+      },
     },
     tagline: 'Sync Artist HQ dates, deadlines, meetings, releases, and reminders to Google Calendar.',
     icon: '📅',
@@ -841,7 +845,7 @@ export function getGoogleDriveSource(workspaceId: string, workspaceRootPath: str
     provider: 'google',
     type: 'api',
     api: {
-      baseUrl: 'https://drive.googleapis.com/drive/v3',
+      baseUrl: 'https://www.googleapis.com/drive/v3',
       authType: 'oauth',
       googleService: 'drive',
       googleScopes: [
@@ -849,6 +853,10 @@ export function getGoogleDriveSource(workspaceId: string, workspaceRootPath: str
         'https://www.googleapis.com/auth/drive.metadata.readonly',
         'https://www.googleapis.com/auth/userinfo.email',
       ],
+      testEndpoint: {
+        method: 'GET',
+        path: '/files?pageSize=1&fields=files(id,name,mimeType)',
+      },
     },
     tagline: 'Attach selected Drive files and folders as workspace context without granting full-drive access.',
     icon: '🗂️',

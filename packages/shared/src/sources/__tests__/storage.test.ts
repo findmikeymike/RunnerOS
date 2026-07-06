@@ -710,7 +710,49 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.provider).toBe('google');
     expect(sources[0]!.config.api?.authType).toBe('oauth');
     expect(sources[0]!.config.api?.googleService).toBe('calendar');
+    expect(sources[0]!.config.api?.baseUrl).toBe('https://www.googleapis.com/calendar/v3');
+    expect(sources[0]!.config.api?.testEndpoint?.path).toBe('/calendars/primary/events?maxResults=1');
     expect(sources[0]!.config.api?.googleScopes).toContain('https://www.googleapis.com/auth/calendar.events');
+  });
+
+  test('normalizes stale workspace google calendar API host and test endpoint', () => {
+    const ws = makeWorkspace();
+    writeWorkspaceSource(ws, 'google-calendar', {
+      provider: 'google',
+      type: 'api',
+      api: {
+        baseUrl: 'https://calendar.googleapis.com/calendar/v3',
+        authType: 'oauth',
+        googleService: 'calendar',
+        googleScopes: ['https://www.googleapis.com/auth/calendar.events'],
+      },
+    });
+
+    const sources = getSourcesBySlugs(ws, ['google-calendar']);
+
+    expect(sources[0]!.tier).toBe('workspace');
+    expect(sources[0]!.config.api?.baseUrl).toBe('https://www.googleapis.com/calendar/v3');
+    expect(sources[0]!.config.api?.testEndpoint?.path).toBe('/calendars/primary/events?maxResults=1');
+  });
+
+  test('normalizes stale workspace google drive API host and test endpoint', () => {
+    const ws = makeWorkspace();
+    writeWorkspaceSource(ws, 'google-drive', {
+      provider: 'google',
+      type: 'api',
+      api: {
+        baseUrl: 'https://drive.googleapis.com/drive/v3',
+        authType: 'oauth',
+        googleService: 'drive',
+        googleScopes: ['https://www.googleapis.com/auth/drive.metadata.readonly'],
+      },
+    });
+
+    const sources = getSourcesBySlugs(ws, ['google-drive']);
+
+    expect(sources[0]!.tier).toBe('workspace');
+    expect(sources[0]!.config.api?.baseUrl).toBe('https://www.googleapis.com/drive/v3');
+    expect(sources[0]!.config.api?.testEndpoint?.path).toBe('/files?pageSize=1&fields=files(id,name,mimeType)');
   });
 
   test('resolves youtube-research by slug without workspace activation', () => {
