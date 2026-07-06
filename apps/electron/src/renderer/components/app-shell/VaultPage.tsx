@@ -52,14 +52,13 @@ const CATEGORIES: Array<{
   label: string
   icon: React.ElementType
   hint: VaultKindHint
-  description: string
 }> = [
-  { id: 'music', label: 'Music', icon: Music2, hint: 'master-final', description: 'Masters, demos, stems, beats, lyrics.' },
-  { id: 'video', label: 'Video', icon: Video, hint: 'raw-footage', description: 'Raw footage, clips, edits, finals.' },
-  { id: 'visuals', label: 'Visuals', icon: Image, hint: 'cover-art', description: 'Cover art, photos, logos, merch.' },
-  { id: 'campaigns', label: 'Campaigns', icon: FileArchive, hint: 'any', description: 'Release, ad, press, social packs.' },
-  { id: 'business', label: 'Business', icon: Lock, hint: 'contract', description: 'Contracts, splits, invoices, one-sheets.' },
-  { id: 'references', label: 'References', icon: Layers, hint: 'any', description: 'Moodboards, inspiration, swipe files.' },
+  { id: 'music', label: 'Music', icon: Music2, hint: 'master-final' },
+  { id: 'video', label: 'Video', icon: Video, hint: 'raw-footage' },
+  { id: 'visuals', label: 'Visuals', icon: Image, hint: 'cover-art' },
+  { id: 'campaigns', label: 'Campaigns', icon: FileArchive, hint: 'any' },
+  { id: 'business', label: 'Business', icon: Lock, hint: 'contract' },
+  { id: 'references', label: 'References', icon: Layers, hint: 'any' },
 ]
 
 const CATEGORY_KIND_LABELS: Record<VaultCategory, Array<{ kind: VaultAssetKind; label: string }>> = {
@@ -287,7 +286,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   return (
     <div className="h-full overflow-hidden bg-[#050505] text-white">
       <div className="flex h-full flex-col px-5 py-4 xl:px-7">
-        <header className="mb-4 shrink-0 rounded-[18px] border border-white/[0.055] bg-[#090909] px-5 py-4">
+        <header className="mb-3 shrink-0 rounded-[18px] border border-white/[0.055] bg-[#090909] px-5 py-4">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-1">
@@ -295,9 +294,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                 <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/52">Artist Library</span>
               </div>
               <h1 className="text-4xl font-medium tracking-tight text-white/92">Vault</h1>
-              <p className="mt-1 max-w-2xl text-sm text-white/46">
-                Global artist assets for {workspaceName || 'this workspace'}: final files, references, private docs, and agent-safe material.
-              </p>
+              <p className="mt-1 max-w-2xl text-sm text-white/42">{workspaceName || 'Workspace'} files, references, and private material.</p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <ToolbarButton disabled={busy !== null} onClick={() => void startImport('any')} icon={Upload} label="Import" active={busy === 'choose:any'} />
@@ -308,10 +305,9 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
           </div>
         </header>
 
-        <div className="mb-4 grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+        <div className="mb-3 grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
           {CATEGORIES.map((category) => {
             const count = assets.filter((asset) => asset.category === category.id).length
-            const usable = assets.filter((asset) => asset.category === category.id && isAgentUsable(asset)).length
             const Icon = category.icon
             const active = selectedCategory === category.id
             return (
@@ -324,20 +320,17 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                   setSelectedAssetId(assets.find((asset) => asset.category === category.id)?.id ?? null)
                 }}
                 className={cn(
-                  'group min-h-[116px] rounded-[14px] border p-3 text-left transition-colors',
-                  active ? 'border-[#f97316]/45 bg-[#2a1206]/70' : 'border-white/[0.055] bg-[#0b0b0b] hover:border-white/[0.12] hover:bg-white/[0.035]',
+                  'group flex h-[76px] items-center justify-between rounded-[14px] border px-4 text-left transition-colors',
+                  active ? 'border-[#f97316]/40 bg-[#f97316]/10' : 'border-white/[0.055] bg-[#0b0b0b] hover:border-white/[0.12] hover:bg-white/[0.035]',
                 )}
               >
-                <div className="mb-3 flex items-center justify-between">
-                  <Icon className={cn('h-4 w-4', active ? 'text-[#f97316]' : 'text-white/42')} />
-                  <span className="rounded-full border border-white/[0.06] px-2 py-0.5 text-[10px] text-white/48">{count}</span>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border', active ? 'border-[#f97316]/25 bg-[#f97316]/12' : 'border-white/[0.055] bg-white/[0.025]')}>
+                    <Icon className={cn('h-4 w-4', active ? 'text-[#f97316]' : 'text-white/42')} />
+                  </span>
+                  <div className="truncate text-sm font-semibold text-white/84">{category.label}</div>
                 </div>
-                <div className="text-sm font-semibold text-white/84">{category.label}</div>
-                <div className="mt-1 line-clamp-2 text-[11px] leading-4 text-white/38">{category.description}</div>
-                <div className="mt-3 flex items-center gap-1.5 text-[10px] text-white/36">
-                  <ShieldCheck className="h-3 w-3 text-emerald-300/55" />
-                  {usable} agent-ready
-                </div>
+                <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[10px]', active ? 'border-[#f97316]/20 text-white/70' : 'border-white/[0.06] text-white/42')}>{count}</span>
               </button>
             )
           })}
@@ -345,11 +338,11 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
 
         <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <main className="min-h-0 overflow-hidden rounded-[18px] border border-white/[0.055] bg-[#080808]">
-            <div className="border-b border-white/[0.06] p-3">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="border-b border-white/[0.06] p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-white/88">{categoryLabel(selectedCategory)}</h2>
-                  <p className="text-xs text-white/38">{filteredAssets.length} shown · {categoryAssets.length} in category</p>
+                  <p className="text-xs text-white/34">{filteredAssets.length} of {categoryAssets.length}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <SegmentedButton active={viewMode === 'grid'} onClick={() => setViewMode('grid')} icon={Grid3X3} label="Grid" />
@@ -378,8 +371,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                 </label>
                 <select value={agentFilter} onChange={(event) => setAgentFilter(event.target.value as typeof agentFilter)} className="h-9 rounded-[10px] border border-white/[0.06] bg-[#0b0b0b] px-3 text-xs text-white/70 outline-none">
                   <option value="all">All visibility</option>
-                  <option value="usable">Agent-ready</option>
-                  <option value="private">Private / blocked</option>
+                  <option value="usable">Ready</option>
+                  <option value="private">Private</option>
                 </select>
                 <button
                   type="button"
@@ -409,9 +402,9 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
               </div>
             </div>
 
-            <div className="h-full min-h-0 overflow-y-auto p-3 pb-28">
+            <div className="h-full min-h-0 overflow-y-auto p-4 pb-28">
               {filteredAssets.length === 0 ? (
-                <EmptyState category={selectedCategory} onAdd={() => void startImport(CATEGORIES.find((item) => item.id === selectedCategory)?.hint ?? 'any')} />
+                <EmptyState category={selectedCategory} />
               ) : viewMode === 'grid' ? (
                 <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
                   {filteredAssets.map((asset) => (
@@ -482,8 +475,14 @@ function AssetDetailPanel({
 
   if (!asset) {
     return (
-      <aside className="hidden rounded-[18px] border border-white/[0.055] bg-[#080808] p-5 text-sm text-white/42 xl:block">
-        Select an asset to edit purpose, privacy, tags, song matching, and notes.
+      <aside className="hidden rounded-[18px] border border-white/[0.055] bg-[#080808] p-5 xl:flex xl:items-center xl:justify-center">
+        <div className="text-center">
+          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-[14px] border border-white/[0.055] bg-white/[0.025]">
+            <FileText className="h-5 w-5 text-white/24" />
+          </div>
+          <div className="text-sm font-medium text-white/58">Select an asset</div>
+          <div className="mt-1 text-xs text-white/30">Details appear here.</div>
+        </div>
       </aside>
     )
   }
@@ -730,16 +729,15 @@ function AssetRow({ asset, selected, onSelect }: { asset: VaultAssetRecord; sele
   )
 }
 
-function EmptyState({ category, onAdd }: { category: VaultCategory; onAdd: () => void }) {
+function EmptyState({ category }: { category: VaultCategory }) {
   const Icon = CATEGORIES.find((item) => item.id === category)?.icon ?? FolderOpen
   return (
-    <div className="flex min-h-[280px] flex-col items-center justify-center rounded-[14px] border border-dashed border-white/[0.07] bg-white/[0.015] text-center">
-      <Icon className="mb-3 h-9 w-9 text-white/18" />
+    <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[14px] border border-dashed border-white/[0.06] bg-white/[0.012] text-center">
+      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-[16px] border border-white/[0.05] bg-white/[0.02]">
+        <Icon className="h-5 w-5 text-white/24" />
+      </div>
       <div className="text-sm font-semibold text-white/64">No {categoryLabel(category).toLowerCase()} assets yet</div>
-      <button type="button" onClick={onAdd} className="mt-4 inline-flex h-9 items-center gap-2 rounded-[9px] bg-white/90 px-4 text-sm font-semibold text-black hover:bg-white">
-        <Plus className="h-4 w-4" />
-        Add Assets
-      </button>
+      <div className="mt-1 text-xs text-white/30">Use Add above to import files.</div>
     </div>
   )
 }
@@ -777,7 +775,7 @@ function VisibilityBadge({ asset }: { asset: VaultAssetRecord }) {
   return (
     <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-medium', usable ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200/72' : 'border-white/[0.07] bg-white/[0.025] text-white/40')}>
       {usable ? <ShieldCheck className="h-3 w-3" /> : <Lock className="h-3 w-3" />}
-      {usable ? 'Agent' : 'Private'}
+      {usable ? 'Ready' : 'Private'}
     </span>
   )
 }
