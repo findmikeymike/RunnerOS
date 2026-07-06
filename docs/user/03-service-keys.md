@@ -68,6 +68,8 @@ Use these for Gmail, Calendar, Drive, YouTube, and Google Ads features.
 
 For Gmail/Drive/Calendar, OAuth is usually better than pasting raw tokens.
 
+For Runner's Google sources, make sure the matching Google Cloud APIs are enabled: Gmail API, Google Calendar API, and Google Drive API. Source/API paths should resolve through `https://www.googleapis.com/...`; old direct hosts like `drive.googleapis.com/drive/v3` and `calendar.googleapis.com/calendar/v3` can return misleading 404s.
+
 ## Social / Publishing / Ads
 
 Use these for posting, account reads, and paid media.
