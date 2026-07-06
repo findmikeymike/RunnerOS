@@ -1036,8 +1036,10 @@ ${formattedMessages}
    * Called from chat() — all agents get the same directive prepended to their message.
    */
   protected formatSkillDirective(skillPaths: Map<string, string>): string {
-    if (skillPaths.size === 0) return '';
-    const pathList = [...skillPaths.entries()]
+    const unreadSkillPaths = [...skillPaths.entries()]
+      .filter(([, path]) => !this.prerequisiteManager.hasRead(path));
+    if (unreadSkillPaths.length === 0) return '';
+    const pathList = unreadSkillPaths
       .map(([slug, path]) => `- ${path} (skill: ${slug})`)
       .join('\n');
     return `Before proceeding with the user's request, you MUST read the following skill instruction files using the Read tool or \`cat\` via Bash:\n${pathList}\n\nDo not take any other action until you have read these files.`;
