@@ -154,6 +154,10 @@ When calling `artwork_compose`, provide:
 - base image path if available
 - text layers with `text`, `x`, `y`, `fontSize`, `fontFamily`, `fontWeight`, `fill`, `anchor`, `letterSpacing`, `maxWidth`
 - shape layers for labels, strips, frames, badges, stickers, or editorial rules
+- do **not** add a rectangle/box behind type by default; only add a backing shape when the user explicitly asks for a label/sticker/strip or when readability absolutely requires it
+- if a backing shape is needed, make it an intentional designed element (label, sticker, caption strip) with clear style rationale; avoid low-opacity rectangles that create accidental halos, outlines, or "not transparent" bugs around text
+- for simple cover typography, prefer direct text over the image using placement, scale, contrast, shadow-free color choice, or a subtle text opacity change before using any background shape
+- after composing, visually inspect for visible bounding boxes, halos, export artifacts, or accidental shape edges around type; if present, remove the shape and re-compose
 - `exportPng: true`
 - `publishOutput: true`
 - `showInCanvas: true`
