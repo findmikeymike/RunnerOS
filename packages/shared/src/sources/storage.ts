@@ -489,6 +489,11 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
   const activatedGlobals = new Set(readGlobalSourcesManifest(workspaceRootPath).activatedSlugs);
 
   for (const slug of slugs) {
+    if (slug === 'computer-use') {
+      sources.push({ ...getComputerUseSource(workspaceId, workspaceRootPath), tier: 'project' });
+      continue;
+    }
+
     // Priority: workspace > activated global > built-in/project.
     const source = loadSource(workspaceRootPath, slug);
     if (source) {
@@ -506,9 +511,7 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
     }
 
     if (isBuiltinSource(slug)) {
-      if (slug === 'computer-use') {
-        sources.push({ ...getComputerUseSource(workspaceId, workspaceRootPath), tier: 'project' });
-      } else if (slug === 'field-theory') {
+      if (slug === 'field-theory') {
         sources.push({ ...getFieldTheorySource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'printing-press-social') {
         sources.push({ ...getPrintingPressSocialSource(workspaceId, workspaceRootPath), tier: 'project' });
@@ -581,6 +584,7 @@ export function loadAllSources(
   const result: LoadedSource[] = [];
 
   for (const s of loadWorkspaceSources(workspaceRootPath)) {
+    if (s.config.slug === 'computer-use') continue;
     if (seen.has(s.config.slug)) continue;
     seen.add(s.config.slug);
     result.push(s);
