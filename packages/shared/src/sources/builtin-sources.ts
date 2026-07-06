@@ -69,6 +69,24 @@ function getComputerUseScriptPath(): string {
   return getResourceScriptPath('background-computer-use-mcp.ts');
 }
 
+function getComputerUseClientPath(): string | null {
+  const executable = join(
+    'Codex Computer Use.app',
+    'Contents',
+    'SharedSupport',
+    'SkyComputerUseClient.app',
+    'Contents',
+    'MacOS',
+    'SkyComputerUseClient',
+  );
+  const candidates = [
+    process.env.CRAFT_COMPUTER_USE_CLIENT ?? '',
+    join(homedir(), '.codex', 'computer-use', executable),
+    join(homedir(), '.codex', 'plugins', 'cache', 'openai-bundled', 'computer-use', '1.0.857', executable),
+  ].filter(Boolean);
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
 function getFieldTheoryScriptPath(): string {
   return getResourceScriptPath('field-theory-mcp.ts');
 }
@@ -344,17 +362,35 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
  * session when an agent/session explicitly enables the `computer-use` source.
  */
 export function getComputerUseSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const computerUseClientPath = getComputerUseClientPath();
+  const workflowGuide = computerUseClientPath
+    ? [
+        'Workflow:',
+        '1. Call `list_apps` to confirm the target app is available.',
+        '2. Call `get_app_state` before every meaningful UI action; it starts the app-use session and returns the screenshot plus accessibility tree.',
+        '3. Prefer element indexes from the observed accessibility tree. Use coordinates only when needed.',
+        '4. Use `click`, `type_text`, `set_value`, `press_key`, `scroll`, `drag`, `select_text`, or `perform_secondary_action` based on the observed state.',
+        '5. Ask the user before submit, send, purchase, delete, credential entry, system settings changes, or any irreversible action.',
+      ]
+    : [
+        'Workflow:',
+        '1. Call `computer_use_status` first.',
+        '2. Call `computer_use_list_apps` and `computer_use_list_windows` to find the target.',
+        '3. Call `computer_use_observe_window` before every meaningful UI action.',
+        '4. Prefer semantic targets from the observed accessibility tree. Use coordinates only when needed.',
+        '5. Ask the user before submit, send, purchase, delete, credential entry, or any irreversible action.',
+      ];
   const config: FolderSourceConfig = {
     id: 'builtin-computer-use',
     name: 'Computer Use',
     slug: COMPUTER_USE_SLUG,
     enabled: true,
-    provider: 'background-computer-use',
+    provider: computerUseClientPath ? 'computer-use' : 'background-computer-use',
     type: 'mcp',
     mcp: {
       transport: 'stdio',
-      command: process.env.CRAFT_BUN || 'bun',
-      args: ['run', getComputerUseScriptPath()],
+      command: computerUseClientPath ?? (process.env.CRAFT_BUN || 'bun'),
+      args: computerUseClientPath ? ['mcp'] : ['run', getComputerUseScriptPath()],
       authType: 'none',
     },
     tagline: 'Inspect and control local macOS app windows with screenshot-backed tools.',
@@ -374,12 +410,7 @@ export function getComputerUseSource(workspaceId: string, workspaceRootPath: str
         '',
         'Use this source when the user explicitly wants a local desktop app controlled or inspected.',
         '',
-        'Workflow:',
-        '1. Call `computer_use_status` first.',
-        '2. Call `computer_use_list_apps` and `computer_use_list_windows` to find the target.',
-        '3. Call `computer_use_observe_window` before every meaningful UI action.',
-        '4. Prefer semantic targets from the observed accessibility tree. Use coordinates only when needed.',
-        '5. Ask the user before submit, send, purchase, delete, credential entry, or any irreversible action.',
+        ...workflowGuide,
       ].join('\n'),
     },
     isBuiltin: true,

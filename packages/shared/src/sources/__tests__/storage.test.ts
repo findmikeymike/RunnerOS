@@ -16,6 +16,10 @@ import type { PatternWithComment } from '../../agent/permissions-config.ts';
 const sandboxHome = mkdtempSync(join(tmpdir(), 'global-sources-home-'));
 const sandboxHomeResolved = resolve(sandboxHome);
 const realHomeSourcesDir = resolve(join(os.homedir(), '.agents', 'sources'));
+const originalComputerUseClient = process.env.CRAFT_COMPUTER_USE_CLIENT;
+const fakeComputerUseClient = join(sandboxHome, 'SkyComputerUseClient');
+writeFileSync(fakeComputerUseClient, '');
+process.env.CRAFT_COMPUTER_USE_CLIENT = fakeComputerUseClient;
 mock.module('os', () => ({
   ...os,
   homedir: () => sandboxHome,
@@ -48,6 +52,11 @@ const {
 const { parsePermissionsJson, loadSourcePermissionsConfig, permissionsConfigCache } = permissions;
 
 afterAll(() => {
+  if (originalComputerUseClient === undefined) {
+    delete process.env.CRAFT_COMPUTER_USE_CLIENT;
+  } else {
+    process.env.CRAFT_COMPUTER_USE_CLIENT = originalComputerUseClient;
+  }
   try {
     rmSync(sandboxHome, { recursive: true, force: true });
   } catch {
@@ -98,17 +107,18 @@ function writeGlobalSource(slug: string, partial: Partial<FolderSourceConfig> = 
   writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
 }
 
-function writeWorkspaceSource(ws: string, slug: string): void {
+function writeWorkspaceSource(ws: string, slug: string, partial: Partial<FolderSourceConfig> = {}): void {
   const dir = join(ws, 'sources', slug);
   mkdirSync(dir, { recursive: true });
   const config: FolderSourceConfig = {
     id: `${slug}_ws`,
-    name: slug,
+    name: partial.name ?? slug,
     slug,
-    enabled: true,
-    provider: 'custom',
-    type: 'mcp',
-    mcp: { transport: 'http', url: 'https://workspace.test/mcp', authType: 'none' },
+    enabled: partial.enabled ?? true,
+    provider: partial.provider ?? 'custom',
+    type: partial.type ?? 'mcp',
+    mcp: partial.mcp ?? { transport: 'http', url: 'https://workspace.test/mcp', authType: 'none' },
+    ...partial,
   };
   writeFileSync(join(dir, 'config.json'), JSON.stringify(config));
 }
@@ -356,6 +366,34 @@ describe('loadAllSources', () => {
     expect(found!.config.type).toBe('mcp');
     expect(found!.config.mcp?.transport).toBe('stdio');
     expect(found!.config.mcp?.authType).toBe('none');
+    expect(found!.config.mcp?.args).toEqual(['mcp']);
+    expect(found!.config.mcp?.command).toContain('SkyComputerUseClient');
+    expect(found!.guide?.raw).toContain('get_app_state');
+  });
+
+  test('ignores stale workspace computer-use copies and keeps the built-in source authoritative', () => {
+    const ws = makeWorkspace();
+    writeWorkspaceSource(ws, 'computer-use', {
+      id: 'builtin-computer-use',
+      provider: 'background-computer-use',
+      mcp: {
+        transport: 'stdio',
+        command: 'bun',
+        args: ['run', '/old/background-computer-use-mcp.ts'],
+        authType: 'none',
+      },
+    });
+
+    const all = loadAllSources(ws);
+    const matches = all.filter((s: LoadedSource) => s.config.slug === 'computer-use');
+    const bySlug = getSourcesBySlugs(ws, ['computer-use']);
+
+    expect(matches.length).toBe(1);
+    expect(matches[0]!.tier).toBe('project');
+    expect(matches[0]!.config.mcp?.command).toContain('SkyComputerUseClient');
+    expect(matches[0]!.config.mcp?.args).toEqual(['mcp']);
+    expect(bySlug[0]!.tier).toBe('project');
+    expect(bySlug[0]!.config.mcp?.command).toContain('SkyComputerUseClient');
   });
 
   test('includes field-theory as a project source', () => {
@@ -519,6 +557,7 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.slug).toBe('computer-use');
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.mcp?.transport).toBe('stdio');
+    expect(sources[0]!.config.mcp?.args).toEqual(['mcp']);
   });
 
   test('resolves field-theory by slug without workspace activation', () => {
