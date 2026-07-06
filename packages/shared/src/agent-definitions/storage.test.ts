@@ -867,6 +867,7 @@ body
     expect(artDirector?.metadata.skills).toContain('artist-visual-world-director')
     expect(artDirector?.metadata.skills).toContain('ad-creative')
     expect(artDirector?.metadata.skills).toContain('zero')
+    expect(artDirector?.metadata.optionalSources).toContain('media-generation')
     expect(artDirector?.metadata.optionalSources).toContain('zero')
     expect(artDirector?.metadata.trustedWorkerTools).toEqual(['artwork_compose', 'create_output'])
     expect(artDirector?.metadata.tags).toContain('album-art')
@@ -888,6 +889,8 @@ body
     expect(artDirector?.systemPrompt).toContain('Artwork Builder handoff')
     expect(artDirector?.systemPrompt).toContain('Never fake a real artist likeness')
     expect(artDirector?.systemPrompt).toContain('Do not queue generation until the user approves')
+    expect(artDirector?.systemPrompt).toContain('media-generation')
+    expect(artDirector?.systemPrompt).toContain('Do not ask for Squad-only keys')
     expect(artDirector?.systemPrompt).not.toContain('RunnerOS')
   })
 
