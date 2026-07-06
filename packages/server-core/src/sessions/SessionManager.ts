@@ -154,6 +154,10 @@ import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { filterAttachmentsForModelInput } from './runtime-config'
 
+function isTransientCodexSseHeaderTimeout(message: string): boolean {
+  return /\bcodex sse response headers timed out after \d+ms\b/i.test(message.trim())
+}
+
 // Import from server-core domain utilities
 import { sanitizeForTitle, shouldActivateBrowserOverlay, normalizeBrowserToolName, rollbackFailedBranchCreation, releaseBrowserOwnershipOnForcedStop } from '@craft-agent/server-core/domain'
 import { resizeImageForAPI, resizeIconBuffer } from '@craft-agent/server-core/services'
@@ -1435,6 +1439,7 @@ interface PendingDelta {
 
 export class SessionManager implements ISessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
+  private canvasVisualReviewAttempts: Map<string, number> = new Map()
   private automationMessagingBinder?: (input: {
     workspaceId: string
     sessionId: string
@@ -6954,6 +6959,16 @@ user a clickable link to where the thing now lives.`
   }): Promise<{ accepted: boolean; reason?: string }> {
     const managed = this.sessions.get(input.sessionId)
     if (!managed) throw new Error(`Session ${input.sessionId} not found`)
+    if (managed.isProcessing) {
+      return { accepted: false, reason: 'session busy' }
+    }
+
+    const reviewKey = `${input.sessionId}:${input.outputId}:${input.captureVersion}`
+    const previousAttemptAt = this.canvasVisualReviewAttempts.get(reviewKey) ?? 0
+    if (Date.now() - previousAttemptAt < 2 * 60_000) {
+      return { accepted: false, reason: 'visual review recently attempted' }
+    }
+
     if (managed.workspace.id !== input.workspaceId) {
       throw new Error(`Session "${input.sessionId}" is not in workspace "${input.workspaceId}".`)
     }
@@ -6993,6 +7008,7 @@ user a clickable link to where the thing now lives.`
       '</system-reminder>',
     ].join('\n')
 
+    this.canvasVisualReviewAttempts.set(reviewKey, Date.now())
     await this.sendMessage(input.sessionId, message, [attachment], undefined, { displayIntent: 'canvas-visual-review' })
     return { accepted: true }
   }
@@ -7444,6 +7460,14 @@ user a clickable link to where the thing now lives.`
           // If the last user message is newer than any assistant response, we got no reply
           // This can happen due to context overflow or API issues
           if (lastUserMsg && (!lastAssistantMsg || lastUserMsg.timestamp > lastAssistantMsg.timestamp)) {
+            if (managed.lastSentOptions?.displayIntent === 'canvas-visual-review') {
+              sessionLog.warn(`Canvas visual review completed without assistant response for session ${sessionId}`)
+              sendSpan.mark('chat.complete.canvas_review_no_response')
+              sendSpan.end()
+              this.onProcessingStopped(sessionId, 'complete')
+              return
+            }
+
             sessionLog.warn(`Session ${sessionId} completed without assistant response - possible context overflow or API issue`)
 
             // Check if there's a captured API error that explains the silent failure.
@@ -8713,6 +8737,14 @@ user a clickable link to where the thing now lives.`
         // Skip abort errors - these are expected when force-aborting via Query.close()
         if (event.message.includes('aborted') || event.message.includes('AbortError')) {
           sessionLog.info('Skipping abort error event (expected during interrupt)')
+          break
+        }
+
+        if (
+          managed.lastSentOptions?.displayIntent === 'canvas-visual-review' &&
+          isTransientCodexSseHeaderTimeout(event.message)
+        ) {
+          sessionLog.warn(`Suppressing transient Canvas visual review timeout for session ${sessionId}: ${event.message}`)
           break
         }
 
