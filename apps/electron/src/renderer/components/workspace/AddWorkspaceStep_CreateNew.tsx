@@ -16,6 +16,7 @@ interface AddWorkspaceStep_CreateNewProps {
   onBack: () => void
   onCreate: (folderPath: string, name: string) => Promise<void>
   isCreating: boolean
+  initialName?: string
 }
 
 /**
@@ -28,10 +29,11 @@ interface AddWorkspaceStep_CreateNewProps {
 export function AddWorkspaceStep_CreateNew({
   onBack,
   onCreate,
-  isCreating
+  isCreating,
+  initialName = '',
 }: AddWorkspaceStep_CreateNewProps) {
   const { t } = useTranslation()
-  const [name, setName] = useState('')
+  const [name, setName] = useState(initialName)
   const [locationOption, setLocationOption] = useState<LocationOption>('default')
   const [customPath, setCustomPath] = useState<string | null>(null)
   const [homeDir, setHomeDir] = useState('')

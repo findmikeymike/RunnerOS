@@ -146,6 +146,16 @@ const SECRET_PRESETS: SecretPreset[] = [
     storage: 'env',
   },
   {
+    group: 'Music / Lyrics',
+    name: 'GENIUS_ACCESS_TOKEN',
+    label: 'Genius access token',
+    description: 'Used by Lab song research for Genius song, artist, album art, annotation, and page lookup. Create a Genius API Client and generate a Client Access Token.',
+    placeholder: 'Genius Client Access Token',
+    storage: 'env',
+    setupUrl: 'https://genius.com/api-clients',
+    setupLabel: 'Get token',
+  },
+  {
     group: 'Promotion',
     name: 'TRYPOST_API_KEY',
     label: 'TryPost API key',
@@ -554,6 +564,13 @@ const SERVICES: SecretService[] = [
     presetNames: ['YOUTUBE_API_KEY'],
   },
   {
+    id: 'genius',
+    group: 'Music / Lyrics',
+    title: 'Genius',
+    description: 'Connect Genius lookup for song research, artist references, album art, annotations, and writing context.',
+    presetNames: ['GENIUS_ACCESS_TOKEN'],
+  },
+  {
     id: 'google-workspace',
     group: 'Workspace',
     title: 'Google Workspace',
@@ -840,7 +857,7 @@ export default function SecretsSettingsPage() {
     }
   }
 
-  const testService = (service: SecretService) => {
+  const testService = async (service: SecretService) => {
     const missing = missingRequiredPresets(service, savedByName, sourceBySlug, draftValues)
     if (missing.length > 0) {
       toast.error(`${service.title} is missing ${missing[0]!.label}`)
@@ -852,6 +869,20 @@ export default function SecretsSettingsPage() {
     }
     if (service.id === 'google-workspace') {
       toast.info('Google Workspace keys are saved. Google account connection is not built yet.')
+      return
+    }
+    if (service.id === 'genius') {
+      setBusyServiceId(service.id)
+      try {
+        const result = await window.electronAPI.testGeniusAccessToken(draftValues.GENIUS_ACCESS_TOKEN?.trim())
+        if (!result.success) {
+          toast.error(result.error || 'Genius token test failed')
+          return
+        }
+        toast.success(`Genius connected${typeof result.hits === 'number' ? ` · ${result.hits} search hits` : ''}`)
+      } finally {
+        setBusyServiceId(null)
+      }
       return
     }
     toast.success(`${service.title} setup looks ready`)
@@ -1090,16 +1121,28 @@ export default function SecretsSettingsPage() {
                                       type={preset.name.includes('DOMAIN') || preset.name.includes('URL') || preset.name.includes('URI') || preset.name.includes('VERSION') || preset.name.includes('ID') ? 'text' : 'password'}
                                       className="h-8 w-full rounded-[9px] border border-white/[0.07] bg-white/[0.02] px-3 text-sm text-white/82 outline-none placeholder:text-white/22 focus:border-[#fb923c]/45"
                                     />
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <button type="button" className="mt-2 text-left text-[11px] leading-4 text-white/30 transition-colors hover:text-white/52">
-                                          Guide
+                                    <div className="mt-2 flex items-center gap-3">
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <button type="button" className="text-left text-[11px] leading-4 text-white/30 transition-colors hover:text-white/52">
+                                            Guide
+                                          </button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[280px] text-xs">
+                                          {preset.description}
+                                        </TooltipContent>
+                                      </Tooltip>
+                                      {preset.setupUrl ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => void window.electronAPI.openUrl(preset.setupUrl!)}
+                                          className="inline-flex items-center gap-1 text-[11px] leading-4 text-white/30 transition-colors hover:text-white/60"
+                                        >
+                                          {preset.setupLabel ?? 'Open setup'}
+                                          <ExternalLink className="h-3 w-3" />
                                         </button>
-                                      </TooltipTrigger>
-                                      <TooltipContent side="top" className="max-w-[280px] text-xs">
-                                        {preset.description}
-                                      </TooltipContent>
-                                    </Tooltip>
+                                      ) : null}
+                                    </div>
                                   </div>
                                 )
                               })}
@@ -1117,10 +1160,11 @@ export default function SecretsSettingsPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => testService(service)}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs font-medium text-white/48 transition-colors hover:bg-white/[0.045] hover:text-white/70"
+                                onClick={() => void testService(service)}
+                                disabled={busy}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs font-medium text-white/48 transition-colors hover:bg-white/[0.045] hover:text-white/70 disabled:opacity-50"
                               >
-                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                                 Test
                               </button>
                             </div>

@@ -855,6 +855,36 @@ body
     expect(recordDoctor?.systemPrompt).toContain('Never mention internal app names')
   })
 
+  test('starter library includes Reverse Magic as a Lab lyric worker', () => {
+    const reverseMagic = STARTER_AGENTS.find((agent) => agent.slug === 'reverse-magic')
+
+    expect(reverseMagic).toBeDefined()
+    expect(reverseMagic?.metadata.name).toBe('Reverse Magic')
+    expect(reverseMagic?.metadata.permissionMode).toBe('ask')
+    expect(reverseMagic?.metadata.thinkingLevel).toBe('high')
+    expect(reverseMagic?.metadata.tags).toContain('lyrics')
+    expect(reverseMagic?.metadata.tags).toContain('annotations')
+    expect(reverseMagic?.systemPrompt).toContain('reverse-engineer why a song feels powerful')
+    expect(reverseMagic?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted lyrics')
+    expect(reverseMagic?.systemPrompt).toContain('Genius API')
+  })
+
+  test('starter library includes Legendary Writer with Yoga of Songwriting skill', () => {
+    const legendaryWriter = STARTER_AGENTS.find((agent) => agent.slug === 'legendary-writer')
+
+    expect(legendaryWriter).toBeDefined()
+    expect(legendaryWriter?.metadata.name).toBe('Legendary Writer')
+    expect(legendaryWriter?.metadata.permissionMode).toBe('ask')
+    expect(legendaryWriter?.metadata.thinkingLevel).toBe('high')
+    expect(legendaryWriter?.metadata.skills).toContain('yoga-of-songwriting')
+    expect(legendaryWriter?.metadata.tags).toContain('songwriting')
+    expect(legendaryWriter?.systemPrompt).toContain('Great Truth')
+    expect(legendaryWriter?.systemPrompt).toContain('Bones')
+    expect(legendaryWriter?.systemPrompt).toContain('Blood')
+    expect(legendaryWriter?.systemPrompt).toContain('Breathe')
+    expect(legendaryWriter?.systemPrompt).toContain('Do not imitate a living artist')
+  })
+
   test('starter library includes Art Director with taste-led image generation rules', () => {
     const artDirector = STARTER_AGENTS.find((agent) => agent.slug === 'art-director')
 

@@ -101,6 +101,27 @@ describe('route-parser: library routes', () => {
     expect(parseRouteToNavigationState('campaign')).toEqual({ navigator: 'campaign' })
   })
 
+  it('parses "lab" as the creative lab navigator', () => {
+    const parsed = parseCompoundRoute('lab')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'home', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('lab')
+    expect(parseRouteToNavigationState('lab')).toEqual({ navigator: 'lab' })
+  })
+
+  it('parses "lab/songs" as the lab songs tab', () => {
+    const parsed = parseCompoundRoute('lab/songs')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'songs', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('lab/songs')
+    expect(parseRouteToNavigationState('lab/songs')).toEqual({ navigator: 'lab', tab: 'songs' })
+  })
+
+  it('parses "lab/pad" as the lab song pad tab', () => {
+    const parsed = parseCompoundRoute('lab/pad')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'pad', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('lab/pad')
+    expect(parseRouteToNavigationState('lab/pad')).toEqual({ navigator: 'lab', tab: 'pad' })
+  })
+
   it('parses "agents" as the agents navigator', () => {
     const state = parseRouteToNavigationState('agents')
     expect(state).toEqual({ navigator: 'agents', details: null })

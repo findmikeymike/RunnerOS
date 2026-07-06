@@ -1,0 +1,646 @@
+import * as React from 'react'
+import {
+  Copy,
+  Eye,
+  EyeOff,
+  FlaskConical,
+  Info,
+  Layers,
+  Music2,
+  Plus,
+  Sparkles,
+  X,
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
+import {
+  ARTIST_PROFILE_CONTEXT_SLUG,
+  parseArtistProfileDocResult,
+  type ArtistProfile,
+} from '@/lib/artist-profile'
+
+interface LabSongPadPageProps {
+  workspaceId?: string
+  artistProfileWorkspaceId?: string
+  workspaceName?: string
+}
+
+type SelectionSource = 'rough' | 'remember'
+
+type SongSection = {
+  id: string
+  label: string
+  text: string
+  optional?: boolean
+}
+
+type LyricAgentPayload = {
+  action: LyricAgentAction
+  labWorkspaceId?: string
+  artistProfile: Pick<ArtistProfile, 'artistName' | 'themes' | 'sound' | 'similarArtists' | 'rules'>
+  song: {
+    title: string
+    roughText: string
+    rememberText: string
+    sections: SongSection[]
+  }
+  targetSection: SongSection
+}
+
+const INITIAL_SECTIONS: SongSection[] = [
+  { id: 'intro', label: 'Intro', text: '', optional: true },
+  {
+    id: 'verse-1',
+    label: 'V1',
+    text: 'I keep leaving town but every red light knows my name\nWindow down, I make the silence say it first',
+  },
+  { id: 'pre-chorus', label: 'Pre1', text: '', optional: true },
+  {
+    id: 'chorus',
+    label: 'Chorus',
+    text: 'Pretty trouble, dressed like I meant it\nSoft disaster, nobody gets it',
+  },
+  { id: 'verse-2', label: 'V2', text: '', optional: true },
+  { id: 'bridge', label: 'Bridge', text: '', optional: true },
+  { id: 'final-chorus', label: 'Chorus 2', text: '', optional: true },
+]
+
+const SECTION_BUTTONS = [
+  { id: 'verse-1', label: 'V1', title: 'Send to Verse 1' },
+  { id: 'pre-chorus', label: 'P', title: 'Send to Pre-Chorus' },
+  { id: 'chorus', label: 'C', title: 'Send to Chorus' },
+  { id: 'verse-2', label: 'V2', title: 'Send to Verse 2' },
+  { id: 'bridge', label: 'B', title: 'Send to Bridge' },
+]
+
+const LYRIC_AGENT_ACTIONS = [
+  { id: 'suggest', label: 'Suggest lines' },
+  { id: 'review', label: 'Review this' },
+  { id: 'stronger', label: 'Make stronger' },
+  { id: 'continue', label: 'Continue from here' },
+] as const
+
+type LyricAgentAction = typeof LYRIC_AGENT_ACTIONS[number]['id']
+
+function appendText(existing: string, incoming: string) {
+  const clean = incoming.trim()
+  if (!clean) return existing
+  return existing.trim() ? `${existing.trim()}\n${clean}` : clean
+}
+
+function removeSelectedText(existing: string, selected: string) {
+  if (!selected.trim()) return existing
+  return existing.replace(selected, '').replace(/\n{3,}/g, '\n\n').trimStart()
+}
+
+function textareaBase(extra?: string) {
+  return cn(
+    'w-full resize-none border-0 bg-transparent text-sm leading-7 tracking-normal text-white/82 outline-none placeholder:text-white/20',
+    extra,
+  )
+}
+
+function sectionRows(text: string) {
+  return Math.max(2, text.split('\n').length + 1)
+}
+
+function buildLyricAgentPayload({
+  action,
+  artistProfile,
+  workspaceId,
+  roughText,
+  rememberText,
+  sections,
+  targetSection,
+  title,
+}: {
+  action: LyricAgentAction
+  artistProfile: ArtistProfile
+  workspaceId?: string
+  roughText: string
+  rememberText: string
+  sections: SongSection[]
+  targetSection: SongSection
+  title: string
+}): LyricAgentPayload {
+  return {
+    action,
+    labWorkspaceId: workspaceId,
+    artistProfile: {
+      artistName: artistProfile.artistName,
+      themes: artistProfile.themes,
+      sound: artistProfile.sound,
+      similarArtists: artistProfile.similarArtists,
+      rules: artistProfile.rules,
+    },
+    song: {
+      title,
+      roughText,
+      rememberText,
+      sections,
+    },
+    targetSection,
+  }
+}
+
+async function runInlineLyricAgent(workspaceId: string, payload: LyricAgentPayload): Promise<string> {
+  const session = await window.electronAPI.createSession(workspaceId, {
+    hidden: true,
+    name: `Lyric Agent - ${payload.targetSection.label}`,
+    permissionMode: 'safe',
+    thinkingLevel: 'medium',
+    customSystemPrompt: LYRIC_AGENT_SYSTEM_PROMPT,
+    spawnedFromAgent: {
+      agentSlug: 'lyric-agent',
+      agentName: 'Lyric Agent',
+      timestamp: Date.now(),
+    },
+  })
+
+  const response = waitForLyricAgentResponse(session.id)
+  try {
+    await window.electronAPI.sendMessage(session.id, buildLyricAgentPrompt(payload))
+    return await response.promise
+  } catch (err) {
+    response.cancel()
+    throw err
+  }
+}
+
+function waitForLyricAgentResponse(sessionId: string): { promise: Promise<string>; cancel: () => void } {
+  let cancel = () => {}
+  const promise = new Promise<string>((resolve, reject) => {
+    let settled = false
+    let latestText = ''
+    let cleanup: (() => void) | null = null
+    const timeout = window.setTimeout(() => {
+      finish(() => reject(new Error('Lyric agent timed out. Try again.')))
+    }, 90_000)
+
+    const finish = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeout)
+      cleanup?.()
+      fn()
+    }
+    cancel = () => finish(() => reject(new Error('Lyric agent cancelled.')))
+
+    cleanup = window.electronAPI.onSessionEvent((event) => {
+      if (!('sessionId' in event) || event.sessionId !== sessionId) return
+      if (event.type === 'text_complete' && !event.isIntermediate) {
+        latestText = event.text.trim()
+        if (latestText) {
+          finish(() => resolve(latestText))
+        }
+      } else if (event.type === 'error') {
+        finish(() => reject(new Error(event.error)))
+      } else if (event.type === 'typed_error') {
+        finish(() => reject(new Error(event.error.message || event.error.title || 'Lyric agent failed.')))
+      } else if (event.type === 'complete' && latestText) {
+        finish(() => resolve(latestText))
+      }
+    })
+  })
+  return { promise, cancel }
+}
+
+const LYRIC_AGENT_SYSTEM_PROMPT = [
+  'You are Lyric Agent, a concise songcraft collaborator inside a writing pad.',
+  'Use the full artist profile and full song context, but focus your answer on the target section.',
+  'Do not give generic writing advice unless the action is review.',
+  'Keep outputs short enough to insert into a section.',
+  'Do not rewrite other sections unless directly asked.',
+  'For line suggestions, return only usable lyric lines. No preamble.',
+].join('\n')
+
+function buildLyricAgentPrompt(payload: LyricAgentPayload) {
+  return [
+    `Action: ${payload.action}`,
+    `Target section: ${payload.targetSection.label}`,
+    '',
+    'Artist profile:',
+    JSON.stringify(payload.artistProfile, null, 2),
+    '',
+    'Song:',
+    `Title: ${payload.song.title}`,
+    '',
+    'Rough pad:',
+    payload.song.roughText || '(empty)',
+    '',
+    'Remember this:',
+    payload.song.rememberText || '(empty)',
+    '',
+    'Structured sections:',
+    payload.song.sections.map((section) => [
+      `## ${section.label}`,
+      section.text || '(empty)',
+    ].join('\n')).join('\n\n'),
+    '',
+    'Target section current text:',
+    payload.targetSection.text || '(empty)',
+    '',
+    actionInstruction(payload.action),
+  ].join('\n')
+}
+
+function actionInstruction(action: LyricAgentAction) {
+  if (action === 'review') {
+    return 'Review only this target section. Give 3 short bullets: what works, what is weak, and one specific fix.'
+  }
+  if (action === 'stronger') {
+    return 'Rewrite or add stronger lyric lines for the target section. Return only the improved lines.'
+  }
+  if (action === 'continue') {
+    return 'Continue naturally from the target section. Return only new lyric lines.'
+  }
+  return 'Suggest 3-5 lyric lines that could fit this target section. Return only the lines.'
+}
+
+export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspaceName }: LabSongPadPageProps) {
+  const roughRef = React.useRef<HTMLTextAreaElement>(null)
+  const rememberRef = React.useRef<HTMLTextAreaElement>(null)
+  const [title, setTitle] = React.useState('Untitled night-drive hook')
+  const [roughText, setRoughText] = React.useState(
+    'I keep writing versions of leaving that still sound like staying\nEverybody called the ending while I was still becoming it\nWhat if the chorus is more confession than flex?\n\nlooking expensive / feeling unstable / making it sound controlled',
+  )
+  const [rememberText, setRememberText] = React.useState(
+    'Luxury as armor\nA private-life song about everyone having a camera and no real access\nSoft exit, no revenge',
+  )
+  const [sections, setSections] = React.useState<SongSection[]>(INITIAL_SECTIONS)
+  const [selectedText, setSelectedText] = React.useState('')
+  const [selectionSource, setSelectionSource] = React.useState<SelectionSource>('rough')
+  const [showEmptySections, setShowEmptySections] = React.useState(true)
+  const [activeAgentSectionId, setActiveAgentSectionId] = React.useState<string | null>(null)
+  const [agentOutput, setAgentOutput] = React.useState('')
+  const [agentBusy, setAgentBusy] = React.useState(false)
+  const [agentError, setAgentError] = React.useState('')
+  const { docs: artistProfileDocs } = useWorkspaceContext(artistProfileWorkspaceId)
+
+  const artistProfile = React.useMemo(
+    () => parseArtistProfileDocResult(artistProfileDocs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
+    [artistProfileDocs],
+  )
+
+  const captureSelection = React.useCallback((source: SelectionSource) => {
+    const node = source === 'rough' ? roughRef.current : rememberRef.current
+    if (!node) return
+    const value = node.value.slice(node.selectionStart, node.selectionEnd)
+    setSelectionSource(source)
+    setSelectedText(value)
+  }, [])
+
+  const clearMovedText = React.useCallback((text: string) => {
+    if (selectionSource === 'rough') {
+      setRoughText((current) => removeSelectedText(current, text))
+    } else {
+      setRememberText((current) => removeSelectedText(current, text))
+    }
+    setSelectedText('')
+  }, [selectionSource])
+
+  const sendSelectionToSection = React.useCallback((sectionId: string, shouldDuplicate = false) => {
+    const text = selectedText.trim()
+    if (!text) return
+    setSections((current) => current.map((section) => (
+      section.id === sectionId ? { ...section, text: appendText(section.text, text) } : section
+    )))
+    if (!shouldDuplicate) clearMovedText(selectedText)
+  }, [clearMovedText, selectedText])
+
+  const sendSelectionToRemember = React.useCallback((shouldDuplicate = false) => {
+    const text = selectedText.trim()
+    if (!text) return
+    setRememberText((current) => appendText(current, text))
+    if (!shouldDuplicate) clearMovedText(selectedText)
+  }, [clearMovedText, selectedText])
+
+  const updateSection = React.useCallback((sectionId: string, text: string) => {
+    setSections((current) => current.map((section) => (
+      section.id === sectionId ? { ...section, text } : section
+    )))
+  }, [])
+
+  const deleteSection = React.useCallback((sectionId: string) => {
+    setSections((current) => current.filter((section) => section.id !== sectionId))
+  }, [])
+
+  const addCustomSection = React.useCallback(() => {
+    setSections((current) => [
+      ...current,
+      { id: `section-${Date.now()}`, label: 'New Section', text: '', optional: true },
+    ])
+    setShowEmptySections(true)
+  }, [])
+
+  const runLyricAgent = React.useCallback(async (section: SongSection, action: LyricAgentAction) => {
+    if (!workspaceId) {
+      setAgentError('No Lab workspace is active.')
+      return
+    }
+    const payload = buildLyricAgentPayload({
+      action,
+      artistProfile,
+      workspaceId,
+      roughText,
+      rememberText,
+      sections,
+      targetSection: section,
+      title,
+    })
+    setActiveAgentSectionId(section.id)
+    setAgentOutput('')
+    setAgentError('')
+    setAgentBusy(true)
+    try {
+      const result = await runInlineLyricAgent(workspaceId, payload)
+      setAgentOutput(result)
+    } catch (err) {
+      setAgentError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAgentBusy(false)
+    }
+  }, [artistProfile, rememberText, roughText, sections, title, workspaceId])
+
+  const insertAgentOutput = React.useCallback((sectionId: string) => {
+    if (!agentOutput.trim()) return
+    setSections((current) => current.map((section) => (
+      section.id === sectionId ? { ...section, text: appendText(section.text, agentOutput) } : section
+    )))
+  }, [agentOutput])
+
+  const replaceWithAgentOutput = React.useCallback((sectionId: string) => {
+    if (!agentOutput.trim()) return
+    updateSection(sectionId, agentOutput)
+  }, [agentOutput, updateSection])
+
+  const sendAgentOutputToRemember = React.useCallback(() => {
+    if (!agentOutput.trim()) return
+    setRememberText((current) => appendText(current, agentOutput))
+  }, [agentOutput])
+
+  const visibleSections = showEmptySections
+    ? sections
+    : sections.filter((section) => section.text.trim())
+  const selectedCount = selectedText.trim().split(/\s+/).filter(Boolean).length
+
+  return (
+    <div className="runneros-glass-route flex h-full min-h-0 flex-col overflow-hidden bg-[#050505] text-white">
+      <div className="shrink-0 border-b border-white/[0.04] px-6 py-3">
+        <div className="flex w-full items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1.5 flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/38">
+              <FlaskConical className="h-3.5 w-3.5" />
+              Song Pad
+            </div>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              className="w-full border-0 bg-transparent text-xl font-semibold tracking-normal text-white/92 outline-none placeholder:text-white/25"
+              placeholder="Untitled song"
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.05] bg-white/[0.025] px-3 py-2 text-xs text-white/45">
+            <Music2 className="h-3.5 w-3.5" />
+            {workspaceName || 'Creative Lab'}
+          </div>
+        </div>
+      </div>
+
+      <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
+        <div className="grid w-full gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(460px,0.92fr)]">
+          <section className="flex min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.04] px-4 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex shrink-0 items-center gap-2 text-[9px] font-medium uppercase tracking-[0.15em] text-white/55">
+                  <Sparkles className="h-3 w-3 text-white/35" />
+                  Rough Pad
+                </div>
+                <div
+                  title="Highlight text and click to send to song section."
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/34"
+                >
+                  <Info className="h-3 w-3" />
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {SECTION_BUTTONS.map((section) => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    title={section.title}
+                    disabled={!selectedText.trim()}
+                    onClick={() => sendSelectionToSection(section.id)}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-[10px] font-semibold text-white/55 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-35"
+                  >
+                    {section.label}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  title="Send to Remember This"
+                  disabled={!selectedText.trim()}
+                  onClick={() => sendSelectionToRemember()}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#fb923c]/35 bg-[#fb923c]/10 text-[10px] font-semibold text-[#fbbf24] hover:bg-[#fb923c]/15 disabled:cursor-not-allowed disabled:opacity-35"
+                >
+                  R
+                </button>
+                <button
+                  type="button"
+                  title="Copy to Chorus"
+                  disabled={!selectedText.trim()}
+                  onClick={() => sendSelectionToSection('chorus', true)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/45 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-35"
+                >
+                  <Copy className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 p-4">
+              <textarea
+                ref={roughRef}
+                value={roughText}
+                onChange={(event) => setRoughText(event.target.value)}
+                onSelect={() => captureSelection('rough')}
+                onKeyUp={() => captureSelection('rough')}
+                onMouseUp={() => captureSelection('rough')}
+                placeholder="Dump lines, images, hooks, bad drafts, voice notes transcribed into words..."
+                className={textareaBase('min-h-[560px]')}
+              />
+
+              <div className="my-5 flex items-center gap-3">
+                <div className="h-px flex-1 bg-white/[0.07]" />
+                <div className="rounded-full border border-white/[0.07] bg-white/[0.025] px-3 py-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/34">
+                  Remember This
+                </div>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
+
+              <textarea
+                ref={rememberRef}
+                value={rememberText}
+                onChange={(event) => setRememberText(event.target.value)}
+                onSelect={() => captureSelection('remember')}
+                onKeyUp={() => captureSelection('remember')}
+                onMouseUp={() => captureSelection('remember')}
+                placeholder="Park strong lines, title ideas, images, references, or alternate bars here."
+                className={textareaBase('min-h-[170px] text-white/66')}
+              />
+            </div>
+
+            <div className="flex shrink-0 items-center justify-between border-t border-white/[0.04] px-4 py-3 text-[11px] text-white/34">
+              <span>{selectedText.trim() ? `${selectedCount} selected word${selectedCount === 1 ? '' : 's'} from ${selectionSource}` : 'Select a line or phrase to move it.'}</span>
+              <span>Move organizes. It never locks.</span>
+            </div>
+          </section>
+
+          <section className="flex min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.04] px-4 py-2.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.15em] text-white/55">
+                  <Layers className="h-3 w-3 text-white/35" />
+                  Song Structure
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  title={showEmptySections ? 'Hide empty sections' : 'Show empty sections'}
+                  onClick={() => setShowEmptySections((current) => !current)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/45 hover:bg-white/[0.05]"
+                >
+                  {showEmptySections ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                </button>
+                <button
+                  type="button"
+                  title="Add section"
+                  onClick={addCustomSection}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#fb923c]/35 bg-[#fb923c]/10 text-[#fbbf24] hover:bg-[#fb923c]/15"
+                >
+                  <Plus className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto px-4 py-2">
+              {visibleSections.map((section) => (
+                <article
+                  key={section.id}
+                  className={cn(
+                    'border-b border-white/[0.045] py-3 last:border-b-0',
+                    !section.text.trim() && 'opacity-55',
+                  )}
+                >
+                  <div className="mb-1.5 flex items-center justify-between gap-3">
+                    <div />
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <input
+                        value={section.label}
+                        onChange={(event) => {
+                          const label = event.target.value
+                          setSections((current) => current.map((item) => (
+                            item.id === section.id ? { ...item, label } : item
+                          )))
+                        }}
+                        className="w-20 border-0 bg-transparent text-right text-[10px] font-medium uppercase tracking-[0.12em] text-white/34 outline-none focus:text-white/62"
+                      />
+                      <Popover
+                        open={activeAgentSectionId === section.id}
+                        onOpenChange={(open) => {
+                          setActiveAgentSectionId(open ? section.id : null)
+                          if (!open) {
+                            setAgentOutput('')
+                            setAgentError('')
+                            setAgentBusy(false)
+                          }
+                        }}
+                      >
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            title="Lyric agent"
+                            className="flex h-5 w-5 items-center justify-center rounded-full text-white/18 transition-colors hover:bg-white/[0.045] hover:text-[#fbbf24]/70"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="end"
+                          side="left"
+                          className="w-[300px] border border-white/[0.08] bg-[#080808] p-3 text-white shadow-modal-small"
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <div className="text-[9px] font-medium uppercase tracking-[0.16em] text-white/42">
+                              Lyric Agent · {section.label}
+                            </div>
+                            <div className="text-[9px] text-white/24">HQ + full song</div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {LYRIC_AGENT_ACTIONS.map((action) => (
+                              <button
+                                key={action.id}
+                                type="button"
+                                onClick={() => runLyricAgent(section, action.id)}
+                                className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-2 py-1.5 text-left text-[11px] text-white/58 hover:bg-white/[0.05] hover:text-white/78"
+                              >
+                                {action.label}
+                              </button>
+                            ))}
+                          </div>
+                          {agentBusy ? (
+                            <div className="mt-3 rounded-lg border border-white/[0.055] bg-white/[0.018] p-2 text-xs text-white/42">
+                              Lyric agent is thinking...
+                            </div>
+                          ) : null}
+                          {agentError ? (
+                            <div className="mt-3 rounded-lg border border-red-500/20 bg-red-500/10 p-2 text-xs leading-5 text-red-100/72">
+                              {agentError}
+                            </div>
+                          ) : null}
+                          {agentOutput ? (
+                            <div className="mt-3">
+                              <div className="max-h-[180px] overflow-auto whitespace-pre-wrap rounded-lg border border-white/[0.055] bg-white/[0.018] p-2 text-xs leading-5 text-white/70">
+                                {agentOutput}
+                              </div>
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                <button type="button" onClick={() => insertAgentOutput(section.id)} className="rounded-full border border-white/[0.07] px-2.5 py-1 text-[10px] text-white/55 hover:bg-white/[0.05]">Insert</button>
+                                <button type="button" onClick={() => replaceWithAgentOutput(section.id)} className="rounded-full border border-white/[0.07] px-2.5 py-1 text-[10px] text-white/55 hover:bg-white/[0.05]">Replace</button>
+                                <button type="button" onClick={sendAgentOutputToRemember} className="rounded-full border border-white/[0.07] px-2.5 py-1 text-[10px] text-white/55 hover:bg-white/[0.05]">Remember</button>
+                              </div>
+                            </div>
+                          ) : null}
+                        </PopoverContent>
+                      </Popover>
+                      <button
+                        type="button"
+                        title="Delete section"
+                        onClick={() => deleteSection(section.id)}
+                        className="flex h-5 w-5 items-center justify-center rounded-full text-white/16 transition-colors hover:bg-white/[0.045] hover:text-white/50"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={section.text}
+                    rows={sectionRows(section.text)}
+                    onChange={(event) => updateSection(section.id, event.target.value)}
+                    placeholder={section.optional ? 'Optional' : 'Write lyrics here.'}
+                    className={textareaBase('overflow-hidden text-white/76 placeholder:text-white/14')}
+                  />
+                </article>
+              ))}
+              {!visibleSections.length ? (
+                <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.015] p-8 text-center text-sm text-white/35">
+                  Empty sections are hidden. Show empty sections or move a line from the rough pad.
+                </div>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  )
+}

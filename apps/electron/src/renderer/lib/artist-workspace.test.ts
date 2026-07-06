@@ -1,5 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistHQWorkspace } from './artist-workspace'
+import {
+  findArtistHQWorkspace,
+  findPrimaryCampaignWorkspace,
+  findPrimaryLabWorkspace,
+  isArtistHQWorkspace,
+  isLabWorkspace,
+} from './artist-workspace'
 
 describe('artist workspace helpers', () => {
   test('recognizes the global artist HQ workspace', () => {
@@ -40,6 +46,39 @@ describe('artist workspace helpers', () => {
     ]
 
     expect(findPrimaryCampaignWorkspace(workspaces)?.id).toBe('single')
+  })
+
+  test('recognizes lab workspaces without treating them as campaigns', () => {
+    const workspaces = [
+      { id: 'hq', name: 'Artist HQ' },
+      { id: 'lab', name: 'Song Lab' },
+      { id: 'release', name: 'Current Release' },
+    ]
+
+    expect(isLabWorkspace(workspaces[1], workspaces)).toBe(true)
+    expect(findPrimaryLabWorkspace(workspaces)?.id).toBe('lab')
+    expect(findPrimaryCampaignWorkspace(workspaces)?.id).toBe('release')
+  })
+
+  test('recognizes numbered creative lab workspace names and slugs', () => {
+    const workspaces = [
+      { id: 'hq', name: 'Artist HQ' },
+      { id: 'lab1', name: 'Creative Lab1', slug: 'creative-lab1' },
+      { id: 'release', name: 'Current Release' },
+    ]
+
+    expect(isLabWorkspace(workspaces[1], workspaces)).toBe(true)
+    expect(findPrimaryLabWorkspace(workspaces)?.id).toBe('lab1')
+    expect(findPrimaryCampaignWorkspace(workspaces)?.id).toBe('release')
+  })
+
+  test('falls back to no campaign when only HQ and Lab exist', () => {
+    const workspaces = [
+      { id: 'hq', name: 'Artist HQ' },
+      { id: 'lab', name: 'Creative Lab' },
+    ]
+
+    expect(findPrimaryCampaignWorkspace(workspaces)).toBeUndefined()
   })
 
   test('returns no campaign workspace when only HQ exists', () => {

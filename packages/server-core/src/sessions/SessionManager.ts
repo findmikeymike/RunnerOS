@@ -1444,6 +1444,11 @@ interface PendingDelta {
   turnId?: string
 }
 
+function isCreativeLabWorkspaceInfo(workspace: { id?: string; name?: string; rootPath: string }): boolean {
+  const text = `${workspace.id ?? ''} ${workspace.name ?? ''} ${basename(workspace.rootPath)}`.toLowerCase()
+  return /(^|[^a-z0-9])(?:creative[-\s]?lab|song[-\s]?lab|writing[-\s]?lab|concept[-\s]?lab|studio[-\s]?lab|lyrics?|lab)(?:\d+)?($|[^a-z0-9])/.test(text)
+}
+
 export class SessionManager implements ISessionManager {
   private sessions: Map<string, ManagedSession> = new Map()
   private sendMessageAdmissionLocks: Map<string, Promise<void>> = new Map()
@@ -2451,7 +2456,7 @@ export class SessionManager implements ISessionManager {
         // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Hypermotion, Lottie Animation,
         // Video Editor, Content Genius, promotion helpers, Shopify, Print Agent,
         // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
-        // and Update System Agent.
+        // Reverse Magic, Legendary Writer, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
@@ -2476,11 +2481,33 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'art-director'
             || a.slug === 'world-builder'
             || a.slug === 'record-doctor'
+            || a.slug === 'reverse-magic'
+            || a.slug === 'legendary-writer'
             || a.slug === 'update-system-agent',
         )
         const { ensured } = ensureRequiredAgents(required)
         if (ensured > 0) {
           sessionLog.info(`[agent-definitions] Ensured ${ensured} required agent(s)`)
+        }
+        try {
+          const { getWorkspaces } = await import('@craft-agent/shared/config')
+          const { readActivatedAgents, writeActivatedAgents } = await import('@craft-agent/shared/agent-definitions')
+          const labWorkerSlugs = ['reverse-magic', 'legendary-writer', 'record-doctor']
+          let normalizedLabWorkspaces = 0
+          for (const ws of getWorkspaces()) {
+            if (ws.remoteServer || !isCreativeLabWorkspaceInfo(ws)) continue
+            const current = readActivatedAgents(ws.rootPath).active
+            const alreadyLabOnly = current.length === labWorkerSlugs.length
+              && labWorkerSlugs.every((slug) => current.includes(slug))
+            if (alreadyLabOnly) continue
+            writeActivatedAgents(ws.rootPath, labWorkerSlugs)
+            normalizedLabWorkspaces += 1
+          }
+          if (normalizedLabWorkspaces > 0) {
+            sessionLog.info(`[agent-definitions] Normalized Lab worker list in ${normalizedLabWorkspaces} workspace(s)`)
+          }
+        } catch (err) {
+          sessionLog.warn('[agent-definitions] Failed to normalize Lab worker lists', err)
         }
         // Seed built-in creator/meta skills. They are implicit system skills:
         // Concierge and Orchestrator depend on them, so users should not have
@@ -2528,7 +2555,7 @@ export class SessionManager implements ISessionManager {
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
             for (const ws of getWorkspaces()) {
-              if (ws.remoteServer) continue
+              if (ws.remoteServer || isCreativeLabWorkspaceInfo(ws)) continue
               let workspaceUpdated = false
               if (!readActivatedAgents(ws.rootPath).active.includes('branding-agent')) {
                 setAgentActive(ws.rootPath, 'branding-agent', true)
@@ -2559,7 +2586,7 @@ export class SessionManager implements ISessionManager {
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
             for (const ws of getWorkspaces()) {
-              if (ws.remoteServer) continue
+              if (ws.remoteServer || isCreativeLabWorkspaceInfo(ws)) continue
               let workspaceUpdated = false
               if (!readActivatedAgents(ws.rootPath).active.includes('content-genius')) {
                 setAgentActive(ws.rootPath, 'content-genius', true)
@@ -2590,7 +2617,7 @@ export class SessionManager implements ISessionManager {
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0
             for (const ws of getWorkspaces()) {
-              if (ws.remoteServer) continue
+              if (ws.remoteServer || isCreativeLabWorkspaceInfo(ws)) continue
               let workspaceUpdated = false
               if (!readActivatedAgents(ws.rootPath).active.includes('world-builder')) {
                 setAgentActive(ws.rootPath, 'world-builder', true)

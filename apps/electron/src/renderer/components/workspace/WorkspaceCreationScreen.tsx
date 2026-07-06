@@ -22,6 +22,7 @@ interface WorkspaceCreationScreenProps {
   onClose: () => void
   className?: string
   initialStep?: Extract<CreationStep, 'choice' | 'create' | 'open'>
+  initialName?: string
   /** When set, skip choice step and open ConnectRemote in reconnect mode */
   reconnectWorkspace?: Workspace
   /** Reconnect an existing remote workspace and resolve only on real success. */
@@ -41,6 +42,7 @@ export function WorkspaceCreationScreen({
   onClose,
   className,
   initialStep = 'choice',
+  initialName,
   reconnectWorkspace,
   onReconnectWorkspace,
 }: WorkspaceCreationScreenProps) {
@@ -113,6 +115,7 @@ export function WorkspaceCreationScreen({
             onBack={() => setStep('choice')}
             onCreate={handleCreateWorkspace}
             isCreating={isCreating}
+            initialName={initialName}
           />
         )
 

@@ -1,7 +1,7 @@
 import * as React from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { AnimatePresence } from "motion/react"
-import { Cloud, CloudOff, FolderOpen, FolderPlus, Home } from "lucide-react"
+import { Cloud, CloudOff, Disc3, FlaskConical, FolderPlus, Home } from "lucide-react"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@craft-agent/ui"
 import {
   DropdownMenu,
@@ -20,7 +20,8 @@ import { WorkspaceCreationScreen } from "@/components/workspace"
 import { waitForTransportConnected } from "@/lib/transport-wait"
 import { useWorkspaceIcons } from "@/hooks/useWorkspaceIcon"
 import { useTransportConnectionState } from "@/hooks/useTransportConnectionState"
-import { isArtistHQWorkspace } from "@/lib/artist-workspace"
+import { navigate, routes } from "@/lib/navigate"
+import { isArtistHQWorkspace, isLabWorkspace } from "@/lib/artist-workspace"
 import type { Workspace } from "../../../shared/types"
 
 interface WorkspaceRailProps {
@@ -41,6 +42,8 @@ export function WorkspaceRail({
   const { t } = useTranslation()
   const [showCreationScreen, setShowCreationScreen] = useState(false)
   const [creationStep, setCreationStep] = useState<'choice' | 'create' | 'open'>('choice')
+  const [creationName, setCreationName] = useState('')
+  const [creationKind, setCreationKind] = useState<'campaign' | 'lab' | null>(null)
   const [reconnectTarget, setReconnectTarget] = useState<Workspace | null>(null)
   const [remoteHealthMap, setRemoteHealthMap] = useState<Map<string, 'ok' | 'error' | 'checking'>>(new Map())
   const healthCheckAbort = useRef<AbortController | null>(null)
@@ -49,9 +52,11 @@ export function WorkspaceRail({
   const connectionState = useTransportConnectionState()
   const isRemote = connectionState?.mode === 'remote'
   const hqWorkspace = workspaces.find((workspace) => isArtistHQWorkspace(workspace, workspaces))
-  const railWorkspaces = hqWorkspace
-    ? workspaces.filter((workspace) => workspace.id !== hqWorkspace.id)
-    : workspaces
+  const labWorkspaces = workspaces.filter((workspace) => isLabWorkspace(workspace, workspaces))
+  const campaignWorkspaces = workspaces.filter((workspace) => (
+    !isArtistHQWorkspace(workspace, workspaces)
+    && !isLabWorkspace(workspace, workspaces)
+  ))
 
   const checkRemoteHealth = useCallback(() => {
     healthCheckAbort.current?.abort()
@@ -104,18 +109,22 @@ export function WorkspaceRail({
     return remoteHealthMap.get(workspaceId) === 'error'
   }, [activeWorkspaceId, connectionState, isRemote, remoteHealthMap])
 
-  const openWorkspaceCreation = (step: 'choice' | 'create' | 'open') => {
+  const openWorkspaceCreation = (step: 'choice' | 'create' | 'open', initialName = '', kind: 'campaign' | 'lab' | null = null) => {
     setCreationStep(step)
+    setCreationName(initialName)
+    setCreationKind(kind)
     setShowCreationScreen(true)
     setFullscreenOverlayOpen(true)
   }
 
-  const handleNewWorkspace = () => openWorkspaceCreation('create')
-  const handleOpenWorkspace = () => openWorkspaceCreation('open')
+  const handleNewCampaign = () => openWorkspaceCreation('create', 'New Campaign', 'campaign')
+  const handleNewLab = () => openWorkspaceCreation('create', 'Creative Lab', 'lab')
 
   const handleCloseCreationScreen = useCallback(() => {
     setShowCreationScreen(false)
     setReconnectTarget(null)
+    setCreationName('')
+    setCreationKind(null)
     setFullscreenOverlayOpen(false)
   }, [setFullscreenOverlayOpen])
 
@@ -124,7 +133,15 @@ export function WorkspaceRail({
     setFullscreenOverlayOpen(false)
     toast.success(t('toast.createdWorkspace', { name: workspace.name }))
     onWorkspaceCreated?.(workspace)
-    onSelect(workspace.id)
+    void Promise.resolve(onSelect(workspace.id)).then(() => {
+      if (creationKind === 'lab') {
+        navigate(routes.view.lab())
+      } else if (creationKind === 'campaign') {
+        navigate(routes.view.campaign())
+      }
+      setCreationKind(null)
+      setCreationName('')
+    })
   }
 
   const handleReconnectWorkspace = useCallback(async (workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => {
@@ -154,11 +171,11 @@ export function WorkspaceRail({
     onSelect(workspace.id, openInNewWindow)
   }, [isRemoteDisconnected, onSelect, setFullscreenOverlayOpen])
 
-  const renderWorkspaceButton = (workspace: Workspace, variant: 'workspace' | 'home' = 'workspace') => {
+  const renderWorkspaceButton = (workspace: Workspace, variant: 'workspace' | 'home' | 'lab' = 'workspace') => {
     const active = workspace.id === activeWorkspaceId
     const disconnected = isRemoteDisconnected(workspace.id)
     const unread = workspaceUnreadMap?.[workspace.id]
-    const label = variant === 'home' ? 'Artist HQ Home' : workspace.name
+    const label = variant === 'home' ? 'Artist HQ' : workspace.name
 
     return (
       <Tooltip key={workspace.id}>
@@ -178,6 +195,8 @@ export function WorkspaceRail({
           >
             {variant === 'home' ? (
               <Home className={cn("h-4 w-4", active ? "text-white" : "text-white/55")} />
+            ) : variant === 'lab' ? (
+              <FlaskConical className={cn("h-4 w-4", active ? "text-white" : "text-white/55")} />
             ) : (
               <CrossfadeAvatar
                 src={workspaceIconMap.get(workspace.id)}
@@ -219,6 +238,7 @@ export function WorkspaceRail({
             onWorkspaceCreated={handleWorkspaceCreated}
             onClose={handleCloseCreationScreen}
             initialStep={reconnectTarget ? undefined : creationStep}
+            initialName={creationName}
             reconnectWorkspace={reconnectTarget ?? undefined}
             onReconnectWorkspace={handleReconnectWorkspace}
           />
@@ -227,14 +247,10 @@ export function WorkspaceRail({
 
       <aside className="titlebar-no-drag -mb-16 flex h-[calc(100%+64px)] w-[56px] shrink-0 flex-col items-center justify-end">
         <div className="runneros-workspace-dock flex max-h-full min-h-0 flex-col items-center gap-1.5 overflow-y-auto px-1.5 pb-2.5 pt-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {railWorkspaces.map((workspace) => renderWorkspaceButton(workspace))}
+          {hqWorkspace ? renderWorkspaceButton(hqWorkspace, 'home') : null}
+          {campaignWorkspaces.map((workspace) => renderWorkspaceButton(workspace))}
+          {labWorkspaces.map((workspace) => renderWorkspaceButton(workspace, 'lab'))}
         </div>
-
-        {hqWorkspace && (
-          <div className="mb-1.5 flex flex-col items-center border-t border-white/[0.06] pt-1.5">
-            {renderWorkspaceButton(hqWorkspace, 'home')}
-          </div>
-        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -247,13 +263,13 @@ export function WorkspaceRail({
             </button>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent side="top" align="start" sideOffset={8} minWidth="min-w-44">
-            <StyledDropdownMenuItem onClick={handleNewWorkspace}>
-              <FolderPlus className="h-3.5 w-3.5" />
-              {t("workspace.createNew")}
+            <StyledDropdownMenuItem onClick={handleNewCampaign}>
+              <Disc3 className="h-3.5 w-3.5" />
+              New Campaign
             </StyledDropdownMenuItem>
-            <StyledDropdownMenuItem onClick={handleOpenWorkspace}>
-              <FolderOpen className="h-3.5 w-3.5" />
-              {t("workspace.openFolder")}
+            <StyledDropdownMenuItem onClick={handleNewLab}>
+              <FlaskConical className="h-3.5 w-3.5" />
+              New Creative Lab
             </StyledDropdownMenuItem>
           </StyledDropdownMenuContent>
         </DropdownMenu>

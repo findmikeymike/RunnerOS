@@ -297,6 +297,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.secrets.LIST,
   RPC_CHANNELS.secrets.SAVE,
   RPC_CHANNELS.secrets.DELETE,
+  RPC_CHANNELS.secrets.TEST_GENIUS,
   RPC_CHANNELS.secrets.ZERO_STATUS,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
 

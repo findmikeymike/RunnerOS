@@ -586,6 +586,7 @@ export interface ElectronAPI {
   listSecrets(): Promise<UserSecretSummary[]>
   saveSecret(name: string, value: string): Promise<{ success: boolean; error?: string }>
   deleteSecret(name: string): Promise<{ success: boolean }>
+  testGeniusAccessToken(token?: string): Promise<{ success: boolean; error?: string; hits?: number }>
   getZeroStatus(): Promise<ZeroStatus>
   installZero(): Promise<{ success: boolean; error?: string }>
   initZero(): Promise<{ success: boolean; output?: string; error?: string }>
@@ -1174,6 +1175,12 @@ export interface CampaignNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface LabNavigationState {
+  navigator: 'lab'
+  tab?: 'home' | 'songs' | 'pad'
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Source type filter for sources navigation
  */
@@ -1308,6 +1315,7 @@ export interface VideoStudioNavigationState {
  */
 export type NavigationState =
   | CampaignNavigationState
+  | LabNavigationState
   | SessionsNavigationState
   | SourcesNavigationState
   | SettingsNavigationState
@@ -1331,6 +1339,10 @@ export const isSessionsNavigation = (
 export const isCampaignNavigation = (
   state: NavigationState
 ): state is CampaignNavigationState => state.navigator === 'campaign'
+
+export const isLabNavigation = (
+  state: NavigationState
+): state is LabNavigationState => state.navigator === 'lab'
 
 export const isSourcesNavigation = (
   state: NavigationState
@@ -1397,6 +1409,10 @@ export const DEFAULT_NAVIGATION_STATE: NavigationState = {
 export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'campaign') {
     return 'campaign'
+  }
+  if (state.navigator === 'lab') {
+    if (state.tab === 'pad') return 'lab/pad'
+    return state.tab === 'songs' ? 'lab/songs' : 'lab'
   }
   if (state.navigator === 'sources') {
     if (state.details) {
@@ -1472,6 +1488,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
 
 export const parseNavigationStateKey = (key: string): NavigationState | null => {
   if (key === 'campaign') return { navigator: 'campaign' }
+  if (key === 'lab') return { navigator: 'lab' }
+  if (key === 'lab/songs') return { navigator: 'lab', tab: 'songs' }
+  if (key === 'lab/pad') return { navigator: 'lab', tab: 'pad' }
 
   // Handle sources
   if (key === 'sources') return { navigator: 'sources', details: null }

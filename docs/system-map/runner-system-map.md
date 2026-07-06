@@ -30,16 +30,18 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - bundledSkills: `packages/shared/src/skills/bundled.generated.ts`
 - builtinSources: `packages/shared/src/sources/builtin-sources.ts`
 - starterWorkflows: `packages/shared/src/workflows/starter-templates.ts`
+- labWorkspaceHome: `apps/electron/src/renderer/components/app-shell/LabWorkspaceHome.tsx`
 
 ## Summary
 
-- Agents mapped: 33
+- Agents mapped: 34
 - Hidden from Workers home: 9
 - Campaign default workers: `world-builder`, `content-genius`
+- Lab default workers: `writer`, `researcher`, `content-genius`, `world-builder`, `art-director`, `record-doctor`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
-- Domains: Command 2, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
-- Permission modes: ask 26, safe 7
+- Domains: Command 3, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
+- Permission modes: ask 27, safe 7
 - Known skills: 103 (64 bundled, 6 system, 103 user-global on this machine)
 - Known builtin sources: 19
 
@@ -52,6 +54,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
 - Campaign workspaces can pass defaultVisibleSlugs, currently world-builder, content-genius.
+- Lab workspaces can pass defaultVisibleSlugs, currently writer, researcher, content-genius, world-builder, art-director, record-doctor.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -96,7 +99,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Main work chat. Routes goals to the right workers, skills, automations, and workflows.
 - Permission: `safe`; thinking: `medium`
 - Launch surfaces: `hq-sidebar-chat`, `campaign-sidebar-chat`, `system-agent-hidden-from-worker-home`
-- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `source-recipe`, `artist-os-guide`, `runneros-self-edit`
+- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `source-recipe`
 - Sources: none
 - Optional sources: none
 - Trusted tools: none
@@ -118,6 +121,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `artifact-output-aware`, `memory-scope-instructions`
 - Inputs: A goal or outcome you want to achieve.
 - Outputs: A step-by-step plan with named owners, plus the executed result.
+
+#### Setup Concierge (`setup-concierge`)
+
+- Description: Guides app setup, connections, keys, services, and “how do I use this?” questions.
+- Permission: `ask`; thinking: `medium`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `artist-os-guide`, `source-recipe`
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `setup`, `connections`, `keys`, `help`, `guide`, `command`
+- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`
+- Inputs: A setup goal, pasted credential, app-feature question, broken connection, or “what do I do next?” request.
+- Outputs: A guided setup step, saved-setting plan, connection test path, app explanation, or follow-up checklist.
 
 ### Content Creation
 
@@ -183,7 +200,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Create taste-led cover art, merch graphics, campaign visuals, posters, and image-generation/layout briefs from Artist HQ context without generic AI slop.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`
+- Launch surfaces: `workspace-workers-when-active`, `lab-workers-default-visible`
 - Skills: `artist-art-direction`, `artist-typography-taste`, `artist-visual-world-director`, `ad-creative`, `zero`
 - Sources: none
 - Optional sources: `zero`
@@ -197,7 +214,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Plan short-form content ideas, then finish locked ideas with captions and overlays that command attention.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`, `lab-workers-default-visible`
 - Skills: `contentgenuis`, `captions-and-overlays`
 - Sources: none
 - Optional sources: none
@@ -225,7 +242,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Submit a song for premium producer vetting, feedback, or enhancement by sending a clean approval-gated packet to mikeymikemusic@gmail.com.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`
+- Launch surfaces: `workspace-workers-when-active`, `lab-workers-default-visible`
 - Skills: `record-doctor-handoff`, `artist-comms-strategist`
 - Sources: none
 - Optional sources: `gmail`
@@ -239,7 +256,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Design immersive low-budget release worlds fans can enter, built from the song's actual emotional world instead of generic promo tactics.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`, `lab-workers-default-visible`
 - Skills: `world-immersion`, `artist-narrative-universe`, `artist-campaign-angle-builder`
 - Sources: none
 - Optional sources: none
@@ -329,7 +346,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Drafts and edits prose with a clear, direct voice.
 - Permission: `ask`; thinking: `medium`
-- Launch surfaces: `workspace-workers-when-active`
+- Launch surfaces: `workspace-workers-when-active`, `lab-workers-default-visible`
 - Skills: none
 - Sources: none
 - Optional sources: none
@@ -503,7 +520,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Research a topic and return clear findings with sources.
 - Permission: `safe`; thinking: `high`
-- Launch surfaces: `hidden-from-workers-home`
+- Launch surfaces: `hidden-from-workers-home`, `lab-workers-default-visible`
 - Skills: none
 - Sources: none
 - Optional sources: none

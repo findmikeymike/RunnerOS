@@ -39,13 +39,10 @@ import type { AgentDefinitionDTO, ContextDocDTO, LlmConnectionWithStatus } from 
 
 interface AgentsLaunchpadProps {
   workspaceId: string | null | undefined
-  includeCampaignDefaultWorkers?: boolean
 }
 
-export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = false }: AgentsLaunchpadProps) {
-  const { activeAgents, allAgents, loading } = useAgents(workspaceId, {
-    defaultVisibleSlugs: includeCampaignDefaultWorkers ? CAMPAIGN_DEFAULT_WORKER_SLUGS : [],
-  })
+export function AgentsLaunchpad({ workspaceId }: AgentsLaunchpadProps) {
+  const { activeAgents, allAgents, loading } = useAgents(workspaceId)
   const { getDisplayName } = useAgentDisplayNames()
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
@@ -78,7 +75,10 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   }, [onCreateSession, onInputChange, skills, sources, workspaceId])
 
   const grouped = React.useMemo(() => {
-    const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => !isSystemAgent(a.slug) && !isHiddenFromWorkerHome(a.slug)))
+    const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => (
+      !isSystemAgent(a.slug)
+      && !isHiddenFromWorkerHome(a.slug)
+    )))
     const orch = visibleAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
     const rest = visibleAgents
       .filter((a) => a.slug !== ORCHESTRATOR_SLUG)
@@ -1352,11 +1352,6 @@ const HIDDEN_WORKER_HOME_AGENT_SLUGS = new Set([
   'playlisting-power-up',
   'spotify-playlist-creator',
 ])
-
-const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
-  'world-builder',
-  'content-genius',
-] as const
 
 function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
   const bestByKey = new Map<string, AgentDefinitionDTO>()

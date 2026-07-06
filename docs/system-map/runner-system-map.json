@@ -15,12 +15,13 @@
     "sessionTools": "packages/session-tools-core/src/tool-defs.ts",
     "bundledSkills": "packages/shared/src/skills/bundled.generated.ts",
     "builtinSources": "packages/shared/src/sources/builtin-sources.ts",
-    "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts"
+    "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts",
+    "labWorkspaceHome": "apps/electron/src/renderer/components/app-shell/LabWorkspaceHome.tsx"
   },
   "summary": {
-    "agentCount": 33,
+    "agentCount": 34,
     "domains": {
-      "Command": 2,
+      "Command": 3,
       "Content Creation": 4,
       "Creative": 5,
       "Merch": 2,
@@ -32,13 +33,21 @@
       "Socials": 2
     },
     "permissionModes": {
-      "ask": 26,
+      "ask": 27,
       "safe": 7
     },
     "hiddenWorkerHomeCount": 9,
     "campaignDefaultWorkerSlugs": [
       "world-builder",
       "content-genius"
+    ],
+    "labDefaultWorkerSlugs": [
+      "writer",
+      "researcher",
+      "content-genius",
+      "world-builder",
+      "art-director",
+      "record-doctor"
     ],
     "workflowCount": 2,
     "sharedIntelPromptWired": true
@@ -115,6 +124,7 @@
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
     "Campaign workspaces can pass defaultVisibleSlugs, currently world-builder, content-genius.",
+    "Lab workspaces can pass defaultVisibleSlugs, currently writer, researcher, content-genius, world-builder, art-director, record-doctor.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
@@ -134,9 +144,7 @@
         "agent-creator",
         "automation-creator",
         "workflow-creator",
-        "source-recipe",
-        "artist-os-guide",
-        "runneros-self-edit"
+        "source-recipe"
       ],
       "sources": [],
       "optionalSources": [],
@@ -198,6 +206,41 @@
       ],
       "inputs": "A goal or outcome you want to achieve.",
       "outputs": "A step-by-step plan with named owners, plus the executed result."
+    },
+    {
+      "slug": "setup-concierge",
+      "name": "Setup Concierge",
+      "description": "Guides app setup, connections, keys, services, and “how do I use this?” questions.",
+      "domain": "Command",
+      "permissionMode": "ask",
+      "thinkingLevel": "medium",
+      "skills": [
+        "artist-os-guide",
+        "source-recipe"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "setup",
+        "connections",
+        "keys",
+        "help",
+        "guide",
+        "command"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "explicit-approval-required",
+        "external-action-boundary"
+      ],
+      "inputs": "A setup goal, pasted credential, app-feature question, broken connection, or “what do I do next?” request.",
+      "outputs": "A guided setup step, saved-setting plan, connection test path, app explanation, or follow-up checklist."
     },
     {
       "slug": "hypermotion-agent",
@@ -376,7 +419,8 @@
         "visuals"
       ],
       "launchSurfaces": [
-        "workspace-workers-when-active"
+        "workspace-workers-when-active",
+        "lab-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -414,7 +458,8 @@
       ],
       "launchSurfaces": [
         "workspace-workers-when-active",
-        "campaign-workers-default-visible"
+        "campaign-workers-default-visible",
+        "lab-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -483,7 +528,8 @@
         "handoff"
       ],
       "launchSurfaces": [
-        "workspace-workers-when-active"
+        "workspace-workers-when-active",
+        "lab-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -519,7 +565,8 @@
       ],
       "launchSurfaces": [
         "workspace-workers-when-active",
-        "campaign-workers-default-visible"
+        "campaign-workers-default-visible",
+        "lab-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -716,7 +763,8 @@
         "prose"
       ],
       "launchSurfaces": [
-        "workspace-workers-when-active"
+        "workspace-workers-when-active",
+        "lab-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -1113,7 +1161,8 @@
         "cite"
       ],
       "launchSurfaces": [
-        "hidden-from-workers-home"
+        "hidden-from-workers-home",
+        "lab-workers-default-visible"
       ],
       "riskSignals": [
         "artifact-output-aware",

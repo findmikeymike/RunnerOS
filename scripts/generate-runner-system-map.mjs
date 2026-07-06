@@ -10,6 +10,7 @@ const AGENT_TYPES_FILE = join(ROOT, 'packages/shared/src/agent-definitions/types
 const SYSTEM_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/system.ts');
 const STARTER_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/starter-templates.ts');
 const LAUNCHPAD_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx');
+const LAB_WORKSPACE_HOME_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/LabWorkspaceHome.tsx');
 const RUN_AGENT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/run-agent.ts');
 const COMPOSE_AGENT_PROMPT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/compose-agent-prompt.ts');
 const SESSION_MANAGER_FILE = join(ROOT, 'packages/server-core/src/sessions/SessionManager.ts');
@@ -210,13 +211,14 @@ function riskSignals(agent) {
   return [...new Set(signals)].sort();
 }
 
-function deriveLaunchSurfaces(agent, systemSlugs, hiddenSlugs, campaignDefaultSlugs) {
+function deriveLaunchSurfaces(agent, systemSlugs, hiddenSlugs, campaignDefaultSlugs, labDefaultSlugs) {
   const surfaces = [];
   if (agent.slug === 'concierge') surfaces.push('hq-sidebar-chat', 'campaign-sidebar-chat');
   if (systemSlugs.includes(agent.slug)) surfaces.push('system-agent-hidden-from-worker-home');
   if (hiddenSlugs.includes(agent.slug)) surfaces.push('hidden-from-workers-home');
   if (!systemSlugs.includes(agent.slug) && !hiddenSlugs.includes(agent.slug)) surfaces.push('workspace-workers-when-active');
   if (campaignDefaultSlugs.includes(agent.slug)) surfaces.push('campaign-workers-default-visible');
+  if (labDefaultSlugs.includes(agent.slug)) surfaces.push('lab-workers-default-visible');
   return surfaces;
 }
 
@@ -315,6 +317,8 @@ function main() {
 
   const hiddenSlugs = extractSetLiteral(LAUNCHPAD_FILE, 'HIDDEN_WORKER_HOME_AGENT_SLUGS');
   const campaignDefaultSlugs = findExportedConst(LAUNCHPAD_FILE, 'CAMPAIGN_DEFAULT_WORKER_SLUGS', constants);
+  const labConstants = collectTopLevelConstants(LAB_WORKSPACE_HOME_FILE, constants);
+  const labDefaultSlugs = findExportedConst(LAB_WORKSPACE_HOME_FILE, 'LAB_DEFAULT_WORKER_SLUGS', labConstants);
   const systemSlugs = ['concierge', 'orchestrator', 'update-system-agent'];
   const skillScopes = {
     bundled: [
@@ -344,7 +348,7 @@ function main() {
     trustedWorkerTools: agent.metadata?.trustedWorkerTools ?? [],
     visualAgent: Boolean(agent.metadata?.visualAgent),
     tags: agent.metadata?.tags ?? [],
-    launchSurfaces: deriveLaunchSurfaces(agent, systemSlugs, hiddenSlugs, campaignDefaultSlugs),
+    launchSurfaces: deriveLaunchSurfaces(agent, systemSlugs, hiddenSlugs, campaignDefaultSlugs, labDefaultSlugs),
     riskSignals: riskSignals(agent),
     inputs: agent.metadata?.inputs ?? '',
     outputs: agent.metadata?.outputs ?? '',
@@ -368,6 +372,7 @@ function main() {
       bundledSkills: rel(BUNDLED_SKILLS_FILE),
       builtinSources: rel(BUILTIN_SOURCES_FILE),
       starterWorkflows: rel(STARTER_WORKFLOWS_FILE),
+      labWorkspaceHome: rel(LAB_WORKSPACE_HOME_FILE),
     },
     summary: {
       agentCount: agents.length,
@@ -375,6 +380,7 @@ function main() {
       permissionModes: Object.fromEntries(groupBy(agents, (a) => a.permissionMode).map(([mode, rows]) => [mode, rows.length])),
       hiddenWorkerHomeCount: hiddenSlugs.length,
       campaignDefaultWorkerSlugs: campaignDefaultSlugs,
+      labDefaultWorkerSlugs: labDefaultSlugs,
       workflowCount: Array.isArray(starterWorkflows) ? starterWorkflows.length : 0,
       sharedIntelPromptWired: text(COMPOSE_AGENT_PROMPT_FILE).includes('buildSharedIntelPromptSection')
         && text(SESSION_MANAGER_FILE).includes('buildSharedIntelPromptSection'),
@@ -385,6 +391,7 @@ function main() {
       'Saved agents live in the global library and are activated per workspace.',
       'Workers page shows active agents, except system agents and hidden worker-home slugs.',
       `Campaign workspaces can pass defaultVisibleSlugs, currently ${campaignDefaultSlugs.join(', ')}.`,
+      `Lab workspaces can pass defaultVisibleSlugs, currently ${labDefaultSlugs.join(', ')}.`,
       'run-agent drops missing skills/sources before session creation and includes a launch receipt.',
       'Concierge receives broad workspace context and an active-agent capability catalog for routing.',
       'Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.',
@@ -436,6 +443,7 @@ function renderMarkdown(map) {
   lines.push(`- Agents mapped: ${map.summary.agentCount}`);
   lines.push(`- Hidden from Workers home: ${map.summary.hiddenWorkerHomeCount}`);
   lines.push(`- Campaign default workers: ${formatList(map.summary.campaignDefaultWorkerSlugs)}`);
+  lines.push(`- Lab default workers: ${formatList(map.summary.labDefaultWorkerSlugs)}`);
   lines.push(`- Starter workflows mapped: ${map.summary.workflowCount}`);
   lines.push(`- Shared Intel prompt injection: ${map.summary.sharedIntelPromptWired ? 'wired' : 'not detected'}`);
   lines.push(`- Domains: ${Object.entries(map.summary.domains).map(([k, v]) => `${k} ${v}`).join(', ')}`);

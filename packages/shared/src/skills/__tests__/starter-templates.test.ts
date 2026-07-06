@@ -167,6 +167,18 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).not.toContain('Runner');
   });
 
+  it('includes yoga-of-songwriting for Lab lyric coaching', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'yoga-of-songwriting');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('yoga-of-songwriting');
+    expect(parsed.content).toContain('Great Truth');
+    expect(parsed.content).toContain('Bones');
+    expect(parsed.content).toContain('Blood');
+    expect(parsed.content).toContain('Breathe');
+    expect(skill?.files.some(f => f.path === 'references/song-audit-framework.md')).toBe(true);
+  });
+
   it('includes magnetic-outreach for cold first-contact draft craft', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'magnetic-outreach');
     expect(skill).toBeDefined();

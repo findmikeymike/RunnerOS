@@ -1,0 +1,99 @@
+version: 1
+purpose: "Route songwriting problems to the right Yoga of Songwriting lens."
+
+scopes:
+  whole_song:
+    use_when:
+      - "user provides full lyrics"
+      - "song feels good but not great"
+      - "user asks for an audit, critique, diagnosis, or rewrite plan"
+    read:
+      - "song-audit-framework.md"
+      - "doctrine.md"
+  section:
+    use_when:
+      - "user asks about verse, chorus, pre-chorus, bridge, intro, or outro"
+      - "one section is not landing"
+    read:
+      - "song-audit-framework.md"
+  line:
+    use_when:
+      - "user asks for better wording"
+      - "lyrics feel clunky, generic, too songy, or too wordy"
+    lenses:
+      - "breathe"
+      - "character"
+      - "great-truth"
+  artist_identity:
+    use_when:
+      - "user asks if a song fits an artist"
+      - "user asks about voice, brand, persona, or mythology"
+    lenses:
+      - "who"
+      - "character"
+
+lenses:
+  god-zone:
+    file: "lenses/god-zone.md"
+    use_when:
+      - "blocked"
+      - "overthinking"
+      - "no inspiration"
+      - "trying too hard"
+      - "needs source material"
+    core_move: "Return the writer to silence, lived feeling, and honest observation."
+
+  great-truth:
+    file: "lenses/great-truth.md"
+    use_when:
+      - "song says nothing"
+      - "chorus has no payoff"
+      - "song lacks destination"
+      - "strong vibe but weak meaning"
+    core_move: "Find the simple universal revelation the song earns."
+
+  bones:
+    file: "lenses/bones.md"
+    use_when:
+      - "story is confusing"
+      - "verses do not build"
+      - "chorus does not feel earned"
+      - "needs reveal, reversal, or journey"
+    core_move: "Clarify character, want, conflict, turn, and payoff."
+
+  blood:
+    file: "lenses/blood.md"
+    use_when:
+      - "emotion is flat"
+      - "song has one static mood"
+      - "needs tension and release"
+      - "listener will not feel enough"
+    core_move: "Map fear and love across sections and create emotional motion."
+
+  breathe:
+    file: "lenses/breathe.md"
+    use_when:
+      - "too many words"
+      - "song feels exhausting"
+      - "phrasing is crowded"
+      - "listener cannot absorb the hook"
+    core_move: "Cut, space, repeat, simplify, and let important lines glow."
+
+  character:
+    file: "lenses/character.md"
+    use_when:
+      - "speaker feels generic"
+      - "images are vague"
+      - "song needs specificity"
+      - "line needs body/action/detail"
+    core_move: "Make the speaker visible through action, contradiction, body, and scene."
+
+  who:
+    file: "lenses/who.md"
+    use_when:
+      - "artist identity"
+      - "voice"
+      - "persona"
+      - "catalog fit"
+      - "artist mythology"
+    core_move: "Clarify the artist's center of gravity and whether the song strengthens it."

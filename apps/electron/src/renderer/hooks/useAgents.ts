@@ -12,7 +12,6 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import { useAtom } from 'jotai'
 import { agentsStateAtomFamily, type AgentsState } from '@/atoms/agents'
-import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO } from '../../shared/types'
 
 export interface UseAgentsResult {
@@ -40,35 +39,7 @@ export interface UseAgentsResult {
   remove: (slug: string) => Promise<boolean>
 }
 
-export interface UseAgentsOptions {
-  defaultVisibleSlugs?: readonly string[]
-}
-
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const EMPTY_DEFAULT_VISIBLE_SLUGS: readonly string[] = []
-const BUILTIN_VISIBLE_AGENT_SLUGS = [
-  CONCIERGE_SLUG,
-  ORCHESTRATOR_SLUG,
-  SETUP_CONCIERGE_SLUG,
-  SOCIAL_PUBLISHER_SLUG,
-  'content-genius',
-  'video-director',
-  'video-editor-agent',
-  'raw-video-editor',
-  'ads-agent',
-  'trypost-agent',
-  'spotify-analyst',
-  'shopify-agent',
-  'print-agent',
-  'gaygent-master',
-  'persona-agent',
-  'branding-agent',
-  'comms-agent',
-  'outreach-agent',
-  'industry-hunter',
-  'youtube-research-agent',
-  'youtube-intelligence-agent',
-] as const
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalDefinitionsCleanup: (() => void) | null = null
@@ -82,22 +53,9 @@ function sortAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
   return [...agents].sort((a, b) => a.metadata.name.localeCompare(b.metadata.name))
 }
 
-function withSystemActiveSlugs(slugs: string[], agents: AgentDefinitionDTO[], extraDefaultVisibleSlugs: readonly string[] = EMPTY_DEFAULT_VISIBLE_SLUGS): string[] {
-  const next = new Set(slugs)
-  for (const systemSlug of [...BUILTIN_VISIBLE_AGENT_SLUGS, ...extraDefaultVisibleSlugs]) {
-    if (agents.some((agent) => agent.slug === systemSlug)) next.add(systemSlug)
-  }
-  return Array.from(next)
-}
-
-export function useAgents(activeWorkspaceId: string | null | undefined, options: UseAgentsOptions = {}): UseAgentsResult {
+export function useAgents(activeWorkspaceId: string | null | undefined): UseAgentsResult {
   const workspaceKey = getWorkspaceKey(activeWorkspaceId)
   const [state, setState] = useAtom(agentsStateAtomFamily(workspaceKey))
-  const defaultVisibleKey = (options.defaultVisibleSlugs ?? EMPTY_DEFAULT_VISIBLE_SLUGS).join('\u0000')
-  const defaultVisibleSlugs = useMemo(
-    () => defaultVisibleKey ? defaultVisibleKey.split('\u0000') : EMPTY_DEFAULT_VISIBLE_SLUGS,
-    [defaultVisibleKey],
-  )
 
   const refresh = useCallback(async () => {
     const existing = inFlightRefreshes.get(workspaceKey)
@@ -115,7 +73,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
         const allAgents = sortAgents(libraryRaw)
         const next: AgentsState = {
           allAgents,
-          activeSlugs: withSystemActiveSlugs(activeRaw, allAgents, defaultVisibleSlugs),
+          activeSlugs: activeRaw,
           loading: false,
           error: null,
         }
@@ -133,7 +91,7 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
 
     inFlightRefreshes.set(workspaceKey, run)
     return run
-  }, [activeWorkspaceId, defaultVisibleSlugs, setState, workspaceKey])
+  }, [activeWorkspaceId, setState, workspaceKey])
 
   useEffect(() => {
     refreshersByWorkspaceKey.set(workspaceKey, refresh)
@@ -171,13 +129,9 @@ export function useAgents(activeWorkspaceId: string | null | undefined, options:
 
   const setActive = useCallback(async (slug: string, active: boolean) => {
     if (!activeWorkspaceId) return
-    if ([...BUILTIN_VISIBLE_AGENT_SLUGS, ...defaultVisibleSlugs].includes(slug) && !active) {
-      setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(prev.activeSlugs, prev.allAgents, defaultVisibleSlugs) }))
-      return
-    }
     const result = await window.electronAPI.setAgentDefinitionActive(activeWorkspaceId, slug, active)
-    setState((prev) => ({ ...prev, activeSlugs: withSystemActiveSlugs(result.active, prev.allAgents, defaultVisibleSlugs) }))
-  }, [activeWorkspaceId, defaultVisibleSlugs, setState])
+    setState((prev) => ({ ...prev, activeSlugs: result.active }))
+  }, [activeWorkspaceId, setState])
 
   const upsert = useCallback(async (input: {
     slug: string

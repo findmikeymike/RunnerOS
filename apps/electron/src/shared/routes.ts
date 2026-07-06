@@ -95,6 +95,9 @@ export const routes = {
     /** Campaign command center/home for non-HQ workspaces */
     campaign: () => 'campaign' as const,
 
+    /** Lab workspace for creative exploration, lyrics, concepts, and research */
+    lab: (tab?: 'songs' | 'pad') => tab ? `lab/${tab}` as const : 'lab' as const,
+
     /** All sessions view (sessions navigator, allSessions filter) */
     allSessions: (sessionId?: string) =>
       sessionId ? `allSessions/session/${sessionId}` as const : 'allSessions' as const,

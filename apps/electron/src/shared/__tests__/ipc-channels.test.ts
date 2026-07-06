@@ -260,6 +260,7 @@ const EXPECTED_CHANNELS: string[] = [
   "secrets:installZero",
   "secrets:list",
   "secrets:save",
+  "secrets:testGenius",
   "secrets:zeroStatus",
   "server:createWorkspace",
   "server:getActiveSessions",

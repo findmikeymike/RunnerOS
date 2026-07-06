@@ -111,6 +111,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.secrets.LIST,
   RPC_CHANNELS.secrets.SAVE,
   RPC_CHANNELS.secrets.DELETE,
+  RPC_CHANNELS.secrets.TEST_GENIUS,
   RPC_CHANNELS.secrets.ZERO_STATUS,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
   RPC_CHANNELS.secrets.INIT_ZERO,
@@ -146,6 +147,47 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     const success = await getCredentialManager().deleteUserSecret(normalized)
     delete process.env[normalized]
     return { success }
+  })
+
+  server.handle(RPC_CHANNELS.secrets.TEST_GENIUS, async (_ctx, token?: string) => {
+    const accessToken = token?.trim() || await getCredentialManager().getUserSecret('GENIUS_ACCESS_TOKEN') || process.env.GENIUS_ACCESS_TOKEN
+    if (!accessToken) {
+      return { success: false, error: 'Add a Genius Client Access Token first.' }
+    }
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 10_000)
+    try {
+      const url = new URL('https://api.genius.com/search')
+      url.searchParams.set('q', 'Missy Elliott')
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        signal: controller.signal,
+      })
+      const payload = await response.json().catch(() => null) as { meta?: { status?: number; message?: string }; response?: { hits?: unknown[] } } | null
+      if (!response.ok || payload?.meta?.status !== 200) {
+        return {
+          success: false,
+          error: payload?.meta?.message || `Genius rejected the token (${response.status}).`,
+        }
+      }
+      return {
+        success: true,
+        hits: Array.isArray(payload.response?.hits) ? payload.response.hits.length : 0,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error && error.name === 'AbortError'
+          ? 'Genius request timed out.'
+          : error instanceof Error ? error.message : String(error),
+      }
+    } finally {
+      clearTimeout(timeout)
+    }
   })
 
   server.handle(RPC_CHANNELS.secrets.ZERO_STATUS, async () => {

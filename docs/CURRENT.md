@@ -40,6 +40,7 @@ source_of_truth: true
 - Corrected the local smoke profile plan: real keys are entered through the app UI and persist in local RunnerOS credential storage; `smoke/local/` only holds ignored artist/campaign/service smoke context.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
+- Added the first Lab workspace slice: inferred Lab workspace detection, `lab` route, Lab home surface, Lab-specific sidebar, Lab default workers, and campaign detection that excludes Lab.
 
 ## In Progress
 

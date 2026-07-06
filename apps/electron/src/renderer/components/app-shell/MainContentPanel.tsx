@@ -28,6 +28,7 @@ import {
   useNavigation,
   useNavigationState,
   isCampaignNavigation,
+  isLabNavigation,
   isSessionsNavigation,
   isSourcesNavigation,
   isSettingsNavigation,
@@ -62,6 +63,9 @@ import VideoStudioPage from '@/pages/VideoStudioPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { ArtistHQHome } from './ArtistHQHome'
 import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
+import { LabWorkspaceHome } from './LabWorkspaceHome'
+import { LabSongsPage } from './LabSongsPage'
+import { LabSongPadPage } from './LabSongPadPage'
 import { AgendaPage } from './AgendaPage'
 import { AGENDA_LABEL } from './agenda-utils'
 import { CommunityPage } from './CommunityPage'
@@ -81,7 +85,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { navigate, routes } from '@/lib/navigate'
-import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistHQWorkspace } from '@/lib/artist-workspace'
+import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistHQWorkspace, isLabWorkspace } from '@/lib/artist-workspace'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -281,6 +285,24 @@ export function MainContentPanel({
     )
   }
 
+  if (isLabNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        {navState.tab === 'songs' ? (
+          <LabSongsPage workspaceName={activeWorkspace?.name} />
+        ) : navState.tab === 'pad' ? (
+          <LabSongPadPage
+            workspaceId={activeWorkspaceId || ''}
+            artistProfileWorkspaceId={artistHQWorkspace?.id}
+            workspaceName={activeWorkspace?.name}
+          />
+        ) : (
+          <LabWorkspaceHome workspaceName={activeWorkspace?.name} />
+        )}
+      </Panel>
+    )
+  }
+
   // Settings navigator - uses component map from settings-pages.ts
   if (isSettingsNavigation(navState)) {
     const SettingsPageComponent = getSettingsPageComponent(navState.subpage)
@@ -415,10 +437,7 @@ export function MainContentPanel({
     }
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <AgentsLaunchpad
-          workspaceId={activeWorkspaceId}
-          includeCampaignDefaultWorkers={!isArtistHQWorkspace(activeWorkspace, workspaces)}
-        />
+        <AgentsLaunchpad workspaceId={activeWorkspaceId} />
       </Panel>
     )
   }
@@ -628,6 +647,16 @@ export function MainContentPanel({
             workspaceName={activeWorkspace?.name}
             primaryCampaignWorkspaceName={primaryCampaignWorkspace?.name}
             onOpenPrimaryCampaignWorkspace={primaryCampaignWorkspace ? handleOpenPrimaryCampaignWorkspace : undefined}
+          />
+        </Panel>
+      )
+    }
+
+    if (isLabWorkspace(activeWorkspace, workspaces)) {
+      return wrapWithStoplight(
+        <Panel variant="grow" className={className}>
+          <LabWorkspaceHome
+            workspaceName={activeWorkspace?.name}
           />
         </Panel>
       )
