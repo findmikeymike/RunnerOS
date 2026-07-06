@@ -16,10 +16,10 @@ import type { PatternWithComment } from '../../agent/permissions-config.ts';
 const sandboxHome = mkdtempSync(join(tmpdir(), 'global-sources-home-'));
 const sandboxHomeResolved = resolve(sandboxHome);
 const realHomeSourcesDir = resolve(join(os.homedir(), '.agents', 'sources'));
-const originalComputerUseClient = process.env.CRAFT_COMPUTER_USE_CLIENT;
-const fakeComputerUseClient = join(sandboxHome, 'SkyComputerUseClient');
-writeFileSync(fakeComputerUseClient, '');
-process.env.CRAFT_COMPUTER_USE_CLIENT = fakeComputerUseClient;
+const originalCopilotComputerUseMcp = process.env.CRAFT_COPILOT_COMPUTER_USE_MCP;
+const fakeCopilotComputerUseMcp = join(sandboxHome, 'computer-use-mcp');
+writeFileSync(fakeCopilotComputerUseMcp, '');
+process.env.CRAFT_COPILOT_COMPUTER_USE_MCP = fakeCopilotComputerUseMcp;
 mock.module('os', () => ({
   ...os,
   homedir: () => sandboxHome,
@@ -52,10 +52,10 @@ const {
 const { parsePermissionsJson, loadSourcePermissionsConfig, permissionsConfigCache } = permissions;
 
 afterAll(() => {
-  if (originalComputerUseClient === undefined) {
-    delete process.env.CRAFT_COMPUTER_USE_CLIENT;
+  if (originalCopilotComputerUseMcp === undefined) {
+    delete process.env.CRAFT_COPILOT_COMPUTER_USE_MCP;
   } else {
-    process.env.CRAFT_COMPUTER_USE_CLIENT = originalComputerUseClient;
+    process.env.CRAFT_COPILOT_COMPUTER_USE_MCP = originalCopilotComputerUseMcp;
   }
   try {
     rmSync(sandboxHome, { recursive: true, force: true });
@@ -366,9 +366,10 @@ describe('loadAllSources', () => {
     expect(found!.config.type).toBe('mcp');
     expect(found!.config.mcp?.transport).toBe('stdio');
     expect(found!.config.mcp?.authType).toBe('none');
-    expect(found!.config.mcp?.args).toEqual(['mcp']);
-    expect(found!.config.mcp?.command).toContain('SkyComputerUseClient');
-    expect(found!.guide?.raw).toContain('get_app_state');
+    expect(found!.config.provider).toBe('copilot-computer-use');
+    expect(found!.config.mcp?.args).toEqual([]);
+    expect(found!.config.mcp?.command).toContain('computer-use-mcp');
+    expect(found!.guide?.raw).toContain('get_window_state');
   });
 
   test('ignores stale workspace computer-use copies and keeps the built-in source authoritative', () => {
@@ -390,10 +391,10 @@ describe('loadAllSources', () => {
 
     expect(matches.length).toBe(1);
     expect(matches[0]!.tier).toBe('project');
-    expect(matches[0]!.config.mcp?.command).toContain('SkyComputerUseClient');
-    expect(matches[0]!.config.mcp?.args).toEqual(['mcp']);
+    expect(matches[0]!.config.mcp?.command).toContain('computer-use-mcp');
+    expect(matches[0]!.config.mcp?.args).toEqual([]);
     expect(bySlug[0]!.tier).toBe('project');
-    expect(bySlug[0]!.config.mcp?.command).toContain('SkyComputerUseClient');
+    expect(bySlug[0]!.config.mcp?.command).toContain('computer-use-mcp');
   });
 
   test('includes field-theory as a project source', () => {
@@ -557,7 +558,7 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.slug).toBe('computer-use');
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.mcp?.transport).toBe('stdio');
-    expect(sources[0]!.config.mcp?.args).toEqual(['mcp']);
+    expect(sources[0]!.config.mcp?.args).toEqual([]);
   });
 
   test('resolves field-theory by slug without workspace activation', () => {
