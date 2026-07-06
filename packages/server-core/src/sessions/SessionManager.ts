@@ -6078,6 +6078,11 @@ user a clickable link to where the thing now lives.`
       throw new Error(`Session ${sessionId} not found`)
     }
 
+    if (managed.isProcessing) {
+      sessionLog.warn(`setSessionConnection: cannot change connection while session is processing (${sessionId})`)
+      throw new Error('Stop the current response before switching models.')
+    }
+
     // Validate connection exists
     const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
     const connection = getLlmConnection(connectionSlug)
@@ -6861,6 +6866,11 @@ user a clickable link to where the thing now lives.`
     sessionLog.info(`[updateSessionModel] sessionId=${sessionId}, model=${model}, connection=${connection}`)
     const managed = this.sessions.get(sessionId)
     if (managed) {
+      if (managed.isProcessing) {
+        sessionLog.warn(`[updateSessionModel] Rejecting model change while session is processing (${sessionId})`)
+        throw new Error('Stop the current response before switching models.')
+      }
+
       const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
       const previousConnectionSlug = managed.llmConnection
       const effectiveConnectionSlug = connection ?? managed.llmConnection

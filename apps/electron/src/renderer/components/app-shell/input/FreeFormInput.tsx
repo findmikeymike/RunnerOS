@@ -2003,16 +2003,18 @@ export function FreeFormInput({
 
           {/* 5. Model/Connection Selector - Hidden in compact mode (EditPopover embedding) */}
           {!compactMode && (
-          <DropdownMenu open={modelDropdownOpen} onOpenChange={setModelDropdownOpen}>
+          <DropdownMenu open={modelDropdownOpen} onOpenChange={(open) => setModelDropdownOpen(isProcessing ? false : open)}>
             <Tooltip>
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
+                    disabled={isProcessing}
                     className={cn(
                       "input-toolbar-btn inline-flex items-center h-7 px-1.5 gap-0.5 text-[13px] shrink-0 rounded-[6px] hover:bg-foreground/5 transition-colors select-none",
                       modelDropdownOpen && "bg-foreground/5",
                       connectionUnavailable && "text-destructive",
+                      isProcessing && "opacity-50 cursor-not-allowed hover:bg-transparent",
                     )}
                   >
                     {connectionUnavailable ? (
@@ -2031,7 +2033,7 @@ export function FreeFormInput({
                 </DropdownMenuTrigger>
               </TooltipTrigger>
               <TooltipContent side="top">
-                {t('common.model')}
+                {isProcessing ? 'Stop response before switching models' : t('common.model')}
               </TooltipContent>
             </Tooltip>
             <StyledDropdownMenuContent side="top" align="end" sideOffset={8} className="min-w-[260px]">
@@ -2069,7 +2071,7 @@ export function FreeFormInput({
                       return (
                         <DropdownMenuSub key={conn.slug}>
                           <StyledDropdownMenuSubTrigger
-                            disabled={!isAuthenticated}
+                            disabled={!isAuthenticated || isProcessing}
                             className={cn(
                               "flex items-center justify-between px-2 py-2 rounded-lg",
                               isCurrentConnection && "bg-foreground/5"
@@ -2096,7 +2098,9 @@ export function FreeFormInput({
                                 return (
                                   <StyledDropdownMenuItem
                                     key={modelId}
+                                    disabled={isProcessing}
                                     onSelect={() => {
+                                      if (isProcessing) return
                                       // Pre-message sessions can update the connection directly.
                                       // Started sessions persist connection through onModelChange below.
                                       if (isEmptySession && !isCurrentConnection && onConnectionChange) {
@@ -2146,7 +2150,11 @@ export function FreeFormInput({
                     return (
                       <StyledDropdownMenuItem
                         key={modelId}
-                        onSelect={() => onModelChange(modelId, effectiveConnection)}
+                        disabled={isProcessing}
+                        onSelect={() => {
+                          if (isProcessing) return
+                          onModelChange(modelId, effectiveConnection)
+                        }}
                         className="flex items-center justify-between px-2 py-2 rounded-lg cursor-pointer"
                       >
                         <div className="text-left">
