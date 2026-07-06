@@ -13,6 +13,7 @@ import {
   createBackendFromConnection,
   resolveBackendContext,
   createBackendFromResolvedContext,
+  resolveModelForProvider,
   cleanupSourceRuntimeArtifacts,
   providerTypeToAgentProvider,
   type AgentBackend,
@@ -6861,13 +6862,27 @@ user a clickable link to where the thing now lives.`
     sessionLog.info(`[updateSessionModel] sessionId=${sessionId}, model=${model}, connection=${connection}`)
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      managed.model = model ?? undefined
+      const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+      const effectiveConnectionSlug = connection && !managed.connectionLocked
+        ? connection
+        : managed.llmConnection
+      const sessionConn = resolveSessionConnection(effectiveConnectionSlug, wsConfig?.defaults?.defaultLlmConnection)
+      const provider = providerTypeToAgentProvider(sessionConn?.providerType || 'anthropic')
+      const requestedModel = model ?? undefined
+      const resolvedModel = resolveModelForProvider(provider, requestedModel, sessionConn)
+      const modelToPersist = requestedModel && resolvedModel !== requestedModel ? undefined : requestedModel
+
+      if (requestedModel && !modelToPersist) {
+        sessionLog.warn(`[updateSessionModel] Ignoring incompatible model "${requestedModel}" for connection "${effectiveConnectionSlug ?? 'default'}"; using "${resolvedModel}"`)
+      }
+
+      managed.model = modelToPersist
       // Also update connection if provided and not already locked
       if (connection && !managed.connectionLocked) {
         managed.llmConnection = connection
       }
       // Persist to disk (include connection if it was updated)
-      const updates: { model?: string; llmConnection?: string } = { model: model ?? undefined }
+      const updates: { model?: string; llmConnection?: string } = { model: modelToPersist }
       if (connection && !managed.connectionLocked) {
         updates.llmConnection = connection
       }
@@ -6875,17 +6890,15 @@ user a clickable link to where the thing now lives.`
       // Update agent model if it already exists (takes effect on next query)
       if (managed.agent) {
         // Fallback chain: session model > workspace default > connection default
-        const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
-        const sessionConn = resolveSessionConnection(managed.llmConnection, wsConfig?.defaults?.defaultLlmConnection)
-        const effectiveModel = model ?? wsConfig?.defaults?.model ?? sessionConn?.defaultModel!
+        const effectiveModel = modelToPersist ?? wsConfig?.defaults?.model ?? sessionConn?.defaultModel!
         sessionLog.info(`[updateSessionModel] Calling agent.setModel(${effectiveModel}) [agent exists=${!!managed.agent}, connectionLocked=${managed.connectionLocked}]`)
         managed.agent.setModel(effectiveModel)
       } else {
         sessionLog.info(`[updateSessionModel] No agent yet, model will apply on next agent creation`)
       }
       // Notify renderer of the model change
-      this.sendEvent({ type: 'session_model_changed', sessionId, model }, managed.workspace.id)
-      sessionLog.info(`Session ${sessionId} model updated to: ${model ?? '(global config)'}`)
+      this.sendEvent({ type: 'session_model_changed', sessionId, model: modelToPersist ?? null }, managed.workspace.id)
+      sessionLog.info(`Session ${sessionId} model updated to: ${modelToPersist ?? '(global config)'}`)
     }
   }
 

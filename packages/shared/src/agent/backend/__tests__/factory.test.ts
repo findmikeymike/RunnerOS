@@ -24,6 +24,7 @@ import {
   connectionAuthTypeToBackendAuthType,
   providerTypeToAgentProvider,
   resolveSetupTestConnectionHint,
+  resolveModelForProvider,
   createBackendFromConnection,
   testBackendConnection,
   validateStoredBackendConnection,
@@ -377,5 +378,33 @@ describe('ClaudeAgent model switching', () => {
     agent.setModel('claude-sonnet-4-6');
 
     expect(agent.getModel()).toBe('claude-sonnet-4-6');
+  });
+});
+
+describe('resolveModelForProvider', () => {
+  it('falls back when a locked Pi connection receives a model from another connection', () => {
+    const connection = {
+      slug: 'chatgpt-plus-2',
+      name: 'GPT/Codex',
+      providerType: 'pi',
+      authType: 'oauth_token',
+      defaultModel: 'pi/gpt-5.5',
+      models: ['pi/gpt-5.5', 'pi/gpt-5.4'],
+    } as LlmConnection;
+
+    expect(resolveModelForProvider('pi', 'pi/deepseek/deepseek-v4-pro', connection)).toBe('pi/gpt-5.5');
+  });
+
+  it('keeps valid models for the active connection', () => {
+    const connection = {
+      slug: 'pi-api-key',
+      name: 'Runner Backend',
+      providerType: 'pi',
+      authType: 'api_key',
+      defaultModel: 'pi/deepseek-v4-flash',
+      models: ['pi/deepseek-v4-flash', 'pi/deepseek-v4-pro'],
+    } as LlmConnection;
+
+    expect(resolveModelForProvider('pi', 'pi/deepseek-v4-pro', connection)).toBe('pi/deepseek-v4-pro');
   });
 });
