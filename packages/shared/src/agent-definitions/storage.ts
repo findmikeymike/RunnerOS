@@ -570,12 +570,12 @@ export function seedGlobalLibraryIfEmpty(
 }
 
 /**
- * Ensure built-in agents (Concierge, Orchestrator) have the given skill slugs
+ * Ensure core built-in agents have the given skill slugs
  * in their `skills:` frontmatter. Used for one-time silent migration when new
  * load-bearing skills ship — users with existing AGENT.md files (which the
  * seeder doesn't overwrite) still get the new bundle without manual edits.
  *
- * No-op for slugs already present. Only mutates the two built-in slugs by name.
+ * No-op for slugs already present. Only mutates approved built-in slugs by name.
  * User-customized agents are deliberately untouched.
  */
 export function ensureBuiltInAgentSkills(
@@ -595,7 +595,7 @@ export function ensureBuiltInAgentSkillsForSlug(
   requiredSkills: ReadonlyArray<string>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
@@ -635,6 +635,7 @@ export function replaceBuiltInAgentMetadata(
     'ig-trending-power-up',
     'influencer-campaign-power-up',
     'playlisting-power-up',
+    'industry-hunter',
   ]);
   if (!builtIns.has(slug)) return { updated: false };
 
@@ -644,7 +645,7 @@ export function replaceBuiltInAgentMetadata(
   let changed = false;
   const next: AgentMetadata = { ...loaded.metadata };
   for (const [key, replacement] of Object.entries(replacements) as Array<[keyof AgentMetadata, { from: unknown; to: unknown }]>) {
-    if (next[key] === replacement.from) {
+    if (agentMetadataValueEquals(next[key], replacement.from)) {
       (next as unknown as Record<string, unknown>)[key] = replacement.to;
       changed = true;
     }
@@ -659,6 +660,14 @@ export function replaceBuiltInAgentMetadata(
   }
 }
 
+function agentMetadataValueEquals(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((value, index) => value === b[index]);
+  }
+  return false;
+}
+
 /**
  * Apply an exact text migration to built-in agent prompt bodies. This preserves
  * user edits unless the old shipped paragraph is still present verbatim.
@@ -669,7 +678,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !loaded.systemPrompt.includes(oldText)) return { updated: false };
@@ -699,7 +708,7 @@ export function replaceBuiltInAgentPromptPattern(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !pattern.test(loaded.systemPrompt)) return { updated: false };

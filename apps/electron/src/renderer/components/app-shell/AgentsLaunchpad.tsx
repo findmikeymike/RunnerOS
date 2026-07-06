@@ -1370,6 +1370,7 @@ const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
   'influencer-campaign-power-up',
   'playlisting-power-up',
   'record-doctor',
+  'industry-hunter',
 ] as const
 
 function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {

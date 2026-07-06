@@ -18,6 +18,7 @@ import {
   ensureRequiredAgents,
   ensureBuiltInAgentSkills,
   ensureBuiltInAgentSkillsForSlug,
+  replaceBuiltInAgentMetadata,
   replaceBuiltInAgentPromptPattern,
   replaceBuiltInAgentPromptText,
   removeBuiltInAgentSkills,
@@ -809,6 +810,8 @@ body
     expect(industryHunter?.metadata.name).toBe('Industry Hunter')
     expect(industryHunter?.metadata.permissionMode).toBe('safe')
     expect(industryHunter?.metadata.skills).toContain('artist-industry-hunter')
+    expect(industryHunter?.metadata.skills).toContain('zero')
+    expect(industryHunter?.metadata.sources).toContain('zero')
     expect(industryHunter?.metadata.trustedWorkerTools).toEqual([
       'start_deep_research',
       'list_deep_research_runs',
@@ -818,6 +821,7 @@ body
     expect(industryHunter?.metadata.tags).toContain('industry')
     expect(industryHunter?.metadata.tags).toContain('anr')
     expect(industryHunter?.metadata.tags).toContain('outreach')
+    expect(industryHunter?.metadata.tags).toContain('zero')
     expect(industryHunter?.systemPrompt).toContain('artist-profile')
     expect(industryHunter?.systemPrompt).toContain('artist-voice')
     expect(industryHunter?.systemPrompt).toContain('artist-branding')
@@ -828,6 +832,9 @@ body
     expect(industryHunter?.systemPrompt).toContain('get_deep_research_run')
     expect(industryHunter?.systemPrompt).toContain('Industry Hunter Target List')
     expect(industryHunter?.systemPrompt).toContain('Outreach Agent')
+    expect(industryHunter?.systemPrompt).toContain('Zero enrichment')
+    expect(industryHunter?.systemPrompt).toContain('ZERO_AGENT=codex zero search "Tomba LinkedIn email finder"')
+    expect(industryHunter?.systemPrompt).toContain('--max-pay 0.50')
     expect(industryHunter?.systemPrompt).toContain('not looking for famous CEOs')
     expect(industryHunter?.systemPrompt).toContain('showInCanvas: true')
   })
@@ -1027,6 +1034,46 @@ body
     expect(loadGlobalAgent('concierge', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew shipped paragraph\nAfter')
     expect(replaceBuiltInAgentPromptText('writer', 'old shipped paragraph', 'new shipped paragraph', { globalAgentsDir }).updated).toBe(false)
     expect(loadGlobalAgent('writer', { globalAgentsDir })!.systemPrompt).toBe('old shipped paragraph')
+  })
+
+  test('replaceBuiltInAgentMetadata can patch Industry Hunter array metadata without touching other agents', () => {
+    writeGlobalAgent(
+      {
+        slug: 'industry-hunter',
+        metadata: {
+          name: 'Industry Hunter',
+          description: 'Find industry contacts.',
+          skills: ['artist-industry-hunter'],
+          tags: ['industry'],
+        },
+        systemPrompt: 'Industry body.',
+      },
+      { globalAgentsDir },
+    )
+    writeGlobalAgent(
+      {
+        slug: 'writer',
+        metadata: {
+          name: 'Writer',
+          description: 'Writes.',
+          skills: ['artist-industry-hunter'],
+        },
+        systemPrompt: 'Writer body.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentMetadata('industry-hunter', {
+      skills: { from: ['artist-industry-hunter'], to: ['artist-industry-hunter', 'zero'] },
+      tags: { from: ['industry'], to: ['industry', 'zero'] },
+      sources: { from: undefined, to: ['zero'] },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(loadGlobalAgent('industry-hunter', { globalAgentsDir })!.metadata.skills).toEqual(['artist-industry-hunter', 'zero'])
+    expect(loadGlobalAgent('industry-hunter', { globalAgentsDir })!.metadata.tags).toEqual(['industry', 'zero'])
+    expect(loadGlobalAgent('industry-hunter', { globalAgentsDir })!.metadata.sources).toEqual(['zero'])
+    expect(replaceBuiltInAgentMetadata('writer', {
+      skills: { from: ['artist-industry-hunter'], to: ['artist-industry-hunter', 'zero'] },
+    }, { globalAgentsDir }).updated).toBe(false)
   })
 
   test('replaceBuiltInAgentPromptPattern patches wrapped stale built-in guidance', () => {

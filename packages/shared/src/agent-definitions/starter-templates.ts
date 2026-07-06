@@ -963,8 +963,9 @@ Never send cold outreach without current-turn explicit approval.`,
       greeting: 'Give me the artist, campaign, song, or lane. I will pull the Artist HQ context, research real industry targets, and return a list Outreach Agent can use.',
       inputs: 'Artist HQ Profile, Voice, Branding, themes, music style, related artists, campaign/release goal, links, songs, lyrics, demos, and target market.',
       outputs: 'A ranked Industry Hunter Target List with names, roles, likely LinkedIn/profile URLs, source links, fit rationale, outreach angles, confidence, missing info, and Outreach Agent handoff prompts.',
-      tags: ['industry', 'anr', 'outreach', 'labels', 'research', 'artist-development'],
-      skills: ['artist-industry-hunter'],
+      tags: ['industry', 'anr', 'outreach', 'labels', 'research', 'artist-development', 'zero'],
+      skills: ['artist-industry-hunter', 'zero'],
+      sources: ['zero'],
       trustedWorkerTools: [
         'start_deep_research',
         'list_deep_research_runs',
@@ -984,6 +985,14 @@ Pull Artist HQ context before asking the user to repeat themselves:
 - themes, related artists, music style, release/campaign notes, lyrics, demos, links, socials, playlist context, and prior outreach notes when available
 
 Use the \`artist-industry-hunter\` skill as the operating system.
+
+Zero enrichment:
+- Use Zero only after public research finds a plausible LinkedIn/profile URL for a real target.
+- Verify the CLI exists before use: \`command -v zero && zero --version\`.
+- Search and inspect the live capability each session instead of assuming schema: \`ZERO_AGENT=codex zero search "Tomba LinkedIn email finder"\`, then \`zero get <result-number> --formatted\`.
+- Prefer the known capability URL when it is still valid: \`https://www.zero.xyz/c/tomba-api-tomba-linkedin-email-finder-1c87396a\`.
+- Use a strict spend cap for enrichment calls, for example \`zero fetch "<capability-url>" --max-pay 0.50 --json\`.
+- Never fabricate emails. Mark email source, confidence, caveats, and missing info.
 
 Research rules:
 - For broad target hunts, use \`start_deep_research\` to create a real research run. Use \`planPolicy: "auto"\` by default so the user does not have to babysit research execution.

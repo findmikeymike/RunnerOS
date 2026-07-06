@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-05
+last_verified: 2026-07-06
 source_of_truth: true
 ---
 
@@ -43,6 +43,8 @@ source_of_truth: true
 - Added `save_secret` so approved setup sessions can save encrypted app/source credentials through RunnerOS instead of telling users to copy values into files.
 - Hardened `save_secret`: only HNIC and Setup Concierge can save RunnerOS secrets; ordinary workers and manual sessions are blocked from directly writing credentials.
 - Hardened global-source credential saves from agent setup so app/global keys refresh every workspace using that global source, matching the Settings credential path.
+- Wired Industry Hunter to Zero: `zero` skill/source, LinkedIn/email enrichment prompt rules, existing-install migration, and campaign default worker visibility.
+- Regenerated `docs/system-map/` so Industry Hunter now maps to `artist-industry-hunter`, `zero`, and campaign worker launch surfaces.
 - Updated Setup Concierge guidance to default to app-level/global credentials so the same keys work across the whole app unless a user explicitly wants a workspace override.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.

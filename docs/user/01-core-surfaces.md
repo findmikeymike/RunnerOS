@@ -74,7 +74,7 @@ Typical workers:
 - **Art Director**: cover art, merch graphics, visual prompts, layout direction.
 - **Comms Agent**: fan emails, newsletters, press/community updates.
 - **Outreach Agent**: prospect research, email lookup, outreach drafts.
-- **Industry Hunter**: finds target people and companies for outreach.
+- **Industry Hunter**: finds target people and companies for outreach, then can use Zero for LinkedIn/email enrichment when a real public profile URL is found.
 - **Record Doctor**: prepares song review handoff packets.
 - **Social Publisher**: posts/schedules to social channels after approval.
 - **Ads Agent**: Meta/Google ad planning and review.

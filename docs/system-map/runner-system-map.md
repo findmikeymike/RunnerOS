@@ -39,7 +39,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Agents mapped: 34
 - Hidden from Workers home: 6
-- Campaign default workers: `content-genius`, `art-director`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`
+- Campaign default workers: `content-genius`, `art-director`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
@@ -56,7 +56,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
-- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor.
+- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -389,13 +389,13 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Find the right A&Rs, label operators, managers, publishers, sync people, and industry connectors, then output an Outreach-ready target list.
 - Permission: `safe`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`
-- Skills: `artist-industry-hunter`
-- Sources: none
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Skills: `artist-industry-hunter`, `zero`
+- Sources: `zero`
 - Optional sources: none
 - Trusted tools: `start_deep_research`, `list_deep_research_runs`, `get_deep_research_run`, `create_output`
-- Tags: `industry`, `anr`, `outreach`, `labels`, `research`, `artist-development`
-- Signals: `artifact-output-aware`, `external-action-boundary`, `safe-default`, `trusted-worker-tools`
+- Tags: `industry`, `anr`, `outreach`, `labels`, `research`, `artist-development`, `zero`
+- Signals: `artifact-output-aware`, `external-action-boundary`, `requires-source-activation`, `safe-default`, `trusted-worker-tools`
 - Inputs: Artist HQ Profile, Voice, Branding, themes, music style, related artists, campaign/release goal, links, songs, lyrics, demos, and target market.
 - Outputs: A ranked Industry Hunter Target List with names, roles, likely LinkedIn/profile URLs, source links, fit rationale, outreach angles, confidence, missing info, and Outreach Agent handoff prompts.
 

@@ -30,7 +30,7 @@ Workers can hand work to other workers.
 Examples:
 - HNIC asks Content Genius for ideas.
 - Content Genius hands an approved caption batch to Social Publisher.
-- Industry Hunter creates targets, then Outreach Agent writes messages.
+- Industry Hunter creates targets, can enrich LinkedIn/email leads through Zero, then Outreach Agent writes messages.
 - Art Director creates a visual brief, then an image/tool worker creates the asset.
 
 The user should still see the result. Worker messaging is coordination, not a hidden black box.

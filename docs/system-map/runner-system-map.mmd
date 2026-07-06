@@ -103,6 +103,9 @@ flowchart LR
   Registry --> A_industry_hunter["Industry Hunter\nsafe\nOutreach"]
   Workers --> A_industry_hunter
   A_industry_hunter --> S_artist_industry_hunter["skill:artist-industry-hunter"]
+  A_industry_hunter --> S_zero["skill:zero"]
+  A_industry_hunter --> T_zero["source:zero"]
+  Campaign["Campaign Workspace"] --> A_industry_hunter
   Registry --> A_outreach_agent["Outreach Agent\nask\nOutreach"]
   Workers --> A_outreach_agent
   A_outreach_agent --> S_zero["skill:zero"]

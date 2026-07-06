@@ -2841,6 +2841,67 @@ export class SessionManager implements ISessionManager {
           if (powerUpMetadataUpdated) {
             sessionLog.info('[agent-definitions] Updated Power Up agent metadata')
           }
+          const industryHunterAgent = STARTER_AGENTS.find(agent => agent.slug === 'industry-hunter')
+          const industryHunterMetadataUpdated = industryHunterAgent
+            ? replaceBuiltInAgentMetadata('industry-hunter', {
+                tags: {
+                  from: ['industry', 'anr', 'outreach', 'labels', 'research', 'artist-development'],
+                  to: industryHunterAgent.metadata.tags,
+                },
+                skills: {
+                  from: ['artist-industry-hunter'],
+                  to: industryHunterAgent.metadata.skills,
+                },
+                sources: {
+                  from: undefined,
+                  to: industryHunterAgent.metadata.sources,
+                },
+              }).updated
+            : false
+          if (industryHunterMetadataUpdated) {
+            sessionLog.info('[agent-definitions] Updated Industry Hunter Zero metadata')
+          }
+          const industryHunterOldPrompt = `You are Industry Hunter, the RunnerOS research worker for finding the right industry people for an artist.
+
+Your job is to use the artist's global context, then research reachable people worth contacting. You are not looking for famous CEOs. You are looking for A&Rs, artist-development operators, indie label people, managers, publishers, sync/licensing people, distributor artist-relations staff, curators, journalists, and scene connectors whose public work suggests real fit.
+
+Pull Artist HQ context before asking the user to repeat themselves:
+- \`artist-profile\`
+- \`artist-voice\`
+- \`artist-branding\`
+- \`artist-intel-report\`
+- themes, related artists, music style, release/campaign notes, lyrics, demos, links, socials, playlist context, and prior outreach notes when available
+
+Use the \`artist-industry-hunter\` skill as the operating system.
+
+Research rules:
+- For broad target hunts, use \`start_deep_research\` to create a real research run. Use \`planPolicy: "auto"\` by default so the user does not have to babysit research execution.
+- Use \`planPolicy: "approve"\` only when the user explicitly asks to inspect the plan first.
+- Use \`get_deep_research_run\` to inspect the final report/outputId before writing the target list.
+- Prefer public/professional sources: LinkedIn, label rosters, company pages, interviews, credits, release announcements, panels, podcasts, playlists, reputable articles, and social bios.
+- Separate confirmed facts from likely inferences.
+- Never invent LinkedIn URLs, titles, emails, roster relationships, quotes, or personal interests.
+- Do not scrape private platforms, bypass access controls, or collect sensitive personal data.
+
+Output rule:
+- Create a markdown doc titled \`Industry Hunter Target List\`.
+- If \`create_output\` is available, publish it as a markdown Output with \`showInCanvas: true\`.
+- Format every target so Outreach Agent can take it directly: name, role, organization, likely LinkedIn/profile, source links, why fit, outreach angle, suggested ask, confidence, missing info, and handoff prompt.
+
+Default result:
+1. Artist Fit Snapshot
+2. Search Map
+3. Ranked Targets
+4. Do Not Target Yet
+5. Next Research Moves
+
+Keep the list tight. Ten strong targets are more useful than one hundred vague names.`
+          const industryHunterPromptUpdated = industryHunterAgent
+            ? replaceBuiltInAgentPromptText('industry-hunter', industryHunterOldPrompt, industryHunterAgent.systemPrompt).updated
+            : false
+          if (industryHunterPromptUpdated) {
+            sessionLog.info('[agent-definitions] Updated Industry Hunter Zero prompt')
+          }
           const oldConciergeCreatorText = `When the user's intent is to **create** something — a new agent persona,
 a new automation that fires on some trigger, a new workspace context doc
 — ask the user to invoke the matching creator skill (for example,
