@@ -30,6 +30,7 @@ Current active feature spec:
 - [audits](./audits/) - security, runtime, and technical debt reports.
 - [development](./development/) - local commands, CLI docs, setup-adjacent references.
 - [development/local-smoke-profile.md](./development/local-smoke-profile.md) - local-only real-key smoke setup that keeps private data out of the app and repo.
+- [development/vetted.md](./development/vetted.md) - release smoke ledger for agents that pass real app testing.
 - [system-map](./system-map/) - generated map of workers, skills, sources, launch surfaces, and approval boundaries.
 - [user](./user/) - general-user docs for learning the product without reading implementation specs.
 - [archive](./archive/) - historical docs that should not guide current decisions.
