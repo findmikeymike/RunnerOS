@@ -158,6 +158,7 @@ When calling `artwork_compose`, provide:
 - if a backing shape is needed, make it an intentional designed element (label, sticker, caption strip) with clear style rationale; avoid low-opacity rectangles that create accidental halos, outlines, or "not transparent" bugs around text
 - for simple cover typography, prefer direct text over the image using placement, scale, contrast, shadow-free color choice, or a subtle text opacity change before using any background shape
 - after composing, visually inspect for visible bounding boxes, halos, export artifacts, or accidental shape edges around type; if present, remove the shape and re-compose
+- before presenting to the user, visually judge the finished work yourself: does it look genuinely good, not amateur; is the text visible, well positioned, aligned, and appropriate to the image; does the type style fit the artist, song, and visual world; if not, revise before showing it
 - `exportPng: true`
 - `publishOutput: true`
 - `showInCanvas: true`
