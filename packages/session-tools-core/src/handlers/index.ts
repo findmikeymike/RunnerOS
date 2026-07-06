@@ -178,6 +178,20 @@ export type {
   ListAgentMessageReceiptsResult,
 } from './list-agent-message-receipts.ts';
 
+// App actions
+export {
+  handleListAppActions,
+  handlePreviewAppAction,
+  handleExecuteAppAction,
+  handleGetAppActionReceipt,
+} from './app-actions.ts';
+export type {
+  ListAppActionsToolInput,
+  PreviewAppActionToolInput,
+  ExecuteAppActionToolInput,
+  GetAppActionReceiptToolInput,
+} from './app-actions.ts';
+
 // Outputs
 export { handleCreateOutput } from './outputs.ts';
 export type {

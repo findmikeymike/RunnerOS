@@ -35,6 +35,7 @@ const VALID_INPUT: CreateAgentToolInput = {
     visualAgent: true,
     sources: ['zero'],
     optionalSources: ['gmail'],
+    actionGrants: ['outputs.create', 'vault.*'],
   },
   systemPrompt: 'You are a sales call prep specialist.',
 };
@@ -92,6 +93,29 @@ describe('handleCreateAgent', () => {
     expect(captured?.metadata.visualAgent).toBe(true);
     expect(captured?.metadata.sources).toEqual(['zero']);
     expect(captured?.metadata.optionalSources).toEqual(['gmail']);
+    expect(captured?.metadata.actionGrants).toEqual(['outputs.create', 'vault.*']);
     expect((result.content[0] as any).text).toContain('/agents/agent/sales-call-prep');
+  });
+
+  it('rejects unknown action grants before writing the agent', async () => {
+    let called = false;
+    const ctx = makeCtx({
+      createAgent: async () => {
+        called = true;
+        return { ok: true, slug: 'x' };
+      },
+    });
+
+    const result = await handleCreateAgent(ctx, {
+      ...VALID_INPUT,
+      metadata: {
+        ...VALID_INPUT.metadata,
+        actionGrants: ['calendar.teleport'],
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain('Unsupported actionGrants');
+    expect(called).toBe(false);
   });
 });

@@ -7,7 +7,7 @@ source_of_truth: true
 
 # Runner System Map
 
-Generated: 2026-07-05
+Generated: 2026-07-06
 
 ## Why This Exists
 
@@ -33,13 +33,13 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Summary
 
-- Agents mapped: 33
+- Agents mapped: 34
 - Hidden from Workers home: 9
 - Campaign default workers: `world-builder`, `content-genius`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
-- Domains: Command 2, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
-- Permission modes: ask 26, safe 7
+- Domains: Command 3, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
+- Permission modes: ask 28, safe 6
 - Known skills: 103 (64 bundled, 6 system, 103 user-global on this machine)
 - Known builtin sources: 19
 
@@ -94,14 +94,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 #### HNIC (`concierge`)
 
 - Description: Main work chat. Routes goals to the right workers, skills, automations, and workflows.
-- Permission: `safe`; thinking: `medium`
+- Permission: `ask`; thinking: `medium`
 - Launch surfaces: `hq-sidebar-chat`, `campaign-sidebar-chat`, `system-agent-hidden-from-worker-home`
-- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `source-recipe`, `artist-os-guide`, `runneros-self-edit`
+- Skills: `agent-creator`, `automation-creator`, `workflow-creator`, `source-recipe`
 - Sources: none
 - Optional sources: none
 - Trusted tools: none
 - Tags: `chat`, `guide`, `routing`, `workflows`, `automations`
-- Signals: `agent-catalog-aware`, `artifact-output-aware`, `context-doc-aware`, `explicit-approval-required`, `external-action-boundary`, `memory-scope-instructions`, `safe-default`
+- Signals: `agent-catalog-aware`, `approval-capable`, `artifact-output-aware`, `context-doc-aware`, `explicit-approval-required`, `external-action-boundary`, `memory-scope-instructions`
 - Inputs: Any goal, task, question, campaign need, automation idea, workflow idea, or worker-routing request.
 - Outputs: A direct answer, worker handoff, queued-work plan, automation/workflow draft, or approval-gated next action.
 
@@ -118,6 +118,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `artifact-output-aware`, `memory-scope-instructions`
 - Inputs: A goal or outcome you want to achieve.
 - Outputs: A step-by-step plan with named owners, plus the executed result.
+
+#### Setup Concierge (`setup-concierge`)
+
+- Description: Guides app setup, connections, keys, services, and “how do I use this?” questions.
+- Permission: `ask`; thinking: `medium`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `artist-os-guide`, `source-recipe`
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `setup`, `connections`, `keys`, `help`, `guide`, `command`
+- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`
+- Inputs: A setup goal, pasted credential, app-feature question, broken connection, or “what do I do next?” request.
+- Outputs: A guided setup step, saved-setting plan, connection test path, app explanation, or follow-up checklist.
 
 ### Content Creation
 

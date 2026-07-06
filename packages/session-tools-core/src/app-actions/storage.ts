@@ -1,0 +1,126 @@
+import { createHash, randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
+import type { AppActionReceipt, AppActionRuntimeContext, AppActionSurface } from './types.ts';
+
+export function getWorkspaceId(ctx: AppActionRuntimeContext): string {
+  return ctx.workspaceId?.trim() || basename(ctx.workspacePath);
+}
+
+export function nowIso(): string {
+  return new Date().toISOString();
+}
+
+export function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const object = value as Record<string, unknown>;
+  return `{${Object.keys(object).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(object[key])}`).join(',')}}`;
+}
+
+export function sha256(input: string): string {
+  return createHash('sha256').update(input).digest('hex');
+}
+
+export function appActionsRoot(ctx: AppActionRuntimeContext): string {
+  return join(ctx.workspacePath, '.runneros', 'app-actions');
+}
+
+function receiptDir(ctx: AppActionRuntimeContext, createdAt: string): string {
+  const date = new Date(createdAt);
+  const yyyy = String(date.getUTCFullYear());
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  return join(appActionsRoot(ctx), 'receipts', yyyy, mm);
+}
+
+function receiptIndexDir(ctx: AppActionRuntimeContext): string {
+  return join(appActionsRoot(ctx), 'receipt-index');
+}
+
+function idempotencyDir(ctx: AppActionRuntimeContext): string {
+  return join(appActionsRoot(ctx), 'idempotency');
+}
+
+export function buildIdempotencyKey(input: {
+  workspaceId: string;
+  actionId: string;
+  actorStableId: string;
+  requestId: string;
+  normalizedInput: unknown;
+}): string {
+  return sha256(stableStringify(input));
+}
+
+export function writeReceipt(ctx: AppActionRuntimeContext, receipt: AppActionReceipt): AppActionReceipt {
+  const dir = receiptDir(ctx, receipt.createdAt);
+  const indexDir = receiptIndexDir(ctx);
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(indexDir, { recursive: true });
+  const file = join(dir, `${receipt.id}.json`);
+  writeFileSync(file, JSON.stringify(receipt, null, 2) + '\n', 'utf-8');
+  writeFileSync(join(indexDir, `${receipt.id}.json`), JSON.stringify({ file }, null, 2) + '\n', 'utf-8');
+  return receipt;
+}
+
+export function readReceipt(ctx: AppActionRuntimeContext, receiptId: string): AppActionReceipt | null {
+  const indexFile = join(receiptIndexDir(ctx), `${receiptId}.json`);
+  if (!existsSync(indexFile)) return null;
+  try {
+    const pointer = JSON.parse(readFileSync(indexFile, 'utf-8')) as { file?: unknown };
+    if (typeof pointer.file !== 'string' || !existsSync(pointer.file)) return null;
+    return JSON.parse(readFileSync(pointer.file, 'utf-8')) as AppActionReceipt;
+  } catch {
+    return null;
+  }
+}
+
+export function readIdempotencyReceipt(ctx: AppActionRuntimeContext, idempotencyKey: string): AppActionReceipt | null {
+  const file = join(idempotencyDir(ctx), `${idempotencyKey}.json`);
+  if (!existsSync(file)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf-8')) as { receiptId?: unknown };
+    return typeof parsed.receiptId === 'string' ? readReceipt(ctx, parsed.receiptId) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeIdempotency(ctx: AppActionRuntimeContext, idempotencyKey: string, receiptId: string): void {
+  const dir = idempotencyDir(ctx);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, `${idempotencyKey}.json`),
+    JSON.stringify({ receiptId, updatedAt: nowIso() }, null, 2) + '\n',
+    'utf-8',
+  );
+}
+
+export function appendSurfaceRecord<T extends Record<string, unknown>>(
+  ctx: AppActionRuntimeContext,
+  surface: AppActionSurface,
+  recordType: string,
+  record: T,
+): T & { id: string; createdAt: string; updatedAt: string } {
+  const dir = join(appActionsRoot(ctx), 'surfaces', surface);
+  mkdirSync(dir, { recursive: true });
+  const file = join(dir, `${recordType}.json`);
+  let existing: Array<Record<string, unknown>> = [];
+  if (existsSync(file)) {
+    try {
+      const parsed = JSON.parse(readFileSync(file, 'utf-8'));
+      if (Array.isArray(parsed)) existing = parsed as Array<Record<string, unknown>>;
+    } catch {
+      existing = [];
+    }
+  }
+  const now = nowIso();
+  const next = {
+    id: randomUUID(),
+    createdAt: now,
+    updatedAt: now,
+    ...record,
+  };
+  existing.push(next);
+  writeFileSync(file, JSON.stringify(existing, null, 2) + '\n', 'utf-8');
+  return next;
+}

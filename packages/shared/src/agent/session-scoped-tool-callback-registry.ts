@@ -51,6 +51,9 @@ export interface SessionScopedToolCallbacks {
    */
   browserPaneFns?: BrowserPaneFns;
 
+  /** Active standalone agent slug for this session, when running as an agent. */
+  activeAgentSlug?: string;
+
   /** Set labels on a session (defaults to current). */
   setSessionLabelsFn?: (sessionId: string | undefined, labels: string[]) => void | Promise<void>;
   /** Set status on a session (defaults to current). */
@@ -150,6 +153,14 @@ export interface SessionScopedToolCallbacks {
   createOutputFn?: (
     input: import('@craft-agent/session-tools-core').CreateOutputToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').CreateOutputResult>;
+  /** Import local files into Artist Vault. */
+  addVaultFilesFn?: (
+    input: import('@craft-agent/session-tools-core').AppActionVaultAddFilesInput,
+  ) => Promise<import('@craft-agent/session-tools-core').AppActionVaultResult>;
+  /** Save an Output asset into Artist Vault. */
+  addOutputToVaultFn?: (
+    input: import('@craft-agent/session-tools-core').AppActionVaultAddFromOutputInput,
+  ) => Promise<import('@craft-agent/session-tools-core').AppActionVaultResult>;
   /** Apply a safe visual surface operation to the current session Canvas. */
   applyVisualSurfaceEventFn?: (
     input: import('@craft-agent/session-tools-core').VisualSurfaceToolInput,

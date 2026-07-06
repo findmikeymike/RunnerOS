@@ -1,6 +1,7 @@
 import type { SessionToolContext } from '../context.ts';
 import type { ToolResult } from '../types.ts';
 import { successResponse, errorResponse } from '../response.ts';
+import { isValidActionGrant } from '../app-actions/index.ts';
 
 export interface CreateAgentToolMetadata {
   name: string;
@@ -12,6 +13,7 @@ export interface CreateAgentToolMetadata {
   sources?: string[];
   optionalSources?: string[];
   trustedWorkerTools?: string[];
+  actionGrants?: string[];
   visualAgent?: boolean;
   inputs?: string;
   outputs?: string;
@@ -65,6 +67,11 @@ export async function handleCreateAgent(
 
   if (!args.systemPrompt || args.systemPrompt.trim().length === 0) {
     return errorResponse('systemPrompt is required and cannot be empty.');
+  }
+
+  const invalidActionGrant = args.metadata.actionGrants?.find((grant) => !isValidActionGrant(grant));
+  if (invalidActionGrant) {
+    return errorResponse(`Unsupported actionGrants entry: "${invalidActionGrant}". Use list_app_actions first, or a valid surface wildcard like "vault.*".`);
   }
 
   try {

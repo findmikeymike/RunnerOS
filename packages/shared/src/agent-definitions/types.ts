@@ -48,6 +48,8 @@ export interface AgentMetadata {
   optionalSources?: string[];
   /** Session tool names this trusted worker may run without per-tool babysitting. */
   trustedWorkerTools?: string[];
+  /** App Action IDs or grants this worker may execute through execute_app_action. */
+  actionGrants?: string[];
   /** When true, runtime prompts encourage proactive Canvas use for visual artifacts. */
   visualAgent?: boolean;
   /**
@@ -99,6 +101,7 @@ export type AgentParseWarningCode =
   | 'invalid-sources'
   | 'invalid-optional-sources'
   | 'invalid-trusted-worker-tools'
+  | 'invalid-action-grants'
   | 'invalid-tags';
 
 export interface AgentParseWarning {

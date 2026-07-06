@@ -159,6 +159,9 @@ export interface SessionToolContext {
   /** Absolute path to workspace folder (~/.craft-agent/workspaces/{id}) */
   workspacePath: string;
 
+  /** Stable workspace ID when known. Falls back to basename(workspacePath). */
+  workspaceId?: string;
+
   /** Path to sources folder within workspace */
   get sourcesPath(): string;
 
@@ -439,6 +442,12 @@ export interface SessionToolContext {
    */
   createOutput?(input: import('./handlers/outputs.ts').CreateOutputToolInput): Promise<import('./handlers/outputs.ts').CreateOutputResult>;
 
+  /** Import local files into Artist Vault from the current workspace session. */
+  addVaultFiles?(input: import('./app-actions/types.ts').AppActionVaultAddFilesInput): Promise<import('./app-actions/types.ts').AppActionVaultResult>;
+
+  /** Save an existing Output asset into Artist Vault from the current workspace session. */
+  addOutputToVault?(input: import('./app-actions/types.ts').AppActionVaultAddFromOutputInput): Promise<import('./app-actions/types.ts').AppActionVaultResult>;
+
   /**
    * Apply a validated visual surface operation to the current session Canvas.
    * Backend owns workspace/session resolution; callers cannot supply those IDs.
@@ -607,6 +616,7 @@ export interface AgentListItem {
   sources: string[];
   optionalSources?: string[];
   trustedWorkerTools?: string[];
+  actionGrants?: string[];
   inputs?: string;
   outputs?: string;
   tags: string[];

@@ -46,6 +46,13 @@ export function attachSessionSelfManagementBindings(
 ): void {
   // Direct pass-through bindings — signatures match, no wrapping needed.
   // Each getter resolves fresh from the registry on every access.
+  Object.defineProperty(context, 'activeAgentSlug', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.activeAgentSlug;
+    },
+    configurable: true,
+    enumerable: true,
+  });
 
   Object.defineProperty(context, 'setSessionLabels', {
     get() {
@@ -295,6 +302,22 @@ export function attachSessionSelfManagementBindings(
   Object.defineProperty(context, 'createOutput', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createOutputFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'addVaultFiles', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.addVaultFilesFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'addOutputToVault', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.addOutputToVaultFn;
     },
     configurable: true,
     enumerable: true,

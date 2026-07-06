@@ -27,12 +27,13 @@ export const STARTER_AGENTS: CreateAgentInput[] = [
       name: 'HNIC',
       description: 'Main work chat. Routes goals to the right workers, skills, automations, and workflows.',
       avatar: '💬',
-      permissionMode: 'safe',
+      permissionMode: 'ask',
       thinkingLevel: 'medium',
       inputs: 'Any goal, task, question, campaign need, automation idea, workflow idea, or worker-routing request.',
       outputs: 'A direct answer, worker handoff, queued-work plan, automation/workflow draft, or approval-gated next action.',
       tags: ['chat', 'guide', 'routing', 'workflows', 'automations'],
       skills: [...CREATOR_SYSTEM_SKILL_SLUGS],
+      actionGrants: ['outputs.create', 'approvals.request', 'workflows.start', 'vault.*', 'kanban.create_card', 'campaigns.*', 'network.upsert_person', 'fans.upsert_fan'],
     },
     systemPrompt: `You are HNIC — Head Nerd in Charge, the in-app Concierge.
 
@@ -193,6 +194,7 @@ Style:
       outputs: 'A step-by-step plan with named owners, plus the executed result.',
       tags: ['planning', 'coordination', 'multi-step'],
       skills: [...CREATOR_SYSTEM_SKILL_SLUGS],
+      actionGrants: ['outputs.create', 'approvals.request', 'workflows.start', 'kanban.create_card', 'campaigns.*'],
     },
     systemPrompt: `You are the Orchestrator.
 
@@ -601,6 +603,7 @@ Default report shape:
       skills: ['artist-art-direction', 'artist-typography-taste', 'artist-visual-world-director', 'ad-creative', 'zero'],
       optionalSources: ['zero'],
       trustedWorkerTools: ['artwork_compose', 'create_output'],
+      actionGrants: ['outputs.create', 'vault.add_file', 'vault.add_from_output'],
     },
     systemPrompt: `You are Art Director, the artist visual concept worker for cover art, merch graphics, campaign images, posters, editorial visuals, and AI-assisted artwork.
 

@@ -129,18 +129,18 @@ function warning(field: keyof AgentMetadata, code: AgentParseWarning['code'], me
 
 function coerceStringArray(
   value: unknown,
-  field: 'skills' | 'sources' | 'optionalSources' | 'trustedWorkerTools',
+  field: 'skills' | 'sources' | 'optionalSources' | 'trustedWorkerTools' | 'actionGrants',
   warnings: AgentParseWarning[],
 ): string[] | undefined {
   if (typeof value === 'string') return [value.trim()].filter(Boolean);
   if (value == null) return undefined;
   if (!Array.isArray(value)) {
-    warnings.push(warning(field, field === 'optionalSources' ? 'invalid-optional-sources' : field === 'trustedWorkerTools' ? 'invalid-trusted-worker-tools' : `invalid-${field}`, `${field} must be a string or an array of strings.`));
+    warnings.push(warning(field, field === 'optionalSources' ? 'invalid-optional-sources' : field === 'trustedWorkerTools' ? 'invalid-trusted-worker-tools' : field === 'actionGrants' ? 'invalid-action-grants' : `invalid-${field}`, `${field} must be a string or an array of strings.`));
     return undefined;
   }
   const invalidCount = value.filter((entry) => typeof entry !== 'string').length;
   if (invalidCount > 0) {
-    warnings.push(warning(field, field === 'optionalSources' ? 'invalid-optional-sources' : field === 'trustedWorkerTools' ? 'invalid-trusted-worker-tools' : `invalid-${field}`, `${field} contains ${invalidCount} non-string entr${invalidCount === 1 ? 'y' : 'ies'} that were ignored.`));
+    warnings.push(warning(field, field === 'optionalSources' ? 'invalid-optional-sources' : field === 'trustedWorkerTools' ? 'invalid-trusted-worker-tools' : field === 'actionGrants' ? 'invalid-action-grants' : `invalid-${field}`, `${field} contains ${invalidCount} non-string entr${invalidCount === 1 ? 'y' : 'ies'} that were ignored.`));
   }
   const cleaned = Array.from(
     new Set(
@@ -253,6 +253,7 @@ export function parseAgentFile(content: string): { metadata: AgentMetadata; syst
     sources: coerceStringArray(data.sources, 'sources', warnings),
     optionalSources: coerceStringArray(data.optionalSources, 'optionalSources', warnings),
     trustedWorkerTools: coerceStringArray(data.trustedWorkerTools, 'trustedWorkerTools', warnings),
+    actionGrants: coerceStringArray(data.actionGrants, 'actionGrants', warnings),
     visualAgent: data.visualAgent === true ? true : undefined,
     greeting: typeof data.greeting === 'string' ? data.greeting.trim() || undefined : undefined,
     inputs: typeof data.inputs === 'string' ? data.inputs.trim() || undefined : undefined,
@@ -427,6 +428,7 @@ export function serializeAgent(metadata: AgentMetadata, systemPrompt: string): s
   if (metadata.sources?.length) data.sources = metadata.sources;
   if (metadata.optionalSources?.length) data.optionalSources = metadata.optionalSources;
   if (metadata.trustedWorkerTools?.length) data.trustedWorkerTools = metadata.trustedWorkerTools;
+  if (metadata.actionGrants?.length) data.actionGrants = metadata.actionGrants;
   if (metadata.visualAgent) data.visualAgent = true;
   if (metadata.greeting) data.greeting = metadata.greeting;
   if (metadata.inputs) data.inputs = metadata.inputs;
@@ -617,6 +619,33 @@ export function ensureBuiltInAgentSkillsForSlug(
     // Best-effort migration; loading must not fail because of a malformed write.
     return { updated: false };
   }
+}
+
+export function ensureAgentActionGrants(
+  required: ReadonlyArray<{ slug: string; actionGrants: ReadonlyArray<string> }>,
+  options?: AgentStorageOptions,
+): { updated: number } {
+  let updated = 0;
+  for (const entry of required) {
+    const loaded = loadGlobalAgent(entry.slug, options);
+    if (!loaded) continue;
+    const current = new Set(loaded.metadata.actionGrants ?? []);
+    const missing = entry.actionGrants.filter((grant) => !current.has(grant));
+    if (missing.length === 0) continue;
+
+    const next: AgentMetadata = {
+      ...loaded.metadata,
+      actionGrants: [...(loaded.metadata.actionGrants ?? []), ...missing],
+    };
+
+    try {
+      writeGlobalAgent({ slug: entry.slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+      updated += 1;
+    } catch {
+      // Best-effort migration; loading must not fail because of a malformed write.
+    }
+  }
+  return { updated };
 }
 
 /**

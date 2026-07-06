@@ -1,9 +1,11 @@
 # App Action Layer Spec
 
-Status: draft
-Last verified: 2026-07-05
+Status: initial implementation landed
+Last verified: 2026-07-06
 Branch: codex/app-action-layer
 Owner: RunnerOS system layer
+
+Implementation map: [12-app-action-layer-build.md](./12-app-action-layer-build.md)
 
 ## Purpose
 

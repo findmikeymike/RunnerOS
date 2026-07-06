@@ -18,6 +18,7 @@ import {
   ensureRequiredAgents,
   ensureBuiltInAgentSkills,
   ensureBuiltInAgentSkillsForSlug,
+  ensureAgentActionGrants,
   replaceBuiltInAgentPromptPattern,
   replaceBuiltInAgentPromptText,
   removeBuiltInAgentSkills,
@@ -284,6 +285,7 @@ describe('serializeAgent', () => {
         sources: ['s1'],
         optionalSources: ['gmail'],
         trustedWorkerTools: ['start_deep_research'],
+        actionGrants: ['outputs.create', 'vault.*'],
         visualAgent: true,
         inputs: 'A topic.',
         outputs: 'A summary.',
@@ -300,6 +302,7 @@ describe('serializeAgent', () => {
     expect(parsed!.metadata.sources).toEqual(['s1'])
     expect(parsed!.metadata.optionalSources).toEqual(['gmail'])
     expect(parsed!.metadata.trustedWorkerTools).toEqual(['start_deep_research'])
+    expect(parsed!.metadata.actionGrants).toEqual(['outputs.create', 'vault.*'])
     expect(parsed!.metadata.visualAgent).toBe(true)
     expect(parsed!.metadata.inputs).toBe('A topic.')
     expect(parsed!.metadata.outputs).toBe('A summary.')
@@ -499,10 +502,14 @@ body
 
     expect(hnic).toBeDefined()
     expect(hnic?.metadata.name).toBe('HNIC')
+    expect(hnic?.metadata.permissionMode).toBe('ask')
     expect(hnic?.metadata.tags).toContain('routing')
     expect(hnic?.metadata.tags).toContain('workflows')
     expect(hnic?.metadata.skills).toContain('workflow-creator')
     expect(hnic?.metadata.skills).toContain('automation-creator')
+    expect(hnic?.metadata.actionGrants).toContain('outputs.create')
+    expect(hnic?.metadata.actionGrants).toContain('vault.*')
+    expect(hnic?.metadata.actionGrants).toContain('campaigns.*')
     expect(hnic?.systemPrompt).toContain('current active-agent capability catalog')
     expect(hnic?.systemPrompt).toContain('@setup-concierge')
     expect(hnic?.systemPrompt).toContain('suggest an automation')
@@ -869,6 +876,7 @@ body
     expect(artDirector?.metadata.skills).toContain('zero')
     expect(artDirector?.metadata.optionalSources).toContain('zero')
     expect(artDirector?.metadata.trustedWorkerTools).toEqual(['artwork_compose', 'create_output'])
+    expect(artDirector?.metadata.actionGrants).toEqual(['outputs.create', 'vault.add_file', 'vault.add_from_output'])
     expect(artDirector?.metadata.tags).toContain('album-art')
     expect(artDirector?.metadata.tags).toContain('merch')
     expect(artDirector?.systemPrompt).toContain('70s Vinyl Cover')
@@ -996,6 +1004,29 @@ body
     expect(ensureBuiltInAgentSkills(['agent-creator'], { globalAgentsDir }).updated).toBe(2)
     expect(loadGlobalAgent('concierge', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
     expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
+  })
+
+  test('ensureAgentActionGrants appends missing grants without duplicating', () => {
+    writeGlobalAgent(
+      {
+        slug: 'concierge',
+        metadata: {
+          name: 'HNIC',
+          description: 'Routes requests.',
+          actionGrants: ['outputs.create'],
+        },
+        systemPrompt: 'Concierge body.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureAgentActionGrants([
+      { slug: 'concierge', actionGrants: ['outputs.create', 'vault.*'] },
+    ], { globalAgentsDir }).updated).toBe(1)
+    expect(ensureAgentActionGrants([
+      { slug: 'concierge', actionGrants: ['outputs.create', 'vault.*'] },
+    ], { globalAgentsDir }).updated).toBe(0)
+    expect(loadGlobalAgent('concierge', { globalAgentsDir })!.metadata.actionGrants).toEqual(['outputs.create', 'vault.*'])
   })
 
   test('replaceBuiltInAgentPromptText only patches built-in prompt bodies on exact match', () => {

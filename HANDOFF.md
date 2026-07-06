@@ -1,5 +1,28 @@
 # Handoff: RunnerOS
 
+## Current Addendum: App Action Layer
+
+- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/app-action-layer`
+- Branch: `codex/app-action-layer`
+- Current slice: App Action Layer implementation for safe agent-driven app/UI mutations.
+- Main docs:
+  - `docs/creator-command-center/11-app-action-layer-spec.md`
+  - `docs/creator-command-center/12-app-action-layer-build.md`
+- Key implementation files:
+  - `packages/session-tools-core/src/app-actions/`
+  - `packages/session-tools-core/src/handlers/app-actions.ts`
+  - `packages/session-tools-core/src/tool-defs.ts`
+  - `packages/server-core/src/sessions/SessionManager.ts`
+  - `packages/shared/src/agent-definitions/{types.ts,storage.ts,starter-templates.ts}`
+  - `packages/shared/src/agent/session-scoped-tool-callback-registry.ts`
+  - `packages/shared/src/agent/session-self-management-bindings.ts`
+- What landed: `list_app_actions`, `preview_app_action`, `execute_app_action`, `get_app_action_receipt`, action receipts/idempotency, agent `actionGrants`, real Output/Workflow/Vault adapters, internal records for Kanban/Campaigns/Network/Fans, starter/migration grants for HNIC/Orchestrator/Art Director.
+- Verified:
+  - `/Users/michaelb.williams/.bun/bin/bun test packages/session-tools-core/src/handlers/app-actions.test.ts packages/session-tools-core/src/handlers/create-agent.test.ts packages/shared/src/agent-definitions/storage.test.ts packages/shared/src/agent/__tests__/session-self-management-bindings.test.ts` -> `86 pass`.
+  - `/Users/michaelb.williams/.bun/bin/bun run --cwd packages/session-tools-core typecheck` passed.
+  - `npm run docs:system-map` passed and regenerated `docs/system-map/`.
+- Watchout: direct shared/server-core `tsc -p` in this nested worktree resolves `@craft-agent/session-tools-core` to the main checkout and also hits pre-existing missing Pi SDK type packages. Use the focused tests plus package-local typecheck as this slice's reliable evidence unless the workspace linker is refreshed.
+
 ## Mission
 
 RunnerOS is a local Electron/Bun/TypeScript desktop workspace app forked from Craft Agents. The product is moving from "chat app" to local AI control plane: agents, skills, sources/tools, workflows, automations, workspace context, memory, visual outputs, and multi-step execution. The core direction is practical: specialist agents run with declared skills/sources, missing tools fail loudly before execution, and long-running workflows stay inspectable and recoverable.

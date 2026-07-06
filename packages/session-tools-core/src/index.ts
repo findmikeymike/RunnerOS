@@ -87,6 +87,29 @@ export type {
   MessageAgentToolResult,
 } from './handlers/message-agent.ts';
 
+export type {
+  AppActionCallInput,
+  AppActionExecuteResult,
+  AppActionGetReceiptInput,
+  AppActionListInput,
+  AppActionListResult,
+  AppActionPreview,
+  AppActionPreviewInput,
+  AppActionReceipt,
+  AppActionVaultAddFilesInput,
+  AppActionVaultAddFromOutputInput,
+  AppActionVaultKindHint,
+  AppActionVaultResult,
+} from './app-actions/index.ts';
+
+export {
+  executeAppAction,
+  getAppActionReceipt,
+  isValidActionGrant,
+  listAppActions,
+  previewAppAction,
+} from './app-actions/index.ts';
+
 // Validation
 export {
   // Result helpers
@@ -215,6 +238,10 @@ export {
   handleRecallMemory,
   // Outputs
   handleCreateOutput,
+  handleListAppActions,
+  handlePreviewAppAction,
+  handleExecuteAppAction,
+  handleGetAppActionReceipt,
   // Visual surface
   handleVisualSurface,
   handleVisualSurfaceState,
@@ -300,6 +327,10 @@ export type {
   CreateOutputFileInput,
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
+  ListAppActionsToolInput,
+  PreviewAppActionToolInput,
+  ExecuteAppActionToolInput,
+  GetAppActionReceiptToolInput,
   VisualSurfaceToolInput,
   VisualSurfaceToolResult,
   VisualSurfaceStateCapture,
@@ -344,6 +375,10 @@ export {
   UpdateMemorySchema,
   ForgetMemorySchema,
   RecallMemorySchema,
+  ListAppActionsSchema,
+  PreviewAppActionSchema,
+  ExecuteAppActionSchema,
+  GetAppActionReceiptSchema,
   CreateOutputSchema,
   VisualSurfaceSchema,
   VisualSurfaceStateSchema,

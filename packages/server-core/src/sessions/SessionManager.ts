@@ -543,6 +543,14 @@ function withWorkflowDefinitionsLibraryMutex<T>(fn: () => Promise<T>): Promise<T
   return next
 }
 
+const appActionVaultMutexes = new Map<string, Promise<void>>()
+function withAppActionVaultMutex<T>(workspaceRootPath: string, fn: () => Promise<T>): Promise<T> {
+  const prev = appActionVaultMutexes.get(workspaceRootPath) ?? Promise.resolve()
+  const next = prev.then(fn, fn)
+  appActionVaultMutexes.set(workspaceRootPath, next.then(() => {}, () => {}))
+  return next
+}
+
 async function writeFileAtomic(path: string, data: string): Promise<void> {
   const tmpPath = `${path}.${process.pid}.${randomUUID()}.tmp`
   await writeFile(tmpPath, data, 'utf-8')
@@ -2654,7 +2662,7 @@ export class SessionManager implements ISessionManager {
           sessionLog.warn('[skills] Workspace→global mirror skipped:', err as Error)
         }
         try {
-          const { CONCIERGE_SLUG, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
+          const { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, ensureAgentActionGrants, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
           const { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } = await import('@craft-agent/shared/skills/system')
           const { updated } = ensureBuiltInAgentSkills(CREATOR_SYSTEM_SKILL_SLUGS)
           if (updated > 0) {
@@ -2663,7 +2671,16 @@ export class SessionManager implements ISessionManager {
           if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
             sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
           }
+          const actionGrantUpdate = ensureAgentActionGrants([
+            { slug: CONCIERGE_SLUG, actionGrants: ['outputs.create', 'approvals.request', 'workflows.start', 'vault.*', 'kanban.create_card', 'campaigns.*', 'network.upsert_person', 'fans.upsert_fan'] },
+            { slug: ORCHESTRATOR_SLUG, actionGrants: ['outputs.create', 'approvals.request', 'workflows.start', 'kanban.create_card', 'campaigns.*'] },
+            { slug: 'art-director', actionGrants: ['outputs.create', 'vault.add_file', 'vault.add_from_output'] },
+          ])
+          if (actionGrantUpdate.updated > 0) {
+            sessionLog.info(`[agent-definitions] Ensured ${actionGrantUpdate.updated} agent(s) have app action grants`)
+          }
           if (replaceBuiltInAgentMetadata(CONCIERGE_SLUG, {
+            permissionMode: { from: 'safe', to: 'ask' },
             name: { from: 'Concierge', to: 'HNIC' },
             description: {
               from: 'In-app guide. Knows every agent, skill, and tool — points you at the right one.',
@@ -4882,6 +4899,7 @@ user a clickable link to where the thing now lives.`
 
       // Wire up session self-management tools (set_session_labels, set_session_status, etc.)
       mergeSessionScopedToolCallbacks(managed.id, {
+        activeAgentSlug: managed.spawnedFromAgent?.agentSlug,
         setSessionLabelsFn: (sessionId: string | undefined, labels: string[]) => {
           this.setSessionLabels(sessionId ?? managed.id, labels)
         },
@@ -4982,6 +5000,87 @@ user a clickable link to where the thing now lives.`
             workflowName: managed.launchReceipt?.summary,
             stepId: workflow?.stepId,
             output: input,
+          })
+        },
+        addVaultFilesFn: async (input) => {
+          return withAppActionVaultMutex(managed.workspace.rootPath, async () => {
+            const {
+              artistVaultContextMetadata,
+              artistVaultContextSlug,
+              importArtistVaultAssetsAsync,
+              serializeArtistVaultContext,
+            } = await import('@craft-agent/shared/artist-vault')
+            const { loadAllContextDocs, upsertContextDoc } = await import('@craft-agent/shared/workspace-context')
+            const { refreshHqStateContextDocBestEffort } = await import('../hq-state/refresh')
+            const result = await importArtistVaultAssetsAsync(
+              managed.workspace.rootPath,
+              managed.workspace.id,
+              input.paths,
+              input.kindHint ? { kindHint: input.kindHint } : {},
+            )
+            upsertContextDoc(managed.workspace.rootPath, {
+              slug: artistVaultContextSlug(),
+              metadata: artistVaultContextMetadata(),
+              body: serializeArtistVaultContext(result.manifest),
+            })
+            refreshHqStateContextDocBestEffort(managed.workspace.rootPath)
+            this.eventSink?.(
+              RPC_CHANNELS.workspaceContext.CHANGED,
+              { to: 'all' },
+              managed.workspace.id,
+              loadAllContextDocs(managed.workspace.rootPath),
+            )
+            return result
+          })
+        },
+        addOutputToVaultFn: async (input) => {
+          return withAppActionVaultMutex(managed.workspace.rootPath, async () => {
+            const {
+              artistVaultContextMetadata,
+              artistVaultContextSlug,
+              importArtistVaultAssetsAsync,
+              serializeArtistVaultContext,
+            } = await import('@craft-agent/shared/artist-vault')
+            const { loadAllContextDocs, upsertContextDoc } = await import('@craft-agent/shared/workspace-context')
+            const { refreshHqStateContextDocBestEffort } = await import('../hq-state/refresh')
+            const outputService = new OutputService({
+              getWorkspaceRootPath: (workspaceId) => {
+                if (workspaceId !== managed.workspace.id) {
+                  throw new Error(`Workspace not available for this session: ${workspaceId}`)
+                }
+                return managed.workspace.rootPath
+              },
+            })
+            const output = outputService.get(managed.workspace.id, input.outputId)
+            if (!output) {
+              throw new Error(`Output not found: ${input.outputId}`)
+            }
+            const asset = input.assetId
+              ? output.assets.find((candidate) => candidate.id === input.assetId)
+              : output.primary ?? output.assets.find((candidate) => candidate.role === 'primary') ?? output.assets[0]
+            if (!asset) {
+              throw new Error(`Output "${input.outputId}" has no file asset to save.`)
+            }
+            const assetPath = outputService.resolveAssetPath(managed.workspace.id, input.outputId, asset.path)
+            const result = await importArtistVaultAssetsAsync(
+              managed.workspace.rootPath,
+              managed.workspace.id,
+              [assetPath],
+              input.kindHint ? { kindHint: input.kindHint } : {},
+            )
+            upsertContextDoc(managed.workspace.rootPath, {
+              slug: artistVaultContextSlug(),
+              metadata: artistVaultContextMetadata(),
+              body: serializeArtistVaultContext(result.manifest),
+            })
+            refreshHqStateContextDocBestEffort(managed.workspace.rootPath)
+            this.eventSink?.(
+              RPC_CHANNELS.workspaceContext.CHANGED,
+              { to: 'all' },
+              managed.workspace.id,
+              loadAllContextDocs(managed.workspace.rootPath),
+            )
+            return result
           })
         },
         applyVisualSurfaceEventFn: async (input) => {
@@ -5132,6 +5231,7 @@ user a clickable link to where the thing now lives.`
             sources: agent.metadata.sources ?? [],
             optionalSources: agent.metadata.optionalSources ?? [],
             trustedWorkerTools: agent.metadata.trustedWorkerTools ?? [],
+            actionGrants: agent.metadata.actionGrants ?? [],
             inputs: agent.metadata.inputs,
             outputs: agent.metadata.outputs,
             tags: agent.metadata.tags ?? [],

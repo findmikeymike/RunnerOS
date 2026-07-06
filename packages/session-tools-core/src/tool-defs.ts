@@ -83,6 +83,12 @@ import {
   handleVideoClipAdjust,
   handleVideoExport,
 } from './handlers/video-tools.ts';
+import {
+  handleExecuteAppAction,
+  handleGetAppActionReceipt,
+  handleListAppActions,
+  handlePreviewAppAction,
+} from './handlers/app-actions.ts';
 
 // ============================================================
 // Canonical Zod Schemas
@@ -424,6 +430,7 @@ export const CreateAgentSchema = z.object({
     sources: z.array(z.string()).optional().describe('Source slugs to bundle.'),
     optionalSources: z.array(z.string()).optional().describe('Source slugs to use when already connected, but never require to launch the agent.'),
     trustedWorkerTools: z.array(z.string()).optional().describe('Session tool names this trusted worker may run without per-tool babysitting. Use only for bounded internal work such as research runs and outputs; never for external sends/posts.'),
+    actionGrants: z.array(z.string()).optional().describe('App Action IDs or surface wildcards this worker may execute, e.g. outputs.create, vault.*, kanban.create_card.'),
     visualAgent: z.boolean().optional().describe('Set true for agents that should proactively create/pin visual, web, media, or document Outputs in Canvas.'),
     inputs: z.string().optional().describe('One sentence describing expected inputs.'),
     outputs: z.string().optional().describe('One sentence describing produced outputs.'),
@@ -516,6 +523,33 @@ export const RecallMemorySchema = z.object({
   query: z.string().min(1).describe('What to look for in durable memory. Ask a concise semantic question or keyword phrase.'),
   scopes: z.array(MemoryScopeSchema).min(1).optional().describe('Optional scopes to search. Defaults to USER.md plus this agent MEMORY.md when available.'),
   limit: z.number().int().min(1).max(25).optional().describe('Maximum matches to return. Defaults to 8, maximum 25.'),
+});
+
+const AppActionSurfaceSchema = z.enum(['calendar', 'kanban', 'network', 'fans', 'vault', 'outputs', 'work_products', 'campaigns', 'approvals', 'workflows', 'messages', 'publishing', 'settings']);
+
+export const ListAppActionsSchema = z.object({
+  surface: AppActionSurfaceSchema.optional().describe('Optional surface filter.'),
+  includeUnavailable: z.boolean().optional().describe('Include known actions whose adapter/grant is unavailable in this session.'),
+});
+
+export const PreviewAppActionSchema = z.object({
+  actionId: z.string().min(1).describe('Action ID from list_app_actions.'),
+  input: z.unknown().describe('Action-specific input object.'),
+  requestId: z.string().optional().describe('Stable caller request ID. Include for duplicate detection preview.'),
+  intendedSurface: z.string().optional().describe('Optional UI surface that triggered this request.'),
+});
+
+export const ExecuteAppActionSchema = z.object({
+  actionId: z.string().min(1).describe('Action ID from list_app_actions.'),
+  input: z.unknown().describe('Action-specific input object.'),
+  requestId: z.string().min(1).describe('Stable caller request ID used for idempotency. Reuse on retry.'),
+  intendedSurface: z.string().optional().describe('Optional UI surface that triggered this request.'),
+  approvalToken: z.string().optional().describe('Approval ID returned by a previous approval_required result.'),
+  dryRun: z.boolean().optional().describe('Validate and preview only; no write.'),
+});
+
+export const GetAppActionReceiptSchema = z.object({
+  receiptId: z.string().min(1).describe('Receipt ID returned by execute_app_action.'),
 });
 
 const OutputKindSchema = z.enum([
@@ -1068,13 +1102,29 @@ Shows which external chat apps are connected and can send/receive messages.`,
   unbind_messaging_channel: `Disconnect a messaging channel from the current session.
 Messages will no longer be forwarded between the chat app and this session.`,
 
+  list_app_actions: `List app actions this session can use.
+
+Use this before modifying app surfaces such as Outputs, Vault, Kanban, Campaigns, Network, Fans, Workflows, or Approvals. This is read-only and shows availability, risk, input schema, and approval behavior.`,
+
+  preview_app_action: `Validate and preview an app action before writing.
+
+Use this when you need to explain what will change, check duplicate risk, or verify an input shape before execute_app_action.`,
+
+  execute_app_action: `Execute a registered RunnerOS app action with idempotency and a durable receipt.
+
+Use this to let agents safely update app surfaces instead of inventing ad-hoc files. Always provide a stable requestId and prefer preview_app_action first for non-trivial writes. External, destructive, credential, or unavailable actions will require approval or fail closed.`,
+
+  get_app_action_receipt: `Read a prior app action receipt by ID.
+
+Use this to explain what changed, debug duplicates, or audit why an agent wrote to an app surface.`,
+
   create_agent: `Create a new agent in the global agent library and activate it in the current workspace.
 
 Use this only after walking the user through the agent-creator interview and getting explicit confirmation. Always show a complete draft (name, slug, avatar, system prompt, etc.) BEFORE calling this tool — never silent-write.
 
 **Inputs:**
 - \`slug\`: kebab-case (1-64 chars). If unsure, derive from the agent name.
-- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags) and free for you to infer sensibly. Use \`sources\` for required tools and \`optionalSources\` for tools that should attach only when connected. Use \`trustedWorkerTools\` only for bounded internal tools the worker may run without babysitting; never include email/post/send tools. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
+- \`metadata\`: name + description are required; the rest are strongly preferred (avatar, permissionMode, thinkingLevel, visualAgent, inputs, outputs, tags) and free for you to infer sensibly. Use \`sources\` for required tools and \`optionalSources\` for tools that should attach only when connected. Use \`trustedWorkerTools\` only for bounded internal tools the worker may run without babysitting; never include email/post/send tools. Use \`actionGrants\` for app actions the worker can execute, e.g. \`outputs.create\`, \`vault.*\`, \`kanban.create_card\`. Set \`visualAgent: true\` only for agents that should proactively use Canvas for visual/web/media/document artifacts.
 - \`systemPrompt\`: the agent's identity + operating instructions. Required, non-empty.
 - \`activateInWorkspace\` (default true): activate in this workspace immediately so the user sees it.
 - \`overwrite\` (default false): only set true if the user explicitly asked to replace an existing agent.
@@ -1379,6 +1429,11 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Messaging gateway tools
   { name: 'list_messaging_channels', description: TOOL_DESCRIPTIONS.list_messaging_channels, inputSchema: ListMessagingChannelsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListMessagingChannels },
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },
+  // App action layer
+  { name: 'list_app_actions', description: TOOL_DESCRIPTIONS.list_app_actions, inputSchema: ListAppActionsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAppActions },
+  { name: 'preview_app_action', description: TOOL_DESCRIPTIONS.preview_app_action, inputSchema: PreviewAppActionSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handlePreviewAppAction },
+  { name: 'execute_app_action', description: TOOL_DESCRIPTIONS.execute_app_action, inputSchema: ExecuteAppActionSchema, executionMode: 'registry', safeMode: 'block', handler: handleExecuteAppAction },
+  { name: 'get_app_action_receipt', description: TOOL_DESCRIPTIONS.get_app_action_receipt, inputSchema: GetAppActionReceiptSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleGetAppActionReceipt },
   // Creator skills — agent-creator structured write tool
   { name: 'create_agent', description: TOOL_DESCRIPTIONS.create_agent, inputSchema: CreateAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAgent },
   { name: 'create_automation', description: TOOL_DESCRIPTIONS.create_automation, inputSchema: CreateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAutomation },

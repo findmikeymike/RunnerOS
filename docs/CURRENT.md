@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-05
+last_verified: 2026-07-06
 source_of_truth: true
 ---
 
@@ -9,9 +9,9 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-05
-- Branch: `codex/creator-command-center`
-- Current goal: harden Shared Intel routing and Artist HQ proactive routing toward release confidence.
+- Date: 2026-07-06
+- Branch: `codex/app-action-layer`
+- Current goal: implement and harden the App Action Layer so agents can safely operate app surfaces.
 - Overall state: active Creator Command Center worktree with many feature docs; docs are now routed through this map instead of loose root files.
 
 ## Recently Completed
@@ -40,6 +40,11 @@ source_of_truth: true
 - Corrected the local smoke profile plan: real keys are entered through the app UI and persist in local RunnerOS credential storage; `smoke/local/` only holds ignored artist/campaign/service smoke context.
 - Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
+- Added the App Action Layer: `list_app_actions`, `preview_app_action`, `execute_app_action`, and `get_app_action_receipt`.
+- Added action receipts, idempotency pointers, grant checks, approval-required handling, unavailable-action reporting, and internal durable records for Kanban/Campaigns/Network/Fans.
+- Wired real adapters for Outputs, Workflows, and Artist Vault imports; Vault imports refresh the Artist Vault context doc and are serialized by workspace mutex.
+- Added `AgentMetadata.actionGrants`, create-agent validation, starter grants for HNIC/Orchestrator/Art Director, and startup grant migration for existing installed agents.
+- Added `docs/creator-command-center/12-app-action-layer-build.md` as the feature implementation map.
 
 ## In Progress
 
@@ -64,6 +69,10 @@ source_of_truth: true
 - Verified git branch before cleanup.
 - Verified moved paths with `rg` and updated stale references.
 - Electron typecheck required for Artist HQ UI changes.
+- Verified on 2026-07-06:
+  - `/Users/michaelb.williams/.bun/bin/bun test packages/session-tools-core/src/handlers/app-actions.test.ts packages/session-tools-core/src/handlers/create-agent.test.ts packages/shared/src/agent-definitions/storage.test.ts packages/shared/src/agent/__tests__/session-self-management-bindings.test.ts` -> `86 pass`.
+  - `/Users/michaelb.williams/.bun/bin/bun run --cwd packages/session-tools-core typecheck` passed.
+  - `npm run docs:system-map` passed and regenerated `docs/system-map/`.
 - Verified on 2026-07-05:
   - `bun test apps/electron/src/renderer/lib/artist-hq-proactive.test.ts packages/shared/src/hq-state/composer.test.ts packages/server-core/src/hq-state/refresh.test.ts packages/server-core/src/handlers/rpc/google-workspace.test.ts packages/shared/src/shared-intel/router.test.ts packages/server-core/src/handlers/rpc/shared-intel.test.ts apps/electron/src/renderer/lib/compose-agent-prompt.test.ts` -> `65 pass`.
   - `(cd packages/shared && ../../node_modules/.bin/tsc --noEmit)` passed.

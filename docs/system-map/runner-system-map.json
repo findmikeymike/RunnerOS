@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-05",
+  "generatedAt": "2026-07-06",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -18,9 +18,9 @@
     "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts"
   },
   "summary": {
-    "agentCount": 33,
+    "agentCount": 34,
     "domains": {
-      "Command": 2,
+      "Command": 3,
       "Content Creation": 4,
       "Creative": 5,
       "Merch": 2,
@@ -32,8 +32,8 @@
       "Socials": 2
     },
     "permissionModes": {
-      "ask": 26,
-      "safe": 7
+      "ask": 28,
+      "safe": 6
     },
     "hiddenWorkerHomeCount": 9,
     "campaignDefaultWorkerSlugs": [
@@ -128,15 +128,13 @@
       "name": "HNIC",
       "description": "Main work chat. Routes goals to the right workers, skills, automations, and workflows.",
       "domain": "Command",
-      "permissionMode": "safe",
+      "permissionMode": "ask",
       "thinkingLevel": "medium",
       "skills": [
         "agent-creator",
         "automation-creator",
         "workflow-creator",
-        "source-recipe",
-        "artist-os-guide",
-        "runneros-self-edit"
+        "source-recipe"
       ],
       "sources": [],
       "optionalSources": [],
@@ -156,12 +154,12 @@
       ],
       "riskSignals": [
         "agent-catalog-aware",
+        "approval-capable",
         "artifact-output-aware",
         "context-doc-aware",
         "explicit-approval-required",
         "external-action-boundary",
-        "memory-scope-instructions",
-        "safe-default"
+        "memory-scope-instructions"
       ],
       "inputs": "Any goal, task, question, campaign need, automation idea, workflow idea, or worker-routing request.",
       "outputs": "A direct answer, worker handoff, queued-work plan, automation/workflow draft, or approval-gated next action."
@@ -198,6 +196,41 @@
       ],
       "inputs": "A goal or outcome you want to achieve.",
       "outputs": "A step-by-step plan with named owners, plus the executed result."
+    },
+    {
+      "slug": "setup-concierge",
+      "name": "Setup Concierge",
+      "description": "Guides app setup, connections, keys, services, and “how do I use this?” questions.",
+      "domain": "Command",
+      "permissionMode": "ask",
+      "thinkingLevel": "medium",
+      "skills": [
+        "artist-os-guide",
+        "source-recipe"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "setup",
+        "connections",
+        "keys",
+        "help",
+        "guide",
+        "command"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "explicit-approval-required",
+        "external-action-boundary"
+      ],
+      "inputs": "A setup goal, pasted credential, app-feature question, broken connection, or “what do I do next?” request.",
+      "outputs": "A guided setup step, saved-setting plan, connection test path, app explanation, or follow-up checklist."
     },
     {
       "slug": "hypermotion-agent",

@@ -19,6 +19,7 @@ export interface AgentSearchCandidate {
   inputs?: string;
   outputs?: string;
   tags?: string[];
+  actionGrants?: string[];
 }
 
 function searchableText(agent: AgentSearchCandidate): string {
@@ -29,6 +30,7 @@ function searchableText(agent: AgentSearchCandidate): string {
     agent.inputs,
     agent.outputs,
     agent.tags?.join(' '),
+    agent.actionGrants?.join(' '),
   ]
     .filter(Boolean)
     .join(' ')
