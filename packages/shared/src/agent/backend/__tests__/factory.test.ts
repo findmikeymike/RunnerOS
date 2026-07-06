@@ -382,7 +382,7 @@ describe('ClaudeAgent model switching', () => {
 });
 
 describe('resolveModelForProvider', () => {
-  it('falls back when a locked Pi connection receives a model from another connection', () => {
+  it('falls back when a Pi connection receives a model outside its advertised list', () => {
     const connection = {
       slug: 'chatgpt-plus-2',
       name: 'GPT/Codex',

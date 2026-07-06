@@ -1218,9 +1218,9 @@ interface ManagedSession {
   sharedId?: string
   // Model to use for this session (overrides global config if set)
   model?: string
-  // LLM connection slug for this session (locked after first message)
+  // LLM connection slug for this session.
   llmConnection?: string
-  // Whether the connection is locked (cannot be changed after first agent creation)
+  // Whether the session has selected a sticky connection. Users may still switch deliberately.
   connectionLocked?: boolean
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
@@ -4066,7 +4066,7 @@ user a clickable link to where the thing now lives.`
    * Creates the appropriate backend agent based on LLM connection.
    *
    * Provider resolution order:
-   * 1. session.llmConnection (locked after first message)
+   * 1. session.llmConnection
    * 2. workspace.defaults.defaultLlmConnection
    * 3. global defaultLlmConnection
    * 4. fallback: no connection configured
@@ -4095,8 +4095,7 @@ user a clickable link to where the thing now lives.`
       })
       const connection = backendContext.connection
 
-      // Lock the connection after first resolution
-      // This ensures the session always uses the same provider
+      // Stick to the resolved connection until the user deliberately changes it.
       if (connection && !managed.connectionLocked) {
         managed.llmConnection = connection.slug
         managed.connectionLocked = true
@@ -6079,12 +6078,6 @@ user a clickable link to where the thing now lives.`
       throw new Error(`Session ${sessionId} not found`)
     }
 
-    // Only allow changing connection before first message (session hasn't started)
-    if (managed.messages && managed.messages.length > 0) {
-      sessionLog.warn(`setSessionConnection: cannot change connection after session has started (${sessionId})`)
-      throw new Error('Cannot change connection after session has started')
-    }
-
     // Validate connection exists
     const { getLlmConnection } = await import('@craft-agent/shared/config/storage')
     const connection = getLlmConnection(connectionSlug)
@@ -6094,6 +6087,12 @@ user a clickable link to where the thing now lives.`
     }
 
     managed.llmConnection = connectionSlug
+    managed.connectionLocked = true
+    if (managed.agent) {
+      sessionLog.info(`setSessionConnection: rebuilding agent for session ${sessionId} after connection switch to ${connectionSlug}`)
+      managed.agent.dispose()
+      managed.agent = null
+    }
     // Persist in-memory state directly to avoid race with pending queue writes
     this.persistSession(managed)
     await this.flushSession(managed.id)
@@ -6863,9 +6862,8 @@ user a clickable link to where the thing now lives.`
     const managed = this.sessions.get(sessionId)
     if (managed) {
       const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
-      const effectiveConnectionSlug = connection && !managed.connectionLocked
-        ? connection
-        : managed.llmConnection
+      const previousConnectionSlug = managed.llmConnection
+      const effectiveConnectionSlug = connection ?? managed.llmConnection
       const sessionConn = resolveSessionConnection(effectiveConnectionSlug, wsConfig?.defaults?.defaultLlmConnection)
       const provider = providerTypeToAgentProvider(sessionConn?.providerType || 'anthropic')
       const requestedModel = model ?? undefined
@@ -6877,16 +6875,25 @@ user a clickable link to where the thing now lives.`
       }
 
       managed.model = modelToPersist
-      // Also update connection if provided and not already locked
-      if (connection && !managed.connectionLocked) {
+      const connectionChanged = !!connection && connection !== previousConnectionSlug
+      // Deliberate user/provider switches are allowed; rebuild the backend below.
+      if (connection) {
         managed.llmConnection = connection
+        managed.connectionLocked = true
       }
       // Persist to disk (include connection if it was updated)
       const updates: { model?: string; llmConnection?: string } = { model: modelToPersist }
-      if (connection && !managed.connectionLocked) {
+      if (connection) {
         updates.llmConnection = connection
       }
       await updateSessionMetadata(managed.workspace.rootPath, sessionId, updates)
+
+      if (connectionChanged && managed.agent) {
+        sessionLog.info(`[updateSessionModel] Rebuilding agent for session ${sessionId} after connection switch ${previousConnectionSlug ?? '(none)'} → ${connection}`)
+        managed.agent.dispose()
+        managed.agent = null
+      }
+
       // Update agent model if it already exists (takes effect on next query)
       if (managed.agent) {
         // Fallback chain: session model > workspace default > connection default
@@ -6897,6 +6904,14 @@ user a clickable link to where the thing now lives.`
         sessionLog.info(`[updateSessionModel] No agent yet, model will apply on next agent creation`)
       }
       // Notify renderer of the model change
+      if (connectionChanged) {
+        this.sendEvent({
+          type: 'connection_changed',
+          sessionId,
+          connectionSlug: connection,
+          supportsBranching: resolveSupportsBranching(managed),
+        }, managed.workspace.id)
+      }
       this.sendEvent({ type: 'session_model_changed', sessionId, model: modelToPersist ?? null }, managed.workspace.id)
       sessionLog.info(`Session ${sessionId} model updated to: ${modelToPersist ?? '(global config)'}`)
     }
