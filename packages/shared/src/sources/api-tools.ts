@@ -123,7 +123,26 @@ export function buildHeaders(
 /**
  * Build the full URL for an API request
  */
-function buildUrl(
+function normalizeApiPathForBaseUrl(baseUrl: string, path: string): string {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  try {
+    const parsed = new URL(baseUrl);
+    const basePath = parsed.pathname.endsWith('/')
+      ? parsed.pathname.slice(0, -1)
+      : parsed.pathname;
+    if (basePath && normalizedPath === basePath) return '';
+    if (basePath && normalizedPath.startsWith(`${basePath}/`)) {
+      return normalizedPath.slice(basePath.length);
+    }
+  } catch {
+    // Fall back to raw path handling below.
+  }
+
+  return normalizedPath;
+}
+
+export function buildUrl(
   baseUrl: string,
   path: string,
   method: string,
@@ -133,7 +152,7 @@ function buildUrl(
 ): string {
   // Normalize: remove trailing slash from baseUrl and ensure path starts with /
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const normalizedPath = normalizeApiPathForBaseUrl(normalizedBase, path);
   let url = `${normalizedBase}${normalizedPath}`;
 
   // Handle query param auth (only for string credentials)
