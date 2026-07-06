@@ -32,6 +32,27 @@ import {
   isIconUrl,
 } from '../utils/icon.ts';
 
+function normalizeGoogleApiConfig(config: FolderSourceConfig): FolderSourceConfig {
+  if (config.type !== 'api' || !config.api || config.provider !== 'google') return config;
+
+  const api = { ...config.api };
+  if (config.slug === 'google-calendar') {
+    api.baseUrl = 'https://www.googleapis.com/calendar/v3';
+    api.testEndpoint ??= {
+      method: 'GET',
+      path: '/calendars/primary/events?maxResults=1',
+    };
+  } else if (config.slug === 'google-drive') {
+    api.baseUrl = 'https://www.googleapis.com/drive/v3';
+    api.testEndpoint ??= {
+      method: 'GET',
+      path: '/files?pageSize=1&fields=files(id,name,mimeType)',
+    };
+  }
+
+  return api === config.api ? config : { ...config, api };
+}
+
 // ============================================================
 // Directory Utilities
 // ============================================================
@@ -68,7 +89,7 @@ export function loadSourceConfig(
   if (!existsSync(configPath)) return null;
 
   try {
-    const config = readJsonFileSync<FolderSourceConfig>(configPath);
+    const config = normalizeGoogleApiConfig(readJsonFileSync<FolderSourceConfig>(configPath));
 
     // Expand path variables in local source paths for portability
     if (config.type === 'local' && config.local?.path) {
@@ -86,7 +107,7 @@ function loadGlobalSourceConfig(sourceSlug: string): FolderSourceConfig | null {
   if (!existsSync(configPath)) return null;
 
   try {
-    const config = readJsonFileSync<FolderSourceConfig>(configPath);
+    const config = normalizeGoogleApiConfig(readJsonFileSync<FolderSourceConfig>(configPath));
 
     if (config.type === 'local' && config.local?.path) {
       config.local.path = expandPath(config.local.path, getGlobalSourcePath(sourceSlug));
