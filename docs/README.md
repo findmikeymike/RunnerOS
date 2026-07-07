@@ -35,6 +35,7 @@ Current active feature spec:
 - [development/vetted.md](./development/vetted.md) - release smoke ledger for agents that pass real app testing.
 - [system-map](./system-map/) - generated map of workers, skills, sources, launch surfaces, and approval boundaries.
 - [user](./user/) - general-user docs for learning the product without reading implementation specs.
+- [pitch](./pitch/) - draft positioning, landing-page, ad, and launch-message material for Artist OS Desktop.
 - [archive](./archive/) - historical docs that should not guide current decisions.
 
 ## Feature Docs
@@ -52,6 +53,7 @@ Feature folders stay in place to avoid breaking existing links:
 - `messaging-gateway/`
 - `project-spaces/`
 - `pulses/`
+- `pitch/`
 - `skill-recipes/`
 - `tts-agent/`
 - `user/`
