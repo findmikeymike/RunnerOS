@@ -5,7 +5,7 @@
 - Path: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/creator-command-center`
 - Branch: `codex/creator-command-center`
 - Product direction: RunnerOS / Artist OS local creator command center.
-- Current push: paid-ads specialist workers, Meta/Google ads operator safety, ad-library creative intelligence, and live smoke readiness.
+- Current push: paid-ads specialist workers, Meta/Google/Spotify ads operator safety, ad-library creative intelligence, and live smoke readiness.
 - Last verified: 2026-07-07.
 
 ## Read First
@@ -27,7 +27,7 @@
 - Split paid-ads work into three specialists:
   - `ads-strategist`: budget, audience, territory, platform, and testing strategy.
   - `ad-creative-agent`: ad-library scouting, angles, hooks, copy, format tests, and asset needs.
-  - `ads-agent`: Meta/Google account inspection, exports, draft setup plans, approval packets, and execution handoff.
+  - `ads-agent`: Meta/Google/Spotify account inspection, exports, draft setup plans, approval packets, and execution handoff.
 - Ad Creative Agent now has:
   - Skills: `artist-ad-dna`, `ad-library-intel`, `ads-creative-development`, `ad-creative`, `artist-campaign-angle-builder`.
   - Card subtext: "Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns."
@@ -36,6 +36,7 @@
   - Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`.
   - Sources: `meta-ads`, `google-ads`, `ads-operator`.
   - Browser/export/setup fallback for Meta when API/MCP access is missing or blocked.
+  - Spotify Ads V1 browser mode for Spotify Ads Manager / Spotify Ad Studio. Spotify for Artists is audience/song/city intel only, not campaign creation.
   - Approval packets before any spend or live account mutation.
 - `tools/ads-operator` supports read-only normalization, audit, campaign-plan, setup-plan, ad-library plan/analyze, packet creation, and receipts. It does not publish, pause, enable, delete, change budgets/bids/targets/creative/keywords/conversions/billing, upload assets, or apply recommendations.
 - Chat view autoscroll was adjusted so a newly streaming assistant reply can stay pinned near the top instead of forcing the user to the bottom.

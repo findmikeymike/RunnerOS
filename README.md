@@ -10,8 +10,8 @@ Active worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/creator-
 Current focus: Artist OS paid-ads workers for upcoming song campaigns.
 
 - `ad-creative-agent`: researches public high-performing music ad patterns, then builds hooks, copy, creative angles, format tests, and asset needs.
-- `ads-strategist`: turns artist/campaign context into budget, audience, territory, platform, and test strategy.
-- `ads-agent`: handles Meta/Google account-side inspection, exports, browser setup guidance, draft setup plans, approval packets, and explicit-approval handoff.
+- `ads-strategist`: turns artist/campaign context, including Spotify for Artists intel when available, into budget, audience, territory, platform, and test strategy.
+- `ads-agent`: handles Meta/Google/Spotify account-side inspection, exports, browser setup guidance, draft setup plans, approval packets, and explicit-approval handoff.
 - `tools/ads-operator`: read-only local CLI for ad CSV import/audit, public ad-library planning/analyze, campaign/setup plans, approval packets, and receipts.
 
 Start from [HANDOFF.md](./HANDOFF.md), [docs/CURRENT.md](./docs/CURRENT.md), and [docs/system-map](./docs/system-map/) before continuing this branch.

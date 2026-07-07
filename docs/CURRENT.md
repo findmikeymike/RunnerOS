@@ -11,7 +11,7 @@ source_of_truth: true
 
 - Date: 2026-07-07
 - Branch: `codex/creator-command-center`
-- Current goal: make paid-ads workers useful for artist campaigns without blocking on Meta/Google API approval.
+- Current goal: make paid-ads workers useful for artist campaigns without blocking on Meta/Google API approval or Spotify Ads API setup.
 - Overall state: Ads specialist agents, ad-library intelligence, and the local ads operator are wired and ready for focused smoke testing.
 
 ## Recently Completed
@@ -21,11 +21,12 @@ source_of_truth: true
 - Split paid-ads responsibilities:
   - `ad-creative-agent`: public ad research, hooks, copy, creative angles, video formats, asset needs.
   - `ads-strategist`: budget, audience, territory, platform, and test plan.
-  - `ads-agent`: account inspection/export/draft setup/approval packets for Meta and Google.
+  - `ads-agent`: account inspection/export/draft setup/approval packets for Meta, Google, and Spotify.
 - Updated Ad Creative Agent with `ad-library-intel` and new card subtext:
   - "Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns."
 - Fixed startup migration so stale installed `ads-strategist` and `ad-creative-agent` metadata receives new skills.
 - Updated Ads Agent to use `meta-ads`, `google-ads`, and `paid-ads-browser-operator` skills plus `meta-ads`, `google-ads`, and `ads-operator` sources.
+- Added Spotify Ads browser mode: Ads Agent can guide logged-in Spotify Ads Manager / Spotify Ad Studio setup, while Spotify for Artists is used only for audience/song/city intel.
 - Made Meta account work practical without API approval: use `ads-operator --platform meta`, browser dashboard/export/setup guidance, and explicit approval packets.
 - Hardened ChatGPT search retry after unsupported `web_search_preview` failures.
 - Adjusted chat autoscroll so long agent replies do not force the user to the bottom while trying to read from the top.
@@ -67,7 +68,7 @@ python3 /Users/michaelb.williams/.codex/scripts/rebuild_codex_catalog.py
 
 - Public Meta Ad Library does not expose CTR, CPA, ROAS, exact reach, or spend.
 - TikTok Creative Center / public pages may vary by region, availability, and automation blocking.
-- Meta/Google account operations require connected accounts or browser-guided user sessions.
+- Meta/Google/Spotify account operations require connected accounts or browser-guided user sessions.
 - No agent should publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations without explicit approval naming account, action, and spend impact.
 
 ## Notes For Next Agent

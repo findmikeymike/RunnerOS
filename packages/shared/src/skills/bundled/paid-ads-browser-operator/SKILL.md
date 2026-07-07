@@ -1,6 +1,6 @@
 ---
 name: paid-ads-browser-operator
-description: Operate Meta Ads and Google Ads safely through browser dashboards, exported CSV/XLSX files, and the local ads-operator CLI. Use when API/MCP auth is missing, incomplete, blocked, or insufficient; when the user provides paid-ads exports; when an agent needs browser/export fallback for campaign reporting, diagnostics, setup planning, or approval packets; or before any paid-ads action that could publish, spend, pause, enable, delete, or change budgets, bids, targeting, creative, keywords, conversions, billing, recommendations, catalogs, or status.
+description: Operate Meta Ads, Google Ads, and Spotify Ads safely through browser dashboards, exported CSV/XLSX files, Spotify for Artists audience intel, and the local ads-operator CLI. Use when API/MCP auth is missing, incomplete, blocked, or insufficient; when the user provides paid-ads exports; when an agent needs browser/export fallback for campaign reporting, diagnostics, setup planning, or approval packets; or before any paid-ads action that could publish, spend, pause, enable, delete, or change budgets, bids, targeting, creative, keywords, conversions, billing, recommendations, catalogs, or status.
 ---
 
 # Paid Ads Browser Operator
@@ -12,10 +12,12 @@ Use this skill to keep paid-ads work useful when APIs are unavailable while stil
 1. Prefer connected structured sources for read-only work:
    - Google Ads: use `google-ads`.
    - Meta Ads: use `ads-operator --platform meta` as the local browser/export/setup operator. Use `meta-ads` only when authenticated and eligible.
+   - Spotify Ads: use browser mode for Spotify Ads Manager / Spotify Ad Studio in V1. Spotify Ads API is optional later and must not block work.
 2. If structured access is missing, blocked, expired, or incomplete, switch to browser dashboard/export mode.
-3. If browser automation is blocked, ask the user for an export and give exact platform, account, date range, table, columns, and file type.
-4. Use screenshots as visual evidence only. Use API/export data for numbers when available.
-5. Use Computer Use only when normal browser automation cannot inspect or operate the page and the user has enabled it.
+3. For Spotify audience strategy, use Spotify for Artists browser intel when the user is logged in: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Do not confuse Spotify for Artists with Spotify Ads Manager.
+4. If browser automation is blocked, ask the user for an export/screenshot and give exact platform, account, date range, table, columns, and file type.
+5. Use screenshots as visual evidence only. Use API/export data for numbers when available.
+6. Use Computer Use only when normal browser automation cannot inspect or operate the page and the user has enabled it.
 
 ## Ads Operator
 
@@ -71,6 +73,15 @@ For Google Ads:
 - Use dashboard/export mode when API credentials or developer token are missing.
 - Export campaign, ad group, keyword, search term, asset, conversion, or recommendation views as needed.
 - Check spend, conversions, cost/conv, conversion value, ROAS, CTR, CPC, impression share, search terms, negatives, match type waste, limited budgets, bidding strategy, conversion tracking, and disapproved assets.
+
+For Spotify Ads:
+
+- V1 path is browser-guided Spotify Ads Manager / Spotify Ad Studio, not API-first.
+- Use Spotify for Artists only for audience and song intel, not campaign creation. It can inform cities, age/gender if visible, listener growth, top songs, playlist/source signal, and campaign geography.
+- In Spotify Ads Manager, inspect or draft campaigns, ad sets, ads, targeting, budget, placements/formats, and reporting only when the user is logged in.
+- Before campaign setup, identify campaign objective, song/landing URL, creative assets, audio/video format, territories, budget, dates, audience/artist targeting, and CTA.
+- Stop before Launch, Submit, Publish, Save changes, budget changes, targeting changes, asset upload, status changes, or anything that could spend or mutate the account.
+- If the Spotify Ads API is later configured, treat it like Google/Meta structured access: read-only first, then approval packet before writes.
 
 ## Export Handling
 

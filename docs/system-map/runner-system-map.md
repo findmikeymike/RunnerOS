@@ -445,30 +445,30 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Ads Agent (`ads-agent`)
 
-- Description: Plan, review, and improve Meta and Google ad campaigns.
+- Description: Plan, review, and improve Meta, Google, and Spotify ad campaigns.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`
 - Sources: `meta-ads`, `google-ads`, `ads-operator`
 - Optional sources: none
 - Trusted tools: none
-- Tags: `ads`, `meta`, `google-ads`, `paid-search`, `reporting`, `diagnostics`, `growth`
+- Tags: `ads`, `meta`, `google-ads`, `spotify-ads`, `paid-search`, `reporting`, `diagnostics`, `growth`
 - Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
-- Inputs: Meta Ads or Google Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, or reporting question.
+- Inputs: Meta Ads, Google Ads, or Spotify Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, reporting question, or Spotify for Artists audience intel.
 - Outputs: Clear paid-media findings, diagnostics, reports, proposed changes, and approval-ready action plans.
 
 #### Ads Strategist (`ads-strategist`)
 
-- Description: Builds paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.
+- Description: Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: `artist-ad-dna`, `ad-library-intel`, `ads-strategy`
 - Sources: none
 - Optional sources: none
 - Trusted tools: none
-- Tags: `ads`, `strategy`, `budget`, `media-plan`, `artist-growth`, `campaigns`
+- Tags: `ads`, `strategy`, `budget`, `media-plan`, `artist-growth`, `campaigns`, `spotify-ads`
 - Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`
-- Inputs: Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, and creative assets.
+- Inputs: Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, Spotify for Artists intel, and creative assets.
 - Outputs: Ads Strategy Packet with platform rationale, campaign architecture, audience/territory plan, budget split, test plan, and execution handoff fields.
 
 #### Branding Agent (`branding-agent`)

@@ -577,6 +577,8 @@ body
     expect(adsAgent?.systemPrompt).toContain('tools/ads-operator')
     expect(adsAgent?.systemPrompt).toContain('ads-operator --platform meta')
     expect(adsAgent?.systemPrompt).toContain('setup-plan --platform meta')
+    expect(adsAgent?.systemPrompt).toContain('Spotify Ads Manager')
+    expect(adsAgent?.systemPrompt).toContain('Spotify for Artists')
     expect(adsAgent?.systemPrompt).toContain('Ads Strategy Packet')
     expect(adsAgent?.systemPrompt).toContain('Ad Creative Packet')
     expect(adsAgent?.systemPrompt).toContain('Routing decision tree')
@@ -592,6 +594,7 @@ body
     expect(strategist?.metadata.sources).toBeUndefined()
     expect(strategist?.systemPrompt).toContain('You plan; you do not operate ad accounts.')
     expect(strategist?.systemPrompt).toContain('ad-library-intel')
+    expect(strategist?.systemPrompt).toContain('Spotify for Artists')
     expect(strategist?.systemPrompt).toContain('Ads Agent handoff fields')
 
     expect(creative?.metadata.skills).toEqual(['artist-ad-dna', 'ad-library-intel', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder'])

@@ -255,6 +255,8 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     const parsed = matter(getSkillMd(skill!));
     expect(parsed.data.name).toBe('paid-ads-browser-operator');
     expect(parsed.content).toContain('browser dashboard/export mode');
+    expect(parsed.content).toContain('Spotify Ads Manager');
+    expect(parsed.content).toContain('Spotify for Artists');
     expect(parsed.content).toContain('Stop before clicking any ambiguous Save, Publish, Apply, Launch');
     expect(parsed.content).toContain('Do not use receipts to claim live ad execution');
   });

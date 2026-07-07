@@ -968,7 +968,7 @@
     {
       "slug": "ads-agent",
       "name": "Ads Agent",
-      "description": "Plan, review, and improve Meta and Google ad campaigns.",
+      "description": "Plan, review, and improve Meta, Google, and Spotify ad campaigns.",
       "domain": "Promotion",
       "permissionMode": "ask",
       "thinkingLevel": "high",
@@ -989,6 +989,7 @@
         "ads",
         "meta",
         "google-ads",
+        "spotify-ads",
         "paid-search",
         "reporting",
         "diagnostics",
@@ -1005,13 +1006,13 @@
         "external-action-boundary",
         "requires-source-activation"
       ],
-      "inputs": "Meta Ads or Google Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, or reporting question.",
+      "inputs": "Meta Ads, Google Ads, or Spotify Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, reporting question, or Spotify for Artists audience intel.",
       "outputs": "Clear paid-media findings, diagnostics, reports, proposed changes, and approval-ready action plans."
     },
     {
       "slug": "ads-strategist",
       "name": "Ads Strategist",
-      "description": "Builds paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.",
+      "description": "Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.",
       "domain": "Promotion",
       "permissionMode": "ask",
       "thinkingLevel": "high",
@@ -1030,7 +1031,8 @@
         "budget",
         "media-plan",
         "artist-growth",
-        "campaigns"
+        "campaigns",
+        "spotify-ads"
       ],
       "launchSurfaces": [
         "workspace-workers-when-active",
@@ -1041,7 +1043,7 @@
         "artifact-output-aware",
         "external-action-boundary"
       ],
-      "inputs": "Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, and creative assets.",
+      "inputs": "Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, Spotify for Artists intel, and creative assets.",
       "outputs": "Ads Strategy Packet with platform rationale, campaign architecture, audience/territory plan, budget split, test plan, and execution handoff fields."
     },
     {

@@ -21,10 +21,10 @@ Prep target: execute [Paid Ads Browser + CLI Operator](./paid-ads-browser-cli-op
 Source: `packages/shared/src/agent-definitions/starter-templates.ts`
 
 - Ads Agent slug: `ads-agent`
-- Current skills: `ad-creative`, `google-ads`
-- Current sources: required `google-ads`; optional `meta-ads`
+- Current skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`
+- Current sources: `meta-ads`, `google-ads`, `ads-operator`
 - Current permission mode: `ask`
-- Current prompt bias: CLI/API/MCP first when connected; browser dashboard/export mode when Meta or Google API access is missing, expired, blocked, or insufficient.
+- Current prompt bias: CLI/API/MCP first when connected; browser dashboard/export mode when Meta, Google, or Spotify API access is missing, expired, blocked, or insufficient.
 
 Phase 1 mismatch that was fixed:
 
@@ -37,6 +37,7 @@ Phase 1 changes made:
 - Ads Agent now attaches the existing `meta-ads` builtin source as optional, so unauthenticated Meta MCP does not get injected into sessions.
 - Ads Agent prompt now routes `CLI/API/MCP -> browser dashboard export -> user-provided export -> Computer Use fallback`.
 - Decision recorded: do not bundle Meta Printing Press CLI in V1 Phase 1.
+- Spotify Ads V1 route added: use Spotify Ads Manager / Spotify Ad Studio through the browser for planning and drafts; use Spotify for Artists only for audience/song/city intel. Spotify Ads API is optional later and must not block V1 work.
 
 Required later change:
 
