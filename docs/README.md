@@ -23,7 +23,7 @@ Current active work:
 - Paid-ads worker chain is active: `ad-creative-agent` -> `ads-strategist` -> `ads-agent`.
 - Ad Creative Agent owns public ad-library scouting, hooks, copy, creative angles, and format tests.
 - Ads Strategist owns budget, audience, territory, platform, and test planning.
-- Ads Agent owns Meta/Google account inspection, browser/export setup, draft setup plans, approval packets, and account-side handoff.
+- Ads Agent owns Meta/Google/Spotify account inspection, browser/export setup, draft setup plans, approval packets, and account-side handoff.
 - `tools/ads-operator` is the local read-only paid-ads helper for imports, audits, ad-library plans/analyze, campaign/setup plans, packets, and receipts.
 - Older active specs remain relevant: [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md), [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md), and [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md).
 

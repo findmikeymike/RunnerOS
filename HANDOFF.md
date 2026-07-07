@@ -84,5 +84,5 @@ python3 /Users/michaelb.williams/.codex/scripts/rebuild_codex_catalog.py
 - Do not give Ad Creative Agent Ads Manager or account mutation tools.
 - Do not ask users for passwords, cookies, 2FA codes, or recovery codes.
 - Public ad libraries do not expose CTR, CPA, ROAS, exact reach, or spend; use visible creative patterns and longevity only as weak evidence.
-- Meta/Google account actions are external business actions. Stop before mutation and require explicit approval naming account, action, and spend impact.
+- Meta/Google/Spotify account actions are external business actions. Stop before mutation and require explicit approval naming account, action, and spend impact.
 - If Meta Ad Library blocks automation, ask for screenshots/captured examples or continue manually in browser.

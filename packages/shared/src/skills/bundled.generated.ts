@@ -14599,6 +14599,7 @@ For Spotify Ads:
 - In Spotify Ads Manager, inspect or draft campaigns, ad sets, ads, targeting, budget, placements/formats, and reporting only when the user is logged in.
 - Before campaign setup, identify campaign objective, song/landing URL, creative assets, audio/video format, territories, budget, dates, audience/artist targeting, and CTA.
 - Stop before Launch, Submit, Publish, Save changes, budget changes, targeting changes, asset upload, status changes, or anything that could spend or mutate the account.
+- For Spotify approval packets, do not call \`ads-operator --platform spotify\`; it is not supported yet. Write the approval packet manually using the same fields below.
 - If the Spotify Ads API is later configured, treat it like Google/Meta structured access: read-only first, then approval packet before writes.
 
 ## Export Handling

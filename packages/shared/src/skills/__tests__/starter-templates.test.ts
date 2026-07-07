@@ -257,6 +257,7 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain('browser dashboard/export mode');
     expect(parsed.content).toContain('Spotify Ads Manager');
     expect(parsed.content).toContain('Spotify for Artists');
+    expect(parsed.content).toContain('do not call `ads-operator --platform spotify`');
     expect(parsed.content).toContain('Stop before clicking any ambiguous Save, Publish, Apply, Launch');
     expect(parsed.content).toContain('Do not use receipts to claim live ad execution');
   });

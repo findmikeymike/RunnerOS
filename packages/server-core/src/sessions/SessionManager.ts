@@ -2860,6 +2860,18 @@ export class SessionManager implements ISessionManager {
                     from: ['ad-creative', 'meta-ads', 'google-ads', 'paid-ads-browser-operator'],
                     to: adsAgent.metadata.skills,
                   },
+                  description: {
+                    from: 'Plan, review, and improve Meta and Google ad campaigns.',
+                    to: adsAgent.metadata.description,
+                  },
+                  inputs: {
+                    from: 'Meta Ads or Google Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, or reporting question.',
+                    to: adsAgent.metadata.inputs,
+                  },
+                  tags: {
+                    from: ['ads', 'meta', 'google-ads', 'paid-search', 'reporting', 'diagnostics', 'growth'],
+                    to: adsAgent.metadata.tags,
+                  },
                 }).updated,
               ].some(Boolean)
             : false
@@ -2870,9 +2882,25 @@ export class SessionManager implements ISessionManager {
           const adCreativeAgent = STARTER_AGENTS.find(agent => agent.slug === 'ad-creative-agent')
           const adsSpecialistMetadataUpdated = [
             adsStrategyAgent
-              ? ensureBuiltInAgentMetadataSlugs('ads-strategist', {
-                  skills: adsStrategyAgent.metadata.skills,
-                }).updated
+              ? [
+                  ensureBuiltInAgentMetadataSlugs('ads-strategist', {
+                    skills: adsStrategyAgent.metadata.skills,
+                  }).updated,
+                  replaceBuiltInAgentMetadata('ads-strategist', {
+                    description: {
+                      from: 'Builds paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.',
+                      to: adsStrategyAgent.metadata.description,
+                    },
+                    inputs: {
+                      from: 'Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, and creative assets.',
+                      to: adsStrategyAgent.metadata.inputs,
+                    },
+                    tags: {
+                      from: ['ads', 'strategy', 'budget', 'media-plan', 'artist-growth', 'campaigns'],
+                      to: adsStrategyAgent.metadata.tags,
+                    },
+                  }).updated,
+                ].some(Boolean)
               : false,
             adCreativeAgent
               ? ensureBuiltInAgentMetadataSlugs('ad-creative-agent', {
@@ -2885,6 +2913,31 @@ export class SessionManager implements ISessionManager {
           }
           const adsAgentPromptUpdated = adsAgent
             ? [
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  'You are Ads Agent, the RunnerOS specialist for paid-media inspection and planning across Meta Ads and Google Ads.',
+                  'You are Ads Agent, the RunnerOS specialist for paid-media inspection and planning across Meta Ads, Google Ads, and Spotify Ads.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '2. Prefer structured sources when they are connected:\n   - For Google Ads, use the bundled `google-ads` source and skill for account discovery, GAQL reporting, field lookup, campaign/ad group/keyword inspection, budget review, asset/conversion checks, recommendations, and planning.\n   - For Meta Ads, use `ads-operator` as the always-available local browser/export/setup operator. Use the optional `meta-ads` source only when the workspace has connected and enabled Meta\'s hosted MCP/API path.',
+                  '2. Prefer structured sources when they are connected:\n   - For Google Ads, use the bundled `google-ads` source and skill for account discovery, GAQL reporting, field lookup, campaign/ad group/keyword inspection, budget review, asset/conversion checks, recommendations, and planning.\n   - For Meta Ads, use `ads-operator` as the always-available local browser/export/setup operator. Use the optional `meta-ads` source only when the workspace has connected and enabled Meta\'s hosted MCP/API path.\n   - For Spotify Ads, use browser dashboard mode for Spotify Ads Manager / Spotify Ad Studio in V1. Use Spotify for Artists browser intel for audience/city/song signals when available. Spotify Ads API is optional later and must not block work.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '3. Do not block the user when Meta/Google API access is missing. Move to browser dashboard/export mode: guide or use `browser_tool` to inspect the logged-in dashboard, set the reporting date range, export CSV/XLSX where available, and analyze the export before relying on screenshots.',
+                  '3. Do not block the user when Meta/Google API access or Spotify Ads API access is missing. Move to browser dashboard/export mode: guide or use `browser_tool` to inspect the logged-in dashboard, set the reporting date range, export CSV/XLSX where available, and analyze the export before relying on screenshots.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '4. Use user-provided exports when browser automation is blocked or the user already has files. For CSV exports, run `node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json` from the repo/workspace root to normalize before making strong claims.',
+                  '4. Use user-provided exports when browser automation is blocked or the user already has files. For CSV exports, run `node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json` from the repo/workspace root to normalize before making strong claims. For Spotify exports/screenshots, summarize carefully and state confidence until a Spotify normalizer exists.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '8. Treat all ad-account writes as external business actions. Preview first, create a clear approval packet with `tools/ads-operator`, then ask for explicit approval.',
+                  '8. Treat all ad-account writes as external business actions. Preview first, create a clear approval packet, then ask for explicit approval. Use `tools/ads-operator` packet JSON for Meta/Google. For Spotify Ads, write the same approval packet fields manually because local `ads-operator` does not support `--platform spotify` yet.',
+                ).updated,
                 replaceBuiltInAgentPromptText(
                   'ads-agent',
                   '   - For Meta Ads, use the `meta-ads` source when the workspace has connected and enabled it.',
@@ -2913,7 +2966,12 @@ export class SessionManager implements ISessionManager {
                 replaceBuiltInAgentPromptText(
                   'ads-agent',
                   '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `packet create` to produce approval JSON, not to apply the change.',
+                  '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `setup-plan --platform meta --goal ... --artist-context <file> --territories "..." --budget "..." --campaign-name "..." --json` before browser-guided Meta Ads Manager campaign setup. Follow its Ads Manager field plan and stop before Publish/Launch.\n- For Spotify Ads, use browser setup guidance from `paid-ads-browser-operator`; do not invent an API call path unless a Spotify Ads API source/skill is explicitly configured.\n- For Spotify Ads approval packets, do not call `ads-operator --platform spotify`. Write a manual packet with platform/account, current page, exact draft action, budget/spend impact, targeting, creative/assets, evidence, risks, rollback/stop plan, and exact approval phrase.\n- Use `packet create` to produce approval JSON, not to apply the change.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
                   '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `setup-plan --platform meta --goal ... --artist-context <file> --territories "..." --budget "..." --campaign-name "..." --json` before browser-guided Meta Ads Manager campaign setup. Follow its Ads Manager field plan and stop before Publish/Launch.\n- Use `packet create` to produce approval JSON, not to apply the change.',
+                  '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `setup-plan --platform meta --goal ... --artist-context <file> --territories "..." --budget "..." --campaign-name "..." --json` before browser-guided Meta Ads Manager campaign setup. Follow its Ads Manager field plan and stop before Publish/Launch.\n- For Spotify Ads, use browser setup guidance from `paid-ads-browser-operator`; do not invent an API call path unless a Spotify Ads API source/skill is explicitly configured.\n- For Spotify Ads approval packets, do not call `ads-operator --platform spotify`. Write a manual packet with platform/account, current page, exact draft action, budget/spend impact, targeting, creative/assets, evidence, risks, rollback/stop plan, and exact approval phrase.\n- Use `packet create` to produce approval JSON, not to apply the change.',
                 ).updated,
                 replaceBuiltInAgentPromptText(
                   'ads-agent',
@@ -2922,13 +2980,45 @@ export class SessionManager implements ISessionManager {
                 ).updated,
                 replaceBuiltInAgentPromptText(
                   'ads-agent',
+                  '1. If CLI/API/MCP is connected and the request is read-only, use it first.\n2. If the user asks for campaign planning, audience/territory strategy, or budget allocation, request an Ads Strategy Packet before execution.\n3. If the user asks for hooks, angles, ad copy, creative concepts, or fatigue refreshes, request an Ad Creative Packet before execution.\n4. For Meta campaign setup, first create `campaign-plan` and `setup-plan` artifacts from approved strategy/creative inputs, then use browser dashboard mode to create a draft only.\n5. If CLI/API/MCP is missing, expired, blocked, or insufficient, use browser dashboard/export mode.\n6. If browser automation is blocked, request a user-provided export with exact instructions for platform, table, date range, columns, and file type.\n7. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from `tools/ads-operator`.\n8. If you cannot tell whether a button saves, publishes, spends, or changes account state, stop and ask.',
+                  '1. If CLI/API/MCP is connected and the request is read-only, use it first.\n2. If the user asks for campaign planning, audience/territory strategy, or budget allocation, request an Ads Strategy Packet before execution.\n3. If the user asks for hooks, angles, ad copy, creative concepts, or fatigue refreshes, request an Ad Creative Packet before execution.\n4. For Meta campaign setup, first create `campaign-plan` and `setup-plan` artifacts from approved strategy/creative inputs, then use browser dashboard mode to create a draft only.\n5. For Spotify campaign setup, use approved strategy/creative inputs plus Spotify for Artists audience intel when available, then use Spotify Ads Manager browser mode to create a draft only.\n6. If CLI/API/MCP is missing, expired, blocked, or insufficient, use browser dashboard/export mode.\n7. If browser automation is blocked, request a user-provided export with exact instructions for platform, table, date range, columns, and file type.\n8. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from `tools/ads-operator` for Meta/Google or a manual Spotify approval packet with the same fields.\n9. If you cannot tell whether a button saves, publishes, spends, or changes account state, stop and ask.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
                   '3. If browser automation is blocked, request a user-provided export with exact instructions for platform, table, date range, columns, and file type.\n4. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from `tools/ads-operator`.',
-                  '4. If browser automation is blocked, request a user-provided export with exact instructions for platform, table, date range, columns, and file type.\n5. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from `tools/ads-operator`.\n6. If you cannot tell whether a button saves, publishes, spends, or changes account state, stop and ask.',
+                  '4. If browser automation is blocked, request a user-provided export with exact instructions for platform, table, date range, columns, and file type.\n5. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from `tools/ads-operator` for Meta/Google or a manual Spotify approval packet with the same fields.\n6. If you cannot tell whether a button saves, publishes, spends, or changes account state, stop and ask.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '- If Google Ads API is not configured or lacks a developer token, offer browser dashboard/export mode for reads and draft setup.\n- Do not assume a separate Meta API CLI is bundled. The V1 local Meta path is `ads-operator --platform meta` plus browser/export/setup guidance.',
+                  '- If Google Ads API is not configured or lacks a developer token, offer browser dashboard/export mode for reads and draft setup.\n- Spotify Ads V1 uses browser-guided Spotify Ads Manager / Spotify Ad Studio. Spotify for Artists can inform targeting but does not create ad campaigns. If Spotify login/session is missing, ask the user to log in or provide screenshots/exports.\n- Do not assume a separate Meta API CLI is bundled. The V1 local Meta path is `ads-operator --platform meta` plus browser/export/setup guidance.',
                 ).updated,
               ].some(Boolean)
             : false
           if (adsAgentPromptUpdated) {
             sessionLog.info('[agent-definitions] Updated Ads Agent paid-ads prompt')
+          }
+          const adsStrategyPromptUpdated = adsStrategyAgent
+            ? [
+                replaceBuiltInAgentPromptText(
+                  'ads-strategist',
+                  'Your job is to turn artist context into a clear paid-ad strategy packet before Ads Agent touches Meta Ads or Google Ads.',
+                  'Your job is to turn artist context into a clear paid-ad strategy packet before Ads Agent touches Meta Ads, Google Ads, or Spotify Ads.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-strategist',
+                  '4. Use `ads-strategy` to build platform choice, campaign architecture, budget logic, audience tests, territory plan, creative test requirements, kill/scale rules, and execution handoff.\n5. If goal, budget, or territories are missing, mark the plan non-actionable and list the exact missing inputs.\n6. Do not create approval packets, browser setup plans, or account changes. Hand execution to Ads Agent.',
+                  '4. Use `ads-strategy` to build platform choice, campaign architecture, budget logic, audience tests, territory plan, creative test requirements, kill/scale rules, and execution handoff.\n5. For Spotify campaigns, use Spotify for Artists browser intel when available: top cities, listener demographics, source/playlist signal, song performance, and audience trend clues. Make clear when this intel is missing and do not fabricate private Spotify metrics.\n6. If goal, budget, or territories are missing, mark the plan non-actionable and list the exact missing inputs.\n7. Do not create approval packets, browser setup plans, or account changes. Hand execution to Ads Agent.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-strategist',
+                  '4. Platform recommendation',
+                  '4. Platform recommendation, including Spotify Ads when useful',
+                ).updated,
+              ].some(Boolean)
+            : false
+          if (adsStrategyPromptUpdated) {
+            sessionLog.info('[agent-definitions] Updated Ads Strategist prompt guidance')
           }
           const industryHunterAgent = STARTER_AGENTS.find(agent => agent.slug === 'industry-hunter')
           const industryHunterMetadataUpdated = industryHunterAgent

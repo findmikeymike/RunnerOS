@@ -682,6 +682,8 @@ export function replaceBuiltInAgentMetadata(
     'concierge',
     'orchestrator',
     'ads-agent',
+    'ads-strategist',
+    'ad-creative-agent',
     'ig-trending-power-up',
     'influencer-campaign-power-up',
     'playlisting-power-up',
@@ -728,7 +730,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !loaded.systemPrompt.includes(oldText)) return { updated: false };
@@ -758,7 +760,7 @@ export function replaceBuiltInAgentPromptPattern(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !pattern.test(loaded.systemPrompt)) return { updated: false };

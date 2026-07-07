@@ -579,6 +579,8 @@ body
     expect(adsAgent?.systemPrompt).toContain('setup-plan --platform meta')
     expect(adsAgent?.systemPrompt).toContain('Spotify Ads Manager')
     expect(adsAgent?.systemPrompt).toContain('Spotify for Artists')
+    expect(adsAgent?.systemPrompt).toContain('manual Spotify approval packet')
+    expect(adsAgent?.systemPrompt).toContain('ads-operator --platform spotify')
     expect(adsAgent?.systemPrompt).toContain('Ads Strategy Packet')
     expect(adsAgent?.systemPrompt).toContain('Ad Creative Packet')
     expect(adsAgent?.systemPrompt).toContain('Routing decision tree')
@@ -1174,6 +1176,49 @@ body
     expect(replaceBuiltInAgentMetadata('writer', {
       skills: { from: ['artist-industry-hunter'], to: ['artist-industry-hunter', 'zero'] },
     }, { globalAgentsDir }).updated).toBe(false)
+  })
+
+  test('replaceBuiltInAgentMetadata and prompt text can patch Ads Strategist stale Spotify metadata', () => {
+    writeGlobalAgent(
+      {
+        slug: 'ads-strategist',
+        metadata: {
+          name: 'Ads Strategist',
+          description: 'Builds paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.',
+          inputs: 'Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, and creative assets.',
+          tags: ['ads', 'strategy', 'budget', 'media-plan', 'artist-growth', 'campaigns'],
+        },
+        systemPrompt: 'Your job is to turn artist context into a clear paid-ad strategy packet before Ads Agent touches Meta Ads or Google Ads.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentMetadata('ads-strategist', {
+      description: {
+        from: 'Builds paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.',
+        to: 'Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.',
+      },
+      inputs: {
+        from: 'Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, and creative assets.',
+        to: 'Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, Spotify for Artists intel, and creative assets.',
+      },
+      tags: {
+        from: ['ads', 'strategy', 'budget', 'media-plan', 'artist-growth', 'campaigns'],
+        to: ['ads', 'strategy', 'budget', 'media-plan', 'artist-growth', 'campaigns', 'spotify-ads'],
+      },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText(
+      'ads-strategist',
+      'Your job is to turn artist context into a clear paid-ad strategy packet before Ads Agent touches Meta Ads or Google Ads.',
+      'Your job is to turn artist context into a clear paid-ad strategy packet before Ads Agent touches Meta Ads, Google Ads, or Spotify Ads.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+
+    const strategist = loadGlobalAgent('ads-strategist', { globalAgentsDir })!
+    expect(strategist.metadata.description).toContain('Spotify')
+    expect(strategist.metadata.inputs).toContain('Spotify for Artists')
+    expect(strategist.metadata.tags).toContain('spotify-ads')
+    expect(strategist.systemPrompt).toContain('Spotify Ads')
   })
 
   test('replaceBuiltInAgentPromptPattern patches wrapped stale built-in guidance', () => {
