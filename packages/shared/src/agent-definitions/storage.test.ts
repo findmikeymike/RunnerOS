@@ -564,6 +564,8 @@ body
   test('starter library includes the Ads Agent with paid ads source routing', () => {
     const adsAgent = STARTER_AGENTS.find((agent) => agent.slug === 'ads-agent')
 
+    expect(adsAgent?.metadata.name).toBe('Ad Runner')
+    expect(adsAgent?.metadata.description).toBe('Plan, review, and run Meta, Google, Spotify ads.')
     expect(adsAgent?.metadata.skills).not.toContain('ad-creative')
     expect(adsAgent?.metadata.skills).toContain('meta-ads')
     expect(adsAgent?.metadata.skills).toContain('google-ads')
@@ -592,18 +594,20 @@ body
     const strategist = STARTER_AGENTS.find((agent) => agent.slug === 'ads-strategist')
     const creative = STARTER_AGENTS.find((agent) => agent.slug === 'ad-creative-agent')
 
+    expect(creative?.metadata.name).toBe('Ad Creative')
+    expect(strategist?.metadata.name).toBe('Ad Strategy')
     expect(strategist?.metadata.skills).toEqual(['artist-ad-dna', 'ad-library-intel', 'ads-strategy'])
     expect(strategist?.metadata.sources).toBeUndefined()
     expect(strategist?.systemPrompt).toContain('You plan; you do not operate ad accounts.')
     expect(strategist?.systemPrompt).toContain('ad-library-intel')
     expect(strategist?.systemPrompt).toContain('Spotify for Artists')
-    expect(strategist?.systemPrompt).toContain('Ads Agent handoff fields')
+    expect(strategist?.systemPrompt).toContain('Ad Runner handoff fields')
 
     expect(creative?.metadata.skills).toEqual(['artist-ad-dna', 'ad-library-intel', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder'])
     expect(creative?.metadata.sources).toBeUndefined()
     expect(creative?.systemPrompt).toContain('ad-library-intel')
     expect(creative?.systemPrompt).toContain('you do not operate ad accounts')
-    expect(creative?.systemPrompt).toContain('Ads Agent handoff fields')
+    expect(creative?.systemPrompt).toContain('Ad Runner handoff fields')
   })
 
   test('starter library includes draft-only Power Up handoff agents', () => {
@@ -1219,6 +1223,52 @@ body
     expect(strategist.metadata.inputs).toContain('Spotify for Artists')
     expect(strategist.metadata.tags).toContain('spotify-ads')
     expect(strategist.systemPrompt).toContain('Spotify Ads')
+  })
+
+  test('replaceBuiltInAgentMetadata can rename paid ads built-in cards without changing slugs', () => {
+    writeGlobalAgent(
+      {
+        slug: 'ads-agent',
+        metadata: { name: 'Ads Agent', description: 'Plan, review, and improve Meta, Google, and Spotify ad campaigns.' },
+        systemPrompt: 'body',
+      },
+      { globalAgentsDir },
+    )
+    writeGlobalAgent(
+      {
+        slug: 'ads-strategist',
+        metadata: { name: 'Ads Strategist', description: 'Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.' },
+        systemPrompt: 'body',
+      },
+      { globalAgentsDir },
+    )
+    writeGlobalAgent(
+      {
+        slug: 'ad-creative-agent',
+        metadata: { name: 'Ad Creative Agent', description: 'Builds paid ad creative.' },
+        systemPrompt: 'body',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentMetadata('ads-agent', {
+      name: { from: 'Ads Agent', to: 'Ad Runner' },
+      description: { from: 'Plan, review, and improve Meta, Google, and Spotify ad campaigns.', to: 'Plan, review, and run Meta, Google, Spotify ads.' },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentMetadata('ads-strategist', {
+      name: { from: 'Ads Strategist', to: 'Ad Strategy' },
+      description: {
+        from: 'Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.',
+        to: 'Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ad Runner executes.',
+      },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentMetadata('ad-creative-agent', {
+      name: { from: 'Ad Creative Agent', to: 'Ad Creative' },
+    }, { globalAgentsDir }).updated).toBe(true)
+
+    expect(loadGlobalAgent('ads-agent', { globalAgentsDir })!.metadata.name).toBe('Ad Runner')
+    expect(loadGlobalAgent('ads-strategist', { globalAgentsDir })!.metadata.name).toBe('Ad Strategy')
+    expect(loadGlobalAgent('ad-creative-agent', { globalAgentsDir })!.metadata.name).toBe('Ad Creative')
   })
 
   test('replaceBuiltInAgentPromptPattern patches wrapped stale built-in guidance', () => {

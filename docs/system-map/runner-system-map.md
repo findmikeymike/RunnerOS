@@ -39,7 +39,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Agents mapped: 36
 - Hidden from Workers home: 6
-- Campaign default workers: `content-genius`, `art-director`, `ads-strategist`, `ad-creative-agent`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
+- Campaign default workers: `content-genius`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
@@ -56,7 +56,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
-- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ads-strategist, ad-creative-agent, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
+- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -429,7 +429,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ### Promotion
 
-#### Ad Creative Agent (`ad-creative-agent`)
+#### Ad Creative (`ad-creative-agent`)
 
 - Description: Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns.
 - Permission: `ask`; thinking: `high`
@@ -443,9 +443,9 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Inputs: Artist context, strategy packet, platform, goal, creative assets, lyrics, clips, visuals, comments, destination, and brand constraints.
 - Outputs: Ad Creative Packet with angles, hooks, copy variants, format plan, diversity check, fatigue refresh plan, policy risk, and execution handoff.
 
-#### Ads Agent (`ads-agent`)
+#### Ad Runner (`ads-agent`)
 
-- Description: Plan, review, and improve Meta, Google, and Spotify ad campaigns.
+- Description: Plan, review, and run Meta, Google, Spotify ads.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`
@@ -457,9 +457,9 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Inputs: Meta Ads, Google Ads, or Spotify Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, reporting question, or Spotify for Artists audience intel.
 - Outputs: Clear paid-media findings, diagnostics, reports, proposed changes, and approval-ready action plans.
 
-#### Ads Strategist (`ads-strategist`)
+#### Ad Strategy (`ads-strategist`)
 
-- Description: Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.
+- Description: Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ad Runner executes.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
 - Skills: `artist-ad-dna`, `ad-library-intel`, `ads-strategy`

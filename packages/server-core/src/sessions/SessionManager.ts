@@ -2860,8 +2860,12 @@ export class SessionManager implements ISessionManager {
                     from: ['ad-creative', 'meta-ads', 'google-ads', 'paid-ads-browser-operator'],
                     to: adsAgent.metadata.skills,
                   },
+                  name: {
+                    from: 'Ads Agent',
+                    to: adsAgent.metadata.name,
+                  },
                   description: {
-                    from: 'Plan, review, and improve Meta and Google ad campaigns.',
+                    from: 'Plan, review, and improve Meta, Google, and Spotify ad campaigns.',
                     to: adsAgent.metadata.description,
                   },
                   inputs: {
@@ -2871,6 +2875,12 @@ export class SessionManager implements ISessionManager {
                   tags: {
                     from: ['ads', 'meta', 'google-ads', 'paid-search', 'reporting', 'diagnostics', 'growth'],
                     to: adsAgent.metadata.tags,
+                  },
+                }).updated,
+                replaceBuiltInAgentMetadata('ads-agent', {
+                  description: {
+                    from: 'Plan, review, and improve Meta and Google ad campaigns.',
+                    to: adsAgent.metadata.description,
                   },
                 }).updated,
               ].some(Boolean)
@@ -2887,8 +2897,12 @@ export class SessionManager implements ISessionManager {
                     skills: adsStrategyAgent.metadata.skills,
                   }).updated,
                   replaceBuiltInAgentMetadata('ads-strategist', {
+                    name: {
+                      from: 'Ads Strategist',
+                      to: adsStrategyAgent.metadata.name,
+                    },
                     description: {
-                      from: 'Builds paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.',
+                      from: 'Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.',
                       to: adsStrategyAgent.metadata.description,
                     },
                     inputs: {
@@ -2900,12 +2914,26 @@ export class SessionManager implements ISessionManager {
                       to: adsStrategyAgent.metadata.tags,
                     },
                   }).updated,
+                  replaceBuiltInAgentMetadata('ads-strategist', {
+                    description: {
+                      from: 'Builds paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.',
+                      to: adsStrategyAgent.metadata.description,
+                    },
+                  }).updated,
                 ].some(Boolean)
               : false,
             adCreativeAgent
-              ? ensureBuiltInAgentMetadataSlugs('ad-creative-agent', {
-                  skills: adCreativeAgent.metadata.skills,
-                }).updated
+              ? [
+                  ensureBuiltInAgentMetadataSlugs('ad-creative-agent', {
+                    skills: adCreativeAgent.metadata.skills,
+                  }).updated,
+                  replaceBuiltInAgentMetadata('ad-creative-agent', {
+                    name: {
+                      from: 'Ad Creative Agent',
+                      to: adCreativeAgent.metadata.name,
+                    },
+                  }).updated,
+                ].some(Boolean)
               : false,
           ].some(Boolean)
           if (adsSpecialistMetadataUpdated) {
@@ -2917,6 +2945,11 @@ export class SessionManager implements ISessionManager {
                   'ads-agent',
                   'You are Ads Agent, the RunnerOS specialist for paid-media inspection and planning across Meta Ads and Google Ads.',
                   'You are Ads Agent, the RunnerOS specialist for paid-media inspection and planning across Meta Ads, Google Ads, and Spotify Ads.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  'You are Ads Agent, the RunnerOS specialist for paid-media inspection and planning across Meta Ads, Google Ads, and Spotify Ads.',
+                  'You are Ad Runner, the RunnerOS specialist for paid-media inspection and planning across Meta Ads, Google Ads, and Spotify Ads.',
                 ).updated,
                 replaceBuiltInAgentPromptText(
                   'ads-agent',
@@ -3004,6 +3037,16 @@ export class SessionManager implements ISessionManager {
                   'ads-strategist',
                   'Your job is to turn artist context into a clear paid-ad strategy packet before Ads Agent touches Meta Ads or Google Ads.',
                   'Your job is to turn artist context into a clear paid-ad strategy packet before Ads Agent touches Meta Ads, Google Ads, or Spotify Ads.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-strategist',
+                  'You are Ads Strategist, the RunnerOS paid-media planner for artist campaigns.',
+                  'You are Ad Strategy, the RunnerOS paid-media planner for artist campaigns.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-strategist',
+                  'Your job is to turn artist context into a clear paid-ad strategy packet before Ads Agent touches Meta Ads, Google Ads, or Spotify Ads.',
+                  'Your job is to turn artist context into a clear paid-ad strategy packet before Ad Runner touches Meta Ads, Google Ads, or Spotify Ads.',
                 ).updated,
                 replaceBuiltInAgentPromptText(
                   'ads-strategist',

@@ -43,8 +43,8 @@
     "campaignDefaultWorkerSlugs": [
       "content-genius",
       "art-director",
-      "ads-strategist",
       "ad-creative-agent",
+      "ads-strategist",
       "ads-agent",
       "ig-trending-power-up",
       "influencer-campaign-power-up",
@@ -127,7 +127,7 @@
   "inferredRuntimeRules": [
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
-    "Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ads-strategist, ad-creative-agent, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
+    "Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
@@ -929,7 +929,7 @@
     },
     {
       "slug": "ad-creative-agent",
-      "name": "Ad Creative Agent",
+      "name": "Ad Creative",
       "description": "Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns.",
       "domain": "Promotion",
       "permissionMode": "ask",
@@ -967,8 +967,8 @@
     },
     {
       "slug": "ads-agent",
-      "name": "Ads Agent",
-      "description": "Plan, review, and improve Meta, Google, and Spotify ad campaigns.",
+      "name": "Ad Runner",
+      "description": "Plan, review, and run Meta, Google, Spotify ads.",
       "domain": "Promotion",
       "permissionMode": "ask",
       "thinkingLevel": "high",
@@ -1011,8 +1011,8 @@
     },
     {
       "slug": "ads-strategist",
-      "name": "Ads Strategist",
-      "description": "Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.",
+      "name": "Ad Strategy",
+      "description": "Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ad Runner executes.",
       "domain": "Promotion",
       "permissionMode": "ask",
       "thinkingLevel": "high",

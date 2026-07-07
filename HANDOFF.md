@@ -25,14 +25,14 @@
   - CLI support: `tools/ads-operator/bin/ads-operator.mjs ad-library-analyze`.
   - Public Meta Ad Library and TikTok Creative Center research should look for high-performing formats/hooks, not only close sound-alike artists.
 - Split paid-ads work into three specialists:
-  - `ads-strategist`: budget, audience, territory, platform, and testing strategy.
-  - `ad-creative-agent`: ad-library scouting, angles, hooks, copy, format tests, and asset needs.
-  - `ads-agent`: Meta/Google/Spotify account inspection, exports, draft setup plans, approval packets, and execution handoff.
-- Ad Creative Agent now has:
+  - Ad Creative (`ad-creative-agent`): ad-library scouting, angles, hooks, copy, format tests, and asset needs.
+  - Ad Strategy (`ads-strategist`): budget, audience, territory, platform, and testing strategy.
+  - Ad Runner (`ads-agent`): Meta/Google/Spotify account inspection, exports, draft setup plans, approval packets, and execution handoff.
+- Ad Creative now has:
   - Skills: `artist-ad-dna`, `ad-library-intel`, `ads-creative-development`, `ad-creative`, `artist-campaign-angle-builder`.
   - Card subtext: "Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns."
   - No account-operation tools by design; it researches public ads and produces creative packets.
-- Ads Agent now uses:
+- Ad Runner now uses:
   - Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`.
   - Sources: `meta-ads`, `google-ads`, `ads-operator`.
   - Browser/export/setup fallback for Meta when API/MCP access is missing or blocked.
@@ -42,15 +42,15 @@
 - Chat view autoscroll was adjusted so a newly streaming assistant reply can stay pinned near the top instead of forcing the user to the bottom.
 - ChatGPT search retry was hardened to avoid unsupported `web_search_preview` failures.
 - Startup agent metadata migration now includes `ads-strategist` and `ad-creative-agent`, so existing installs receive the new ads specialist skills.
-- Global installed Ad Creative Agent at `/Users/michaelb.williams/.agents/agents/ad-creative-agent/AGENT.md` was updated and the Codex catalog was regenerated.
+- Global installed Ad Creative at `/Users/michaelb.williams/.agents/agents/ad-creative-agent/AGENT.md` was updated and the Codex catalog was regenerated.
 
 ## Current Runtime State
 
 - Electron dev app was relaunched from this worktree on 2026-07-07.
 - Startup log confirmed: `[agent-definitions] Updated ads specialist research metadata`.
 - Active workspace observed: `/Users/michaelb.williams/.craft-agent/workspaces/trading`.
-- Ad Creative Agent setup should show `ad-library-intel` in Skills and no bundled Tools.
-- "No bundled tools" on Ad Creative Agent is intentional; account tools belong to Ads Agent.
+- Ad Creative setup should show `ad-library-intel` in Skills and no bundled Tools.
+- "No bundled tools" on Ad Creative is intentional; account tools belong to Ad Runner.
 
 ## Verified Commands
 
@@ -67,21 +67,21 @@ python3 /Users/michaelb.williams/.codex/scripts/rebuild_codex_catalog.py
 ## Smoke Status
 
 - App launches and the ads specialist migration runs.
-- Ad Creative Agent wiring is ready for a smoke prompt using `Watching Tornado Videos on YouTube`.
-- Prior Ads Strategist live smoke proved direct Meta Ad Library URLs were attempted, but browser research can run long and Meta pages may return sparse/blocked content.
-- Use Ad Creative Agent for hook/format scouting first; then Ads Strategist consumes that creative packet for budget/audience/territory strategy; then Ads Agent drafts/operates account-side work.
+- Ad Creative wiring is ready for a smoke prompt using `Watching Tornado Videos on YouTube`.
+- Prior Ad Strategy live smoke proved direct Meta Ad Library URLs were attempted, but browser research can run long and Meta pages may return sparse/blocked content.
+- Use Ad Creative for hook/format scouting first; then Ad Strategy consumes that creative packet for budget/audience/territory strategy; then Ad Runner drafts/operates account-side work.
 
 ## Next Best Actions
 
-1. Smoke Ad Creative Agent with a campaign prompt for `Watching Tornado Videos on YouTube`.
+1. Smoke Ad Creative with a campaign prompt for `Watching Tornado Videos on YouTube`.
 2. Confirm it uses `ad-library-intel` first and returns a compact creative packet instead of looping in browser research.
 3. If it over-researches, tighten `ad-library-intel` with a time/sample cap and force a partial packet after first usable examples.
-4. Then smoke Ads Strategist consuming that packet for `$400` Meta budget/audience/territory planning.
-5. Then smoke Ads Agent with an approved strategy/creative handoff and verify it stops at draft/setup-plan/approval packet.
+4. Then smoke Ad Strategy consuming that packet for `$400` Meta budget/audience/territory planning.
+5. Then smoke Ad Runner with an approved strategy/creative handoff and verify it stops at draft/setup-plan/approval packet.
 
 ## Watchouts
 
-- Do not give Ad Creative Agent Ads Manager or account mutation tools.
+- Do not give Ad Creative Ads Manager or account mutation tools.
 - Do not ask users for passwords, cookies, 2FA codes, or recovery codes.
 - Public ad libraries do not expose CTR, CPA, ROAS, exact reach, or spend; use visible creative patterns and longevity only as weak evidence.
 - Meta/Google/Spotify account actions are external business actions. Stop before mutation and require explicit approval naming account, action, and spend impact.
