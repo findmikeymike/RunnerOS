@@ -190,7 +190,8 @@ function campaignPlanCommand(args, io, json) {
     territories: opt(args, '--territories'),
     budget: opt(args, '--budget'),
   });
-  return write(io, result, 0, json);
+  const out = opt(args, '--out');
+  return write(io, withOptionalFile(result, out, 'plan'), 0, json);
 }
 
 function packetCreateCommand(args, io, json) {
@@ -286,7 +287,8 @@ function withOptionalFile(payload, out, key) {
   if (!out) return payload;
   const outputPath = resolve(process.cwd(), out);
   mkdirSync(dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, `${JSON.stringify(payload[key], null, 2)}\n`, 'utf8');
+  const artifact = key === 'plan' ? payload : payload[key];
+  writeFileSync(outputPath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
   return { ...payload, outputPath };
 }
 

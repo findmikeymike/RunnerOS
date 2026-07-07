@@ -283,6 +283,33 @@ describe('ads-operator cli', () => {
     expect(result.stdout.writeExecuted).toBe(false);
   });
 
+  test('writes campaign plan artifacts', () => {
+    const dir = tempDir();
+    const context = tempFile('artist-context.md', 'Artist: Luna Vale\nAudience: synth pop fans in London\n');
+    const planPath = join(dir, 'campaign-plan.json');
+    const result = run([
+      'campaign-plan',
+      '--platform',
+      'meta',
+      '--goal',
+      'sales',
+      '--territories',
+      'London',
+      '--artist-context',
+      context,
+      '--out',
+      planPath,
+      '--json',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.outputPath).toBe(planPath);
+    expect(existsSync(planPath)).toBe(true);
+    const savedPlan = JSON.parse(readFileSync(planPath, 'utf8'));
+    expect(savedPlan.schema).toBe('runneros.ads.campaign_plan.v1');
+    expect(savedPlan.writeExecuted).toBe(false);
+  });
+
   test('approval packet marks existing local evidence as verified', () => {
     const file = tempCsv('Campaign name,Impressions,Clicks,Spend\nLaunch,1,1,1\n');
     const result = run([
