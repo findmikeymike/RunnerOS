@@ -6,6 +6,20 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, resolveBrowserEngine, launchBrowserContextForEngine } from '../../src/browser-engines.mjs';
+import { buildContentContext, resolveMediaList, resolveText } from '../../src/content-assets.mjs';
+import {
+  acquireProfileLock,
+  assertConfirmPolicy,
+  assertLiveReady,
+  buildBrowserPlan,
+  buildSmokeProfile,
+  canExecuteLiveAction,
+  duplicateActionResult,
+  findCompletedAction,
+  recordCompletedAction,
+  resolveConfirmPolicy,
+  smokeProfileAllowed,
+} from '../../src/action-safety.mjs';
 
 const SUPPORTED_PLATFORMS = new Set(['instagram']);
 
@@ -83,7 +97,9 @@ async function handleProfile(command, flags) {
       sessionRef,
       proxyId: flags['proxy-id'] || null,
       ratePolicy: flags['rate-policy'] || 'normal',
-      confirmPolicy: flags['confirm-policy'] || process.env.SOCIAL_CONFIRM_POLICY || 'autorun',
+      confirmPolicy: resolveConfirmPolicy(flags),
+      accountHandle: flags.handle || flags['account-handle'] || null,
+      accountUrl: flags['account-url'] || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -107,9 +123,7 @@ async function handleProfile(command, flags) {
     assertPlatform(platform);
     const profileId = requireFlag(flags, 'profile');
     const confirmPolicy = requireFlag(flags, 'confirm-policy');
-    if (!['require-confirm', 'autorun'].includes(confirmPolicy)) {
-      throw new CliError('--confirm-policy must be require-confirm or autorun', 'INVALID_CONFIRM_POLICY');
-    }
+    assertConfirmPolicy(confirmPolicy);
 
     const store = loadProfileStore();
     const key = profileKey(platform, profileId);
@@ -206,8 +220,21 @@ async function handleInstagramComment(flags) {
     return;
   }
 
-  const profile = getProfile('instagram', action.profile);
-  const result = await commentInstagramDirect(profile, action, flags);
+  const profile = getProfile('instagram', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
+  assertLiveReady(profile, flags, 'live Instagram comment');
+  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
+  if (duplicate) {
+    writeResult(duplicateActionResult(action, duplicate, 'comment.instagram'), flags.json);
+    return;
+  }
+  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
+  let result;
+  try {
+    result = await commentInstagramDirect(profile, action, flags);
+    recordCompletedAction({ action, socialHome: socialHome(), result, command: 'comment.instagram' });
+  } finally {
+    releaseLock();
+  }
   writeResult(liveResult(action, result, 'comment.instagram'), flags.json);
 }
 
@@ -225,14 +252,28 @@ async function handleInstagramDm(flags) {
     return;
   }
 
-  const profile = getProfile('instagram', action.profile);
-  const result = await dmInstagramDirect(profile, action, flags);
+  const profile = getProfile('instagram', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
+  assertLiveReady(profile, flags, 'live Instagram DM');
+  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
+  if (duplicate) {
+    writeResult(duplicateActionResult(action, duplicate, 'dm.instagram'), flags.json);
+    return;
+  }
+  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
+  let result;
+  try {
+    result = await dmInstagramDirect(profile, action, flags);
+    recordCompletedAction({ action, socialHome: socialHome(), result, command: 'dm.instagram' });
+  } finally {
+    releaseLock();
+  }
   writeResult(liveResult(action, result, 'dm.instagram'), flags.json);
 }
 
 function buildInstagramTextAction(verb, flags, extraPayload) {
   const profileId = requireFlag(flags, 'profile');
-  const text = readText(flags);
+  const textResult = resolveText(flags);
+  const text = textResult.text;
   if (!text) throw new CliError(`Instagram ${verb} needs --text or --text-file`, 'MISSING_TEXT');
   return {
     actionId: flags['action-id'] || `act_${randomUUID()}`,
@@ -249,6 +290,7 @@ function buildInstagramTextAction(verb, flags, extraPayload) {
       idempotencyKey: flags['idempotency-key'] || null,
       headed: Boolean(flags.headed),
     },
+    contentContext: buildContentContext(flags, { textSource: textResult.source }),
   };
 }
 
@@ -268,10 +310,11 @@ function dryRunResult(action, steps) {
     status: 'dry_run',
     command: `${action.verb}.instagram`,
     action,
-    browserPlan: {
-      sessionPath: sessionDir(getProfile('instagram', action.profile)),
-      steps,
-    },
+      browserPlan: buildBrowserPlan({
+        profile: getProfile('instagram', action.profile, { allowSmoke: true }),
+        sessionPath: sessionDir(getProfile('instagram', action.profile, { allowSmoke: true })),
+        steps,
+      }),
   };
 }
 
@@ -290,11 +333,12 @@ function liveResult(action, result, command) {
 
 async function handleInstagramPost(flags) {
   const profileId = requireFlag(flags, 'profile');
-  const text = readText(flags);
+  const textResult = resolveText(flags);
+  const text = textResult.text;
   if (!text) throw new CliError('Instagram post needs --text or --text-file', 'MISSING_TEXT');
 
-  const profile = getProfile('instagram', profileId);
-  const media = normalizeList(flags.media);
+  const profile = getProfile('instagram', profileId, { allowSmoke: smokeProfileAllowed(flags) });
+  const media = resolveMediaList(flags.media, flags);
   const action = {
     actionId: flags['action-id'] || `act_${randomUUID()}`,
     verb: 'post',
@@ -311,6 +355,7 @@ async function handleInstagramPost(flags) {
       idempotencyKey: flags['idempotency-key'] || null,
       headed: Boolean(flags.headed),
     },
+    contentContext: buildContentContext(flags, { textSource: textResult.source }),
   };
 
   validateInstagramAction(action);
@@ -325,15 +370,29 @@ async function handleInstagramPost(flags) {
       status: 'dry_run',
       command: 'post.instagram',
       action,
-      browserPlan: {
+      browserPlan: buildBrowserPlan({
+        profile,
         sessionPath: sessionDir(profile),
-        steps: ['open persistent session', 'go to create/select', 'attach media', 'enter caption', 'share'],
-      },
+        steps: ['open persistent session', 'verify visible account matches profile', 'go to create/select', 'attach media', 'enter caption', 'share'],
+      }),
     }, flags.json);
     return;
   }
 
-  const result = await postInstagramDirect(profile, action, flags);
+  assertLiveReady(profile, flags, 'live Instagram post');
+  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
+  if (duplicate) {
+    writeResult(duplicateActionResult(action, duplicate, 'post.instagram'), flags.json);
+    return;
+  }
+  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
+  let result;
+  try {
+    result = await postInstagramDirect(profile, action, flags);
+    recordCompletedAction({ action, socialHome: socialHome(), result, command: 'post.instagram' });
+  } finally {
+    releaseLock();
+  }
   writeResult({
     ok: result.ok,
     actionId: action.actionId,
@@ -407,7 +466,7 @@ async function postInstagramDirect(profile, action, flags) {
     await fillCaption(page, action.payload.text);
 
     if (!canExecuteLive(profile, flags)) {
-      throw new CliError('Refusing live share because confirmation policy blocks autorun', 'CONFIRM_REQUIRED');
+      throw new CliError('Refusing live share without explicit --confirm yes', 'CONFIRM_REQUIRED');
     }
 
     await clickText(page, 'Share', 30000);
@@ -442,7 +501,7 @@ async function commentInstagramDirect(profile, action, flags) {
     });
 
     if (!canExecuteLive(profile, flags)) {
-      throw new CliError('Refusing live comment because confirmation policy blocks autorun', 'CONFIRM_REQUIRED');
+      throw new CliError('Refusing live comment without explicit --confirm yes', 'CONFIRM_REQUIRED');
     }
 
     await clickText(page, 'Post', 30000);
@@ -473,7 +532,7 @@ async function dmInstagramDirect(profile, action, flags) {
     await page.keyboard.type(action.payload.text);
 
     if (!canExecuteLive(profile, flags)) {
-      throw new CliError('Refusing live DM because confirmation policy blocks autorun', 'CONFIRM_REQUIRED');
+      throw new CliError('Refusing live DM without explicit --confirm yes', 'CONFIRM_REQUIRED');
     }
 
     await clickText(page, 'Send', 30000);
@@ -578,10 +637,7 @@ function browserOptions(flags, headlessDefault) {
 }
 
 function canExecuteLive(profile, flags) {
-  if (flags.confirm === 'yes') return true;
-  if (flags.confirm === 'no') return false;
-  if (flags.autorun) return true;
-  return profile.confirmPolicy === 'autorun';
+  return canExecuteLiveAction(profile, flags);
 }
 
 function parseFlags(args) {
@@ -641,22 +697,12 @@ function saveProfileStore(store) {
   fs.writeFileSync(filePath, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
 }
 
-function getProfile(platform, id) {
+function getProfile(platform, id, options = {}) {
   const store = loadProfileStore();
   const profile = store.profiles[profileKey(platform, id)];
   if (profile) return profile;
-  if (id === 'smoke') {
-    return {
-      id,
-      platform,
-      modePreference: 'browser',
-      adapter: DEFAULT_BROWSER_ENGINE,
-      browserEngine: DEFAULT_BROWSER_ENGINE,
-      sessionRef: path.join('sessions', platform, id),
-      proxyId: null,
-      ratePolicy: 'normal',
-      confirmPolicy: 'autorun',
-    };
+  if (id === 'smoke' && options.allowSmoke) {
+    return buildSmokeProfile(platform, id, DEFAULT_BROWSER_ENGINE);
   }
   throw new CliError(`Profile not found: ${platform}/${id}`, 'PROFILE_NOT_FOUND');
 }
@@ -699,9 +745,7 @@ function assertPlatform(platform) {
 }
 
 function readText(flags) {
-  if (flags.text) return String(flags.text);
-  if (flags['text-file']) return fs.readFileSync(String(flags['text-file']), 'utf8').trim();
-  return '';
+  return resolveText(flags).text;
 }
 
 function normalizeList(value) {
@@ -716,20 +760,23 @@ function printHelp() {
   console.log(`social - direct agent-native social CLI harness
 
 Instagram MVP:
-  social profile add instagram --profile artist01 --json
+  social profile add instagram --profile artist01 --handle @artist01 --json
   social profile set-policy instagram --profile artist01 --confirm-policy require-confirm --json
   social profile login instagram --profile artist01
   social profile status instagram --profile artist01 --live --json
   social post instagram --profile artist01 --text "caption" --media image.jpg --dry-run --json
-  social post instagram --profile artist01 --text "caption" --media image.jpg --json
+  social post instagram --profile artist01 --text "caption" --media image.jpg --engine playwright --confirm yes --json
   social comment instagram --profile artist01 --url "https://www.instagram.com/p/..." --text "comment" --dry-run --json
-  social comment instagram --profile artist01 --url "https://www.instagram.com/p/..." --text "comment" --json
+  social comment instagram --profile artist01 --url "https://www.instagram.com/p/..." --text "comment" --engine playwright --confirm yes --json
   social dm instagram --profile artist01 --to username --text "message" --dry-run --json
-  social dm instagram --profile artist01 --to username --text "message" --json
+  social dm instagram --profile artist01 --to username --text "message" --engine playwright --confirm yes --json
 
 Global env:
   SOCIAL_HOME Override local .social store
-  SOCIAL_CONFIRM_POLICY autorun|require-confirm
+  SOCIAL_ASSET_ROOT Resolve relative --media paths from this folder
+  SOCIAL_CONTENT_ROOT Resolve relative --text-file paths from this folder
+  SOCIAL_CONFIRM_POLICY autorun|require-confirm (default: require-confirm; autorun writes require SOCIAL_ALLOW_AUTORUN_WRITES=1)
+  SOCIAL_ALLOW_AUTORUN_WRITES=1 Allow legacy autorun write behavior
   SOCIAL_BROWSER_ENGINE runner-cdp|chrome-devtools|stagehand|cloakbrowser|playwright
 `);
 }

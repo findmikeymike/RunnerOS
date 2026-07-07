@@ -9,17 +9,17 @@ The harness exposes deterministic commands for agents. Agents should emit conten
 Root package binary is `social`. Standalone package binary is `x-social` with the same arguments.
 
 ```bash
-social profile add x --profile artist01 --json
+social profile add x --profile artist01 --handle @artist01 --json
 social profile set-policy x --profile artist01 --confirm-policy require-confirm --json
 social profile login x --profile artist01
 social profile list --json
 social profile status x --profile artist01 --live --json
 social post x --profile artist01 --text "post text" --dry-run --json
-social post x --profile artist01 --text "post text" --media image.jpg --json
+social post x --profile artist01 --text "post text" --media image.jpg --engine playwright --confirm yes --json
 social comment x --profile artist01 --url "https://x.com/user/status/123" --text "reply" --dry-run --json
-social comment x --profile artist01 --url "https://x.com/user/status/123" --text "reply" --json
+social comment x --profile artist01 --url "https://x.com/user/status/123" --text "reply" --engine playwright --confirm yes --json
 social dm x --profile artist01 --to username --text "message" --dry-run --json
-social dm x --profile artist01 --to username --text "message" --json
+social dm x --profile artist01 --to username --text "message" --engine playwright --confirm yes --json
 ```
 
 ## Adapter
@@ -58,7 +58,7 @@ Use `SOCIAL_HOME` to move the store for tests or isolated runs.
 
 ## Confirm Policy
 
-Default is `autorun`.
+Default is `require-confirm`. Live actions require `--confirm yes` for the exact approved action.
 
 ```bash
 social profile set-policy x --profile artist01 --confirm-policy require-confirm --json
@@ -70,3 +70,5 @@ Per-command override:
 --confirm no
 --confirm yes
 ```
+
+Profiles used for live actions must include `--handle` or `--account-url`.

@@ -17,16 +17,16 @@ Always dry-run before live execution:
 social post instagram --profile artist01 --text "caption" --media image.jpg --dry-run --json
 ```
 
-Then execute live. Profiles default to `autorun`.
+Then execute live only after exact user approval. Default `runner-cdp` returns a plan for Runner browser tools; direct CLI live execution needs a configured fallback engine.
 
 ```bash
-social post instagram --profile artist01 --text "caption" --media image.jpg --json
+social post instagram --profile artist01 --text "caption" --media image.jpg --engine playwright --confirm yes --json
 ```
 
 ## Profile Setup
 
 ```bash
-social profile add instagram --profile artist01 --json
+social profile add instagram --profile artist01 --handle @artist01 --json
 social profile set-policy instagram --profile artist01 --confirm-policy require-confirm --json
 social profile login instagram --profile artist01
 social profile status instagram --profile artist01 --live --json
@@ -41,10 +41,11 @@ social dm instagram --profile artist01 --to username --text "message" --dry-run 
 
 ## Notes
 
-- Current bundled implementation uses Playwright as the OSS baseline.
+- Current bundled implementation defaults to Runner browser/CDP plans; Playwright is an optional standalone fallback.
 - CloakBrowser is optional local-only because its binary cannot be bundled into a sellable product without extra licensing.
 - Browser harness/CDP should be the long-term clean engine.
-- New profiles default to `autorun`.
-- Use `--confirm no` or `require-confirm` only when the user asks for a brake.
+- New profiles default to `require-confirm`.
+- Live profiles need `--handle` or `--account-url` so the visible browser account can be verified.
+- Use `--confirm yes` only for the exact approved live action.
 - Live Instagram posts require media.
 - JSON output is the stable contract for agents.

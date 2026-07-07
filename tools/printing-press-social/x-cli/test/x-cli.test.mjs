@@ -49,11 +49,14 @@ test('adds and lists an X profile', () => {
   const added = JSON.parse(run([
     'profile', 'add', 'x',
     '--profile', 'artist01',
+    '--handle', '@artist01',
     '--json',
   ], env));
 
   assert.equal(added.ok, true);
   assert.equal(added.data.adapter, 'runner-cdp');
+  assert.equal(added.data.confirmPolicy, 'require-confirm');
+  assert.equal(added.data.accountHandle, '@artist01');
 
   const listed = JSON.parse(run(['profile', 'list', '--json'], env));
   assert.equal(listed.profiles.length, 1);
@@ -100,6 +103,7 @@ test('sets require-confirm policy on a profile', () => {
   run([
     'profile', 'add', 'x',
     '--profile', 'artist01',
+    '--handle', '@artist01',
     '--json',
   ], env);
 
@@ -120,6 +124,7 @@ test('dry-runs a text-only X post with normalized action output', () => {
   run([
     'profile', 'add', 'x',
     '--profile', 'artist01',
+    '--handle', '@artist01',
     '--json',
   ], env);
 
@@ -135,7 +140,10 @@ test('dry-runs a text-only X post with normalized action output', () => {
   assert.equal(result.status, 'dry_run');
   assert.equal(result.action.platform, 'x');
   assert.equal(result.action.payload.text, 'new drop tonight');
-  assert.deepEqual(result.browserPlan.steps, ['open persistent session', 'open X composer', 'enter post text', 'post']);
+  assert.deepEqual(result.browserPlan.steps, ['open persistent session', 'verify visible account matches profile', 'open X composer', 'enter post text', 'post']);
+  assert.equal(result.browserPlan.accountVerification.requiredBeforeLiveSubmit, true);
+  assert.equal(result.browserPlan.accountVerification.verificationTargetKnown, true);
+  assert.equal(result.browserPlan.accountVerification.fallbackExpectedIdentity, '@artist01');
 });
 
 test('dry-runs an X media post', () => {
@@ -154,7 +162,7 @@ test('dry-runs an X media post', () => {
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.action.payload.media, [media]);
-  assert.deepEqual(result.browserPlan.steps, ['open persistent session', 'open X composer', 'enter post text', 'attach media', 'post']);
+  assert.deepEqual(result.browserPlan.steps, ['open persistent session', 'verify visible account matches profile', 'open X composer', 'enter post text', 'attach media', 'post']);
 });
 
 test('dry-run rejects invalid X media', () => {

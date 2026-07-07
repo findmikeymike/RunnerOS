@@ -5,6 +5,7 @@ import readline from 'node:readline/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, checkBrowserEngine } from './browser-engines.mjs';
+import { listAssets, listContent } from './content-assets.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const REGISTRY_PATH = path.join(ROOT, 'registry.json');
@@ -50,6 +51,16 @@ async function main() {
 
   if (argv[0] === 'doctor') {
     await runDoctor(argv.slice(1));
+    return;
+  }
+
+  if (argv[0] === 'assets') {
+    await runAssets(argv.slice(1));
+    return;
+  }
+
+  if (argv[0] === 'content') {
+    await runContent(argv.slice(1));
     return;
   }
 
@@ -178,6 +189,48 @@ async function runDoctor(args) {
   }
 }
 
+async function runAssets(args) {
+  const flags = parseFlags(args);
+  const assets = listAssets({
+    assetRoot: flags['asset-root'],
+    platform: flags.platform,
+  });
+  const result = {
+    ok: true,
+    status: 'succeeded',
+    command: 'assets',
+    assetRoot: flags['asset-root'] || process.env.SOCIAL_ASSET_ROOT || null,
+    platform: flags.platform || null,
+    assets,
+  };
+
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  for (const item of assets) console.log(`${item.relativePath}\t${item.kind}\t${item.platforms.join(',')}`);
+}
+
+async function runContent(args) {
+  const flags = parseFlags(args);
+  const content = listContent({ contentRoot: flags['content-root'] });
+  const result = {
+    ok: true,
+    status: 'succeeded',
+    command: 'content',
+    contentRoot: flags['content-root'] || process.env.SOCIAL_CONTENT_ROOT || null,
+    content,
+  };
+
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  for (const item of content) console.log(`${item.relativePath}\t${item.kind}`);
+}
+
 function splitArgs(line) {
   return line.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) => part.replace(/^"|"$/g, '')) || [];
 }
@@ -246,6 +299,8 @@ Commands:
   social doctor --json
   social doctor --live --json
   social repl
+  social assets --asset-root ./assets --platform instagram --json
+  social content --content-root ./content --json
   social profile add instagram --profile artist01 --json
   social profile add tiktok --profile creator01 --json
   social profile add x --profile artist01 --json

@@ -53,11 +53,14 @@ test('adds and lists an YouTube profile', () => {
   const added = JSON.parse(run([
     'profile', 'add', 'youtube',
     '--profile', 'artist01',
+    '--handle', '@artist01',
     '--json',
   ], env));
 
   assert.equal(added.ok, true);
   assert.equal(added.data.adapter, 'runner-cdp');
+  assert.equal(added.data.confirmPolicy, 'require-confirm');
+  assert.equal(added.data.accountHandle, '@artist01');
 
   const listed = JSON.parse(run(['profile', 'list', '--json'], env));
   assert.equal(listed.profiles.length, 1);
@@ -102,6 +105,7 @@ test('sets require-confirm policy on a profile', () => {
   run([
     'profile', 'add', 'youtube',
     '--profile', 'artist01',
+    '--handle', '@artist01',
     '--json',
   ], env);
 
@@ -124,6 +128,7 @@ test('dry-runs a YouTube full video with normalized action output', () => {
   run([
     'profile', 'add', 'youtube',
     '--profile', 'artist01',
+    '--handle', '@artist01',
     '--json',
   ], env);
 
@@ -148,6 +153,7 @@ test('dry-runs a YouTube full video with normalized action output', () => {
   assert.equal(result.action.payload.visibility, 'unlisted');
   assert.deepEqual(result.browserPlan.steps, [
     'open persistent session',
+    'verify visible account/channel matches profile',
     'go to YouTube Studio upload',
     'attach video',
     'set title',
@@ -156,6 +162,9 @@ test('dry-runs a YouTube full video with normalized action output', () => {
     'set visibility',
     'publish video',
   ]);
+  assert.equal(result.browserPlan.accountVerification.requiredBeforeLiveSubmit, true);
+  assert.equal(result.browserPlan.accountVerification.verificationTargetKnown, true);
+  assert.equal(result.browserPlan.accountVerification.fallbackExpectedIdentity, '@artist01');
 });
 
 test('dry-runs a YouTube Short upload', () => {

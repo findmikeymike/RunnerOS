@@ -49,11 +49,14 @@ test('adds and lists an TikTok profile', () => {
   const added = JSON.parse(run([
     'profile', 'add', 'tiktok',
     '--profile', 'artist01',
+    '--handle', '@artist01',
     '--json',
   ], env));
 
   assert.equal(added.ok, true);
   assert.equal(added.data.adapter, 'runner-cdp');
+  assert.equal(added.data.confirmPolicy, 'require-confirm');
+  assert.equal(added.data.accountHandle, '@artist01');
 
   const listed = JSON.parse(run(['profile', 'list', '--json'], env));
   assert.equal(listed.profiles.length, 1);
@@ -100,6 +103,7 @@ test('sets require-confirm policy on a profile', () => {
   run([
     'profile', 'add', 'tiktok',
     '--profile', 'artist01',
+    '--handle', '@artist01',
     '--json',
   ], env);
 
@@ -122,6 +126,7 @@ test('dry-runs an TikTok post with normalized action output', () => {
   run([
     'profile', 'add', 'tiktok',
     '--profile', 'artist01',
+    '--handle', '@artist01',
     '--json',
   ], env);
 
@@ -138,7 +143,10 @@ test('dry-runs an TikTok post with normalized action output', () => {
   assert.equal(result.status, 'dry_run');
   assert.equal(result.action.platform, 'tiktok');
   assert.equal(result.action.payload.text, 'new drop tonight');
-  assert.deepEqual(result.browserPlan.steps, ['open persistent session', 'go to upload page', 'attach video', 'enter caption', 'post']);
+  assert.deepEqual(result.browserPlan.steps, ['open persistent session', 'verify visible account matches profile', 'go to upload page', 'attach video', 'enter caption', 'post']);
+  assert.equal(result.browserPlan.accountVerification.requiredBeforeLiveSubmit, true);
+  assert.equal(result.browserPlan.accountVerification.verificationTargetKnown, true);
+  assert.equal(result.browserPlan.accountVerification.fallbackExpectedIdentity, '@artist01');
 });
 
 test('dry-run rejects invalid TikTok media', () => {

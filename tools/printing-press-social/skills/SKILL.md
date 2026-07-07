@@ -29,10 +29,12 @@ Read the platform skill before live execution:
 
 ## Safety Rules
 
-- New profiles default to `autorun`; do not ask the user to toggle confirmation repeatedly.
+- New profiles default to `require-confirm`; live actions need exact approval and `--confirm yes`.
 - Run `social doctor --json` before using a freshly installed harness.
 - Run `social doctor --live --json` after profile login to verify sessions.
 - Default to `runner-cdp` inside RunnerOS. Treat dry-run JSON as the action contract and execute with Runner browser/CDP tools.
-- Use `--confirm no` or set profile policy to `require-confirm` only when the user asks for a brake.
+- Treat `browserPlan.accountVerification` as mandatory before the final submit button.
+- Use `social assets --asset-root <dir> --platform <platform> --json` and `social content --content-root <dir> --json` before selecting files from campaign folders.
+- Use `--asset-root` / `--content-root` with relative `--media` and `--text-file` values so the action records the exact resolved source paths.
 - Use valid media paths in dry-runs; dry-run validates obvious impossible inputs.
 - Do not operate browser sessions directly when a `social` command exists.

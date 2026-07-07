@@ -18,16 +18,16 @@ social post x --profile artist01 --text "post text" --dry-run --json
 social post x --profile artist01 --text "post text" --media image.jpg --dry-run --json
 ```
 
-Then execute live. Profiles default to `autorun`.
+Then execute live only after exact user approval. Default `runner-cdp` returns a plan for Runner browser tools; direct CLI live execution needs a configured fallback engine.
 
 ```bash
-social post x --profile artist01 --text "post text" --json
+social post x --profile artist01 --text "post text" --engine playwright --confirm yes --json
 ```
 
 ## Profile Setup
 
 ```bash
-social profile add x --profile artist01 --json
+social profile add x --profile artist01 --handle @artist01 --json
 social profile set-policy x --profile artist01 --confirm-policy require-confirm --json
 social profile login x --profile artist01
 social profile status x --profile artist01 --live --json
@@ -42,11 +42,12 @@ social dm x --profile artist01 --to username --text "message" --dry-run --json
 
 ## Notes
 
-- Current bundled implementation uses Playwright as the OSS baseline.
+- Current bundled implementation defaults to Runner browser/CDP plans; Playwright is an optional standalone fallback.
 - CloakBrowser is optional local-only because its binary cannot be bundled into a sellable product without extra licensing.
 - Browser harness/CDP should be the long-term clean engine.
-- New profiles default to `autorun`.
-- Use `--confirm no` or `require-confirm` only when the user asks for a brake.
+- New profiles default to `require-confirm`.
+- Live profiles need `--handle` or `--account-url` so the visible browser account can be verified.
+- Use `--confirm yes` only for the exact approved live action.
 - X posts can be text-only or media-backed.
 - Image posts support up to 4 images; video posts support one video.
 - The MVP does not mix image and video media in one post.

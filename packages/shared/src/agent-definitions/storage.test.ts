@@ -546,7 +546,7 @@ body
     expect(socialPublisher?.metadata.sources).toEqual(['printing-press-social'])
     expect(socialPublisher?.systemPrompt).toContain('browser_tool')
     expect(socialPublisher?.systemPrompt).toContain('chrome-cdp')
-    expect(socialPublisher?.systemPrompt).toContain('not Playwright')
+    expect(socialPublisher?.systemPrompt).toContain('browserPlan.accountVerification')
   })
 
   test('starter library includes the TryPost social publisher as approval-gated', () => {

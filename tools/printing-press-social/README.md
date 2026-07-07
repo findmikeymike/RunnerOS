@@ -17,9 +17,27 @@ Recommended next check after install:
 social doctor --json
 ```
 
+Safety defaults:
+
+- New profiles default to `require-confirm`.
+- Dry-run commands are safe planning commands.
+- Live post/comment/DM/upload commands require exact approval passed as `--confirm yes`.
+- Profiles must define `--handle` or `--account-url` before live actions so the visible browser account can be verified.
+- The built-in `smoke` profile is dry-run only unless `SOCIAL_ENABLE_SMOKE_PROFILE=1` is explicitly set.
+- Successful live actions with `--idempotency-key` are recorded in a local ledger to avoid accidental duplicate execution.
+- A per-profile lock prevents two social actions from driving the same browser session at once.
+- Dry-run browser plans include `accountVerification`; Runner/browser operators must verify the visible logged-in account or channel matches the requested handle/URL before final submit.
+
+Asset and content roots:
+
+- Use `social assets --asset-root <dir> --platform <platform> --json` to list usable media before choosing files.
+- Use `social content --content-root <dir> --json` to list caption/title text files.
+- Post commands accept `--asset-root` and `--content-root`; relative `--media`, `--text-file`, `--title-file`, and `--description-file` paths resolve inside those roots.
+- Relative rooted paths cannot escape their root with `..`.
+
 Default browser engine:
 
 - Use one Runner agent, `@social-publisher`, as the front door for all channel posting.
 - Keep Instagram/TikTok/X/YouTube differences as platform playbooks inside this CLI harness, not as separate posting agents by default.
-- `runner-cdp` inside RunnerOS. The CLI emits structured plans; Runner executes with native browser/CDP tools.
+- `runner-cdp` inside RunnerOS. The CLI emits structured plans; Runner executes with native browser/CDP tools. Direct live CLI execution requires a non-delegated fallback engine.
 - `playwright` is optional fallback for standalone local execution.

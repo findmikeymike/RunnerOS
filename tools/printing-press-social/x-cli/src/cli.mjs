@@ -6,6 +6,20 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, resolveBrowserEngine, launchBrowserContextForEngine } from '../../src/browser-engines.mjs';
+import { buildContentContext, resolveMediaList, resolveText } from '../../src/content-assets.mjs';
+import {
+  acquireProfileLock,
+  assertConfirmPolicy,
+  assertLiveReady,
+  buildBrowserPlan,
+  buildSmokeProfile,
+  canExecuteLiveAction,
+  duplicateActionResult,
+  findCompletedAction,
+  recordCompletedAction,
+  resolveConfirmPolicy,
+  smokeProfileAllowed,
+} from '../../src/action-safety.mjs';
 
 const SUPPORTED_PLATFORMS = new Set(['x']);
 
@@ -83,7 +97,9 @@ async function handleProfile(command, flags) {
       sessionRef,
       proxyId: flags['proxy-id'] || null,
       ratePolicy: flags['rate-policy'] || 'normal',
-      confirmPolicy: flags['confirm-policy'] || process.env.SOCIAL_CONFIRM_POLICY || 'autorun',
+      confirmPolicy: resolveConfirmPolicy(flags),
+      accountHandle: flags.handle || flags['account-handle'] || null,
+      accountUrl: flags['account-url'] || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -107,9 +123,7 @@ async function handleProfile(command, flags) {
     assertPlatform(platform);
     const profileId = requireFlag(flags, 'profile');
     const confirmPolicy = requireFlag(flags, 'confirm-policy');
-    if (!['require-confirm', 'autorun'].includes(confirmPolicy)) {
-      throw new CliError('--confirm-policy must be require-confirm or autorun', 'INVALID_CONFIRM_POLICY');
-    }
+    assertConfirmPolicy(confirmPolicy);
 
     const store = loadProfileStore();
     const key = profileKey(platform, profileId);
@@ -206,8 +220,21 @@ async function handleXComment(flags) {
     return;
   }
 
-  const profile = getProfile('x', action.profile);
-  const result = await commentXDirect(profile, action, flags);
+  const profile = getProfile('x', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
+  assertLiveReady(profile, flags, 'live X reply');
+  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
+  if (duplicate) {
+    writeResult(duplicateActionResult(action, duplicate, 'comment.x'), flags.json);
+    return;
+  }
+  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
+  let result;
+  try {
+    result = await commentXDirect(profile, action, flags);
+    recordCompletedAction({ action, socialHome: socialHome(), result, command: 'comment.x' });
+  } finally {
+    releaseLock();
+  }
   writeResult(liveResult(action, result, 'comment.x'), flags.json);
 }
 
@@ -225,14 +252,28 @@ async function handleXDm(flags) {
     return;
   }
 
-  const profile = getProfile('x', action.profile);
-  const result = await dmXDirect(profile, action, flags);
+  const profile = getProfile('x', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
+  assertLiveReady(profile, flags, 'live X DM');
+  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
+  if (duplicate) {
+    writeResult(duplicateActionResult(action, duplicate, 'dm.x'), flags.json);
+    return;
+  }
+  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
+  let result;
+  try {
+    result = await dmXDirect(profile, action, flags);
+    recordCompletedAction({ action, socialHome: socialHome(), result, command: 'dm.x' });
+  } finally {
+    releaseLock();
+  }
   writeResult(liveResult(action, result, 'dm.x'), flags.json);
 }
 
 function buildXTextAction(verb, flags, extraPayload) {
   const profileId = requireFlag(flags, 'profile');
-  const text = readText(flags);
+  const textResult = resolveText(flags);
+  const text = textResult.text;
   if (!text) throw new CliError(`X ${verb} needs --text or --text-file`, 'MISSING_TEXT');
   return {
     actionId: flags['action-id'] || `act_${randomUUID()}`,
@@ -249,6 +290,7 @@ function buildXTextAction(verb, flags, extraPayload) {
       idempotencyKey: flags['idempotency-key'] || null,
       headed: Boolean(flags.headed),
     },
+    contentContext: buildContentContext(flags, { textSource: textResult.source }),
   };
 }
 
@@ -268,10 +310,11 @@ function dryRunResult(action, steps) {
     status: 'dry_run',
     command: `${action.verb}.x`,
     action,
-    browserPlan: {
-      sessionPath: sessionDir(getProfile('x', action.profile)),
-      steps,
-    },
+      browserPlan: buildBrowserPlan({
+        profile: getProfile('x', action.profile, { allowSmoke: true }),
+        sessionPath: sessionDir(getProfile('x', action.profile, { allowSmoke: true })),
+        steps,
+      }),
   };
 }
 
@@ -290,9 +333,10 @@ function liveResult(action, result, command) {
 
 async function handleXPost(flags) {
   const profileId = requireFlag(flags, 'profile');
-  const profile = getProfile('x', profileId);
-  const text = readText(flags);
-  const media = normalizeList(flags.media);
+  const profile = getProfile('x', profileId, { allowSmoke: smokeProfileAllowed(flags) });
+  const textResult = resolveText(flags);
+  const text = textResult.text;
+  const media = resolveMediaList(flags.media, flags);
   const action = {
     actionId: flags['action-id'] || `act_${randomUUID()}`,
     verb: 'post',
@@ -309,6 +353,7 @@ async function handleXPost(flags) {
       idempotencyKey: flags['idempotency-key'] || null,
       headed: Boolean(flags.headed),
     },
+    contentContext: buildContentContext(flags, { textSource: textResult.source }),
   };
 
   validateXAction(action);
@@ -323,21 +368,36 @@ async function handleXPost(flags) {
       status: 'dry_run',
       command: 'post.x',
       action,
-      browserPlan: {
+      browserPlan: buildBrowserPlan({
+        profile,
         sessionPath: sessionDir(profile),
         steps: [
           'open persistent session',
+          'verify visible account matches profile',
           'open X composer',
           ...(text ? ['enter post text'] : []),
           ...(media.length ? ['attach media'] : []),
           'post',
         ],
-      },
+      }),
     }, flags.json);
     return;
   }
 
-  const result = await postXDirect(profile, action, flags);
+  assertLiveReady(profile, flags, 'live X post');
+  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
+  if (duplicate) {
+    writeResult(duplicateActionResult(action, duplicate, 'post.x'), flags.json);
+    return;
+  }
+  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
+  let result;
+  try {
+    result = await postXDirect(profile, action, flags);
+    recordCompletedAction({ action, socialHome: socialHome(), result, command: 'post.x' });
+  } finally {
+    releaseLock();
+  }
   writeResult({
     ok: result.ok,
     actionId: action.actionId,
@@ -417,7 +477,7 @@ async function postXDirect(profile, action, flags) {
     }
 
     if (!canExecuteLive(profile, flags)) {
-      throw new CliError('Refusing live post because confirmation policy blocks autorun', 'CONFIRM_REQUIRED');
+      throw new CliError('Refusing live post without explicit --confirm yes', 'CONFIRM_REQUIRED');
     }
 
     await clickXButton(page, ['Post', 'Tweet'], 30000);
@@ -452,7 +512,7 @@ async function commentXDirect(profile, action, flags) {
     });
 
     if (!canExecuteLive(profile, flags)) {
-      throw new CliError('Refusing live comment because confirmation policy blocks autorun', 'CONFIRM_REQUIRED');
+      throw new CliError('Refusing live comment without explicit --confirm yes', 'CONFIRM_REQUIRED');
     }
 
     await clickXButton(page, ['Reply', 'Post', 'Tweet'], 30000).catch(async () => {
@@ -487,7 +547,7 @@ async function dmXDirect(profile, action, flags) {
     await page.keyboard.type(action.payload.text);
 
     if (!canExecuteLive(profile, flags)) {
-      throw new CliError('Refusing live DM because confirmation policy blocks autorun', 'CONFIRM_REQUIRED');
+      throw new CliError('Refusing live DM without explicit --confirm yes', 'CONFIRM_REQUIRED');
     }
 
     await clickXButton(page, ['Send'], 30000);
@@ -612,10 +672,7 @@ function browserOptions(flags, headlessDefault) {
 }
 
 function canExecuteLive(profile, flags) {
-  if (flags.confirm === 'yes') return true;
-  if (flags.confirm === 'no') return false;
-  if (flags.autorun) return true;
-  return profile.confirmPolicy === 'autorun';
+  return canExecuteLiveAction(profile, flags);
 }
 
 function parseFlags(args) {
@@ -675,22 +732,12 @@ function saveProfileStore(store) {
   fs.writeFileSync(filePath, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
 }
 
-function getProfile(platform, id) {
+function getProfile(platform, id, options = {}) {
   const store = loadProfileStore();
   const profile = store.profiles[profileKey(platform, id)];
   if (profile) return profile;
-  if (id === 'smoke') {
-    return {
-      id,
-      platform,
-      modePreference: 'browser',
-      adapter: DEFAULT_BROWSER_ENGINE,
-      browserEngine: DEFAULT_BROWSER_ENGINE,
-      sessionRef: path.join('sessions', platform, id),
-      proxyId: null,
-      ratePolicy: 'normal',
-      confirmPolicy: 'autorun',
-    };
+  if (id === 'smoke' && options.allowSmoke) {
+    return buildSmokeProfile(platform, id, DEFAULT_BROWSER_ENGINE);
   }
   throw new CliError(`Profile not found: ${platform}/${id}`, 'PROFILE_NOT_FOUND');
 }
@@ -729,9 +776,7 @@ function assertPlatform(platform) {
 }
 
 function readText(flags) {
-  if (flags.text) return String(flags.text);
-  if (flags['text-file']) return fs.readFileSync(String(flags['text-file']), 'utf8').trim();
-  return '';
+  return resolveText(flags).text;
 }
 
 function normalizeList(value) {
@@ -746,20 +791,23 @@ function printHelp() {
   console.log(`social - direct agent-native social CLI harness
 
 X MVP:
-  social profile add x --profile artist01 --json
+  social profile add x --profile artist01 --handle @artist01 --json
   social profile set-policy x --profile artist01 --confirm-policy require-confirm --json
   social profile login x --profile artist01
   social profile status x --profile artist01 --live --json
   social post x --profile artist01 --text "post text" --dry-run --json
-  social post x --profile artist01 --text "post text" --media image.jpg --json
+  social post x --profile artist01 --text "post text" --media image.jpg --engine playwright --confirm yes --json
   social comment x --profile artist01 --url "https://x.com/user/status/123" --text "reply" --dry-run --json
-  social comment x --profile artist01 --url "https://x.com/user/status/123" --text "reply" --json
+  social comment x --profile artist01 --url "https://x.com/user/status/123" --text "reply" --engine playwright --confirm yes --json
   social dm x --profile artist01 --to username --text "message" --dry-run --json
-  social dm x --profile artist01 --to username --text "message" --json
+  social dm x --profile artist01 --to username --text "message" --engine playwright --confirm yes --json
 
 Global env:
   SOCIAL_HOME Override local .social store
-  SOCIAL_CONFIRM_POLICY autorun|require-confirm
+  SOCIAL_ASSET_ROOT Resolve relative --media paths from this folder
+  SOCIAL_CONTENT_ROOT Resolve relative --text-file paths from this folder
+  SOCIAL_CONFIRM_POLICY autorun|require-confirm (default: require-confirm; autorun writes require SOCIAL_ALLOW_AUTORUN_WRITES=1)
+  SOCIAL_ALLOW_AUTORUN_WRITES=1 Allow legacy autorun write behavior
   SOCIAL_BROWSER_ENGINE runner-cdp|chrome-devtools|stagehand|cloakbrowser|playwright
 `);
 }

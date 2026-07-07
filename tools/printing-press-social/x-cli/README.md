@@ -3,11 +3,11 @@
 Standalone binary:
 
 ```bash
-x-social post x --profile artist01 --text "post text" --json
+x-social post x --profile artist01 --text "post text" --dry-run --json
 ```
 
 Root workspace binary:
 
 ```bash
-social post x --profile artist01 --text "post text" --json
+social post x --profile artist01 --text "post text" --dry-run --json
 ```
