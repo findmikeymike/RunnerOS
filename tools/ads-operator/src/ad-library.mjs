@@ -22,6 +22,17 @@ const ANGLE_RULES = [
 export function createAdLibraryPlan({ artist, competitors, keywords, countries, maxAds }) {
   const competitorList = parseList(competitors);
   const keywordList = parseList(keywords);
+  const vehicleSeedTerms = [
+    'indie artist new song',
+    'unsigned artist',
+    'viral song',
+    'listen now music',
+    'music video out now',
+    'save this song',
+    'playlist new music',
+    'local show music',
+    'for fans of',
+  ];
   const countryList = parseList(countries || 'US');
   const missingInputs = [];
   if (!artist && competitorList.length === 0 && keywordList.length === 0) {
@@ -29,16 +40,17 @@ export function createAdLibraryPlan({ artist, competitors, keywords, countries, 
   }
 
   const searchTerms = unique([
-    artist,
+    ...vehicleSeedTerms,
     ...competitorList,
     ...keywordList,
+    artist,
   ].filter(Boolean));
 
   return {
     ok: true,
     schema: 'runneros.ads.ad_library_plan.v1',
     platform: 'meta',
-    route: 'public-meta-ad-library-browser',
+    route: 'browser-tiktok-discovery-meta-validation',
     readOnly: true,
     loginRequired: false,
     actionable: missingInputs.length === 0,
@@ -47,17 +59,32 @@ export function createAdLibraryPlan({ artist, competitors, keywords, countries, 
     searchTerms,
     countries: countryList,
     startUrl: 'https://www.facebook.com/ads/library',
+    discoveryUrls: [
+      'https://ads.tiktok.com/business/creativecenter/inspiration/topads/pc/en',
+      'https://ads.tiktok.com/business/creativecenter/inspiration/popular/music/pc/en',
+      'https://www.facebook.com/ads/library',
+    ],
     browserSteps: [
-      'Open Meta Ad Library in a normal browser context.',
+      'Do not treat Meta Ad Library as a popularity-ranked search engine. Normal US commercial music ads do not expose CTR, CPA, ROAS, exact reach, or exact spend.',
+      'Do not start with generic web search or DuckDuckGo. Open the discoveryUrls directly first; search engines can trigger automation challenges and stall the run.',
+      'Start in TikTok Creative Center / Top Ads / trend pages in the browser. Search music, entertainment, creator, concert, streaming, playlist, app, and ecommerce examples for transferable hook/format mechanics.',
+      'Capture visible hooks, formats, CTAs, engagement/performance-style signals shown by the page, landing pages, and why the vehicle could transfer to an artist campaign.',
+      'Use public blogs, YouTube breakdowns, and case studies only when they show actual creative examples or specific formats.',
+      'Then open Meta Ad Library in a normal browser context.',
       'Set ad category to All ads.',
       'Set country filter for each target country.',
-      'Search each artist, similar artist, label, genre phrase, and fan-culture keyword.',
+      'Search the pages, artists, hooks, vehicles, and music-ad terms found during discovery, plus indie/emerging artist, playlist, local show, release, and fan-identity terms.',
+      'Use similar artists only as secondary references. Skip huge artists quickly when they have no active ads or only big-budget/fame-dependent creative.',
+      'Prefer active, repeatable, modest-budget-looking ads over celebrity-scale campaigns. The goal is hook/format/vehicle intel, not soundalike validation.',
+      'Rank candidates strong/maybe/skip using proxies: public viral proof, active paid usage, longevity, repeatability, pattern repetition, and direct-response clarity.',
       'Prefer active ads and capture ad text, Page name, platforms, media type, CTA, destination URL, start date, and screenshot/video thumbnail when visible.',
       'Use longevity only as a weak proxy. Meta does not expose commercial ad performance in the public library.',
+      'If TikTok, Meta, or a search engine blocks automation or shows a human challenge, stop that branch quickly. Return a partial packet with the block noted, or ask the user for screenshots/captured examples.',
       'Save captured examples to JSON, then run ad-library-analyze.',
     ],
     captureSchema: {
       ads: [{
+        sourcePlatform: '<tiktok|meta|web|youtube>',
         pageName: '<advertiser or artist page>',
         searchTerm: '<term used>',
         adText: '<visible primary text>',
@@ -198,6 +225,7 @@ function normalizeAds(input) {
   return input
     .filter(Boolean)
     .map((ad) => ({
+      sourcePlatform: text(ad.sourcePlatform || ad.platform || ad.source),
       pageName: text(ad.pageName),
       searchTerm: text(ad.searchTerm),
       adText: text(ad.adText || ad.primaryText || ad.body),

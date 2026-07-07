@@ -574,6 +574,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const prevLastMessageIdRef = React.useRef<string | null>(null)
   const prevMessageCountRef = React.useRef(0)
   const prevSessionIdForCommitScrollRef = React.useRef<string | null>(null)
+  const lastMessageRoleRef = React.useRef<Message['role'] | undefined>(undefined)
+  const prevAssistantTopAnchorSessionRef = React.useRef<string | null>(null)
+  const prevAssistantTopAnchorKeyRef = React.useRef<string | null>(null)
   const internalTextareaRef = React.useRef<RichTextInputHandle>(null)
   const textareaRef = externalTextareaRef || internalTextareaRef
   const [sendMessageKey, setSendMessageKey] = useState<'enter' | 'cmd-enter'>('enter')
@@ -1102,6 +1105,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   const lastMessage = messageCount > 0 ? session?.messages[messageCount - 1] : undefined
   const lastMessageId = lastMessage?.id
   const lastMessageRole = lastMessage?.role
+  lastMessageRoleRef.current = lastMessageRole
 
   const pendingFollowUpAnnotations = useMemo<PendingFollowUpAnnotation[]>(() => {
     if (!session?.messages?.length) return []
@@ -1211,6 +1215,10 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
       }
 
       // Focused panel: respect sticky-bottom preference
+      // For long assistant replies, keep the viewport at the top of the new
+      // response instead of chasing the streaming content to the bottom.
+      if (!compactMode && lastMessageRoleRef.current !== 'user') return
+
       if (!isStickToBottomRef.current) return
 
       // Clear pending scroll and wait for layout to settle
@@ -1483,6 +1491,34 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     }
     return null
   }, [allTurns, isConciergeSession])
+
+  const latestAssistantTurnKey = useMemo(() => {
+    const latestTurn = allTurns[allTurns.length - 1]
+    return latestTurn?.type === 'assistant' ? getTurnKey(latestTurn) : null
+  }, [allTurns])
+
+  React.useEffect(() => {
+    const currentSessionId = session?.id ?? null
+
+    if (prevAssistantTopAnchorSessionRef.current !== currentSessionId) {
+      prevAssistantTopAnchorSessionRef.current = currentSessionId
+      prevAssistantTopAnchorKeyRef.current = latestAssistantTurnKey
+      return
+    }
+
+    if (compactMode || !isFocusedPanel || !latestAssistantTurnKey) return
+    if (prevAssistantTopAnchorKeyRef.current === latestAssistantTurnKey) return
+
+    prevAssistantTopAnchorKeyRef.current = latestAssistantTurnKey
+    isStickToBottomRef.current = false
+
+    requestAnimationFrame(() => {
+      turnRefs.current.get(latestAssistantTurnKey)?.scrollIntoView({
+        behavior: 'instant',
+        block: 'start',
+      })
+    })
+  }, [compactMode, isFocusedPanel, latestAssistantTurnKey, session?.id])
 
   const assistantTurnIndexByMessageId = useMemo(() => {
     const map = new Map<string, number>()

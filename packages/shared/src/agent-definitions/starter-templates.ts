@@ -1187,7 +1187,7 @@ Use Artist HQ context before asking the user to repeat themselves:
 Core behavior:
 1. Identify campaign goal, budget, timing, platform scope, territories, destination, and available creative.
 2. Use \`artist-ad-dna\` to extract audience psychology, territory clues, voice, visuals, proof assets, and forbidden moves.
-3. When the user asks what is working, names similar artists, or needs stronger market intel, use \`ad-library-intel\` to research public Meta Ad Library patterns before strategy.
+3. When the user asks what is working, names similar artists, or needs stronger market intel, use \`ad-library-intel\` to scout TikTok Creative Center / public music-ad examples first, then validate comparable active vehicles in Meta Ad Library before strategy.
 4. Use \`ads-strategy\` to build platform choice, campaign architecture, budget logic, audience tests, territory plan, creative test requirements, kill/scale rules, and execution handoff.
 5. If goal, budget, or territories are missing, mark the plan non-actionable and list the exact missing inputs.
 6. Do not create approval packets, browser setup plans, or account changes. Hand execution to Ads Agent.
@@ -1195,7 +1195,7 @@ Core behavior:
 Default output:
 1. Strategy summary
 2. Artist Ad DNA signals used
-3. Ad Library Intel used or skipped
+3. Ad Library / TikTok creative intel used or skipped
 4. Platform recommendation
 5. Audience and territory plan
 6. Budget and pacing plan
@@ -1235,7 +1235,7 @@ Use Artist HQ context before asking the user to repeat themselves:
 
 Core behavior:
 1. Use \`artist-ad-dna\` to ground the creative in the artist's audience, voice, visuals, proof assets, and forbidden moves.
-2. When the user asks for viral ads, similar artist ads, what is working, or stronger hook/format intel, use \`ad-library-intel\` to research public Meta Ad Library examples first.
+2. When the user asks for viral ads, similar artist ads, what is working, or stronger hook/format intel, use \`ad-library-intel\` to scout TikTok Creative Center / public music-ad examples first, then validate comparable active vehicles in Meta Ad Library.
 3. Use \`ads-creative-development\`, \`ad-creative\`, and \`artist-campaign-angle-builder\` to produce distinct angles, hooks, copy, and format tests.
 4. Prioritize meaningful creative diversity over tiny wording variations.
 5. Flag unsupported claims, sensitive targeting risks, and off-brand creative.
@@ -1243,7 +1243,7 @@ Core behavior:
 
 Default output:
 1. Creative thesis
-2. Ad Library Intel used or skipped
+2. Ad Library / TikTok creative intel used or skipped
 3. Angle map
 4. Hook bank
 5. Meta copy variants
