@@ -23,4 +23,21 @@ describe('permissions craft-agent allowlist sync', () => {
 
     expect(actual).toEqual(expected)
   })
+
+  it('allows only the guarded Printing Press Social execute handoff shape by default', () => {
+    const permissionsPath = resolve(import.meta.dir, '../../../apps/electron/resources/permissions/default.json')
+    const permissions = JSON.parse(readFileSync(permissionsPath, 'utf-8')) as {
+      allowedBashPatterns?: AllowedBashEntry[]
+    }
+
+    const executePattern = permissions.allowedBashPatterns?.find(entry =>
+      entry.pattern.includes('social\\.mjs\\s+execute')
+    )
+
+    expect(executePattern).toBeDefined()
+    expect(executePattern!.pattern).toContain('--action-file')
+    expect(executePattern!.pattern).toContain('--expected-action-id')
+    expect(executePattern!.pattern).toContain('--confirm\\s+yes')
+    expect(executePattern!.pattern).toContain('--json')
+  })
 })

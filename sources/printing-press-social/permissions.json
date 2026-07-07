@@ -27,6 +27,10 @@
     {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+dm\\s+(instagram|tiktok|x)\\s+.*\\s+--dry-run\\s+--json$",
       "comment": "Dry-run social DM commands only"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+\\S+(?:\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+)?\\s+--confirm\\s+yes\\s+--json$",
+      "comment": "Execute approved dry-run social handoff through the guarded Runner handoff command"
     }
   ],
   "blockedCommandHints": [
@@ -58,6 +62,16 @@
       "tryInstead": [
         "Run `node src/social.mjs doctor --json` first",
         "Run the same DM command with `--dry-run --json`"
+      ]
+    },
+    {
+      "command": "node src/social.mjs execute",
+      "whenNotMatching": "--action-file\\s+\\S+.*--confirm\\s+yes\\s+--json",
+      "reason": "Approved social execution can mutate real channels.",
+      "context": "Only execute a full dry-run result JSON after explicit user approval of the exact action.",
+      "tryInstead": [
+        "Run a post/comment/DM dry-run with `--dry-run --json` first",
+        "Run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`"
       ]
     }
   ]

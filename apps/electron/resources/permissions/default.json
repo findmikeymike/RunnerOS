@@ -86,6 +86,10 @@
       "comment": "Dry-run bundled Printing Press Social DM commands"
     },
     {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+\\S+(?:\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+)?\\s+--confirm\\s+yes\\s+--json$",
+      "comment": "Execute approved Printing Press Social handoff after dry-run and explicit approval"
+    },
+    {
       "pattern": "^pdf-tool\\s+(extract|info)\\b",
       "comment": "PDF read operations: extract text/pages, view info"
     },

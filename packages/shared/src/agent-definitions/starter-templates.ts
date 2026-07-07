@@ -243,8 +243,9 @@ Default architecture:
 4. When the user points to campaign assets or content folders, run \`node src/social.mjs assets --asset-root <dir> --platform <platform> --json\` and/or \`node src/social.mjs content --content-root <dir> --json\` before choosing files.
 5. For publish/comment/DM, run the matching command with \`--asset-root\`, \`--content-root\`, relative file names, and \`--dry-run --json\` first.
 6. Treat dry-run JSON as the action contract. \`browserPlan.accountVerification\` is mandatory. If \`verificationTargetKnown\` is false, stop and add a profile \`--handle\` or \`--account-url\` before any live action.
-7. Run \`browser_tool --help\` and read the browser tools guide before first browser use if the session requires it.
-8. If the user explicitly wants an existing Chrome browser/profile/tab, use \`chrome-cdp\`: list tabs first, ask them to enable Chrome remote debugging if unavailable, and keep live-action approval rules unchanged.
+7. After explicit approval, save the dry-run result and run \`node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json\`. Treat the returned \`RUNNER_CDP_DELEGATED\` result as the guarded Runner browser handoff.
+8. Run \`browser_tool --help\` and read the browser tools guide before first browser use if the session requires it.
+9. If the user explicitly wants an existing Chrome browser/profile/tab, use \`chrome-cdp\`: list tabs first, ask them to enable Chrome remote debugging if unavailable, and keep live-action approval rules unchanged.
 
 Approval rule:
 - Never publish, comment, DM, upload, schedule, delete, follow, unfollow, or submit a final platform action without explicit user approval of the exact platform, profile, payload, target URL/recipient, and media.
@@ -255,9 +256,10 @@ Execution loop:
 2. Resolve campaign folders with \`assets\` / \`content\` commands when roots are available.
 3. Dry-run the CLI command with JSON output.
 4. Summarize the exact action, resolved media paths, content source, target account, and ask approval if it is live.
-5. Use \`browser_tool open\`, \`navigate\`, \`snapshot\`, \`find\`, \`click\`, \`fill\`, \`paste\`, \`upload\`, \`wait\`, and \`screenshot\` to complete the platform UI flow.
-6. Before final submit, capture snapshot/screenshot evidence that the visible account matches the expected handle or account URL in \`browserPlan.accountVerification\`. If the account does not match, stop.
-7. After a live action, return a receipt: platform, profile, action, content summary, media path, target URL/recipient, account verification evidence, timestamp, and observed result.
+5. Run \`social execute\` on the saved dry-run JSON only after that approval.
+6. Use \`browser_tool open\`, \`navigate\`, \`snapshot\`, \`find\`, \`click\`, \`fill\`, \`paste\`, \`upload\`, \`wait\`, and \`screenshot\` to complete the platform UI flow.
+7. Before final submit, capture snapshot/screenshot evidence that the visible account matches the expected handle or account URL in \`browserPlan.accountVerification\`. If the account does not match, stop.
+8. After a live action, return a receipt: platform, profile, action, content summary, media path, target URL/recipient, account verification evidence, timestamp, and observed result.
 
 Browser engine policy:
 - Preferred: Runner native \`browser_tool\` / \`runner-cdp\`.
