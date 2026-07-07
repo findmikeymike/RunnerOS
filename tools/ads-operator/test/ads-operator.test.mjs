@@ -73,6 +73,66 @@ describe('ads-operator cli', () => {
     expect(result.stdout.writeExecuted).toBe(false);
   });
 
+  test('creates a public Meta Ad Library browser research plan', () => {
+    const result = run([
+      'ad-library-plan',
+      '--artist',
+      'Watching Tornado Videos',
+      '--competitors',
+      'Artist One,Artist Two',
+      '--keywords',
+      'viral indie song, late night driving song',
+      '--countries',
+      'US,GB',
+      '--json',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.ok).toBe(true);
+    expect(result.stdout.route).toBe('public-meta-ad-library-browser');
+    expect(result.stdout.loginRequired).toBe(false);
+    expect(result.stdout.writeExecuted).toBe(false);
+    expect(result.stdout.searchTerms).toContain('Watching Tornado Videos');
+    expect(result.stdout.searchTerms).toContain('Artist One');
+    expect(result.stdout.countries).toEqual(['US', 'GB']);
+    expect(result.stdout.browserSteps.join(' ')).toContain('All ads');
+  });
+
+  test('analyzes captured Meta Ad Library examples into an intel packet', () => {
+    const file = tempFile('ad-library.json', JSON.stringify({
+      ads: [
+        {
+          pageName: 'Artist One',
+          searchTerm: 'late night driving song',
+          adText: 'If you like sad late night drives, this song is for you. Listen now.',
+          headline: 'New single out now',
+          cta: 'Listen Now',
+          mediaType: 'video',
+          platforms: ['facebook', 'instagram'],
+        },
+        {
+          pageName: 'Artist Two',
+          searchTerm: 'viral indie song',
+          adText: 'Watch the official video that fans keep sharing.',
+          headline: 'Official video',
+          cta: 'Watch Now',
+          mediaType: 'video',
+        },
+      ],
+    }));
+    const result = run(['ad-library-analyze', file, '--artist', 'Watching Tornado Videos', '--json']);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.ok).toBe(true);
+    expect(result.stdout.schema).toBe('runneros.ads.ad_library_intel.v1');
+    expect(result.stdout.confidence.performanceData).toBe('none');
+    expect(result.stdout.patterns.formats['music-video-clip']).toBe(1);
+    expect(result.stdout.patterns.angles.identity).toBe(1);
+    expect(result.stdout.patterns.hooks[0]).toContain('late night drives');
+    expect(result.stdout.recommendations.join(' ')).toContain('artist context');
+    expect(result.stdout.writeExecuted).toBe(false);
+  });
+
   test('imports a CSV export into normalized metric rows', () => {
     const file = tempCsv('Campaign name,Impressions,Clicks,Amount spent,Results,Date\nLaunch,1000,50,$125.50,7,2026-07-01\n');
     const result = run(['import', file, '--platform', 'meta', '--level', 'campaign', '--json']);

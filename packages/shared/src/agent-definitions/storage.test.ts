@@ -588,13 +588,15 @@ body
     const strategist = STARTER_AGENTS.find((agent) => agent.slug === 'ads-strategist')
     const creative = STARTER_AGENTS.find((agent) => agent.slug === 'ad-creative-agent')
 
-    expect(strategist?.metadata.skills).toEqual(['artist-ad-dna', 'ads-strategy'])
+    expect(strategist?.metadata.skills).toEqual(['artist-ad-dna', 'ad-library-intel', 'ads-strategy'])
     expect(strategist?.metadata.sources).toBeUndefined()
     expect(strategist?.systemPrompt).toContain('You plan; you do not operate ad accounts.')
+    expect(strategist?.systemPrompt).toContain('ad-library-intel')
     expect(strategist?.systemPrompt).toContain('Ads Agent handoff fields')
 
-    expect(creative?.metadata.skills).toEqual(['artist-ad-dna', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder'])
+    expect(creative?.metadata.skills).toEqual(['artist-ad-dna', 'ad-library-intel', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder'])
     expect(creative?.metadata.sources).toBeUndefined()
+    expect(creative?.systemPrompt).toContain('ad-library-intel')
     expect(creative?.systemPrompt).toContain('you do not operate ad accounts')
     expect(creative?.systemPrompt).toContain('Ads Agent handoff fields')
   })

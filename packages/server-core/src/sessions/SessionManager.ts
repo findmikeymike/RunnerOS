@@ -2866,6 +2866,23 @@ export class SessionManager implements ISessionManager {
           if (adsAgentMetadataUpdated) {
             sessionLog.info('[agent-definitions] Updated Ads Agent paid-ads metadata')
           }
+          const adsStrategyAgent = STARTER_AGENTS.find(agent => agent.slug === 'ads-strategist')
+          const adCreativeAgent = STARTER_AGENTS.find(agent => agent.slug === 'ad-creative-agent')
+          const adsSpecialistMetadataUpdated = [
+            adsStrategyAgent
+              ? ensureBuiltInAgentMetadataSlugs('ads-strategist', {
+                  skills: adsStrategyAgent.metadata.skills,
+                }).updated
+              : false,
+            adCreativeAgent
+              ? ensureBuiltInAgentMetadataSlugs('ad-creative-agent', {
+                  skills: adCreativeAgent.metadata.skills,
+                }).updated
+              : false,
+          ].some(Boolean)
+          if (adsSpecialistMetadataUpdated) {
+            sessionLog.info('[agent-definitions] Updated ads specialist research metadata')
+          }
           const adsAgentPromptUpdated = adsAgent
             ? [
                 replaceBuiltInAgentPromptText(

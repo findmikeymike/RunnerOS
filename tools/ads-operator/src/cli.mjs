@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { analyzeAdLibraryFile, createAdLibraryPlan } from './ad-library.mjs';
 import { auditFile, createCampaignPlan, createSetupPlan } from './audit.mjs';
 import { importCsvFile } from './csv.mjs';
 import {
@@ -54,6 +55,8 @@ export function runCli(argv, io = process) {
     if (command === 'export-plan') return write(io, exportPlanPayload(args), 0, json);
     if (command === 'import') return importCommand(args, io, json);
     if (command === 'audit') return auditCommand(args, io, json);
+    if (command === 'ad-library-plan') return adLibraryPlanCommand(args, io, json);
+    if (command === 'ad-library-analyze') return adLibraryAnalyzeCommand(args, io, json);
     if (command === 'campaign-plan') return campaignPlanCommand(args, io, json);
     if (command === 'setup-plan') return setupPlanCommand(args, io, json);
     if (command === 'packet' && args[1] === 'create') return packetCreateCommand(args, io, json);
@@ -62,7 +65,7 @@ export function runCli(argv, io = process) {
     return write(io, {
       ok: false,
       error: `Unknown command: ${command}`,
-      availableCommands: ['doctor', 'accounts', 'campaigns', 'export-plan', 'import', 'audit', 'campaign-plan', 'setup-plan', 'packet create', 'receipt create'],
+      availableCommands: ['doctor', 'accounts', 'campaigns', 'export-plan', 'import', 'audit', 'ad-library-plan', 'ad-library-analyze', 'campaign-plan', 'setup-plan', 'packet create', 'receipt create'],
     }, 2, json);
   } catch (error) {
     return write(io, { ok: false, error: error.message }, 1, json);
@@ -88,7 +91,7 @@ function doctorPayload() {
         browserExportRequiredWhenApiMissing: true,
       },
     },
-    commands: ['doctor', 'accounts', 'campaigns', 'export-plan', 'import', 'audit', 'campaign-plan', 'setup-plan', 'packet create', 'receipt create'],
+    commands: ['doctor', 'accounts', 'campaigns', 'export-plan', 'import', 'audit', 'ad-library-plan', 'ad-library-analyze', 'campaign-plan', 'setup-plan', 'packet create', 'receipt create'],
   };
 }
 
@@ -179,6 +182,28 @@ function auditCommand(args, io, json) {
   const goal = opt(args, '--goal', 'conversions');
   const result = auditFile(file, { platform, level, goal });
   return write(io, result, result.ok ? 0 : 1, json);
+}
+
+function adLibraryPlanCommand(args, io, json) {
+  const result = createAdLibraryPlan({
+    artist: opt(args, '--artist'),
+    competitors: opt(args, '--competitors'),
+    keywords: opt(args, '--keywords'),
+    countries: opt(args, '--countries'),
+    maxAds: opt(args, '--max-ads'),
+  });
+  const out = opt(args, '--out');
+  return write(io, withOptionalFile(result, out, 'adLibraryPlan'), result.actionable ? 0 : 2, json);
+}
+
+function adLibraryAnalyzeCommand(args, io, json) {
+  const file = positional(args, 1);
+  if (!file) return write(io, { ok: false, error: 'Captured ad JSON file path is required.' }, 2, json);
+  const result = analyzeAdLibraryFile(file, {
+    artist: opt(args, '--artist'),
+  });
+  const out = opt(args, '--out');
+  return write(io, result.ok ? withOptionalFile(result, out, 'adLibraryIntel') : result, result.ok ? 0 : 1, json);
 }
 
 function campaignPlanCommand(args, io, json) {
@@ -297,7 +322,7 @@ function positional(args, offset) {
 function helpPayload() {
   return {
     ok: true,
-    usage: 'node tools/ads-operator/bin/ads-operator.mjs <doctor|accounts|campaigns|export-plan|import|audit|campaign-plan|setup-plan|packet create|receipt create> --json',
+    usage: 'node tools/ads-operator/bin/ads-operator.mjs <doctor|accounts|campaigns|export-plan|import|audit|ad-library-plan|ad-library-analyze|campaign-plan|setup-plan|packet create|receipt create> --json',
     writesEnabled: false,
   };
 }
@@ -306,7 +331,9 @@ function withOptionalFile(payload, out, key) {
   if (!out) return payload;
   const outputPath = resolve(process.cwd(), out);
   mkdirSync(dirname(outputPath), { recursive: true });
-  const artifact = key === 'plan' || key === 'setupPlan' ? payload : payload[key];
+  const artifact = key === 'plan' || key === 'setupPlan' || key === 'adLibraryPlan' || key === 'adLibraryIntel'
+    ? payload
+    : payload[key];
   writeFileSync(outputPath, `${JSON.stringify(artifact, null, 2)}\n`, 'utf8');
   return { ...payload, outputPath };
 }
