@@ -31,6 +31,7 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - YouTube dry-run video: `node src/social.mjs post youtube --profile <profile> --post-type video --text "<title>" --media <video> --visibility public --dry-run --json`
 - YouTube dry-run Short: `node src/social.mjs post youtube --profile <profile> --post-type short --text "<title>" --media <video> --visibility public --dry-run --json`
 - YouTube dry-run comment: `node src/social.mjs comment youtube --profile <profile> --url "<url>" --text "<comment>" --dry-run --json`
+- Approved handoff: `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`
 
 ## Guidelines
 
@@ -40,9 +41,9 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - Use `node src/social.mjs doctor --live --json` before claiming a profile is ready for live execution.
 - Use `--json` and parse structured output instead of scraping text.
 - Dry-run every post, comment, or DM before live execution.
-- With `runner-cdp`, treat CLI output as the action contract/plan and execute through Runner's native browser tools.
+- With `runner-cdp`, treat CLI output as the action contract/plan. After approval, run `social execute` on the saved dry-run result to re-check provenance and account-verification readiness, then execute the returned handoff through Runner's native browser tools.
 - Do not run a live post, comment, or DM unless the user has explicitly approved the exact platform, profile, payload, and target URL/recipient.
-- Do not default to Computer Use. These CLIs already automate browser execution directly.
+- Do not default to Computer Use. In RunnerOS, use the guarded CLI handoff plus native `browser_tool`; standalone fallback engines are optional.
 - Use Playwright only when explicitly running the standalone fallback engine outside Runner.
 
 ## Validation

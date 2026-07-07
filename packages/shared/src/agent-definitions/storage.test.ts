@@ -547,6 +547,7 @@ body
     expect(socialPublisher?.systemPrompt).toContain('browser_tool')
     expect(socialPublisher?.systemPrompt).toContain('chrome-cdp')
     expect(socialPublisher?.systemPrompt).toContain('browserPlan.accountVerification')
+    expect(socialPublisher?.systemPrompt).toContain('social.mjs execute')
   })
 
   test('starter library includes the TryPost social publisher as approval-gated', () => {

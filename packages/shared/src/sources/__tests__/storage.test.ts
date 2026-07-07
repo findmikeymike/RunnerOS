@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect, beforeAll, afterAll, mock } from 'bun:test';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readdirSync } from 'fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from 'fs';
 import * as os from 'os';
 import { tmpdir } from 'os';
 import { join, resolve, sep } from 'path';
@@ -409,6 +409,20 @@ describe('loadAllSources', () => {
     expect(found!.tier).toBe('project');
     expect(found!.config.type).toBe('local');
     expect(found!.config.local?.format).toBe('cli-tool');
+    expect(found!.guide?.raw).toContain('execute --action-file');
+  });
+
+  test('printing-press-social source permissions include guarded execute handoff only', () => {
+    const permissionsPath = resolve(import.meta.dir, '../../../../../sources/printing-press-social/permissions.json');
+    const permissions = JSON.parse(readFileSync(permissionsPath, 'utf8')) as {
+      allowedBashPatterns?: Array<{ pattern: string; comment?: string }>;
+    };
+    const executePattern = permissions.allowedBashPatterns?.find((entry) => entry.pattern.includes('social\\.mjs\\s+execute'));
+
+    expect(executePattern).toBeDefined();
+    expect(executePattern!.pattern).toContain('--action-file');
+    expect(executePattern!.pattern).toContain('--confirm\\s+yes');
+    expect(executePattern!.pattern).toContain('--json');
   });
 
   test('includes hypermotion as a project local source', () => {
