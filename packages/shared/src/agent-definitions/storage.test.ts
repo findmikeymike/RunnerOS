@@ -885,6 +885,20 @@ body
     expect(legendaryWriter?.systemPrompt).toContain('Do not imitate a living artist')
   })
 
+  test('starter library includes Hooker as a Lab hook and chorus worker', () => {
+    const hooker = STARTER_AGENTS.find((agent) => agent.slug === 'hooker')
+
+    expect(hooker).toBeDefined()
+    expect(hooker?.metadata.name).toBe('Hooker')
+    expect(hooker?.metadata.permissionMode).toBe('ask')
+    expect(hooker?.metadata.thinkingLevel).toBe('high')
+    expect(hooker?.metadata.skills).toContain('hook-writer')
+    expect(hooker?.metadata.tags).toContain('chorus')
+    expect(hooker?.metadata.tags).toContain('hooks')
+    expect(hooker?.systemPrompt).toContain('Paint specific, sing plain')
+    expect(hooker?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted hooks')
+  })
+
   test('starter library includes Art Director with taste-led image generation rules', () => {
     const artDirector = STARTER_AGENTS.find((agent) => agent.slug === 'art-director')
 

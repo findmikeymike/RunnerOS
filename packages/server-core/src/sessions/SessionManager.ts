@@ -2482,6 +2482,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'world-builder'
             || a.slug === 'record-doctor'
             || a.slug === 'reverse-magic'
+            || a.slug === 'hooker'
             || a.slug === 'legendary-writer'
             || a.slug === 'update-system-agent',
         )
@@ -2492,7 +2493,7 @@ export class SessionManager implements ISessionManager {
         try {
           const { getWorkspaces } = await import('@craft-agent/shared/config')
           const { readActivatedAgents, writeActivatedAgents } = await import('@craft-agent/shared/agent-definitions')
-          const labWorkerSlugs = ['reverse-magic', 'legendary-writer', 'record-doctor']
+          const labWorkerSlugs = ['reverse-magic', 'hooker', 'legendary-writer', 'record-doctor']
           let normalizedLabWorkspaces = 0
           for (const ws of getWorkspaces()) {
             if (ws.remoteServer || !isCreativeLabWorkspaceInfo(ws)) continue

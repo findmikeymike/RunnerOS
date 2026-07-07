@@ -11083,6 +11083,434 @@ Use real hyphenated commands. Some upstream introspection may show underscore na
     ],
   },
   {
+    slug: "hook-writer",
+    files: [
+      {
+        path: "references/craft-notes.md",
+        content: `# Craft Notes & the Science Underneath
+
+For TEACH mode, or when an artist wants the "why" beneath a hook choice. The point of this file: the Yoga of Songwriting method isn't just intuition — respected songwriting pedagogy and peer-reviewed research land on the same places. When you teach, you can offer both the method's language and the outside grounding.
+
+Each claim is graded: **[SOLID]** = peer-reviewed or near-universal craft consensus · **[CRAFT]** = respected teacher's heuristic · **[SOFT]** = correlational / trade-source · **[POP]** = evocative but unproven — use as intuition, never assert as fact.
+
+## The method and the craft canon agree
+
+The Yoga method, Pat Pattison (Berklee), and Andrea Stolpe are describing the same machine in different words:
+
+- **"Everything serves the Great Truth" ≈ prosody.** Pattison's one rule: every element — the words, their rhythm, rhyme, and phrasing — supports a single emotion. [CRAFT, authoritative] A hook fails when some element is fighting the feeling. (Pattison includes melody too, but that's the artist's layer, not ours — we work the words.)
+- **Fear→Love ≈ unstable→stable resolution.** Decide the feeling first, then pick tools. Verses often sit *unstable* (longing, doubt); the hook *resolves* to stable — that resolution is the release the method calls Love/Remembrance. [CRAFT]
+- **The Reveal ≈ "the hook is the only answer to the verse's question."** Stolpe: every verse line should point at the hook so it feels like it sums up *this song and only this song*. [CRAFT]
+- **The Reversal / spotlight ≈ contrast + the surprise "sweet spot."** Spotlight the hook by contrasting it with the lines before it — a beat of space, a shift in the words' rhythm or density, fewer words after a busy verse. [CRAFT] And memorability peaks at *moderate* surprise — a hook wants a familiar shape with one unexpected turn, not total predictability nor chaos. [SOLID for the general principle; [POP] for the tidy dopamine story]
+- **Child-simple title ≈ the one-word-title trend + "chunking."** Short, simple phrases are easier for the brain to store as one retrievable unit. [SOLID/CRAFT]
+
+## Prosody, in usable pieces (Pattison)
+
+- **Mind where the stress falls in the words.** When the natural stress of the words falls where the line's weight wants to be, it reads like speech and disappears into the feeling; a stress in the wrong spot sounds hurried and pulls attention off the emotion. Say the hook out loud — where does the stress *want* to fall? [CRAFT]
+- **Front-heavy lines feel committed; back-heavy lines feel in-motion.** A line whose weight lands early feels solid and resolute — good for the hook's truth. A line that leans late feels like longing or uncertainty — good for setup. "Motion creates e-motion." (You can hear this in the words alone.) [CRAFT]
+- **Rhyme by how resolved the moment should feel.** Perfect rhyme *closes* (use it when the hook means it); vowel-only rhyme (assonance) leaves things *open* (use it when the feeling is unsettled). Rhyme is a tool for resolution, not decoration. [CRAFT]
+
+## Hook layers & stacking
+
+- A hook can work on more than one layer at once. In the words alone you have the **line/title** and its **rhythm** (repetition, cadence, internal echo). Stacking a plain title line with an internal repeat or a rhythmic echo is the "hook inside the hook." (The full record also has melody and groove — the artist's layers, not ours; we make the words carry.) The strongest hooks stack at least two layers, each kept simple so they don't compete. [CRAFT]
+- **Title convention:** the hook is usually the title, the most-repeated line, sitting in the first and/or last position of the chorus. Practical reason: people can't request or remember a song whose title they never caught. [CRAFT consensus]
+
+## The memorability science (why the principles hold)
+
+- **Front-load it.** Hit-song intros collapsed from ~20 seconds (mid-80s) to ~5 seconds (2015); the voice is the fastest way to grab attention. [SOLID trend; SOFT on the streaming-caused mechanism] The "stadium/forever" tests are really about grabbing fast and lodging clean.
+- **Familiar shape + one signature oddity.** Catchy hooks use a *typical, expected* shape (easy to grab) with one unusual turn as a fingerprint (Jakubowski, ~3,000 songs). [SOLID] Mirrors "familiar enough to sing, surprising enough to notice." (The research is about melody; the same familiar-plus-one-twist principle applies to the words.)
+- **Repetition is the single strongest lever** (Margulis, *On Repeat*): it drives both liking (mere-exposure) and sing-along participation; looping can even make plain speech feel like a chant. But there's a fatigue ceiling — repeat to lodge, vary slightly to hold. [SOLID] This *is* the method's "repetition with slight augmentation."
+- **No magic number.** There is no validated "catchiness score." These are correlations, not a formula — the final judge is a real listener's face, exactly as the method says. [SOLID]
+
+## How to teach with this
+
+Point at the artist's actual hook, name the move in plain words, then — if they're curious — offer the term and the grounding. "This lands because the verse was all doubt and the hook is the first calm thing — tension and release. Pattison calls it unstable-to-stable; the method calls it Fear→Love. Same thing." Keep it short. The goal is that they feel it and can do it again, not that they memorize theory.
+
+## Sources (for the curious)
+
+Pattison, "Prosody in Music and Songwriting" (Berklee Online) · Pattison, "The Art of Phrasing" · Andrea Stolpe, "How to Write Songs with Killer Hooks" · Berklee Online, "How to Write Killer Song Hooks" · Jakubowski et al., "Dissecting an Earworm" (APA, 2016) · Léveillé Gauvin, intro/tempo/title study (Ohio State / *Musicae Scientiae*, 2018) · Margulis, *On Repeat* (Oxford UP, 2014) · linguistics: sonority hierarchy.
+`,
+      },
+      {
+        path: "references/examples.md",
+        content: `# Annotated Hook Library
+
+Models to reach for, and to show artists. Each entry names *why* the hook works. Use these to calibrate your own candidates, or to hold up a comparison ("here's what makes 'Let it be' land — yours is missing the release"). Drawn from the Yoga of Songwriting book and the wider canon.
+
+**The through-line of nearly every one:** the *punch is plain*, and something *specific and colorful set it up* so the plain thing lands hard instead of hollow. Paint specific, sing plain. Watch for it in each entry.
+
+## The Great Truth, said plainest
+
+**"Let it be" — The Beatles.** Every verse line is tension — trouble, darkness, brokenhearted people — and the hook is the exhale into acceptance. Three plain words a whole stadium owns instantly, earned by all the trouble that came before. The simplicity works *because* the setup was specific and heavy.
+
+**"I will always love you" — the line, not just the Whitney belt.** A universal truth stated with zero cleverness. Works because the setup earns it. Proof that the plainest possible line, set up right, "you can't ever go wrong with."
+
+**"Here comes the sun / it's alright" — The Beatles.** The truth is the reassurance. "It's alright" is the payoff — the fear laid to rest.
+
+**"So be good to me and I'll be good to you."** The book's origin example — karma, loyalty, the doctrine of love, in words an 85-year-old neighbor said on a porch. Everyone gets it instantly. A whole song could be built to arrive here.
+
+## Simplicity as the whole point
+
+**"Doin' me" — Mikey Mike** _(the method's author; illustrative, not canon-authority)._ "Absurdly child-like simplicity — a 6-year-old could relate." The chorus *stacks* Great Truths ("I want to be happy / I want to be free / fuck what they say / I'm doin' me") into a cumulative slam-dunk. The bold, casual line ("fuck what they say") makes it feel like a real person, not a "song." The plain punch is set up by specific, colorful lines around it.
+
+**"Mmm mmm mmm mmm" — Crash Test Dummies.** Not even a word. Works on pure Original Sound (the *mmm* that needs no tongue). Proof that sonics alone, with enough conviction and repetition, can carry a hook.
+
+## The Reveal held to the last possible moment
+
+**"I'm just a fool waitin' on the wrong block" — Led Zeppelin, "Fool in the Rain."** The whole song is a man aching for a woman who never shows — and the reveal, in the final line, is that he's been on the wrong corner the entire time. Delaying the payoff to the very end makes the arrival more intoxicating. A hook doesn't have to be in the chorus.
+
+## The Reversal + "hook inside the hook"
+
+**"I just kind of wish you were gay" — Billie Eilish.** A reveal *and* a reversal — you don't see the line coming, and it swings the listener from ache to a laugh (the emotional "ride"). It also says the strange, honest thing most people think and never voice. Layered surprise.
+
+**"Bitch don't kill my vibe" — Kendrick Lamar.** Moves from passive self-criticism ("I am a sinner...") to a sudden, jarring assault. The contrast *is* the power — soft setup, hard hook.
+
+## Repetition with slight variation (the Breathe)
+
+**"...like I am home / whole / young / fun again" — The Cure / Adele, "Lovesong."** One frame, one word moving each pass. The repetition lodges it; the variation keeps it breathing. People sing the *verses* back — the whole song became a hook. Ends on the plainest Great Truth: "I will always love you."
+
+**"Re— spect— Walk!" — Pantera.** Staccato, one word per breath, after verses that hold you underwater. The space between the words is the hook.
+
+## The bold opener / un-turn-off-able line
+
+**"Jesus died for somebody's sins, but not mine" — Patti Smith, "Gloria."** Don't fear offending. A polarizing, edged line is hard to turn off — it spikes emotion whether the listener is thrilled or enraged.
+
+## The one mysterious word the listener leans into
+
+**"Warm smell of colitas rising up through the air" — Eagles, "Hotel California."** Nobody knows what colitas are — and that's the pull. The warmth in the *sound* of the word makes you "get it." The question is more seductive than the answer. A hook is allowed one evocative, ambiguous word.
+
+**"A bump with the king" — Doin' Me** _(author's own)._ Elvis? A crown? The double meaning doubles the engagement; people still ask which king. Leave room for the listener's mind to paint.
+
+## Modern & non-lyric-forward models
+
+The book's canon skews classic and lyric-forward; these balance it. A great hook is not always an epiphany in words — sometimes it's a sound, a cadence, or a chant. Don't let "great hook" quietly collapse into "1970s lyrical truth."
+
+**The wordless vocable.** In a huge amount of current pop and dance music the biggest hook is a wordless vocable — "oh-oh-oh," "eh-eh," "na na na" — the sound carrying countless festival records. No truth, no sentence; on the page it's just the syllables — pure open-vowel sound and repetition. Judge it only on the sound (singable, unforgettable). This is a *complete* hook, not a placeholder.
+
+**The chant / rhythmic hook (hip-hop & club).** Often the hook is a short phrase repeated in a tight rhythmic pocket — the cadence and repetition of the words themselves are the memorable thing. Two to four bars, ad-libs filling the gaps. Repetition is not laziness here — it *is* the hook. Calibrate to the vibe, not to meaning.
+
+**The one-word / title-as-chant.** Modern hits increasingly ride a single word or the title shouted as the hook. Chunkable, instantly requestable, maximum crowd. When a song's energy is momentum, don't out-write it — find the one right word.
+
+_(Use these as the *kind* of move, not names to drop. The lesson is the mechanism — sound, cadence, repetition — not the specific track.)_
+
+## How to use these
+
+- **Generating?** Find which model the current song is closest to, then chase that *kind* of hook — not a copy, the same move.
+- **Upgrading?** Hold the artist's hook next to the closest model and name the gap ("'Let it be' is the release from the verse's fear — yours doesn't resolve anything yet").
+- **Teaching?** These are the clearest illustrations of each lever; point at the actual line, not the abstraction.
+
+Keep the library alive — when the artist loves a hook you land, or names one that moves them, it's worth remembering the move behind it.
+`,
+      },
+      {
+        path: "references/hook-teardowns.md",
+        content: `# Hook Teardowns — Real Hits, Read Closely
+
+The best way to learn what a great hook does is to take real ones apart. These are worked teardowns of hit hooks, classic to modern, each read through the same lens the skill teaches. Study the *pattern*, not the lines — never copy a hook, but learn the move behind it.
+
+**Read for the throughline.** Across every one of these, the same shape repeats:
+
+- **The punch is plain, short, timeless, and conversational.** "Since you been gone." "New York." "Fuck you." "Royals." A few words — often words you've heard a thousand times — that say everything. Familiar is the point.
+- **Color and specificity in the setup make the plain punch land.** "I see you driving 'round town with the girl I love" is what makes "fuck you" hit. The vivid, specific, human setup earns the simple payoff.
+- **A turn sets it up** — a "but," a "so," a lead-in line, a reversal — signaling the big statement is coming, or flipping the verse's expectation.
+- **Repetition and directness** — the punch repeats, stays simple, and often speaks straight to the person the song is about.
+- **A timeless archetype underneath** — freedom, loyalty, heartbreak, escape, defiance — the human thing everyone already feels.
+
+Use these to calibrate your own candidates, or to hold up a mirror for an artist ("here's what makes 'Rolling in the Deep' land — yours is missing the color in the setup").
+
+---
+
+## "Since U Been Gone" — Kelly Clarkson
+
+> **But** since you been gone, I can breathe for the first time
+> I'm so moving on, yeah yeah
+> Thanks to you, now I get what I want
+> Since you been gone
+
+- The opening **"but"** is the turning point — the reversal off the verse's build-up.
+- **"Since you been gone"** is the memorable punch: few words that say so much, and feel timeless.
+- Notice how human and conversational it feels.
+- Not wordy or long-winded — direct and to the point.
+
+## "Ms. Jackson" — OutKast
+
+> I'm sorry Ms. Jackson, I am for real
+> Never meant to make your daughter cry
+> I apologized a trillion times
+> (repeats)
+
+- **"I'm sorry Ms. Jackson"** is the memorable punch.
+- It sums up the verse with an interesting twist — he's apologizing to the *girl's mother*, not the girl.
+- Notice the simplicity and repetition.
+
+## "Empire State of Mind" — Jay-Z & Alicia Keys
+
+> New York — concrete jungle where dreams are made of
+> There's nothing you can't do
+> Now you're in New York
+
+- Look how it sums up the whole ethos of the song.
+- The simple name **"New York"** is the memorable punch — the thing that cuts and sticks.
+- Notice the repetition.
+
+## "Umbrella" — Rihanna
+
+> When the sun shine, we shine together
+> Told you I'll be here forever
+> Said I'll always be your friend
+> Took an oath, I'ma stick it out to the end
+> Now that it's raining more than ever
+> Know that we'll still have each other
+> You can stand under my umbrella
+> You can stand under my umbrella — ella, ella
+
+- Notice the archetypes: "forever," "friend," "the end," "we'll still have each other" — timeless.
+- Notice the directness and simplicity. It doesn't introduce some big new idea — it *empowers* the verses.
+- **"Took an oath"** adds emotional weight and stake that heightens the feeling.
+- **"You can stand under my umbrella"** is the memorable punch that brings the whole notion of the song together.
+- Notice the repetition and simplicity (and how "-ella, ella" turns the punch into pure singable sound).
+
+## "Rolling in the Deep" — Adele
+
+> _(I can't help feeling)_ ← lead-in
+> We could have had it all
+> Rolling in the deep
+> You had my heart inside of your hand
+> And you played it, to the beat
+
+- Notice the **lead-in** ("I can't help feeling") that tells you the big statement is coming.
+- **"Rolling in the deep"** gives color to the simplicity and directness of the other lines.
+- **"We could have had it all"** — timeless notion and the memorable punch.
+- Notice the simplicity and repetition.
+- Notice the power in the singer speaking *directly* to who the song is about.
+
+## "Fire and Rain" — James Taylor
+
+> Oh, I've seen fire and I've seen rain
+> I've seen sunny days that I thought would never end
+> I've seen lonely times when I could not find a friend
+> But I always thought that I'd see you again
+
+- The opposing imagery and emotions (fire/rain, sunny/lonely) take the listener on an emotional ride.
+- Notice the repetition of just a key piece — **"I've seen."**
+- **"I always thought that I'd see you again"** — the memorable punch, a summation of the feeling, a timeless archetype.
+- Notice again that it's not overly wordy or long-winded.
+
+## "Fuck You (Forget You)" — CeeLo Green
+
+> I see you driving 'round town with the girl I love
+> and I'm like, "Fuck you!"
+> I guess the change in my pocket wasn't enough
+> I'm like, "Fuck you, and fuck her too."
+
+- **"Fuck you"** is the memorable punch — the simplest, most direct, most conversational way to sum up the entire sentiment and emotion of the song in two words.
+- Notice the attitude and edge — that's what makes it feel fun.
+- **"I see you driving 'round town"** adds the color and visual image that gives flavor to the simplicity of "fuck you." Someone driving around town and passing a person they know is a timeless cultural archetype of human life.
+
+## "Royals" — Lorde
+
+> And we'll never be royals
+> It don't run in our blood
+> That kind of luxe just ain't for us
+> We crave a different kind of buzz
+> Let me be your ruler, you can call me queen bee
+> And baby, I'll rule (I'll rule), I'll rule (I'll rule)
+> Let me live that fantasy
+
+- The memorable punch is **"royals"** — a single word that inverts status. She isn't wishing for royalty; she's rejecting it as unattainable and uncool. That defiant anti-status *is* the hook.
+- Look at the conversational contractions and slang: "ain't for us," "different kind of buzz." It feels like a teenager talking in a diner, not a poet on a stage. That relatability is the entry point.
+- The magic is the twist in the second half ("Let me be your ruler") — she trades the crown for a "queen bee," a more organic form of leadership. "We can't have your world, so let's build mine."
+- Notice the repetition of "I'll rule." A minimalist, almost childish chant. Great hooks often reduce complex ideas to playground-level repetition.
+
+## "Blank Space" — Taylor Swift
+
+> So it's gonna be forever, or it's gonna go down in flames
+> You can tell me when it's over, if the high was worth the pain
+> Got a long list of ex-lovers, they'll tell you I'm insane
+> But I got a blank space, baby, and I'll write your name
+
+- Notice the hook starts with **"So"** — a conversational lead-in that makes you feel you're joining a conversation already in progress. It disarms you.
+- The memorable punch is **"blank space"** — a twist on a cliché. Instead of "I'm ready for a new relationship," she visualizes a literal empty page, inviting the listener to be the next chapter.
+- The magic is the self-aware wink ("they'll tell you I'm insane") — it owns the reputation, then turns it into a threat/offer ("I'll write your name").
+- Look at the binary: forever vs. flames. No middle ground. That emotional extremity makes the hook explosive even sung softly.
+
+## "Waterfalls" — TLC
+
+> Don't go chasing waterfalls
+> Please stick to the rivers and the lakes that you're used to
+> I know that you're gonna have it your way or nothing at all
+> But I think you're moving too fast
+
+- The memorable punch is **"Don't go chasing waterfalls"** — a direct imperative (a command) that feels like advice from an older sibling. Universal and easy to picture.
+- The magic is the contrast: exotic danger (waterfalls) vs. boring safety (rivers and lakes). It doesn't explain *why* chasing them is bad — the listener fills in the blank.
+- The second half ("have it your way or nothing at all") grounds the metaphor in a common relationship dynamic — pivoting from poetic imagery to blunt human stubbornness.
+- Notice the conversational flow: it reads like a text message or a plea, not a poem. The simplicity makes it instantly singable.
+
+## "Fast Car" — Tracy Chapman
+
+> You got a fast car
+> I want a ticket to anywhere
+> Maybe we make a deal
+> Maybe together we can get somewhere
+> Anyplace is better
+> Starting from zero, got nothing to lose
+> Maybe we'll make something
+> But me, myself, I got nothing to prove
+
+- Notice the concrete object — **"fast car"** — as the memorable punch. A physical symbol that carries the massive abstract weight of escape, freedom, and class struggle.
+- Look at the conversational hedging: "Maybe," "Anyplace," "got nothing to lose." Not boastful — fragile and human. That vulnerability makes the hook land harder.
+- "Starting from zero" and "nothing to prove" are timeless underdog archetypes. It doesn't explain a backstory — it states the emotional math of the situation.
+- Notice the drive of the hard consonant sounds (got, ticket, together, zero) — rhythmic push you can feel in the words alone, no beat required.
+
+---
+
+## What to take from all of these
+
+None of these punches is "new." "Fast car," "New York," "fuck you," "we could have had it all" — every one is something you've heard people say. Their power is that they're **plain, timeless, and human**, and that the writer built a **specific, colorful, conversational world** around them so the familiar words suddenly land like a truth. That is the whole job: paint specific, sing plain. Say the thing everyone already feels, and set it up so it finally hits.
+`,
+      },
+      {
+        path: "references/sonics.md",
+        content: `# Sonics — The Phonetics of Singability
+
+How a hook *sounds in the mouth* is co-equal with what it means. This is about the **words themselves** — the sounds, not the melody. (Melody is the artist's job, not this skill's; everything here you can hear just by saying the words out loud.) It's the working engine behind the two questions your ear is really asking: **could a stadium sing these words back with ease, and would one hearing lodge them for life?** Use it when sound is the focus of a generate/upgrade/review.
+
+The one principle under everything here: **the sound lives on the vowels.** A crowd — mostly untrained voices — can only hold, carry, and lock together on an open, unobstructed sound. Consonants are the punctuation between vowels. The more a hook keeps the voice open, the more of a room can lock onto it. (This is the linguists' *sonority hierarchy* — vowels are the most singable sounds, then glides, liquids, nasals, and last the hard stops. It's also exactly what the Yoga method calls the "Original Sounds": Aaaa, Uuuu, Mmmm — the sounds of AUM.)
+
+## The rules, in order of impact
+
+1. **Put the peak of the hook on an open vowel** — *ah* (father), *oh*, *ay*, *eye* (my/high), *oo*. These carry, hold, and are the easiest for a crowd to belt out. The word you stretch out longest and loudest should almost never sit on a pinched vowel like *ee* or *ih*.
+
+2. **End phrases on open syllables** (ending in a vowel) so the word can ring out — *be, ya, na, oh, free, away*. A closed syllable ending in a hard consonant (*stop, back, cut*) forces you to clip the word off. Great for punch; bad for holding a word and for singalong.
+
+3. **When you need consonants, reach for the singable (sonorant) ones** — *m, n, ng, l, r, w, y*. They're voiced and semi-open, so a crowd can glide or hum through them without stopping the airflow (*mmm, laaa, nnn*). They keep the line flowing.
+
+4. **Use hard stops (p, t, k, b, d, g) to launch, not to land.** A plosive at the *front* of a word gives a crisp, percussive attack ("**L**et it **B**e," "**D**oin' me"). A plosive at the *end* of a drawn-out word kills the ring. Use them to attack a word, not to close out one you're holding.
+
+5. **Repeat one vowel shape across the hook (assonance)** so a crowd locks onto a single sound. "Hey ya" lives on *ay/ah*. "Na na na" is one shape entirely. Changing vowel on every syllable makes a crowd re-aim constantly and blurs the unison.
+
+6. **Front the consonant, stretch the vowel within each syllable** — "consonant early, vowel long." Get the consonant out of the way fast, then live on the open sound. This is how a single syllable becomes singable by thousands at once.
+
+7. **The most universally singable unit is the wordless vocable** — *na-na-na, oh-oh-oh, la-la-la, whoa-oh*. Zero meaning to remember, maximum open resonance. When a hook needs a pure crowd moment (the part between the words), this is the tool. Don't over-explain why it works — it just does; the "it hits some pre-verbal part of the brain" story is a nice intuition but not established fact, so don't sell it as science.
+
+## The Breathe — space and repetition
+
+Singability isn't only the sounds; it's the *pacing* — and pacing is fully in the words: how many, how tight, how much space. (Rhythm here means the rhythm of the words themselves — repetition, spacing, stress — not a musical arrangement.)
+
+- **Give the hook room to land.** Don't crowd a great moment by cramming the next line against it. Space right before the hook is like the white of a canvas — it's what makes the hook glow. Let it hit, let it sit, then repeat.
+- **Repetition is the strongest memory tool there is** — but use **repetition with slight variation** to keep it alive. Same frame, one word moving: the Cure's "Lovesong" runs "like I am home / whole / young / fun again." The repetition lodges it; the small change keeps it from going stale. (There's a real fatigue ceiling on pure repetition — vary to delay it.)
+- **Fewer unique words = more force.** "Love Me Do" gets by on 19. Strip a hook to its irreducible core.
+- **Staccato with space between words is its own kind of hook** — "Re— spect— Walk!" (Pantera): each word standing alone. One-word hooks with space around them can be enormous.
+- **Repetition can turn a whole section into a hook.** When the frame is simple and repeated enough, people will sing the *verse* back to you (Lovesong again). A hook doesn't have to be labeled "chorus" to be the thing they remember.
+
+## Quick diagnostic for a hook that "won't sing"
+
+- Is the word you stretch longest stuck on a closed vowel (*ee/ih*)? → open it up.
+- Does the line end on a hard stop that clips the ring? → move it or swap for an open syllable.
+- Is every syllable a different vowel? → find a repeating vowel to anchor.
+- Is it consonant-clustered and tongue-twisting (too many stops in a row)? → thin the consonants, favor sonorants.
+- Is there no space before it? → the sounds may be fine; the *setup* is crowding it.
+
+## Honesty note
+
+The vowel/consonant principle is near-universal in vocal and choral teaching — safe to lean on hard. The finer sonority rankings and the "singer's formant" (the ring that lets a trained voice cut through a band) come from voice acoustics and don't fully transfer to an amateur stadium crowd — so treat sonics as *one* lever, working alongside rhythm and repetition, not the whole secret. When in doubt, say the line out loud and imagine the back row singing it.
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: hook-writer
+description: >-
+  Write, upgrade, review, or fully rewrite the HOOK of a song — the chorus line, title,
+  refrain, or central repeated phrase a song is remembered by. Use whenever an artist is
+  working on a hook or chorus: generating candidates from a verse/concept/mood, punching up
+  a hook that feels flat, diagnosing why one isn't landing, writing alternative directions,
+  or teaching hook craft. Trigger even when the word "hook" isn't used — "the chorus feels
+  weak," "the part people sing back," "what should they sing here," "the payoff isn't
+  hitting," "make this catchier," or "this needs a title" all count, as long as the thing in
+  question is a chorus, refrain, title line, or repeated payoff. Built on the Yoga of
+  Songwriting method. Do NOT use for full-song lyric writing with no hook focus, verse/bridge
+  writing, beat/production, naming a project or instrumental, or music-business tasks.
+---
+
+# The Hook
+
+A song is a journey; the hook is where it arrives. It's the moment the whole thing clicks — the line that makes a listener feel *"yes, that's it."* Everything before it is the walk up; the hook is the payoff the walk was for.
+
+Your job is to write hooks that **hit** — not to satisfy a checklist. Everything below exists only to help you *find* the one that lands, or to spot *why* one isn't. Hold it all loosely: when in doubt, trust the simplest true thing over the cleverest. And read the song's ambition — a song reaching to mean something, or to last, should never settle for merely competent; a vibe record or banger can win on pure catch and feel, so don't over-work what just wants to be fun.
+
+Speak plainly and warmly, like a co-writer in the room — not a teacher. Keep the craft under the hood; only name a concept when it actually helps the artist.
+
+## The core — the three things that are always true
+
+These are load-bearing. Everything else in this skill is optional wisdom in service of these.
+
+1. **A hook is an epiphany.** It brings the whole world of the song together in one stroke — it doesn't extend the scene, it *resolves* it into meaning. It should feel discovered, like the point the song was always walking toward. If the hook doesn't make everything around it suddenly *mean* something, it isn't a hook yet. (When there's no verse yet, just a concept, the hook is still that arrival point — the thing the rest will be built to reach.)
+
+2. **The punch is direct and simple.** The hook usually holds a Great Truth — a plain, direct summation of the song's core feeling. "Let it be." "I will always love you." "Doin' me." The key punch lands *plain* — not clever, not wordy, not a display of vocabulary. The clean, true thing, said so simply a whole stadium owns it instantly.
+
+3. **It sings.** How it rolls off the tongue matters as much as what it says. Could 60,000 people sing it back with ease, and would one listen lodge it in someone for life? Sound is co-equal with meaning, never an afterthought.
+
+## The one move that makes a simple hook land: paint specific, sing plain
+
+A hook is *meant* to be familiar. Its whole job is to say something timeless and human — the thing everyone already knows and feels — in a way that finally lands. "Let it be." "I will always love you." Even "can't tell me nothing." They say nothing "new," and that is the point: a great hook is universal, archetypal, *everyone's*. So never fear a plain, direct, or even well-worn punch. Familiar and timeless is the target, not the enemy — a hook you've "heard before" is often exactly right.
+
+What makes a familiar punch *land* is the setup. A plain punch on its own is wallpaper — "I will always love you" means nothing in a vacuum. It becomes devastating because *specific, vivid, colorful* lyric set it up and led into it. The color lives in the setup and in the lines *around* the punch; the punch itself stays plain, direct, universal. The colorful, specific setup is what earns the simple timeless payoff and makes it hit instead of just sit. "Can't tell me nothing" is a flat brag or a knockout hook depending entirely on the world you build around it.
+
+But specific doesn't mean ornate: **one sharp, true detail beats three vague colorful ones**, and the setup still has to breathe. Vividness that crowds the punch just smothers it another way.
+
+So when a hook feels flat, it almost never has a "too familiar" or "too simple" problem — it has a **nothing-colorful-set-it-up** problem, or a **beige-filler** problem where the setup lines paint nothing and the punch lands on empty. Fix the setup; don't run from the plain punch. Two things to watch:
+
+- **The setup is where the craft lives — hold it to a high bar.** A timeless punch propped up by beige filler ("gettin' colder," "the strongest thing a man can do") still falls flat. If a setup line paints no picture and adds nothing, sharpen it or cut it. The punch is only as strong as the specific color feeding it.
+- **Take a beat before you ship — but don't throw out gold.** Don't reflexively hand over the very first thing that fell out; sit with it and ask, *can I beat this?* Sometimes the first line is the great one, sometimes the fifth is. Keep whichever actually hits — the goal is the one that lands, not the one that took the most work.
+
+The magic is a **timeless, human truth said plain and singable, earned by colorful, specific setup.** That's the target every time.
+
+## Looser wisdom — tools to reach for, not rules to obey
+
+These are the moves a strong hook-writer has internalized. Use the ones a given song actually wants; a great hook can lean on almost none of them. Never run them as a checklist — they're here to draw on with judgment when a hook needs finding or fixing.
+
+- **The Reveal.** Land the hook as the *answer* to the question the verse quietly asked. When a hook feels flat, it's often because it restates the verse's feeling instead of resolving it. Make it the arrival.
+- **Tension → release (Fear → Love).** Verses often sit in tension — doubt, longing, trouble; the hook is the exhale. A punch lands harder when it releases something the setup built. If the hook feels weak, check whether the verse is charged enough to discharge.
+- **The reversal / the unsaid.** A small twist right before the punch — expecting one thing, getting another — makes the hook feel like a bigger arrival. So does saying the true thing people usually don't say out loud.
+- **One vivid or open word.** A single colorful, or even slightly mysterious, word can carry a whole hook ("colitas") — the listener leans in. The question is often more seductive than the answer.
+- **The Breathe.** Give the punch room to land; don't crowd it. Repetition is the strongest memory tool there is — use it, with slight variation to keep it alive. Fewer words hit harder.
+- **Sonics.** The words themselves should sing — build the hook on open, singable vowels (ah, oh, ay, eye, oo), favor flowing consonants, and let hard stops launch a word rather than close out a drawn-out one. This is about how the words feel in the mouth, not melody. Full playbook in \`references/sonics.md\` when sound is the focus.
+- **Universal, not personal.** The biggest hooks belong to *everyone* — they say the human thing anyone could mean, the truth a whole stadium already feels. A hook transcends the singer; it isn't chained to one persona or a private detail only this artist would say. Reach for what's true for all of us. (Save the personal specifics for the setup and the verse; the punch is the part the world takes for itself.)
+
+## Calibration — read what the song wants
+
+The right hook depends entirely on the song. A club or rap banger can ride a simple, specific chant where repetition and cadence *are* the hook — don't force a profound truth onto a vibe record. A song built to last a hundred years leans on the Great Truth — reach for the universal remembrance. Most songs live in between. Read the genre and the ambition first, and don't push depth or catchiness where it doesn't belong.
+
+The simplest hooks — a two-word chant, a repeated ad-lib — are the reminder that **none of this is a hard rule.** A great hook can break every guideline in this skill and win on pure sound and vibe alone. Don't over-think or over-judge the simple ones; if it's catchy and it feels right, it's done. The wisdom here is for finding and fixing hooks that aren't landing — not a bar every hook must clear. (If the words already sit in a rhythmic pocket — a set number of beats, a stress pattern like "da-DA-da-da-DA" — match that shape: same syllable count, stresses in the same spots. That's rhythm you can hear in the words themselves. Leave the melody to the artist; you're writing the words.)
+
+## Working with the artist
+
+Read the situation, then act. If you have enough — a verse, a concept, an existing hook, a clear intent — just go. If it's genuinely thin, ask only for what you actually need — the material, the genre/ambition, any rhythmic pocket the words already sit in.
+
+Do what's asked or obviously wanted — generate candidates, punch up an existing hook, diagnose why one's flat, write a real alternative swing, or explain a choice if they want to learn. Most requests are a blend.
+
+When **generating**, work in two passes. *First pass:* find the one true thing *this specific song* is reaching for, and get candidates down — don't fear a plain or familiar punch, that's often the right one. *Second pass:* sit with them and push — does the setup paint something specific enough to make the punch actually *land*, or are the setup lines beige filler? Then ask, *can I beat this?* Sharpen the setups, and keep the candidates that hit — whether they came first or fifth. Do this silently; show the artist the keepers, not the process.
+
+When **upgrading or diagnosing**: usually it's the setup — a good, plain punch landing on beige lines that paint nothing, so it falls flat. Less often the punch itself is unearned or unclear. Name which, honestly — but reach for the setup first; most "weak hooks" just need the world around the punch to get specific, not a whole new punch. Praise what's genuinely good; don't inflate what isn't. The truth serves the artist.
+
+## Output
+
+Give them what they came for, in the shape that serves the moment — options, a fix, a full alternative, or just the hooks raw if they're mid-flow. Let the artist *feel* the candidate the way a listener would; the real test is playing it for someone and watching their face. Keep commentary light and in service of the hook, never an essay around it. Deliver with conviction, and if you're uncertain whether something connects, say so once, at the end — not on every line.
+
+Above all: for any song reaching to mean something, don't hand over what you'd call merely competent — if it doesn't hit, it isn't done. (A pure vibe hook is the exception to that bar, never the excuse for skipping the work.)
+
+## Reference files
+
+Load as needed — not all upfront:
+- \`references/hook-teardowns.md\` — **the main place to learn from real hits.** Full worked teardowns of great hooks, classic to modern (Kelly Clarkson, OutKast, Adele, Lorde, Taylor Swift, Rihanna, TLC, Tracy Chapman, and more), each showing how a plain, timeless punch is made to land by colorful setup. Read this to internalize the pattern, to calibrate a candidate, or to show an artist a model of the move they're missing.
+- \`references/sonics.md\` — the phonetics of singability: open vowels, singable consonants, the Breathe and repetition mechanics. Read when sound is the focus.
+- \`references/examples.md\` — quick one-line annotations organized by technique, plus non-lyrical/modern hook *forms* (the wordless vocable, the chant hook). Read for a fast model of one specific move.
+- \`references/craft-notes.md\` — deeper craft and the supporting science (prosody, structure, memorability), graded for how solid each claim is. Read for teaching or the "why" underneath.
+`,
+      },
+    ],
+  },
+  {
     slug: "hyperframes",
     files: [
       {

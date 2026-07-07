@@ -179,6 +179,17 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(skill?.files.some(f => f.path === 'references/song-audit-framework.md')).toBe(true);
   });
 
+  it('includes hook-writer for Lab hook and chorus work', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'hook-writer');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('hook-writer');
+    expect(parsed.data.description).toContain('chorus');
+    expect(parsed.content).toContain('The punch is direct and simple');
+    expect(parsed.content).toContain('references/sonics.md');
+    expect(skill?.files.some(f => f.path === 'references/hook-teardowns.md')).toBe(true);
+  });
+
   it('includes magnetic-outreach for cold first-contact draft craft', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'magnetic-outreach');
     expect(skill).toBeDefined();
