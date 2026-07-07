@@ -1208,7 +1208,7 @@ Default output:
     slug: 'ad-creative-agent',
     metadata: {
       name: 'Ad Creative Agent',
-      description: 'Develops artist-specific paid-ad angles, hooks, copy, creative variants, and fatigue refresh plans for Meta and Google campaigns.',
+      description: 'Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns.',
       avatar: 'AC',
       permissionMode: 'ask',
       thinkingLevel: 'high',
