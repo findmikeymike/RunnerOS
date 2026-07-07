@@ -29,6 +29,7 @@ test('root registry returns CLI-Anything style command metadata', () => {
   assert.ok(registry.platforms.x);
   assert.ok(registry.platforms.youtube);
   assert.ok(registry.commands.some((command) => command.verb === 'doctor'));
+  assert.ok(registry.commands.some((command) => command.verb === 'execute'));
 });
 
 test('root doctor reports install and platform health', () => {
@@ -251,6 +252,197 @@ test('root dispatcher reports missing content files with typed errors', () => {
 
   assert.equal(result.ok, false);
   assert.equal(result.code, 'CONTENT_FILE_NOT_FOUND');
+});
+
+test('root execute requires explicit approval', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const actionFile = path.join(home, 'action.json');
+  writeFileSync(actionFile, JSON.stringify({
+    action: {
+      actionId: 'act_execute_confirm',
+      verb: 'post',
+      platform: 'x',
+      profile: 'artist01',
+      mode: 'browser',
+      payload: { text: 'hello', media: [], postType: 'post' },
+      options: { dryRun: true, idempotencyKey: null, headed: false },
+    },
+  }));
+
+  let result;
+  try {
+    run(['execute', '--action-file', actionFile, '--json'], { SOCIAL_HOME: home });
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'CONFIRM_REQUIRED');
+});
+
+test('root execute rejects non-dry-run action files', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const actionFile = path.join(home, 'action.json');
+  writeFileSync(actionFile, JSON.stringify({
+    ok: true,
+    status: 'succeeded',
+    actionId: 'act_execute_live',
+    platform: 'x',
+    profile: 'artist01',
+    action: {
+      actionId: 'act_execute_live',
+      verb: 'post',
+      platform: 'x',
+      profile: 'artist01',
+      mode: 'browser',
+      payload: { text: 'hello', media: [], postType: 'post' },
+      options: { dryRun: false, idempotencyKey: null, headed: false },
+    },
+    browserPlan: {
+      accountVerification: { verificationTargetKnown: true },
+    },
+  }));
+
+  let result;
+  try {
+    run(['execute', '--action-file', actionFile, '--confirm', 'yes', '--json'], { SOCIAL_HOME: home });
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'ACTION_NOT_DRY_RUN');
+});
+
+test('root execute rejects bare forged action files', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const actionFile = path.join(home, 'action.json');
+  writeFileSync(actionFile, JSON.stringify({
+    actionId: 'act_forged',
+    verb: 'post',
+    platform: 'x',
+    profile: 'ghost',
+    mode: 'browser',
+    payload: { text: 'forged', media: [], postType: 'post' },
+    options: { dryRun: true, idempotencyKey: null, headed: false },
+  }));
+
+  let result;
+  try {
+    run(['execute', '--action-file', actionFile, '--confirm', 'yes', '--json'], { SOCIAL_HOME: home });
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'INVALID_ACTION_FILE');
+});
+
+test('root execute checks expected action id before replay', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const actionFile = path.join(home, 'action.json');
+  writeFileSync(actionFile, JSON.stringify({
+    ok: true,
+    status: 'dry_run',
+    actionId: 'act_execute_actual',
+    platform: 'x',
+    profile: 'artist01',
+    action: {
+      actionId: 'act_execute_actual',
+      verb: 'post',
+      platform: 'x',
+      profile: 'artist01',
+      mode: 'browser',
+      payload: { text: 'hello', media: [], postType: 'post' },
+      options: { dryRun: true, idempotencyKey: null, headed: false },
+    },
+    browserPlan: {
+      accountVerification: { verificationTargetKnown: true },
+    },
+  }));
+
+  let result;
+  try {
+    run([
+      'execute',
+      '--action-file', actionFile,
+      '--expected-action-id', 'act_execute_expected',
+      '--confirm', 'yes',
+      '--json',
+    ], { SOCIAL_HOME: home });
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'ACTION_ID_MISMATCH');
+});
+
+test('root execute rejects dry-run results without account verification target', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const dryRun = JSON.parse(run([
+    'post', 'x',
+    '--profile', 'smoke',
+    '--text', 'hello',
+    '--dry-run',
+    '--json',
+  ], { SOCIAL_HOME: home }));
+  const actionFile = path.join(home, 'dry-run.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+
+  let result;
+  try {
+    run([
+      'execute',
+      '--action-file', actionFile,
+      '--expected-action-id', dryRun.actionId,
+      '--confirm', 'yes',
+      '--json',
+    ], { SOCIAL_HOME: home });
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'ACCOUNT_VERIFICATION_REQUIRED');
+});
+
+test('root execute returns delegated runner-cdp result for approved dry-run result', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  run([
+    'profile', 'add', 'x',
+    '--profile', 'artist01',
+    '--handle', '@artist01',
+    '--json',
+  ], { SOCIAL_HOME: home });
+
+  const dryRun = JSON.parse(run([
+    'post', 'x',
+    '--profile', 'artist01',
+    '--text', 'hello',
+    '--idempotency-key', 'execute-once',
+    '--dry-run',
+    '--json',
+  ], { SOCIAL_HOME: home }));
+  const actionFile = path.join(home, 'dry-run.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+
+  let result;
+  try {
+    run([
+      'execute',
+      '--action-file', actionFile,
+      '--expected-action-id', dryRun.actionId,
+      '--confirm', 'yes',
+      '--json',
+    ], { SOCIAL_HOME: home });
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+
+  assert.equal(result.ok, false);
+  assert.equal(result.actionId, dryRun.actionId);
+  assert.equal(result.code, 'RUNNER_CDP_DELEGATED');
 });
 
 test('root dispatcher does not allow smoke profile for live actions', () => {

@@ -17,6 +17,13 @@ Recommended next check after install:
 social doctor --json
 ```
 
+Approved Runner handoff workflow:
+
+```bash
+social post x --profile artist01 --text "post text" --dry-run --json > dry-run-result.json
+social execute --action-file dry-run-result.json --expected-action-id act_... --confirm yes --json
+```
+
 Safety defaults:
 
 - New profiles default to `require-confirm`.
@@ -27,6 +34,7 @@ Safety defaults:
 - Successful live actions with `--idempotency-key` are recorded in a local ledger to avoid accidental duplicate execution.
 - A per-profile lock prevents two social actions from driving the same browser session at once.
 - Dry-run browser plans include `accountVerification`; Runner/browser operators must verify the visible logged-in account or channel matches the requested handle/URL before final submit.
+- `social execute` only accepts full dry-run result JSON with a browser plan and still requires `--confirm yes`; with default `runner-cdp`, it returns a delegated handoff for RunnerOS browser tools.
 
 Asset and content roots:
 

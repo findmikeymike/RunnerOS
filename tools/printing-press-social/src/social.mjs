@@ -5,7 +5,7 @@ import readline from 'node:readline/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, checkBrowserEngine } from './browser-engines.mjs';
-import { listAssets, listContent } from './content-assets.mjs';
+import { listAssets, listContent, normalizeList } from './content-assets.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const REGISTRY_PATH = path.join(ROOT, 'registry.json');
@@ -61,6 +61,11 @@ async function main() {
 
   if (argv[0] === 'content') {
     await runContent(argv.slice(1));
+    return;
+  }
+
+  if (argv[0] === 'execute') {
+    await runExecute(argv.slice(1));
     return;
   }
 
@@ -231,6 +236,156 @@ async function runContent(args) {
   for (const item of content) console.log(`${item.relativePath}\t${item.kind}`);
 }
 
+async function runExecute(args) {
+  const flags = parseFlags(args);
+  const actionFile = flags['action-file'] || flags.file || flags.from;
+  if (!actionFile || actionFile === true) {
+    throw new CliError('execute needs --action-file <dry-run-result.json>', 'MISSING_ACTION_FILE');
+  }
+  if (flags.confirm !== 'yes') {
+    throw new CliError('Refusing execute without explicit --confirm yes', 'CONFIRM_REQUIRED');
+  }
+
+  const approved = readApprovedActionFile(actionFile);
+  const { action, browserPlan } = approved;
+  if (flags['expected-action-id'] && flags['expected-action-id'] !== action.actionId) {
+    throw new CliError(`Action id mismatch: expected ${flags['expected-action-id']}, got ${action.actionId}`, 'ACTION_ID_MISMATCH');
+  }
+  if (!action.options?.dryRun) {
+    throw new CliError('execute only accepts action files produced by a dry-run result', 'ACTION_NOT_DRY_RUN');
+  }
+  assertAccountVerificationReady(browserPlan);
+
+  const engine = flags.engine || process.env.SOCIAL_BROWSER_ENGINE || DEFAULT_BROWSER_ENGINE;
+  if (engine === 'runner-cdp') {
+    const result = {
+      ok: false,
+      status: 'failed',
+      command: `execute.${action.platform}`,
+      actionId: action.actionId,
+      platform: action.platform,
+      profile: action.profile,
+      action,
+      browserPlan,
+      error: 'runner-cdp execution is delegated to RunnerOS native browser tools after account verification and approval.',
+      code: 'RUNNER_CDP_DELEGATED',
+      next: [
+        'Open the browser session named in browserPlan.sessionPath.',
+        'Verify the visible account matches browserPlan.accountVerification.',
+        'Execute the browserPlan steps, then pause before final submit for approval.',
+      ],
+    };
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    process.exit(1);
+  }
+
+  const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
+  const entry = registry.platforms[action.platform];
+  if (!entry) throw new CliError(`Unsupported platform: ${action.platform}`, 'UNSUPPORTED_PLATFORM');
+
+  const cliPath = path.join(ROOT, entry.path, entry.entrypoint);
+  const commandArgs = buildLiveReplayArgs(action, flags);
+  const result = await run(process.execPath, [cliPath, ...commandArgs]);
+  process.stdout.write(result.stdout);
+  if (result.stderr) process.stderr.write(result.stderr);
+  process.exit(result.code);
+}
+
+function readApprovedActionFile(filePath) {
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(path.resolve(String(filePath)), 'utf8'));
+  } catch (error) {
+    throw new CliError(`Could not read action file: ${error.message}`, 'INVALID_ACTION_FILE');
+  }
+  assertDryRunResultShape(data);
+  assertActionShape(data.action);
+  return { action: data.action, browserPlan: data.browserPlan };
+}
+
+function assertActionShape(action) {
+  if (!action || typeof action !== 'object') {
+    throw new CliError('Action file does not contain an action object', 'INVALID_ACTION_FILE');
+  }
+  for (const key of ['actionId', 'verb', 'platform', 'profile', 'mode', 'payload', 'options']) {
+    if (action[key] === undefined || action[key] === null) {
+      throw new CliError(`Action file is missing ${key}`, 'INVALID_ACTION_FILE');
+    }
+  }
+  if (!['post', 'comment', 'dm'].includes(action.verb)) {
+    throw new CliError(`Unsupported action verb: ${action.verb}`, 'UNSUPPORTED_VERB');
+  }
+  if (!['instagram', 'tiktok', 'x', 'youtube'].includes(action.platform)) {
+    throw new CliError(`Unsupported platform: ${action.platform}`, 'UNSUPPORTED_PLATFORM');
+  }
+  if (action.mode !== 'browser') {
+    throw new CliError(`Unsupported action mode: ${action.mode}`, 'UNSUPPORTED_MODE');
+  }
+}
+
+function assertDryRunResultShape(data) {
+  if (!data || typeof data !== 'object' || !data.action || !data.browserPlan) {
+    throw new CliError('execute only accepts full dry-run result JSON with action and browserPlan', 'INVALID_ACTION_FILE');
+  }
+  if (data.status !== 'dry_run' || data.ok !== true) {
+    throw new CliError('execute only accepts successful dry-run result JSON', 'ACTION_NOT_DRY_RUN');
+  }
+  if (data.actionId !== data.action.actionId) {
+    throw new CliError('Dry-run result actionId does not match nested action actionId', 'ACTION_ID_MISMATCH');
+  }
+  if (data.platform !== data.action.platform || data.profile !== data.action.profile) {
+    throw new CliError('Dry-run result identity does not match nested action identity', 'INVALID_ACTION_FILE');
+  }
+}
+
+function assertAccountVerificationReady(browserPlan) {
+  const verification = browserPlan?.accountVerification;
+  if (!verification?.verificationTargetKnown) {
+    throw new CliError('Refusing execute because the dry-run browserPlan is missing a known account handle or account URL', 'ACCOUNT_VERIFICATION_REQUIRED');
+  }
+}
+
+function buildLiveReplayArgs(action, flags) {
+  const payload = action.payload || {};
+  const out = [action.verb, action.platform, '--profile', action.profile, '--action-id', action.actionId, '--confirm', 'yes'];
+
+  if (action.options?.idempotencyKey) out.push('--idempotency-key', action.options.idempotencyKey);
+  if (flags.json) out.push('--json');
+  if (flags.headed || action.options?.headed) out.push('--headed');
+  for (const key of ['engine', 'settle-ms', 'timeout']) {
+    if (flags[key] && flags[key] !== true) out.push(`--${key}`, String(flags[key]));
+  }
+
+  if (action.verb === 'post') addPostPayloadArgs(out, action.platform, payload);
+  if (action.verb === 'comment') addCommentPayloadArgs(out, payload);
+  if (action.verb === 'dm') addDmPayloadArgs(out, payload);
+  return out;
+}
+
+function addPostPayloadArgs(out, platform, payload) {
+  const text = platform === 'youtube' ? (payload.title || payload.text) : payload.text;
+  if (text) out.push('--text', text);
+  for (const item of normalizeList(payload.media)) out.push('--media', item);
+  if (payload.postType) out.push('--post-type', payload.postType);
+
+  if (platform === 'youtube') {
+    if (payload.description) out.push('--description', payload.description);
+    if (payload.visibility) out.push('--visibility', payload.visibility);
+    if (payload.madeForKids) out.push('--made-for-kids', payload.madeForKids);
+    if (Array.isArray(payload.tags) && payload.tags.length) out.push('--tags', payload.tags.join(','));
+  }
+}
+
+function addCommentPayloadArgs(out, payload) {
+  if (payload.targetUrl) out.push('--url', payload.targetUrl);
+  if (payload.text) out.push('--text', payload.text);
+}
+
+function addDmPayloadArgs(out, payload) {
+  if (payload.recipient) out.push('--to', payload.recipient);
+  if (payload.text) out.push('--text', payload.text);
+}
+
 function splitArgs(line) {
   return line.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((part) => part.replace(/^"|"$/g, '')) || [];
 }
@@ -301,6 +456,7 @@ Commands:
   social repl
   social assets --asset-root ./assets --platform instagram --json
   social content --content-root ./content --json
+  social execute --action-file ./dry-run-result.json --confirm yes --json
   social profile add instagram --profile artist01 --json
   social profile add tiktok --profile creator01 --json
   social profile add x --profile artist01 --json
