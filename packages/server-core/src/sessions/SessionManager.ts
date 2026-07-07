@@ -85,7 +85,7 @@ import { CraftMcpClient, McpClientPool, McpPoolServer } from '@craft-agent/share
 import { type Session, type SessionEvent, type FileAttachment, type SendMessageOptions, type UnreadSummary, type RemoteSessionTransferPayload, type ImportRemoteSessionTransferResult, type CreateSessionOptions, RPC_CHANNELS, generateMessageId } from '@craft-agent/shared/protocol'
 import { messageToStored, storedToMessage, type AgentMessageNoticeMetadata, type Message, type StoredAttachment, type ToolDisplayMeta } from '@craft-agent/core/types'
 import { formatPathsToRelative, formatToolInputPaths, perf, encodeIconToDataUrlAsync, getEmojiIcon, resetSummarizationClient, resolveToolIcon, readFileAttachment, selectSpreadMessages, normalizePath } from '@craft-agent/shared/utils'
-import { loadAllSkills, loadGlobalSkills, loadSkillBySlug, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
+import { loadAllSkills, loadGlobalSkills, loadGlobalSkillBySlug, loadSkillBySlug, setGlobalSkillEnabled, invalidateSkillsCache, type LoadedSkill } from '@craft-agent/shared/skills'
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
@@ -2068,9 +2068,22 @@ export class SessionManager implements ISessionManager {
     const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
-    const skills = loadAllSkills(ws.rootPath)
+    let skills = loadAllSkills(ws.rootPath)
     const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
     const declaredSkillSlugs = agent.metadata.skills ?? []
+    const missingDeclaredGlobalSkills = declaredSkillSlugs.filter((slug) => (
+      !skillBySlug.has(slug) && loadGlobalSkillBySlug(slug) !== null
+    ))
+    if (missingDeclaredGlobalSkills.length > 0) {
+      for (const slug of missingDeclaredGlobalSkills) {
+        setGlobalSkillEnabled(ws.rootPath, slug, true)
+      }
+      skills = loadAllSkills(ws.rootPath)
+      skillBySlug.clear()
+      for (const skill of skills) {
+        skillBySlug.set(skill.slug, skill)
+      }
+    }
     const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
     const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => (
       skillBySlug.has(slug) || (canUseSystemSkills && isSystemGlobalSkillSlug(slug))
