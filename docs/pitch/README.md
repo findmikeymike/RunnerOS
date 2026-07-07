@@ -24,6 +24,9 @@ It is not generic AI chat. It is a music-specific work system with specialist ag
 - [Positioning](./positioning.md): what it is, who it is for, and why it exists.
 - [Why Not Generic Agent Hubs](./why-not-generic-agent-hubs.md): why Artist OS Desktop over Claude Desktop, Codex, or generic agent hubs.
 - [Feature Pillars](./feature-pillars.md): the big product pillars to sell.
+- [Landing Page](./landing-page.md): page structure, proof sections, and conversion blocks.
+- [Built-In Artist Team](./built-in-artist-team.md): agent-directory/dropdown content for the landing page.
+- [Proof Gallery](./proof-gallery.md): output examples and demos the landing page should show.
 - [Artist And Manager Value](./artist-and-manager-value.md): value for artists and managers.
 - [Human Layer](./human-layer.md): vetted partner and expert-access layer.
 - [Claims To Prove](./claims-to-prove.md): strong claims that need demos, screenshots, tests, or proof before public launch.
@@ -40,3 +43,12 @@ Artist OS Desktop gives them one place where the artist profile, brand, voice, c
 
 The result is closer to having a lightweight management team inside the app than having another chatbot tab open.
 
+## Landing Page Must-Sell Ideas
+
+- Built-in artist team: an expandable directory of every included worker.
+- Campaign workspaces: one release, one organized command center.
+- Outputs -> Finals: messy exploration becomes approved campaign assets.
+- Vault: masters, art, lyrics, press photos, clips, references, and brand assets made usable by agents.
+- State of Play: the app tells the artist or manager what matters next.
+- Approval control: agents prepare real work, but risky external actions stay user-approved.
+- Proof gallery: show real examples, not abstract feature claims.

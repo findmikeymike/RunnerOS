@@ -54,3 +54,20 @@ Artist OS Desktop keeps the artist, brand, voice, campaign, audience, assets, an
 
 It is the AI workbench an artist manager wishes existed: one place to brief the team, launch specialist workers, keep approved campaign assets, and know what should happen next.
 
+## What It Is Not
+
+Artist OS Desktop is not:
+
+- a generic AI chat wrapper
+- a prompt library
+- a normal project-management board
+- a replacement for an artist manager
+- a guaranteed promo machine
+
+It is a command center for the work around the music.
+
+## Strongest Market Contrast
+
+Generic agent hubs are built around the agent.
+
+Artist OS Desktop is built around the artist, the release, the assets, the campaign, and the manager's operating reality.

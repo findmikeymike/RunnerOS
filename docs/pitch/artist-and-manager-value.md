@@ -36,6 +36,24 @@ Value:
 - preserve decisions across the whole campaign
 - package work cleanly for artists, vendors, and partners
 
+The strongest manager angle:
+
+```text
+One manager can keep more campaigns moving without losing context, approvals, or asset control.
+```
+
+## Manager Pain Points To Hit
+
+- "Where is the final cover?"
+- "Which caption pack did we approve?"
+- "What did we decide the release world was?"
+- "Did anyone follow up with that contact?"
+- "What assets are missing before launch?"
+- "What can we post this week?"
+- "What is the next best move?"
+
+Artist OS Desktop should answer these inside the workspace instead of forcing the manager to search old chats, folders, notes, and DMs.
+
 ## Management Team Angle
 
 Do not position this as "replacing a manager."
@@ -53,6 +71,9 @@ Good phrasing:
 - a campaign command center
 - specialist workers for the jobs around the music
 - the place where the artist's team memory lives
+- move like a bigger team
+- campaign memory that does not disappear into chat
+- approvals, assets, and next moves in one desk
 
 Avoid:
 
@@ -60,4 +81,3 @@ Avoid:
 - fully automated music career
 - push-button fame
 - guaranteed promo results
-
