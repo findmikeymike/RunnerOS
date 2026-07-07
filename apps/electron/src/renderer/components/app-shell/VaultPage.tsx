@@ -56,7 +56,7 @@ const CATEGORIES: Array<{
   { id: 'music', label: 'Music', icon: Music2, hint: 'master-final' },
   { id: 'video', label: 'Video', icon: Video, hint: 'raw-footage' },
   { id: 'visuals', label: 'Visuals', icon: Image, hint: 'cover-art' },
-  { id: 'campaigns', label: 'Campaigns', icon: FileArchive, hint: 'any' },
+  { id: 'campaigns', label: 'Campaigns', icon: FileArchive, hint: 'ad-asset' },
   { id: 'business', label: 'Business', icon: Lock, hint: 'contract' },
   { id: 'references', label: 'References', icon: Layers, hint: 'any' },
 ]

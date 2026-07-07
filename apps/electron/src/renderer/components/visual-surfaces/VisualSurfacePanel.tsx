@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai'
 import { Archive, Layers, Loader2, Maximize2, PanelRight, PanelTopOpen } from 'lucide-react'
 import { VISUAL_BOARD_TAG } from '@craft-agent/shared/visual-board'
 import { Button } from '@/components/ui/button'
+import { isAdOutput } from '@/lib/output-finals-actions'
 import { cn } from '@/lib/utils'
 import { useOutputs, type OutputManifestDTO, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import {
@@ -415,7 +416,8 @@ function visualCaptureVersion(manifest: OutputManifestDTO): string {
   })
 }
 
-function vaultKindHintForOutput(manifest: OutputManifestDTO): 'master-final' | 'raw-footage' | 'cover-art' | 'any' {
+function vaultKindHintForOutput(manifest: OutputManifestDTO): 'master-final' | 'raw-footage' | 'cover-art' | 'ad-asset' | 'any' {
+  if (isAdOutput(manifest)) return 'ad-asset'
   if (manifest.kind === 'audio') return 'master-final'
   if (manifest.kind === 'video') return 'raw-footage'
   if (manifest.kind === 'image') return 'cover-art'

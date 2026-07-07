@@ -48,6 +48,20 @@ describe('artist vault', () => {
     ]);
   });
 
+  test('plans ad assets into campaign ads as final usable assets', () => {
+    const workspace = tempWorkspace();
+    const adVideo = join(workspace, 'watching-tornado-videos-ad.mp4');
+    writeFileSync(adVideo, 'fake video');
+
+    const plan = planArtistVaultImports(workspace, [adVideo], { kindHint: 'ad-asset' });
+
+    expect(plan.skipped).toEqual([]);
+    expect(plan.candidates[0]?.kind).toBe('ad-asset');
+    expect(plan.candidates[0]?.destinationRelativePath).toBe('vault/campaigns/ads/watching-tornado-videos-ad.mp4');
+    expect(plan.candidates[0]?.defaultStatus).toBe('final');
+    expect(plan.candidates[0]?.defaultUsableByAgents).toBe(true);
+  });
+
   test('copies files, writes manifest, and emits compact agent context', () => {
     const workspace = tempWorkspace();
     const master = join(workspace, 'night-drive-final.wav');

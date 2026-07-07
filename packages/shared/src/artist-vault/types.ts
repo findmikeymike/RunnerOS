@@ -65,6 +65,7 @@ export type VaultKindHint =
   | 'cover-art'
   | 'artist-photo'
   | 'contract'
+  | 'ad-asset'
   | 'any';
 
 export interface VaultAssetRecord {

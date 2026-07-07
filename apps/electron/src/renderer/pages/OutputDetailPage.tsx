@@ -11,6 +11,7 @@ import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks
 import { openDemoVisualSurfaceAtom, openOutputVisualSurfaceAtom } from '@/atoms/visual-surfaces'
 import { findVideoProjectAsset } from '@/components/outputs/video-project-output'
 import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
+import { isAdOutput } from '@/lib/output-finals-actions'
 
 interface Props {
   workspaceId: string
@@ -26,7 +27,7 @@ type OutputsElectronAPI = typeof window.electronAPI & {
     sessionId: string,
     input: { action: 'add_image' | 'add_video'; outputId: string },
   ) => Promise<{ ok: boolean; receipt?: string; error?: string }>
-  saveOutputAssetToVault?: (workspaceId: string, outputId: string, assetId?: string, options?: { kindHint?: 'master-final' | 'demo' | 'raw-footage' | 'cover-art' | 'artist-photo' | 'contract' | 'any' }) => Promise<{ imported: unknown[]; skipped: Array<{ path: string; reason: string }> }>
+  saveOutputAssetToVault?: (workspaceId: string, outputId: string, assetId?: string, options?: { kindHint?: 'master-final' | 'demo' | 'raw-footage' | 'cover-art' | 'artist-photo' | 'contract' | 'ad-asset' | 'any' }) => Promise<{ imported: unknown[]; skipped: Array<{ path: string; reason: string }> }>
 }
 
 export default function OutputDetailPage({ workspaceId, outputId, currentCampaignId }: Props) {
@@ -415,7 +416,8 @@ async function saveOutputToVault(
   }
 }
 
-function vaultKindHintForOutput(manifest: OutputManifestDTO): 'master-final' | 'raw-footage' | 'cover-art' | 'any' {
+function vaultKindHintForOutput(manifest: OutputManifestDTO): 'master-final' | 'raw-footage' | 'cover-art' | 'ad-asset' | 'any' {
+  if (isAdOutput(manifest)) return 'ad-asset'
   if (manifest.kind === 'audio') return 'master-final'
   if (manifest.kind === 'video') return 'raw-footage'
   if (manifest.kind === 'image') return 'cover-art'

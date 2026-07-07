@@ -41,6 +41,7 @@ Examples:
 - generated cover art option
 - text-overlay image
 - video cut
+- ad video / ad creative variant
 - bio draft
 - caption pack
 - ad copy
@@ -113,7 +114,7 @@ Campaign slots:
 - `Shortform Clips`
 - `Press Copy`
 - `Captions`
-- `Ads`
+- `Ads` - ad videos, ad creative variants, ad copy sets, and approved paid-ad packets
 - `References`
 
 HQ slots:
@@ -146,6 +147,8 @@ Clicking `Set as Final` opens a small picker:
 - Campaign context is auto-filled from the active campaign workspace when available
 - Manual campaign entry appears only as an orphan-output fallback when no current campaign/context exists
 - Slot: `Cover Art`, `Shortform Clips`, etc.
+
+Ad-tagged Outputs, including ad videos created for Meta/Google campaigns, should default to the `Ads` slot instead of generic `Shortform Clips`. Saving an ad Output to Artist Vault should classify it as `ad-asset` under `vault/campaigns/ads`.
 
 Clicking `Set as Primary` opens the same dialog for existing Finals and marks one chosen Final as the current default for that slot. It does not remove other finals.
 

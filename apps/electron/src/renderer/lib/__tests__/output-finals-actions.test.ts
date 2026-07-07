@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { resolveCampaignFinalId } from '../output-finals-actions'
+import { defaultFinalSlotForOutput, resolveCampaignFinalId } from '../output-finals-actions'
 import type { OutputFinalPointerDTO, OutputSummaryDTO } from '@/hooks/useOutputs'
 
 const output = (campaignId?: string): OutputSummaryDTO => ({
@@ -58,5 +58,25 @@ describe('resolveCampaignFinalId', () => {
       output: output(),
       fallbackCampaignId: ' manual-campaign ',
     })).toBe('manual-campaign')
+  })
+})
+
+describe('defaultFinalSlotForOutput', () => {
+  test('routes ad-tagged videos to Ads instead of generic shortform clips', () => {
+    expect(defaultFinalSlotForOutput({
+      ...output('campaign-1'),
+      title: 'Watching Tornado Videos Meta ad cut',
+      kind: 'video',
+      tags: ['ad-creative'],
+    })).toBe('Ads')
+  })
+
+  test('keeps normal videos in Shortform Clips', () => {
+    expect(defaultFinalSlotForOutput({
+      ...output('campaign-1'),
+      title: 'Behind the scenes clip',
+      kind: 'video',
+      tags: ['content'],
+    })).toBe('Shortform Clips')
   })
 })

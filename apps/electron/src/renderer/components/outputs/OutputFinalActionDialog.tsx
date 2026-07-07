@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { finalPointerLabel, removeInputForFinal, resolveCampaignFinalId } from '@/lib/output-finals-actions'
+import { defaultFinalSlotForOutput, finalPointerLabel, removeInputForFinal, resolveCampaignFinalId } from '@/lib/output-finals-actions'
 import type {
   OutputFinalPointerDTO,
   OutputManifestDTO,
@@ -60,7 +60,7 @@ export function OutputFinalActionDialog({
       output,
       currentCampaignId,
     }) ?? '')
-    setSlot(formatSlot(existing?.slot ?? defaultSlotForOutput(output)))
+    setSlot(formatSlot(existing?.slot ?? defaultFinalSlotForOutput(output)))
     setFinalId(existing?.id ?? '')
     setSaving(false)
   }, [action, currentCampaignId, finals, open, output])
@@ -195,14 +195,6 @@ export function OutputFinalActionDialog({
       </DialogContent>
     </Dialog>
   )
-}
-
-function defaultSlotForOutput(output: OutputLike): string {
-  if (output.kind === 'image') return 'Cover Art'
-  if (output.kind === 'video') return 'Shortform Clips'
-  if (output.kind === 'audio') return 'Master'
-  if (output.kind === 'receipt' || output.kind === 'external-action') return 'References'
-  return output.context?.scope === 'hq' ? 'Brand Copy' : 'Press Copy'
 }
 
 function formatSlot(slot: string): string {
