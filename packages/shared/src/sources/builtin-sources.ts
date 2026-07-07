@@ -1007,7 +1007,7 @@ export function getAdsOperatorSource(workspaceId: string, workspaceRootPath: str
         '4. Use `audit <file.csv|import.json> --platform meta|google --level ... --goal ... --json` after import to identify obvious waste and cleanup candidates.',
         '5. Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structure from artist context before any live creation.',
         '6. Use `packet create --platform meta|google --type publish|budget|status|targeting|creative --out packet.json --json` before any proposed write.',
-        '7. Use `receipt create --packet packet.json --status approved|rejected|executed|skipped --out receipt.json --json` to record approval or execution outcome.',
+        '7. Use `receipt create --packet packet.json --status approved|rejected|skipped --out receipt.json --json` to record the approval outcome.',
         '8. Treat packets and receipts as artifacts only. This tool must not publish, pause, change budgets, update targeting, upload creative, or apply recommendations.',
       ].join('\n'),
     },

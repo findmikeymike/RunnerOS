@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 export const SUPPORTED_PLATFORMS = ['google', 'meta'];
 export const SUPPORTED_LEVELS = ['campaign', 'adset', 'adgroup', 'ad', 'keyword', 'search_term'];
 export const PACKET_TYPES = ['publish', 'budget', 'status', 'targeting', 'creative', 'keyword', 'recommendation'];
-export const RECEIPT_STATUSES = ['approved', 'rejected', 'executed', 'skipped'];
+export const RECEIPT_STATUSES = ['approved', 'rejected', 'skipped'];
 
 export function normalizePlatform(value) {
   if (value === 'google-ads') return 'google';
@@ -70,7 +70,7 @@ export function validateReceiptInput(input) {
   if (!input.packet) errors.push('packet is required');
   if (!input.status) errors.push('status is required');
   else if (!RECEIPT_STATUSES.includes(input.status)) errors.push(`status must be one of: ${RECEIPT_STATUSES.join(', ')}`);
-  if (input.writeExecuted && input.status !== 'executed') errors.push('write-executed is only valid with status executed');
+  if (input.writeExecuted) errors.push('write-executed is not supported by the read-only ads operator');
   return errors;
 }
 

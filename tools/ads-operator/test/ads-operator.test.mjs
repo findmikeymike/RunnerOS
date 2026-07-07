@@ -390,7 +390,7 @@ describe('ads-operator cli', () => {
     expect(savedReceipt.schema).toBe('runneros.ads.receipt.v1');
   });
 
-  test('receipt creation rejects write execution unless status is executed', () => {
+  test('receipt creation rejects executed write claims in read-only mode', () => {
     const dir = tempDir();
     const packetPath = join(dir, 'status-packet.json');
     run([
@@ -412,11 +412,15 @@ describe('ads-operator cli', () => {
       packetPath,
       '--json',
     ]);
-    const result = run(['receipt', 'create', '--packet', packetPath, '--status', 'approved', '--write-executed', '--json']);
+    const writeClaim = run(['receipt', 'create', '--packet', packetPath, '--status', 'approved', '--write-executed', '--json']);
+    const executedStatus = run(['receipt', 'create', '--packet', packetPath, '--status', 'executed', '--json']);
 
-    expect(result.status).toBe(2);
-    expect(result.stdout.ok).toBe(false);
-    expect(result.stdout.errors).toContain('write-executed is only valid with status executed');
+    expect(writeClaim.status).toBe(2);
+    expect(writeClaim.stdout.ok).toBe(false);
+    expect(writeClaim.stdout.errors).toContain('write-executed is not supported by the read-only ads operator');
+    expect(executedStatus.status).toBe(2);
+    expect(executedStatus.stdout.ok).toBe(false);
+    expect(executedStatus.stdout.errors).toContain('status must be one of: approved, rejected, skipped');
   });
 
   test('approval packets redact browser session and cookie-like secrets', () => {
