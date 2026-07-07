@@ -52,6 +52,7 @@ Before inspecting a dashboard:
 - Confirm platform, account/business/customer, objective, and date range.
 - Prefer table exports over manual copying.
 - Record the dashboard URL or page name, date range, filters, attribution/window if visible, and export filename.
+- Stop before clicking any ambiguous Save, Publish, Apply, Launch, Enable, Pause, Delete, budget, bid, targeting, creative, keyword, billing, recommendation, or upload control.
 - Never ask for or expose passwords, access tokens, cookies, API keys, 2FA codes, or recovery codes.
 
 For Meta:

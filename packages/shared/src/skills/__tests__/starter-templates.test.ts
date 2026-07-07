@@ -248,4 +248,14 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain('Georgia, Times New Roman, serif');
     expect(parsed.content).not.toContain('Runner');
   });
+
+  it('bundles paid ads browser operator with danger-control stop rules', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'paid-ads-browser-operator');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('paid-ads-browser-operator');
+    expect(parsed.content).toContain('browser dashboard/export mode');
+    expect(parsed.content).toContain('Stop before clicking any ambiguous Save, Publish, Apply, Launch');
+    expect(parsed.content).toContain('Do not use receipts to claim live ad execution');
+  });
 });
