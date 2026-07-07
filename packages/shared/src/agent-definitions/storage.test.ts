@@ -564,13 +564,14 @@ body
   test('starter library includes the Ads Agent with paid ads source routing', () => {
     const adsAgent = STARTER_AGENTS.find((agent) => agent.slug === 'ads-agent')
 
-    expect(adsAgent?.metadata.skills).toContain('google-ads')
     expect(adsAgent?.metadata.skills).toContain('ad-creative')
+    expect(adsAgent?.metadata.skills).toContain('meta-ads')
+    expect(adsAgent?.metadata.skills).toContain('google-ads')
     expect(adsAgent?.metadata.skills).toContain('paid-ads-browser-operator')
+    expect(adsAgent?.metadata.sources).toContain('meta-ads')
     expect(adsAgent?.metadata.sources).toContain('google-ads')
     expect(adsAgent?.metadata.sources).toContain('ads-operator')
-    expect(adsAgent?.metadata.sources).not.toContain('meta-ads')
-    expect(adsAgent?.metadata.optionalSources).toContain('meta-ads')
+    expect(adsAgent?.metadata.optionalSources).toBeUndefined()
     expect(adsAgent?.systemPrompt).toContain('node bin/google-ads.mjs')
     expect(adsAgent?.systemPrompt).toContain('browser dashboard/export mode')
     expect(adsAgent?.systemPrompt).toContain('tools/ads-operator')
@@ -1046,15 +1047,14 @@ body
     )
 
     expect(ensureBuiltInAgentMetadataSlugs('ads-agent', {
-      skills: ['ad-creative', 'google-ads', 'paid-ads-browser-operator'],
-      sources: ['google-ads', 'ads-operator'],
-      optionalSources: ['meta-ads'],
+      skills: ['ad-creative', 'meta-ads', 'google-ads', 'paid-ads-browser-operator'],
+      sources: ['meta-ads', 'google-ads', 'ads-operator'],
     }, { globalAgentsDir }).updated).toBe(true)
 
     const adsAgent = loadGlobalAgent('ads-agent', { globalAgentsDir })!
-    expect(adsAgent.metadata.skills).toEqual(['ad-creative', 'google-ads', 'paid-ads-browser-operator'])
-    expect(adsAgent.metadata.sources).toEqual(['google-ads', 'ads-operator'])
-    expect(adsAgent.metadata.optionalSources).toEqual(['meta-ads'])
+    expect(adsAgent.metadata.skills).toEqual(['ad-creative', 'meta-ads', 'google-ads', 'paid-ads-browser-operator'])
+    expect(adsAgent.metadata.sources).toEqual(['meta-ads', 'google-ads', 'ads-operator'])
+    expect(adsAgent.metadata.optionalSources).toBeUndefined()
     expect(adsAgent.systemPrompt).toBe('Ads Agent body stays intact.')
     expect(ensureBuiltInAgentMetadataSlugs('writer', {
       skills: ['paid-ads-browser-operator'],
@@ -1168,5 +1168,77 @@ body
       { globalAgentsDir },
     ).updated).toBe(true)
     expect(loadGlobalAgent('ads-agent', { globalAgentsDir })!.systemPrompt).toContain('setup-plan --platform meta')
+  })
+
+  test('Ads Agent prompt line migrations preserve custom prompt text', () => {
+    const staleMetaLine = '   - For Meta Ads, use the `meta-ads` source when the workspace has connected and enabled it.'
+    const nextMetaLine = '   - For Meta Ads, use `ads-operator` as the always-available local browser/export/setup operator. Use the optional `meta-ads` source only when the workspace has connected and enabled Meta\'s hosted MCP/API path.'
+    writeGlobalAgent(
+      {
+        slug: 'ads-agent',
+        metadata: { name: 'Ads Agent', description: 'Handles ads.' },
+        systemPrompt: [
+          'CUSTOM USER PREFIX',
+          staleMetaLine,
+          'CUSTOM USER MIDDLE',
+          '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.',
+          '- Use `packet create` to produce approval JSON, not to apply the change.',
+          'CUSTOM USER SUFFIX',
+        ].join('\n'),
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentPromptText('ads-agent', staleMetaLine, nextMetaLine, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText(
+      'ads-agent',
+      '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `packet create` to produce approval JSON, not to apply the change.',
+      '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `setup-plan --platform meta --goal ... --artist-context <file> --territories "..." --budget "..." --campaign-name "..." --json` before browser-guided Meta Ads Manager campaign setup. Follow its Ads Manager field plan and stop before Publish/Launch.\n- Use `packet create` to produce approval JSON, not to apply the change.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+
+    const migrated = loadGlobalAgent('ads-agent', { globalAgentsDir })!.systemPrompt
+    expect(migrated).toContain('CUSTOM USER PREFIX')
+    expect(migrated).toContain('CUSTOM USER MIDDLE')
+    expect(migrated).toContain('CUSTOM USER SUFFIX')
+    expect(migrated).toContain('setup-plan --platform meta')
+    expect(migrated).not.toContain(staleMetaLine)
+  })
+
+  test('Ads Agent prompt line migrations upgrade older stale Meta guidance without replacing custom text', () => {
+    writeGlobalAgent(
+      {
+        slug: 'ads-agent',
+        metadata: { name: 'Ads Agent', description: 'Handles ads.' },
+        systemPrompt: [
+          'CUSTOM OLD PREFIX',
+          'Meta Ads auth happens through the `meta-ads` OAuth MCP source.',
+          'For proposed writes, run a `--dry-run` preview.',
+          'CUSTOM OLD SUFFIX',
+        ].join('\n'),
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentPromptText(
+      'ads-agent',
+      'Meta Ads auth happens through the `meta-ads` OAuth MCP source.',
+      'Meta Ads local browser/export/setup happens through `ads-operator --platform meta`; use the optional `meta-ads` OAuth MCP source only when connected.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText(
+      'ads-agent',
+      'For proposed writes, run a `--dry-run` preview.',
+      'For proposed writes, use `setup-plan --platform meta` when drafting Meta campaigns, create a `tools/ads-operator` approval packet, and stop before live mutation.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+
+    const migrated = loadGlobalAgent('ads-agent', { globalAgentsDir })!.systemPrompt
+    expect(migrated).toContain('CUSTOM OLD PREFIX')
+    expect(migrated).toContain('CUSTOM OLD SUFFIX')
+    expect(migrated).toContain('ads-operator --platform meta')
+    expect(migrated).toContain('setup-plan --platform meta')
+    expect(migrated).not.toContain('Meta Ads auth happens through the `meta-ads` OAuth MCP source.')
+    expect(migrated).not.toContain('For proposed writes, run a `--dry-run` preview.')
   })
 })

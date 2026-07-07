@@ -4,6 +4,7 @@ import { importCsvFile } from './csv.mjs';
 import { normalizeLevel, normalizePlatform } from './schema.mjs';
 
 const CONVERSION_GOALS = new Set(['conversions', 'leads', 'sales', 'roas']);
+const SUPPORTED_CAMPAIGN_GOALS = ['awareness', 'conversions', 'leads', 'roas', 'sales', 'traffic'];
 
 export function auditFile(filePath, { platform, level = 'campaign', goal = 'conversions' }) {
   const rows = loadRows(filePath, { platform, level });
@@ -83,22 +84,28 @@ export function createCampaignPlan({ platform, goal = 'conversions', artistConte
   const contextSignals = extractSignals(context);
   const selectedTerritories = parseList(territories);
   const normalizedPlatform = normalizePlatform(platform);
+  const normalizedGoal = normalizeCampaignGoal(goal);
+  if (!normalizedGoal) return invalidGoal(goal);
+  const missingInputs = selectedTerritories.length ? [] : ['territories'];
 
   return {
     ok: true,
     schema: 'runneros.ads.campaign_plan.v1',
     platform: normalizedPlatform,
     account: account || null,
-    goal,
+    goal: normalizedGoal,
     budget: budget || null,
+    actionable: missingInputs.length === 0,
+    requiresInput: missingInputs.length > 0,
+    missingInputs,
     artistContext: {
       provided: Boolean(context),
       path: artistContextPath || null,
       signals: contextSignals,
     },
     recommendedStructure: {
-      objective: objectiveFor(goal, normalizedPlatform),
-      campaign: `${title(goal)} test campaign`,
+      objective: objectiveFor(normalizedGoal, normalizedPlatform),
+      campaign: `${title(normalizedGoal)} test campaign`,
       adSets: buildAdSets(selectedTerritories, contextSignals),
       creativeTests: [
         'core story / identity hook',
@@ -126,6 +133,34 @@ export function createCampaignPlan({ platform, goal = 'conversions', artistConte
 export function createSetupPlan({ platform, goal = 'conversions', artistContextPath, territories, budget, account, campaignName }) {
   const campaignPlan = createCampaignPlan({ platform, goal, artistContextPath, territories, budget, account });
   const normalizedPlatform = normalizePlatform(platform);
+  if (!campaignPlan.ok) {
+    return {
+      ...campaignPlan,
+      schema: 'runneros.ads.setup_plan.v1',
+      platform: normalizedPlatform,
+      account: account || null,
+      budget: budget || null,
+      browserPlan: null,
+    };
+  }
+  if (campaignPlan.requiresInput) {
+    return {
+      ok: false,
+      schema: 'runneros.ads.setup_plan.v1',
+      platform: normalizedPlatform,
+      account: account || null,
+      goal: campaignPlan.goal,
+      budget: budget || null,
+      actionable: false,
+      requiresInput: true,
+      missingInputs: campaignPlan.missingInputs,
+      error: 'setup-plan requires explicit --territories before producing browser field instructions.',
+      strategy: campaignPlan,
+      browserPlan: null,
+      approvalGate: setupApprovalGate(normalizedPlatform),
+      writeExecuted: false,
+    };
+  }
   const browserPlan = normalizedPlatform === 'meta'
     ? metaBrowserSetupPlan(campaignPlan, { campaignName })
     : googleBrowserSetupPlan(campaignPlan, { campaignName });
@@ -135,16 +170,20 @@ export function createSetupPlan({ platform, goal = 'conversions', artistContextP
     schema: 'runneros.ads.setup_plan.v1',
     platform: normalizedPlatform,
     account: account || null,
-    goal,
+    goal: campaignPlan.goal,
     budget: budget || null,
     strategy: campaignPlan,
     browserPlan,
-    approvalGate: {
-      requiredBeforePublish: true,
-      stopBeforeControls: ['Publish', 'Launch', 'Apply', 'Save changes', 'Turn on', 'Increase budget', 'Schedule'],
-      packetCommand: `node tools/ads-operator/bin/ads-operator.mjs packet create --platform ${normalizedPlatform} --type publish --account <account> --action "<campaign setup summary>" --spend-impact "<budget impact>" --evidence <plan-or-export-path> --json`,
-    },
+    approvalGate: setupApprovalGate(normalizedPlatform),
     writeExecuted: false,
+  };
+}
+
+function setupApprovalGate(platform) {
+  return {
+    requiredBeforePublish: true,
+    stopBeforeControls: ['Publish', 'Launch', 'Apply', 'Save changes', 'Turn on', 'Increase budget', 'Schedule'],
+    packetCommand: `node tools/ads-operator/bin/ads-operator.mjs packet create --platform ${platform} --type publish --account <account> --action "<campaign setup summary>" --spend-impact "<budget impact>" --evidence <plan-or-export-path> --json`,
   };
 }
 
@@ -291,8 +330,7 @@ function recommend(findings, { platform, level, goal }) {
 }
 
 function buildAdSets(territories, signals) {
-  const territorySet = territories.length ? territories : ['best-current-audience-territory', 'low-cost-test-territory', 'lookalike/interest-expansion-territory'];
-  return territorySet.map((territory, index) => ({
+  return territories.map((territory, index) => ({
     name: `${territory} / ${index === 0 ? 'core fans' : 'test pocket'}`,
     territory,
     audienceSignals: signals.slice(0, 8),
@@ -328,6 +366,21 @@ function objectiveFor(goal, platform) {
 
 function parseList(value = '') {
   return String(value).split(',').map((item) => item.trim()).filter(Boolean);
+}
+
+function normalizeCampaignGoal(goal) {
+  const normalized = String(goal || '').trim().toLowerCase();
+  return SUPPORTED_CAMPAIGN_GOALS.includes(normalized) ? normalized : null;
+}
+
+function invalidGoal(goal) {
+  return {
+    ok: false,
+    error: `--goal must be one of: ${SUPPORTED_CAMPAIGN_GOALS.join(', ')}.`,
+    goal: goal || null,
+    allowedGoals: SUPPORTED_CAMPAIGN_GOALS,
+    writeExecuted: false,
+  };
 }
 
 function rowLabel(row) {

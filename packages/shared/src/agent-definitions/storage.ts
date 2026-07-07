@@ -636,17 +636,25 @@ export function ensureBuiltInAgentMetadataSlugs(
     const requiredValues = required[key] ?? [];
     if (requiredValues.length === 0) continue;
     const current = next[key] ?? [];
-    const missing = requiredValues.filter((value) => !current.includes(value));
-    if (missing.length === 0) continue;
-    next[key] = [...current, ...missing];
+    const extras = current.filter((value) => !requiredValues.includes(value));
+    const requiredFirst = [...requiredValues, ...extras];
+    if (agentMetadataValueEquals(current, requiredFirst)) continue;
+    next[key] = requiredFirst;
     changed = true;
   }
-  const optionalSources = new Set(required.optionalSources ?? []);
   const requiredSources = new Set(required.sources ?? []);
+  const optionalSources = new Set(required.optionalSources ?? []);
   if (optionalSources.size > 0 && next.sources?.length) {
     const filteredSources = next.sources.filter((source) => !optionalSources.has(source) || requiredSources.has(source));
     if (filteredSources.length !== next.sources.length) {
       next.sources = filteredSources.length > 0 ? filteredSources : undefined;
+      changed = true;
+    }
+  }
+  if (requiredSources.size > 0 && next.optionalSources?.length) {
+    const filteredOptionalSources = next.optionalSources.filter((source) => !requiredSources.has(source));
+    if (filteredOptionalSources.length !== next.optionalSources.length) {
+      next.optionalSources = filteredOptionalSources.length > 0 ? filteredOptionalSources : undefined;
       changed = true;
     }
   }

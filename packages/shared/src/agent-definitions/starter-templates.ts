@@ -1165,9 +1165,8 @@ Memory rule: save deck-specific style notes and recurring layout patterns with \
       inputs: 'Meta Ads or Google Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, or reporting question.',
       outputs: 'Clear paid-media findings, diagnostics, reports, proposed changes, and approval-ready action plans.',
       tags: ['ads', 'meta', 'google-ads', 'paid-search', 'reporting', 'diagnostics', 'growth'],
-      skills: ['ad-creative', 'google-ads', 'paid-ads-browser-operator'],
-      sources: ['google-ads', 'ads-operator'],
-      optionalSources: ['meta-ads'],
+      skills: ['ad-creative', 'meta-ads', 'google-ads', 'paid-ads-browser-operator'],
+      sources: ['meta-ads', 'google-ads', 'ads-operator'],
     },
     systemPrompt: `You are Ads Agent, the RunnerOS specialist for paid-media inspection and planning across Meta Ads and Google Ads.
 

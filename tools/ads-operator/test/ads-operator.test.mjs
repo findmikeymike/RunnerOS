@@ -403,6 +403,70 @@ describe('ads-operator cli', () => {
     expect(savedSetup.writeExecuted).toBe(false);
   });
 
+  test('normalizes setup plan goal consistently at top level and strategy level', () => {
+    const result = run([
+      'setup-plan',
+      '--platform',
+      'meta',
+      '--goal',
+      'Leads',
+      '--territories',
+      'Los Angeles',
+      '--json',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.ok).toBe(true);
+    expect(result.stdout.goal).toBe('leads');
+    expect(result.stdout.strategy.goal).toBe('leads');
+    expect(result.stdout.browserPlan.campaignFields.objective).toBe('Leads');
+  });
+
+  test('rejects unsupported setup goals before producing browser fields', () => {
+    const result = run([
+      'setup-plan',
+      '--platform',
+      'meta',
+      '--goal',
+      'weird',
+      '--territories',
+      'Los Angeles',
+      '--budget',
+      '$50/day',
+      '--json',
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(result.stdout.ok).toBe(false);
+    expect(result.stdout.error).toContain('--goal must be one of');
+    expect(result.stdout.allowedGoals).toContain('leads');
+    expect(result.stdout.browserPlan).toBeNull();
+    expect(result.stdout.writeExecuted).toBe(false);
+  });
+
+  test('setup plans require explicit territories before browser field instructions', () => {
+    const result = run([
+      'setup-plan',
+      '--platform',
+      'meta',
+      '--goal',
+      'leads',
+      '--budget',
+      '$50/day',
+      '--json',
+    ]);
+
+    expect(result.status).toBe(2);
+    expect(result.stdout.ok).toBe(false);
+    expect(result.stdout.requiresInput).toBe(true);
+    expect(result.stdout.missingInputs).toEqual(['territories']);
+    expect(result.stdout.browserPlan).toBeNull();
+    expect(JSON.stringify(result.stdout)).not.toContain('best-current-audience-territory');
+    expect(JSON.stringify(result.stdout)).not.toContain('low-cost-test-territory');
+    expect(JSON.stringify(result.stdout)).not.toContain('lookalike/interest-expansion-territory');
+    expect(result.stdout.writeExecuted).toBe(false);
+  });
+
   test('approval packet marks existing local evidence as verified', () => {
     const file = tempCsv('Campaign name,Impressions,Clicks,Spend\nLaunch,1,1,1\n');
     const result = run([

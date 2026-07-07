@@ -2853,11 +2853,48 @@ export class SessionManager implements ISessionManager {
             sessionLog.info('[agent-definitions] Updated Ads Agent paid-ads metadata')
           }
           const adsAgentPromptUpdated = adsAgent
-            ? replaceBuiltInAgentPromptPattern(
-                'ads-agent',
-                /You are Ads Agent,[\s\S]*Meta Ads auth happens through the `meta-ads` OAuth MCP source[\s\S]*For proposed writes, run a `--dry-run` preview[\s\S]*Never apply a campaign, budget, catalog, creative, keyword, audience, placement, conversion, billing, or status change without explicit user approval in the current conversation\./,
-                adsAgent.systemPrompt,
-              ).updated
+            ? [
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '   - For Meta Ads, use the `meta-ads` source when the workspace has connected and enabled it.',
+                  '   - For Meta Ads, use `ads-operator` as the always-available local browser/export/setup operator. Use the optional `meta-ads` source only when the workspace has connected and enabled Meta\'s hosted MCP/API path.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  'Meta Ads auth happens through the `meta-ads` OAuth MCP source.',
+                  'Meta Ads local browser/export/setup happens through `ads-operator --platform meta`; use the optional `meta-ads` OAuth MCP source only when connected.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  'For proposed writes, run a `--dry-run` preview.',
+                  'For proposed writes, use `setup-plan --platform meta` when drafting Meta campaigns, create a `tools/ads-operator` approval packet, and stop before live mutation.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '- Do not assume a local Meta Printing Press CLI is bundled. The V1 local-source path is Google Ads plus browser/export fallback for Meta; a read-only Meta CLI can be revisited later.',
+                  '- Do not assume a separate Meta API CLI is bundled. The V1 local Meta path is `ads-operator --platform meta` plus browser/export/setup guidance.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '- Use `accounts`, `campaigns`, `export-plan`, `import`, `audit`, `campaign-plan`, and `packet create` only. This Phase 2 skeleton is read-only and must fail closed for mutation-like commands.',
+                  '- Use `accounts`, `campaigns`, `export-plan`, `import`, `audit`, `campaign-plan`, `setup-plan`, and `packet create` only. This Phase 2 skeleton is read-only and must fail closed for mutation-like commands.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `packet create` to produce approval JSON, not to apply the change.',
+                  '- Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.\n- Use `setup-plan --platform meta --goal ... --artist-context <file> --territories "..." --budget "..." --campaign-name "..." --json` before browser-guided Meta Ads Manager campaign setup. Follow its Ads Manager field plan and stop before Publish/Launch.\n- Use `packet create` to produce approval JSON, not to apply the change.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '1. If CLI/API/MCP is connected and the request is read-only, use it first.\n2. If CLI/API/MCP is missing, expired, blocked, or insufficient, use browser dashboard/export mode.',
+                  '1. If CLI/API/MCP is connected and the request is read-only, use it first.\n2. For Meta campaign setup, first create `campaign-plan` and `setup-plan` artifacts, then use browser dashboard mode to create a draft only.\n3. If CLI/API/MCP is missing, expired, blocked, or insufficient, use browser dashboard/export mode.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'ads-agent',
+                  '3. If browser automation is blocked, request a user-provided export with exact instructions for platform, table, date range, columns, and file type.\n4. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from `tools/ads-operator`.',
+                  '4. If browser automation is blocked, request a user-provided export with exact instructions for platform, table, date range, columns, and file type.\n5. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from `tools/ads-operator`.\n6. If you cannot tell whether a button saves, publishes, spends, or changes account state, stop and ask.',
+                ).updated,
+              ].some(Boolean)
             : false
           if (adsAgentPromptUpdated) {
             sessionLog.info('[agent-definitions] Updated Ads Agent paid-ads prompt')

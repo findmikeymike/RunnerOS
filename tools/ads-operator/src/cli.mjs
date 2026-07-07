@@ -192,7 +192,7 @@ function campaignPlanCommand(args, io, json) {
     budget: opt(args, '--budget'),
   });
   const out = opt(args, '--out');
-  return write(io, withOptionalFile(result, out, 'plan'), 0, json);
+  return write(io, result.ok ? withOptionalFile(result, out, 'plan') : result, result.ok ? 0 : 2, json);
 }
 
 function setupPlanCommand(args, io, json) {
@@ -207,7 +207,7 @@ function setupPlanCommand(args, io, json) {
     campaignName: opt(args, '--campaign-name'),
   });
   const out = opt(args, '--out');
-  return write(io, withOptionalFile(result, out, 'setupPlan'), 0, json);
+  return write(io, result.ok ? withOptionalFile(result, out, 'setupPlan') : result, result.ok ? 0 : 2, json);
 }
 
 function packetCreateCommand(args, io, json) {
