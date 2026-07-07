@@ -258,4 +258,14 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain('Stop before clicking any ambiguous Save, Publish, Apply, Launch');
     expect(parsed.content).toContain('Do not use receipts to claim live ad execution');
   });
+
+  it('bundles separated paid ads planning and creative skills', () => {
+    for (const slug of ['artist-ad-dna', 'ads-strategy', 'ads-creative-development']) {
+      const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === slug);
+      expect(skill).toBeDefined();
+      const parsed = matter(getSkillMd(skill!));
+      expect(parsed.data.name).toBe(slug);
+      expect(parsed.content).toContain('Ads Agent');
+    }
+  });
 });

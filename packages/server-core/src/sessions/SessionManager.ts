@@ -2843,11 +2843,19 @@ export class SessionManager implements ISessionManager {
           }
           const adsAgent = STARTER_AGENTS.find(agent => agent.slug === 'ads-agent')
           const adsAgentMetadataUpdated = adsAgent
-            ? ensureBuiltInAgentMetadataSlugs('ads-agent', {
-                skills: adsAgent.metadata.skills,
-                sources: adsAgent.metadata.sources,
-                optionalSources: adsAgent.metadata.optionalSources,
-              }).updated
+            ? [
+                ensureBuiltInAgentMetadataSlugs('ads-agent', {
+                  skills: adsAgent.metadata.skills,
+                  sources: adsAgent.metadata.sources,
+                  optionalSources: adsAgent.metadata.optionalSources,
+                }).updated,
+                replaceBuiltInAgentMetadata('ads-agent', {
+                  skills: {
+                    from: ['ad-creative', 'meta-ads', 'google-ads', 'paid-ads-browser-operator'],
+                    to: adsAgent.metadata.skills,
+                  },
+                }).updated,
+              ].some(Boolean)
             : false
           if (adsAgentMetadataUpdated) {
             sessionLog.info('[agent-definitions] Updated Ads Agent paid-ads metadata')

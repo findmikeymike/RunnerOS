@@ -564,7 +564,7 @@ body
   test('starter library includes the Ads Agent with paid ads source routing', () => {
     const adsAgent = STARTER_AGENTS.find((agent) => agent.slug === 'ads-agent')
 
-    expect(adsAgent?.metadata.skills).toContain('ad-creative')
+    expect(adsAgent?.metadata.skills).not.toContain('ad-creative')
     expect(adsAgent?.metadata.skills).toContain('meta-ads')
     expect(adsAgent?.metadata.skills).toContain('google-ads')
     expect(adsAgent?.metadata.skills).toContain('paid-ads-browser-operator')
@@ -577,9 +577,26 @@ body
     expect(adsAgent?.systemPrompt).toContain('tools/ads-operator')
     expect(adsAgent?.systemPrompt).toContain('ads-operator --platform meta')
     expect(adsAgent?.systemPrompt).toContain('setup-plan --platform meta')
+    expect(adsAgent?.systemPrompt).toContain('Ads Strategy Packet')
+    expect(adsAgent?.systemPrompt).toContain('Ad Creative Packet')
     expect(adsAgent?.systemPrompt).toContain('Routing decision tree')
     expect(adsAgent?.systemPrompt).toContain('approval packet')
     expect(adsAgent?.systemPrompt).toContain('explicit user approval')
+  })
+
+  test('starter library includes separated ads strategy and creative workers', () => {
+    const strategist = STARTER_AGENTS.find((agent) => agent.slug === 'ads-strategist')
+    const creative = STARTER_AGENTS.find((agent) => agent.slug === 'ad-creative-agent')
+
+    expect(strategist?.metadata.skills).toEqual(['artist-ad-dna', 'ads-strategy'])
+    expect(strategist?.metadata.sources).toBeUndefined()
+    expect(strategist?.systemPrompt).toContain('You plan; you do not operate ad accounts.')
+    expect(strategist?.systemPrompt).toContain('Ads Agent handoff fields')
+
+    expect(creative?.metadata.skills).toEqual(['artist-ad-dna', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder'])
+    expect(creative?.metadata.sources).toBeUndefined()
+    expect(creative?.systemPrompt).toContain('you do not operate ad accounts')
+    expect(creative?.systemPrompt).toContain('Ads Agent handoff fields')
   })
 
   test('starter library includes draft-only Power Up handoff agents', () => {
@@ -1047,12 +1064,12 @@ body
     )
 
     expect(ensureBuiltInAgentMetadataSlugs('ads-agent', {
-      skills: ['ad-creative', 'meta-ads', 'google-ads', 'paid-ads-browser-operator'],
+      skills: ['meta-ads', 'google-ads', 'paid-ads-browser-operator'],
       sources: ['meta-ads', 'google-ads', 'ads-operator'],
     }, { globalAgentsDir }).updated).toBe(true)
 
     const adsAgent = loadGlobalAgent('ads-agent', { globalAgentsDir })!
-    expect(adsAgent.metadata.skills).toEqual(['ad-creative', 'meta-ads', 'google-ads', 'paid-ads-browser-operator'])
+    expect(adsAgent.metadata.skills).toEqual(['meta-ads', 'google-ads', 'paid-ads-browser-operator', 'ad-creative'])
     expect(adsAgent.metadata.sources).toEqual(['meta-ads', 'google-ads', 'ads-operator'])
     expect(adsAgent.metadata.optionalSources).toBeUndefined()
     expect(adsAgent.systemPrompt).toBe('Ads Agent body stays intact.')

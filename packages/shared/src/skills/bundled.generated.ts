@@ -1236,6 +1236,121 @@ node tools/clis/google-ads.js reports get --type ad_performance --date-range las
     ],
   },
   {
+    slug: "ads-creative-development",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: ads-creative-development
+description: "Develop paid-ad creative angles, hooks, copy variants, format tests, fatigue refreshes, and creative testing packets from artist context and campaign strategy."
+---
+
+# Ads Creative Development
+
+Use this when the user needs ad angles, copy, hooks, creative concepts, testing cycles, fatigue refreshes, or diagnosis of why paid creative is not converting.
+
+This skill creates creative strategy and copy. It does not touch ad accounts.
+
+## Inputs
+
+- Artist Ad DNA packet or Artist HQ context.
+- Ads Strategy Packet, if available.
+- Platform: Meta, Google, or both.
+- Campaign goal and destination.
+- Existing creative, hooks, captions, lyrics, clips, comments, or prior ads.
+- Known constraints: claims, policy, assets, budget, release timing, territory, language, and brand rules.
+
+## Output: Ad Creative Packet
+
+Produce:
+
+1. Creative thesis: the core conversion idea behind the campaign.
+2. Angle map: 6-10 distinct angles, not minor rewrites.
+3. Hook bank: short hooks grouped by emotion, identity, proof, curiosity, and direct offer.
+4. Copy variants:
+   - Meta primary text
+   - Meta headline
+   - Google responsive search ad headlines/descriptions when relevant
+   - CTA recommendations
+5. Format plan: video, static, carousel, UGC-style, lyric-led, performance clip, comment/social-proof, or story-world concept.
+6. Diversity check: concept, format, visual, hook, and headline diversity.
+7. Fatigue plan: what to refresh first if CTR falls, frequency rises, or delivery narrows.
+8. Asset needs: exact clips, images, captions, landing page, tracking URL, and proof assets needed before setup.
+9. Policy and brand risk: claims to avoid, restricted category concerns, sensitive targeting issues, and off-brand moves.
+10. Execution handoff: selected variants Ads Agent can place into a draft after approval.
+
+## Standards
+
+- For Meta, prioritize genuine concept and format diversity over many tiny copy variants.
+- For Google Search, keep intent and landing-page promise aligned.
+- Do not invent testimonials, stats, press, charting, streaming counts, or fan claims.
+- Make creative feel native to the artist's world, not generic direct-response filler.
+`,
+      },
+    ],
+  },
+  {
+    slug: "ads-strategy",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: ads-strategy
+description: "Build paid-ad campaign strategy packets covering goal, platform choice, funnel structure, audience and territory plan, test design, budget logic, and approval-ready execution inputs."
+---
+
+# Ads Strategy
+
+Use this when the user asks for ad strategy, campaign planning, media plan, where to spend, audience targeting, territories, rollout structure, or how to turn artist context into a paid campaign.
+
+This skill plans. It does not touch ad accounts.
+
+## Required Inputs
+
+- Campaign goal: awareness, traffic, leads, sales, conversions, or ROAS.
+- Platform scope: Meta, Google, or both.
+- Budget range and time window.
+- Artist Ad DNA packet or Artist HQ context.
+- Release/campaign context and destination URL, if available.
+- Prior performance exports or account findings, if available.
+
+If budget, territories, or goal are missing, ask for them or mark the output non-actionable.
+
+## Output: Ads Strategy Packet
+
+Produce:
+
+1. Goal and success metric: one primary metric and 2-3 guardrail metrics.
+2. Platform rationale: why Meta, Google, or both.
+3. Funnel structure: prospecting, retargeting, search intent, landing page, conversion event, and follow-up path.
+4. Campaign architecture: campaign, ad set/ad group, audience, location, creative-test, and measurement structure.
+5. Audience plan: 3-6 testable audiences with rationale from artist context.
+6. Territory plan: target locations, why they matter, and what evidence would improve confidence.
+7. Creative test plan: required angle diversity, format mix, and minimum viable creative set.
+8. Budget plan: daily/total budget, control vs test split, pacing, and minimum learning budget warnings.
+9. Kill/scale rules: what to pause, hold, iterate, or increase based on spend, clicks, CTR, CPA, ROAS, or learning state.
+10. Execution handoff: exact fields Ads Agent needs for \`campaign-plan\` and \`setup-plan\`.
+
+## Budget Logic
+
+Use conservative planning defaults:
+
+- Keep proven/control spend separate from test spend.
+- Do not recommend scale decisions without enough data.
+- Treat low-budget campaigns as learning experiments, not performance proof.
+- Use 70/20/10 as a starting framework only when there is enough prior performance data.
+- New artist campaigns can use control/test/explore splits instead of pretending there are proven channels.
+
+## Safety
+
+- Never imply a live account change has been made.
+- Never recommend publishing, spending, pausing, or changing budgets without Ads Agent approval flow.
+- If the strategy lacks required budget or territory inputs, mark it \`actionable: false\`.
+`,
+      },
+    ],
+  },
+  {
     slug: "ai-seo",
     files: [
       {
@@ -3009,6 +3124,59 @@ With \`--mode=sparkline\`: **Presentation Architect** — You analyze the oscill
 
 See \`framework.md\` for extended tactical playbooks: Shape Selection Guide, Hero's Journey Stage Injections, Sparkline Construction Manual, Inciting Incident Engineering, Climax Design Protocol, and the Antagonist Deep-Dive Matrix.
 See \`examples/\` for before/after narrative surgeries across domains (SaaS landing pages, email sequences, pitch decks, about pages, product demos, onboarding flows).
+`,
+      },
+    ],
+  },
+  {
+    slug: "artist-ad-dna",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: artist-ad-dna
+description: "Convert Artist HQ context into paid-ad brand DNA: audience psychology, voice, visual boundaries, promise, proof, angle territory, and forbidden moves."
+---
+
+# Artist Ad DNA
+
+Use this before paid-ad strategy or creative work when the campaign depends on an artist's profile, brand, voice, community, visuals, music world, release context, or approved Finals.
+
+## Inputs
+
+Pull available Artist HQ context before asking the user to repeat themselves:
+
+- Artist Profile
+- Artist Voice
+- Artist Branding
+- Artist Community
+- Artist Network
+- Campaign Worker Context
+- Release Board
+- HQ State of Play
+- approved Finals and prior Outputs
+
+## Output: Artist Ad DNA Packet
+
+Produce a concise packet with:
+
+1. Artist promise: what the artist helps the audience feel, become, escape, confess, or belong to.
+2. Audience psychology: current desire, tension, identity, anxiety, and social signal.
+3. Core audience pockets: 3-6 audience groups worth testing.
+4. Territory clues: cities, scenes, languages, platforms, venues, subcultures, creators, events, and playlist/genre gravity.
+5. Voice rules: words, pacing, emotional register, directness, humor, and taboo phrasing.
+6. Visual rules: palette, texture, styling, composition, symbol system, and what would feel off-brand.
+7. Proof assets: songs, lyrics, clips, comments, press, live footage, social proof, collaborations, or cultural references.
+8. Angle territories: 5-8 paid-ad angle spaces with why each could convert.
+9. Forbidden moves: fake virality, generic hustle language, mismatch visuals, claims we cannot prove, or anything that violates platform policy.
+10. Confidence notes: what is strongly supported vs inferred.
+
+## Standards
+
+- Do not invent fan data, territory demand, streaming numbers, or conversion evidence.
+- Label assumptions clearly.
+- Prefer artist-specific emotional and cultural language over generic marketing categories.
+- Keep the packet structured enough for Ads Strategist, Ad Creative Agent, and Ads Agent to consume.
 `,
       },
     ],
