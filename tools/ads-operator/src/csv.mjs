@@ -61,6 +61,17 @@ export function importCsvFile(filePath, { platform, level }) {
   for (const required of ['campaignName', 'impressions', 'clicks', 'spend']) {
     if (!normalizedRows.some((row) => row[required] != null)) warnings.push(`No ${required} column detected.`);
   }
+  const detectedCoreColumns = ['campaignName', 'impressions', 'clicks', 'spend']
+    .filter((field) => normalizedRows.some((row) => row[field] != null));
+  if (detectedCoreColumns.length === 0) {
+    return {
+      ok: false,
+      error: 'CSV does not look like a supported ads export.',
+      headers: parsed.headers,
+      headerRowIndex: parsed.headerRowIndex,
+      warnings,
+    };
+  }
 
   return {
     ok: true,
@@ -69,6 +80,7 @@ export function importCsvFile(filePath, { platform, level }) {
     headers: parsed.headers,
     headerRowIndex: parsed.headerRowIndex,
     warnings,
+    detectedCoreColumns,
     normalizedRows,
   };
 }

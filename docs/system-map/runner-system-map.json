@@ -55,25 +55,14 @@
   },
   "referenceHealth": {
     "knownSkillCount": 107,
-    "bundledSkillCount": 65,
+    "bundledSkillCount": 66,
     "systemSkillCount": 6,
     "userGlobalSkillCount": 106,
     "knownSourceCount": 21,
     "missingSkills": [],
-    "machineLocalOnlySkills": [
-      "creative-oracle"
-    ],
+    "machineLocalOnlySkills": [],
     "missingSources": [],
-    "agentsWithMissingRefs": [
-      {
-        "slug": "persona-agent",
-        "missingSkills": [],
-        "machineLocalOnlySkills": [
-          "creative-oracle"
-        ],
-        "missingSources": []
-      }
-    ]
+    "agentsWithMissingRefs": []
   },
   "workflows": [
     {

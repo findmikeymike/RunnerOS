@@ -19,6 +19,15 @@ export function auditFile(filePath, { platform, level = 'campaign', goal = 'conv
 export function auditRows(normalizedRows, { platform, level, goal, source = null }) {
   const rows = normalizedRows.filter(Boolean);
   if (!rows.length) return { ok: false, error: 'No normalized rows to audit.' };
+  const detectedCoreColumns = detectCoreColumns(rows);
+  if (detectedCoreColumns.length === 0) {
+    return {
+      ok: false,
+      error: 'Input does not look like a supported ads export.',
+      rowCount: rows.length,
+      detectedCoreColumns,
+    };
+  }
 
   const totals = summarize(rows);
   const findings = [];
@@ -55,12 +64,18 @@ export function auditRows(normalizedRows, { platform, level, goal, source = null
     goal,
     source,
     rowCount: rows.length,
+    detectedCoreColumns,
     totals,
     findings,
     recommendedActions: recommend(findings, { platform, level, goal }),
     requiresApprovalForWrites: true,
     writeExecuted: false,
   };
+}
+
+function detectCoreColumns(rows) {
+  return ['campaignName', 'impressions', 'clicks', 'spend']
+    .filter((field) => rows.some((row) => row[field] != null));
 }
 
 export function createCampaignPlan({ platform, goal = 'conversions', artistContextPath, territories, budget, account }) {

@@ -19,24 +19,23 @@ Use this skill to keep paid-ads work useful when APIs are unavailable while stil
 
 ## Ads Operator
 
-Run local helper commands from the repo tool path:
+Run local helper commands from the repo/workspace root so export paths remain stable:
 
 ```bash
-cd tools/ads-operator
-node bin/ads-operator.mjs doctor --json
+node tools/ads-operator/bin/ads-operator.mjs doctor --json
 ```
 
 Use only these commands in the current skeleton:
 
 ```bash
-node bin/ads-operator.mjs accounts --platform meta|google --json
-node bin/ads-operator.mjs campaigns --platform meta|google --account <id> --json
-node bin/ads-operator.mjs export-plan --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
-node bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
-node bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
-node bin/ads-operator.mjs campaign-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
-node bin/ads-operator.mjs packet create --platform meta|google --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
-node bin/ads-operator.mjs receipt create --packet packet.json --status approved|rejected|skipped --out receipt.json --json
+node tools/ads-operator/bin/ads-operator.mjs accounts --platform meta|google --json
+node tools/ads-operator/bin/ads-operator.mjs campaigns --platform meta|google --account <id> --json
+node tools/ads-operator/bin/ads-operator.mjs export-plan --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
+node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs packet create --platform meta|google --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
+node tools/ads-operator/bin/ads-operator.mjs receipt create --packet packet.json --status approved|rejected|skipped --out receipt.json --json
 ```
 
 Treat `packet create` and `receipt create` as artifacts, not execution commands. The tool is read-only; mutation-like commands must fail closed.

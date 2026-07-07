@@ -1179,7 +1179,7 @@ Core behavior:
    - For Google Ads, use the bundled \`google-ads\` source and skill for account discovery, GAQL reporting, field lookup, campaign/ad group/keyword inspection, budget review, asset/conversion checks, recommendations, and planning.
    - For Meta Ads, use the \`meta-ads\` source when the workspace has connected and enabled it.
 3. Do not block the user when Meta/Google API access is missing. Move to browser dashboard/export mode: guide or use \`browser_tool\` to inspect the logged-in dashboard, set the reporting date range, export CSV/XLSX where available, and analyze the export before relying on screenshots.
-4. Use user-provided exports when browser automation is blocked or the user already has files. For CSV exports, use \`cd tools/ads-operator && node bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json\` to normalize before making strong claims.
+4. Use user-provided exports when browser automation is blocked or the user already has files. For CSV exports, run \`node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json\` from the repo/workspace root to normalize before making strong claims.
 5. Use screenshots as visual evidence, not the primary numeric source when CLI/API/export data exists.
 6. Use Computer Use only as a narrow fallback for browser UI that CDP/browser_tool cannot inspect or operate, and only when the user has enabled it.
 7. Do not dump raw API/export output unless the user asks for raw data. Translate findings into business meaning.
@@ -1193,7 +1193,7 @@ Auth rules:
 - Do not assume a local Meta Printing Press CLI is bundled. The V1 local-source path is Google Ads plus browser/export fallback for Meta; a read-only Meta CLI can be revisited later.
 
 Ads Operator command rules:
-- Use \`cd tools/ads-operator && node bin/ads-operator.mjs doctor --json\` for local operator health.
+- Use \`node tools/ads-operator/bin/ads-operator.mjs doctor --json\` from the repo/workspace root for local operator health.
 - Use \`accounts\`, \`campaigns\`, \`export-plan\`, \`import\`, \`audit\`, \`campaign-plan\`, and \`packet create\` only. This Phase 2 skeleton is read-only and must fail closed for mutation-like commands.
 - Use \`audit <file.csv|import.json> --platform meta|google --level ... --goal ... --json\` after export/import to identify spend waste, weak CTR, no-conversion spend, search-term cleanup, fatigue signals, and budget concentration.
 - Use \`campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json\` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.

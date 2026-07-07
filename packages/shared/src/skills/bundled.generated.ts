@@ -9773,6 +9773,250 @@ Flip the order and you're always playing defense. Two inbox windows:
     ],
   },
   {
+    slug: "creative-oracle",
+    files: [
+      {
+        path: "references/david-bowie.md",
+        content: `# Lens: David Bowie
+
+The engine is **transformation** — but not the greeting-card version ("be a chameleon, embrace change"). Bowie's real move was more specific and more useful: **kill the thing that's working before it calcifies into a cartoon, and route around your own competence on purpose so you're always slightly out of your depth.** He treated identity as constructed and disposable, and treated mastery as a trap. Below is the working engine from documented decisions. Where the myth is soft, it's sharpened.
+
+## Axioms (what he believed about making things)
+
+- **Identity is a construction, therefore disposable.** The self is a work in progress, not a fixed thing to protect. A persona is a tool you build to do a job, and you retire it when the job's done. Clinging to one identity is stagnation.
+- **Work where you're slightly out of your depth.** Real creative work happens just past the edge of competence and familiarity. Comfort is the enemy. If you can already do it, that's the reason to stop doing it.
+- **Distrust the conscious, safe choice.** The predictable mind picks the obvious move. Introduce chance and constraint to sabotage your own patterns (see cut-up and self-limiting below).
+- **Distance enables honesty.** He found it hard to write "as himself" but easy to write for a character he'd created. The mask doesn't hide the truth; it's the thing that lets the truth out.
+- **Collision of unlike sources makes the new.** Deliberately blend things that don't belong together (a 50s rock rhythm with French chanson, sci-fi with Japanese theatre) to land somewhere nobody's been.
+
+## Rejection criteria (what he throws away, and why)
+
+Run the user's material against these:
+
+- **It's a persona that's overstayed.** A character or style is worth "about one or two albums" before you can't write anything new inside it. If the user is still mining a vein that's already defined them for years, that's the thing to kill — especially if it's still popular.
+- **It was chosen because it's what they're good at.** If the material exists because it's the user's proven strength, suspect it. Bowie routed *around* his competence deliberately. Mastery on display is a warning sign, not an achievement.
+- **It's a gradual, safe evolution.** He rejected the smooth Beatles-style incremental image-shift. Transformation should be a clean break that shocks, not a tasteful drift. Half-measures read as hedging.
+- **It's the conscious, obvious arrangement.** If the lyric/structure/concept came out in the predictable order the rational mind would produce, cut it up and re-order it. The first, sensible version is rarely the interesting one.
+- **It resolves the strangeness too early.** He left meaning open (famously refused to explain The Next Day). If the user is rushing to make the work legible and safe, that instinct is suspect.
+
+## Signature tension (the engine's core contradiction)
+
+**Mastery vs. reinvention.** He was a genuinely skilled interpreter and craftsman who treated his own mastery as something to escape. The tension isn't "amateur vs. pro" — it's a professional deliberately handicapping himself to stay alive. When you apply this lens, find where the user is leaning on what they've mastered, and push them off it — but respect that Bowie never abandoned craft, he *constrained* it. He shrank his toolkit; he didn't get worse on purpose.
+
+Secondary tension: **calculation vs. spontaneity.** The costumes and shocks looked reckless; the strategy underneath was cold. (Killing Ziggy was as much a business maneuver as an artistic one — see below.) Don't sell the user pure romantic abandon. Bowie planned his ruptures.
+
+## Process tics (how he actually worked)
+
+- **Cut-up technique:** write lyrics conventionally, then physically cut the page into fragments and rearrange them to force juxtapositions the conscious mind wouldn't reach. Used to "ignite" the imagination, not to write the whole song.
+- **Deliberate self-limiting:** shrink his own known vocabulary of chords/ideas to force a beginner's mind — narrower constraints, more invention.
+- **Character-first writing:** build a persona, then write "for" it, using the distance to access material he couldn't reach as himself.
+- **Genre-collision:** fuse two incompatible traditions on purpose to arrive somewhere unmapped.
+- **Collaborator as catalyst for the unfamiliar:** went to Eno/Berlin specifically to make music he didn't already know how to make.
+
+## Documented decisions (evidence, not decoration)
+
+- **Killing Ziggy at the peak (July 3, 1973):** Announced Ziggy's retirement onstage at the Hammersmith Odeon at the height of the character's fame. Bowie's stated artistic reason: the persona was creatively exhausted — "worth about one or two albums" — and he moved out "fast enough so as not to be caught" by the theatrics trap. **The honest complication:** his manager says it was substantially a business maneuver — modeled on Sinatra's retire-then-comeback playbook, and a way to cancel an undersold US tour, "nothing to do with music." The reusable principle sits in *both*: kill the persona before it becomes a cartoon, and time the exit while it still has enough pull to *be* a statement. Don't sell this as pure fearless art; the calculation is part of the engine.
+- **Berlin (1976):** At the point where he'd mastered fame, he fled it — to Berlin, to sobriety, to Eno — and made Low / "Heroes" / Lodger, deliberately uncommercial records the industry read as career suicide. Principle: when you've won the game you were playing, that's the signal to change games, even at commercial cost.
+- **Cut-up on The Next Day / refusing to explain:** Kept the work open and let the audience interpret. Principle: legibility is not the goal; resonance is.
+- **Turned down a knighthood (2003):** "I seriously don't know what it's for." Refused the establishment's stamp. The honors that confirm you've arrived are the ones to be most suspicious of.
+
+## Myth vs. reality (guard against these)
+
+- **Myth:** He reinvented for the pure love of change. **Reality:** The ruptures were calculated, sometimes financially. Reinvention was a discipline against stagnation, not whimsy — and often a strategy. Counsel that sells romantic spontaneity is giving the myth.
+- **Myth:** He abandoned his skills to reinvent. **Reality:** He constrained his mastery, routed around it — he didn't discard craft. Don't let a user use "Bowie reinvented constantly" to justify chasing novelty with no rigor.
+- **Myth:** Change for its own sake. **Reality:** He killed things *specifically when they calcified* — the trigger was creative death or cartoonishness, not a calendar. The move is diagnostic, not compulsive.
+
+## When this lens is the wrong tool
+
+Say so if it is. Sharpest on: escaping a persona/style that's defining you, sophomore-through-veteran "what do I do next" decisions, whether to abandon a proven formula, using character/distance to unlock stuck writing, killing something that's working. Weakest on: authenticity/selling-out purity questions (that's Cobain), building overwhelming spectacle or ego-as-fuel (that's Kanye), or first-time identity-finding (Bowie's engine assumes you already have something to escape). If the user's real question is one of those, name the better lens.
+`,
+      },
+      {
+        path: "references/kanye-west.md",
+        content: `# Lens: Kanye West
+
+The engine is **collision and force driven toward a single obsessive intent** — maximalist accumulation, iterated past the point of reason, then sometimes stripped violently back to essence. The cartoon is "add everything, be grandiose, huge ego." The real engine is more precise: *pile up unlike elements, iterate obsessively and competitively, refuse the ceiling other people accept, and be willing to demolish months of work at the last second to serve the intent.* Below is the working engine from documented process. A note on scope is at the bottom and it matters.
+
+## Axioms (what he believed about making things)
+
+- **The ceiling is fake.** Whatever the genre, budget, or category says is the limit, treat it as a wall to push through. A rap album can be cinematic, orchestral, operatic. "Good enough" and "that's not done in this genre" are both refusals to be overruled.
+- **Collision makes the new.** Force incompatible elements together — soul samples + brutalist drums + gospel choir + luxury + confession. The friction between sacred and profane, opulent and broken, is the point, not a problem to smooth.
+- **Iterate past reason.** The work is never done because the version in your head is always ahead of the version on tape. Rework, re-record, re-sequence obsessively. "30 percent complete" a month after calling it finished is normal.
+- **Contradiction is the subject, not the flaw.** Ego and insecurity, fame and isolation, faith and appetite — put them in the same track and don't resolve them. The tension is the content.
+- **Ambition is a production tool.** Grandiosity isn't decoration on the work; it's the engine that makes the scale possible. The belief that it should be the biggest thing ever made is part of how it gets big.
+
+## Rejection criteria (what he throws away, and why)
+
+Run the user's material against these:
+
+- **It accepts the category's ceiling.** If the user is working within what their genre/format/budget "allows," that limit is the first thing to attack. Where's the version that's too ambitious for the lane?
+- **It's tasteful.** Good taste and restraint-as-default are suspect. The best work here abandons "any notion of good taste at the door." If the user is hedging toward safe and elegant, push toward excess — then decide what to cut.
+- **It stopped iterating too early.** First-thought, one-pass, "it's fine" work gets rejected. Did they rework it enough to earn it? Did they try three radically different versions and fight them against each other?
+- **The elements are all from the same world.** If every ingredient is coherent and matching, it's flat. Where's the collision — the element that doesn't belong, the sacred thing next to the profane thing?
+- **It's maximal with no spine.** The failure mode of maximalism is noise. Pile-up without a single ruthless intent underneath is just clutter. (This is why the *reduction* move exists — see Rubin below.)
+
+## Signature tension (the engine's core contradiction)
+
+**Maximalism vs. reduction.** The myth is "Kanye = more." The truth is that his most disciplined work is maximalism *governed by* a willingness to strip violently. On Yeezus he handed a 3.5-hour maximalist rough cut to Rick Rubin with orders to take it minimal — "he's not a producer, he's a reducer." The engine accumulates *and* demolishes in service of one intent. When you apply this lens, don't just tell the user to add and inflate — find the single intent, maximize toward it, then ask what to burn. Excess is the search; reduction is the verdict.
+
+Secondary tension: **sacred vs. profane.** Gospel and appetite, faith and excess, in the same breath. Where the user has sanitized their work into one register, reintroduce the other.
+
+## Process tics (how he actually worked)
+
+- **Competitive iteration:** sent a single song to as many as three mixers *simultaneously* and let the versions compete. Parallel attempts, then pick the winner — don't commit to one path early.
+- **Last-minute demolition:** contacted Rubin ~15 days before a deadline to strip the record down; re-recorded whole songs and rewrote entire verses days before release. Nothing is locked until it ships.
+- **Sample-as-collision:** flip a soul/vocal sample against something that doesn't belong with it (industrial synths, tribal drums) to make the familiar strange.
+- **Cross-domain input:** pulled structure and mood from architecture (Le Corbusier), minimalist art, fashion — deliberately importing logic from outside music.
+- **Public iteration:** used release mechanics themselves (GOOD Fridays free drops) as part of the creative and cultural act, not just distribution.
+
+## Documented decisions (evidence, not decoration)
+
+- **My Beautiful Dark Twisted Fantasy (2010):** After public disgrace, he answered not with an apology record but with the most maximalist, ambitious thing he'd made — orchestration, operatic scale, every prior era folded in. Principle: *answer a low point with your most ambitious work, not your safest.* Reframe exile as fuel.
+- **Yeezus / Rubin reduction (2013):** The maximalist immediately followed MBDTF with an abrasive, stark, deliberately ugly protest record, then stripped it down at the last minute. Proof the engine isn't "always more" — it's "serve the intent, even if the intent is violence and subtraction." His lowest opening sales; he did it anyway.
+- **808s & Heartbreak (2008):** Abandoned rapping for Auto-Tuned singing about grief when it was a commercially strange move; it went on to reshape a decade of rap. Principle: follow the emotional necessity into the format nobody's asking you for.
+- **Fighting the "producer, not a rapper" box early:** signed as a producer, disbelieved as a rapper, he forced the second identity through anyway. Principle: refuse the role others have scoped for you.
+
+## Scope and honesty (read this — it's not optional)
+
+This lens encodes the **creative engine** documented in the studio: the collision, the obsessive iteration, the refusal of ceilings, the maximalism-governed-by-reduction. That engine is real and produced some of the most influential records of the century.
+
+The **same traits have a documented failure mode outside the studio.** The refusal of limits, the certainty, the ego-as-tool — the qualities that make the work — have, in West's public and political life, driven behavior widely condemned as harmful, including antisemitic statements. Do not launder that, and do not moralize about it either; this is a creative-counsel tool. The honest, useful framing for a user is: *the engine that makes ambitious work is powerful and dangerous; the discipline is aiming it at the work and not mistaking "no limits in the studio" for "no limits as a person."* If a user seems to be drawing the lesson that consequence-free grandiosity is the goal, push back — the reduction move, the served intent, the studio discipline are the point, not the unbounded ego.
+
+## Myth vs. reality (guard against these)
+
+- **Myth:** Kanye means more, bigger, louder, always. **Reality:** His most disciplined work maximizes *then reduces* toward one intent. Advice that's just "inflate it" is giving the myth.
+- **Myth:** It's all impulsive ego and spontaneity. **Reality:** Obsessive, iterative, competitive craft — three mixers in competition, last-minute total rewrites. The ego rides on top of relentless work, not instead of it.
+- **Myth:** The confidence is the whole thing. **Reality:** The confidence is a *tool* pointed at ambitious execution. Detached from the work and the discipline, it's the failure mode, not the engine.
+
+## When this lens is the wrong tool
+
+Say so if it is. Sharpest on: work that's playing too safe or small, refusing a genre/format ceiling, answering a setback with ambition, building scale and spectacle, injecting collision into work that's gone flat and coherent, following emotional necessity into an unexpected format. Weakest on: authenticity/purity-vs-selling-out questions (that's Cobain), escaping a persona that's calcified (that's Bowie), or any situation where the user's actual problem is *too much* ego/scale and they need restraint — though the maximalism-vs-reduction tension can address that if aimed carefully. If the user's real question is one of those, name the better lens.
+`,
+      },
+      {
+        path: "references/kurt-cobain.md",
+        content: `# Lens: Kurt Cobain
+
+The engine is **refusal** — but a precise, counterintuitive refusal that most people get wrong. Cobain's defining move was rejecting the *expected* choice, from whichever direction it came. Not "stay underground," not "make it abrasive" — refuse whatever the room is pushing you toward, including the room of your own fans. Below is the working engine, grounded in documented decisions. Where the popular myth is wrong, that's flagged, because building on the myth produces bad counsel.
+
+## Axioms (what he believed about making things)
+
+- **The worst crime is faking it.** Authenticity isn't a style; it's the absence of performance. A choice made to look a certain way — even to look authentic — is already fake.
+- **Meaning should be earned, not handed over.** He buried sense inside noise and fragments, resisted explaining his lyrics, and was suspicious when people read clean themes into them. Beauty that's too available feels sold rather than found.
+- **Integrity is fidelity to the internal, even when it's contradictory or inconvenient.** Not consistency. He contradicted himself constantly and defended the right to.
+- **The collaborator is a statement of values.** Who you choose to make the thing with tells everyone what the thing is before they hear it. (See In Utero / Albini below.)
+- **Reach is not the enemy. Pandering is.** This is the axiom the myth erases. He wanted to be heard widely; he refused to change the work to earn the width.
+
+## Rejection criteria (what he throws away, and why)
+
+Run the user's material against these:
+
+- **It explains itself.** If the meaning is delivered in the first line, if the concept announces its own theme, he'd gut it. He wanted the listener to do the work.
+- **It's the expected move — safe OR reactionary.** The trap has two doors. After Nevermind, the safe door was "Nevermind II"; the reactionary door was a deliberately unlistenable punk tantrum to prove he didn't sell out. He refused *both*. Watch for a user congratulating themselves for the "brave" choice that's actually just the opposite cliché.
+- **It's competent for competence's sake.** He distrusted polish and virtuosity as ends. If a choice exists to demonstrate skill rather than to serve the feeling, it's suspect.
+- **It performs an identity.** Anything done to seem rebellious, seem deep, seem raw, seem anything, is faking. The performance of authenticity is still a performance.
+- **It sands off the discomfort.** He preferred the dry, exposed, unpleasant version to the warm, flattering one. If the user's instinct is to make it more palatable, that instinct is the thing to interrogate.
+
+## Signature tension (the engine's core contradiction)
+
+**Wanting to be huge vs. refusing to be owned.** He was not a purity martyr who hated success — he said plainly that success didn't suck and that he'd have taken a "Rock Star 101" course if it existed. The real conflict was between genuine desire for reach and a refusal to let the machine dictate the work. Every hard decision he made lived in that gap.
+
+Secondary tension: **meticulous vs. careless.** He revised obsessively in his journals yet claimed his lyrics were last-second "garbage." Part real, part shield. When you apply this lens, don't resolve the tension into a slogan — locate where the user's decision sits inside it and lean the way *he* leaned in that specific spot.
+
+## Process tics (how he actually worked)
+
+- Quiet-loud dynamics: hide the pop hook inside the noise so the melody feels smuggled, not sold.
+- First takes, fast, unlabored — In Utero's basics were largely first takes in under three days. He trusted the purge over the polish.
+- Collage and fragment over thesis; borrowed images, garbled pieces, meaning assembled after the fact.
+- Chose gear and mixes that were unpredictable and raspy over clean and controllable.
+
+## Documented decisions (evidence, not decoration)
+
+Use these as proof when you make a judgment about the user's situation.
+
+- **In Utero / Albini (peak-leverage refusal):** At the moment of maximum commercial leverage, Nirvana hired Steve Albini — known for integrity and disdain for the corporate industry — specifically to make an abrasive, un-Nevermind record. The label, management, and lawyers hated the result. The band stood by it "as a point of principle" (Novoselic's words). The lesson isn't "be abrasive" — it's *protect the work's integrity hardest at the moment you have the most to lose, and choose collaborators who signal what the work stands for.*
+- **The refusal was aimed at both doors:** In Utero actually moved *more* melodic and reflective, not more punishing. He resisted the temptation to record something more deliberately contentious. Proof that the engine is "refuse the expected," not "always escalate the noise."
+- **"Corporate Magazines Still Suck"** worn on the Rolling Stone cover — accepting the reach while refusing to let it launder him. The stance and the platform held in tension, not resolved.
+- **Playing "Teen Spirit" became "an embarrassment"** not because it was popular but because it had calcified into the expected thing. The engine turns on anything that becomes a reflex, including your own hit.
+
+## Myth vs. reality (guard against these)
+
+- **Myth:** He hated success and wanted to stay small. **Reality:** He wanted reach; he refused to be changed by it. Counsel that says "reject the mainstream" is giving the myth's advice and it's wrong.
+- **Myth:** More raw and abrasive is always more Cobain. **Reality:** He refused the expected move from *either* direction; sometimes that's quieter and more melodic.
+- **Myth:** The anti-craft, "lazy," last-second lyric pose was the whole truth. **Reality:** It was half shield; he revised carefully. Don't let a user use "Cobain was lazy about lyrics" to excuse not doing the work.
+
+## When this lens is the wrong tool
+
+Say so if it is. This lens is sharpest on: authenticity vs. selling-out decisions, follow-up/sophomore pressure, whether work is too safe, choosing collaborators as a values signal, resisting your own formula. It's weakest on: pure craft-maximizing, scaling a business, building spectacle or grandeur (that's Kanye's engine), or deliberate reinvention of persona (that's Bowie's). If the user's real question is one of those, name the better lens.
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: creative-oracle
+description: Run a creative or career decision through the mind of a legendary artist to get direction, critique, and counsel, not imitation. Use whenever a user (artist, creative, designer, writer, musician, founder, or their manager) is weighing a creative or career choice and wants it pressure-tested through a specific artist's ethos, with prompts like what would Bowie do with this, is this too safe, run my direction through Cobain, I'm stuck on this project's identity, should I take this deal, or critique this concept the way Kanye would. Also trigger when someone names one of the available artists as a lens, or asks for art direction or creative counsel in the spirit of a legend. This is a COUNSEL engine, not a generator; it does not write fake lyrics or imitate voice, it applies the artist's decision-making engine to the user's own material. Available lenses are Kurt Cobain, David Bowie, and Kanye West.
+---
+
+# Creative Oracle
+
+Apply a legendary artist's decision-making engine to a user's creative or career choice, producing sharp direction and critique. The value is the artist's **rejection criteria and ethos applied to the user's material** — never imitation of their voice or output.
+
+## What this skill is NOT
+
+Read this first; it defines the failure modes.
+
+- **Not a voice imitator.** Do not write fake Cobain lyrics, fake Bowie verses, or mock-Kanye bars. If the user wants that, say plainly this skill offers counsel, not karaoke, and redirect to critiquing *their* work.
+- **Not a horoscope.** Vague, profound-sounding advice ("stay true to yourself, take risks") is the enemy. Every judgment must be specific enough to **reject a concrete choice for a concrete reason** and name what to do instead. If a line of advice would apply equally to any artist, delete it.
+- **Not a flatterer.** The engine's default is adversarial. Its job is to find the coward's choice in the user's work and name it. These artists were brutal editors of their own material; the skill inherits that. Do not soften to protect feelings — the user came for the blade.
+- **Not a biographer.** Don't recite the artist's life story. Reference documented decisions only as evidence for a judgment about the user's situation.
+
+## Workflow
+
+### 1. Identify the lens and the material
+
+Determine two things:
+- **Which artist** is the lens. If the user named one, use it. If they described a sensibility without naming anyone ("I want the person who reinvents themselves"), propose the closest available lens and confirm. If they want a lens you don't have a reference file for, say so — do not improvise an artist from vibes.
+- **What decision or material** is on the table — a lyric, a visual direction, a project's identity, a career move (a deal, a pivot, a collaborator, a release strategy), or a positioning question. If it's genuinely unclear what they're deciding, ask one sharp question. Otherwise proceed.
+
+### 2. Load the artist reference
+
+Read the matching file in \`references/\` **before** writing anything:
+- Kurt Cobain → \`references/kurt-cobain.md\`
+- David Bowie → \`references/david-bowie.md\`
+- Kanye West → \`references/kanye-west.md\`
+
+Each file gives you the artist's **axioms** (what they believe about making things), **rejection criteria** (what they throw away and why), **signature tensions** (the contradictions that generate their choices), **process tics** (how they actually work), and **documented decisions** (real forks in their career, as evidence). Use the documented decisions as proof, not decoration.
+
+### 3. Run the material through the engine
+
+This is the core method. Do it in this order:
+
+**a. Locate the coward's choice.** Look at the user's material and find where it takes the expected, safe, or self-flattering option. Name it specifically. This is almost always the most valuable single output — the thing they half-know and are avoiding.
+
+**b. Apply the rejection criteria.** Run the material against the artist's documented rejection criteria. Which ones does it violate? Be concrete: "Cobain would kill this because it explains its own meaning — he buried meaning so listeners had to earn it; you're handing it over in the first line."
+
+**c. Surface the relevant tension.** The artist's power comes from a contradiction they held (Cobain: integrity vs. reach; Bowie: mastery vs. reinvention; Kanye: sacred vs. profane, ego as tool). Show the user where their decision sits inside that tension, and which way this artist would lean *here* — with the reason. Do not flatten the tension into a slogan.
+
+**d. Give direction, not just critique.** End with the move. What would this artist actually *do* with the user's material or decision? Be specific enough to act on tomorrow. If there are two defensible moves, name both and the trade-off.
+
+### 4. Stay honest about the seams
+
+You are applying a documented engine, not channeling a ghost. Where the artist's real position is more complicated than the myth, say so — it makes the counsel more useful, not less. (Example: Cobain wasn't anti-success; he negotiated integrity against wanting reach. Advice that says "reject the mainstream" is the myth, and it's wrong.) Never invent a quote or a decision. If you're inferring rather than citing something documented, let that show.
+
+## Output shape
+
+Keep it tight and usable — this is counsel, not an essay. Lead with the coward's choice. Then the critique through the rejection criteria. Then the tension. Then the move. Prose, sharp, second-person. No headers unless the response is long. No preamble like "Great question." Match the register of someone who respects the user enough to be blunt.
+
+For a single lens (the default), stay in one artist's head the whole way through — do not hedge by averaging across artists. The power is in the specificity of one mind.
+
+## Adding new lenses
+
+Each artist is a self-contained reference file built from primary sources (interviews, documented process, real career decisions) — never from the popular myth. The engine in this SKILL.md is artist-agnostic; a new lens is a new file in \`references/\` following the same structure (axioms, rejection criteria, tensions, process tics, documented decisions), plus one line in the dispatcher list in step 2. Do not encode an artist from training-data cliché; research primary sources first, and record where the myth and the reality diverge.
+`,
+      },
+    ],
+  },
+  {
     slug: "customer-research",
     files: [
       {
@@ -13921,24 +14165,23 @@ Use this skill to keep paid-ads work useful when APIs are unavailable while stil
 
 ## Ads Operator
 
-Run local helper commands from the repo tool path:
+Run local helper commands from the repo/workspace root so export paths remain stable:
 
 \`\`\`bash
-cd tools/ads-operator
-node bin/ads-operator.mjs doctor --json
+node tools/ads-operator/bin/ads-operator.mjs doctor --json
 \`\`\`
 
 Use only these commands in the current skeleton:
 
 \`\`\`bash
-node bin/ads-operator.mjs accounts --platform meta|google --json
-node bin/ads-operator.mjs campaigns --platform meta|google --account <id> --json
-node bin/ads-operator.mjs export-plan --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
-node bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
-node bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
-node bin/ads-operator.mjs campaign-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
-node bin/ads-operator.mjs packet create --platform meta|google --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
-node bin/ads-operator.mjs receipt create --packet packet.json --status approved|rejected|skipped --out receipt.json --json
+node tools/ads-operator/bin/ads-operator.mjs accounts --platform meta|google --json
+node tools/ads-operator/bin/ads-operator.mjs campaigns --platform meta|google --account <id> --json
+node tools/ads-operator/bin/ads-operator.mjs export-plan --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
+node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs packet create --platform meta|google --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
+node tools/ads-operator/bin/ads-operator.mjs receipt create --packet packet.json --status approved|rejected|skipped --out receipt.json --json
 \`\`\`
 
 Treat \`packet create\` and \`receipt create\` as artifacts, not execution commands. The tool is read-only; mutation-like commands must fail closed.

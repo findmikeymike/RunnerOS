@@ -86,6 +86,42 @@ describe('ads-operator cli', () => {
     expect(result.stdout.normalizedRows[0].raw['Amount spent']).toBe('$125.50');
   });
 
+  test('accepts global json flag before import file path', () => {
+    const file = tempCsv('Campaign name,Impressions,Clicks,Amount spent\nLaunch,100,10,$12\n');
+    const result = run(['import', '--json', file, '--platform', 'meta', '--level', 'campaign']);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.ok).toBe(true);
+    expect(result.stdout.rowCount).toBe(1);
+  });
+
+  test('rejects non-ad CSVs instead of auditing them as clean', () => {
+    const file = tempCsv('foo,bar\na,b\n');
+    const imported = run(['import', file, '--platform', 'meta', '--level', 'campaign', '--json']);
+    const audited = run(['audit', file, '--platform', 'meta', '--level', 'campaign', '--json']);
+
+    expect(imported.status).toBe(1);
+    expect(imported.stdout.ok).toBe(false);
+    expect(imported.stdout.error).toBe('CSV does not look like a supported ads export.');
+    expect(audited.status).toBe(1);
+    expect(audited.stdout.ok).toBe(false);
+    expect(audited.stdout.error).toBe('CSV does not look like a supported ads export.');
+  });
+
+  test('rejects non-ad JSON inputs instead of auditing them as clean', () => {
+    const junkArray = tempFile('junk-array.json', '[{"foo":"a"},{"bar":"b"}]');
+    const junkObject = tempFile('junk-object.json', '{"normalizedRows":[{"foo":"a"}]}');
+    const arrayResult = run(['audit', junkArray, '--platform', 'meta', '--level', 'campaign', '--json']);
+    const objectResult = run(['audit', junkObject, '--platform', 'meta', '--level', 'campaign', '--json']);
+
+    expect(arrayResult.status).toBe(1);
+    expect(arrayResult.stdout.ok).toBe(false);
+    expect(arrayResult.stdout.error).toBe('Input does not look like a supported ads export.');
+    expect(objectResult.status).toBe(1);
+    expect(objectResult.stdout.ok).toBe(false);
+    expect(objectResult.stdout.error).toBe('Input does not look like a supported ads export.');
+  });
+
   test('creates approval packets but does not execute writes', () => {
     const result = run([
       'packet',
@@ -147,6 +183,15 @@ describe('ads-operator cli', () => {
     expect(body).not.toContain('abc123');
     expect(result.stdout.packet.action).toContain('GOOGLE_ADS_ACCESS_TOKEN=[redacted]');
     expect(result.stdout.packet.spendImpact).toBe('Bearer [redacted]');
+  });
+
+  test('redacts secret-like values from preserved raw CSV rows', () => {
+    const file = tempCsv('Campaign name,Impressions,Clicks,Amount spent,Notes\nLaunch,10,1,$2,access_token=raw-secret\n');
+    const result = run(['import', file, '--platform', 'meta', '--level', 'campaign', '--json']);
+
+    expect(result.status).toBe(0);
+    expect(JSON.stringify(result.stdout)).not.toContain('raw-secret');
+    expect(result.stdout.normalizedRows[0].raw.Notes).toBe('access_token=[redacted]');
   });
 
   test('google cost micros imports are scaled to account currency units', () => {

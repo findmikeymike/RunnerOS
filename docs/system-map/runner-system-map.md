@@ -45,15 +45,12 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Outputs -> Finals promotion: wired
 - Domains: Command 3, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
 - Permission modes: ask 27, safe 7
-- Known skills: 107 (65 bundled, 6 system, 106 user-global on this machine)
+- Known skills: 107 (66 bundled, 6 system, 106 user-global on this machine)
 - Known builtin sources: 21
 
 ## Reference Health
 
-- Missing skills: none
-- Machine-local-only skills: `creative-oracle`
-- Missing sources: none
-- persona-agent: missing skills none; machine-local-only skills `creative-oracle`; missing sources none
+- All mapped starter-agent skill/source references resolve to repo-bundled/system skills or builtin sources.
 
 ## Runtime Rules Agents Should Not Miss
 

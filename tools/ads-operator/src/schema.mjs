@@ -154,6 +154,13 @@ export function normalizedMetricRow({ platform, level, raw, fields }) {
     costPerResult: fields.costPerResult ?? null,
     costPerConversion: fields.costPerConversion ?? null,
     impressionShare: fields.impressionShare ?? null,
-    raw,
+    raw: redactRawRecord(raw),
   };
+}
+
+function redactRawRecord(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+  return Object.fromEntries(
+    Object.entries(raw).map(([key, value]) => [key, typeof value === 'string' ? redactSensitiveText(value) : value])
+  );
 }

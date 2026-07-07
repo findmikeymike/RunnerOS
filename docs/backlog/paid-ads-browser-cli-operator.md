@@ -717,19 +717,21 @@ tools/ads-operator/
   test/
 ```
 
-Candidate commands:
+Current shipped V1 commands:
 
 ```bash
-node bin/ads-operator.mjs doctor --json
-node bin/ads-operator.mjs detect --platform meta|google --json
-node bin/ads-operator.mjs import <file> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
-node bin/ads-operator.mjs normalize <file> --platform meta|google --json
-node bin/ads-operator.mjs audit <normalized-json> --goal conversions|traffic|awareness|leads --json
-node bin/ads-operator.mjs packet create --platform meta|google --type publish|budget|status|targeting|creative --json
-node bin/ads-operator.mjs receipt create --packet <packet.json> --evidence <folder> --json
-node bin/ads-operator.mjs flowbook meta-campaign-setup --json
-node bin/ads-operator.mjs flowbook google-search-setup --json
+node tools/ads-operator/bin/ads-operator.mjs doctor --json
+node tools/ads-operator/bin/ads-operator.mjs accounts --platform meta|google --json
+node tools/ads-operator/bin/ads-operator.mjs campaigns --platform meta|google --account <id> --json
+node tools/ads-operator/bin/ads-operator.mjs export-plan --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
+node tools/ads-operator/bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
+node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs packet create --platform meta|google --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
+node tools/ads-operator/bin/ads-operator.mjs receipt create --packet packet.json --status approved|rejected|skipped --out receipt.json --json
 ```
+
+Future backlog commands, not shipped in V1: `detect`, `normalize`, and `flowbook`.
 
 Responsibilities:
 

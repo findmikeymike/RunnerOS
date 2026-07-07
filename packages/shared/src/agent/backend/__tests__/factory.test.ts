@@ -387,9 +387,10 @@ describe('resolveModelForProvider', () => {
       slug: 'chatgpt-plus-2',
       name: 'GPT/Codex',
       providerType: 'pi',
-      authType: 'oauth_token',
+      authType: 'oauth',
       defaultModel: 'pi/gpt-5.5',
       models: ['pi/gpt-5.5', 'pi/gpt-5.4'],
+      createdAt: Date.now(),
     } as LlmConnection;
 
     expect(resolveModelForProvider('pi', 'pi/deepseek/deepseek-v4-pro', connection)).toBe('pi/gpt-5.5');
@@ -403,6 +404,7 @@ describe('resolveModelForProvider', () => {
       authType: 'api_key',
       defaultModel: 'pi/deepseek-v4-flash',
       models: ['pi/deepseek-v4-flash', 'pi/deepseek-v4-pro'],
+      createdAt: Date.now(),
     } as LlmConnection;
 
     expect(resolveModelForProvider('pi', 'pi/deepseek-v4-pro', connection)).toBe('pi/deepseek-v4-pro');

@@ -266,6 +266,9 @@ function positional(args, offset) {
   const values = [];
   for (let index = offset; index < args.length; index += 1) {
     const arg = args[index];
+    if (arg === '--json') {
+      continue;
+    }
     if (arg.startsWith('--')) {
       index += 1;
       continue;
@@ -278,7 +281,7 @@ function positional(args, offset) {
 function helpPayload() {
   return {
     ok: true,
-    usage: 'node bin/ads-operator.mjs <doctor|accounts|campaigns|export-plan|import|audit|campaign-plan|packet create|receipt create> --json',
+    usage: 'node tools/ads-operator/bin/ads-operator.mjs <doctor|accounts|campaigns|export-plan|import|audit|campaign-plan|packet create|receipt create> --json',
     writesEnabled: false,
   };
 }

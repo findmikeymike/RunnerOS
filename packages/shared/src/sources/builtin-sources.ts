@@ -1001,7 +1001,7 @@ export function getAdsOperatorSource(workspaceId: string, workspaceRootPath: str
         'Use this source for paid ads export normalization, local route planning, and approval packet creation.',
         '',
         'Workflow:',
-        '1. Run `node bin/ads-operator.mjs doctor --json` before operator work.',
+        '1. Run `node tools/ads-operator/bin/ads-operator.mjs doctor --json` from the repo/workspace root before operator work.',
         '2. Use `accounts`, `campaigns`, `export-plan`, `audit`, and `campaign-plan` for read-only planning.',
         '3. Use `import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json` to normalize user exports.',
         '4. Use `audit <file.csv|import.json> --platform meta|google --level ... --goal ... --json` after import to identify obvious waste and cleanup candidates.',
