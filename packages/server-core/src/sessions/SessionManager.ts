@@ -1371,6 +1371,32 @@ export function createManagedSession(
   return managed
 }
 
+export function ensureDeclaredGlobalSkillsEnabledForAgent(
+  workspaceRoot: string,
+  declaredSkillSlugs: string[],
+  skills: LoadedSkill[],
+  deps: {
+    loadGlobalSkillBySlug?: typeof loadGlobalSkillBySlug
+    setGlobalSkillEnabled?: typeof setGlobalSkillEnabled
+    loadAllSkills?: typeof loadAllSkills
+  } = {},
+): LoadedSkill[] {
+  const skillBySlug = new Map(skills.map((skill) => [skill.slug, skill]))
+  const loadGlobalSkill = deps.loadGlobalSkillBySlug ?? loadGlobalSkillBySlug
+  const enableGlobalSkill = deps.setGlobalSkillEnabled ?? setGlobalSkillEnabled
+  const reloadSkills = deps.loadAllSkills ?? loadAllSkills
+  const missingDeclaredGlobalSkills = declaredSkillSlugs.filter((slug) => (
+    !skillBySlug.has(slug) && loadGlobalSkill(slug) !== null
+  ))
+
+  if (missingDeclaredGlobalSkills.length === 0) return skills
+
+  for (const slug of missingDeclaredGlobalSkills) {
+    enableGlobalSkill(workspaceRoot, slug, true)
+  }
+  return reloadSkills(workspaceRoot)
+}
+
 /**
  * Resolve supportsBranching for a managed session.
  * Prefers the live agent instance; falls back to true for all backends.
@@ -2068,22 +2094,9 @@ export class SessionManager implements ISessionManager {
     const { loadActiveContextDocsForAgent } = await import('@craft-agent/shared/workspace-context')
     const agent = loadGlobalAgent(agentSlug)
     if (!agent) throw new Error(`Agent not found: ${agentSlug}`)
-    let skills = loadAllSkills(ws.rootPath)
-    const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
     const declaredSkillSlugs = agent.metadata.skills ?? []
-    const missingDeclaredGlobalSkills = declaredSkillSlugs.filter((slug) => (
-      !skillBySlug.has(slug) && loadGlobalSkillBySlug(slug) !== null
-    ))
-    if (missingDeclaredGlobalSkills.length > 0) {
-      for (const slug of missingDeclaredGlobalSkills) {
-        setGlobalSkillEnabled(ws.rootPath, slug, true)
-      }
-      skills = loadAllSkills(ws.rootPath)
-      skillBySlug.clear()
-      for (const skill of skills) {
-        skillBySlug.set(skill.slug, skill)
-      }
-    }
+    const skills = ensureDeclaredGlobalSkillsEnabledForAgent(ws.rootPath, declaredSkillSlugs, loadAllSkills(ws.rootPath))
+    const skillBySlug = new Map(skills.map((s) => [s.slug, s]))
     const canUseSystemSkills = agent.slug === CONCIERGE_SLUG || agent.slug === ORCHESTRATOR_SLUG
     const resolvedSkillSlugs = declaredSkillSlugs.filter((slug) => (
       skillBySlug.has(slug) || (canUseSystemSkills && isSystemGlobalSkillSlug(slug))
