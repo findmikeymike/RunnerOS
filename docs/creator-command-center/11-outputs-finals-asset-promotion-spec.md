@@ -143,7 +143,8 @@ Each Output card should expose:
 Clicking `Set as Final` opens a small picker:
 
 - Scope: `Campaign` or `HQ`
-- Campaign ID when scope is `Campaign`
+- Campaign context is auto-filled from the active campaign workspace when available
+- Manual campaign entry appears only as an orphan-output fallback when no current campaign/context exists
 - Slot: `Cover Art`, `Shortform Clips`, etc.
 
 Clicking `Set as Primary` opens the same dialog for existing Finals and marks one chosen Final as the current default for that slot. It does not remove other finals.
@@ -278,6 +279,15 @@ promote_output_to_final
 
 The runtime exposes it alongside other session tools. If the user says "make this final" and the Output is clear, the agent should call this tool. If "this" is ambiguous, the agent should ask which Output.
 
+## Key Runtime Files
+
+- `packages/shared/src/outputs/finals.ts` - Finals registry read/write, lock, validation, promote/remove helpers.
+- `packages/server-core/src/outputs/OutputService.ts` - service layer for list/get/promote/remove/delete guard behavior.
+- `apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx` - user-facing promote/primary/remove dialog.
+- `apps/electron/src/renderer/lib/output-finals-actions.ts` - shared UI helpers, including campaign id resolution.
+- `apps/electron/src/renderer/components/outputs/OutputsListPanel.tsx` - Output list actions.
+- `apps/electron/src/renderer/pages/OutputDetailPage.tsx` - Output detail actions.
+
 ## UI Placement
 
 Output card actions:
@@ -336,7 +346,7 @@ Done:
 3. Add Output card/detail actions: `Set as Final`, `Set as Primary`, `Remove from Finals`.
 4. Add Campaign Finals widget.
 5. Add HQ Finals widget.
-6. Add tests for multiple finals per slot, optional primary, corrupt registry preservation, delete guard, lock timeout, and session tool validation.
+6. Add tests for multiple finals per slot, optional primary, corrupt registry preservation, delete guard, lock timeout, session tool validation, and campaign id resolution.
 
 Still deferred:
 

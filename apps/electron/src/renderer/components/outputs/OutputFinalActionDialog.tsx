@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { finalPointerLabel, removeInputForFinal } from '@/lib/output-finals-actions'
+import { finalPointerLabel, removeInputForFinal, resolveCampaignFinalId } from '@/lib/output-finals-actions'
 import type {
   OutputFinalPointerDTO,
   OutputManifestDTO,
@@ -26,6 +26,7 @@ interface OutputFinalActionDialogProps {
   open: boolean
   action: FinalAction
   output: OutputLike | null
+  currentCampaignId?: string
   onOpenChange: (open: boolean) => void
   promoteToFinal: (input: PromoteOutputToFinalInputDTO) => Promise<OutputFinalPointerDTO>
   removeFromFinal: (input: RemoveOutputFromFinalInputDTO) => Promise<number>
@@ -35,6 +36,7 @@ export function OutputFinalActionDialog({
   open,
   action,
   output,
+  currentCampaignId,
   onOpenChange,
   promoteToFinal,
   removeFromFinal,
@@ -53,11 +55,15 @@ export function OutputFinalActionDialog({
       ? output.context?.scope ?? existing?.scope ?? 'campaign'
       : existing?.scope ?? 'campaign'
     setScope(nextScope)
-    setCampaignId(existing?.campaignId ?? output.context?.campaignId ?? '')
+    setCampaignId(resolveCampaignFinalId({
+      existing: action === 'promote' ? undefined : existing,
+      output,
+      currentCampaignId,
+    }) ?? '')
     setSlot(formatSlot(existing?.slot ?? defaultSlotForOutput(output)))
     setFinalId(existing?.id ?? '')
     setSaving(false)
-  }, [action, finals, open, output])
+  }, [action, currentCampaignId, finals, open, output])
 
   if (!output) return null
   const selectedFinal = finals.find((entry) => entry.id === finalId) ?? finals[0]
@@ -65,6 +71,12 @@ export function OutputFinalActionDialog({
   const isPrimary = action === 'primary'
   const title = isRemove ? 'Remove from Finals' : isPrimary ? 'Set as Primary' : 'Set as Final'
   const needsCampaignId = !isRemove && (isPrimary ? selectedFinal?.scope === 'campaign' : scope === 'campaign')
+  const canResolveCampaignId = Boolean(resolveCampaignFinalId({
+    existing: isPrimary ? selectedFinal : undefined,
+    output,
+    currentCampaignId,
+  })?.trim())
+  const showCampaignIdFallback = needsCampaignId && !canResolveCampaignId
 
   async function submit() {
     if (!output) return
@@ -72,8 +84,14 @@ export function OutputFinalActionDialog({
       toast.error('Choose a Final first.')
       return
     }
-    if (needsCampaignId && !campaignId.trim()) {
-      toast.error('Campaign ID is required for Campaign Finals.')
+    const resolvedCampaignId = resolveCampaignFinalId({
+      existing: isPrimary ? selectedFinal : undefined,
+      output,
+      currentCampaignId,
+      fallbackCampaignId: campaignId,
+    })
+    if (needsCampaignId && !resolvedCampaignId) {
+      toast.error('Campaign context is required for Campaign Finals.')
       return
     }
     if (!isRemove && !slot.trim()) {
@@ -90,7 +108,7 @@ export function OutputFinalActionDialog({
         await promoteToFinal({
           outputId: output.id,
           scope: finalScope,
-          campaignId: finalScope === 'campaign' ? campaignId.trim() : undefined,
+          campaignId: finalScope === 'campaign' ? resolvedCampaignId : undefined,
           slot: isPrimary ? selectedFinal!.slot : slot.trim(),
           assetId: isPrimary ? selectedFinal!.assetId : output.primary?.id,
           makePrimary: isPrimary,
@@ -146,9 +164,9 @@ export function OutputFinalActionDialog({
               </select>
             </label>
           )}
-          {needsCampaignId && (
+          {showCampaignIdFallback && (
             <label className="block space-y-1.5 text-xs text-muted-foreground">
-              <span>Campaign ID</span>
+              <span>Campaign</span>
               <input
                 value={campaignId}
                 onChange={(event) => setCampaignId(event.target.value)}

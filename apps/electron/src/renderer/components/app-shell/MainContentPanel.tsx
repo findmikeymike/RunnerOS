@@ -128,6 +128,10 @@ export function MainContentPanel({
     () => workspaces.find((workspace) => workspace.id === activeWorkspaceId),
     [activeWorkspaceId, workspaces],
   )
+  const activeCampaignId = useMemo(
+    () => activeWorkspaceId && !isArtistHQWorkspace(activeWorkspace, workspaces) ? activeWorkspaceId : undefined,
+    [activeWorkspace, activeWorkspaceId, workspaces],
+  )
   const artistHQWorkspace = useMemo(
     () => findArtistHQWorkspace(workspaces),
     [workspaces],
@@ -531,7 +535,7 @@ export function MainContentPanel({
 
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <OutputDetailPage outputId={navState.outputId} workspaceId={activeWorkspaceId || ''} />
+        <OutputDetailPage outputId={navState.outputId} workspaceId={activeWorkspaceId || ''} currentCampaignId={activeCampaignId} />
       </Panel>
     )
   }

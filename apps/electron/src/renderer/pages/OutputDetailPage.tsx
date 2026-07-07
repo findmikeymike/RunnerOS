@@ -15,6 +15,7 @@ import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionD
 interface Props {
   workspaceId: string
   outputId?: string
+  currentCampaignId?: string
 }
 
 type OutputsElectronAPI = typeof window.electronAPI & {
@@ -28,7 +29,7 @@ type OutputsElectronAPI = typeof window.electronAPI & {
   saveOutputAssetToVault?: (workspaceId: string, outputId: string, assetId?: string, options?: { kindHint?: 'master-final' | 'demo' | 'raw-footage' | 'cover-art' | 'artist-photo' | 'contract' | 'any' }) => Promise<{ imported: unknown[]; skipped: Array<{ path: string; reason: string }> }>
 }
 
-export default function OutputDetailPage({ workspaceId, outputId }: Props) {
+export default function OutputDetailPage({ workspaceId, outputId, currentCampaignId }: Props) {
   const { navigate } = useNavigation()
   const { getOutput, outputs, loading, error, promoteToFinal, removeFromFinal } = useOutputs(workspaceId)
   const openOutputVisualSurface = useSetAtom(openOutputVisualSurfaceAtom)
@@ -272,6 +273,7 @@ export default function OutputDetailPage({ workspaceId, outputId }: Props) {
         }}
         promoteToFinal={promoteToFinal}
         removeFromFinal={removeFromFinal}
+        currentCampaignId={currentCampaignId}
       />
       </div>
     </div>

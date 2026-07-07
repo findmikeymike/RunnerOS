@@ -31,6 +31,9 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - outputService: `packages/server-core/src/outputs/OutputService.ts`
 - outputsHook: `apps/electron/src/renderer/hooks/useOutputs.ts`
 - outputFinalActionDialog: `apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx`
+- outputFinalActions: `apps/electron/src/renderer/lib/output-finals-actions.ts`
+- outputsListPanel: `apps/electron/src/renderer/components/outputs/OutputsListPanel.tsx`
+- outputDetailPage: `apps/electron/src/renderer/pages/OutputDetailPage.tsx`
 - bundledSkills: `packages/shared/src/skills/bundled.generated.ts`
 - builtinSources: `packages/shared/src/sources/builtin-sources.ts`
 - starterWorkflows: `packages/shared/src/workflows/starter-templates.ts`
@@ -63,6 +66,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.
 - Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.
 - Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.
+- Campaign Finals UI resolves campaignId from the active campaign workspace or Output context, so normal users do not type internal ids.
 - message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.
 - trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.
 
@@ -78,6 +82,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 ## Outputs -> Finals Promotion
 
 - User action: Output list/detail actions open `OutputFinalActionDialog` for `Set as Final`, `Set as Primary`, or `Remove from Finals`.
+- Campaign context: Output list/detail callers pass the active campaign workspace id; the dialog only shows a manual campaign fallback for orphaned Outputs with no context.
 - Agent action: `promote_output_to_final` is exposed through the session tool manifest and calls the same backend promotion path.
 - Backend action: `OutputService.promoteToFinal` validates workspace ownership, then writes through shared Finals registry helpers.
 - Storage: Finals live as JSON pointers in `context/finals/CONTEXT.md`; the Output bundle remains canonical.

@@ -172,7 +172,7 @@ Use Finals when:
 How it works:
 - Click an Output card or Output detail page.
 - Choose **Set as Final**.
-- Pick `HQ` or `Campaign`, add the campaign id when needed, and choose a slot like `Cover Art`, `Artist Bio`, `Press Copy`, or `Shortform Clips`.
+- Pick `HQ` or `Campaign` and choose a slot like `Cover Art`, `Artist Bio`, `Press Copy`, or `Shortform Clips`. In a campaign workspace, the app uses the current campaign automatically.
 - Use **Set as Primary** when one Final should be the default choice.
 
 Finals do not copy or publish files. They point back to the original Output. Removing something from Finals does not delete the Output.

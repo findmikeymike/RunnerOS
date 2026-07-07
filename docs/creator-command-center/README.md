@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-04
+last_verified: 2026-07-06
 source_of_truth: true
 ---
 
@@ -20,5 +20,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [09 HQ State Of Play / Proactive Routing](./09-hq-state-of-play-proactive-routing.md)
 - [10 Work Products / Output Architecture](./10-work-products-output-architecture-spec.md)
 - [11 Outputs, Finals, And Asset Promotion](./11-outputs-finals-asset-promotion-spec.md)
+
+Current V1 implementation note: Outputs -> Finals is wired through UI list/detail actions and the `promote_output_to_final` session tool. Finals are pointers stored in workspace context; campaign promotion should use the active campaign workspace id automatically.
 
 Add new Creator Command Center specs here unless they clearly belong in another feature folder.

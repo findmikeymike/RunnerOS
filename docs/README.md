@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-05
+last_verified: 2026-07-06
 source_of_truth: true
 ---
 
@@ -22,6 +22,7 @@ Current active feature spec:
 - [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md) - generated HQ operating brief, route hint contract, proactive toggle, launch guards, and key files.
 - [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md) - minimal Output-based layer for HQ/campaign widgets, approvals, drawer preview, and agent awareness.
 - [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md) - V1 promotion system for marking Outputs as trusted HQ/campaign Finals, optional Primary, and agent/tool promotion.
+- Finals are active V1: use Output list/detail actions or the `promote_output_to_final` session tool; campaign Finals now resolve the active campaign workspace automatically.
 - Setup Concierge / app setup is now part of the starter worker system: HNIC routes setup, service-key, and app-guide questions to `@setup-concierge`; Setup Concierge owns user guidance, service setup, and approved encrypted credential saves.
 
 ## Main Areas

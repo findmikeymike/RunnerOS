@@ -50,6 +50,7 @@ source_of_truth: true
 - Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
 - Implemented Outputs -> Finals V1: users can promote Outputs into HQ/campaign Finals, mark optional Primary, remove exact Final pointers, and agents can call `promote_output_to_final`.
 - Hardened Finals storage with a shared filesystem lock, corrupt-registry fail-closed behavior, campaign-id requirements, delete guards for Outputs still referenced by Finals, and direct session-tool tests.
+- Polished Finals UI so Output list/detail promotion uses `OutputFinalActionDialog`; campaign Finals auto-resolve the active campaign workspace id instead of asking users to type an internal id.
 - Updated user/spec/map docs for Finals behavior and agent tool awareness.
 
 ## In Progress
@@ -109,6 +110,7 @@ source_of_truth: true
   - `(cd packages/server-core && bun run tsc --noEmit)` passed after the Setup Concierge secret-save hardening.
 - Verified on 2026-07-06:
   - `bun test packages/server-core/src/outputs/OutputService.test.ts apps/electron/src/renderer/components/outputs/__tests__/FinalsWidget.test.ts packages/session-tools-core/src/handlers/outputs.test.ts` -> `40 pass`.
+  - `bun test apps/electron/src/renderer/lib/__tests__/output-finals-actions.test.ts apps/electron/src/renderer/components/outputs/__tests__/FinalsWidget.test.ts packages/session-tools-core/src/handlers/outputs.test.ts packages/server-core/src/outputs/OutputService.test.ts` -> `44 pass`.
   - `bun run typecheck:electron` passed.
   - `(cd packages/server-core && ../../node_modules/.bin/tsc --noEmit)` passed.
   - `bun run --cwd packages/session-mcp-server build` passed.

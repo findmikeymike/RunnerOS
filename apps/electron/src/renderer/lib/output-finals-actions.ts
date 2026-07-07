@@ -1,4 +1,11 @@
-import type { OutputFinalPointerDTO, RemoveOutputFromFinalInputDTO } from '@/hooks/useOutputs'
+import type {
+  OutputFinalPointerDTO,
+  OutputManifestDTO,
+  OutputSummaryDTO,
+  RemoveOutputFromFinalInputDTO,
+} from '@/hooks/useOutputs'
+
+type OutputLike = OutputSummaryDTO | OutputManifestDTO
 
 export function removeInputForFinal(final: OutputFinalPointerDTO): RemoveOutputFromFinalInputDTO {
   return {
@@ -8,6 +15,25 @@ export function removeInputForFinal(final: OutputFinalPointerDTO): RemoveOutputF
     slot: final.slot,
     ...(final.assetId ? { assetId: final.assetId } : {}),
   }
+}
+
+export function resolveCampaignFinalId({
+  existing,
+  output,
+  currentCampaignId,
+  fallbackCampaignId,
+}: {
+  existing?: OutputFinalPointerDTO
+  output?: OutputLike | null
+  currentCampaignId?: string
+  fallbackCampaignId?: string
+}): string | undefined {
+  const id = existing?.campaignId
+    ?? output?.context?.campaignId
+    ?? currentCampaignId
+    ?? fallbackCampaignId
+  const trimmed = id?.trim()
+  return trimmed || undefined
 }
 
 export function finalPointerLabel(final: OutputFinalPointerDTO): string {

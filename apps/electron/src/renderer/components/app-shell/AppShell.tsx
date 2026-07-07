@@ -2094,6 +2094,7 @@ function AppShellContent({
   })
   const vaultActive = isVaultNavigation(navState)
   const campaignHomeActive = !isArtistHQWorkspace && isCampaignNavigation(navState)
+  const activeCampaignId = !isArtistHQWorkspace ? activeWorkspaceId ?? undefined : undefined
   const campaignSessionsActive = !isArtistHQWorkspace
     && isSessionsNavigation(navState)
     && !workChatActive
@@ -3456,6 +3457,7 @@ function AppShellContent({
             {isOutputsNavigation(navState) && (
               <OutputsListPanel
                 workspaceId={activeWorkspaceId}
+                currentCampaignId={activeCampaignId}
                 outputs={outputs}
                 loading={outputsLoading}
                 error={outputsError}

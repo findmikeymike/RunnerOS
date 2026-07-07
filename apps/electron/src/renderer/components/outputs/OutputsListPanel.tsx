@@ -12,6 +12,7 @@ type TFn = (key: string, options?: Record<string, unknown>) => string
 
 interface Props {
   workspaceId: string | null | undefined
+  currentCampaignId?: string
   outputs: OutputSummaryDTO[]
   loading: boolean
   error: string | null
@@ -21,6 +22,7 @@ interface Props {
 
 export function OutputsListPanel({
   workspaceId,
+  currentCampaignId,
   outputs,
   loading,
   error,
@@ -112,6 +114,7 @@ export function OutputsListPanel({
         }}
         promoteToFinal={promoteToFinal}
         removeFromFinal={removeFromFinal}
+        currentCampaignId={currentCampaignId}
       />
     </div>
   )
