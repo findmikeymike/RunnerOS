@@ -1278,6 +1278,14 @@ Browser priority order:
 
 Important browser rule: do not use generic web search or DuckDuckGo as the first step for this workflow. Open the direct discovery URLs from \`ad-library-plan\` first. Search engines often block automated research with challenges and waste the run. Use search only after direct TikTok/Meta inspection, and only for a narrow missing item.
 
+Browser resilience rules:
+
+- On every TikTok/Meta/public-ad page, inspect the current page before assuming it is blocked. If a pop-up, modal, cookie banner, app-download prompt, marketing overlay, or ad overlay is covering the page, try to close it with obvious controls first: \`X\`, \`Close\`, \`Skip\`, \`Not now\`, \`Maybe later\`, \`Continue as guest\`, \`Accept all\`, \`Reject optional\`, or \`Esc\`.
+- If the overlay is a TikTok/Seedance-style promo or app ad, close it and continue the planned search. Do not treat the overlay itself as a research result unless the user asked for TikTok product ads.
+- Do not keep clicking, typing, or waiting behind a blocking overlay. Try at most two close attempts, then capture the blocker in one sentence and move to the next discovery URL or Meta validation.
+- Do not spend the whole run on TikTok. Cap TikTok/browser discovery at roughly 2-3 minutes or 3 useful examples, whichever comes first. Once you have usable patterns, produce the packet and mark any missing validation clearly.
+- Prefer a partial but useful \`Ad Library Intel Packet\` over a perfect browser crawl. If public pages are blocked, use the visible/search results already captured plus direct Meta Ad Library checks.
+
 Avoid:
 
 - Famous artists with no active paid ads.
@@ -1300,6 +1308,7 @@ node tools/ads-operator/bin/ads-operator.mjs ad-library-plan --artist "<artist>"
 2. Use browser automation for discovery:
    - Start by opening the direct \`discoveryUrls\` from \`ad-library-plan\`; do not search the web for those pages.
    - Start with TikTok Creative Center / Top Ads / trend pages in the browser.
+   - Close pop-ups/overlays before search. If they cannot be closed quickly, move on.
    - Search music, entertainment, creator, concert, streaming, playlist, app, and ecommerce top ads. Borrow hook/format mechanics, not product category assumptions.
    - Capture the visible ad/hook, format, CTA, engagement/performance-style signals shown by the page, landing page, and why the vehicle could transfer to an artist campaign.
    - Use public blogs/videos/case studies only when they show actual creative examples or specific formats, not vague advice.
