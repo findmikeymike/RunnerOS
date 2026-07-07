@@ -1366,6 +1366,9 @@ const BASE_DEFAULT_WORKER_SLUGS = [
 const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
   'content-genius',
   'art-director',
+  'ads-strategist',
+  'ad-creative-agent',
+  'ads-agent',
   'ig-trending-power-up',
   'influencer-campaign-power-up',
   'playlisting-power-up',

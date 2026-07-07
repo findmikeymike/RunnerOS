@@ -2505,6 +2505,9 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'lottie-animation-agent'
             || a.slug === 'video-editor-agent'
             || a.slug === 'content-genius'
+            || a.slug === 'ads-strategist'
+            || a.slug === 'ad-creative-agent'
+            || a.slug === 'ads-agent'
             || a.slug === 'ig-trending-power-up'
             || a.slug === 'influencer-campaign-power-up'
             || a.slug === 'playlisting-power-up'
@@ -2657,6 +2660,9 @@ export class SessionManager implements ISessionManager {
             sessionLog.warn(`[agent-definitions] Art Director skill bundle incomplete: ${missingArtDirectorSkills.join(', ')}`)
           }
           const defaultPowerUpAgentSlugs = [
+            'ads-strategist',
+            'ad-creative-agent',
+            'ads-agent',
             'ig-trending-power-up',
             'influencer-campaign-power-up',
             'playlisting-power-up',
