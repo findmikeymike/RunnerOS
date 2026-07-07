@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-06
+last_verified: 2026-07-07
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-07-06
+Generated: 2026-07-07
 
 ## Why This Exists
 
@@ -31,9 +31,6 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - outputService: `packages/server-core/src/outputs/OutputService.ts`
 - outputsHook: `apps/electron/src/renderer/hooks/useOutputs.ts`
 - outputFinalActionDialog: `apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx`
-- outputFinalActions: `apps/electron/src/renderer/lib/output-finals-actions.ts`
-- outputsListPanel: `apps/electron/src/renderer/components/outputs/OutputsListPanel.tsx`
-- outputDetailPage: `apps/electron/src/renderer/pages/OutputDetailPage.tsx`
 - bundledSkills: `packages/shared/src/skills/bundled.generated.ts`
 - builtinSources: `packages/shared/src/sources/builtin-sources.ts`
 - starterWorkflows: `packages/shared/src/workflows/starter-templates.ts`
@@ -48,12 +45,15 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Outputs -> Finals promotion: wired
 - Domains: Command 3, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
 - Permission modes: ask 27, safe 7
-- Known skills: 103 (64 bundled, 6 system, 103 user-global on this machine)
-- Known builtin sources: 20
+- Known skills: 107 (65 bundled, 6 system, 106 user-global on this machine)
+- Known builtin sources: 21
 
 ## Reference Health
 
-- All mapped starter-agent skill/source references resolve to repo-bundled/system skills or builtin sources.
+- Missing skills: none
+- Machine-local-only skills: `creative-oracle`
+- Missing sources: none
+- persona-agent: missing skills none; machine-local-only skills `creative-oracle`; missing sources none
 
 ## Runtime Rules Agents Should Not Miss
 
@@ -66,7 +66,6 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.
 - Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.
 - Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.
-- Campaign Finals UI resolves campaignId from the active campaign workspace or Output context, so normal users do not type internal ids.
 - message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.
 - trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.
 
@@ -82,7 +81,6 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 ## Outputs -> Finals Promotion
 
 - User action: Output list/detail actions open `OutputFinalActionDialog` for `Set as Final`, `Set as Primary`, or `Remove from Finals`.
-- Campaign context: Output list/detail callers pass the active campaign workspace id; the dialog only shows a manual campaign fallback for orphaned Outputs with no context.
 - Agent action: `promote_output_to_final` is exposed through the session tool manifest and calls the same backend promotion path.
 - Backend action: `OutputService.promoteToFinal` validates workspace ownership, then writes through shared Finals registry helpers.
 - Storage: Finals live as JSON pointers in `context/finals/CONTEXT.md`; the Output bundle remains canonical.
@@ -439,12 +437,12 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Plan, review, and improve Meta and Google ad campaigns.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `ad-creative`, `google-ads`
-- Sources: `google-ads`
-- Optional sources: none
+- Skills: `ad-creative`, `google-ads`, `paid-ads-browser-operator`
+- Sources: `google-ads`, `ads-operator`
+- Optional sources: `meta-ads`
 - Trusted tools: none
 - Tags: `ads`, `meta`, `google-ads`, `paid-search`, `reporting`, `diagnostics`, `growth`
-- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `requires-source-activation`
+- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`
 - Inputs: Meta Ads or Google Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, or reporting question.
 - Outputs: Clear paid-media findings, diagnostics, reports, proposed changes, and approval-ready action plans.
 

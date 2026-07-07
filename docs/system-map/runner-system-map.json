@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-06",
+  "generatedAt": "2026-07-07",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -54,15 +54,26 @@
     "finalsPromotionWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 103,
-    "bundledSkillCount": 64,
+    "knownSkillCount": 107,
+    "bundledSkillCount": 65,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 103,
-    "knownSourceCount": 20,
+    "userGlobalSkillCount": 106,
+    "knownSourceCount": 21,
     "missingSkills": [],
-    "machineLocalOnlySkills": [],
+    "machineLocalOnlySkills": [
+      "creative-oracle"
+    ],
     "missingSources": [],
-    "agentsWithMissingRefs": []
+    "agentsWithMissingRefs": [
+      {
+        "slug": "persona-agent",
+        "missingSkills": [],
+        "machineLocalOnlySkills": [
+          "creative-oracle"
+        ],
+        "missingSources": []
+      }
+    ]
   },
   "workflows": [
     {
@@ -933,12 +944,16 @@
       "thinkingLevel": "high",
       "skills": [
         "ad-creative",
-        "google-ads"
+        "google-ads",
+        "paid-ads-browser-operator"
       ],
       "sources": [
-        "google-ads"
+        "google-ads",
+        "ads-operator"
       ],
-      "optionalSources": [],
+      "optionalSources": [
+        "meta-ads"
+      ],
       "trustedWorkerTools": [],
       "visualAgent": false,
       "tags": [
@@ -957,6 +972,8 @@
         "approval-capable",
         "artifact-output-aware",
         "explicit-approval-required",
+        "external-action-boundary",
+        "optional-source-aware",
         "requires-source-activation"
       ],
       "inputs": "Meta Ads or Google Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, or reporting question.",

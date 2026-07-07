@@ -65,6 +65,7 @@ flowchart LR
   Campaign["Campaign Workspace"] --> A_content_genius
   Registry --> A_persona_agent["Legendary Minds\nask\nCreative"]
   Workers --> A_persona_agent
+  A_persona_agent --> S_creative_oracle["skill:creative-oracle"]
   A_persona_agent --> S_steve_jobs_perspective["skill:steve-jobs-perspective"]
   A_persona_agent --> S_mrbeast_perspective["skill:mrbeast-perspective"]
   A_persona_agent --> S_tom_ford["skill:tom-ford"]
@@ -118,7 +119,9 @@ flowchart LR
   Workers --> A_ads_agent
   A_ads_agent --> S_ad_creative["skill:ad-creative"]
   A_ads_agent --> S_google_ads["skill:google-ads"]
+  A_ads_agent --> S_paid_ads_browser_operator["skill:paid-ads-browser-operator"]
   A_ads_agent --> T_google_ads["source:google-ads"]
+  A_ads_agent --> T_ads_operator["source:ads-operator"]
   Registry --> A_branding_agent["Branding Agent\nask\nPromotion"]
   Workers --> A_branding_agent
   A_branding_agent --> S_artist_brand_dna_audit["skill:artist-brand-dna-audit"]
