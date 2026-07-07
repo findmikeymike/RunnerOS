@@ -129,6 +129,9 @@ describe('ads-operator cli', () => {
     expect(result.stdout.patterns.formats['music-video-clip']).toBe(1);
     expect(result.stdout.patterns.angles.identity).toBe(1);
     expect(result.stdout.patterns.hooks[0]).toContain('late night drives');
+    expect(result.stdout.competitiveGap.diversityRead).toBe('wide');
+    expect(result.stdout.competitiveGap.underusedFormats).toContain('performance-video');
+    expect(result.stdout.competitiveGap.mostUsefulOpening).toContain('Differentiate');
     expect(result.stdout.recommendations.join(' ')).toContain('artist context');
     expect(result.stdout.writeExecuted).toBe(false);
   });

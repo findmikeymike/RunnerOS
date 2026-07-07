@@ -62,10 +62,11 @@ Produce an `Ad Library Intel Packet` with:
 1. Search scope: artist, competitors, keywords, countries, date checked.
 2. Captured examples: page, hook, angle, CTA, format, destination, source/screenshot.
 3. Pattern read: repeated hooks, repeated angles, format mix, CTA mix, visual patterns.
-4. Confidence: state clearly that public Meta Ad Library does not expose CTR, CPA, ROAS, or normal commercial spend.
-5. Strategy implications: what Ads Strategist should consider.
-6. Creative implications: what Ad Creative Agent should test.
-7. Originality guardrail: do not copy another artist's ad; borrow patterns and build an artist-specific version.
+4. Competitive gap: crowded formats, underused formats, underused angles, and whether the market looks creatively narrow or diverse.
+5. Confidence: state clearly that public Meta Ad Library does not expose CTR, CPA, ROAS, or normal commercial spend.
+6. Strategy implications: what Ads Strategist should consider.
+7. Creative implications: what Ad Creative Agent should test.
+8. Originality guardrail: do not copy another artist's ad; borrow patterns and build an artist-specific version.
 
 ## Music Format Labels
 

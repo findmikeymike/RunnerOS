@@ -116,6 +116,7 @@ export function analyzeAdLibraryAds(ads, { artist, source = null } = {}) {
       ctas,
       hooks,
     },
+    competitiveGap: buildCompetitiveGap({ formats, angles, rowCount: enriched.length }),
     examples: enriched,
     recommendations: buildRecommendations({ formats, angles, hooks }),
     writeExecuted: false,
@@ -165,6 +166,28 @@ function buildRecommendations({ formats, angles, hooks }) {
     hooks.length ? `Use the hook bank for pattern inspiration, not direct copying.` : 'Capture more ad text before final creative decisions.',
     'Pair this packet with artist context before Ads Agent drafts any campaign.',
   ];
+}
+
+function buildCompetitiveGap({ formats, angles, rowCount }) {
+  const formatKeys = Object.keys(formats);
+  const angleKeys = Object.keys(angles).filter((angle) => angle !== 'unclear');
+  const crowdedFormats = formatKeys.filter((format) => formats[format] >= Math.max(2, Math.ceil(rowCount * 0.35)));
+  const underusedFormats = ['ugc', 'performance-video', 'music-video-clip', 'lyric-or-song-moment', 'playlist-or-streaming-push', 'tour-or-event']
+    .filter((format) => !formats[format]);
+  const underusedAngles = ['identity', 'social-proof', 'new-release', 'direct-response', 'story']
+    .filter((angle) => !angles[angle]);
+  const diversityScore = Math.min(100, Math.round(((formatKeys.length + angleKeys.length) / Math.max(rowCount, 1)) * 50));
+
+  return {
+    diversityScore,
+    diversityRead: diversityScore >= 70 ? 'wide' : diversityScore >= 40 ? 'moderate' : 'narrow',
+    crowdedFormats,
+    underusedFormats: underusedFormats.slice(0, 3),
+    underusedAngles: underusedAngles.slice(0, 3),
+    mostUsefulOpening: underusedFormats.length || underusedAngles.length
+      ? 'Differentiate with an underused format or angle instead of copying the most crowded lane.'
+      : 'Captured competitors already cover the obvious lanes; differentiation needs sharper artist-specific voice, visual world, or offer.',
+  };
 }
 
 function normalizeAds(input) {
