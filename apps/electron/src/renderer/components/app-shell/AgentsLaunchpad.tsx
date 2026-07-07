@@ -83,9 +83,10 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
   const grouped = React.useMemo(() => {
     const visibleAgents = dedupeLaunchpadAgents(activeAgents.filter((a) => !isSystemAgent(a.slug) && !isHiddenFromWorkerHome(a.slug)))
     const orch = visibleAgents.find((a) => a.slug === ORCHESTRATOR_SLUG)
+    const defaultOrder = new Map(defaultVisibleSlugs.map((slug, index) => [slug, index]))
     const rest = visibleAgents
       .filter((a) => a.slug !== ORCHESTRATOR_SLUG)
-      .sort((a, b) => getDisplayName(a).localeCompare(getDisplayName(b)))
+      .sort((a, b) => compareLaunchpadAgents(a, b, defaultOrder, getDisplayName))
     const sorted = orch ? [orch, ...rest] : rest
     const groups = new Map<string, typeof sorted>()
 
@@ -103,7 +104,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
 
     return Array.from(groups.entries())
       .sort(([a], [b]) => agentDomainRank(a) - agentDomainRank(b) || a.localeCompare(b))
-  }, [activeAgents, getDisplayName])
+  }, [activeAgents, defaultVisibleSlugs, getDisplayName])
 
   const toggleDomain = React.useCallback((domain: string) => {
     setCollapsedDomains((current) => {
@@ -1419,6 +1420,22 @@ function launchpadAgentRank(slug: string): number {
   ]
   const index = preferred.indexOf(slug)
   return index === -1 ? preferred.length : index
+}
+
+function compareLaunchpadAgents(
+  a: AgentDefinitionDTO,
+  b: AgentDefinitionDTO,
+  defaultOrder: Map<string, number>,
+  getDisplayName: (agent: AgentDefinitionDTO) => string,
+): number {
+  const aDefaultIndex = defaultOrder.get(a.slug)
+  const bDefaultIndex = defaultOrder.get(b.slug)
+  if (aDefaultIndex !== undefined && bDefaultIndex !== undefined) {
+    return aDefaultIndex - bDefaultIndex
+  }
+  if (aDefaultIndex !== undefined) return -1
+  if (bDefaultIndex !== undefined) return 1
+  return getDisplayName(a).localeCompare(getDisplayName(b))
 }
 
 function cleanDisplayText(value: string) {
