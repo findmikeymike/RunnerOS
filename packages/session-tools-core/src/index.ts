@@ -213,6 +213,9 @@ export {
   handleRecallMemory,
   // Outputs
   handleCreateOutput,
+  handleCreateLabSong,
+  handleSaveLabLyrics,
+  handleListLabSongs,
   // Visual surface
   handleVisualSurface,
   handleVisualSurfaceState,
@@ -295,6 +298,11 @@ export type {
   CreateOutputFileInput,
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
+  CreateLabSongToolInput,
+  SaveLabLyricsToolInput,
+  ListLabSongsToolInput,
+  LabSongCaptureInput,
+  LabSongToolResult,
   VisualSurfaceToolInput,
   VisualSurfaceToolResult,
   VisualSurfaceStateCapture,
@@ -339,6 +347,9 @@ export {
   ForgetMemorySchema,
   RecallMemorySchema,
   CreateOutputSchema,
+  CreateLabSongSchema,
+  SaveLabLyricsSchema,
+  ListLabSongsSchema,
   VisualSurfaceSchema,
   VisualSurfaceStateSchema,
   // Descriptions

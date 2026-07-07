@@ -300,6 +300,30 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'createLabSong', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.createLabSongFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'saveLabLyrics', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.saveLabLyricsFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
+  Object.defineProperty(context, 'listLabSongs', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.listLabSongsFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'applyVisualSurfaceEvent', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.applyVisualSurfaceEventFn;

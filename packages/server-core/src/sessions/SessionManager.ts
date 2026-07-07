@@ -104,6 +104,7 @@ import {
   MemorySidecarService,
 } from '../memory/MemorySidecarService'
 import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } from '@craft-agent/shared/deep-research'
+import { createLabSong, loadLabSongs, saveLabLyrics } from '@craft-agent/shared/lab'
 import { OutputService } from '../outputs/OutputService'
 import {
   loadAllGlobalWorkflows,
@@ -5032,6 +5033,53 @@ user a clickable link to where the thing now lives.`
             stepId: workflow?.stepId,
             output: input,
           })
+        },
+        createLabSongFn: async (input) => {
+          return createLabSong(managed.workspace.rootPath, {
+            ...input,
+            captures: input.captures?.map((capture) => ({
+              ...capture,
+              sourceSessionId: capture.sourceSessionId ?? managed.id,
+              sourceAgentSlug: capture.sourceAgentSlug ?? managed.spawnedFromAgent?.agentSlug,
+            })),
+          })
+        },
+        saveLabLyricsFn: async (input) => {
+          return saveLabLyrics(managed.workspace.rootPath, {
+            ...input,
+            captures: input.captures.map((capture) => ({
+              ...capture,
+              sourceSessionId: capture.sourceSessionId ?? managed.id,
+              sourceAgentSlug: capture.sourceAgentSlug ?? managed.spawnedFromAgent?.agentSlug,
+            })),
+          })
+        },
+        listLabSongsFn: async (input = {}) => {
+          const query = input.search?.trim().toLowerCase()
+          let songs = loadLabSongs(managed.workspace.rootPath)
+          if (input.project?.trim()) {
+            const project = input.project.trim().toLowerCase()
+            songs = songs.filter((song) => song.project?.toLowerCase() === project)
+          }
+          if (input.status) {
+            songs = songs.filter((song) => song.status === input.status)
+          }
+          if (typeof input.focused === 'boolean') {
+            songs = songs.filter((song) => song.focused === input.focused)
+          }
+          if (query) {
+            songs = songs.filter((song) => [
+              song.title,
+              song.project ?? '',
+              song.roughText,
+              song.rememberText,
+              song.sections.map((section) => section.text).join('\n'),
+            ].join('\n').toLowerCase().includes(query))
+          }
+          const limit = input.limit && input.limit > 0 ? Math.min(input.limit, 100) : 20
+          return songs
+            .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+            .slice(0, limit)
         },
         applyVisualSurfaceEventFn: async (input) => {
           const outputService = new OutputService({
