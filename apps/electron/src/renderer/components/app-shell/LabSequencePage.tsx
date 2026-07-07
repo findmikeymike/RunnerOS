@@ -14,21 +14,19 @@ import { navigate, routes } from '@/lib/navigate'
 import {
   createLabUiSong,
   LAB_PROJECT_COLORS,
+  loadLabProjectsState,
   loadLabUiSongs,
+  saveLabProjectsState,
   setSelectedLabSongId,
   subscribeLabSongs,
   upsertLabUiSong,
+  type LabUiSequencePage,
   type LabUiSong,
 } from '@/lib/lab-song-state'
 
 interface LabSequencePageProps {
+  workspaceId?: string
   workspaceName?: string
-}
-
-type SequencePage = {
-  id: string
-  title: string
-  songIds: string[]
 }
 
 function moveId(list: string[], id: string, targetId: string | null) {
@@ -39,28 +37,38 @@ function moveId(list: string[], id: string, targetId: string | null) {
   return [...without.slice(0, targetIndex), id, ...without.slice(targetIndex)]
 }
 
-export function LabSequencePage({ workspaceName }: LabSequencePageProps) {
-  const [songs, setSongs] = React.useState(loadLabUiSongs)
-  const [poolOrder, setPoolOrder] = React.useState(() => loadLabUiSongs().map((song) => song.id))
-  const [sequencePages, setSequencePages] = React.useState<SequencePage[]>([
-    { id: 'sequence-1', title: 'Master Sequence', songIds: [] },
-  ])
-  const [activeSequenceId, setActiveSequenceId] = React.useState('sequence-1')
+export function LabSequencePage({ workspaceId, workspaceName }: LabSequencePageProps) {
+  const [songs, setSongs] = React.useState(() => loadLabUiSongs(workspaceId))
+  const [poolOrder, setPoolOrder] = React.useState(() => loadLabProjectsState(workspaceId).poolOrder)
+  const [sequencePages, setSequencePages] = React.useState<LabUiSequencePage[]>(() => loadLabProjectsState(workspaceId).sequencePages)
+  const [activeSequenceId, setActiveSequenceId] = React.useState(() => loadLabProjectsState(workspaceId).activeSequenceId)
   const [draftTitle, setDraftTitle] = React.useState('')
   const [draftProject, setDraftProject] = React.useState('Loose Singles')
   const [draftNotes, setDraftNotes] = React.useState('')
   const [draftColor, setDraftColor] = React.useState(LAB_PROJECT_COLORS[0])
   const [addOpen, setAddOpen] = React.useState(false)
 
+  React.useEffect(() => {
+    const state = loadLabProjectsState(workspaceId)
+    setSongs(loadLabUiSongs(workspaceId))
+    setPoolOrder(state.poolOrder)
+    setSequencePages(state.sequencePages)
+    setActiveSequenceId(state.activeSequenceId)
+  }, [workspaceId])
+
   React.useEffect(() => subscribeLabSongs(() => {
-    const nextSongs = loadLabUiSongs()
+    const nextSongs = loadLabUiSongs(workspaceId)
     setSongs(nextSongs)
     setPoolOrder((current) => {
       const known = new Set(current)
       const missing = nextSongs.map((song) => song.id).filter((id) => !known.has(id))
       return [...missing, ...current.filter((id) => nextSongs.some((song) => song.id === id))]
     })
-  }), [])
+  }), [workspaceId])
+
+  React.useEffect(() => {
+    saveLabProjectsState(workspaceId, { poolOrder, sequencePages, activeSequenceId })
+  }, [activeSequenceId, poolOrder, sequencePages, workspaceId])
 
   const songsById = React.useMemo(() => new Map(songs.map((song) => [song.id, song])), [songs])
   const activeSequence = sequencePages.find((page) => page.id === activeSequenceId) ?? sequencePages[0]
@@ -91,7 +99,7 @@ export function LabSequencePage({ workspaceName }: LabSequencePageProps) {
     const title = draftTitle.trim()
     if (!title) return
     const project = draftProject.trim() || 'Loose Singles'
-    const song = createLabUiSong({
+    const song = createLabUiSong(workspaceId, {
       title,
       project,
       color: draftColor,
@@ -106,12 +114,12 @@ export function LabSequencePage({ workspaceName }: LabSequencePageProps) {
   const updateSong = (id: string, patch: Partial<Pick<LabUiSong, 'notes' | 'project'>>) => {
     const song = songsById.get(id)
     if (!song) return
-    upsertLabUiSong({ ...song, ...patch })
+    upsertLabUiSong(workspaceId, { ...song, ...patch })
   }
 
   const openSongPad = (songId: string) => {
-    setSelectedLabSongId(songId)
-    navigate(routes.view.lab('pad'))
+    setSelectedLabSongId(workspaceId, songId)
+    navigate(routes.view.lab('pad', songId))
   }
 
   const onDragStart = (event: React.DragEvent, id: string, source: 'pool' | 'sequence') => {

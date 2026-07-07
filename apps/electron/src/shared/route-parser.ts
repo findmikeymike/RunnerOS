@@ -112,7 +112,12 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     const tab = segments[1]
     if (!tab) return { navigator: 'lab', labTab: 'home', details: null }
     if (tab === 'songs') return { navigator: 'lab', labTab: 'songs', details: null }
-    if (tab === 'pad') return { navigator: 'lab', labTab: 'pad', details: null }
+    if (tab === 'pad') {
+      if (segments[2] === 'song' && segments[3]) {
+        return { navigator: 'lab', labTab: 'pad', details: { type: 'song', id: decodeURIComponent(segments[3]) } }
+      }
+      return { navigator: 'lab', labTab: 'pad', details: null }
+    }
     if (tab === 'sequence') return { navigator: 'lab', labTab: 'sequence', details: null }
     return null
   }
@@ -377,7 +382,11 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   }
 
   if (parsed.navigator === 'lab') {
-    if (parsed.labTab === 'pad') return 'lab/pad'
+    if (parsed.labTab === 'pad') {
+      return parsed.details?.type === 'song'
+        ? `lab/pad/song/${encodeURIComponent(parsed.details.id)}`
+        : 'lab/pad'
+    }
     if (parsed.labTab === 'sequence') return 'lab/sequence'
     return parsed.labTab === 'songs' ? 'lab/songs' : 'lab'
   }
@@ -599,10 +608,14 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
     return { type: 'view', name: 'workspace-context', params: {} }
   }
   if (compound.navigator === 'lab') {
+    const params: Record<string, string> = compound.labTab && compound.labTab !== 'home' ? { tab: compound.labTab } : {}
+    if (compound.labTab === 'pad' && compound.details?.type === 'song') {
+      params.songId = compound.details.id
+    }
     return {
       type: 'view',
       name: 'lab',
-      params: compound.labTab && compound.labTab !== 'home' ? { tab: compound.labTab } : {},
+      params,
     }
   }
   if (compound.navigator === 'agenda') {
@@ -737,7 +750,11 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
 
   if (compound.navigator === 'lab') {
     if (compound.labTab === 'songs') return { navigator: 'lab', tab: 'songs' }
-    if (compound.labTab === 'pad') return { navigator: 'lab', tab: 'pad' }
+    if (compound.labTab === 'pad') {
+      return compound.details?.type === 'song'
+        ? { navigator: 'lab', tab: 'pad', songId: compound.details.id }
+        : { navigator: 'lab', tab: 'pad' }
+    }
     if (compound.labTab === 'sequence') return { navigator: 'lab', tab: 'sequence' }
     return { navigator: 'lab' }
   }
@@ -879,7 +896,11 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'campaign' }
     case 'lab':
       if (parsed.params.tab === 'songs') return { navigator: 'lab', tab: 'songs' }
-      if (parsed.params.tab === 'pad') return { navigator: 'lab', tab: 'pad' }
+      if (parsed.params.tab === 'pad') {
+        return parsed.params.songId
+          ? { navigator: 'lab', tab: 'pad', songId: parsed.params.songId }
+          : { navigator: 'lab', tab: 'pad' }
+      }
       if (parsed.params.tab === 'sequence') return { navigator: 'lab', tab: 'sequence' }
       return { navigator: 'lab' }
     case 'settings':
@@ -1066,7 +1087,7 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
     return {
       navigator: 'lab',
       labTab: state.tab ?? 'home',
-      details: null,
+      details: state.tab === 'pad' && state.songId ? { type: 'song', id: state.songId } : null,
     }
   }
 

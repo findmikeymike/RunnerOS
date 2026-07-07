@@ -96,7 +96,13 @@ export const routes = {
     campaign: () => 'campaign' as const,
 
     /** Lab workspace for creative exploration, lyrics, concepts, and research */
-    lab: (tab?: 'songs' | 'pad' | 'sequence') => tab ? `lab/${tab}` as const : 'lab' as const,
+    lab: (tab?: 'songs' | 'pad' | 'sequence', songId?: string) => (
+      tab === 'pad' && songId
+        ? `lab/pad/song/${encodeURIComponent(songId)}` as const
+        : tab
+          ? `lab/${tab}` as const
+          : 'lab' as const
+    ),
 
     /** All sessions view (sessions navigator, allSessions filter) */
     allSessions: (sessionId?: string) =>

@@ -17,8 +17,21 @@ export type LabUiSong = {
   updatedAt: string
 }
 
-const SONGS_KEY = 'lab:songs:v1'
-const SELECTED_SONG_KEY = 'lab:selected-song-id:v1'
+export type LabUiSequencePage = {
+  id: string
+  title: string
+  songIds: string[]
+}
+
+export type LabUiProjectsState = {
+  poolOrder: string[]
+  sequencePages: LabUiSequencePage[]
+  activeSequenceId: string
+}
+
+const SONGS_KEY_PREFIX = 'lab:songs:v1'
+const PROJECTS_KEY_PREFIX = 'lab:projects:v1'
+const SELECTED_SONG_KEY_PREFIX = 'lab:selected-song-id:v1'
 const EVENT_NAME = 'lab-songs-updated'
 
 export const LAB_PROJECT_COLORS = ['#fb923c', '#a78bfa', '#34d399', '#60a5fa', '#f472b6']
@@ -53,6 +66,8 @@ const SEED_SONGS: LabUiSong[] = [
   createSeedSong({ id: 'soft-exit', title: 'Soft exit', project: 'Album Sketches', color: LAB_PROJECT_COLORS[2], notes: 'Quiet closer energy.' }),
 ]
 
+const DEFAULT_SEQUENCE_ID = 'sequence-1'
+
 function createSeedSong(input: Partial<LabUiSong> & Pick<LabUiSong, 'id' | 'title' | 'project' | 'color' | 'notes'>): LabUiSong {
   return {
     roughText: '',
@@ -67,6 +82,10 @@ function emitUpdate() {
   window.dispatchEvent(new CustomEvent(EVENT_NAME))
 }
 
+function scopedKey(prefix: string, workspaceId?: string): string {
+  return `${prefix}:${workspaceId || 'default'}`
+}
+
 export function subscribeLabSongs(callback: () => void): () => void {
   const handler = () => callback()
   window.addEventListener(EVENT_NAME, handler)
@@ -77,37 +96,45 @@ export function subscribeLabSongs(callback: () => void): () => void {
   }
 }
 
-export function loadLabUiSongs(): LabUiSong[] {
+export function loadLabUiSongs(workspaceId?: string): LabUiSong[] {
+  const key = scopedKey(SONGS_KEY_PREFIX, workspaceId)
   try {
-    const raw = window.localStorage.getItem(SONGS_KEY)
-    if (!raw) return SEED_SONGS
+    const raw = window.localStorage.getItem(key)
+    if (!raw) {
+      window.localStorage.setItem(key, JSON.stringify(SEED_SONGS))
+      return SEED_SONGS
+    }
     const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return SEED_SONGS
+    if (!Array.isArray(parsed)) {
+      window.localStorage.setItem(key, JSON.stringify(SEED_SONGS))
+      return SEED_SONGS
+    }
     return parsed.filter((song): song is LabUiSong => Boolean(song?.id && song?.title))
   } catch {
+    window.localStorage.setItem(key, JSON.stringify(SEED_SONGS))
     return SEED_SONGS
   }
 }
 
-export function saveLabUiSongs(songs: LabUiSong[]) {
-  window.localStorage.setItem(SONGS_KEY, JSON.stringify(songs))
+export function saveLabUiSongs(workspaceId: string | undefined, songs: LabUiSong[]) {
+  window.localStorage.setItem(scopedKey(SONGS_KEY_PREFIX, workspaceId), JSON.stringify(songs))
   emitUpdate()
 }
 
-export function upsertLabUiSong(song: LabUiSong) {
-  const songs = loadLabUiSongs()
+export function upsertLabUiSong(workspaceId: string | undefined, song: LabUiSong) {
+  const songs = loadLabUiSongs(workspaceId)
   const index = songs.findIndex((item) => item.id === song.id)
   const next = { ...song, updatedAt: new Date().toISOString() }
-  saveLabUiSongs(index >= 0
+  saveLabUiSongs(workspaceId, index >= 0
     ? songs.map((item) => item.id === song.id ? next : item)
     : [next, ...songs])
   return next
 }
 
-export function createLabUiSong(input: Pick<LabUiSong, 'title' | 'project' | 'color' | 'notes'>): LabUiSong {
+export function createLabUiSong(workspaceId: string | undefined, input: Pick<LabUiSong, 'title' | 'project' | 'color' | 'notes'>): LabUiSong {
   const idBase = input.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'song'
   const id = `${idBase}-${Date.now()}`
-  return upsertLabUiSong({
+  return upsertLabUiSong(workspaceId, {
     id,
     title: input.title,
     project: input.project,
@@ -120,10 +147,46 @@ export function createLabUiSong(input: Pick<LabUiSong, 'title' | 'project' | 'co
   })
 }
 
-export function setSelectedLabSongId(songId: string) {
-  window.localStorage.setItem(SELECTED_SONG_KEY, songId)
+export function setSelectedLabSongId(workspaceId: string | undefined, songId: string) {
+  window.localStorage.setItem(scopedKey(SELECTED_SONG_KEY_PREFIX, workspaceId), songId)
 }
 
-export function getSelectedLabSongId(): string | null {
-  return window.localStorage.getItem(SELECTED_SONG_KEY)
+export function getSelectedLabSongId(workspaceId?: string): string | null {
+  return window.localStorage.getItem(scopedKey(SELECTED_SONG_KEY_PREFIX, workspaceId))
+}
+
+export function defaultLabProjectsState(workspaceId?: string): LabUiProjectsState {
+  const songs = loadLabUiSongs(workspaceId)
+  return {
+    poolOrder: songs.map((song) => song.id),
+    sequencePages: [{ id: DEFAULT_SEQUENCE_ID, title: 'Master Sequence', songIds: [] }],
+    activeSequenceId: DEFAULT_SEQUENCE_ID,
+  }
+}
+
+export function loadLabProjectsState(workspaceId?: string): LabUiProjectsState {
+  const key = scopedKey(PROJECTS_KEY_PREFIX, workspaceId)
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return defaultLabProjectsState(workspaceId)
+    const parsed = JSON.parse(raw) as Partial<LabUiProjectsState>
+    const fallback = defaultLabProjectsState(workspaceId)
+    const sequencePages = Array.isArray(parsed.sequencePages) && parsed.sequencePages.length > 0
+      ? parsed.sequencePages.filter((page): page is LabUiSequencePage => Boolean(page?.id && typeof page.title === 'string' && Array.isArray(page.songIds)))
+      : fallback.sequencePages
+    const activeSequenceId = parsed.activeSequenceId && sequencePages.some((page) => page.id === parsed.activeSequenceId)
+      ? parsed.activeSequenceId
+      : sequencePages[0].id
+    return {
+      poolOrder: Array.isArray(parsed.poolOrder) ? parsed.poolOrder.filter((id): id is string => typeof id === 'string') : fallback.poolOrder,
+      sequencePages,
+      activeSequenceId,
+    }
+  } catch {
+    return defaultLabProjectsState(workspaceId)
+  }
+}
+
+export function saveLabProjectsState(workspaceId: string | undefined, state: LabUiProjectsState) {
+  window.localStorage.setItem(scopedKey(PROJECTS_KEY_PREFIX, workspaceId), JSON.stringify(state))
 }

@@ -45,6 +45,7 @@ import type { AgentDefinitionDTO } from '../../../shared/types'
 
 interface LabSongPadPageProps {
   workspaceId?: string
+  songId?: string
   artistProfileWorkspaceId?: string
   workspaceName?: string
 }
@@ -92,8 +93,8 @@ const INITIAL_SECTIONS: SongSection[] = [
   { id: 'final-chorus', label: 'Chorus 2', text: '', optional: true },
 ]
 
-function fallbackSong(): LabUiSong {
-  return loadLabUiSongs()[0] ?? {
+function fallbackSong(workspaceId?: string): LabUiSong {
+  return loadLabUiSongs(workspaceId)[0] ?? {
     id: 'untitled-song',
     title: 'Untitled song',
     project: 'Loose Singles',
@@ -106,12 +107,12 @@ function fallbackSong(): LabUiSong {
   }
 }
 
-function getActiveLabSong(): LabUiSong {
-  const songs = loadLabUiSongs()
-  const selectedId = getSelectedLabSongId()
+function getActiveLabSong(workspaceId?: string, routeSongId?: string): LabUiSong {
+  const songs = loadLabUiSongs(workspaceId)
+  const selectedId = routeSongId ?? getSelectedLabSongId(workspaceId)
   const selected = selectedId ? songs.find((song) => song.id === selectedId) : null
-  const song = selected ?? songs[0] ?? fallbackSong()
-  setSelectedLabSongId(song.id)
+  const song = selected ?? songs[0] ?? fallbackSong(workspaceId)
+  setSelectedLabSongId(workspaceId, song.id)
   return song
 }
 
@@ -363,18 +364,23 @@ function roleForSection(section: SongSection): LabWorkerRole | null {
   return null
 }
 
-export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspaceName }: LabSongPadPageProps) {
+export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, workspaceName }: LabSongPadPageProps) {
   const roughRef = React.useRef<HTMLTextAreaElement>(null)
   const rememberRef = React.useRef<HTMLTextAreaElement>(null)
   const activeWorkerRunIdRef = React.useRef(0)
   const savingSongRef = React.useRef(false)
-  const [activeSongId, setActiveSongId] = React.useState(() => getActiveLabSong().id)
-  const [title, setTitle] = React.useState(() => getActiveLabSong().title)
-  const [project, setProject] = React.useState(() => getActiveLabSong().project)
-  const [projectColor, setProjectColor] = React.useState(() => getActiveLabSong().color)
-  const [roughText, setRoughText] = React.useState(() => getActiveLabSong().roughText)
-  const [rememberText, setRememberText] = React.useState(() => getActiveLabSong().rememberText)
-  const [sections, setSections] = React.useState<SongSection[]>(() => getActiveLabSong().sections.length ? getActiveLabSong().sections : INITIAL_SECTIONS)
+  const initialSongRef = React.useRef<LabUiSong | null>(null)
+  const readInitialSong = () => {
+    initialSongRef.current ??= getActiveLabSong(workspaceId, songId)
+    return initialSongRef.current
+  }
+  const [activeSongId, setActiveSongId] = React.useState(() => readInitialSong().id)
+  const [title, setTitle] = React.useState(() => readInitialSong().title)
+  const [project, setProject] = React.useState(() => readInitialSong().project)
+  const [projectColor, setProjectColor] = React.useState(() => readInitialSong().color)
+  const [roughText, setRoughText] = React.useState(() => readInitialSong().roughText)
+  const [rememberText, setRememberText] = React.useState(() => readInitialSong().rememberText)
+  const [sections, setSections] = React.useState<SongSection[]>(() => readInitialSong().sections.length ? readInitialSong().sections : INITIAL_SECTIONS)
   const [selectedText, setSelectedText] = React.useState('')
   const [selectionSource, setSelectionSource] = React.useState<SelectionSource>('rough')
   const [showEmptySections, setShowEmptySections] = React.useState(true)
@@ -389,7 +395,7 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
 
   React.useEffect(() => subscribeLabSongs(() => {
     if (savingSongRef.current) return
-    const next = getActiveLabSong()
+    const next = getActiveLabSong(workspaceId, songId)
     setActiveSongId(next.id)
     setTitle(next.title)
     setProject(next.project)
@@ -397,16 +403,27 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
     setRoughText(next.roughText)
     setRememberText(next.rememberText)
     setSections(next.sections.length ? next.sections : INITIAL_SECTIONS)
-  }), [])
+  }), [songId, workspaceId])
+
+  React.useEffect(() => {
+    const next = getActiveLabSong(workspaceId, songId)
+    setActiveSongId(next.id)
+    setTitle(next.title)
+    setProject(next.project)
+    setProjectColor(next.color)
+    setRoughText(next.roughText)
+    setRememberText(next.rememberText)
+    setSections(next.sections.length ? next.sections : INITIAL_SECTIONS)
+  }, [songId, workspaceId])
 
   React.useEffect(() => {
     savingSongRef.current = true
-    upsertLabUiSong({
+    upsertLabUiSong(workspaceId, {
       id: activeSongId,
       title,
       project,
       color: projectColor,
-      notes: loadLabUiSongs().find((song) => song.id === activeSongId)?.notes ?? '',
+      notes: loadLabUiSongs(workspaceId).find((song) => song.id === activeSongId)?.notes ?? '',
       roughText,
       rememberText,
       sections,

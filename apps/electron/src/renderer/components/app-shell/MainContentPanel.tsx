@@ -292,10 +292,11 @@ export function MainContentPanel({
         {navState.tab === 'songs' ? (
           <LabSongsPage workspaceName={activeWorkspace?.name} />
         ) : navState.tab === 'sequence' ? (
-          <LabSequencePage workspaceName={activeWorkspace?.name} />
+          <LabSequencePage workspaceId={activeWorkspaceId || ''} workspaceName={activeWorkspace?.name} />
         ) : navState.tab === 'pad' ? (
           <LabSongPadPage
             workspaceId={activeWorkspaceId || ''}
+            songId={navState.songId}
             artistProfileWorkspaceId={artistHQWorkspace?.id}
             workspaceName={activeWorkspace?.name}
           />

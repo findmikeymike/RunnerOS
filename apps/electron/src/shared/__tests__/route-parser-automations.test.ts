@@ -122,6 +122,13 @@ describe('route-parser: library routes', () => {
     expect(parseRouteToNavigationState('lab/pad')).toEqual({ navigator: 'lab', tab: 'pad' })
   })
 
+  it('parses "lab/pad/song/:id" as a route-scoped song pad', () => {
+    const parsed = parseCompoundRoute('lab/pad/song/night-drive')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'pad', details: { type: 'song', id: 'night-drive' } })
+    expect(buildCompoundRoute(parsed!)).toBe('lab/pad/song/night-drive')
+    expect(parseRouteToNavigationState('lab/pad/song/night-drive')).toEqual({ navigator: 'lab', tab: 'pad', songId: 'night-drive' })
+  })
+
   it('parses "lab/sequence" as the lab sequence tab', () => {
     const parsed = parseCompoundRoute('lab/sequence')
     expect(parsed).toEqual({ navigator: 'lab', labTab: 'sequence', details: null })
