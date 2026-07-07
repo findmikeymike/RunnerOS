@@ -6,7 +6,20 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, resolveBrowserEngine, launchBrowserContextForEngine } from '../../src/browser-engines.mjs';
-import { runLiveAction } from '../../src/runtime.mjs';
+import { buildContentContext, resolveDescription, resolveMediaList, resolveText } from '../../src/content-assets.mjs';
+import {
+  acquireProfileLock,
+  assertConfirmPolicy,
+  assertLiveReady,
+  buildBrowserPlan,
+  buildSmokeProfile,
+  canExecuteLiveAction,
+  duplicateActionResult,
+  findCompletedAction,
+  recordCompletedAction,
+  resolveConfirmPolicy,
+  smokeProfileAllowed,
+} from '../../src/action-safety.mjs';
 
 const SUPPORTED_PLATFORMS = new Set(['youtube']);
 
@@ -79,7 +92,9 @@ async function handleProfile(command, flags) {
       sessionRef,
       proxyId: flags['proxy-id'] || null,
       ratePolicy: flags['rate-policy'] || 'normal',
-      confirmPolicy: flags['confirm-policy'] || process.env.SOCIAL_CONFIRM_POLICY || 'require-confirm',
+      confirmPolicy: resolveConfirmPolicy(flags),
+      accountHandle: flags.handle || flags['account-handle'] || null,
+      accountUrl: flags['account-url'] || null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -103,9 +118,7 @@ async function handleProfile(command, flags) {
     assertPlatform(platform);
     const profileId = requireFlag(flags, 'profile');
     const confirmPolicy = requireFlag(flags, 'confirm-policy');
-    if (!['require-confirm', 'autorun'].includes(confirmPolicy)) {
-      throw new CliError('--confirm-policy must be require-confirm or autorun', 'INVALID_CONFIRM_POLICY');
-    }
+    assertConfirmPolicy(confirmPolicy);
 
     const store = loadProfileStore();
     const key = profileKey(platform, profileId);
@@ -202,19 +215,28 @@ async function handleYouTubeComment(flags) {
     return;
   }
 
-  const profile = getProfile('youtube', action.profile);
-  const result = await runLiveAction({
-    homeDir: socialHome(),
-    action,
-    flags,
-    run: () => commentYouTubeDirect(profile, action, flags),
-  });
+  const profile = getProfile('youtube', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
+  assertLiveReady(profile, flags, 'live YouTube comment');
+  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
+  if (duplicate) {
+    writeResult(duplicateActionResult(action, duplicate, 'comment.youtube'), flags.json);
+    return;
+  }
+  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
+  let result;
+  try {
+    result = await commentYouTubeDirect(profile, action, flags);
+    recordCompletedAction({ action, socialHome: socialHome(), result, command: 'comment.youtube' });
+  } finally {
+    releaseLock();
+  }
   writeResult(liveResult(action, result, 'comment.youtube'), flags.json);
 }
 
 function buildYouTubeTextAction(verb, flags, extraPayload) {
   const profileId = requireFlag(flags, 'profile');
-  const text = readText(flags);
+  const textResult = resolveText(flags);
+  const text = textResult.text;
   if (!text) throw new CliError(`YouTube ${verb} needs --text or --text-file`, 'MISSING_TEXT');
   return {
     actionId: flags['action-id'] || `act_${randomUUID()}`,
@@ -231,6 +253,7 @@ function buildYouTubeTextAction(verb, flags, extraPayload) {
       idempotencyKey: flags['idempotency-key'] || null,
       headed: Boolean(flags.headed),
     },
+    contentContext: buildContentContext(flags, { textSource: textResult.source }),
   };
 }
 
@@ -250,10 +273,11 @@ function dryRunResult(action, steps) {
     status: 'dry_run',
     command: `${action.verb}.youtube`,
     action,
-    browserPlan: {
-      sessionPath: sessionDir(getProfile('youtube', action.profile)),
-      steps,
-    },
+      browserPlan: buildBrowserPlan({
+        profile: getProfile('youtube', action.profile, { allowSmoke: true }),
+        sessionPath: sessionDir(getProfile('youtube', action.profile, { allowSmoke: true })),
+        steps,
+      }),
   };
 }
 
@@ -272,13 +296,15 @@ function liveResult(action, result, command) {
 
 async function handleYouTubePost(flags) {
   const profileId = requireFlag(flags, 'profile');
-  const title = readText(flags);
+  const titleResult = resolveText(flags);
+  const title = titleResult.text;
   if (!title) throw new CliError('YouTube upload needs --text/--title or --text-file', 'MISSING_TITLE');
 
-  const profile = getProfile('youtube', profileId);
-  const media = normalizeList(flags.media);
+  const profile = getProfile('youtube', profileId, { allowSmoke: smokeProfileAllowed(flags) });
+  const media = resolveMediaList(flags.media, flags);
   const postType = normalizePostType(flags['post-type'] || flags.type || 'video');
   const visibility = flags.visibility || 'private';
+  const descriptionResult = resolveDescription(flags);
   const action = {
     actionId: flags['action-id'] || `act_${randomUUID()}`,
     verb: 'post',
@@ -288,7 +314,7 @@ async function handleYouTubePost(flags) {
     payload: {
       text: title,
       title,
-      description: readDescription(flags),
+      description: descriptionResult.text,
       media,
       postType,
       visibility,
@@ -300,6 +326,10 @@ async function handleYouTubePost(flags) {
       idempotencyKey: flags['idempotency-key'] || null,
       headed: Boolean(flags.headed),
     },
+    contentContext: buildContentContext(flags, {
+      textSource: titleResult.source,
+      descriptionSource: descriptionResult.source,
+    }),
   };
 
   validateYouTubeAction(action);
@@ -314,10 +344,12 @@ async function handleYouTubePost(flags) {
       status: 'dry_run',
       command: 'post.youtube',
       action,
-      browserPlan: {
+      browserPlan: buildBrowserPlan({
+        profile,
         sessionPath: sessionDir(profile),
         steps: [
           'open persistent session',
+          'verify visible account/channel matches profile',
           'go to YouTube Studio upload',
           'attach video',
           'set title',
@@ -326,17 +358,25 @@ async function handleYouTubePost(flags) {
           'set visibility',
           postType === 'short' ? 'publish as Short' : 'publish video',
         ],
-      },
+      }),
     }, flags.json);
     return;
   }
 
-  const result = await runLiveAction({
-    homeDir: socialHome(),
-    action,
-    flags,
-    run: () => postYouTubeDirect(profile, action, flags),
-  });
+  assertLiveReady(profile, flags, 'live YouTube upload');
+  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
+  if (duplicate) {
+    writeResult(duplicateActionResult(action, duplicate, 'post.youtube'), flags.json);
+    return;
+  }
+  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
+  let result;
+  try {
+    result = await postYouTubeDirect(profile, action, flags);
+    recordCompletedAction({ action, socialHome: socialHome(), result, command: 'post.youtube' });
+  } finally {
+    releaseLock();
+  }
   writeResult({
     ok: result.ok,
     actionId: action.actionId,
@@ -411,7 +451,7 @@ async function postYouTubeDirect(profile, action, flags) {
     await fillYouTubeUploadDetails(page, action);
 
     if (!canExecuteLive(profile, flags)) {
-      throw new CliError('Refusing live upload because confirmation policy blocks autorun', 'CONFIRM_REQUIRED');
+      throw new CliError('Refusing live upload without explicit --confirm yes', 'CONFIRM_REQUIRED');
     }
 
     await advanceUploadFlow(page, action.payload.visibility);
@@ -446,7 +486,7 @@ async function commentYouTubeDirect(profile, action, flags) {
     });
 
     if (!canExecuteLive(profile, flags)) {
-      throw new CliError('Refusing live comment because confirmation policy blocks autorun', 'CONFIRM_REQUIRED');
+      throw new CliError('Refusing live comment without explicit --confirm yes', 'CONFIRM_REQUIRED');
     }
 
     await clickText(page, 'Post', 30000).catch(async () => {
@@ -613,10 +653,7 @@ function browserOptions(flags, headlessDefault) {
 }
 
 function canExecuteLive(profile, flags) {
-  if (flags.confirm === 'yes') return true;
-  if (flags.confirm === 'no') return false;
-  if (flags.autorun) return true;
-  return profile.confirmPolicy === 'autorun';
+  return canExecuteLiveAction(profile, flags);
 }
 
 function parseFlags(args) {
@@ -676,22 +713,12 @@ function saveProfileStore(store) {
   fs.writeFileSync(filePath, `${JSON.stringify(store, null, 2)}\n`, { mode: 0o600 });
 }
 
-function getProfile(platform, id) {
+function getProfile(platform, id, options = {}) {
   const store = loadProfileStore();
   const profile = store.profiles[profileKey(platform, id)];
   if (profile) return profile;
-  if (id === 'smoke') {
-    return {
-      id,
-      platform,
-      modePreference: 'browser',
-      adapter: DEFAULT_BROWSER_ENGINE,
-      browserEngine: DEFAULT_BROWSER_ENGINE,
-      sessionRef: path.join('sessions', platform, id),
-      proxyId: null,
-      ratePolicy: 'normal',
-      confirmPolicy: 'require-confirm',
-    };
+  if (id === 'smoke' && options.allowSmoke) {
+    return buildSmokeProfile(platform, id, DEFAULT_BROWSER_ENGINE);
   }
   throw new CliError(`Profile not found: ${platform}/${id}`, 'PROFILE_NOT_FOUND');
 }
@@ -730,16 +757,11 @@ function assertPlatform(platform) {
 }
 
 function readText(flags) {
-  if (flags.title) return String(flags.title);
-  if (flags.text) return String(flags.text);
-  if (flags['text-file']) return fs.readFileSync(String(flags['text-file']), 'utf8').trim();
-  return '';
+  return resolveText(flags).text;
 }
 
 function readDescription(flags) {
-  if (flags.description) return String(flags.description);
-  if (flags['description-file']) return fs.readFileSync(String(flags['description-file']), 'utf8').trim();
-  return '';
+  return resolveDescription(flags).text;
 }
 
 function normalizePostType(value) {
@@ -761,23 +783,21 @@ function printHelp() {
   console.log(`social - direct agent-native social CLI harness
 
 YouTube MVP:
-  social profile add youtube --profile channel01 --json
+  social profile add youtube --profile channel01 --handle @channel01 --json
   social profile set-policy youtube --profile channel01 --confirm-policy require-confirm --json
   social profile login youtube --profile channel01
   social profile status youtube --profile channel01 --live --json
   social post youtube --profile channel01 --post-type video --text "Video title" --media video.mp4 --visibility public --dry-run --json
-  social post youtube --profile channel01 --post-type short --text "Short title" --media short.mp4 --visibility public --json
+  social post youtube --profile channel01 --post-type short --text "Short title" --media short.mp4 --visibility public --engine playwright --confirm yes --json
   social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --text "comment" --dry-run --json
-  social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --text "comment" --json
-
-Live safety:
-  Live uploads/comments default to require-confirm. Pass --autorun (or --confirm yes,
-  or set the profile policy to autorun) to allow live execution. Re-running the same live
-  action is de-duplicated; pass --allow-duplicate to force a repeat.
+  social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --text "comment" --engine playwright --confirm yes --json
 
 Global env:
   SOCIAL_HOME Override local .social store
-  SOCIAL_CONFIRM_POLICY autorun|require-confirm (default: require-confirm)
+  SOCIAL_ASSET_ROOT Resolve relative --media paths from this folder
+  SOCIAL_CONTENT_ROOT Resolve relative --text/title/description file paths from this folder
+  SOCIAL_CONFIRM_POLICY autorun|require-confirm (default: require-confirm; autorun writes require SOCIAL_ALLOW_AUTORUN_WRITES=1)
+  SOCIAL_ALLOW_AUTORUN_WRITES=1 Allow legacy autorun write behavior
   SOCIAL_BROWSER_ENGINE runner-cdp|chrome-devtools|stagehand|cloakbrowser|playwright
 `);
 }

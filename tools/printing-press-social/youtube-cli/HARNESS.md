@@ -9,7 +9,7 @@ The harness exposes deterministic commands for agents. Agents should emit conten
 Root package binary is `social`. Standalone package binary is `youtube-social` with the same arguments.
 
 ```bash
-social profile add youtube --profile channel01 --json
+social profile add youtube --profile channel01 --handle @channel01 --json
 social profile set-policy youtube --profile channel01 --confirm-policy require-confirm --json
 social profile login youtube --profile channel01
 social profile list --json
@@ -17,7 +17,7 @@ social profile status youtube --profile channel01 --live --json
 social post youtube --profile channel01 --post-type video --text "Full video title" --description "description" --media video.mp4 --visibility public --dry-run --json
 social post youtube --profile channel01 --post-type short --text "Short title" --media short.mp4 --visibility public --dry-run --json
 social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --text "comment" --dry-run --json
-social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --text "comment" --json
+social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --text "comment" --engine playwright --confirm yes --json
 ```
 
 ## Adapter
@@ -56,7 +56,7 @@ Use `SOCIAL_HOME` to move the store for tests or isolated runs.
 
 ## Confirm Policy
 
-Default is `autorun`.
+Default is `require-confirm`. Live actions require `--confirm yes` for the exact approved action.
 
 ```bash
 social profile set-policy youtube --profile channel01 --confirm-policy require-confirm --json
@@ -68,3 +68,5 @@ Per-command override:
 --confirm no
 --confirm yes
 ```
+
+Profiles used for live actions must include `--handle` or `--account-url`.

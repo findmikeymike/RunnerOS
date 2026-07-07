@@ -240,10 +240,11 @@ Default architecture:
 1. Use the bundled \`social-publishing\` skill for platform playbooks and approval rules.
 2. Use the Printing Press Social source first.
 3. Run \`node src/social.mjs doctor --json\` from \`tools/printing-press-social\` before channel work.
-4. For publish/comment/DM, run the matching command with \`--dry-run --json\` first.
-5. Treat dry-run JSON as the action contract. Then execute in Runner's browser with \`browser_tool\`, not Playwright.
-6. Run \`browser_tool --help\` and read the browser tools guide before first browser use if the session requires it.
-7. If the user explicitly wants an existing Chrome browser/profile/tab, use \`chrome-cdp\`: list tabs first, ask them to enable Chrome remote debugging if unavailable, and keep live-action approval rules unchanged.
+4. When the user points to campaign assets or content folders, run \`node src/social.mjs assets --asset-root <dir> --platform <platform> --json\` and/or \`node src/social.mjs content --content-root <dir> --json\` before choosing files.
+5. For publish/comment/DM, run the matching command with \`--asset-root\`, \`--content-root\`, relative file names, and \`--dry-run --json\` first.
+6. Treat dry-run JSON as the action contract. \`browserPlan.accountVerification\` is mandatory. If \`verificationTargetKnown\` is false, stop and add a profile \`--handle\` or \`--account-url\` before any live action.
+7. Run \`browser_tool --help\` and read the browser tools guide before first browser use if the session requires it.
+8. If the user explicitly wants an existing Chrome browser/profile/tab, use \`chrome-cdp\`: list tabs first, ask them to enable Chrome remote debugging if unavailable, and keep live-action approval rules unchanged.
 
 Approval rule:
 - Never publish, comment, DM, upload, schedule, delete, follow, unfollow, or submit a final platform action without explicit user approval of the exact platform, profile, payload, target URL/recipient, and media.
@@ -251,10 +252,12 @@ Approval rule:
 
 Execution loop:
 1. Confirm missing required fields only when they cannot be inferred.
-2. Dry-run the CLI command with JSON output.
-3. Summarize the exact action and ask approval if it is live.
-4. Use \`browser_tool open\`, \`navigate\`, \`snapshot\`, \`find\`, \`click\`, \`fill\`, \`paste\`, \`upload\`, \`wait\`, and \`screenshot\` to complete the platform UI flow.
-5. After a live action, return a receipt: platform, profile, action, content summary, media path, target URL/recipient, timestamp, and observed result.
+2. Resolve campaign folders with \`assets\` / \`content\` commands when roots are available.
+3. Dry-run the CLI command with JSON output.
+4. Summarize the exact action, resolved media paths, content source, target account, and ask approval if it is live.
+5. Use \`browser_tool open\`, \`navigate\`, \`snapshot\`, \`find\`, \`click\`, \`fill\`, \`paste\`, \`upload\`, \`wait\`, and \`screenshot\` to complete the platform UI flow.
+6. Before final submit, capture snapshot/screenshot evidence that the visible account matches the expected handle or account URL in \`browserPlan.accountVerification\`. If the account does not match, stop.
+7. After a live action, return a receipt: platform, profile, action, content summary, media path, target URL/recipient, account verification evidence, timestamp, and observed result.
 
 Browser engine policy:
 - Preferred: Runner native \`browser_tool\` / \`runner-cdp\`.

@@ -22399,11 +22399,13 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 
 1. Read \`sources/printing-press-social/guide.md\` when available.
 2. Run \`node src/social.mjs doctor --json\` from \`tools/printing-press-social\`.
-3. For post/comment/DM, run the exact CLI action with \`--dry-run --json\`.
-4. Validate the payload against the platform checklist below.
-5. Ask for explicit approval before any live publish/send action.
-6. Execute through Runner \`browser_tool\` using the dry-run JSON as the action contract.
-7. Return a receipt with platform, profile, action, payload summary, media path, target, timestamp, and observed result.
+3. If a campaign/release/client folder is involved, list candidate media with \`node src/social.mjs assets --asset-root <dir> --platform <platform> --json\` and copy with \`node src/social.mjs content --content-root <dir> --json\`.
+4. For post/comment/DM, run the exact CLI action with \`--asset-root\`, \`--content-root\`, relative file names, and \`--dry-run --json\`.
+5. Validate the payload against the platform checklist below.
+6. Ask for explicit approval before any live publish/send action.
+7. Execute through Runner \`browser_tool\` using the dry-run JSON as the action contract.
+8. Treat \`browserPlan.accountVerification\` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before final submit. If \`verificationTargetKnown\` is false, stop and add a profile \`--handle\` or \`--account-url\`.
+9. Return a receipt with platform, profile, action, payload summary, media path, target, account verification evidence, timestamp, and observed result.
 
 ## Existing Chrome Sessions
 
@@ -22423,7 +22425,7 @@ Explain this model when the user is setting up social publishing or seems confus
 - Users should log in once per profile. The saved browser session keeps cookies/login state so they do not retype passwords every run.
 - Passwords, recovery codes, tokens, cookies, and 2FA secrets must never be written into Workspace Context, memory, source guides, or chat prompts.
 - Workspace Context should store only non-secret defaults: profile IDs, handles, account URLs, tone, posting defaults, and account notes.
-- Before live work, run \`node src/social.mjs doctor --live --json\` and verify the visible logged-in account matches the requested profile.
+- Before live work, run \`node src/social.mjs doctor --live --json\` and verify the visible logged-in account matches the profile handle or account URL.
 - If a session expires, pause and guide the user through logging in again for that specific profile.
 
 Use profile-specific commands:
@@ -22451,6 +22453,15 @@ Never perform these without approval of exact details:
 - credential entry, account switch, billing/payment, age-gated or sensitive submission
 
 Approval must name the platform, profile, target URL or recipient when relevant, final copy, media path, visibility, and whether it is live now or draft/scheduled.
+
+CLI safety behavior:
+
+- New Printing Press Social profiles default to \`require-confirm\`.
+- The \`smoke\` profile is dry-run only; never use it for live actions.
+- After explicit user approval, pass \`--confirm yes\` only for the exact approved live action. Do not use \`--autorun\` for write actions.
+- Reuse a stable \`--idempotency-key\` for retried live actions so the CLI can dedupe accidental repeats.
+- Use \`--asset-root\` and \`--content-root\` so receipts and dry-runs preserve exact source folders and resolved files.
+- When using \`runner-cdp\`, the CLI cannot itself bind a browser identity. The agent must use \`browserPlan.accountVerification\` and browser evidence before live submit.
 
 ## Universal Payload Rules
 

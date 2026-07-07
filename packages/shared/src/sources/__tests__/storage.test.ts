@@ -15,6 +15,9 @@ import type { FolderSourceConfig, LoadedSource } from '../types.ts';
 const sandboxHome = mkdtempSync(join(tmpdir(), 'global-sources-home-'));
 const sandboxHomeResolved = resolve(sandboxHome);
 const realHomeSourcesDir = resolve(join(os.homedir(), '.agents', 'sources'));
+const fakeCopilotComputerUseMcp = join(sandboxHome, 'computer-use-mcp');
+writeFileSync(fakeCopilotComputerUseMcp, '');
+process.env.CRAFT_COPILOT_COMPUTER_USE_MCP = fakeCopilotComputerUseMcp;
 mock.module('os', () => ({
   ...os,
   homedir: () => sandboxHome,

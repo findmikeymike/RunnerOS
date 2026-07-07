@@ -6,13 +6,40 @@
   "required": ["ok", "status"],
   "properties": {
     "ok": { "type": "boolean" },
-    "status": { "type": "string", "enum": ["succeeded", "failed", "dry_run"] },
+    "status": { "type": "string", "enum": ["succeeded", "failed", "dry_run", "duplicate"] },
     "command": { "type": "string" },
     "actionId": { "type": "string" },
     "platform": { "type": "string" },
     "profile": { "type": "string" },
     "action": { "$ref": "action.schema.json" },
-    "browserPlan": { "type": "object" },
+    "browserPlan": {
+      "type": "object",
+      "required": ["sessionPath", "steps", "accountVerification"],
+      "properties": {
+        "sessionPath": { "type": ["string", "null"] },
+        "steps": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "accountVerification": {
+          "type": "object",
+          "required": ["requiredBeforeLiveSubmit", "verificationTargetKnown", "platform", "profile", "fallbackExpectedIdentity", "evidenceRequired"],
+          "properties": {
+            "requiredBeforeLiveSubmit": { "type": "boolean" },
+            "verificationTargetKnown": { "type": "boolean" },
+            "platform": { "type": "string" },
+            "profile": { "type": "string" },
+            "expectedHandle": { "type": ["string", "null"] },
+            "expectedAccountUrl": { "type": ["string", "null"] },
+            "fallbackExpectedIdentity": { "type": ["string", "null"] },
+            "evidenceRequired": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "artifacts": { "type": "array" },
     "error": { "type": "string" },
     "code": { "type": "string" }

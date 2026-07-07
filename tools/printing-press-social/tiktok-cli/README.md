@@ -3,11 +3,11 @@
 Standalone binary:
 
 ```bash
-tiktok-social post tiktok --profile creator01 --text "caption" --media video.mp4 --json
+tiktok-social post tiktok --profile creator01 --text "caption" --media video.mp4 --dry-run --json
 ```
 
 Root workspace binary:
 
 ```bash
-social post tiktok --profile creator01 --text "caption" --media video.mp4 --json
+social post tiktok --profile creator01 --text "caption" --media video.mp4 --dry-run --json
 ```

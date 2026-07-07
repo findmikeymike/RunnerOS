@@ -9,17 +9,17 @@ The harness exposes deterministic commands for agents. Agents should emit conten
 Root package binary is `social`. Standalone package binary is `tiktok-social` with the same arguments.
 
 ```bash
-social profile add tiktok --profile artist01 --json
+social profile add tiktok --profile artist01 --handle @artist01 --json
 social profile set-policy tiktok --profile artist01 --confirm-policy require-confirm --json
 social profile login tiktok --profile artist01
 social profile list --json
 social profile status tiktok --profile artist01 --live --json
 social post tiktok --profile artist01 --text "caption" --media video.mp4 --dry-run --json
-social post tiktok --profile artist01 --text "caption" --media video.mp4 --json
+social post tiktok --profile artist01 --text "caption" --media video.mp4 --engine playwright --confirm yes --json
 social comment tiktok --profile artist01 --url "https://www.tiktok.com/@user/video/123" --text "comment" --dry-run --json
-social comment tiktok --profile artist01 --url "https://www.tiktok.com/@user/video/123" --text "comment" --json
+social comment tiktok --profile artist01 --url "https://www.tiktok.com/@user/video/123" --text "comment" --engine playwright --confirm yes --json
 social dm tiktok --profile artist01 --to username --text "message" --dry-run --json
-social dm tiktok --profile artist01 --to username --text "message" --json
+social dm tiktok --profile artist01 --to username --text "message" --engine playwright --confirm yes --json
 ```
 
 ## Adapter
@@ -55,7 +55,7 @@ Use `SOCIAL_HOME` to move the store for tests or isolated runs.
 
 ## Confirm Policy
 
-Default is `autorun`.
+Default is `require-confirm`. Live actions require `--confirm yes` for the exact approved action.
 
 ```bash
 social profile set-policy tiktok --profile artist01 --confirm-policy require-confirm --json
@@ -67,3 +67,5 @@ Per-command override:
 --confirm no
 --confirm yes
 ```
+
+Profiles used for live actions must include `--handle` or `--account-url`.

@@ -11,6 +11,15 @@
     "profile": { "type": "string", "minLength": 1 },
     "mode": { "type": "string", "enum": ["browser"] },
     "payload": { "type": "object" },
+    "contentContext": {
+      "type": "object",
+      "properties": {
+        "assetRoot": { "type": "string" },
+        "contentRoot": { "type": "string" },
+        "textSource": { "type": ["object", "null"] },
+        "descriptionSource": { "type": ["object", "null"] }
+      }
+    },
     "options": {
       "type": "object",
       "properties": {

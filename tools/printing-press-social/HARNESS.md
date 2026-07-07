@@ -16,7 +16,7 @@ The root dispatcher reads `registry.json`, routes to the platform harness, and p
 
 Default engine is `runner-cdp`.
 
-- `runner-cdp`: RunnerOS native browser/CDP execution. CLI dry-runs return the structured action and browser plan.
+- `runner-cdp`: RunnerOS native browser/CDP execution. CLI dry-runs return the structured action, browser plan, and mandatory account-verification contract.
 - `chrome-devtools`: external Chrome DevTools/CDP adapter lane.
 - `stagehand`: optional adaptive AI-browser lane.
 - `cloakbrowser`: optional local stealth lane.
@@ -29,6 +29,8 @@ social registry --json
 social doctor --json
 social doctor --live --json
 social repl
+social assets --asset-root ./assets --platform instagram --json
+social content --content-root ./content --json
 ```
 
 Source of truth:
@@ -59,6 +61,8 @@ social post youtube --profile channel01 --post-type short --text "Short title" -
 social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --text "comment" --dry-run --json
 ```
 
+Use `--asset-root` and `--content-root` when the user points to a campaign, client, or release folder. Then pass relative filenames from those roots so the dry-run JSON shows the resolved absolute media paths and content source.
+
 ## Storage Rule
 
 Sessions default to user config:
@@ -68,3 +72,7 @@ Sessions default to user config:
 ```
 
 Never commit `.social/`, browser profiles, cookies, or session folders.
+
+## Runner CDP Account Verification
+
+`runner-cdp` does not bind a CLI profile to an isolated browser identity by itself. Before any final live submit, the Runner operator must use `browserPlan.accountVerification` to verify the visible account/channel in the browser matches the expected handle or account URL. If the profile has no handle/URL or the visible account does not match, stop and ask the user to update the profile or switch/login.

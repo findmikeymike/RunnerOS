@@ -18,16 +18,16 @@ social post youtube --profile channel01 --post-type video --text "Full video tit
 social post youtube --profile channel01 --post-type short --text "Short title" --media short.mp4 --visibility public --dry-run --json
 ```
 
-Then execute live. Profiles default to `autorun`.
+Then execute live only after exact user approval. Default `runner-cdp` returns a plan for Runner browser tools; direct CLI live execution needs a configured fallback engine.
 
 ```bash
-social post youtube --profile channel01 --post-type video --text "Full video title" --media video.mp4 --visibility public --json
+social post youtube --profile channel01 --post-type video --text "Full video title" --media video.mp4 --visibility public --engine playwright --confirm yes --json
 ```
 
 ## Profile Setup
 
 ```bash
-social profile add youtube --profile channel01 --json
+social profile add youtube --profile channel01 --handle @channel01 --json
 social profile set-policy youtube --profile channel01 --confirm-policy require-confirm --json
 social profile login youtube --profile channel01
 social profile status youtube --profile channel01 --live --json
@@ -41,11 +41,12 @@ social comment youtube --profile channel01 --url "https://www.youtube.com/watch?
 
 ## Notes
 
-- Current bundled implementation uses Playwright as the OSS baseline.
+- Current bundled implementation defaults to Runner browser/CDP plans; Playwright is an optional standalone fallback.
 - CloakBrowser is optional local-only because its binary cannot be bundled into a sellable product without extra licensing.
 - Browser harness/CDP should be the long-term clean engine.
-- New profiles default to `autorun`.
-- Use `--confirm no` or `require-confirm` only when the user asks for a brake.
+- New profiles default to `require-confirm`.
+- Live profiles need `--handle` or `--account-url` so the visible browser account can be verified.
+- Use `--confirm yes` only for the exact approved live action.
 - Live YouTube uploads require one video file.
 - Use `--post-type video` for full videos and `--post-type short` for Shorts.
 - `--visibility` defaults to `private`; set `public` when the user wants it published publicly.

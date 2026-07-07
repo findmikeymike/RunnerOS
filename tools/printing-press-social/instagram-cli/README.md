@@ -3,11 +3,11 @@
 Standalone binary:
 
 ```bash
-instagram-social post instagram --profile artist01 --text "caption" --media image.jpg --json
+instagram-social post instagram --profile artist01 --text "caption" --media image.jpg --dry-run --json
 ```
 
 Root workspace binary:
 
 ```bash
-social post instagram --profile artist01 --text "caption" --media image.jpg --json
+social post instagram --profile artist01 --text "caption" --media image.jpg --dry-run --json
 ```
