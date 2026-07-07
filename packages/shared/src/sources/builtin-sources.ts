@@ -4,7 +4,7 @@
  * Project-level sources that ship with RunnerOS.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { accessSync, constants, existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter } from 'node:path';
 import { join, resolve } from 'node:path';
@@ -317,18 +317,31 @@ function getPrintifyBinaryPath(toolPath: string): string | null {
     process.env.PRINTIFY_PP_CLI ?? '',
     resourcesBase ? join(resourcesBase, 'resources', 'bin', platformDir, binaryName) : '',
     resourcesPath ? join(resourcesPath, 'app', 'resources', 'bin', platformDir, binaryName) : '',
-    join(toolPath, 'bin', platformDir, binaryName),
-    join(REPO_ROOT, 'apps', 'electron', 'resources', 'bin', platformDir, binaryName),
-    join(REPO_ROOT, 'resources', 'bin', platformDir, binaryName),
-    join(REPO_ROOT, 'bin', platformDir, binaryName),
+    ...(process.env.RUNNEROS_DISABLE_PRINTIFY_BUNDLED_CLI === '1' ? [] : [
+      join(toolPath, 'bin', platformDir, binaryName),
+      join(REPO_ROOT, 'apps', 'electron', 'resources', 'bin', platformDir, binaryName),
+      join(REPO_ROOT, 'resources', 'bin', platformDir, binaryName),
+      join(REPO_ROOT, 'bin', platformDir, binaryName),
+    ]),
     join(homedir(), '.local', 'bin', binaryName),
     ...((process.env.PATH ?? '').split(delimiter).filter(Boolean).map((dir) => join(dir, binaryName))),
   ];
 
   for (const candidate of candidates) {
-    if (candidate && existsSync(candidate)) return candidate;
+    if (candidate && isRunnableFile(candidate)) return candidate;
   }
   return null;
+}
+
+function isRunnableFile(candidate: string): boolean {
+  if (!existsSync(candidate)) return false;
+  if (process.platform === 'win32') return true;
+  try {
+    accessSync(candidate, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 type MediaProviderPreference = 'auto' | 'fal' | 'replicate' | 'wavespeed';
@@ -1552,7 +1565,7 @@ export function getPrintifySource(workspaceId: string, workspaceRootPath: string
     connectionError: !toolFolderExists
       ? 'Bundled Printify tool folder not found'
       : !binaryPath
-        ? 'printify-pp-cli binary not found. Run `npx -y @mvanhorn/printing-press-library install printify --cli-only` or set PRINTIFY_PP_CLI.'
+        ? 'printify-pp-cli binary not found or not executable. Run `npx -y @mvanhorn/printing-press-library install printify --cli-only` or set PRINTIFY_PP_CLI.'
         : authState.configured
         ? 'Printify token is saved but not validated. Run `node bin/printify.mjs doctor --agent` before store work.'
         : undefined,

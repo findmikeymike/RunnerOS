@@ -483,10 +483,12 @@ describe('loadAllSources', () => {
       cli: process.env.PRINTIFY_PP_CLI,
       path: process.env.PATH,
       resourcesBase: process.env.CRAFT_RESOURCES_BASE,
+      disableBundledCli: process.env.RUNNEROS_DISABLE_PRINTIFY_BUNDLED_CLI,
     };
     process.env.PRINTIFY_API_TOKEN = 'test-printify-token';
     delete process.env.PRINTIFY_PP_CLI;
     delete process.env.CRAFT_RESOURCES_BASE;
+    process.env.RUNNEROS_DISABLE_PRINTIFY_BUNDLED_CLI = '1';
     process.env.PATH = '';
 
     try {
@@ -496,12 +498,13 @@ describe('loadAllSources', () => {
 
       expect(found).toBeDefined();
       expect(found!.config.connectionStatus).toBe('failed');
-      expect(found!.config.connectionError).toContain('printify-pp-cli binary not found');
+      expect(found!.config.connectionError).toContain('printify-pp-cli binary not found or not executable');
     } finally {
       if (saved.token === undefined) delete process.env.PRINTIFY_API_TOKEN; else process.env.PRINTIFY_API_TOKEN = saved.token;
       if (saved.cli === undefined) delete process.env.PRINTIFY_PP_CLI; else process.env.PRINTIFY_PP_CLI = saved.cli;
       if (saved.path === undefined) delete process.env.PATH; else process.env.PATH = saved.path;
       if (saved.resourcesBase === undefined) delete process.env.CRAFT_RESOURCES_BASE; else process.env.CRAFT_RESOURCES_BASE = saved.resourcesBase;
+      if (saved.disableBundledCli === undefined) delete process.env.RUNNEROS_DISABLE_PRINTIFY_BUNDLED_CLI; else process.env.RUNNEROS_DISABLE_PRINTIFY_BUNDLED_CLI = saved.disableBundledCli;
     }
   });
 

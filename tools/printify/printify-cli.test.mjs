@@ -11,6 +11,7 @@ function run(args) {
     env: {
       PATH: '',
       HOME: join(tmpdir(), 'runneros-printify-test-home-without-cli'),
+      RUNNEROS_DISABLE_PRINTIFY_BUNDLED_CLI: '1',
     },
   });
 
@@ -27,7 +28,7 @@ describe('printify cli wrapper', () => {
 
     expect(result.status).toBe(127);
     expect(result.stdout.ok).toBe(false);
-    expect(result.stdout.error).toContain('printify-pp-cli binary not found');
+    expect(result.stdout.error).toContain('printify-pp-cli binary not found or not executable');
     expect(JSON.stringify(result.stdout)).not.toContain('PRINTIFY_API_TOKEN=');
   });
 
@@ -64,6 +65,16 @@ describe('printify cli wrapper', () => {
     expect(result.stdout.operation).toBe('printify.write');
   });
 
+  test('sync and tail are approval-gated because they can be long-running or locally mutating', () => {
+    const sync = run(['sync', '--agent']);
+    const tail = run(['tail', '--agent']);
+
+    expect(sync.status).toBe(0);
+    expect(sync.stdout.requiresApproval).toBe(true);
+    expect(tail.status).toBe(0);
+    expect(tail.stdout.requiresApproval).toBe(true);
+  });
+
   test('approval command shell-quotes args and keeps argv form', () => {
     const result = run(['products-json', 'create-anew-product', '--title', "Summer Tee's Best", '--agent']);
 
@@ -95,6 +106,6 @@ describe('printify cli wrapper', () => {
 
     expect(result.status).toBe(127);
     expect(result.stdout.ok).toBe(false);
-    expect(result.stdout.error).toContain('printify-pp-cli binary not found');
+    expect(result.stdout.error).toContain('printify-pp-cli binary not found or not executable');
   });
 });

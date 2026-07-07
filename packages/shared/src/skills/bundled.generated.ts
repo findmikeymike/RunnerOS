@@ -15340,7 +15340,7 @@ cd tools/printify && node bin/printify.mjs placement-matrix --product-file produ
 cd tools/printify && node bin/printify.mjs product-drift --product-file current-product.json --manifest intended-manifest.json --agent
 \`\`\`
 
-If \`doctor\` says \`printify-pp-cli\` is missing, install the upstream Printing Press CLI with \`npx -y @mvanhorn/printing-press-library install printify --cli-only\`. RunnerOS checks the default \`~/.local/bin/printify-pp-cli\` install path and \`PRINTIFY_PP_CLI\`.
+If \`doctor\` says \`printify-pp-cli\` is missing, install the upstream Printing Press CLI with \`npx -y @mvanhorn/printing-press-library install printify --cli-only\`. Apple Silicon Mac builds bundle the binary. RunnerOS also checks the default \`~/.local/bin/printify-pp-cli\` install path and \`PRINTIFY_PP_CLI\`.
 
 Write-capable commands must go through the RunnerOS approval gate:
 
@@ -15414,7 +15414,7 @@ If setup is missing:
 
 - Save \`PRINTIFY_API_TOKEN\` in Settings -> Secrets.
 - Install the CLI if needed: \`npx -y @mvanhorn/printing-press-library install printify --cli-only\`.
-- The installer places \`printify-pp-cli\` in \`~/.local/bin\` by default; RunnerOS checks that path directly, or \`PRINTIFY_PP_CLI\` when set.
+- Apple Silicon Mac builds bundle \`printify-pp-cli\`. The installer places \`printify-pp-cli\` in \`~/.local/bin\` by default; RunnerOS checks that path directly, or \`PRINTIFY_PP_CLI\` when set.
 
 ## Read / Planning Commands
 

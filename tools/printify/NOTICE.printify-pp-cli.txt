@@ -1,0 +1,5 @@
+Printing Press Printify CLI
+Copyright mvanhorn and contributors.
+
+This product bundles the printify-pp-cli binary from the Printing Press Library.
+The bundled binary is distributed under the Apache License, Version 2.0.

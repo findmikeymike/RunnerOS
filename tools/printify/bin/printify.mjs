@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { existsSync } from 'node:fs';
+import { accessSync, constants, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { delimiter } from 'node:path';
@@ -31,10 +31,12 @@ function pathCandidates() {
   if (process.resourcesPath) {
     candidates.push(join(process.resourcesPath, 'app', 'resources', 'bin', platformDir, binaryName));
   }
-  candidates.push(join(toolDir, 'bin', platformDir, binaryName));
-  candidates.push(join(repoRoot, 'apps', 'electron', 'resources', 'bin', platformDir, binaryName));
-  candidates.push(join(repoRoot, 'resources', 'bin', platformDir, binaryName));
-  candidates.push(join(repoRoot, 'bin', platformDir, binaryName));
+  if (process.env.RUNNEROS_DISABLE_PRINTIFY_BUNDLED_CLI !== '1') {
+    candidates.push(join(toolDir, 'bin', platformDir, binaryName));
+    candidates.push(join(repoRoot, 'apps', 'electron', 'resources', 'bin', platformDir, binaryName));
+    candidates.push(join(repoRoot, 'resources', 'bin', platformDir, binaryName));
+    candidates.push(join(repoRoot, 'bin', platformDir, binaryName));
+  }
   candidates.push(join(homedir(), '.local', 'bin', binaryName));
   candidates.push(binaryName);
   return candidates;
@@ -47,7 +49,7 @@ function resolveBinary() {
       if (onPath) return onPath;
       continue;
     }
-    if (existsSync(candidate)) return candidate;
+    if (isRunnableFile(candidate)) return candidate;
   }
   return null;
 }
@@ -56,9 +58,20 @@ function findExecutableOnPath(command) {
   for (const dir of (process.env.PATH ?? '').split(delimiter)) {
     if (!dir) continue;
     const candidate = join(dir, command);
-    if (existsSync(candidate)) return candidate;
+    if (isRunnableFile(candidate)) return candidate;
   }
   return null;
+}
+
+function isRunnableFile(candidate) {
+  if (!existsSync(candidate)) return false;
+  if (process.platform === 'win32') return true;
+  try {
+    accessSync(candidate, constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function isSafeReadLike(args) {
@@ -83,8 +96,6 @@ function isSafeReadLike(args) {
     'product-drift',
     'search',
     'shops-json',
-    'sync',
-    'tail',
     'uploads-json',
     'version',
     'which',
@@ -140,7 +151,7 @@ function redactSensitiveArgs(args) {
 function installationHelp(exitCode = 127) {
   jsonOut({
     ok: false,
-    error: 'printify-pp-cli binary not found',
+    error: 'printify-pp-cli binary not found or not executable',
     checked: pathCandidates(),
     fix: 'Install with `npx -y @mvanhorn/printing-press-library install printify --cli-only`, bundle printify-pp-cli under tools/printify/bin/<platform-arch>/, or set PRINTIFY_PP_CLI.',
   }, exitCode);

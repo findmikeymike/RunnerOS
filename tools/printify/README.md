@@ -27,3 +27,5 @@ That installer places `printify-pp-cli` in `~/.local/bin` by default. The Runner
 ```bash
 npm run install:cli
 ```
+
+RunnerOS currently bundles `bin/darwin-arm64/printify-pp-cli` for Apple Silicon Mac builds. Other platforms should install the CLI or set `PRINTIFY_PP_CLI` until their binaries are bundled.
