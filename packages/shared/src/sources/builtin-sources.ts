@@ -308,6 +308,29 @@ function getPrintifyAuthState(): { configured: boolean } {
   return { configured: Boolean(process.env.PRINTIFY_API_TOKEN?.trim()) };
 }
 
+function getPrintifyBinaryPath(toolPath: string): string | null {
+  const platformDir = `${process.platform}-${process.arch}`;
+  const binaryName = process.platform === 'win32' ? 'printify-pp-cli.exe' : 'printify-pp-cli';
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const candidates = [
+    process.env.PRINTIFY_PP_CLI ?? '',
+    resourcesBase ? join(resourcesBase, 'resources', 'bin', platformDir, binaryName) : '',
+    resourcesPath ? join(resourcesPath, 'app', 'resources', 'bin', platformDir, binaryName) : '',
+    join(toolPath, 'bin', platformDir, binaryName),
+    join(REPO_ROOT, 'apps', 'electron', 'resources', 'bin', platformDir, binaryName),
+    join(REPO_ROOT, 'resources', 'bin', platformDir, binaryName),
+    join(REPO_ROOT, 'bin', platformDir, binaryName),
+    join(homedir(), '.local', 'bin', binaryName),
+    ...((process.env.PATH ?? '').split(delimiter).filter(Boolean).map((dir) => join(dir, binaryName))),
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate && existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 type MediaProviderPreference = 'auto' | 'fal' | 'replicate' | 'wavespeed';
 type MediaProviderStrategy = 'balanced' | 'speed' | 'quality' | 'cost';
 
@@ -1505,6 +1528,8 @@ export function getShopifySource(workspaceId: string, workspaceRootPath: string)
 export function getPrintifySource(workspaceId: string, workspaceRootPath: string): LoadedSource {
   const toolPath = getPrintifyPath();
   const authState = getPrintifyAuthState();
+  const toolFolderExists = existsSync(toolPath);
+  const binaryPath = toolFolderExists ? getPrintifyBinaryPath(toolPath) : null;
   const config: FolderSourceConfig = {
     id: 'builtin-printify',
     name: 'Printify',
@@ -1523,10 +1548,12 @@ export function getPrintifySource(workspaceId: string, workspaceRootPath: string
     tagline: 'Printing Press Printify CLI for catalog, uploads, product proofing, orders, webhooks, and approval-gated POD operations.',
     icon: 'P',
     isAuthenticated: authState.configured,
-    connectionStatus: !existsSync(toolPath) ? 'failed' : authState.configured ? 'untested' : 'needs_auth',
-    connectionError: !existsSync(toolPath)
+    connectionStatus: !toolFolderExists || !binaryPath ? 'failed' : authState.configured ? 'untested' : 'needs_auth',
+    connectionError: !toolFolderExists
       ? 'Bundled Printify tool folder not found'
-      : authState.configured
+      : !binaryPath
+        ? 'printify-pp-cli binary not found. Run `npx -y @mvanhorn/printing-press-library install printify --cli-only` or set PRINTIFY_PP_CLI.'
+        : authState.configured
         ? 'Printify token is saved but not validated. Run `node bin/printify.mjs doctor --agent` before store work.'
         : undefined,
   };
@@ -1545,7 +1572,7 @@ export function getPrintifySource(workspaceId: string, workspaceRootPath: string
         'Setup:',
         '1. Open Settings -> Secrets.',
         '2. Save `PRINTIFY_API_TOKEN` from Printify Connections / API settings.',
-        '3. Install or bundle `printify-pp-cli` when missing: `npx -y @mvanhorn/printing-press-library install printify --cli-only`.',
+        '3. Install or bundle `printify-pp-cli` when missing: `npx -y @mvanhorn/printing-press-library install printify --cli-only`. RunnerOS also checks `~/.local/bin/printify-pp-cli` and `PRINTIFY_PP_CLI`.',
         '',
         'Workflow:',
         '1. Use the displayed local path as the working directory.',

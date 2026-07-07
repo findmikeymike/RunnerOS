@@ -7,6 +7,7 @@
     "runner-printify": "bin/printify.mjs"
   },
   "scripts": {
+    "install:cli": "npx -y @mvanhorn/printing-press-library install printify --cli-only",
     "doctor": "node bin/printify.mjs doctor --agent",
     "test": "bun test printify-cli.test.mjs"
   }

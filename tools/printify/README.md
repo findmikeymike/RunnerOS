@@ -21,3 +21,9 @@ Install the upstream CLI when missing:
 ```bash
 npx -y @mvanhorn/printing-press-library install printify --cli-only
 ```
+
+That installer places `printify-pp-cli` in `~/.local/bin` by default. The RunnerOS wrapper checks that path directly, so it does not require the app process PATH to include it. You can also run:
+
+```bash
+npm run install:cli
+```

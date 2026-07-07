@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 const cli = join(import.meta.dir, 'bin', 'printify.mjs');
 
@@ -9,7 +10,7 @@ function run(args) {
     encoding: 'utf8',
     env: {
       PATH: '',
-      HOME: process.env.HOME ?? '',
+      HOME: join(tmpdir(), 'runneros-printify-test-home-without-cli'),
     },
   });
 
@@ -49,6 +50,14 @@ describe('printify cli wrapper', () => {
 
   test('product publish is approval-gated before binary resolution', () => {
     const result = run(['shops', 'products-json', 'publish', '123', 'abc', '--agent']);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.requiresApproval).toBe(true);
+    expect(result.stdout.operation).toBe('printify.write');
+  });
+
+  test('unknown commands are approval-gated by default', () => {
+    const result = run(['future-provider-command', '--agent']);
 
     expect(result.status).toBe(0);
     expect(result.stdout.requiresApproval).toBe(true);

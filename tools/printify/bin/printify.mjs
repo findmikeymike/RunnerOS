@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +35,7 @@ function pathCandidates() {
   candidates.push(join(repoRoot, 'apps', 'electron', 'resources', 'bin', platformDir, binaryName));
   candidates.push(join(repoRoot, 'resources', 'bin', platformDir, binaryName));
   candidates.push(join(repoRoot, 'bin', platformDir, binaryName));
+  candidates.push(join(homedir(), '.local', 'bin', binaryName));
   candidates.push(binaryName);
   return candidates;
 }
@@ -59,28 +61,36 @@ function findExecutableOnPath(command) {
   return null;
 }
 
-function isWriteLike(args) {
-  const joined = args.filter((arg) => !arg.startsWith('--')).join(' ').toLowerCase();
-  if (!joined.trim()) return false;
+function isSafeReadLike(args) {
+  const positional = args.filter((arg) => !arg.startsWith('--'));
+  const command = positional[0]?.toLowerCase();
+  if (!command) return true;
 
-  const writePatterns = [
-    /\bcreate\b/,
-    /\bupdate\b/,
-    /\bdelete\b/,
-    /\bdisconnect\b/,
-    /\barchive\b/,
-    /\bpublish(?:ed|ing)?\b/,
-    /\bunpublish\b/,
-    /\bsubmit\b/,
-    /\bfulfill\b/,
-    /\border\b.*\bwrite\b/,
-    /\bproducts-json\b.*\bcreate/,
-    /\bproducts-json\b.*\bupdate/,
-    /\buploads\b.*\ban-image\b/,
-    /\bshops\b.*\bmanage\b/,
-  ];
+  const safeCommands = new Set([
+    'agent-context',
+    'analytics',
+    'api',
+    'asset-reuse',
+    'catalog',
+    'catalog-margin-matrix',
+    'completion',
+    'doctor',
+    'fulfillment-risk',
+    'help',
+    'personalization-audit',
+    'personalization-batch',
+    'placement-matrix',
+    'product-drift',
+    'search',
+    'shops-json',
+    'sync',
+    'tail',
+    'uploads-json',
+    'version',
+    'which',
+  ]);
 
-  return writePatterns.some((pattern) => pattern.test(joined));
+  return safeCommands.has(command);
 }
 
 function approvalPacket(args) {
@@ -175,7 +185,7 @@ const passthroughArgs = args.filter((arg) => arg !== '--confirm-runner');
 
 if (args[0] === 'doctor') {
   doctor(binary, args.slice(1));
-} else if (isWriteLike(args) && !dryRun && !confirmed) {
+} else if (!isSafeReadLike(args) && !dryRun && !confirmed) {
   jsonOut(approvalPacket(args));
 } else {
   if (!binary) {
