@@ -123,6 +123,115 @@ export function createCampaignPlan({ platform, goal = 'conversions', artistConte
   };
 }
 
+export function createSetupPlan({ platform, goal = 'conversions', artistContextPath, territories, budget, account, campaignName }) {
+  const campaignPlan = createCampaignPlan({ platform, goal, artistContextPath, territories, budget, account });
+  const normalizedPlatform = normalizePlatform(platform);
+  const browserPlan = normalizedPlatform === 'meta'
+    ? metaBrowserSetupPlan(campaignPlan, { campaignName })
+    : googleBrowserSetupPlan(campaignPlan, { campaignName });
+
+  return {
+    ok: true,
+    schema: 'runneros.ads.setup_plan.v1',
+    platform: normalizedPlatform,
+    account: account || null,
+    goal,
+    budget: budget || null,
+    strategy: campaignPlan,
+    browserPlan,
+    approvalGate: {
+      requiredBeforePublish: true,
+      stopBeforeControls: ['Publish', 'Launch', 'Apply', 'Save changes', 'Turn on', 'Increase budget', 'Schedule'],
+      packetCommand: `node tools/ads-operator/bin/ads-operator.mjs packet create --platform ${normalizedPlatform} --type publish --account <account> --action "<campaign setup summary>" --spend-impact "<budget impact>" --evidence <plan-or-export-path> --json`,
+    },
+    writeExecuted: false,
+  };
+}
+
+function metaBrowserSetupPlan(plan, { campaignName }) {
+  const name = campaignName || plan.recommendedStructure.campaign;
+  const adSets = plan.recommendedStructure.adSets;
+  return {
+    route: 'meta-ads-manager-browser',
+    startUrl: 'https://adsmanager.facebook.com/adsmanager/manage/campaigns',
+    setupObjects: ['campaign', 'ad set', 'ad'],
+    campaignFields: {
+      name,
+      objective: plan.recommendedStructure.objective,
+      specialAdCategory: 'Confirm based on the product/artist. Do not guess for credit, employment, housing, politics, or social issues.',
+      buyingType: 'Auction unless account context says otherwise.',
+      budget: plan.budget || 'User approval required before entering budget.',
+    },
+    adSetFields: adSets.map((adSet) => ({
+      name: adSet.name,
+      location: adSet.territory,
+      audienceSignals: adSet.audienceSignals,
+      optimization: objectiveOptimization(plan.goal),
+      placements: 'Advantage+ placements for first draft unless brand safety or channel strategy requires manual placements.',
+      budgetRole: adSet.budgetRole,
+    })),
+    adFields: plan.recommendedStructure.creativeTests.map((test, index) => ({
+      name: `Creative test ${index + 1}: ${test}`,
+      concept: test,
+      assetsNeeded: ['primary text', 'headline', 'description if used', 'destination URL', 'creative asset', 'CTA'],
+    })),
+    browserSteps: [
+      'Open Meta Ads Manager and confirm the correct Business/ad account.',
+      'Create a new campaign draft. Do not publish.',
+      'Select the objective from campaignFields.objective and name the campaign.',
+      'Confirm special ad category honestly; stop if category eligibility is uncertain.',
+      'Create ad sets from adSetFields, using the listed territories, audience signals, optimization, placements, and budget role.',
+      'Create ads from adFields and attach approved creative assets/copy only.',
+      'Review delivery estimate, tracking pixel/conversion event, URL parameters, placements, and budget.',
+      'Stop at the final review screen before Publish/Launch and create an approval packet.',
+    ],
+    requiredEvidence: [
+      'campaign draft screenshot or exported draft summary',
+      'strategy/setup plan JSON',
+      'budget and spend impact',
+      'targeting/territory rationale',
+      'creative/copy variants',
+      'tracking/conversion event selected',
+    ],
+  };
+}
+
+function googleBrowserSetupPlan(plan, { campaignName }) {
+  const name = campaignName || plan.recommendedStructure.campaign;
+  return {
+    route: 'google-ads-browser-or-cli',
+    startUrl: 'https://ads.google.com/',
+    setupObjects: ['campaign', 'ad group', 'ad/asset', 'keyword or audience where applicable'],
+    campaignFields: {
+      name,
+      objective: plan.recommendedStructure.objective,
+      budget: plan.budget || 'User approval required before entering budget.',
+    },
+    adGroupFields: plan.recommendedStructure.adSets.map((adSet) => ({
+      name: adSet.name,
+      location: adSet.territory,
+      audienceSignals: adSet.audienceSignals,
+      budgetRole: adSet.budgetRole,
+    })),
+    browserSteps: [
+      'Use google-ads CLI for read-only account checks when configured.',
+      'Open Google Ads and confirm customer/account.',
+      'Create a draft campaign/ad group structure from strategy. Do not publish.',
+      'Review conversion goal, bidding, budget, assets, keywords/audiences, locations, and final URL.',
+      'Stop before Publish/Apply and create an approval packet.',
+    ],
+    requiredEvidence: ['draft screenshot or export', 'strategy/setup plan JSON', 'budget and spend impact', 'targeting rationale', 'conversion goal'],
+  };
+}
+
+function objectiveOptimization(goal) {
+  if (goal === 'traffic') return 'Landing page views or link clicks depending on tracking quality.';
+  if (goal === 'awareness') return 'Reach or impressions.';
+  if (goal === 'leads') return 'Leads with instant form or website conversion event.';
+  if (goal === 'sales' || goal === 'roas') return 'Purchase or conversion value when pixel/CAPI is reliable.';
+  return 'Conversion event aligned to campaign goal.';
+}
+
 function loadRows(filePath, { platform, level }) {
   const absolute = resolve(process.cwd(), filePath);
   if (extname(absolute).toLowerCase() === '.csv') return importCsvFile(absolute, { platform, level });

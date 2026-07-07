@@ -595,7 +595,7 @@ export function ensureBuiltInAgentSkillsForSlug(
   requiredSkills: ReadonlyArray<string>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
@@ -619,6 +619,47 @@ export function ensureBuiltInAgentSkillsForSlug(
   }
 }
 
+export function ensureBuiltInAgentMetadataSlugs(
+  slug: string,
+  required: Partial<Pick<AgentMetadata, 'skills' | 'sources' | 'optionalSources'>>,
+  options?: AgentStorageOptions,
+): { updated: boolean } {
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent']);
+  if (!builtIns.has(slug)) return { updated: false };
+
+  const loaded = loadGlobalAgent(slug, options);
+  if (!loaded) return { updated: false };
+
+  let changed = false;
+  const next: AgentMetadata = { ...loaded.metadata };
+  for (const key of ['skills', 'sources', 'optionalSources'] as const) {
+    const requiredValues = required[key] ?? [];
+    if (requiredValues.length === 0) continue;
+    const current = next[key] ?? [];
+    const missing = requiredValues.filter((value) => !current.includes(value));
+    if (missing.length === 0) continue;
+    next[key] = [...current, ...missing];
+    changed = true;
+  }
+  const optionalSources = new Set(required.optionalSources ?? []);
+  const requiredSources = new Set(required.sources ?? []);
+  if (optionalSources.size > 0 && next.sources?.length) {
+    const filteredSources = next.sources.filter((source) => !optionalSources.has(source) || requiredSources.has(source));
+    if (filteredSources.length !== next.sources.length) {
+      next.sources = filteredSources.length > 0 ? filteredSources : undefined;
+      changed = true;
+    }
+  }
+  if (!changed) return { updated: false };
+
+  try {
+    writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+    return { updated: true };
+  } catch {
+    return { updated: false };
+  }
+}
+
 /**
  * Apply a narrow metadata migration to a built-in agent. This is intentionally
  * conservative: it only patches fields that still match old shipped values, so
@@ -632,6 +673,7 @@ export function replaceBuiltInAgentMetadata(
   const builtIns = new Set([
     'concierge',
     'orchestrator',
+    'ads-agent',
     'ig-trending-power-up',
     'influencer-campaign-power-up',
     'playlisting-power-up',
@@ -678,7 +720,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !loaded.systemPrompt.includes(oldText)) return { updated: false };
@@ -708,7 +750,7 @@ export function replaceBuiltInAgentPromptPattern(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !pattern.test(loaded.systemPrompt)) return { updated: false };

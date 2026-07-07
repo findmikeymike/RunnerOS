@@ -16,6 +16,7 @@ import {
   deleteGlobalAgent,
   seedGlobalLibraryIfEmpty,
   ensureRequiredAgents,
+  ensureBuiltInAgentMetadataSlugs,
   ensureBuiltInAgentSkills,
   ensureBuiltInAgentSkillsForSlug,
   replaceBuiltInAgentMetadata,
@@ -573,7 +574,8 @@ body
     expect(adsAgent?.systemPrompt).toContain('node bin/google-ads.mjs')
     expect(adsAgent?.systemPrompt).toContain('browser dashboard/export mode')
     expect(adsAgent?.systemPrompt).toContain('tools/ads-operator')
-    expect(adsAgent?.systemPrompt).toContain('Do not assume a local Meta Printing Press CLI is bundled')
+    expect(adsAgent?.systemPrompt).toContain('ads-operator --platform meta')
+    expect(adsAgent?.systemPrompt).toContain('setup-plan --platform meta')
     expect(adsAgent?.systemPrompt).toContain('Routing decision tree')
     expect(adsAgent?.systemPrompt).toContain('approval packet')
     expect(adsAgent?.systemPrompt).toContain('explicit user approval')
@@ -1015,6 +1017,52 @@ body
     expect(loadGlobalAgent('orchestrator', { globalAgentsDir })!.metadata.skills).toEqual(['agent-creator'])
   })
 
+  test('ensureBuiltInAgentMetadataSlugs upgrades stale Ads Agent source routing', () => {
+    writeGlobalAgent(
+      {
+        slug: 'ads-agent',
+        metadata: {
+          name: 'Ads Agent',
+          description: 'Plan, review, and improve Meta and Google ad campaigns.',
+          skills: ['ad-creative', 'google-ads'],
+          sources: ['meta-ads', 'google-ads'],
+        },
+        systemPrompt: 'Ads Agent body stays intact.',
+      },
+      { globalAgentsDir },
+    )
+    writeGlobalAgent(
+      {
+        slug: 'writer',
+        metadata: {
+          name: 'Writer',
+          description: 'Writes.',
+          skills: ['ad-creative', 'google-ads'],
+          sources: ['meta-ads', 'google-ads'],
+        },
+        systemPrompt: 'Writer body.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureBuiltInAgentMetadataSlugs('ads-agent', {
+      skills: ['ad-creative', 'google-ads', 'paid-ads-browser-operator'],
+      sources: ['google-ads', 'ads-operator'],
+      optionalSources: ['meta-ads'],
+    }, { globalAgentsDir }).updated).toBe(true)
+
+    const adsAgent = loadGlobalAgent('ads-agent', { globalAgentsDir })!
+    expect(adsAgent.metadata.skills).toEqual(['ad-creative', 'google-ads', 'paid-ads-browser-operator'])
+    expect(adsAgent.metadata.sources).toEqual(['google-ads', 'ads-operator'])
+    expect(adsAgent.metadata.optionalSources).toEqual(['meta-ads'])
+    expect(adsAgent.systemPrompt).toBe('Ads Agent body stays intact.')
+    expect(ensureBuiltInAgentMetadataSlugs('writer', {
+      skills: ['paid-ads-browser-operator'],
+      sources: ['ads-operator'],
+    }, { globalAgentsDir }).updated).toBe(false)
+    expect(loadGlobalAgent('writer', { globalAgentsDir })!.metadata.sources).toEqual(['meta-ads', 'google-ads'])
+  })
+
   test('replaceBuiltInAgentPromptText only patches built-in prompt bodies on exact match', () => {
     writeGlobalAgent(
       {
@@ -1096,5 +1144,29 @@ body
     const pattern = /When the user wants creator help,[\s\S]*?Do not load creator\s+skills unless the user explicitly asks for them\./
     expect(replaceBuiltInAgentPromptPattern('concierge', pattern, 'Use baked-in creator skills.', { globalAgentsDir }).updated).toBe(true)
     expect(loadGlobalAgent('concierge', { globalAgentsDir })!.systemPrompt).toBe('Intro\nUse baked-in creator skills.\nOutro')
+  })
+
+  test('replaceBuiltInAgentPromptPattern can upgrade stale Ads Agent prompt', () => {
+    writeGlobalAgent(
+      {
+        slug: 'ads-agent',
+        metadata: { name: 'Ads Agent', description: 'Handles ads.' },
+        systemPrompt: [
+          'You are Ads Agent, old prompt.',
+          'Meta Ads auth happens through the `meta-ads` OAuth MCP source.',
+          'For proposed writes, run a `--dry-run` preview.',
+          'Never apply a campaign, budget, catalog, creative, keyword, audience, placement, conversion, billing, or status change without explicit user approval in the current conversation.',
+        ].join('\n'),
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentPromptPattern(
+      'ads-agent',
+      /Meta Ads auth happens through the `meta-ads` OAuth MCP source[\s\S]*dry-run/,
+      'Use `ads-operator --platform meta` and `setup-plan --platform meta`.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    expect(loadGlobalAgent('ads-agent', { globalAgentsDir })!.systemPrompt).toContain('setup-plan --platform meta')
   })
 })

@@ -37,6 +37,7 @@ export {
   ensureRequiredAgents,
   ensureBuiltInAgentSkills,
   ensureBuiltInAgentSkillsForSlug,
+  ensureBuiltInAgentMetadataSlugs,
   replaceBuiltInAgentMetadata,
   replaceBuiltInAgentPromptText,
   replaceBuiltInAgentPromptPattern,

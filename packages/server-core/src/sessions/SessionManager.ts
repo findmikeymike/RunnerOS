@@ -2793,7 +2793,7 @@ export class SessionManager implements ISessionManager {
           sessionLog.warn('[skills] Workspace→global mirror skipped:', err as Error)
         }
         try {
-          const { CONCIERGE_SLUG, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
+          const { CONCIERGE_SLUG, ensureBuiltInAgentMetadataSlugs, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
           const { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } = await import('@craft-agent/shared/skills/system')
           const { updated } = ensureBuiltInAgentSkills(CREATOR_SYSTEM_SKILL_SLUGS)
           if (updated > 0) {
@@ -2840,6 +2840,27 @@ export class SessionManager implements ISessionManager {
           ].some(Boolean)
           if (powerUpMetadataUpdated) {
             sessionLog.info('[agent-definitions] Updated Power Up agent metadata')
+          }
+          const adsAgent = STARTER_AGENTS.find(agent => agent.slug === 'ads-agent')
+          const adsAgentMetadataUpdated = adsAgent
+            ? ensureBuiltInAgentMetadataSlugs('ads-agent', {
+                skills: adsAgent.metadata.skills,
+                sources: adsAgent.metadata.sources,
+                optionalSources: adsAgent.metadata.optionalSources,
+              }).updated
+            : false
+          if (adsAgentMetadataUpdated) {
+            sessionLog.info('[agent-definitions] Updated Ads Agent paid-ads metadata')
+          }
+          const adsAgentPromptUpdated = adsAgent
+            ? replaceBuiltInAgentPromptPattern(
+                'ads-agent',
+                /You are Ads Agent,[\s\S]*Meta Ads auth happens through the `meta-ads` OAuth MCP source[\s\S]*For proposed writes, run a `--dry-run` preview[\s\S]*Never apply a campaign, budget, catalog, creative, keyword, audience, placement, conversion, billing, or status change without explicit user approval in the current conversation\./,
+                adsAgent.systemPrompt,
+              ).updated
+            : false
+          if (adsAgentPromptUpdated) {
+            sessionLog.info('[agent-definitions] Updated Ads Agent paid-ads prompt')
           }
           const industryHunterAgent = STARTER_AGENTS.find(agent => agent.slug === 'industry-hunter')
           const industryHunterMetadataUpdated = industryHunterAgent

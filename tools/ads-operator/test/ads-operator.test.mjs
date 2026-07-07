@@ -355,6 +355,54 @@ describe('ads-operator cli', () => {
     expect(savedPlan.writeExecuted).toBe(false);
   });
 
+  test('creates Meta browser setup plans for campaign drafts without executing writes', () => {
+    const dir = tempDir();
+    const context = tempFile('artist-context.md', [
+      'Artist: Luna Vale',
+      'Audience: synth pop fans, nightlife, heartbreak edits',
+    ].join('\n'));
+    const setupPath = join(dir, 'meta-setup-plan.json');
+    const result = run([
+      'setup-plan',
+      '--platform',
+      'meta',
+      '--goal',
+      'leads',
+      '--account',
+      'act_123',
+      '--budget',
+      '$50/day',
+      '--territories',
+      'Los Angeles,London',
+      '--campaign-name',
+      'Luna Vale lead test',
+      '--artist-context',
+      context,
+      '--out',
+      setupPath,
+      '--json',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.ok).toBe(true);
+    expect(result.stdout.schema).toBe('runneros.ads.setup_plan.v1');
+    expect(result.stdout.platform).toBe('meta');
+    expect(result.stdout.browserPlan.route).toBe('meta-ads-manager-browser');
+    expect(result.stdout.browserPlan.startUrl).toContain('adsmanager.facebook.com');
+    expect(result.stdout.browserPlan.campaignFields.name).toBe('Luna Vale lead test');
+    expect(result.stdout.browserPlan.campaignFields.objective).toBe('Leads');
+    expect(result.stdout.browserPlan.adSetFields.length).toBe(2);
+    expect(result.stdout.browserPlan.browserSteps.join(' ')).toContain('Do not publish');
+    expect(result.stdout.approvalGate.requiredBeforePublish).toBe(true);
+    expect(result.stdout.approvalGate.packetCommand).toContain('packet create --platform meta');
+    expect(result.stdout.writeExecuted).toBe(false);
+    expect(result.stdout.outputPath).toBe(setupPath);
+    expect(existsSync(setupPath)).toBe(true);
+    const savedSetup = JSON.parse(readFileSync(setupPath, 'utf8'));
+    expect(savedSetup.schema).toBe('runneros.ads.setup_plan.v1');
+    expect(savedSetup.writeExecuted).toBe(false);
+  });
+
   test('approval packet marks existing local evidence as verified', () => {
     const file = tempCsv('Campaign name,Impressions,Clicks,Spend\nLaunch,1,1,1\n');
     const result = run([

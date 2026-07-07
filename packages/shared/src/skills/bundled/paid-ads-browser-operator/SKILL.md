@@ -11,7 +11,7 @@ Use this skill to keep paid-ads work useful when APIs are unavailable while stil
 
 1. Prefer connected structured sources for read-only work:
    - Google Ads: use `google-ads`.
-   - Meta Ads: use `meta-ads` when authenticated and eligible.
+   - Meta Ads: use `ads-operator --platform meta` as the local browser/export/setup operator. Use `meta-ads` only when authenticated and eligible.
 2. If structured access is missing, blocked, expired, or incomplete, switch to browser dashboard/export mode.
 3. If browser automation is blocked, ask the user for an export and give exact platform, account, date range, table, columns, and file type.
 4. Use screenshots as visual evidence only. Use API/export data for numbers when available.
@@ -34,6 +34,7 @@ node tools/ads-operator/bin/ads-operator.mjs export-plan --platform meta|google 
 node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json
 node tools/ads-operator/bin/ads-operator.mjs audit <file.csv|import.json> --platform meta|google --level campaign|adset|adgroup|ad|keyword|search-term --goal conversions|traffic|awareness|leads|sales|roas --json
 node tools/ads-operator/bin/ads-operator.mjs campaign-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --out campaign-plan.json --json
+node tools/ads-operator/bin/ads-operator.mjs setup-plan --platform meta|google --goal <goal> --artist-context <file.md> --territories "city one,city two" --budget "<amount>" --campaign-name "<name>" --out setup-plan.json --json
 node tools/ads-operator/bin/ads-operator.mjs packet create --platform meta|google --type publish|budget|status|targeting|creative --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
 node tools/ads-operator/bin/ads-operator.mjs receipt create --packet packet.json --status approved|rejected|skipped --out receipt.json --json
 ```
@@ -43,6 +44,8 @@ Treat `packet create` and `receipt create` as artifacts, not execution commands.
 Use `audit` after import to surface spend waste, weak CTR, no-conversion spend, search-term cleanup, fatigue signals, and budget concentration.
 
 Use `campaign-plan` to draft a campaign from artist context, audience signals, territories, goal, and budget. It may recommend audience and territory research, but it must not publish or create the campaign.
+
+Use `setup-plan` before browser-guided campaign setup. For Meta, it returns the Ads Manager route, campaign/ad set/ad fields, browser steps, evidence requirements, and approval gate. Follow it to create drafts only; stop before Publish/Launch.
 
 ## Browser Export Protocol
 
@@ -57,8 +60,10 @@ Before inspecting a dashboard:
 For Meta:
 
 - Use browser/export mode when Meta MCP is unauthenticated, blocked, or insufficient.
+- For campaign setup, run `campaign-plan` first, then `setup-plan --platform meta`, then use Meta Ads Manager browser mode to create a draft only.
 - Export campaign, ad set, or ad tables where possible.
 - Check objective, delivery/status, budget, spend, results, CPA/CPL/ROAS where available, CTR, CPC, CPM, frequency, conversion signal, learning/delivery limits, audience overlap, placement issues, catalog/feed issues, and creative fatigue.
+- Stop before Publish, Launch, Apply, Save changes, Turn on, budget changes, tracking changes, or any other control that can spend or mutate the account.
 
 For Google Ads:
 

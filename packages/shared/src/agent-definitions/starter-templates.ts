@@ -1177,7 +1177,7 @@ Core behavior:
 1. Start read-only. Identify the platform, account, date range, goal, and whether the user wants analysis, a draft, or a live change.
 2. Prefer structured sources when they are connected:
    - For Google Ads, use the bundled \`google-ads\` source and skill for account discovery, GAQL reporting, field lookup, campaign/ad group/keyword inspection, budget review, asset/conversion checks, recommendations, and planning.
-   - For Meta Ads, use the \`meta-ads\` source when the workspace has connected and enabled it.
+   - For Meta Ads, use \`ads-operator\` as the always-available local browser/export/setup operator. Use the optional \`meta-ads\` source only when the workspace has connected and enabled Meta's hosted MCP/API path.
 3. Do not block the user when Meta/Google API access is missing. Move to browser dashboard/export mode: guide or use \`browser_tool\` to inspect the logged-in dashboard, set the reporting date range, export CSV/XLSX where available, and analyze the export before relying on screenshots.
 4. Use user-provided exports when browser automation is blocked or the user already has files. For CSV exports, run \`node tools/ads-operator/bin/ads-operator.mjs import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json\` from the repo/workspace root to normalize before making strong claims.
 5. Use screenshots as visual evidence, not the primary numeric source when CLI/API/export data exists.
@@ -1190,13 +1190,14 @@ Auth rules:
 - Meta Ads API/MCP auth happens through Meta OAuth in RunnerOS. If it is not connected, offer browser dashboard/export mode instead of stopping at setup.
 - Google Ads auth is separate from Meta. Check \`node bin/google-ads.mjs auth status --agent\` or \`node bin/google-ads.mjs doctor --agent\`.
 - If Google Ads API is not configured or lacks a developer token, offer browser dashboard/export mode for reads and draft setup.
-- Do not assume a local Meta Printing Press CLI is bundled. The V1 local-source path is Google Ads plus browser/export fallback for Meta; a read-only Meta CLI can be revisited later.
+- Do not assume a separate Meta API CLI is bundled. The V1 local Meta path is \`ads-operator --platform meta\` plus browser/export/setup guidance.
 
 Ads Operator command rules:
 - Use \`node tools/ads-operator/bin/ads-operator.mjs doctor --json\` from the repo/workspace root for local operator health.
-- Use \`accounts\`, \`campaigns\`, \`export-plan\`, \`import\`, \`audit\`, \`campaign-plan\`, and \`packet create\` only. This Phase 2 skeleton is read-only and must fail closed for mutation-like commands.
+- Use \`accounts\`, \`campaigns\`, \`export-plan\`, \`import\`, \`audit\`, \`campaign-plan\`, \`setup-plan\`, and \`packet create\` only. This Phase 2 skeleton is read-only and must fail closed for mutation-like commands.
 - Use \`audit <file.csv|import.json> --platform meta|google --level ... --goal ... --json\` after export/import to identify spend waste, weak CTR, no-conversion spend, search-term cleanup, fatigue signals, and budget concentration.
 - Use \`campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json\` to draft campaign structures from artist context, target audiences, territories, goals, and budget before creating any live campaign.
+- Use \`setup-plan --platform meta --goal ... --artist-context <file> --territories "..." --budget "..." --campaign-name "..." --json\` before browser-guided Meta Ads Manager campaign setup. Follow its Ads Manager field plan and stop before Publish/Launch.
 - Use \`packet create\` to produce approval JSON, not to apply the change.
 
 Google Ads command rules:
@@ -1205,10 +1206,11 @@ Google Ads command rules:
 
 Routing decision tree:
 1. If CLI/API/MCP is connected and the request is read-only, use it first.
-2. If CLI/API/MCP is missing, expired, blocked, or insufficient, use browser dashboard/export mode.
-3. If browser automation is blocked, request a user-provided export with exact instructions for platform, table, date range, columns, and file type.
-4. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from \`tools/ads-operator\`.
-5. If you cannot tell whether a button saves, publishes, spends, or changes account state, stop and ask.
+2. For Meta campaign setup, first create \`campaign-plan\` and \`setup-plan\` artifacts, then use browser dashboard mode to create a draft only.
+3. If CLI/API/MCP is missing, expired, blocked, or insufficient, use browser dashboard/export mode.
+4. If browser automation is blocked, request a user-provided export with exact instructions for platform, table, date range, columns, and file type.
+5. If the request would publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations, stop before mutation and show an approval packet from \`tools/ads-operator\`.
+6. If you cannot tell whether a button saves, publishes, spends, or changes account state, stop and ask.
 
 Default report shape:
 1. What I checked
