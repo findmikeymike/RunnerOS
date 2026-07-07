@@ -6,6 +6,7 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, resolveBrowserEngine, launchBrowserContextForEngine } from '../../src/browser-engines.mjs';
+import { runLiveAction } from '../../src/runtime.mjs';
 
 const SUPPORTED_PLATFORMS = new Set(['instagram']);
 
@@ -83,7 +84,7 @@ async function handleProfile(command, flags) {
       sessionRef,
       proxyId: flags['proxy-id'] || null,
       ratePolicy: flags['rate-policy'] || 'normal',
-      confirmPolicy: flags['confirm-policy'] || process.env.SOCIAL_CONFIRM_POLICY || 'autorun',
+      confirmPolicy: flags['confirm-policy'] || process.env.SOCIAL_CONFIRM_POLICY || 'require-confirm',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -207,7 +208,12 @@ async function handleInstagramComment(flags) {
   }
 
   const profile = getProfile('instagram', action.profile);
-  const result = await commentInstagramDirect(profile, action, flags);
+  const result = await runLiveAction({
+    homeDir: socialHome(),
+    action,
+    flags,
+    run: () => commentInstagramDirect(profile, action, flags),
+  });
   writeResult(liveResult(action, result, 'comment.instagram'), flags.json);
 }
 
@@ -226,7 +232,12 @@ async function handleInstagramDm(flags) {
   }
 
   const profile = getProfile('instagram', action.profile);
-  const result = await dmInstagramDirect(profile, action, flags);
+  const result = await runLiveAction({
+    homeDir: socialHome(),
+    action,
+    flags,
+    run: () => dmInstagramDirect(profile, action, flags),
+  });
   writeResult(liveResult(action, result, 'dm.instagram'), flags.json);
 }
 
@@ -333,7 +344,12 @@ async function handleInstagramPost(flags) {
     return;
   }
 
-  const result = await postInstagramDirect(profile, action, flags);
+  const result = await runLiveAction({
+    homeDir: socialHome(),
+    action,
+    flags,
+    run: () => postInstagramDirect(profile, action, flags),
+  });
   writeResult({
     ok: result.ok,
     actionId: action.actionId,
@@ -655,7 +671,7 @@ function getProfile(platform, id) {
       sessionRef: path.join('sessions', platform, id),
       proxyId: null,
       ratePolicy: 'normal',
-      confirmPolicy: 'autorun',
+      confirmPolicy: 'require-confirm',
     };
   }
   throw new CliError(`Profile not found: ${platform}/${id}`, 'PROFILE_NOT_FOUND');
@@ -727,9 +743,14 @@ Instagram MVP:
   social dm instagram --profile artist01 --to username --text "message" --dry-run --json
   social dm instagram --profile artist01 --to username --text "message" --json
 
+Live safety:
+  Live posts/comments/DMs default to require-confirm. Pass --autorun (or --confirm yes,
+  or set the profile policy to autorun) to allow live execution. Re-running the same live
+  action is de-duplicated; pass --allow-duplicate to force a repeat.
+
 Global env:
   SOCIAL_HOME Override local .social store
-  SOCIAL_CONFIRM_POLICY autorun|require-confirm
+  SOCIAL_CONFIRM_POLICY autorun|require-confirm (default: require-confirm)
   SOCIAL_BROWSER_ENGINE runner-cdp|chrome-devtools|stagehand|cloakbrowser|playwright
 `);
 }

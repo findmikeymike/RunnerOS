@@ -6,6 +6,7 @@ import path from 'node:path';
 import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, resolveBrowserEngine, launchBrowserContextForEngine } from '../../src/browser-engines.mjs';
+import { runLiveAction } from '../../src/runtime.mjs';
 
 const SUPPORTED_PLATFORMS = new Set(['tiktok']);
 
@@ -83,7 +84,7 @@ async function handleProfile(command, flags) {
       sessionRef,
       proxyId: flags['proxy-id'] || null,
       ratePolicy: flags['rate-policy'] || 'normal',
-      confirmPolicy: flags['confirm-policy'] || process.env.SOCIAL_CONFIRM_POLICY || 'autorun',
+      confirmPolicy: flags['confirm-policy'] || process.env.SOCIAL_CONFIRM_POLICY || 'require-confirm',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -207,7 +208,12 @@ async function handleTikTokComment(flags) {
   }
 
   const profile = getProfile('tiktok', action.profile);
-  const result = await commentTikTokDirect(profile, action, flags);
+  const result = await runLiveAction({
+    homeDir: socialHome(),
+    action,
+    flags,
+    run: () => commentTikTokDirect(profile, action, flags),
+  });
   writeResult(liveResult(action, result, 'comment.tiktok'), flags.json);
 }
 
@@ -226,7 +232,12 @@ async function handleTikTokDm(flags) {
   }
 
   const profile = getProfile('tiktok', action.profile);
-  const result = await dmTikTokDirect(profile, action, flags);
+  const result = await runLiveAction({
+    homeDir: socialHome(),
+    action,
+    flags,
+    run: () => dmTikTokDirect(profile, action, flags),
+  });
   writeResult(liveResult(action, result, 'dm.tiktok'), flags.json);
 }
 
@@ -333,7 +344,12 @@ async function handleTikTokPost(flags) {
     return;
   }
 
-  const result = await postTikTokDirect(profile, action, flags);
+  const result = await runLiveAction({
+    homeDir: socialHome(),
+    action,
+    flags,
+    run: () => postTikTokDirect(profile, action, flags),
+  });
   writeResult({
     ok: result.ok,
     actionId: action.actionId,
@@ -657,7 +673,7 @@ function getProfile(platform, id) {
       sessionRef: path.join('sessions', platform, id),
       proxyId: null,
       ratePolicy: 'normal',
-      confirmPolicy: 'autorun',
+      confirmPolicy: 'require-confirm',
     };
   }
   throw new CliError(`Profile not found: ${platform}/${id}`, 'PROFILE_NOT_FOUND');
@@ -725,9 +741,14 @@ TikTok MVP:
   social dm tiktok --profile artist01 --to username --text "message" --dry-run --json
   social dm tiktok --profile artist01 --to username --text "message" --json
 
+Live safety:
+  Live posts/comments/DMs default to require-confirm. Pass --autorun (or --confirm yes,
+  or set the profile policy to autorun) to allow live execution. Re-running the same live
+  action is de-duplicated; pass --allow-duplicate to force a repeat.
+
 Global env:
   SOCIAL_HOME Override local .social store
-  SOCIAL_CONFIRM_POLICY autorun|require-confirm
+  SOCIAL_CONFIRM_POLICY autorun|require-confirm (default: require-confirm)
   SOCIAL_BROWSER_ENGINE runner-cdp|chrome-devtools|stagehand|cloakbrowser|playwright
 `);
 }
