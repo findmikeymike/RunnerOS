@@ -1082,6 +1082,29 @@ body
     expect(loadGlobalAgent('writer', { globalAgentsDir })!.metadata.sources).toEqual(['meta-ads', 'google-ads'])
   })
 
+  test('ensureBuiltInAgentMetadataSlugs upgrades ads specialist research skills', () => {
+    writeGlobalAgent(
+      {
+        slug: 'ad-creative-agent',
+        metadata: {
+          name: 'Ad Creative Agent',
+          description: 'Builds paid ad creative.',
+          skills: ['artist-ad-dna', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder'],
+        },
+        systemPrompt: 'Ad Creative body stays intact.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureBuiltInAgentMetadataSlugs('ad-creative-agent', {
+      skills: ['artist-ad-dna', 'ad-library-intel', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder'],
+    }, { globalAgentsDir }).updated).toBe(true)
+
+    const creative = loadGlobalAgent('ad-creative-agent', { globalAgentsDir })!
+    expect(creative.metadata.skills).toEqual(['artist-ad-dna', 'ad-library-intel', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder'])
+    expect(creative.systemPrompt).toBe('Ad Creative body stays intact.')
+  })
+
   test('replaceBuiltInAgentPromptText only patches built-in prompt bodies on exact match', () => {
     writeGlobalAgent(
       {

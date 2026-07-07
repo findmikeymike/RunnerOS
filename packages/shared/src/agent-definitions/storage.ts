@@ -595,7 +595,7 @@ export function ensureBuiltInAgentSkillsForSlug(
   requiredSkills: ReadonlyArray<string>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
@@ -624,7 +624,7 @@ export function ensureBuiltInAgentMetadataSlugs(
   required: Partial<Pick<AgentMetadata, 'skills' | 'sources' | 'optionalSources'>>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
