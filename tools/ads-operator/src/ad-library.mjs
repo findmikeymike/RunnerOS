@@ -181,12 +181,15 @@ function buildCompetitiveGap({ formats, angles, rowCount }) {
   return {
     diversityScore,
     diversityRead: diversityScore >= 70 ? 'wide' : diversityScore >= 40 ? 'moderate' : 'narrow',
-    crowdedFormats,
+    provenFormats: crowdedFormats,
     underusedFormats: underusedFormats.slice(0, 3),
     underusedAngles: underusedAngles.slice(0, 3),
-    mostUsefulOpening: underusedFormats.length || underusedAngles.length
-      ? 'Differentiate with an underused format or angle instead of copying the most crowded lane.'
-      : 'Captured competitors already cover the obvious lanes; differentiation needs sharper artist-specific voice, visual world, or offer.',
+    strategicRead: crowdedFormats.length
+      ? 'Do not ignore repeated formats. Treat them as proven lanes, then make the artist-specific hook, visual world, and offer feel unmistakably original.'
+      : 'No dominant repeated format appeared in the capture. Test several formats before committing budget.',
+    optionalWhiteSpace: underusedFormats.length || underusedAngles.length
+      ? 'Underused formats or angles are optional test lanes, not replacements for proven winners.'
+      : 'The obvious whitespace is not format-based; differentiation should come from voice, visual world, targeting, or offer.',
   };
 }
 

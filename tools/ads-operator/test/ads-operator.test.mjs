@@ -118,6 +118,14 @@ describe('ads-operator cli', () => {
           cta: 'Watch Now',
           mediaType: 'video',
         },
+        {
+          pageName: 'Artist Two',
+          searchTerm: 'viral indie song',
+          adText: 'The new visualizer is out now. Watch now.',
+          headline: 'Visualizer',
+          cta: 'Watch Now',
+          mediaType: 'video',
+        },
       ],
     }));
     const result = run(['ad-library-analyze', file, '--artist', 'Watching Tornado Videos', '--json']);
@@ -126,12 +134,14 @@ describe('ads-operator cli', () => {
     expect(result.stdout.ok).toBe(true);
     expect(result.stdout.schema).toBe('runneros.ads.ad_library_intel.v1');
     expect(result.stdout.confidence.performanceData).toBe('none');
-    expect(result.stdout.patterns.formats['music-video-clip']).toBe(1);
+    expect(result.stdout.patterns.formats['music-video-clip']).toBe(2);
     expect(result.stdout.patterns.angles.identity).toBe(1);
     expect(result.stdout.patterns.hooks[0]).toContain('late night drives');
     expect(result.stdout.competitiveGap.diversityRead).toBe('wide');
+    expect(result.stdout.competitiveGap.provenFormats).toContain('music-video-clip');
     expect(result.stdout.competitiveGap.underusedFormats).toContain('performance-video');
-    expect(result.stdout.competitiveGap.mostUsefulOpening).toContain('Differentiate');
+    expect(result.stdout.competitiveGap.strategicRead).toContain('proven lanes');
+    expect(result.stdout.competitiveGap.optionalWhiteSpace).toContain('optional test lanes');
     expect(result.stdout.recommendations.join(' ')).toContain('artist context');
     expect(result.stdout.writeExecuted).toBe(false);
   });
