@@ -66,6 +66,7 @@ import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
 import { LabWorkspaceHome } from './LabWorkspaceHome'
 import { LabSongsPage } from './LabSongsPage'
 import { LabSongPadPage } from './LabSongPadPage'
+import { LabSequencePage } from './LabSequencePage'
 import { AgendaPage } from './AgendaPage'
 import { AGENDA_LABEL } from './agenda-utils'
 import { CommunityPage } from './CommunityPage'
@@ -290,6 +291,8 @@ export function MainContentPanel({
       <Panel variant="grow" className={className}>
         {navState.tab === 'songs' ? (
           <LabSongsPage workspaceName={activeWorkspace?.name} />
+        ) : navState.tab === 'sequence' ? (
+          <LabSequencePage workspaceName={activeWorkspace?.name} />
         ) : navState.tab === 'pad' ? (
           <LabSongPadPage
             workspaceId={activeWorkspaceId || ''}

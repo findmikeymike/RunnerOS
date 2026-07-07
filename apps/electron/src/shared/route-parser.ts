@@ -55,7 +55,7 @@ export interface ParsedCompoundRoute {
   /** Output id for Video Studio navigator. */
   videoStudioOutputId?: string
   /** Lab sub-page. */
-  labTab?: 'home' | 'songs' | 'pad'
+  labTab?: 'home' | 'songs' | 'pad' | 'sequence'
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -113,6 +113,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
     if (!tab) return { navigator: 'lab', labTab: 'home', details: null }
     if (tab === 'songs') return { navigator: 'lab', labTab: 'songs', details: null }
     if (tab === 'pad') return { navigator: 'lab', labTab: 'pad', details: null }
+    if (tab === 'sequence') return { navigator: 'lab', labTab: 'sequence', details: null }
     return null
   }
 
@@ -377,6 +378,7 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
 
   if (parsed.navigator === 'lab') {
     if (parsed.labTab === 'pad') return 'lab/pad'
+    if (parsed.labTab === 'sequence') return 'lab/sequence'
     return parsed.labTab === 'songs' ? 'lab/songs' : 'lab'
   }
 
@@ -736,6 +738,7 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
   if (compound.navigator === 'lab') {
     if (compound.labTab === 'songs') return { navigator: 'lab', tab: 'songs' }
     if (compound.labTab === 'pad') return { navigator: 'lab', tab: 'pad' }
+    if (compound.labTab === 'sequence') return { navigator: 'lab', tab: 'sequence' }
     return { navigator: 'lab' }
   }
 
@@ -877,6 +880,7 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
     case 'lab':
       if (parsed.params.tab === 'songs') return { navigator: 'lab', tab: 'songs' }
       if (parsed.params.tab === 'pad') return { navigator: 'lab', tab: 'pad' }
+      if (parsed.params.tab === 'sequence') return { navigator: 'lab', tab: 'sequence' }
       return { navigator: 'lab' }
     case 'settings':
       return { navigator: 'settings', subpage: 'ai' }

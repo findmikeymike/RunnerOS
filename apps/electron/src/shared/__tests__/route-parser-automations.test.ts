@@ -122,6 +122,13 @@ describe('route-parser: library routes', () => {
     expect(parseRouteToNavigationState('lab/pad')).toEqual({ navigator: 'lab', tab: 'pad' })
   })
 
+  it('parses "lab/sequence" as the lab sequence tab', () => {
+    const parsed = parseCompoundRoute('lab/sequence')
+    expect(parsed).toEqual({ navigator: 'lab', labTab: 'sequence', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('lab/sequence')
+    expect(parseRouteToNavigationState('lab/sequence')).toEqual({ navigator: 'lab', tab: 'sequence' })
+  })
+
   it('parses "agents" as the agents navigator', () => {
     const state = parseRouteToNavigationState('agents')
     expect(state).toEqual({ navigator: 'agents', details: null })

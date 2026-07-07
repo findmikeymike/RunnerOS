@@ -1177,7 +1177,7 @@ export interface CampaignNavigationState {
 
 export interface LabNavigationState {
   navigator: 'lab'
-  tab?: 'home' | 'songs' | 'pad'
+  tab?: 'home' | 'songs' | 'pad' | 'sequence'
   rightSidebar?: RightSidebarPanel
 }
 
@@ -1412,6 +1412,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'lab') {
     if (state.tab === 'pad') return 'lab/pad'
+    if (state.tab === 'sequence') return 'lab/sequence'
     return state.tab === 'songs' ? 'lab/songs' : 'lab'
   }
   if (state.navigator === 'sources') {
@@ -1491,6 +1492,7 @@ export const parseNavigationStateKey = (key: string): NavigationState | null => 
   if (key === 'lab') return { navigator: 'lab' }
   if (key === 'lab/songs') return { navigator: 'lab', tab: 'songs' }
   if (key === 'lab/pad') return { navigator: 'lab', tab: 'pad' }
+  if (key === 'lab/sequence') return { navigator: 'lab', tab: 'sequence' }
 
   // Handle sources
   if (key === 'sources') return { navigator: 'sources', details: null }

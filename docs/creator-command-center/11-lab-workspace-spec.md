@@ -39,7 +39,7 @@ When active, a Lab workspace gets:
 - Home overview with one-click entry to Songs, Lyric Pad, Research, recent songs, and writing sparks.
 - Songs tab with Song cards, `Add Song`, project filter, focus toggle, status filter, and recency sorting.
 - Song Pad with editable Rough Pad, embedded Remember This area, and editable song structure sections.
-- Lab default workers: Writer, Researcher, Content Genius, World Builder, Art Director, Record Doctor.
+- Lab active workers are workspace-scoped. Current Lab manifests should show only `reverse-magic`, `legendary-writer`, and `record-doctor`; future Lab specialists should be added through activation and role routing, not forced global defaults.
 - Campaign detection excludes Lab so HQ project cards do not mistake Lab for the current release.
 - Workspace rail anchors Artist HQ first, then Campaign spaces, then Lab spaces.
 - Workspace rail add menu offers `New Campaign` and `New Creative Lab` with prefilled creation names.
@@ -64,4 +64,5 @@ When active, a Lab workspace gets:
 - Replace placeholder song cards with real saved song docs.
 - Replace placeholder Stories Worth Writing About with a research/trend source.
 - Add Lab-scoped context templates for lyrics, references, concepts, and song notes.
+- Add Lab worker role routing before hardcoding section-specific flows.
 - Add promotion path from Lab concept to Campaign mission brief.

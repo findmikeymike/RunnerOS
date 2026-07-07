@@ -11,6 +11,7 @@ import {
   RotateCw,
   Flag,
   ListFilter,
+  ListMusic,
   Tag,
   Check,
   X,
@@ -1815,6 +1816,15 @@ function AppShellContent({
     navigate(routes.view.lab('songs'))
   }, [])
 
+  const handleLabSequenceClick = useCallback(() => {
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+    setSessionsNavExpanded(false)
+    navigate(routes.view.lab('sequence'))
+  }, [])
+
   const handleLabPadClick = useCallback(() => {
     if (window.location.hash.startsWith('#artist-hq/')) {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
@@ -2125,6 +2135,7 @@ function AppShellContent({
   const vaultActive = isVaultNavigation(navState)
   const labHomeActive = isLabWorkspace && isLabNavigation(navState) && !navState.tab
   const labSongsActive = isLabWorkspace && isLabNavigation(navState) && navState.tab === 'songs'
+  const labSequenceActive = isLabWorkspace && isLabNavigation(navState) && navState.tab === 'sequence'
   const labPadActive = isLabWorkspace && isLabNavigation(navState) && navState.tab === 'pad'
   const labSessionsActive = isLabWorkspace
     && isSessionsNavigation(navState)
@@ -2145,6 +2156,7 @@ function AppShellContent({
     if (isLabWorkspace) {
       result.push({ id: 'nav:lab', type: 'nav', action: handleLabHomeClick })
       result.push({ id: 'nav:songs', type: 'nav', action: handleLabSongsClick })
+      result.push({ id: 'nav:sequence', type: 'nav', action: handleLabSequenceClick })
       result.push({ id: 'nav:pad', type: 'nav', action: handleLabPadClick })
       result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
       result.push({ id: 'nav:create', type: 'nav', action: () => toggleMainNavGroup('work') })
@@ -2479,6 +2491,13 @@ function AppShellContent({
           onClick: handleLabSongsClick,
         },
         {
+          id: "nav:sequence",
+          title: "Projects",
+          icon: ListMusic,
+          variant: labSequenceActive ? "default" : "ghost",
+          onClick: handleLabSequenceClick,
+        },
+        {
           id: "nav:pad",
           title: "Pad",
           icon: PenLine,
@@ -2760,7 +2779,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainExpanded, campaignHomeActive, campaignSessionsActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleLabHomeClick, handleLabPadClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, hqSessionsActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSessionsActive, labSongsActive, navigate, navState, openAddAutomation, peopleExpanded, planExpanded, sessionsNavExpanded, t, vaultActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainExpanded, campaignHomeActive, campaignSessionsActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleLabHomeClick, handleLabPadClick, handleLabSequenceClick, handleLabSongsClick, handleOutputsClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, hqSessionsActive, isArtistHQWorkspace, isLabWorkspace, labHomeActive, labPadActive, labSequenceActive, labSessionsActive, labSongsActive, navigate, navState, openAddAutomation, peopleExpanded, planExpanded, sessionsNavExpanded, t, vaultActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   return (
     <AppShellProvider value={appShellContextValue}>

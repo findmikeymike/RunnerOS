@@ -14,11 +14,34 @@ import {
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
+import { useAgents } from '@/hooks/useAgents'
+import {
+  buildAgentCreateSessionOptions,
+  loadAgentMemoryEntries,
+  loadUserMemoryEntries,
+} from '@/lib/run-agent'
+import {
+  resolveLabWorkerRoute,
+  type LabWorkerCandidate,
+  type LabWorkerRole,
+  type LabWorkerRouteResult,
+} from '@/lib/lab-worker-routing'
 import {
   ARTIST_PROFILE_CONTEXT_SLUG,
   parseArtistProfileDocResult,
   type ArtistProfile,
 } from '@/lib/artist-profile'
+import {
+  getSelectedLabSongId,
+  LAB_DEFAULT_SECTIONS,
+  LAB_PROJECT_COLORS,
+  loadLabUiSongs,
+  setSelectedLabSongId,
+  subscribeLabSongs,
+  upsertLabUiSong,
+  type LabUiSong,
+} from '@/lib/lab-song-state'
+import type { AgentDefinitionDTO } from '../../../shared/types'
 
 interface LabSongPadPageProps {
   workspaceId?: string
@@ -37,6 +60,9 @@ type SongSection = {
 
 type LyricAgentPayload = {
   action: LyricAgentAction
+  actionLabel: string
+  routeRole: LabWorkerRole
+  requestedRoles: LabWorkerRole[]
   labWorkspaceId?: string
   artistProfile: Pick<ArtistProfile, 'artistName' | 'themes' | 'sound' | 'similarArtists' | 'rules'>
   song: {
@@ -65,6 +91,29 @@ const INITIAL_SECTIONS: SongSection[] = [
   { id: 'bridge', label: 'Bridge', text: '', optional: true },
   { id: 'final-chorus', label: 'Chorus 2', text: '', optional: true },
 ]
+
+function fallbackSong(): LabUiSong {
+  return loadLabUiSongs()[0] ?? {
+    id: 'untitled-song',
+    title: 'Untitled song',
+    project: 'Loose Singles',
+    color: LAB_PROJECT_COLORS[0],
+    notes: '',
+    roughText: '',
+    rememberText: '',
+    sections: LAB_DEFAULT_SECTIONS,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+function getActiveLabSong(): LabUiSong {
+  const songs = loadLabUiSongs()
+  const selectedId = getSelectedLabSongId()
+  const selected = selectedId ? songs.find((song) => song.id === selectedId) : null
+  const song = selected ?? songs[0] ?? fallbackSong()
+  setSelectedLabSongId(song.id)
+  return song
+}
 
 const SECTION_BUTTONS = [
   { id: 'verse-1', label: 'V1', title: 'Send to Verse 1' },
@@ -107,6 +156,9 @@ function sectionRows(text: string) {
 
 function buildLyricAgentPayload({
   action,
+  actionLabel,
+  routeRole,
+  requestedRoles,
   artistProfile,
   workspaceId,
   roughText,
@@ -116,6 +168,9 @@ function buildLyricAgentPayload({
   title,
 }: {
   action: LyricAgentAction
+  actionLabel: string
+  routeRole: LabWorkerRole
+  requestedRoles: LabWorkerRole[]
   artistProfile: ArtistProfile
   workspaceId?: string
   roughText: string
@@ -126,6 +181,9 @@ function buildLyricAgentPayload({
 }): LyricAgentPayload {
   return {
     action,
+    actionLabel,
+    routeRole,
+    requestedRoles,
     labWorkspaceId: workspaceId,
     artistProfile: {
       artistName: artistProfile.artistName,
@@ -144,18 +202,37 @@ function buildLyricAgentPayload({
   }
 }
 
-async function runInlineLyricAgent(workspaceId: string, payload: LyricAgentPayload): Promise<string> {
+async function runSavedLabWorker(
+  workspaceId: string,
+  agent: AgentDefinitionDTO,
+  payload: LyricAgentPayload,
+  agentCatalog: AgentDefinitionDTO[],
+): Promise<string> {
+  const [skills, sources, contextDocs, userMemoryEntries, agentMemoryEntries] = await Promise.all([
+    window.electronAPI.getSkills(workspaceId),
+    window.electronAPI.getSources(workspaceId),
+    window.electronAPI.listWorkspaceContextDocsForAgent(workspaceId, agent.slug),
+    loadUserMemoryEntries(),
+    loadAgentMemoryEntries(agent.slug),
+  ])
+  const baseOptions = buildAgentCreateSessionOptions(agent, {
+    skills,
+    sources,
+    contextDocs,
+    agentCatalog,
+    userMemoryEntries,
+    agentMemoryEntries,
+  })
   const session = await window.electronAPI.createSession(workspaceId, {
+    ...baseOptions,
     hidden: true,
-    name: `Lyric Agent - ${payload.targetSection.label}`,
-    permissionMode: 'safe',
-    thinkingLevel: 'medium',
-    customSystemPrompt: LYRIC_AGENT_SYSTEM_PROMPT,
-    spawnedFromAgent: {
-      agentSlug: 'lyric-agent',
-      agentName: 'Lyric Agent',
-      timestamp: Date.now(),
-    },
+    name: `${agent.metadata.name} - ${payload.targetSection.label}`,
+    launchReceipt: baseOptions.launchReceipt
+      ? {
+          ...baseOptions.launchReceipt,
+          summary: `Lab ${payload.actionLabel.toLowerCase()} for ${payload.targetSection.label}.`,
+        }
+      : baseOptions.launchReceipt,
   })
 
   const response = waitForLyricAgentResponse(session.id)
@@ -175,7 +252,7 @@ function waitForLyricAgentResponse(sessionId: string): { promise: Promise<string
     let latestText = ''
     let cleanup: (() => void) | null = null
     const timeout = window.setTimeout(() => {
-      finish(() => reject(new Error('Lyric agent timed out. Try again.')))
+      finish(() => reject(new Error('Lab worker timed out. Try again.')))
     }, 90_000)
 
     const finish = (fn: () => void) => {
@@ -185,7 +262,7 @@ function waitForLyricAgentResponse(sessionId: string): { promise: Promise<string
       cleanup?.()
       fn()
     }
-    cancel = () => finish(() => reject(new Error('Lyric agent cancelled.')))
+    cancel = () => finish(() => reject(new Error('Lab worker cancelled.')))
 
     cleanup = window.electronAPI.onSessionEvent((event) => {
       if (!('sessionId' in event) || event.sessionId !== sessionId) return
@@ -197,7 +274,7 @@ function waitForLyricAgentResponse(sessionId: string): { promise: Promise<string
       } else if (event.type === 'error') {
         finish(() => reject(new Error(event.error)))
       } else if (event.type === 'typed_error') {
-        finish(() => reject(new Error(event.error.message || event.error.title || 'Lyric agent failed.')))
+        finish(() => reject(new Error(event.error.message || event.error.title || 'Lab worker failed.')))
       } else if (event.type === 'complete' && latestText) {
         finish(() => resolve(latestText))
       }
@@ -206,18 +283,12 @@ function waitForLyricAgentResponse(sessionId: string): { promise: Promise<string
   return { promise, cancel }
 }
 
-const LYRIC_AGENT_SYSTEM_PROMPT = [
-  'You are Lyric Agent, a concise songcraft collaborator inside a writing pad.',
-  'Use the full artist profile and full song context, but focus your answer on the target section.',
-  'Do not give generic writing advice unless the action is review.',
-  'Keep outputs short enough to insert into a section.',
-  'Do not rewrite other sections unless directly asked.',
-  'For line suggestions, return only usable lyric lines. No preamble.',
-].join('\n')
-
 function buildLyricAgentPrompt(payload: LyricAgentPayload) {
   return [
     `Action: ${payload.action}`,
+    `Action label: ${payload.actionLabel}`,
+    `Requested Lab role: ${payload.routeRole}`,
+    `Accepted role path: ${payload.requestedRoles.join(' -> ')}`,
     `Target section: ${payload.targetSection.label}`,
     '',
     'Artist profile:',
@@ -241,6 +312,8 @@ function buildLyricAgentPrompt(payload: LyricAgentPayload) {
     'Target section current text:',
     payload.targetSection.text || '(empty)',
     '',
+    'Use your saved Lab worker persona. Focus on the requested role and target section. Keep the output short enough to insert into the Song Pad.',
+    '',
     actionInstruction(payload.action),
   ].join('\n')
 }
@@ -258,17 +331,50 @@ function actionInstruction(action: LyricAgentAction) {
   return 'Suggest 3-5 lyric lines that could fit this target section. Return only the lines.'
 }
 
+function actionLabel(action: LyricAgentAction): string {
+  return LYRIC_AGENT_ACTIONS.find((item) => item.id === action)?.label ?? action
+}
+
+function routeRequestForAction(section: SongSection, action: LyricAgentAction): { role: LabWorkerRole; fallbackRoles: LabWorkerRole[] } {
+  const sectionRole = roleForSection(section)
+  if (action === 'review') {
+    return { role: 'lyrics.review', fallbackRoles: ['lyrics.rewrite'] }
+  }
+  if (action === 'stronger') {
+    return sectionRole
+      ? { role: sectionRole, fallbackRoles: ['lyrics.rewrite', 'lyrics.review'] }
+      : { role: 'lyrics.rewrite', fallbackRoles: ['lyrics.review'] }
+  }
+  if (action === 'continue') {
+    return sectionRole
+      ? { role: sectionRole, fallbackRoles: ['lyrics.generate'] }
+      : { role: 'lyrics.generate', fallbackRoles: ['lyrics.rewrite'] }
+  }
+  return sectionRole
+    ? { role: sectionRole, fallbackRoles: ['lyrics.generate'] }
+    : { role: 'lyrics.generate', fallbackRoles: ['lyrics.rewrite'] }
+}
+
+function roleForSection(section: SongSection): LabWorkerRole | null {
+  const key = `${section.id} ${section.label}`.toLowerCase()
+  if (key.includes('chorus') || /\bc\b/.test(key)) return 'lyrics.section.chorus'
+  if (key.includes('bridge') || /\bb\b/.test(key)) return 'lyrics.section.bridge'
+  if (key.includes('verse') || /\bv\d?\b/.test(key)) return 'lyrics.section.verse'
+  return null
+}
+
 export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspaceName }: LabSongPadPageProps) {
   const roughRef = React.useRef<HTMLTextAreaElement>(null)
   const rememberRef = React.useRef<HTMLTextAreaElement>(null)
-  const [title, setTitle] = React.useState('Untitled night-drive hook')
-  const [roughText, setRoughText] = React.useState(
-    'I keep writing versions of leaving that still sound like staying\nEverybody called the ending while I was still becoming it\nWhat if the chorus is more confession than flex?\n\nlooking expensive / feeling unstable / making it sound controlled',
-  )
-  const [rememberText, setRememberText] = React.useState(
-    'Luxury as armor\nA private-life song about everyone having a camera and no real access\nSoft exit, no revenge',
-  )
-  const [sections, setSections] = React.useState<SongSection[]>(INITIAL_SECTIONS)
+  const activeWorkerRunIdRef = React.useRef(0)
+  const savingSongRef = React.useRef(false)
+  const [activeSongId, setActiveSongId] = React.useState(() => getActiveLabSong().id)
+  const [title, setTitle] = React.useState(() => getActiveLabSong().title)
+  const [project, setProject] = React.useState(() => getActiveLabSong().project)
+  const [projectColor, setProjectColor] = React.useState(() => getActiveLabSong().color)
+  const [roughText, setRoughText] = React.useState(() => getActiveLabSong().roughText)
+  const [rememberText, setRememberText] = React.useState(() => getActiveLabSong().rememberText)
+  const [sections, setSections] = React.useState<SongSection[]>(() => getActiveLabSong().sections.length ? getActiveLabSong().sections : INITIAL_SECTIONS)
   const [selectedText, setSelectedText] = React.useState('')
   const [selectionSource, setSelectionSource] = React.useState<SelectionSource>('rough')
   const [showEmptySections, setShowEmptySections] = React.useState(true)
@@ -276,7 +382,40 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
   const [agentOutput, setAgentOutput] = React.useState('')
   const [agentBusy, setAgentBusy] = React.useState(false)
   const [agentError, setAgentError] = React.useState('')
+  const [workerRoute, setWorkerRoute] = React.useState<LabWorkerRouteResult | null>(null)
+  const [pendingWorkerRun, setPendingWorkerRun] = React.useState<{ section: SongSection; action: LyricAgentAction } | null>(null)
   const { docs: artistProfileDocs } = useWorkspaceContext(artistProfileWorkspaceId)
+  const { activeAgents, loading: agentsLoading } = useAgents(workspaceId)
+
+  React.useEffect(() => subscribeLabSongs(() => {
+    if (savingSongRef.current) return
+    const next = getActiveLabSong()
+    setActiveSongId(next.id)
+    setTitle(next.title)
+    setProject(next.project)
+    setProjectColor(next.color)
+    setRoughText(next.roughText)
+    setRememberText(next.rememberText)
+    setSections(next.sections.length ? next.sections : INITIAL_SECTIONS)
+  }), [])
+
+  React.useEffect(() => {
+    savingSongRef.current = true
+    upsertLabUiSong({
+      id: activeSongId,
+      title,
+      project,
+      color: projectColor,
+      notes: loadLabUiSongs().find((song) => song.id === activeSongId)?.notes ?? '',
+      roughText,
+      rememberText,
+      sections,
+      updatedAt: new Date().toISOString(),
+    })
+    window.queueMicrotask(() => {
+      savingSongRef.current = false
+    })
+  }, [activeSongId, title, project, projectColor, roughText, rememberText, sections])
 
   const artistProfile = React.useMemo(
     () => parseArtistProfileDocResult(artistProfileDocs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
@@ -334,34 +473,76 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
     setShowEmptySections(true)
   }, [])
 
-  const runLyricAgent = React.useCallback(async (section: SongSection, action: LyricAgentAction) => {
+  const buildPayload = React.useCallback((section: SongSection, action: LyricAgentAction, route: LabWorkerRouteResult): LyricAgentPayload => buildLyricAgentPayload({
+    action,
+    actionLabel: actionLabel(action),
+    routeRole: route.role,
+    requestedRoles: route.requestedRoles,
+    artistProfile,
+    workspaceId,
+    roughText,
+    rememberText,
+    sections,
+    targetSection: section,
+    title,
+  }), [artistProfile, rememberText, roughText, sections, title, workspaceId])
+
+  const runResolvedWorker = React.useCallback(async (section: SongSection, action: LyricAgentAction, route: LabWorkerRouteResult, candidate: LabWorkerCandidate) => {
     if (!workspaceId) {
       setAgentError('No Lab workspace is active.')
       return
     }
-    const payload = buildLyricAgentPayload({
-      action,
-      artistProfile,
-      workspaceId,
-      roughText,
-      rememberText,
-      sections,
-      targetSection: section,
-      title,
-    })
+    const runId = activeWorkerRunIdRef.current + 1
+    activeWorkerRunIdRef.current = runId
+    const payload = buildPayload(section, action, route)
     setActiveAgentSectionId(section.id)
     setAgentOutput('')
     setAgentError('')
+    setWorkerRoute(route)
     setAgentBusy(true)
     try {
-      const result = await runInlineLyricAgent(workspaceId, payload)
+      const result = await runSavedLabWorker(workspaceId, candidate.agent, payload, activeAgents)
+      if (activeWorkerRunIdRef.current !== runId) return
       setAgentOutput(result)
     } catch (err) {
+      if (activeWorkerRunIdRef.current !== runId) return
       setAgentError(err instanceof Error ? err.message : String(err))
     } finally {
-      setAgentBusy(false)
+      if (activeWorkerRunIdRef.current === runId) {
+        setAgentBusy(false)
+      }
     }
-  }, [artistProfile, rememberText, roughText, sections, title, workspaceId])
+  }, [activeAgents, buildPayload, workspaceId])
+
+  const runLyricAgent = React.useCallback(async (section: SongSection, action: LyricAgentAction) => {
+    activeWorkerRunIdRef.current += 1
+    if (agentsLoading) {
+      setActiveAgentSectionId(section.id)
+      setAgentOutput('')
+      setWorkerRoute(null)
+      setPendingWorkerRun(null)
+      setAgentError('Lab workers are still loading.')
+      return
+    }
+    const roleRequest = routeRequestForAction(section, action)
+    const route = resolveLabWorkerRoute(activeAgents, {
+      ...roleRequest,
+      sectionId: section.id,
+      sectionLabel: section.label,
+    })
+    setActiveAgentSectionId(section.id)
+    setAgentOutput('')
+    setAgentError(route.emptyReason ?? '')
+    setWorkerRoute(route)
+    setPendingWorkerRun(null)
+
+    if (route.candidates.length === 0) return
+    if (route.candidates.length > 1) {
+      setPendingWorkerRun({ section, action })
+      return
+    }
+    await runResolvedWorker(section, action, route, route.candidates[0])
+  }, [activeAgents, agentsLoading, runResolvedWorker])
 
   const insertAgentOutput = React.useCallback((sectionId: string) => {
     if (!agentOutput.trim()) return
@@ -379,6 +560,12 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
     if (!agentOutput.trim()) return
     setRememberText((current) => appendText(current, agentOutput))
   }, [agentOutput])
+
+  const chooseWorker = React.useCallback(async (candidate: LabWorkerCandidate) => {
+    if (!pendingWorkerRun || !workerRoute) return
+    setPendingWorkerRun(null)
+    await runResolvedWorker(pendingWorkerRun.section, pendingWorkerRun.action, workerRoute, candidate)
+  }, [pendingWorkerRun, runResolvedWorker, workerRoute])
 
   const visibleSections = showEmptySections
     ? sections
@@ -402,8 +589,14 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
             />
           </div>
           <div className="flex shrink-0 items-center gap-2 rounded-xl border border-white/[0.05] bg-white/[0.025] px-3 py-2 text-xs text-white/45">
+            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: projectColor }} />
             <Music2 className="h-3.5 w-3.5" />
-            {workspaceName || 'Creative Lab'}
+            <input
+              value={project}
+              onChange={(event) => setProject(event.target.value)}
+              className="w-28 border-0 bg-transparent text-xs text-white/55 outline-none"
+              placeholder={workspaceName || 'Project'}
+            />
           </div>
         </div>
       </div>
@@ -554,6 +747,9 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
                             setAgentOutput('')
                             setAgentError('')
                             setAgentBusy(false)
+                            setWorkerRoute(null)
+                            setPendingWorkerRun(null)
+                            activeWorkerRunIdRef.current += 1
                           }
                         }}
                       >
@@ -573,7 +769,7 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
                         >
                           <div className="mb-2 flex items-center justify-between gap-2">
                             <div className="text-[9px] font-medium uppercase tracking-[0.16em] text-white/42">
-                              Lyric Agent · {section.label}
+                              Lab Worker · {section.label}
                             </div>
                             <div className="text-[9px] text-white/24">HQ + full song</div>
                           </div>
@@ -583,7 +779,8 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
                                 key={action.id}
                                 type="button"
                                 onClick={() => runLyricAgent(section, action.id)}
-                                className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-2 py-1.5 text-left text-[11px] text-white/58 hover:bg-white/[0.05] hover:text-white/78"
+                                disabled={agentBusy}
+                                className="rounded-lg border border-white/[0.06] bg-white/[0.025] px-2 py-1.5 text-left text-[11px] text-white/58 hover:bg-white/[0.05] hover:text-white/78 disabled:cursor-not-allowed disabled:opacity-40"
                               >
                                 {action.label}
                               </button>
@@ -591,7 +788,30 @@ export function LabSongPadPage({ workspaceId, artistProfileWorkspaceId, workspac
                           </div>
                           {agentBusy ? (
                             <div className="mt-3 rounded-lg border border-white/[0.055] bg-white/[0.018] p-2 text-xs text-white/42">
-                              Lyric agent is thinking...
+                              Lab worker is thinking...
+                            </div>
+                          ) : null}
+                          {workerRoute && pendingWorkerRun && workerRoute.candidates.length > 1 ? (
+                            <div className="mt-3 rounded-lg border border-white/[0.055] bg-white/[0.018] p-2">
+                              <div className="mb-2 text-[9px] font-medium uppercase tracking-[0.14em] text-white/34">
+                                Choose worker
+                              </div>
+                              <div className="space-y-1.5">
+                                {workerRoute.candidates.map((candidate) => (
+                                  <button
+                                    key={candidate.agent.slug}
+                                    type="button"
+                                    onClick={() => chooseWorker(candidate)}
+                                    className="w-full rounded-lg border border-white/[0.055] bg-white/[0.018] px-2 py-2 text-left hover:bg-white/[0.045]"
+                                  >
+                                    <span className="flex items-center justify-between gap-2">
+                                      <span className="truncate text-xs font-medium text-white/72">{candidate.agent.metadata.name}</span>
+                                      {candidate.recommended ? <span className="text-[9px] uppercase tracking-[0.12em] text-[#fbbf24]/70">Recommended</span> : null}
+                                    </span>
+                                    <span className="mt-1 block text-[10px] leading-4 text-white/36">{candidate.reason}</span>
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           ) : null}
                           {agentError ? (

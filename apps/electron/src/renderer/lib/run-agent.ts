@@ -225,7 +225,7 @@ export async function openAgentSessionComposer(params: {
  * a transport failure surfaces a console warning instead of silently
  * returning empty so the user has a signal that memory injection failed.
  */
-async function loadUserMemoryEntries(): Promise<MemoryEntry[]> {
+export async function loadUserMemoryEntries(): Promise<MemoryEntry[]> {
   try {
     const result = await window.electronAPI.listUserMemory()
     return normalizeMemoryEntries(result)
@@ -235,7 +235,7 @@ async function loadUserMemoryEntries(): Promise<MemoryEntry[]> {
   }
 }
 
-async function loadAgentMemoryEntries(agentSlug: string): Promise<MemoryEntry[]> {
+export async function loadAgentMemoryEntries(agentSlug: string): Promise<MemoryEntry[]> {
   try {
     const result = await window.electronAPI.listAgentMemory(agentSlug)
     return normalizeMemoryEntries(result)
