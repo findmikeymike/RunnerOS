@@ -3,6 +3,19 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Contributor Covenant](https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg)](CODE_OF_CONDUCT.md)
 
+## Current Creator Command Center Build
+
+Active worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/creator-command-center`
+
+Current focus: Artist OS paid-ads workers for upcoming song campaigns.
+
+- `ad-creative-agent`: researches public high-performing music ad patterns, then builds hooks, copy, creative angles, format tests, and asset needs.
+- `ads-strategist`: turns artist/campaign context into budget, audience, territory, platform, and test strategy.
+- `ads-agent`: handles Meta/Google account-side inspection, exports, browser setup guidance, draft setup plans, approval packets, and explicit-approval handoff.
+- `tools/ads-operator`: read-only local CLI for ad CSV import/audit, public ad-library planning/analyze, campaign/setup plans, approval packets, and receipts.
+
+Start from [HANDOFF.md](./HANDOFF.md), [docs/CURRENT.md](./docs/CURRENT.md), and [docs/system-map](./docs/system-map/) before continuing this branch.
+
 ## How it Works (Video)
 To understand what Runner does and how it works watch this video.
 

@@ -37,15 +37,15 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Summary
 
-- Agents mapped: 34
+- Agents mapped: 36
 - Hidden from Workers home: 6
-- Campaign default workers: `content-genius`, `art-director`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
+- Campaign default workers: `content-genius`, `art-director`, `ads-strategist`, `ad-creative-agent`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
-- Domains: Command 3, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 7, Research 3, Socials 2
-- Permission modes: ask 27, safe 7
-- Known skills: 107 (66 bundled, 6 system, 106 user-global on this machine)
+- Domains: Command 3, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
+- Permission modes: ask 29, safe 7
+- Known skills: 112 (71 bundled, 6 system, 112 user-global on this machine)
 - Known builtin sources: 21
 
 ## Reference Health
@@ -56,7 +56,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
-- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
+- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ads-strategist, ad-creative-agent, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -429,19 +429,47 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ### Promotion
 
+#### Ad Creative Agent (`ad-creative-agent`)
+
+- Description: Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Skills: `artist-ad-dna`, `ad-library-intel`, `ads-creative-development`, `ad-creative`, `artist-campaign-angle-builder`
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `ads`, `creative`, `copy`, `hooks`, `meta`, `google-ads`, `artist-growth`
+- Signals: `approval-capable`, `artifact-output-aware`
+- Inputs: Artist context, strategy packet, platform, goal, creative assets, lyrics, clips, visuals, comments, destination, and brand constraints.
+- Outputs: Ad Creative Packet with angles, hooks, copy variants, format plan, diversity check, fatigue refresh plan, policy risk, and execution handoff.
+
 #### Ads Agent (`ads-agent`)
 
 - Description: Plan, review, and improve Meta and Google ad campaigns.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`
-- Skills: `ad-creative`, `google-ads`, `paid-ads-browser-operator`
-- Sources: `google-ads`, `ads-operator`
-- Optional sources: `meta-ads`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`
+- Sources: `meta-ads`, `google-ads`, `ads-operator`
+- Optional sources: none
 - Trusted tools: none
 - Tags: `ads`, `meta`, `google-ads`, `paid-search`, `reporting`, `diagnostics`, `growth`
-- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`
+- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
 - Inputs: Meta Ads or Google Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, or reporting question.
 - Outputs: Clear paid-media findings, diagnostics, reports, proposed changes, and approval-ready action plans.
+
+#### Ads Strategist (`ads-strategist`)
+
+- Description: Builds paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Skills: `artist-ad-dna`, `ad-library-intel`, `ads-strategy`
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `ads`, `strategy`, `budget`, `media-plan`, `artist-growth`, `campaigns`
+- Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`
+- Inputs: Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, and creative assets.
+- Outputs: Ads Strategy Packet with platform rationale, campaign architecture, audience/territory plan, budget split, test plan, and execution handoff fields.
 
 #### Branding Agent (`branding-agent`)
 

@@ -22,7 +22,7 @@
     "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts"
   },
   "summary": {
-    "agentCount": 34,
+    "agentCount": 36,
     "domains": {
       "Command": 3,
       "Content Creation": 4,
@@ -31,18 +31,21 @@
       "Operators": 2,
       "Other Workers": 2,
       "Outreach": 4,
-      "Promotion": 7,
+      "Promotion": 9,
       "Research": 3,
       "Socials": 2
     },
     "permissionModes": {
-      "ask": 27,
+      "ask": 29,
       "safe": 7
     },
     "hiddenWorkerHomeCount": 6,
     "campaignDefaultWorkerSlugs": [
       "content-genius",
       "art-director",
+      "ads-strategist",
+      "ad-creative-agent",
+      "ads-agent",
       "ig-trending-power-up",
       "influencer-campaign-power-up",
       "playlisting-power-up",
@@ -54,10 +57,10 @@
     "finalsPromotionWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 107,
-    "bundledSkillCount": 66,
+    "knownSkillCount": 112,
+    "bundledSkillCount": 71,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 106,
+    "userGlobalSkillCount": 112,
     "knownSourceCount": 21,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
@@ -124,7 +127,7 @@
   "inferredRuntimeRules": [
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
-    "Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
+    "Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ads-strategist, ad-creative-agent, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
@@ -925,6 +928,44 @@
       "outputs": "Each item grouped by urgency with a single-verb next action and owner."
     },
     {
+      "slug": "ad-creative-agent",
+      "name": "Ad Creative Agent",
+      "description": "Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns.",
+      "domain": "Promotion",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "artist-ad-dna",
+        "ad-library-intel",
+        "ads-creative-development",
+        "ad-creative",
+        "artist-campaign-angle-builder"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "ads",
+        "creative",
+        "copy",
+        "hooks",
+        "meta",
+        "google-ads",
+        "artist-growth"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware"
+      ],
+      "inputs": "Artist context, strategy packet, platform, goal, creative assets, lyrics, clips, visuals, comments, destination, and brand constraints.",
+      "outputs": "Ad Creative Packet with angles, hooks, copy variants, format plan, diversity check, fatigue refresh plan, policy risk, and execution handoff."
+    },
+    {
       "slug": "ads-agent",
       "name": "Ads Agent",
       "description": "Plan, review, and improve Meta and Google ad campaigns.",
@@ -932,17 +973,16 @@
       "permissionMode": "ask",
       "thinkingLevel": "high",
       "skills": [
-        "ad-creative",
+        "meta-ads",
         "google-ads",
         "paid-ads-browser-operator"
       ],
       "sources": [
+        "meta-ads",
         "google-ads",
         "ads-operator"
       ],
-      "optionalSources": [
-        "meta-ads"
-      ],
+      "optionalSources": [],
       "trustedWorkerTools": [],
       "visualAgent": false,
       "tags": [
@@ -955,18 +995,54 @@
         "growth"
       ],
       "launchSurfaces": [
-        "workspace-workers-when-active"
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
         "artifact-output-aware",
         "explicit-approval-required",
         "external-action-boundary",
-        "optional-source-aware",
         "requires-source-activation"
       ],
       "inputs": "Meta Ads or Google Ads account, campaign, ad set/ad group, ad, keyword, search term, budget, conversion, or reporting question.",
       "outputs": "Clear paid-media findings, diagnostics, reports, proposed changes, and approval-ready action plans."
+    },
+    {
+      "slug": "ads-strategist",
+      "name": "Ads Strategist",
+      "description": "Builds paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ads Agent executes.",
+      "domain": "Promotion",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "artist-ad-dna",
+        "ad-library-intel",
+        "ads-strategy"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "ads",
+        "strategy",
+        "budget",
+        "media-plan",
+        "artist-growth",
+        "campaigns"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "external-action-boundary"
+      ],
+      "inputs": "Artist context, campaign/release goal, budget, platform scope, territories, destination URL, prior ad/export data, and creative assets.",
+      "outputs": "Ads Strategy Packet with platform rationale, campaign architecture, audience/territory plan, budget split, test plan, and execution handoff fields."
     },
     {
       "slug": "branding-agent",

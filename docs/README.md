@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-06
+last_verified: 2026-07-07
 source_of_truth: true
 ---
 
@@ -12,18 +12,20 @@ Start here when you need project context without reading the whole repo.
 ## Read First
 
 1. [CURRENT.md](./CURRENT.md) - live branch/status notes.
-2. [HANDOFF-2026-07-04.md](./HANDOFF-2026-07-04.md) - zero-context takeover brief for the current build.
-3. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
-4. [workflows](./workflows/) - workflow runtime, UX, examples, and recovery notes.
-5. [user](./user/) - concise user-facing guides for surfaces, advanced abilities, and service keys.
+2. [../HANDOFF.md](../HANDOFF.md) - zero-context takeover brief for the current build.
+3. [backlog/paid-ads-execution-prep.md](./backlog/paid-ads-execution-prep.md) - paid-ads agent/tooling prep and current implementation map.
+4. [system-map](./system-map/) - generated map of workers, skills, sources, launch surfaces, and approval boundaries.
+5. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
+6. [user](./user/) - concise user-facing guides for surfaces, advanced abilities, and service keys.
 
-Current active feature spec:
+Current active work:
 
-- [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md) - generated HQ operating brief, route hint contract, proactive toggle, launch guards, and key files.
-- [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md) - minimal Output-based layer for HQ/campaign widgets, approvals, drawer preview, and agent awareness.
-- [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md) - V1 promotion system for marking Outputs as trusted HQ/campaign Finals, optional Primary, and agent/tool promotion.
-- Finals are active V1: use Output list/detail actions or the `promote_output_to_final` session tool; campaign Finals now resolve the active campaign workspace automatically.
-- Setup Concierge / app setup is now part of the starter worker system: HNIC routes setup, service-key, and app-guide questions to `@setup-concierge`; Setup Concierge owns user guidance, service setup, and approved encrypted credential saves.
+- Paid-ads worker chain is active: `ad-creative-agent` -> `ads-strategist` -> `ads-agent`.
+- Ad Creative Agent owns public ad-library scouting, hooks, copy, creative angles, and format tests.
+- Ads Strategist owns budget, audience, territory, platform, and test planning.
+- Ads Agent owns Meta/Google account inspection, browser/export setup, draft setup plans, approval packets, and account-side handoff.
+- `tools/ads-operator` is the local read-only paid-ads helper for imports, audits, ad-library plans/analyze, campaign/setup plans, packets, and receipts.
+- Older active specs remain relevant: [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md), [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md), and [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md).
 
 ## Main Areas
 

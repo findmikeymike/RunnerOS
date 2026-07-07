@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-06
+last_verified: 2026-07-07
 source_of_truth: true
 ---
 
@@ -9,118 +9,69 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-06
+- Date: 2026-07-07
 - Branch: `codex/creator-command-center`
-- Current goal: harden Setup Concierge, service-key setup, Settings, and release smoke paths toward release confidence.
-- Overall state: active Creator Command Center worktree with many feature docs; docs are now routed through this map instead of loose root files.
+- Current goal: make paid-ads workers useful for artist campaigns without blocking on Meta/Google API approval.
+- Overall state: Ads specialist agents, ad-library intelligence, and the local ads operator are wired and ready for focused smoke testing.
 
 ## Recently Completed
 
-- Added HQ State of Play infrastructure: deterministic composer, generated `hq-state-of-play` context doc, and automatic refresh after workspace context, Shared Intel, Artist Vault, and Google Calendar context writes.
-- Added machine-readable HQ route hints so the generated next move now carries target agent, action, prompt, confidence, context docs, and launch blocker state.
-- Added a per-workspace proactive HQ mode toggle and validated Start Route action in Artist HQ Home.
-- Hardened proactive HQ mode with per-workspace preference storage and tested route-readiness helpers.
-- Hardened Shared Intel routing with route reasons, audit counts, tighter target scoring, duplicate/update tests, secret/junk rejection, and a 2600-character prompt cap.
-- Live-smoked the real Electron app from this worktree. Fixed HQ nav active-state drift, Shared Intel slug overflow, stale over-route preservation on update, and explicit "only route this to..." targeting.
-- Added `docs/creator-command-center/09-hq-state-of-play-proactive-routing.md` as the feature contract and future-agent map.
-- Moved root audit reports into `docs/audits/2026-07-04/`.
-- Moved standalone references into clearer folders:
-  - `docs/development/cli.md`
-  - `docs/backlog/future-external-triggers.md`
-  - `docs/specs/hypermotion-agent.md`
-- Removed local runtime clutter from this worktree: `.omc/`, `docs/creator-command-center/.omc/`, and `docs/.DS_Store`.
-- Added generated system map docs under `docs/system-map/` plus `npm run docs:system-map`.
-- Hardened HQ route readiness so generated route blockers now prevent `Start Route` launch instead of allowing a blocked proactive route through.
-- Hardened Pi subprocess JSONL parsing so terminal notification prefixes on stdout do not drop valid mini-completion results after a chat turn.
-- Hardened Artist Profile parsing so the starter markdown intake template opens as an editable Profile form instead of blocking with a missing-JSON warning.
-- Hardened the Chat nav shortcut so it skips stale expired/error HNIC sessions instead of reopening an old `Session Expired` thread.
-- Wired the HQ `Current Release` project card to open the primary campaign workspace instead of remaining text-only.
-- Refreshed the startup migration test fixture to use a current bundled Pi/OpenRouter model ID after the old Grok fixture aged out of the catalog.
-- Updated HyperMotion's Remotion dependency and transitive lockfile so the production audit is clean.
-- Corrected the local smoke profile plan: real keys are entered through the app UI and persist in local RunnerOS credential storage; `smoke/local/` only holds ignored artist/campaign/service smoke context.
-- Added Setup Concierge as the app/setup specialist worker. HNIC routes app guidance, connection setup, service-key, and "how do I use this?" questions to `@setup-concierge`.
-- Gave Setup Concierge the app-guide/source-setup skill bundle: `artist-os-guide` plus `source-recipe`.
-- Added `save_secret` so approved setup sessions can save encrypted app/source credentials through RunnerOS instead of telling users to copy values into files.
-- Hardened `save_secret`: only HNIC and Setup Concierge can save RunnerOS secrets; ordinary workers and manual sessions are blocked from directly writing credentials.
-- Hardened global-source credential saves from agent setup so app/global keys refresh every workspace using that global source, matching the Settings credential path.
-- Wired Industry Hunter to Zero: `zero` skill/source, LinkedIn/email enrichment prompt rules, existing-install migration, and campaign default worker visibility.
-- Regenerated `docs/system-map/` so Industry Hunter now maps to `artist-industry-hunter`, `zero`, and campaign worker launch surfaces.
-- Updated Setup Concierge guidance to default to app-level/global credentials so the same keys work across the whole app unless a user explicitly wants a workspace override.
-- Re-ran release-oriented automated gates after the hardening fix: focused Creator Command Center tests, shared/server-core/Electron typechecks, and full monorepo `typecheck:all`.
-- Launched Electron dev from this worktree and verified the app initializes, connects the renderer, loads skills, refreshes Pi/OpenAI model lists, and sends a real live prompt without the prior immediate `Session Expired` failure.
-- Implemented Outputs -> Finals V1: users can promote Outputs into HQ/campaign Finals, mark optional Primary, remove exact Final pointers, and agents can call `promote_output_to_final`.
-- Hardened Finals storage with a shared filesystem lock, corrupt-registry fail-closed behavior, campaign-id requirements, delete guards for Outputs still referenced by Finals, and direct session-tool tests.
-- Polished Finals UI so Output list/detail promotion uses `OutputFinalActionDialog`; campaign Finals auto-resolve the active campaign workspace id instead of asking users to type an internal id.
-- Updated user/spec/map docs for Finals behavior and agent tool awareness.
+- Added `ad-library-intel` for public Meta Ad Library / TikTok Creative Center research and music-ad pattern extraction.
+- Added `tools/ads-operator` commands for ad-library planning/analyze, CSV import, audits, campaign plans, setup plans, approval packets, and receipts.
+- Split paid-ads responsibilities:
+  - `ad-creative-agent`: public ad research, hooks, copy, creative angles, video formats, asset needs.
+  - `ads-strategist`: budget, audience, territory, platform, and test plan.
+  - `ads-agent`: account inspection/export/draft setup/approval packets for Meta and Google.
+- Updated Ad Creative Agent with `ad-library-intel` and new card subtext:
+  - "Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns."
+- Fixed startup migration so stale installed `ads-strategist` and `ad-creative-agent` metadata receives new skills.
+- Updated Ads Agent to use `meta-ads`, `google-ads`, and `paid-ads-browser-operator` skills plus `meta-ads`, `google-ads`, and `ads-operator` sources.
+- Made Meta account work practical without API approval: use `ads-operator --platform meta`, browser dashboard/export/setup guidance, and explicit approval packets.
+- Hardened ChatGPT search retry after unsupported `web_search_preview` failures.
+- Adjusted chat autoscroll so long agent replies do not force the user to the bottom while trying to read from the top.
+- Regenerated Codex catalog after installed agent changes.
 
 ## In Progress
 
-- Creator Command Center / Artist HQ feature work continues on this branch.
+- Live smoke testing the paid-ads chain on campaign example: `Watching Tornado Videos on YouTube`.
+- Current next smoke target: Ad Creative Agent should use `ad-library-intel` first, then return a compact creative packet.
 
 ## Next Actions
 
-1. Continue release hardening from Settings/Connections and real-key smoke paths.
-2. Keep the user guide current as features stabilize; do the final user-guide polish near release.
-3. Regenerate `docs/system-map/` after changing starter agents, worker visibility, workflow templates, or launch routing.
-4. Re-run focused tests when code, not docs, changes.
-
-## Blockers / External Dependencies
-
-- No current auth blocker for the basic live chat path. Remaining external-service smokes still need connected provider accounts/keys.
-- External-service smokes need real keys/accounts entered through the app. Do not hardcode user credentials into tracked app data.
+1. Smoke Ad Creative Agent with the campaign prompt for `Watching Tornado Videos on YouTube`.
+2. Verify it researches broad winning music-ad vehicles/hooks, not only huge similar artists.
+3. If browser research loops too long, add a hard cap to `ad-library-intel` and force a best-effort packet.
+4. Smoke Ads Strategist with a `$400` Meta campaign ask and Ad Creative packet input.
+5. Smoke Ads Agent last with approved strategy/creative inputs; it must stop at setup-plan/draft/approval packet before live mutation.
+6. Regenerate `docs/system-map/` after any starter-agent, source, skill, or launch-surface change.
 
 ## Verification State
 
-- Verified Shared Intel hardening with router/RPC tests, shared typecheck, and server-core typecheck.
-- Verified HQ State of Play with focused composer/refresh/Google Workspace/proactive helper tests, shared typecheck, server-core typecheck, Electron typecheck, and `git diff --check`.
-- Verified live Share Intel click updates an existing context note and narrows targets to the matching available worker instead of creating duplicates or keeping stale over-routes.
-- Verified git branch before cleanup.
-- Verified moved paths with `rg` and updated stale references.
-- Electron typecheck required for Artist HQ UI changes.
-- Verified on 2026-07-05:
-  - `bun test apps/electron/src/renderer/lib/artist-hq-proactive.test.ts packages/shared/src/hq-state/composer.test.ts packages/server-core/src/hq-state/refresh.test.ts packages/server-core/src/handlers/rpc/google-workspace.test.ts packages/shared/src/shared-intel/router.test.ts packages/server-core/src/handlers/rpc/shared-intel.test.ts apps/electron/src/renderer/lib/compose-agent-prompt.test.ts` -> `65 pass`.
-  - `(cd packages/shared && ../../node_modules/.bin/tsc --noEmit)` passed.
-  - `(cd packages/server-core && ../../node_modules/.bin/tsc --noEmit)` passed.
-  - `bun run typecheck:electron` passed.
-  - `bun run typecheck:all` passed.
-  - `bun run docs:system-map` passed with no generated diff.
-  - `bun run electron:dev` launched successfully; Runner server listened on `127.0.0.1:55268`, trigger server on `127.0.0.1:9101`, renderer connected, and model refresh fetched provider model lists.
-  - Live prompt smoke passed through the visible Electron composer on session `260704-frosty-basalt`: user prompt `LIVE RELEASE SMOKE: reply with exactly: HNIC live smoke passed.` produced assistant response `HNIC live smoke passed.` Logs showed `agent.chat()` completed and no `Session Expired`.
-  - `bun test packages/shared/src/agent/__tests__/pi-agent-error-handling.test.ts packages/shared/src/agent/__tests__/pi-query-llm.test.ts` -> `10 pass`.
-  - `(cd packages/shared && ../../node_modules/.bin/tsc --noEmit)` passed after the Pi JSONL parser hardening.
-  - Live visual smoke with Computer Use passed for: HQ home, Outputs, Agenda, Calendar, Network, Community, Vault, Workers, Automations, Workflows, Sessions sidebar expansion, Profile, Voice, Intel Docs, Branding, and Settings.
-  - Live Profile re-check confirmed the markdown starter template now renders as a usable editable form with `Save Profile` enabled.
-  - `bun test apps/electron/src/renderer/lib/artist-profile.test.ts apps/electron/src/renderer/lib/artist-hq-nav-state.test.ts apps/electron/src/renderer/lib/artist-hq-proactive.test.ts` -> `13 pass`.
-  - `bun run typecheck:electron` passed after the Artist Profile parser hardening.
-  - `bun test apps/electron/src/renderer/lib/artist-hq-nav-state.test.ts` -> `9 pass`.
-  - `bun run typecheck:electron` passed after the Chat nav expired-session filter.
-  - Live Chat nav re-check passed: starting from HQ, clicking `Chat` opened clean session `260605-fair-quartz` instead of stale expired session `260605-tall-chrome`.
-  - `bun test apps/electron/src/renderer/lib/artist-workspace.test.ts` -> `5 pass`.
-  - `bun run typecheck:electron` passed after the HQ project card route wiring.
-  - Live HQ project card smoke passed: clicking `Current Release` from HQ opened workspace `Trading` at `route=campaign` with the campaign command center visible.
-  - Live HQ route smoke passed with a temporary restored fixture: `Start Route` created a `branding-agent` session, sent `LIVE HQ ROUTE SMOKE: reply with exactly: HQ route smoke passed.`, and the assistant replied `HQ route smoke passed.` Original HQ State context was restored and the smoke session folder was removed.
-  - `bun test packages/shared/src/config/__tests__/storage-startup-migration.test.ts` -> `12 pass`.
-  - `bun run validate:dev` passed: `typecheck:all`, shared LLM connection/model/config tests, and doc-tool tests.
-  - `bun run electron:build` passed: skills generated, main/preload/renderer/resources/assets built.
-  - `(cd tools/hypermotion && npm audit --omit=dev)` -> `found 0 vulnerabilities`.
-  - `bun run smoke:profile:check` verifies local smoke context/checklist files without touching or printing credentials.
-  - `bun test packages/server-core/src/sessions/memory-policy.test.ts packages/session-tools-core/src/handlers/save-secret.test.ts packages/session-tools-core/src/tool-defs-filtering.test.ts` -> `19 pass`.
-  - `bun test packages/shared/src/agent/backend/claude/session-tool-parity.test.ts packages/shared/src/agent/backend/pi/session-tool-parity.test.ts packages/shared/src/agent-definitions/storage.test.ts apps/electron/src/shared/__tests__/ipc-channels.test.ts` -> `67 pass`.
-  - `bun run typecheck:electron` passed after the Setup Concierge secret-save hardening.
-  - `(cd packages/server-core && bun run tsc --noEmit)` passed after the Setup Concierge secret-save hardening.
-- Verified on 2026-07-06:
-  - `bun test packages/server-core/src/outputs/OutputService.test.ts apps/electron/src/renderer/components/outputs/__tests__/FinalsWidget.test.ts packages/session-tools-core/src/handlers/outputs.test.ts` -> `40 pass`.
-  - `bun test apps/electron/src/renderer/lib/__tests__/output-finals-actions.test.ts apps/electron/src/renderer/components/outputs/__tests__/FinalsWidget.test.ts packages/session-tools-core/src/handlers/outputs.test.ts packages/server-core/src/outputs/OutputService.test.ts` -> `44 pass`.
-  - `bun run typecheck:electron` passed.
-  - `(cd packages/server-core && ../../node_modules/.bin/tsc --noEmit)` passed.
-  - `bun run --cwd packages/session-mcp-server build` passed.
-  - `git diff --check` passed.
+- Passed:
 
-## Remaining Release Smoke
+```bash
+/Users/michaelb.williams/.bun/bin/bun test packages/shared/src/agent-definitions/storage.test.ts
+/Users/michaelb.williams/.bun/bin/bun test packages/shared/src/agent-definitions/storage.test.ts packages/shared/src/skills/__tests__/starter-templates.test.ts packages/pi-agent-server/src/tools/search/providers/chatgpt.test.ts packages/pi-agent-server/src/tools/search/create-search-tool.test.ts
+/Users/michaelb.williams/.bun/bin/bun run typecheck:shared
+(cd packages/pi-agent-server && /Users/michaelb.williams/.bun/bin/bun run typecheck)
+(cd apps/electron && /Users/michaelb.williams/.bun/bin/bun run typecheck)
+git diff --check
+python3 /Users/michaelb.williams/.codex/scripts/rebuild_codex_catalog.py
+```
 
-- Remaining external-service smokes should use the local smoke profile so real keys and artist/campaign context stay outside tracked app data.
+- Electron dev app relaunched from this worktree.
+- Startup log confirmed ads specialist migration ran.
+- Ad Creative Agent setup now shows `ad-library-intel` in Skills and no bundled account Tools.
+
+## Known Limits
+
+- Public Meta Ad Library does not expose CTR, CPA, ROAS, exact reach, or spend.
+- TikTok Creative Center / public pages may vary by region, availability, and automation blocking.
+- Meta/Google account operations require connected accounts or browser-guided user sessions.
+- No agent should publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations without explicit approval naming account, action, and spend impact.
 
 ## Notes For Next Agent
 
-- Do not treat every old audit as current truth. Use `docs/audits/README.md` and current code before acting on old findings.
-- Feature-folder paths were mostly preserved intentionally to avoid breaking links.
+- Start from `HANDOFF.md`, this file, `docs/backlog/paid-ads-execution-prep.md`, and `tools/ads-operator/README.md`.
+- Do not re-add account tools to Ad Creative Agent. It is a creative/research worker.
+- Ads Agent is the account operator and approval-packet owner.

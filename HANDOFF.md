@@ -5,72 +5,83 @@
 - Path: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/creator-command-center`
 - Branch: `codex/creator-command-center`
 - Product direction: RunnerOS / Artist OS local creator command center.
-- Current push: release hardening, Settings/Connections polish, real-key smoke readiness, worker/source correctness.
+- Current push: paid-ads specialist workers, Meta/Google ads operator safety, ad-library creative intelligence, and live smoke readiness.
+- Last verified: 2026-07-07.
 
 ## Read First
 
-1. `docs/README.md` - docs routing map.
-2. `docs/CURRENT.md` - current status, verification, next actions.
-3. `docs/user/` - concise user-facing guide drafts.
-4. `docs/system-map/` - generated map of workers, skills, sources, and launch surfaces.
-5. `docs/development/local-smoke-profile.md` - local real-key smoke setup.
+1. `docs/CURRENT.md` - live branch/status notes.
+2. `docs/README.md` - docs routing map.
+3. `docs/backlog/paid-ads-execution-prep.md` - paid ads implementation prep and current ads-tooling map.
+4. `docs/backlog/paid-ads-browser-cli-operator.md` - longer paid-ads backlog/spec history.
+5. `docs/system-map/` - generated map of workers, skills, sources, and launch surfaces.
+6. `tools/ads-operator/README.md` - local ads operator commands and safety boundary.
 
 ## Recent Work To Preserve
 
-- Implemented Outputs -> Finals V1 hardening and UI polish.
-- Finals are lightweight pointers in `context/finals/CONTEXT.md`; Output bundles remain canonical.
-- Finals writes use a shared filesystem lock at `context/.locks/output-finals.lock`.
-- Corrupt Finals registry updates fail closed; deleting an Output referenced by Finals is blocked.
-- Output list/detail actions use `OutputFinalActionDialog`, not `window.prompt`.
-- Campaign Finals now auto-use the active campaign workspace id; raw campaign id entry only appears as an orphan-output fallback.
-- Added Setup Concierge as the app/setup specialist worker.
-- HNIC routes app guidance, service setup, key, and "how do I use this?" questions to `@setup-concierge`.
-- Setup Concierge carries `artist-os-guide` and `source-recipe`.
-- Added `save_secret` for approved encrypted credential saves.
-- Hardened secret writes so only HNIC and Setup Concierge can save RunnerOS secrets.
-- Global source credentials saved by Setup Concierge now refresh every workspace using that source.
-- Setup guidance now defaults to app/global keys for the whole app experience; workspace overrides are explicit exceptions.
-- Settings UI has been heavily cleaned up in this workstream; preserve those UX choices unless user redirects.
+- Added public ad-library intelligence for music ads:
+  - Skill: `ad-library-intel`.
+  - CLI support: `tools/ads-operator/bin/ads-operator.mjs ad-library-plan`.
+  - CLI support: `tools/ads-operator/bin/ads-operator.mjs ad-library-analyze`.
+  - Public Meta Ad Library and TikTok Creative Center research should look for high-performing formats/hooks, not only close sound-alike artists.
+- Split paid-ads work into three specialists:
+  - `ads-strategist`: budget, audience, territory, platform, and testing strategy.
+  - `ad-creative-agent`: ad-library scouting, angles, hooks, copy, format tests, and asset needs.
+  - `ads-agent`: Meta/Google account inspection, exports, draft setup plans, approval packets, and execution handoff.
+- Ad Creative Agent now has:
+  - Skills: `artist-ad-dna`, `ad-library-intel`, `ads-creative-development`, `ad-creative`, `artist-campaign-angle-builder`.
+  - Card subtext: "Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns."
+  - No account-operation tools by design; it researches public ads and produces creative packets.
+- Ads Agent now uses:
+  - Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`.
+  - Sources: `meta-ads`, `google-ads`, `ads-operator`.
+  - Browser/export/setup fallback for Meta when API/MCP access is missing or blocked.
+  - Approval packets before any spend or live account mutation.
+- `tools/ads-operator` supports read-only normalization, audit, campaign-plan, setup-plan, ad-library plan/analyze, packet creation, and receipts. It does not publish, pause, enable, delete, change budgets/bids/targets/creative/keywords/conversions/billing, upload assets, or apply recommendations.
+- Chat view autoscroll was adjusted so a newly streaming assistant reply can stay pinned near the top instead of forcing the user to the bottom.
+- ChatGPT search retry was hardened to avoid unsupported `web_search_preview` failures.
+- Startup agent metadata migration now includes `ads-strategist` and `ad-creative-agent`, so existing installs receive the new ads specialist skills.
+- Global installed Ad Creative Agent at `/Users/michaelb.williams/.agents/agents/ad-creative-agent/AGENT.md` was updated and the Codex catalog was regenerated.
 
-## Current Dirty Files
+## Current Runtime State
 
-Expected current edits:
-- Outputs/Finals UI context fix:
-  - `apps/electron/src/renderer/components/app-shell/AppShell.tsx`
-  - `apps/electron/src/renderer/components/app-shell/MainContentPanel.tsx`
-  - `apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx`
-  - `apps/electron/src/renderer/components/outputs/OutputsListPanel.tsx`
-  - `apps/electron/src/renderer/lib/output-finals-actions.ts`
-  - `apps/electron/src/renderer/lib/__tests__/output-finals-actions.test.ts`
-  - `apps/electron/src/renderer/pages/OutputDetailPage.tsx`
-- Docs updated for Outputs/Finals status, handoff, and system map.
-- Unrelated existing docs edits may be present in `docs/backlog/`.
-
-Do not revert unrelated user/agent work.
+- Electron dev app was relaunched from this worktree on 2026-07-07.
+- Startup log confirmed: `[agent-definitions] Updated ads specialist research metadata`.
+- Active workspace observed: `/Users/michaelb.williams/.craft-agent/workspaces/trading`.
+- Ad Creative Agent setup should show `ad-library-intel` in Skills and no bundled Tools.
+- "No bundled tools" on Ad Creative Agent is intentional; account tools belong to Ads Agent.
 
 ## Verified Commands
 
 ```bash
-PATH="$HOME/.bun/bin:$PWD/node_modules/.bin:$PATH" bun test packages/server-core/src/sessions/memory-policy.test.ts packages/session-tools-core/src/handlers/save-secret.test.ts packages/session-tools-core/src/tool-defs-filtering.test.ts
-PATH="$HOME/.bun/bin:$PWD/node_modules/.bin:$PATH" bun test packages/shared/src/agent/backend/claude/session-tool-parity.test.ts packages/shared/src/agent/backend/pi/session-tool-parity.test.ts packages/shared/src/agent-definitions/storage.test.ts apps/electron/src/shared/__tests__/ipc-channels.test.ts
-PATH="$HOME/.bun/bin:$PWD/node_modules/.bin:$PATH" bun test apps/electron/src/renderer/lib/__tests__/output-finals-actions.test.ts apps/electron/src/renderer/components/outputs/__tests__/FinalsWidget.test.ts packages/session-tools-core/src/handlers/outputs.test.ts packages/server-core/src/outputs/OutputService.test.ts
-PATH="$HOME/.bun/bin:$PWD/node_modules/.bin:$PATH" bun run typecheck:electron
-cd packages/server-core && PATH="$HOME/.bun/bin:$PWD/../../node_modules/.bin:$PATH" bun run tsc --noEmit
+/Users/michaelb.williams/.bun/bin/bun test packages/shared/src/agent-definitions/storage.test.ts
+/Users/michaelb.williams/.bun/bin/bun test packages/shared/src/agent-definitions/storage.test.ts packages/shared/src/skills/__tests__/starter-templates.test.ts packages/pi-agent-server/src/tools/search/providers/chatgpt.test.ts packages/pi-agent-server/src/tools/search/create-search-tool.test.ts
+/Users/michaelb.williams/.bun/bin/bun run typecheck:shared
+(cd packages/pi-agent-server && /Users/michaelb.williams/.bun/bin/bun run typecheck)
+(cd apps/electron && /Users/michaelb.williams/.bun/bin/bun run typecheck)
 git diff --check
+python3 /Users/michaelb.williams/.codex/scripts/rebuild_codex_catalog.py
 ```
+
+## Smoke Status
+
+- App launches and the ads specialist migration runs.
+- Ad Creative Agent wiring is ready for a smoke prompt using `Watching Tornado Videos on YouTube`.
+- Prior Ads Strategist live smoke proved direct Meta Ad Library URLs were attempted, but browser research can run long and Meta pages may return sparse/blocked content.
+- Use Ad Creative Agent for hook/format scouting first; then Ads Strategist consumes that creative packet for budget/audience/territory strategy; then Ads Agent drafts/operates account-side work.
 
 ## Next Best Actions
 
-1. Regenerate/check `docs/system-map/` after any worker/starter-agent changes.
-2. Continue Settings/Connections and real-key smoke hardening.
-3. Keep `docs/user/` updated as features stabilize; do final user-guide polish near release.
-4. Run live app smoke when user has entered real keys through the app.
-5. For Finals next, build text-selection `Save as Output` / `Set as Final`; do not add complex asset-state machinery.
+1. Smoke Ad Creative Agent with a campaign prompt for `Watching Tornado Videos on YouTube`.
+2. Confirm it uses `ad-library-intel` first and returns a compact creative packet instead of looping in browser research.
+3. If it over-researches, tighten `ad-library-intel` with a time/sample cap and force a partial packet after first usable examples.
+4. Then smoke Ads Strategist consuming that packet for `$400` Meta budget/audience/territory planning.
+5. Then smoke Ads Agent with an approved strategy/creative handoff and verify it stops at draft/setup-plan/approval packet.
 
 ## Watchouts
 
-- Do not store user keys in tracked files.
-- Do not tell users to paste passwords, 2FA codes, cookies, or recovery codes.
-- Browser-guided login is the right path for many dashboard-only services.
-- Treat app/global credentials as the default so one key setup works across HQ and campaign workspaces.
-- Required tools/sources should fail loudly before execution, not halfway through.
+- Do not give Ad Creative Agent Ads Manager or account mutation tools.
+- Do not ask users for passwords, cookies, 2FA codes, or recovery codes.
+- Public ad libraries do not expose CTR, CPA, ROAS, exact reach, or spend; use visible creative patterns and longevity only as weak evidence.
+- Meta/Google account actions are external business actions. Stop before mutation and require explicit approval naming account, action, and spend impact.
+- If Meta Ad Library blocks automation, ask for screenshots/captured examples or continue manually in browser.
