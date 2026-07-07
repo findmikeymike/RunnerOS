@@ -690,6 +690,22 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.local?.path).toContain('tools/google-ads');
   });
 
+  test('resolves ads-operator by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['ads-operator']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('ads-operator');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
+    expect(sources[0]!.config.local?.path).toContain('tools/ads-operator');
+    expect(sources[0]!.config.connectionStatus).toBe('connected');
+    expect(sources[0]!.guide?.raw).toContain('packet create');
+    expect(sources[0]!.guide?.raw).toContain('audit');
+    expect(sources[0]!.guide?.raw).toContain('campaign-plan');
+  });
+
   test('resolves google-calendar by slug without workspace activation', () => {
     const ws = makeWorkspace();
     const sources = getSourcesBySlugs(ws, ['google-calendar']);

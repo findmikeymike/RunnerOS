@@ -18,6 +18,7 @@ const LOTTIE_SLUG = 'lottie';
 const VIDEO_STUDIO_SLUG = 'video-studio';
 const RAW_VIDEO_EDITOR_SLUG = 'raw-video-editor';
 const GOOGLE_ADS_SLUG = 'google-ads';
+const ADS_OPERATOR_SLUG = 'ads-operator';
 const GOOGLE_CALENDAR_SLUG = 'google-calendar';
 const GMAIL_SLUG = 'gmail';
 const GOOGLE_DRIVE_SLUG = 'google-drive';
@@ -206,6 +207,21 @@ function getGoogleAdsPath(): string {
   );
 }
 
+function getAdsOperatorPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'ads-operator') : '',
+      join(appRoot, 'tools', 'ads-operator'),
+      join(REPO_ROOT, 'tools', 'ads-operator'),
+      join(process.cwd(), 'tools', 'ads-operator'),
+    ],
+    join('tools', 'ads-operator')
+  );
+}
+
 function getYouTubeResearchPath(): string {
   const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
   const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
@@ -351,6 +367,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getVideoStudioSource(workspaceId, workspaceRootPath),
     getRawVideoEditorSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
+    getAdsOperatorSource(workspaceId, workspaceRootPath),
     getGoogleCalendarSource(workspaceId, workspaceRootPath),
     getGmailSource(workspaceId, workspaceRootPath),
     getGoogleDriveSource(workspaceId, workspaceRootPath),
@@ -939,6 +956,58 @@ export function getGoogleAdsSource(workspaceId: string, workspaceRootPath: strin
         '6. Ask for explicit approval before any live mutation to campaigns, budgets, keywords, audiences, conversions, billing, or status.',
         '',
         'Google Ads auth is separate from Meta Ads auth. If auth is missing, tell the user it needs OAuth login or configured Google Ads credentials.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
+ * Built-in source for the local Ads Operator helper.
+ *
+ * This is intentionally read-only. It normalizes exports, plans routes, and
+ * creates approval packets, but it never applies ad-account changes.
+ */
+export function getAdsOperatorSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getAdsOperatorPath();
+  const isReady = existsSync(toolPath);
+  const config: FolderSourceConfig = {
+    id: 'builtin-ads-operator',
+    name: 'Ads Operator',
+    slug: ADS_OPERATOR_SLUG,
+    enabled: true,
+    provider: 'runneros',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Read-only paid ads helper for CSV normalization, route planning, and approval packets.',
+    icon: 'A',
+    isAuthenticated: isReady,
+    connectionStatus: isReady ? 'connected' : 'failed',
+    connectionError: isReady ? undefined : 'Bundled Ads Operator tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Ads Operator',
+        '',
+        'Use this source for paid ads export normalization, local route planning, and approval packet creation.',
+        '',
+        'Workflow:',
+        '1. Run `node bin/ads-operator.mjs doctor --json` before operator work.',
+        '2. Use `accounts`, `campaigns`, `export-plan`, `audit`, and `campaign-plan` for read-only planning.',
+        '3. Use `import <file.csv> --platform meta|google --level campaign|adset|adgroup|ad|keyword --json` to normalize user exports.',
+        '4. Use `audit <file.csv|import.json> --platform meta|google --level ... --goal ... --json` after import to identify obvious waste and cleanup candidates.',
+        '5. Use `campaign-plan --platform meta|google --goal ... --artist-context <file> --territories "..." --budget "..." --json` to draft campaign structure from artist context before any live creation.',
+        '6. Use `packet create --platform meta|google --type publish|budget|status|targeting|creative --json` before any proposed write.',
+        '7. Treat the packet as an approval artifact only. This tool must not publish, pause, change budgets, update targeting, upload creative, or apply recommendations.',
       ].join('\n'),
     },
     isBuiltin: true,
@@ -1558,6 +1627,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === VIDEO_STUDIO_SLUG
     || slug === RAW_VIDEO_EDITOR_SLUG
     || slug === GOOGLE_ADS_SLUG
+    || slug === ADS_OPERATOR_SLUG
     || slug === GOOGLE_CALENDAR_SLUG
     || slug === GMAIL_SLUG
     || slug === GOOGLE_DRIVE_SLUG

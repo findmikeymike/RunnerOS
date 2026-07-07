@@ -1,0 +1,13 @@
+{
+  "name": "@runneros/ads-operator-tool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "runner-ads-operator": "bin/ads-operator.mjs"
+  },
+  "scripts": {
+    "doctor": "node bin/ads-operator.mjs doctor --json",
+    "test": "bun test test"
+  }
+}

@@ -65,6 +65,7 @@ files:
   - tools/video-studio/**/*
   - tools/raw-video-editor/**/*
   - tools/google-ads/**/*
+  - tools/ads-operator/**/*
   - tools/shopify/**/*
   - tools/printify/**/*
   # Exclude everything from node_modules (will use extraResources for SDK)
@@ -140,6 +141,11 @@ mac:
     # Managed local Google Ads CLI wrapper and bundled platform binary.
     - from: ../../tools/google-ads
       to: app/tools/google-ads
+      filter:
+        - "**/*"
+    # Managed local paid ads operator wrapper.
+    - from: ../../tools/ads-operator
+      to: app/tools/ads-operator
       filter:
         - "**/*"
     # Managed local YouTube Research CLI wrapper and bundled platform binary.
@@ -258,6 +264,11 @@ win:
       to: app/tools/google-ads
       filter:
         - "**/*"
+    # Managed local paid ads operator wrapper.
+    - from: ../../tools/ads-operator
+      to: app/tools/ads-operator
+      filter:
+        - "**/*"
     # Managed local YouTube Research CLI wrapper and bundled platform binary.
     - from: ../../tools/youtube-research
       to: app/tools/youtube-research
@@ -335,6 +346,11 @@ linux:
     # Managed local Google Ads CLI wrapper and bundled platform binary.
     - from: ../../tools/google-ads
       to: app/tools/google-ads
+      filter:
+        - "**/*"
+    # Managed local paid ads operator wrapper.
+    - from: ../../tools/ads-operator
+      to: app/tools/ads-operator
       filter:
         - "**/*"
     # Managed local YouTube Research CLI wrapper and bundled platform binary.

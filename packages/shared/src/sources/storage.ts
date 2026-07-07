@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getGoogleAdsSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getMediaGenerationSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getGoogleAdsSource, getAdsOperatorSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getMediaGenerationSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import {
@@ -546,6 +546,8 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getRawVideoEditorSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'google-ads') {
         sources.push({ ...getGoogleAdsSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'ads-operator') {
+        sources.push({ ...getAdsOperatorSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'google-calendar') {
         sources.push({ ...getGoogleCalendarSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'gmail') {

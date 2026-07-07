@@ -560,15 +560,22 @@ body
     expect(tryPost?.systemPrompt).toContain('explicit approval')
   })
 
-  test('starter library includes the Ads Agent with bundled Google Ads source', () => {
+  test('starter library includes the Ads Agent with paid ads source routing', () => {
     const adsAgent = STARTER_AGENTS.find((agent) => agent.slug === 'ads-agent')
 
     expect(adsAgent?.metadata.skills).toContain('google-ads')
     expect(adsAgent?.metadata.skills).toContain('ad-creative')
+    expect(adsAgent?.metadata.skills).toContain('paid-ads-browser-operator')
     expect(adsAgent?.metadata.sources).toContain('google-ads')
+    expect(adsAgent?.metadata.sources).toContain('ads-operator')
     expect(adsAgent?.metadata.sources).not.toContain('meta-ads')
+    expect(adsAgent?.metadata.optionalSources).toContain('meta-ads')
     expect(adsAgent?.systemPrompt).toContain('node bin/google-ads.mjs')
-    expect(adsAgent?.systemPrompt).toContain('Meta OAuth must be connected first')
+    expect(adsAgent?.systemPrompt).toContain('browser dashboard/export mode')
+    expect(adsAgent?.systemPrompt).toContain('tools/ads-operator')
+    expect(adsAgent?.systemPrompt).toContain('Do not assume a local Meta Printing Press CLI is bundled')
+    expect(adsAgent?.systemPrompt).toContain('Routing decision tree')
+    expect(adsAgent?.systemPrompt).toContain('approval packet')
     expect(adsAgent?.systemPrompt).toContain('explicit user approval')
   })
 

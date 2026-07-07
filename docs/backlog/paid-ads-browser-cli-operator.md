@@ -1136,6 +1136,26 @@ Use the existing approval model where possible, but paid ads should show spend i
 - Decide whether Meta Printing Press CLI should be bundled as a local read-only source or kept as later optional install.
 - Add routing decision tree to Ads Agent docs/prompt.
 
+Phase 1 execution note, 2026-07-07:
+
+- Existing Ads Agent, `google-ads`, `meta-ads`, `browser_tool`, `computer-use`, and Outputs paths were audited in [Paid Ads Execution Prep](./paid-ads-execution-prep.md).
+- Decision: do not bundle Meta Printing Press CLI in V1 Phase 1. Keep Meta's official Ads MCP as the connected API path, and make browser dashboard/export mode the normal fallback when Meta API/MCP access is missing or blocked.
+- Ads Agent now keeps `google-ads` required and `meta-ads` optional, and its prompt no longer blocks Meta work on OAuth setup. It routes through CLI/API/MCP when connected, browser dashboard/export when not, user-provided exports when automation is blocked, and Computer Use only as a narrow fallback.
+
+Phase 2 execution note, 2026-07-07:
+
+- Added `tools/ads-operator` as a read-only local CLI skeleton.
+- Implemented deterministic `doctor`, route-plan commands for `accounts` and `campaigns`, CSV `import`, `export-plan`, and approval-only `packet create`.
+- Mutation-like commands fail closed and report `writeExecuted: false`.
+- Approval packets redact secret-like text fields and mark local evidence paths as verified/unverified.
+- Google `cost_micros` imports normalize to account currency units instead of raw micros.
+- CSV import now handles report preamble rows, Meta Ads Manager export headers, Google Ads search-term export headers, currency/percent values, and richer normalized metrics.
+- Added read-only `audit` for spend waste, weak CTR, no-conversion spend, search-term cleanup, fatigue signals, and budget concentration.
+- Added read-only `campaign-plan` for artist-context campaign structures, target audiences, territories, goals, and budget planning.
+- Added `ads-operator` as a builtin local source pointing at `tools/ads-operator`.
+- Ads Agent prompt now points CSV export analysis and approval packet creation at `tools/ads-operator`.
+- Electron packaging now includes `tools/ads-operator` with the other managed local tools.
+
 ### Phase 2: Ads Operator CLI Skeleton
 
 - Add `tools/ads-operator`.
@@ -1313,14 +1333,14 @@ V1 is acceptable when:
 
 ## Backlog Checklist
 
-- [ ] Add `paid-ads-browser-operator` skill.
-- [ ] Add `ads-operator` local source.
-- [ ] Add `tools/ads-operator` CLI skeleton.
-- [ ] Add Meta CSV parser.
-- [ ] Add Google Ads CSV parser.
+- [x] Add `paid-ads-browser-operator` skill.
+- [x] Add `ads-operator` local source.
+- [x] Add `tools/ads-operator` CLI skeleton.
+- [x] Add Meta CSV parser V1.
+- [x] Add Google Ads CSV parser V1.
 - [ ] Add GA4 context parser.
-- [ ] Add normalized metrics schema.
-- [ ] Add audit engine V1.
+- [x] Add normalized metrics schema V1.
+- [x] Add audit engine V1.
 - [ ] Add approval packet schema.
 - [ ] Add receipt schema.
 - [ ] Update Ads Agent prompt/source/skill wiring.
@@ -1338,4 +1358,3 @@ V1 is acceptable when:
 - Should approval packets become a generic Runner action type beyond paid ads?
 - Should budget/spend approvals require a stricter confirmation phrase than normal external actions?
 - Should campaign setup use in-app browser by default, or ask the user whether to use their already-logged-in Chrome profile?
-

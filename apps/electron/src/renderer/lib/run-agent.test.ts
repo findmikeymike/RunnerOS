@@ -125,6 +125,35 @@ describe('buildAgentCreateSessionOptions memory receipts', () => {
     expect(connected.customSystemPrompt).toContain('@gmail')
   })
 
+  test('does not inject optional Meta Ads when it is not authenticated', () => {
+    const agent = {
+      ...makeAgent(),
+      slug: 'ads-agent',
+      metadata: {
+        name: 'Ads Agent',
+        description: 'For tests.',
+        sources: ['google-ads', 'ads-operator'],
+        optionalSources: ['meta-ads'],
+      },
+    } as AgentDefinitionDTO
+
+    const disconnected = buildAgentCreateSessionOptions(agent, {
+      skills: [],
+      sources: [makeSource('google-ads'), makeSource('ads-operator'), makeSource('meta-ads', false)],
+    })
+    expect(disconnected.enabledSourceSlugs).toEqual(['google-ads', 'ads-operator'])
+    expect(disconnected.customSystemPrompt).toContain('@google-ads')
+    expect(disconnected.customSystemPrompt).toContain('@ads-operator')
+    expect(disconnected.customSystemPrompt).not.toContain('@meta-ads')
+
+    const connected = buildAgentCreateSessionOptions(agent, {
+      skills: [],
+      sources: [makeSource('google-ads'), makeSource('ads-operator'), makeSource('meta-ads')],
+    })
+    expect(connected.enabledSourceSlugs).toEqual(['google-ads', 'ads-operator', 'meta-ads'])
+    expect(connected.customSystemPrompt).toContain('@meta-ads')
+  })
+
   test('passes trusted worker tools into spawned sessions and receipts', () => {
     const agent = {
       ...makeAgent(),
