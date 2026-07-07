@@ -704,6 +704,7 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.guide?.raw).toContain('packet create');
     expect(sources[0]!.guide?.raw).toContain('audit');
     expect(sources[0]!.guide?.raw).toContain('campaign-plan');
+    expect(sources[0]!.guide?.raw).toContain('receipt create');
   });
 
   test('resolves google-calendar by slug without workspace activation', () => {

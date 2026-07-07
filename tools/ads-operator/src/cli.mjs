@@ -1,15 +1,17 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditFile, createCampaignPlan } from './audit.mjs';
 import { importCsvFile } from './csv.mjs';
 import {
   createApprovalPacket,
+  createReceipt,
   normalizeLevel,
   normalizePlatform,
   validateApprovalPacketInput,
   validateLevel,
   validatePlatform,
+  validateReceiptInput,
 } from './schema.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -54,11 +56,12 @@ export function runCli(argv, io = process) {
     if (command === 'audit') return auditCommand(args, io, json);
     if (command === 'campaign-plan') return campaignPlanCommand(args, io, json);
     if (command === 'packet' && args[1] === 'create') return packetCreateCommand(args, io, json);
+    if (command === 'receipt' && args[1] === 'create') return receiptCreateCommand(args, io, json);
 
     return write(io, {
       ok: false,
       error: `Unknown command: ${command}`,
-      availableCommands: ['doctor', 'accounts', 'campaigns', 'export-plan', 'import', 'audit', 'campaign-plan', 'packet create'],
+      availableCommands: ['doctor', 'accounts', 'campaigns', 'export-plan', 'import', 'audit', 'campaign-plan', 'packet create', 'receipt create'],
     }, 2, json);
   } catch (error) {
     return write(io, { ok: false, error: error.message }, 1, json);
@@ -84,7 +87,7 @@ function doctorPayload() {
         browserExportRequiredWhenApiMissing: true,
       },
     },
-    commands: ['doctor', 'accounts', 'campaigns', 'export-plan', 'import', 'audit', 'campaign-plan', 'packet create'],
+    commands: ['doctor', 'accounts', 'campaigns', 'export-plan', 'import', 'audit', 'campaign-plan', 'packet create', 'receipt create'],
   };
 }
 
@@ -202,7 +205,24 @@ function packetCreateCommand(args, io, json) {
   };
   const errors = validateApprovalPacketInput(input);
   if (errors.length) return write(io, { ok: false, errors, requiresApproval: true, writeExecuted: false }, 2, json);
-  return write(io, { ok: true, packet: createApprovalPacket(input) }, 0, json);
+  const packet = createApprovalPacket(input);
+  const out = opt(args, '--out');
+  return write(io, withOptionalFile({ ok: true, packet }, out, 'packet'), 0, json);
+}
+
+function receiptCreateCommand(args, io, json) {
+  const input = {
+    packet: opt(args, '--packet'),
+    status: opt(args, '--status'),
+    note: opt(args, '--note'),
+    evidence: opt(args, '--evidence'),
+    writeExecuted: args.includes('--write-executed'),
+  };
+  const errors = validateReceiptInput(input);
+  if (errors.length) return write(io, { ok: false, errors, writeExecuted: false }, 2, json);
+  const receipt = createReceipt(input);
+  const out = opt(args, '--out');
+  return write(io, withOptionalFile({ ok: true, receipt }, out, 'receipt'), 0, json);
 }
 
 function exportPlan(platform, level) {
@@ -257,9 +277,17 @@ function positional(args, offset) {
 function helpPayload() {
   return {
     ok: true,
-    usage: 'node bin/ads-operator.mjs <doctor|accounts|campaigns|export-plan|import|audit|campaign-plan|packet create> --json',
+    usage: 'node bin/ads-operator.mjs <doctor|accounts|campaigns|export-plan|import|audit|campaign-plan|packet create|receipt create> --json',
     writesEnabled: false,
   };
+}
+
+function withOptionalFile(payload, out, key) {
+  if (!out) return payload;
+  const outputPath = resolve(process.cwd(), out);
+  mkdirSync(dirname(outputPath), { recursive: true });
+  writeFileSync(outputPath, `${JSON.stringify(payload[key], null, 2)}\n`, 'utf8');
+  return { ...payload, outputPath };
 }
 
 function write(io, payload, exitCode, json) {

@@ -21,11 +21,12 @@ node bin/ads-operator.mjs export-plan --platform meta --level campaign --json
 node bin/ads-operator.mjs import <file.csv> --platform meta --level campaign --json
 node bin/ads-operator.mjs audit <file.csv|import.json> --platform google --level search-term --goal conversions --json
 node bin/ads-operator.mjs campaign-plan --platform meta --goal leads --artist-context artist.md --territories "Los Angeles,London" --budget "$50/day" --json
-node bin/ads-operator.mjs packet create --platform google --type budget --account <id> --action "..." --spend-impact "..." --evidence <path> --json
+node bin/ads-operator.mjs packet create --platform google --type budget --account <id> --action "..." --spend-impact "..." --evidence <path> --out packet.json --json
+node bin/ads-operator.mjs receipt create --packet packet.json --status approved --out receipt.json --json
 ```
 
 ## Safety
 
 No command publishes, pauses, enables, deletes, changes bids/budgets, uploads assets, or applies recommendations. Mutation-like commands fail closed.
 
-Packet text fields redact token-like values before output. Local evidence paths are marked with `verified: true|false`; remote evidence references are allowed but marked unverified by this skeleton.
+Packet and receipt text fields redact token/session-like values before output. Local evidence paths are marked with `verified: true|false`; remote evidence references are allowed but marked unverified by this skeleton.

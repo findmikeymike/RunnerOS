@@ -54,6 +54,7 @@ Phase 2 current state:
 - CSV import handles report preamble rows, Meta Ads Manager export headers, Google Ads search-term export headers, currency/percent values, and richer normalized metrics.
 - Audit engine V1 flags spend waste, weak CTR, no-conversion spend, search-term cleanup, fatigue signals, and budget concentration.
 - Campaign plan V1 drafts read-only campaign structures from artist context, territories, goals, and budget. Live creation still requires approval packet flow.
+- Approval packet file output and receipt schema/creation are implemented.
 
 ## 2. Source And Tooling Map
 
@@ -106,6 +107,7 @@ Known tests to update or add:
   - Currency, comma-separated numbers, percentages, and Google `cost_micros` are normalized.
   - Audit output includes totals, findings, recommended actions, and no writes.
   - Campaign plan output includes artist-context signals, territories, structure, research prompts, and approval gate.
+  - Packet files and receipt files are created with write-executed guardrails.
   - Unknown columns are preserved in `raw`.
   - Secret-like values are not emitted in packets/receipts.
   - Approval packet rejects missing account/action/spend impact/evidence.

@@ -1152,6 +1152,7 @@ Phase 2 execution note, 2026-07-07:
 - CSV import now handles report preamble rows, Meta Ads Manager export headers, Google Ads search-term export headers, currency/percent values, and richer normalized metrics.
 - Added read-only `audit` for spend waste, weak CTR, no-conversion spend, search-term cleanup, fatigue signals, and budget concentration.
 - Added read-only `campaign-plan` for artist-context campaign structures, target audiences, territories, goals, and budget planning.
+- Added approval packet file output and receipt schema/creation.
 - Added `ads-operator` as a builtin local source pointing at `tools/ads-operator`.
 - Ads Agent prompt now points CSV export analysis and approval packet creation at `tools/ads-operator`.
 - Electron packaging now includes `tools/ads-operator` with the other managed local tools.
@@ -1341,8 +1342,8 @@ V1 is acceptable when:
 - [ ] Add GA4 context parser.
 - [x] Add normalized metrics schema V1.
 - [x] Add audit engine V1.
-- [ ] Add approval packet schema.
-- [ ] Add receipt schema.
+- [x] Add approval packet schema.
+- [x] Add receipt schema.
 - [ ] Update Ads Agent prompt/source/skill wiring.
 - [ ] Add browser flowbook docs.
 - [ ] Add browser fixture tests.

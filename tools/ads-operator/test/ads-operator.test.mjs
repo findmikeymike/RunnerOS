@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -34,6 +34,12 @@ function tempFile(name, contents) {
   const file = join(dir, name);
   writeFileSync(file, contents, 'utf8');
   return file;
+}
+
+function tempDir() {
+  const dir = mkdtempSync(join(tmpdir(), 'runneros-ads-operator-'));
+  tempDirs.push(dir);
+  return dir;
 }
 
 describe('ads-operator cli', () => {
@@ -300,6 +306,90 @@ describe('ads-operator cli', () => {
     expect(result.status).toBe(0);
     expect(result.stdout.packet.evidence).toEqual({ type: 'local_path', value: file, verified: true });
     expect(result.stdout.packet.evidenceVerified).toBe(true);
+  });
+
+  test('writes approval packet files and creates receipts from them', () => {
+    const dir = tempDir();
+    const packetPath = join(dir, 'budget-packet.json');
+    const receiptPath = join(dir, 'budget-receipt.json');
+    const packetResult = run([
+      'packet',
+      'create',
+      '--platform',
+      'google',
+      '--type',
+      'budget',
+      '--account',
+      '123',
+      '--action',
+      'Increase campaign budget from 20 to 30',
+      '--spend-impact',
+      '+10/day',
+      '--evidence',
+      'evidence/export.csv',
+      '--out',
+      packetPath,
+      '--json',
+    ]);
+
+    expect(packetResult.status).toBe(0);
+    expect(packetResult.stdout.outputPath).toBe(packetPath);
+    expect(existsSync(packetPath)).toBe(true);
+    const savedPacket = JSON.parse(readFileSync(packetPath, 'utf8'));
+    expect(savedPacket.schema).toBe('runneros.ads.approval_packet.v1');
+    expect(savedPacket.writeExecuted).toBe(false);
+
+    const receiptResult = run([
+      'receipt',
+      'create',
+      '--packet',
+      packetPath,
+      '--status',
+      'approved',
+      '--note',
+      'Approved in chat',
+      '--out',
+      receiptPath,
+      '--json',
+    ]);
+
+    expect(receiptResult.status).toBe(0);
+    expect(receiptResult.stdout.outputPath).toBe(receiptPath);
+    expect(receiptResult.stdout.receipt.schema).toBe('runneros.ads.receipt.v1');
+    expect(receiptResult.stdout.receipt.packetApprovalPhrase).toBe('APPROVE GOOGLE BUDGET');
+    expect(receiptResult.stdout.receipt.status).toBe('approved');
+    expect(receiptResult.stdout.receipt.writeExecuted).toBe(false);
+    const savedReceipt = JSON.parse(readFileSync(receiptPath, 'utf8'));
+    expect(savedReceipt.schema).toBe('runneros.ads.receipt.v1');
+  });
+
+  test('receipt creation rejects write execution unless status is executed', () => {
+    const dir = tempDir();
+    const packetPath = join(dir, 'status-packet.json');
+    run([
+      'packet',
+      'create',
+      '--platform',
+      'meta',
+      '--type',
+      'status',
+      '--account',
+      'act_1',
+      '--action',
+      'Pause campaign',
+      '--spend-impact',
+      'stops spend',
+      '--evidence',
+      'evidence/export.csv',
+      '--out',
+      packetPath,
+      '--json',
+    ]);
+    const result = run(['receipt', 'create', '--packet', packetPath, '--status', 'approved', '--write-executed', '--json']);
+
+    expect(result.status).toBe(2);
+    expect(result.stdout.ok).toBe(false);
+    expect(result.stdout.errors).toContain('write-executed is only valid with status executed');
   });
 
   test('approval packets redact browser session and cookie-like secrets', () => {
