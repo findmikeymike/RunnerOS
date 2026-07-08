@@ -191,6 +191,8 @@ export {
   handleListAgents,
   handleSearchSkillMarketplace,
   handleListSources,
+  handleMessageAgent,
+  handleListAgentMessageReceipts,
   // Workflows
   handleListWorkflows,
   handleGetWorkflow,
@@ -205,6 +207,7 @@ export {
   handleRecallMemory,
   // Outputs
   handleCreateOutput,
+  handlePromoteOutputToFinal,
   // Visual surface
   handleVisualSurface,
   handleVisualSurfaceState,
@@ -275,6 +278,12 @@ export type {
   RecallMemoryResult,
   MemoryScope,
   MemoryType,
+  CreateOutputApprovalInput,
+  CreateOutputContextInput,
+  MessageAgentToolInput,
+  MessageAgentToolResult,
+  ListAgentMessageReceiptsInput,
+  ListAgentMessageReceiptsResult,
   CreateOutputToolInput,
   CreateOutputResult,
   OutputKind,
@@ -282,6 +291,8 @@ export type {
   CreateOutputFileInput,
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
+  PromoteOutputToFinalToolInput,
+  PromoteOutputToFinalResult,
   VisualSurfaceToolInput,
   VisualSurfaceToolResult,
   VisualSurfaceStateCapture,
@@ -320,6 +331,7 @@ export {
   ForgetMemorySchema,
   RecallMemorySchema,
   CreateOutputSchema,
+  PromoteOutputToFinalSchema,
   VisualSurfaceSchema,
   VisualSurfaceStateSchema,
   // Descriptions

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol';
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config';
-import type { OutputManifest, OutputSummary } from '@craft-agent/shared/outputs';
+import type { OutputFinalPointer, OutputManifest, OutputSummary, PromoteOutputToFinalInput, RemoveOutputFromFinalInput } from '@craft-agent/shared/outputs';
 import { validateRunnerVideoProject } from '@craft-agent/shared/video';
 import type { VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
 import type { ApplyVisualSurfaceEventResult, VisualSurfaceEventInput, VisualSurfaceEventRecord } from '@craft-agent/shared/visual-surface-events';
@@ -17,6 +17,8 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.outputs.LIST,
   RPC_CHANNELS.outputs.GET,
   RPC_CHANNELS.outputs.DELETE,
+  RPC_CHANNELS.outputs.PROMOTE_TO_FINAL,
+  RPC_CHANNELS.outputs.REMOVE_FROM_FINAL,
   RPC_CHANNELS.outputs.GET_VISUAL_BOARD,
   RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD,
   RPC_CHANNELS.outputs.APPLY_VISUAL_SURFACE_EVENT,
@@ -157,6 +159,22 @@ export function registerOutputsHandlers(server: RpcServer, _deps: HandlerDeps): 
     RPC_CHANNELS.outputs.DELETE,
     async (_ctx, workspaceId: string, outputId: string): Promise<boolean> => {
       return serviceFor(server).delete(workspaceId, outputId);
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.PROMOTE_TO_FINAL,
+    async (_ctx, workspaceId: string, input: PromoteOutputToFinalInput): Promise<OutputFinalPointer> => {
+      assertLocalWorkspace(workspaceId, 'Promote output to final');
+      return serviceFor(server).promoteToFinal(workspaceId, { ...input, promotedBy: input.promotedBy ?? 'user' });
+    },
+  );
+
+  server.handle(
+    RPC_CHANNELS.outputs.REMOVE_FROM_FINAL,
+    async (_ctx, workspaceId: string, input: RemoveOutputFromFinalInput): Promise<number> => {
+      assertLocalWorkspace(workspaceId, 'Remove output from finals');
+      return serviceFor(server).removeFromFinal(workspaceId, input);
     },
   );
 

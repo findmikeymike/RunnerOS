@@ -44,6 +44,7 @@ import { handleSearchSkillMarketplace } from './handlers/search-skill-marketplac
 import { handleListSources } from './handlers/list-sources.ts';
 import { handleSendAgentMessage } from './handlers/send-agent-message.ts';
 import { handleMessageAgent } from './handlers/message-agent.ts';
+import { handleListAgentMessageReceipts } from './handlers/list-agent-message-receipts.ts';
 import { handleListMessagingChannels, handleUnbindMessagingChannel } from './handlers/messaging.ts';
 import { handleCreateAgent } from './handlers/create-agent.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
@@ -54,7 +55,7 @@ import {
   handleForgetMemory,
   handleRecallMemory,
 } from './handlers/memory.ts';
-import { handleCreateOutput } from './handlers/outputs.ts';
+import { handleCreateOutput, handlePromoteOutputToFinal } from './handlers/outputs.ts';
 import { handleVisualSurface } from './handlers/visual-surface.ts';
 import { handleVisualSurfaceState } from './handlers/visual-surface-state.ts';
 import {
@@ -380,6 +381,14 @@ export const MessageAgentSchema = z.object({
   timeoutSeconds: z.number().int().min(1).max(1800).optional().describe('Timeout for the delegated turn. Defaults to 300 seconds.'),
   maxTurns: z.number().int().min(1).max(1).optional().describe('Maximum child turns. MVP supports one delegated turn.'),
   priority: z.enum(['low', 'normal', 'high']).optional().describe('Scheduling hint for future use. Defaults to normal.'),
+  background: z.boolean().optional().describe('When true, start the child agent and return immediately. The receipt updates when it finishes.'),
+});
+
+export const ListAgentMessageReceiptsSchema = z.object({
+  receiptId: z.string().optional().describe('Specific receipt ID to inspect. Omit to list recent receipts.'),
+  status: z.enum(['running', 'succeeded', 'failed', 'cancelled', 'timed-out']).optional().describe('Optional status filter.'),
+  agentSlug: z.string().optional().describe('Optional caller or target agent slug filter.'),
+  limit: z.number().optional().describe('Max receipts to return when listing. Defaults to 20, max 100.'),
 });
 
 export const ListMessagingChannelsSchema = z.object({
@@ -541,9 +550,28 @@ export const CreateOutputSchema = z.object({
     displayText: z.string().optional(),
     metadata: z.record(z.string(), z.unknown()).optional(),
   })).optional(),
+  context: z.object({
+    scope: z.enum(['hq', 'campaign']).describe('Where this Output should appear. Use hq for general HQ work, campaign for campaign-specific work.'),
+    campaignId: z.string().min(1).optional().describe('Required when scope is campaign.'),
+  }).optional(),
+  approval: z.object({
+    state: z.enum(['none', 'pending', 'approved', 'changes_requested']).describe('User decision state for this Output. Use pending only when the user needs to approve, reject, or request changes.'),
+    note: z.string().optional(),
+    updatedAt: z.string().optional().describe('ISO-8601 timestamp. Defaults can be filled by callers when approval changes.'),
+  }).optional(),
   tags: z.array(z.string()).optional(),
   showInCanvas: z.boolean().optional().describe('Set true when the user should see this Output in Canvas immediately. The backend marks and pins the same-session Output when Canvas is available.'),
   show_in_canvas: z.boolean().optional().describe('Alias for showInCanvas. Prefer showInCanvas in new calls.'),
+});
+
+export const PromoteOutputToFinalSchema = z.object({
+  outputId: z.string().min(1).describe('Existing Output id to promote.'),
+  scope: z.enum(['hq', 'campaign']).describe('Promote into the HQ kit or a campaign kit.'),
+  campaignId: z.string().min(1).optional().describe('Required when scope is campaign.'),
+  slot: z.string().min(1).describe('Finals slot, e.g. Cover Art, Shortform Clips, Artist Bio.'),
+  assetId: z.string().min(1).optional().describe('Optional asset id inside the Output. Defaults to the Output primary asset.'),
+  makePrimary: z.boolean().optional().describe('Mark this final as the current primary choice for the slot without removing other finals.'),
+  note: z.string().optional().describe('Optional short note about why this was promoted.'),
 });
 
 export const VideoProjectCreateSchema = z.object({
@@ -965,6 +993,11 @@ Rules:
 - The child cannot use a looser permission mode than this parent session.
 - Delegation is bounded by timeout and recursion depth.`,
 
+  list_agent_message_receipts: `Inspect recent message_agent delegation receipts in the current workspace.
+
+Use this after background delegation, failures, or audit questions to find receipt IDs, child session IDs, status, summary, tools, and errors.
+This is read-only and scoped to the current workspace's agent-messages directory.`,
+
   list_messaging_channels: `List messaging channels (Telegram, WhatsApp) bound to a session.
 Shows which external chat apps are connected and can send/receive messages.`,
 
@@ -1141,6 +1174,19 @@ Use Browser Pane or browser tools, not Canvas, when the user wants to test, debu
 
 Do NOT use this for ordinary chat replies, scratch notes, temporary plans, or files that are not intended as final deliverables. Prefer one concise primary output over dumping every intermediate artifact.`,
 
+  promote_output_to_final: `Promote an existing Output into Finals.
+
+Use this only after the user clearly asks or confirms. Do not silently finalize work.
+
+Inputs:
+- outputId: existing Output id.
+- scope: hq or campaign.
+- campaignId: required for campaign.
+- slot: named Finals slot like Cover Art, Shortform Clips, Artist Bio, Press Copy, Captions, Ads, References.
+- makePrimary: optional; marks the current default for that slot without deleting other Finals.
+
+Finals are trusted pointers to Outputs. This does not duplicate files, publish anything, send anything, or delete competing options.`,
+
   video_project_create: `Create a local RunnerOS Video Studio project file.
 
 Use this before timeline edits. The project file is the source of truth for both agents and the future Video Studio UI.
@@ -1279,6 +1325,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
   { name: 'message_agent', description: TOOL_DESCRIPTIONS.message_agent, inputSchema: MessageAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleMessageAgent },
+  { name: 'list_agent_message_receipts', description: TOOL_DESCRIPTIONS.list_agent_message_receipts, inputSchema: ListAgentMessageReceiptsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgentMessageReceipts },
   // Messaging gateway tools
   { name: 'list_messaging_channels', description: TOOL_DESCRIPTIONS.list_messaging_channels, inputSchema: ListMessagingChannelsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListMessagingChannels },
   { name: 'unbind_messaging_channel', description: TOOL_DESCRIPTIONS.unbind_messaging_channel, inputSchema: UnbindMessagingChannelSchema, executionMode: 'registry', safeMode: 'block', handler: handleUnbindMessagingChannel },
@@ -1291,6 +1338,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'forget_memory', description: TOOL_DESCRIPTIONS.forget_memory, inputSchema: ForgetMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleForgetMemory },
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
+  { name: 'promote_output_to_final', description: TOOL_DESCRIPTIONS.promote_output_to_final, inputSchema: PromoteOutputToFinalSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteOutputToFinal },
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
   { name: 'video_project_update', description: TOOL_DESCRIPTIONS.video_project_update, inputSchema: VideoProjectUpdateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUpdate },
   { name: 'video_media_import', description: TOOL_DESCRIPTIONS.video_media_import, inputSchema: VideoMediaImportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoMediaImport },

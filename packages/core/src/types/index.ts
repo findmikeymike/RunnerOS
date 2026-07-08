@@ -29,6 +29,7 @@ export type {
   AttachmentType,
   MessageAttachment,
   StoredAttachment,
+  AgentMessageNoticeMetadata,
   ContentBadge,
   AnnotationAuthor,
   AnnotationBody,
@@ -63,4 +64,3 @@ export type {
   SessionProcessingStatus,
   ActiveSessionInfo,
 } from './server.ts';
-

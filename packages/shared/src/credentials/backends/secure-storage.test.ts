@@ -49,6 +49,6 @@ describe('SecureStorageBackend', () => {
       { type: 'user_secret', name: 'NEW_SECRET' },
       { value: 'new-secret-value', source: 'user' }
     )).rejects.toThrow('cannot be unlocked');
-    expect(readFileSync(credentialsFile)).toEqual(original);
+    expect(Buffer.compare(readFileSync(credentialsFile), original)).toBe(0);
   });
 });

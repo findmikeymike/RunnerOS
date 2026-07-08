@@ -431,6 +431,12 @@ export interface SessionToolContext {
   createOutput?(input: import('./handlers/outputs.ts').CreateOutputToolInput): Promise<import('./handlers/outputs.ts').CreateOutputResult>;
 
   /**
+   * Promote an existing Output into Finals.
+   * Backend owns output lookup, workspace ownership checks, and Finals registry writes.
+   */
+  promoteOutputToFinal?(input: import('./handlers/outputs.ts').PromoteOutputToFinalToolInput): Promise<import('./handlers/outputs.ts').PromoteOutputToFinalResult>;
+
+  /**
    * Apply a validated visual surface operation to the current session Canvas.
    * Backend owns workspace/session resolution; callers cannot supply those IDs.
    */
@@ -447,7 +453,12 @@ export interface SessionToolContext {
   // ============================================================
 
   /** Send a message to another session. Injected by backend (SessionManager). */
-  sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
+  sendAgentMessage?(
+    sessionId: string,
+    message: string,
+    attachments?: Array<{ path: string; name?: string }>,
+    options?: { deliveryMode?: 'normal' | 'passive' },
+  ): Promise<void>;
 
   /** Delegate a bounded task to a saved agent and wait for a structured result. */
   messageAgent?(input: import('./handlers/message-agent.ts').MessageAgentToolInput): Promise<import('./handlers/message-agent.ts').MessageAgentToolResult>;

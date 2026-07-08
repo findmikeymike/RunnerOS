@@ -266,6 +266,14 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
       output: input,
     }),
 
+    promoteOutputToFinal: async (input) => {
+      const final = await outputService.promoteToFinal(workspaceId, {
+        ...input,
+        promotedBy: 'agent',
+      });
+      return { ok: true, finalId: final.id };
+    },
+
     applyVisualSurfaceEvent: (input) => Promise.resolve(
       outputService.applyVisualSurfaceEvent(
         workspaceId,

@@ -156,9 +156,23 @@ export type {
   MemoryType,
 } from './memory.ts';
 
-// Outputs
-export { handleCreateOutput } from './outputs.ts';
+// Agent messaging
+export { handleMessageAgent } from './message-agent.ts';
 export type {
+  MessageAgentToolInput,
+  MessageAgentToolResult,
+} from './message-agent.ts';
+export { handleListAgentMessageReceipts } from './list-agent-message-receipts.ts';
+export type {
+  ListAgentMessageReceiptsInput,
+  ListAgentMessageReceiptsResult,
+} from './list-agent-message-receipts.ts';
+
+// Outputs
+export { handleCreateOutput, handlePromoteOutputToFinal } from './outputs.ts';
+export type {
+  CreateOutputApprovalInput,
+  CreateOutputContextInput,
   CreateOutputToolInput,
   CreateOutputResult,
   OutputKind,
@@ -166,6 +180,8 @@ export type {
   CreateOutputFileInput,
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
+  PromoteOutputToFinalToolInput,
+  PromoteOutputToFinalResult,
 } from './outputs.ts';
 
 // Video Studio

@@ -638,6 +638,13 @@ export function resolveModelForProvider(
     }
   }
 
+  if (managedModel && connection?.models?.length) {
+    const allowed = new Set(connection.models.map(model => typeof model === 'string' ? model : model.id));
+    if (!allowed.has(managedModel)) {
+      managedModel = undefined;
+    }
+  }
+
   switch (provider) {
     case 'pi':
       return managedModel || connection?.defaultModel || '';
