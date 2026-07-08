@@ -674,9 +674,13 @@ body
     expect(hypermotionAgent).toBeDefined()
     expect(hypermotionAgent?.metadata.visualAgent).toBe(true)
     expect(hypermotionAgent?.metadata.skills).toContain('hyperframes')
+    expect(hypermotionAgent?.metadata.skills).toContain('spotify-canvas-video')
     expect(hypermotionAgent?.metadata.skills).not.toContain('remotion-production')
     expect(hypermotionAgent?.metadata.sources).toContain('hypermotion')
+    expect(hypermotionAgent?.metadata.optionalSources).toContain('media-generation')
     expect(hypermotionAgent?.systemPrompt).toContain('node bin/hypermotion.mjs doctor')
+    expect(hypermotionAgent?.systemPrompt).toContain('Spotify Canvas')
+    expect(hypermotionAgent?.systemPrompt).toContain('Do not require OpenAI')
     expect(hypermotionAgent?.systemPrompt).toContain('showInCanvas')
   })
 

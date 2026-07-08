@@ -153,6 +153,16 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain('Outreach Agent handoff');
   });
 
+  it('includes spotify-canvas-video for silent Spotify Canvas loops', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'spotify-canvas-video');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('spotify-canvas-video');
+    expect(parsed.content).toContain('Vertical 9:16');
+    expect(parsed.content).toContain('Do not add voiceover');
+    expect(parsed.content).toContain('Do not require OpenAI');
+  });
+
   it('includes record-doctor-handoff for producer review submissions', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'record-doctor-handoff');
     expect(skill).toBeDefined();
