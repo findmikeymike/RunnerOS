@@ -459,6 +459,7 @@ function buildMomentum(input: HqInputState): HqStateOfPlay['momentum'] {
   if (topCity?.city) up.push(`Top city signal: ${topCity.city}${topCity.country ? `, ${topCity.country}` : ''}.`);
   if (community.contacts > 0) up.push(`${community.contacts} community contact${community.contacts === 1 ? '' : 's'} tracked.`);
   if (vault.agentUsable > 0) up.push(`${vault.agentUsable} agent-usable Vault asset${vault.agentUsable === 1 ? '' : 's'} available.`);
+  if (vault.faceReference) up.push('Face reference is available in Vault for visual generation.');
 
   if (!spotify) down.push('No Spotify snapshot yet.');
   else if (spotify.partial) down.push('Spotify snapshot is marked partial.');
@@ -559,6 +560,7 @@ function summarizeVault(vault: VaultManifest | null): {
   finalMaster: boolean;
   coverArt: boolean;
   pressPhoto: boolean;
+  faceReference: boolean;
   epk: boolean;
 } {
   const assets = vault?.assets ?? [];
@@ -569,6 +571,7 @@ function summarizeVault(vault: VaultManifest | null): {
     finalMaster: usable.some((asset) => asset.kind === 'master-final'),
     coverArt: usable.some((asset) => asset.kind === 'cover-art'),
     pressPhoto: usable.some((asset) => asset.kind === 'artist-photo'),
+    faceReference: usable.some((asset) => asset.kind === 'face-reference'),
     epk: usable.some((asset) => asset.kind === 'epk' || asset.kind === 'one-sheet'),
   };
 }

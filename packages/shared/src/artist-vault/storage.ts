@@ -63,6 +63,7 @@ const DEFAULT_DIRECTORIES = [
   'video/project-files',
   'visuals/cover-art',
   'visuals/artist-photos',
+  'visuals/face-references',
   'visuals/logos-marks',
   'visuals/brand-assets',
   'visuals/posters-flyers',
@@ -98,6 +99,7 @@ const VAULT_KINDS = new Set<VaultAssetKind>([
   'video-project',
   'cover-art',
   'artist-photo',
+  'face-reference',
   'logo-mark',
   'brand-asset',
   'poster-flyer',
@@ -793,6 +795,7 @@ function kindFromRelativePath(relativePath: string): VaultAssetRecord['kind'] | 
   if (normalized.startsWith('vault/video/project-files/')) return 'video-project';
   if (normalized.startsWith('vault/visuals/cover-art/')) return 'cover-art';
   if (normalized.startsWith('vault/visuals/artist-photos/')) return 'artist-photo';
+  if (normalized.startsWith('vault/visuals/face-references/')) return 'face-reference';
   if (normalized.startsWith('vault/visuals/logos-marks/')) return 'logo-mark';
   if (normalized.startsWith('vault/visuals/brand-assets/')) return 'brand-asset';
   if (normalized.startsWith('vault/visuals/posters-flyers/')) return 'poster-flyer';

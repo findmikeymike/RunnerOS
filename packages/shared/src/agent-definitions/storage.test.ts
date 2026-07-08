@@ -1184,6 +1184,51 @@ body
     expect(loadGlobalAgent('lyric-video-agent', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew lyric prompt line\nAfter')
   })
 
+  test('replaceBuiltInAgentPromptText can patch Art Director face-reference guidance', () => {
+    writeGlobalAgent(
+      {
+        slug: 'art-director',
+        metadata: {
+          name: 'Art Director',
+          description: 'Creates artist visuals.',
+        },
+        systemPrompt: 'Before\nold face reference line\nAfter',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentPromptText(
+      'art-director',
+      'old face reference line',
+      'new face reference line',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    expect(loadGlobalAgent('art-director', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew face reference line\nAfter')
+  })
+
+  test('replaceBuiltInAgentMetadata can patch Art Director inputs guidance', () => {
+    writeGlobalAgent(
+      {
+        slug: 'art-director',
+        metadata: {
+          name: 'Art Director',
+          description: 'Creates artist visuals.',
+          inputs: 'approved artist photos',
+        },
+        systemPrompt: 'Prompt',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentMetadata('art-director', {
+      inputs: {
+        from: 'approved artist photos',
+        to: 'approved artist photos and face references',
+      },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(loadGlobalAgent('art-director', { globalAgentsDir })!.metadata.inputs).toBe('approved artist photos and face references')
+  })
+
   test('replaceBuiltInAgentMetadata can patch Industry Hunter array metadata without touching other agents', () => {
     writeGlobalAgent(
       {

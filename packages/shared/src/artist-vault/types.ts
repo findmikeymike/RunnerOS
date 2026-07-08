@@ -25,6 +25,7 @@ export type VaultAssetKind =
   | 'video-project'
   | 'cover-art'
   | 'artist-photo'
+  | 'face-reference'
   | 'logo-mark'
   | 'brand-asset'
   | 'poster-flyer'
@@ -64,6 +65,7 @@ export type VaultKindHint =
   | 'raw-footage'
   | 'cover-art'
   | 'artist-photo'
+  | 'face-reference'
   | 'contract'
   | 'ad-asset'
   | 'any';

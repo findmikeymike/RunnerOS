@@ -199,6 +199,7 @@ function dialogTitle(kindHint: VaultKindHint): string {
   if (kindHint === 'raw-footage') return 'Add Raw Footage'
   if (kindHint === 'cover-art') return 'Add Cover Art'
   if (kindHint === 'artist-photo') return 'Add Press Photo'
+  if (kindHint === 'face-reference') return 'Add Face Reference'
   if (kindHint === 'contract') return 'Add Contract'
   if (kindHint === 'ad-asset') return 'Add Ad Asset'
   return 'Add Artist Vault Assets'
@@ -211,7 +212,7 @@ function dialogFilters(kindHint: VaultKindHint): Array<{ name: string; extension
   if (kindHint === 'raw-footage' || kindHint === 'ad-asset') {
     return [{ name: 'Video', extensions: ['mov', 'mp4', 'm4v', 'avi', 'mkv', 'webm'] }]
   }
-  if (kindHint === 'cover-art' || kindHint === 'artist-photo') {
+  if (kindHint === 'cover-art' || kindHint === 'artist-photo' || kindHint === 'face-reference') {
     return [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'psd', 'ai', 'tif', 'tiff'] }]
   }
   if (kindHint === 'contract') {

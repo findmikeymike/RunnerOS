@@ -58,12 +58,14 @@ function keyReadyAssetLines(assets: VaultAssetRecord[]): string[] {
   const master = firstPath(assets, 'master-final');
   const cover = firstPath(assets, 'cover-art');
   const pressPhoto = firstPath(assets, 'artist-photo');
+  const faceReference = firstPath(assets, 'face-reference');
   const epk = firstPath(assets, 'epk');
   const oneSheet = firstPath(assets, 'one-sheet');
   return [
     `- Final master: ${master ?? 'missing'}`,
     `- Cover art: ${cover ?? 'missing'}`,
     `- Press photo: ${pressPhoto ?? 'missing'}`,
+    `- Face reference: ${faceReference ?? 'missing'}`,
     `- EPK: ${epk ?? 'missing'}`,
     `- One-sheet: ${oneSheet ?? 'missing'}`,
   ];

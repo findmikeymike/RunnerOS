@@ -88,6 +88,7 @@ vault/
   visuals/
     cover-art/
     artist-photos/
+    face-references/
     logos-marks/
     brand-assets/
     posters-flyers/
@@ -151,6 +152,7 @@ type VaultAssetKind =
   | 'video-project'
   | 'cover-art'
   | 'artist-photo'
+  | 'face-reference'
   | 'logo-mark'
   | 'brand-asset'
   | 'poster-flyer'
@@ -221,7 +223,7 @@ Agent visibility is a first-class control.
 
 Default rules:
 
-- `masters-finals`, `cover-art`, `artist-photos`, `logos-marks`, `one-sheets`, `epk`: agent-usable by default after import confirmation.
+- `masters-finals`, `cover-art`, `artist-photos`, `face-references`, `logos-marks`, `one-sheets`, `epk`: agent-usable by default after import confirmation.
 - `demos`, `raw-footage`, `lyrics-notes`, `brand-assets`, `references`: ask during import.
 - `contracts`, `splits`, `invoices`: private by default.
 - Anything marked `needs-clearance`, `private`, `draft`, or `missing` should not be used as a final asset by agents.
@@ -269,6 +271,7 @@ This context lists artist Vault assets. Do not assume files were analyzed. Use t
 
 - Final masters: 0
 - Approved press photos: 0
+- Face references: 0
 - Cover art: 0
 - EPK / one-sheet: 0
 - Agent-usable assets: 0
@@ -303,6 +306,7 @@ video/*
 image/*
   -> visuals/cover-art if square-ish or filename contains cover/artwork
   -> visuals/artist-photos if filename contains press/photo/headshot
+  -> visuals/face-references if filename contains face-reference/face-ref/identity-ref/likeness/selfie
   -> visuals/logos-marks if filename contains logo/mark
   -> references/moodboards if filename contains mood/ref/inspo
 
@@ -327,6 +331,7 @@ beat, instrumental, prod               -> music/beats-instrumentals
 ref, reference                         -> music/mix-references or references/moodboards
 cover, artwork                         -> visuals/cover-art
 press, headshot, portrait              -> visuals/artist-photos
+face-reference, face-ref, likeness     -> visuals/face-references
 logo, mark, wordmark                   -> visuals/logos-marks
 poster, flyer                          -> visuals/posters-flyers
 merch, shirt, hoodie                   -> visuals/merch-designs
@@ -585,6 +590,7 @@ Ready assets:
 - Final master: vault/music/masters-finals/song-final.wav
 - Cover art: vault/visuals/cover-art/cover-final.png
 - Press photo: vault/visuals/artist-photos/press-photo-01.jpg
+- Face reference: vault/visuals/face-references/face-reference-01.jpg
 
 Private assets:
 - 3 business docs exist but are not agent-usable.

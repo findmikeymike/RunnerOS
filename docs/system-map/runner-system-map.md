@@ -234,7 +234,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Trusted tools: `artwork_compose`, `create_output`
 - Tags: `creative`, `art-direction`, `album-art`, `merch`, `design`, `image-generation`, `visuals`
 - Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `trusted-worker-tools`
-- Inputs: Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos, cover/merch mode, format, and generation approval.
+- Inputs: Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos and face references, cover/merch mode, format, and generation approval.
 - Outputs: Taste-led visual concepts, style-lane recommendations, album/single art prompts, merch graphic specs, reference-image requirements, typography/layout direction, SVG/PNG artwork composition exports, Canvas-visible artifacts, anti-slop checks, and approved image-generation/layout briefs.
 
 #### Content Genius (`content-genius`)

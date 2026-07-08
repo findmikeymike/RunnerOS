@@ -27,6 +27,7 @@ describe('artist vault', () => {
     expect(classifyVaultAsset('/tmp/vocal-stem.wav').kind).toBe('stem');
     expect(classifyVaultAsset('/tmp/cover-art-v4.png').kind).toBe('cover-art');
     expect(classifyVaultAsset('/tmp/press-headshot.jpg').kind).toBe('artist-photo');
+    expect(classifyVaultAsset('/tmp/face-reference-01.jpg').kind).toBe('face-reference');
     expect(classifyVaultAsset('/tmp/song-splitsheet.pdf').kind).toBe('split-sheet');
     expect(classifyVaultAsset('/tmp/studio-bts.mov').kind).toBe('raw-footage');
   });
@@ -62,25 +63,42 @@ describe('artist vault', () => {
     expect(plan.candidates[0]?.defaultUsableByAgents).toBe(true);
   });
 
+  test('plans face reference images into the dedicated visual bucket', () => {
+    const workspace = tempWorkspace();
+    const faceReference = join(workspace, 'mikey-face-reference.jpg');
+    writeFileSync(faceReference, 'fake image');
+
+    const plan = planArtistVaultImports(workspace, [faceReference], { kindHint: 'face-reference' });
+
+    expect(plan.skipped).toEqual([]);
+    expect(plan.candidates[0]?.kind).toBe('face-reference');
+    expect(plan.candidates[0]?.destinationRelativePath).toBe('vault/visuals/face-references/mikey-face-reference.jpg');
+    expect(plan.candidates[0]?.defaultStatus).toBe('final');
+    expect(plan.candidates[0]?.defaultUsableByAgents).toBe(true);
+  });
+
   test('copies files, writes manifest, and emits compact agent context', () => {
     const workspace = tempWorkspace();
     const master = join(workspace, 'night-drive-final.wav');
     const photo = join(workspace, 'press-headshot.jpg');
+    const faceReference = join(workspace, 'face-reference-01.jpg');
     writeFileSync(master, 'fake audio');
     writeFileSync(photo, 'fake image');
+    writeFileSync(faceReference, 'fake face image');
 
-    importArtistVaultAssets(workspace, 'workspace-1', [master, photo]);
+    importArtistVaultAssets(workspace, 'workspace-1', [master, photo, faceReference]);
     const loaded = loadArtistVaultManifest(workspace, 'workspace-1');
     const body = serializeArtistVaultContext(loaded);
 
     expect(getArtistVaultManifestPath(workspace)).toContain('vault/manifest.json');
-    expect(loaded.assets).toHaveLength(2);
-    expect(loaded.assets.map((asset) => asset.kind).sort()).toEqual(['artist-photo', 'master-final']);
+    expect(loaded.assets).toHaveLength(3);
+    expect(loaded.assets.map((asset) => asset.kind).sort()).toEqual(['artist-photo', 'face-reference', 'master-final']);
     expect(loaded.assets.every((asset) => asset.usableByAgents)).toBe(true);
     expect(loaded.assets.every((asset) => asset.status === 'final')).toBe(true);
     expect(body).toContain('"kind": "master-final"');
     expect(body).toContain('Final master: vault/music/masters-finals/night-drive-final.wav');
     expect(body).toContain('Press photo: vault/visuals/artist-photos/press-headshot.jpg');
+    expect(body).toContain('Face reference: vault/visuals/face-references/face-reference-01.jpg');
     expect(body).toContain('Vault files are usable by agents by default.');
     expect(body).toContain('Private or non-agent-usable assets: 0');
     expect(artistVaultContextMetadata().description).toContain('song matching metadata');
@@ -130,20 +148,24 @@ describe('artist vault', () => {
     const workspace = tempWorkspace();
     const masterPath = join(workspace, 'vault/music/masters-finals/live-master.wav');
     const contractPath = join(workspace, 'vault/business/contracts/deal-contract.pdf');
+    const faceReferencePath = join(workspace, 'vault/visuals/face-references/face-reference.jpg');
     mkdirSync(join(workspace, 'vault/music/masters-finals'), { recursive: true });
     mkdirSync(join(workspace, 'vault/business/contracts'), { recursive: true });
+    mkdirSync(join(workspace, 'vault/visuals/face-references'), { recursive: true });
     writeFileSync(masterPath, 'manual audio');
     writeFileSync(contractPath, 'manual contract');
+    writeFileSync(faceReferencePath, 'manual image');
 
     const first = scanArtistVault(workspace, 'workspace-1');
     const second = scanArtistVault(workspace, 'workspace-1');
     const loaded = loadArtistVaultManifest(workspace, 'workspace-1');
 
-    expect(first.added.map((asset) => asset.kind).sort()).toEqual(['contract', 'master-final']);
+    expect(first.added.map((asset) => asset.kind).sort()).toEqual(['contract', 'face-reference', 'master-final']);
     expect(first.added.find((asset) => asset.kind === 'contract')?.usableByAgents).toBe(true);
+    expect(first.added.find((asset) => asset.kind === 'face-reference')?.usableByAgents).toBe(true);
     expect(first.added.find((asset) => asset.kind === 'master-final')?.usableByAgents).toBe(true);
     expect(second.added).toHaveLength(0);
-    expect(loaded.assets).toHaveLength(2);
+    expect(loaded.assets).toHaveLength(3);
   });
 
   test('links an external folder without copying files and defaults assets usable', () => {

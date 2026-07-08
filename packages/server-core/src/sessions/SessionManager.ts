@@ -2952,6 +2952,25 @@ export class SessionManager implements ISessionManager {
           if (lyricVideoPromptUpdated) {
             sessionLog.info('[agent-definitions] Updated Lyric Video campaign master audio guidance')
           }
+          const artDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'art-director')
+          const artDirectorMetadataUpdated = artDirectorAgent
+            ? replaceBuiltInAgentMetadata('art-director', {
+                inputs: {
+                  from: 'Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos, cover/merch mode, format, and generation approval.',
+                  to: artDirectorAgent.metadata.inputs,
+                },
+              }).updated
+            : false
+          const artDirectorFaceRefPromptUpdated = artDirectorAgent
+            ? replaceBuiltInAgentPromptText(
+                'art-director',
+                '- If the user wants the artist\'s actual likeness, ask for or pull an approved artist reference image.',
+                '- If the user wants the artist\'s actual likeness, first check Artist Vault context for an agent-usable `face-reference` asset and use that exact file path when a compatible tool supports it.\n- If no Vault face reference exists, ask for or pull an approved artist reference image.',
+              ).updated
+            : false
+          if (artDirectorMetadataUpdated || artDirectorFaceRefPromptUpdated) {
+            sessionLog.info('[agent-definitions] Updated Art Director face-reference guidance and metadata')
+          }
           const adsAgentPromptUpdated = adsAgent
             ? [
                 replaceBuiltInAgentPromptText(

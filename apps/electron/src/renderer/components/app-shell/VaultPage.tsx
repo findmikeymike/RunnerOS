@@ -81,6 +81,7 @@ const CATEGORY_KIND_LABELS: Record<VaultCategory, Array<{ kind: VaultAssetKind; 
   visuals: [
     { kind: 'cover-art', label: 'Cover Art' },
     { kind: 'artist-photo', label: 'Photos' },
+    { kind: 'face-reference', label: 'Face Refs' },
     { kind: 'logo-mark', label: 'Logos' },
     { kind: 'brand-asset', label: 'Brand' },
     { kind: 'poster-flyer', label: 'Posters' },
@@ -350,7 +351,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                   <button
                     type="button"
                     disabled={busy !== null}
-                    onClick={() => void startImport(CATEGORIES.find((item) => item.id === selectedCategory)?.hint ?? 'any')}
+                    onClick={() => void startImport(addHintForSelection(selectedCategory, selectedKind))}
                     className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[#f97316]/35 bg-[#f97316]/12 px-3 text-xs font-medium text-white/82 hover:bg-[#f97316]/18 disabled:cursor-wait disabled:opacity-50"
                   >
                     <Plus className="h-3.5 w-3.5" />
@@ -449,6 +450,7 @@ function AssetDetailPanel({
   onUpdate: (assetId: string, patch: VaultAssetUpdatePatch) => Promise<void>
 }) {
   const [label, setLabel] = React.useState('')
+  const [kind, setKind] = React.useState<VaultAssetKind>('other')
   const [purpose, setPurpose] = React.useState<AssetPurpose>('seed')
   const [privateAsset, setPrivateAsset] = React.useState(false)
   const [campaigns, setCampaigns] = React.useState('')
@@ -462,6 +464,7 @@ function AssetDetailPanel({
   React.useEffect(() => {
     if (!asset) return
     setLabel(asset.label)
+    setKind(asset.kind)
     setPurpose(asset.status === 'final' || asset.status === 'approved' ? 'final' : 'seed')
     setPrivateAsset(asset.rightsStatus === 'private' || !asset.usableByAgents)
     setCampaigns((asset.campaigns ?? []).join(', '))
@@ -488,6 +491,7 @@ function AssetDetailPanel({
   }
 
   const save = () => onUpdate(asset.id, {
+    kind,
     label,
     status: purpose === 'final' ? 'final' : 'review',
     rightsStatus: privateAsset ? 'private' : 'safe-to-use',
@@ -525,6 +529,14 @@ function AssetDetailPanel({
       <div className="space-y-3">
         <Field label="Label">
           <input value={label} onChange={(event) => setLabel(event.target.value)} className={INPUT_CLASS} />
+        </Field>
+
+        <Field label="Type">
+          <select value={kind} onChange={(event) => setKind(event.target.value as VaultAssetKind)} className={INPUT_CLASS}>
+            {CATEGORY_KIND_LABELS[asset.category].map((item) => (
+              <option key={item.kind} value={item.kind}>{item.label}</option>
+            ))}
+          </select>
         </Field>
 
         <div className="grid grid-cols-2 gap-2">
@@ -579,7 +591,7 @@ function AssetDetailPanel({
         </Field>
 
         <Field label="Tags">
-          <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="final, press, cover" className={INPUT_CLASS} />
+          <input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="face-reference, press, cover" className={INPUT_CLASS} />
         </Field>
 
         <Field label="Notes">
@@ -791,6 +803,22 @@ function TinyPill({ icon: Icon, label }: { icon: React.ElementType; label: strin
 
 function categoryLabel(category: VaultCategory): string {
   return CATEGORIES.find((item) => item.id === category)?.label ?? formatKind(category)
+}
+
+function addHintForSelection(category: VaultCategory, kind: VaultAssetKind | 'all'): VaultKindHint {
+  if (
+    kind === 'master-final'
+    || kind === 'demo'
+    || kind === 'raw-footage'
+    || kind === 'cover-art'
+    || kind === 'artist-photo'
+    || kind === 'face-reference'
+    || kind === 'contract'
+    || kind === 'ad-asset'
+  ) {
+    return kind
+  }
+  return CATEGORIES.find((item) => item.id === category)?.hint ?? 'any'
 }
 
 function formatKind(value: string): string {

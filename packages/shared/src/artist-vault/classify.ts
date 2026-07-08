@@ -81,6 +81,9 @@ export function classifyVaultAsset(filePath: string, kindHint: VaultKindHint = '
     if (/\b(cover|artwork|single-cover|album-cover)\b/.test(lower)) {
       return route('visuals', 'cover-art', 'visuals/cover-art', 'high', 'Image filename suggests cover art');
     }
+    if (/(^|[-_\s])(face|face-ref|face-reference|identity-ref|identity-reference|likeness|selfie|selfies|portrait-ref|portrait-reference)([-_\s.]|$)/.test(lower)) {
+      return route('visuals', 'face-reference', 'visuals/face-references', 'high', 'Image filename suggests face reference');
+    }
     if (/\b(press|photo|headshot|portrait|promo)\b/.test(lower)) {
       return route('visuals', 'artist-photo', 'visuals/artist-photos', 'high', 'Image filename suggests artist photo');
     }
@@ -147,6 +150,7 @@ export function destinationForVaultKind(kind: VaultAssetKind): string {
     case 'video-project': return 'video/project-files';
     case 'cover-art': return 'visuals/cover-art';
     case 'artist-photo': return 'visuals/artist-photos';
+    case 'face-reference': return 'visuals/face-references';
     case 'logo-mark': return 'visuals/logos-marks';
     case 'brand-asset': return 'visuals/brand-assets';
     case 'poster-flyer': return 'visuals/posters-flyers';
@@ -171,7 +175,7 @@ export function destinationForVaultKind(kind: VaultAssetKind): string {
 export function categoryForKind(kind: VaultAssetKind): VaultCategory {
   if (kind === 'master-final' || kind === 'demo' || kind === 'stem' || kind === 'beat-instrumental' || kind === 'mix-reference' || kind === 'lyrics-note') return 'music';
   if (kind === 'final-video' || kind === 'raw-footage' || kind === 'content-clip' || kind === 'b-roll' || kind === 'live-performance' || kind === 'video-project') return 'video';
-  if (kind === 'cover-art' || kind === 'artist-photo' || kind === 'logo-mark' || kind === 'brand-asset' || kind === 'poster-flyer' || kind === 'merch-design') return 'visuals';
+  if (kind === 'cover-art' || kind === 'artist-photo' || kind === 'face-reference' || kind === 'logo-mark' || kind === 'brand-asset' || kind === 'poster-flyer' || kind === 'merch-design') return 'visuals';
   if (kind === 'release-asset' || kind === 'ad-asset' || kind === 'press-asset' || kind === 'social-pack') return 'campaigns';
   if (kind === 'contract' || kind === 'split-sheet' || kind === 'invoice' || kind === 'one-sheet' || kind === 'epk') return 'business';
   return 'references';
@@ -182,7 +186,7 @@ export function defaultVaultPolicy(kind: VaultAssetKind): {
   rightsStatus: VaultRightsStatus;
   usableByAgents: boolean;
 } {
-  if (kind === 'master-final' || kind === 'final-video' || kind === 'cover-art' || kind === 'artist-photo' || kind === 'logo-mark' || kind === 'ad-asset' || kind === 'one-sheet' || kind === 'epk') {
+  if (kind === 'master-final' || kind === 'final-video' || kind === 'cover-art' || kind === 'artist-photo' || kind === 'face-reference' || kind === 'logo-mark' || kind === 'ad-asset' || kind === 'one-sheet' || kind === 'epk') {
     return { status: 'final', rightsStatus: 'safe-to-use', usableByAgents: true };
   }
   return { status: 'review', rightsStatus: 'safe-to-use', usableByAgents: true };

@@ -650,7 +650,7 @@ Default report shape:
       thinkingLevel: 'high',
       visualAgent: true,
       greeting: 'Tell me the song, release, merch idea, or visual you need. I will pull the artist context, choose the right mode, propose strong art directions first, then only queue generation after approval.',
-      inputs: 'Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos, cover/merch mode, format, and generation approval.',
+      inputs: 'Artist HQ Profile, Voice, Branding, themes, similar artists, music style, song/release notes, lyrics, references, approved artist photos and face references, cover/merch mode, format, and generation approval.',
       outputs: 'Taste-led visual concepts, style-lane recommendations, album/single art prompts, merch graphic specs, reference-image requirements, typography/layout direction, SVG/PNG artwork composition exports, Canvas-visible artifacts, anti-slop checks, and approved image-generation/layout briefs.',
       tags: ['creative', 'art-direction', 'album-art', 'merch', 'design', 'image-generation', 'visuals'],
       skills: ['artist-art-direction', 'artist-typography-taste', 'artist-visual-world-director', 'ad-creative', 'zero'],
@@ -686,7 +686,8 @@ Default style lanes:
 - Far Out: elevated psychedelic visual language, not lava-lamp AI mush
 
 Face/reference rule:
-- If the user wants the artist's actual likeness, ask for or pull an approved artist reference image.
+- If the user wants the artist's actual likeness, first check Artist Vault context for an agent-usable \`face-reference\` asset and use that exact file path when a compatible tool supports it.
+- If no Vault face reference exists, ask for or pull an approved artist reference image.
 - Use only a model/tool that supports image reference, face reference, identity reference, or image editing.
 - Never fake a real artist likeness from text alone.
 - If no suitable reference/tool exists, offer non-likeness alternatives: silhouette, hands, back-of-head, styling, room, objects, symbolic portrait, or obscured crop.
