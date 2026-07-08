@@ -19,6 +19,7 @@ import {
   type WorkflowMetadata,
   type WorkflowRunSnapshot,
 } from '@craft-agent/shared/workflows';
+import { writeAgentMessageReceipt } from '@craft-agent/shared/agent-messaging';
 import { readOutput } from '@craft-agent/shared/outputs';
 import {
   WorkflowRunner,
@@ -84,6 +85,7 @@ interface SessionRecord {
 interface MockHarness {
   deps: WorkflowRunnerDeps;
   sessions: Map<string, SessionRecord>;
+  deletedSessions: string[];
   promptsSent: Array<{ sessionId: string; prompt: string }>;
   events: WorkflowRunEvent[];
   /** Override what `sendMessage` does for a given step index. */
@@ -96,6 +98,7 @@ function makeHarness(opts: {
   unavailableAgentSlugs?: string[];
 } = {}): MockHarness {
   const sessions = new Map<string, SessionRecord>();
+  const deletedSessions: string[] = [];
   const promptsSent: Array<{ sessionId: string; prompt: string }> = [];
   const events: WorkflowRunEvent[] = [];
   const stepBehaviors = new Map<number, (record: SessionRecord) => Promise<void>>();
@@ -163,6 +166,9 @@ function makeHarness(opts: {
       const rec = sessions.get(sessionId);
       if (rec) rec.aborted = true;
     },
+    deleteSession: async (sessionId) => {
+      deletedSessions.push(sessionId);
+    },
     getWorkspaceRootPath: (_workspaceId) => workspaceRoot,
     emit: (event) => {
       events.push(event);
@@ -172,6 +178,7 @@ function makeHarness(opts: {
   return {
     deps,
     sessions,
+    deletedSessions,
     promptsSent,
     events,
     setStepBehavior: (index, fn) => stepBehaviors.set(index, fn),
@@ -243,6 +250,7 @@ describe('WorkflowRunner', () => {
     // received step 1's output substituted into its prompt.
     expect(h.promptsSent[0]!.prompt).toStartWith('Research cats');
     expect(h.promptsSent[1]!.prompt).toStartWith('Write about: STEP_ONE_OUT');
+    expect(h.deletedSessions).toEqual(['sess-1', 'sess-2']);
 
     // Persisted to disk.
     const onDisk = readRun(workspaceRoot, completed.id);
@@ -410,6 +418,160 @@ describe('WorkflowRunner', () => {
 
     const onDisk = readRun(workspaceRoot, completed.id);
     expect(onDisk?.steps[0]!.executionReceipt).toEqual(receipt);
+  });
+
+  test('workflow step records compact message_agent child receipts', async () => {
+    const h = makeHarness({ stepOutputs: ['PARENT_DONE'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    h.setStepBehavior(0, async (rec) => {
+      const options = rec.options as {
+        launchReceipt?: { workflow?: { runId?: string; stepId?: string } };
+      };
+      writeAgentMessageReceipt(workspaceRoot, {
+        schemaVersion: 1,
+        id: 'child-receipt-1',
+        workspaceId: WORKSPACE_ID,
+        parentSessionId: rec.id,
+        parentRunId: options.launchReceipt?.workflow?.runId,
+        parentStepId: options.launchReceipt?.workflow?.stepId,
+        childSessionId: 'child-sess-1',
+        callerAgentSlug: 'researcher',
+        targetAgentSlug: 'critic',
+        task: 'Review the parent step output.',
+        status: 'succeeded',
+        policy: {
+          permissionMode: 'safe',
+          timeoutSeconds: 120,
+          maxTurns: 1,
+          maxDepth: 3,
+          depth: 1,
+        },
+        constraints: {
+          sourceSlugs: [],
+          skillSlugs: [],
+        },
+        result: {
+          summary: 'Child review passed.',
+          output: 'ok',
+          toolUseCount: 1,
+          toolNames: ['read_file'],
+        },
+        createdAt: '2026-06-23T10:00:00.000Z',
+        updatedAt: '2026-06-23T10:00:01.000Z',
+        completedAt: '2026-06-23T10:00:01.000Z',
+      });
+    });
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{ id: 'first', agent: 'researcher', input: 'Research {{trigger.topic}}' }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'subagent tracing' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.steps[0]!.agentMessageReceipts).toEqual([
+      {
+        receiptId: 'child-receipt-1',
+        childSessionId: 'child-sess-1',
+        targetAgentSlug: 'critic',
+        status: 'succeeded',
+        summary: 'Child review passed.',
+        createdAt: '2026-06-23T10:00:00.000Z',
+        updatedAt: '2026-06-23T10:00:01.000Z',
+        completedAt: '2026-06-23T10:00:01.000Z',
+      },
+    ]);
+
+    const onDisk = readRun(workspaceRoot, completed.id);
+    expect(onDisk?.steps[0]!.agentMessageReceipts).toEqual(completed.steps[0]!.agentMessageReceipts);
+    expect(JSON.stringify(onDisk?.steps[0]!.agentMessageReceipts)).not.toContain('Review the parent step output');
+  });
+
+  test('workflow retry replaces stale message_agent child receipts', async () => {
+    const h = makeHarness({ stepOutputs: ['unused', 'long enough'] });
+    const runner = new WorkflowRunner(h.deps);
+
+    function writeReceipt(rec: SessionRecord, id: string, summary: string): void {
+      const options = rec.options as {
+        launchReceipt?: { workflow?: { runId?: string; stepId?: string } };
+      };
+      writeAgentMessageReceipt(workspaceRoot, {
+        schemaVersion: 1,
+        id,
+        workspaceId: WORKSPACE_ID,
+        parentSessionId: rec.id,
+        parentRunId: options.launchReceipt?.workflow?.runId,
+        parentStepId: options.launchReceipt?.workflow?.stepId,
+        childSessionId: `${id}-session`,
+        targetAgentSlug: 'critic',
+        task: `Child task for ${id}`,
+        status: 'succeeded',
+        policy: {
+          permissionMode: 'safe',
+          timeoutSeconds: 120,
+          maxTurns: 1,
+          maxDepth: 3,
+          depth: 1,
+        },
+        constraints: {
+          sourceSlugs: [],
+          skillSlugs: [],
+        },
+        result: {
+          summary,
+          output: 'ok',
+          toolUseCount: 0,
+          toolNames: [],
+        },
+        createdAt: id === 'failed-attempt-receipt'
+          ? '2026-06-23T10:00:00.000Z'
+          : '2026-06-23T10:00:01.000Z',
+        updatedAt: id === 'failed-attempt-receipt'
+          ? '2026-06-23T10:00:00.000Z'
+          : '2026-06-23T10:00:01.000Z',
+        completedAt: id === 'failed-attempt-receipt'
+          ? '2026-06-23T10:00:00.000Z'
+          : '2026-06-23T10:00:01.000Z',
+      });
+    }
+
+    h.setStepBehavior(0, async (rec) => {
+      writeReceipt(rec, 'failed-attempt-receipt', 'stale failed attempt');
+      throw new Error('first attempt failed');
+    });
+    h.setStepBehavior(1, async (rec) => {
+      writeReceipt(rec, 'successful-attempt-receipt', 'fresh successful attempt');
+    });
+
+    await runner.start({
+      workflow: makeWorkflow({
+        steps: [{
+          id: 'first',
+          agent: 'researcher',
+          input: 'Research {{trigger.topic}}',
+          retries: 1,
+        }],
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'subagent retry tracing' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.steps[0]!.attempts).toBe(2);
+    expect(completed.steps[0]!.agentMessageReceipts?.map((receipt) => receipt.receiptId)).toEqual([
+      'successful-attempt-receipt',
+    ]);
+    expect(JSON.stringify(completed.steps[0]!.agentMessageReceipts)).not.toContain('failed-attempt-receipt');
+
+    const onDisk = readRun(workspaceRoot, completed.id);
+    expect(onDisk?.steps[0]!.agentMessageReceipts).toEqual(completed.steps[0]!.agentMessageReceipts);
   });
 
   test('hidden workflow steps downgrade interactive ask permission mode to safe', async () => {
@@ -649,7 +811,7 @@ describe('WorkflowRunner', () => {
     expect(onDisk?.steps[1]!.state).toBe('succeeded');
   });
 
-  test('onFailure ask is parsed by the runner but stops without checkpoint support', async () => {
+  test('onFailure ask fails explicitly until checkpoint support exists', async () => {
     const h = makeHarness();
     const runner = new WorkflowRunner(h.deps);
 
@@ -680,7 +842,12 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.state).toBe('failed');
     expect(completed.steps[1]!.state).toBe('queued');
     expect(h.sessions.size).toBe(1);
-    expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({ onFailure: 'ask' });
+    expect(completed.steps[0]!.error).toMatchObject({ code: 'on-failure-ask-unsupported' });
+    expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({
+      onFailure: 'ask',
+      error: { code: 'on-failure-ask-unsupported' },
+    });
+    expect(h.deletedSessions).toEqual(['sess-1']);
   });
 
   test('structured output: parses JSON and exposes dot-paths to later steps', async () => {
@@ -756,6 +923,7 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.attempts).toBe(2);
     expect(completed.steps[0]!.output).toEqual({ title: 'Recovered' });
     expect(h.sessions.size).toBe(2);
+    expect(h.deletedSessions).toEqual(['sess-1', 'sess-2']);
     expect(findUpdatedDetail(h.events, 'step.retrying')).toMatchObject({
       kind: 'step.retrying',
       stepId: 'first',
@@ -830,6 +998,7 @@ describe('WorkflowRunner', () => {
     expect(completed.steps[0]!.state).toBe('failed');
     expect(completed.steps[0]!.error?.code).toBe('timeout');
     expect(h.sessions.get('sess-1')!.aborted).toBe(true);
+    expect(h.deletedSessions).toEqual(['sess-1']);
     expect(findUpdatedDetail(h.events, 'step.failed')).toMatchObject({
       kind: 'step.failed',
       stepId: 'first',

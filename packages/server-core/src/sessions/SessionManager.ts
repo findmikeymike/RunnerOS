@@ -2710,6 +2710,7 @@ user a clickable link to where the thing now lives.`
           if (!managed) return
           managed.agent?.forceAbort(AbortReason.UserStop)
         },
+        deleteSession: (sessionId) => this.deleteSession(sessionId),
         getWorkspaceRootPath: (wsId) => {
           const ws = getWorkspaceByNameOrId(wsId)
           if (!ws) throw new Error(`Workspace not found: ${wsId}`)
@@ -2748,6 +2749,7 @@ user a clickable link to where the thing now lives.`
           if (!managed) return
           managed.agent?.forceAbort(AbortReason.UserStop)
         },
+        deleteSession: (sessionId) => this.deleteSession(sessionId),
         getWorkspaceRootPath: (wsId) => {
           const ws = getWorkspaceByNameOrId(wsId)
           if (!ws) throw new Error(`Workspace not found: ${wsId}`)
