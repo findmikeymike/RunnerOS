@@ -31,6 +31,7 @@ Value:
 - keep campaign materials organized
 - launch specialist agents for repeatable tasks
 - prepare outreach, ads, content, socials, and promo handoffs faster
+- coordinate posting, replies, comments, and DMs across multiple profiles
 - reduce repeated briefing
 - track outputs and approvals
 - preserve decisions across the whole campaign
@@ -50,6 +51,8 @@ One manager can keep more campaigns moving without losing context, approvals, or
 - "Did anyone follow up with that contact?"
 - "What assets are missing before launch?"
 - "What can we post this week?"
+- "Which profile is this going live on?"
+- "Did we answer those DMs or comments?"
 - "What is the next best move?"
 
 Artist OS Desktop should answer these inside the workspace instead of forcing the manager to search old chats, folders, notes, and DMs.

@@ -108,3 +108,24 @@ Proof needed:
 - partner/provider flow screenshots
 - exact wording around what is inquiry, draft, send, or booked
 
+## Multi-Profile Social Operations
+
+Claim:
+
+```text
+Agents can help post, reply, comment, and answer DMs across multiple accounts or profiles per platform.
+```
+
+Safer public version until fully verified:
+
+```text
+Artist OS Desktop can prepare approval packets for posting, replies, comments, and DMs across multiple social profiles, then execute supported actions once approved.
+```
+
+Proof needed:
+
+- connected social profile selector demo
+- approval packet showing exact account/profile and action
+- dry-run plan
+- execution receipt
+- clear list of which platforms/actions are currently supported

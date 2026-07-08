@@ -127,10 +127,35 @@ Show concrete examples:
 - content calendar
 - campaign kit
 - video render receipt
+- social approval packet showing account/profile, post/reply/DM copy, destination, and execution receipt
 
 Link to [Proof Gallery](./proof-gallery.md).
 
-## Section 7: Approval And Control
+## Section 7: Social Operations Across Profiles
+
+Copy:
+
+```text
+Artist OS Desktop can help manage the work around your social presence: posts, schedules, replies, DMs, fan pages, side pages, and campaign profiles.
+```
+
+Feature points:
+
+- multiple accounts/profiles per platform
+- artist pages and fan pages
+- approved post execution
+- approved comment replies
+- approved DM responses
+- dry-run plans before live actions
+- receipts after execution
+
+Safety copy:
+
+```text
+Before anything goes live, the app should show exactly which profile, what copy, what media, and what action will happen.
+```
+
+## Section 8: Approval And Control
 
 Copy:
 
@@ -148,7 +173,7 @@ Use for:
 - account changes
 - deletes
 
-## Section 8: Human Layer
+## Section 9: Human Layer
 
 Copy:
 
@@ -168,4 +193,3 @@ Examples:
 ```text
 Build the command center around your next release.
 ```
-

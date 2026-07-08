@@ -50,5 +50,6 @@ The result is closer to having a lightweight management team inside the app than
 - Outputs -> Finals: messy exploration becomes approved campaign assets.
 - Vault: masters, art, lyrics, press photos, clips, references, and brand assets made usable by agents.
 - State of Play: the app tells the artist or manager what matters next.
+- Social operations: agents can prepare and execute approved posts, comment replies, and DMs across multiple social profiles.
 - Approval control: agents prepare real work, but risky external actions stay user-approved.
 - Proof gallery: show real examples, not abstract feature claims.

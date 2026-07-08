@@ -83,6 +83,20 @@ Shows:
 - worker owner
 - approval status
 
+### Multi-Profile Social Packet
+
+Shows:
+
+- platform
+- account/profile
+- artist page, fan page, campaign page, or side profile
+- action type: post, schedule, reply, comment, or DM
+- final copy
+- media/file
+- timing
+- approval status
+- execution receipt
+
 ### Video / Motion Receipt
 
 Shows:

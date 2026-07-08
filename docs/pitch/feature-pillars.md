@@ -131,7 +131,33 @@ Posting, sending, publishing, spending, uploading, deleting, or changing account
 
 This is especially important for managers: the app can move fast without losing control.
 
-## 10. Manager Multiplication
+## 10. Social Operations
+
+Artist OS Desktop should highlight that agents can help operate social channels, not just write captions.
+
+Key social jobs:
+
+- post or schedule approved content
+- manage multiple accounts or profiles per platform
+- support artist pages, fan pages, side-project pages, and campaign profiles
+- reply to comments
+- answer DMs
+- prepare dry-run plans before execution
+- produce receipts after approved actions
+
+Pitch angle:
+
+```text
+Your social worker can help run the channels, not just brainstorm what to post.
+```
+
+Important safety rule:
+
+```text
+Live posting, replies, DMs, and account changes should be approval-gated and show the exact account/profile before execution.
+```
+
+## 11. Manager Multiplication
 
 The app helps one artist or manager operate with the leverage of a larger team.
 
@@ -143,13 +169,13 @@ Pitch angle:
 Move like a bigger team without pretending AI replaces the team.
 ```
 
-## 11. Human Layer
+## 12. Human Layer
 
 Some work should go to humans.
 
 Artist OS Desktop can package the right context and create handoff packets for vetted promo providers, expert song review, and future partner workflows.
 
-## 12. Proof Gallery
+## 13. Proof Gallery
 
 The pitch should show examples, not only describe features.
 
@@ -165,3 +191,4 @@ Recommended proof items:
 - final asset slot
 - State of Play panel
 - worker directory
+- multi-profile social posting/reply/DM approval packet

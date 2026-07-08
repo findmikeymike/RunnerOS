@@ -59,7 +59,7 @@ Each category should show worker name, one-line job, and a tiny example output.
 
 ## Socials
 
-- **Social Publisher**: prepares and executes approved Instagram, TikTok, X, and YouTube actions.
+- **Social Publisher**: prepares and executes approved Instagram, TikTok, X, and YouTube actions, including posts, replies, comments, DMs, and multi-profile channel work.
 - **TryPost**: prepares TryPost-ready social drafts and schedule packets.
 - **YouTube Research Agent**: finds videos, comments, transcripts, channels, and campaign-adjacent YouTube ideas.
 
