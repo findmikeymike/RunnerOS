@@ -6,7 +6,7 @@
   "required": ["ok", "status"],
   "properties": {
     "ok": { "type": "boolean" },
-    "status": { "type": "string", "enum": ["succeeded", "failed", "dry_run", "duplicate"] },
+    "status": { "type": "string", "enum": ["succeeded", "failed", "dry_run", "duplicate", "delegated"] },
     "command": { "type": "string" },
     "actionId": { "type": "string" },
     "platform": { "type": "string" },
@@ -42,6 +42,11 @@
     },
     "artifacts": { "type": "array" },
     "error": { "type": "string" },
-    "code": { "type": "string" }
+    "message": { "type": "string" },
+    "code": { "type": "string" },
+    "next": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
   }
 }

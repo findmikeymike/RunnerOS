@@ -378,6 +378,56 @@ test('root execute checks expected action id before replay', () => {
   assert.equal(result.code, 'ACTION_ID_MISMATCH');
 });
 
+test('root execute requires expected action id before replay', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const actionFile = path.join(home, 'dry-run.json');
+  writeFileSync(actionFile, JSON.stringify({
+    ok: true,
+    status: 'dry_run',
+    actionId: 'act_execute_expected',
+    platform: 'x',
+    profile: 'artist01',
+    action: {
+      actionId: 'act_execute_expected',
+      verb: 'post',
+      platform: 'x',
+      profile: 'artist01',
+      mode: 'browser',
+      payload: { text: 'hello', media: [], postType: 'post' },
+      options: { dryRun: true, idempotencyKey: null, headed: false },
+    },
+    browserPlan: {
+      sessionPath: 'x',
+      accountVerification: {
+        requiredBeforeLiveSubmit: true,
+        verificationTargetKnown: true,
+        platform: 'x',
+        profile: 'artist01',
+        expectedHandle: '@artist01',
+        expectedAccountUrl: null,
+        fallbackExpectedIdentity: '@artist01',
+        evidenceRequired: ['visible account identity'],
+      },
+      steps: [],
+    },
+  }));
+
+  let result;
+  try {
+    run([
+      'execute',
+      '--action-file', actionFile,
+      '--confirm', 'yes',
+      '--json',
+    ], { SOCIAL_HOME: home });
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'EXPECTED_ACTION_ID_REQUIRED');
+});
+
 test('root execute rejects dry-run results without account verification target', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
   const dryRun = JSON.parse(run([
@@ -427,20 +477,16 @@ test('root execute returns delegated runner-cdp result for approved dry-run resu
   const actionFile = path.join(home, 'dry-run.json');
   writeFileSync(actionFile, JSON.stringify(dryRun));
 
-  let result;
-  try {
-    run([
-      'execute',
-      '--action-file', actionFile,
-      '--expected-action-id', dryRun.actionId,
-      '--confirm', 'yes',
-      '--json',
-    ], { SOCIAL_HOME: home });
-  } catch (error) {
-    result = JSON.parse(error.stdout.toString());
-  }
+  const result = JSON.parse(run([
+    'execute',
+    '--action-file', actionFile,
+    '--expected-action-id', dryRun.actionId,
+    '--confirm', 'yes',
+    '--json',
+  ], { SOCIAL_HOME: home }));
 
-  assert.equal(result.ok, false);
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 'delegated');
   assert.equal(result.actionId, dryRun.actionId);
   assert.equal(result.code, 'RUNNER_CDP_DELEGATED');
 });

@@ -421,8 +421,13 @@ describe('loadAllSources', () => {
 
     expect(executePattern).toBeDefined();
     expect(executePattern!.pattern).toContain('--action-file');
+    expect(executePattern!.pattern).toContain('--expected-action-id');
     expect(executePattern!.pattern).toContain('--confirm\\s+yes');
     expect(executePattern!.pattern).toContain('--json');
+
+    const regex = new RegExp(executePattern!.pattern);
+    expect(regex.test('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --expected-action-id act_abc-123 --confirm yes --json')).toBe(true);
+    expect(regex.test('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --confirm yes --json')).toBe(false);
   });
 
   test('includes hypermotion as a project local source', () => {
