@@ -8,6 +8,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSyn
 import * as os from 'os';
 import { tmpdir } from 'os';
 import { join, resolve, sep } from 'path';
+import { validateBashCommand } from '../../agent/bash-validator.ts';
 import type { FolderSourceConfig, LoadedSource } from '../types.ts';
 
 // Redirect ~/ to a temp directory before importing storage.ts so that
@@ -458,9 +459,21 @@ describe('loadAllSources', () => {
     expect(executePattern!.pattern).toContain('--confirm\\s+yes');
     expect(executePattern!.pattern).toContain('--json');
 
-    const regex = new RegExp(executePattern!.pattern);
-    expect(regex.test('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --expected-action-id act_abc-123 --confirm yes --json')).toBe(true);
-    expect(regex.test('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --confirm yes --json')).toBe(false);
+    const patterns = (permissions.allowedBashPatterns ?? []).map((entry) => ({
+      regex: new RegExp(entry.pattern),
+      source: entry.pattern,
+    }));
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs registry --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs doctor --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs assets --asset-root assets --platform instagram --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs assets --asset-root "/tmp/my assets" --platform instagram --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs content --content-root content --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs content --content-root "/tmp/my content" --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs post instagram --profile p --text hi --dry-run --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs post instagram --profile p && echo BAD --dry-run --json', patterns).allowed).toBe(false);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --expected-action-id act_abc-123 --confirm yes --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file "/tmp/dry runs/dry-run.json" --expected-action-id act_abc-123 --confirm yes --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --confirm yes --json', patterns).allowed).toBe(false);
   });
 
   test('includes hypermotion as a project local source', () => {
