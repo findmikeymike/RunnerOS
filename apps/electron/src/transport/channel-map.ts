@@ -172,6 +172,12 @@ export const CHANNEL_MAP = {
   setDefaultThinkingLevel: invoke(RPC_CHANNELS.settings.SET_DEFAULT_THINKING_LEVEL),
   getNetworkProxySettings: invoke(RPC_CHANNELS.settings.GET_NETWORK_PROXY),
   setNetworkProxySettings: invoke(RPC_CHANNELS.settings.SET_NETWORK_PROXY),
+  listSocialAccounts: invoke(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LIST),
+  addSocialAccount: invoke(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_ADD),
+  updateSocialAccount: invoke(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_UPDATE),
+  deleteSocialAccount: invoke(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_DELETE),
+  loginSocialAccount: invoke(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LOGIN),
+  getSocialAccountStatus: invoke(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS),
 
   // Pi provider discovery
   getPiApiKeyProviders: invoke(RPC_CHANNELS.pi.GET_API_KEY_PROVIDERS),
