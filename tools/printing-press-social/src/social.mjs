@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline/promises';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, checkBrowserEngine } from './browser-engines.mjs';
 import { listAssets, listContent, normalizeList } from './content-assets.mjs';
+import { buildProfileBrowserSession } from './action-safety.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const REGISTRY_PATH = path.join(ROOT, 'registry.json');
@@ -329,6 +331,7 @@ async function runExecute(args) {
     throw new CliError('execute only accepts action files produced by a dry-run result', 'ACTION_NOT_DRY_RUN');
   }
   assertAccountVerificationReady(browserPlan);
+  assertBrowserPlanMatchesCurrentProfile(action, browserPlan);
 
   const engine = flags.engine || process.env.SOCIAL_BROWSER_ENGINE || DEFAULT_BROWSER_ENGINE;
   if (engine === 'runner-cdp') {
@@ -344,7 +347,7 @@ async function runExecute(args) {
       message: 'runner-cdp execution is delegated to RunnerOS native browser tools after account verification and approval.',
       code: 'RUNNER_CDP_DELEGATED',
       next: [
-        'Open the browser session named in browserPlan.sessionPath.',
+        'Open the browser session named in browserPlan.browserSession.',
         'Verify the visible account matches browserPlan.accountVerification.',
         'Execute the browserPlan steps and submit when the visible account and draft match the approved dry-run; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.',
       ],
@@ -417,6 +420,59 @@ function assertAccountVerificationReady(browserPlan) {
   if (!verification?.verificationTargetKnown) {
     throw new CliError('Refusing execute because the dry-run browserPlan is missing a known account handle or account URL', 'ACCOUNT_VERIFICATION_REQUIRED');
   }
+}
+
+function assertBrowserPlanMatchesCurrentProfile(action, browserPlan) {
+  const profile = readCurrentProfile(action.platform, action.profile);
+  const expectedSessionPath = sessionDir(profile);
+  if (browserPlan.sessionPath !== expectedSessionPath) {
+    throw new CliError('Refusing execute because the dry-run browserPlan session does not match the current profile session', 'PROFILE_SESSION_MISMATCH');
+  }
+
+  const expectedBrowserSession = buildProfileBrowserSession(profile);
+  const browserSession = browserPlan.browserSession;
+  if (
+    !browserSession
+    || browserSession.kind !== expectedBrowserSession.kind
+    || browserSession.platform !== expectedBrowserSession.platform
+    || browserSession.profile !== expectedBrowserSession.profile
+    || browserSession.instanceId !== expectedBrowserSession.instanceId
+    || browserSession.partition !== expectedBrowserSession.partition
+  ) {
+    throw new CliError('Refusing execute because the dry-run browserPlan browser session does not match the current profile', 'PROFILE_BROWSER_SESSION_MISMATCH');
+  }
+
+  const verification = browserPlan.accountVerification || {};
+  if (
+    verification.platform !== action.platform
+    || verification.profile !== action.profile
+    || (verification.expectedHandle || null) !== (profile.accountHandle || null)
+    || (verification.expectedAccountUrl || null) !== (profile.accountUrl || null)
+  ) {
+    throw new CliError('Refusing execute because the dry-run account verification target no longer matches the current profile', 'PROFILE_VERIFICATION_MISMATCH');
+  }
+}
+
+function readCurrentProfile(platform, profileId) {
+  const filePath = path.join(socialHome(platform), 'profiles.json');
+  let store;
+  try {
+    store = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    throw new CliError(`Profile not found: ${platform}/${profileId}`, 'PROFILE_NOT_FOUND');
+  }
+  const profile = store.profiles?.[`${platform}:${profileId}`];
+  if (!profile) throw new CliError(`Profile not found: ${platform}/${profileId}`, 'PROFILE_NOT_FOUND');
+  return profile;
+}
+
+function sessionDir(profile) {
+  return path.join(socialHome(profile.platform), profile.sessionRef || path.join('sessions', profile.platform, profile.id));
+}
+
+function socialHome(platform) {
+  if (process.env.SOCIAL_HOME) return process.env.SOCIAL_HOME;
+  return path.join(os.homedir(), '.config', 'printing-press-clis', platform);
 }
 
 function buildLiveReplayArgs(action, flags) {

@@ -14,9 +14,20 @@
     "action": { "$ref": "action.schema.json" },
     "browserPlan": {
       "type": "object",
-      "required": ["sessionPath", "steps", "accountVerification"],
+      "required": ["sessionPath", "browserSession", "steps", "accountVerification"],
       "properties": {
         "sessionPath": { "type": ["string", "null"] },
+        "browserSession": {
+          "type": "object",
+          "required": ["kind", "platform", "profile", "instanceId", "partition"],
+          "properties": {
+            "kind": { "type": "string", "enum": ["runneros-electron-partition"] },
+            "platform": { "type": "string" },
+            "profile": { "type": "string" },
+            "instanceId": { "type": "string" },
+            "partition": { "type": "string" }
+          }
+        },
         "steps": {
           "type": "array",
           "items": { "type": "string" }

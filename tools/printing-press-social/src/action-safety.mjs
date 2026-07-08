@@ -79,8 +79,10 @@ export function buildSmokeProfile(platform, id, defaultBrowserEngine) {
 export function buildBrowserPlan({ profile, sessionPath, steps }) {
   const normalizedSteps = addAccountVerificationStep(steps, profile.platform);
   const expectedIdentity = profile.accountHandle || profile.accountUrl || null;
+  const browserSession = buildProfileBrowserSession(profile);
   return {
     sessionPath,
+    browserSession,
     steps: normalizedSteps,
     accountVerification: {
       requiredBeforeLiveSubmit: true,
@@ -99,6 +101,20 @@ export function buildBrowserPlan({ profile, sessionPath, steps }) {
       ],
     },
   };
+}
+
+export function buildProfileBrowserSession(profile = {}) {
+  return {
+    kind: 'runneros-electron-partition',
+    platform: profile.platform,
+    profile: profile.id,
+    instanceId: `social-${profile.platform}-${socialBrowserSegment(profile.id || '')}`,
+    partition: `persist:social-${profile.platform}-${socialBrowserSegment(profile.id || '')}`,
+  };
+}
+
+function socialBrowserSegment(value) {
+  return String(value).replace(/[^A-Za-z0-9_-]/g, '-');
 }
 
 export function buildIdentityProbe(profile = {}) {
