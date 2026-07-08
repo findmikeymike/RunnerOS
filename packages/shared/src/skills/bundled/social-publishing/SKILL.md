@@ -15,15 +15,16 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 
 1. Read `sources/printing-press-social/guide.md` when available.
 2. Run `node src/social.mjs doctor --json` from `tools/printing-press-social`.
-3. If a campaign/release/client folder is involved, list candidate media with `node src/social.mjs assets --asset-root <dir> --platform <platform> --json` and copy with `node src/social.mjs content --content-root <dir> --json`.
-4. For post/comment/DM, run the exact CLI action with `--asset-root`, `--content-root`, relative file names, and `--dry-run --json`.
-5. Validate the payload against the platform checklist below.
-6. Ask for explicit approval before any live publish/send action.
-7. Save the full dry-run result JSON and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`.
-8. Execute through Runner `browser_tool` using the returned `RUNNER_CDP_DELEGATED` handoff and browser plan.
-9. Treat `browserPlan.accountVerification` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before submit. If `verificationTargetKnown` is false, stop and add a profile `--handle` or `--account-url`.
+3. Resolve the exact `platform/profile` first. Users can copy this reference from Settings -> Social Accounts, for example `instagram/brand-main`.
+4. If a campaign/release/client folder is involved, list candidate media with `node src/social.mjs assets --asset-root <dir> --platform <platform> --json` and copy with `node src/social.mjs content --content-root <dir> --json`.
+5. For post/comment/DM, run the exact CLI action with the selected `--profile`, `--asset-root`, `--content-root`, relative file names, and `--dry-run --json`.
+6. Validate the payload against the platform checklist below.
+7. Ask for explicit approval before any live publish/send action.
+8. Save the full dry-run result JSON and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`.
+9. Execute through Runner `browser_tool` using the returned `RUNNER_CDP_DELEGATED` handoff and browser plan.
+10. Treat `browserPlan.accountVerification` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before submit. If `verificationTargetKnown` is false, stop and add a profile `--handle` or `--account-url`.
    - For profile readiness checks, use `accountVerification.identityProbe`, then pass only non-secret observed identity back with `profile status <platform> --profile <id> --live --verification-result <json-file> --json`.
-10. Return a receipt with platform, profile, action, payload summary, media path, target, account verification evidence, timestamp, and observed result.
+11. Return a receipt with platform, profile, action, payload summary, media path, target, account verification evidence, timestamp, and observed result.
 
 ## Existing Chrome Sessions
 
@@ -41,6 +42,8 @@ Explain this model when the user is setting up social publishing or seems confus
 
 - Each platform/profile should have its own saved browser session, such as `tiktok/main`, `instagram/brand`, or `youtube/client-a`.
 - Users should log in once per profile. The saved browser session keeps cookies/login state so they do not retype passwords every run.
+- If multiple profiles exist for a platform, never guess. Ask the user which `platform/profile` to use unless they already named it.
+- If the user names a handle or account URL instead of a profile ID, match it against `doctor --json`; ask if more than one profile matches.
 - Passwords, recovery codes, tokens, cookies, and 2FA secrets must never be written into Workspace Context, memory, source guides, or chat prompts.
 - Workspace Context should store only non-secret defaults: profile IDs, handles, account URLs, tone, posting defaults, and account notes.
 - Before live work, run `node src/social.mjs doctor --live --json` and verify the visible logged-in account matches the profile handle or account URL.

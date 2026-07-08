@@ -27,6 +27,8 @@ social profile update <platform> --profile <profile> --handle <handle> --account
 social profile delete <platform> --profile <profile> --json
 ```
 
+Profiles are account selectors. Users can keep multiple accounts per platform, then tell the agent which one to use with `platform/profile`, such as `instagram/brand-main` or `youtube/client-a`. Agents must not guess when multiple profiles exist for a platform.
+
 With the default `runner-cdp` engine, profile login and live status return a delegated browser plan for RunnerOS native browser tools. They do not drive the browser inside this CLI process.
 
 Profile status JSON includes `profileStatus`, `severity`, `message`, `nextAction`, `lastCheckedAt`, and redacted `evidence` for Settings UI consumption.
