@@ -544,8 +544,8 @@ function ProfileRow({
     }
   }
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-3">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div className="rounded-lg border border-white/[0.06] bg-black/20 p-3">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-md bg-white/[0.06] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white/52">
@@ -554,31 +554,37 @@ function ProfileRow({
             <span className="text-sm font-semibold text-white/86">{profile.profile}</span>
             <StatusPill profile={profile} />
           </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/42">
-            <span className="font-mono text-white/58">{agentRef}</span>
-            <span>{profile.accountHandle || 'No handle'}</span>
-            <span>{profile.accountUrl || 'No account URL'}</span>
-            <span>{profile.message || profile.profileStatus || 'Unknown status'}</span>
+          <div className="mt-2 grid gap-2 text-xs text-white/42 md:grid-cols-[minmax(130px,0.8fr)_minmax(120px,0.8fr)_minmax(180px,1.6fr)]">
+            <span className="truncate font-mono text-white/58" title={agentRef}>{agentRef}</span>
+            <span className="truncate" title={profile.accountHandle || 'No handle'}>{profile.accountHandle || 'No handle'}</span>
+            <span className="truncate" title={profile.accountUrl || 'No account URL'}>{profile.accountUrl || 'No account URL'}</span>
           </div>
+          <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/40">
+            {profile.message || profile.profileStatus || 'Unknown status'}
+          </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" size="sm" variant="ghost" onClick={copyAgentRef}>
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-          <Button type="button" size="sm" variant="secondary" onClick={onLogin} disabled={statusBusy}>
-            {statusBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-            Open Login
-          </Button>
-          <Button type="button" size="sm" variant="secondary" onClick={onVerify} disabled={statusBusy}>
-            {busy === `${profile.platform}:${profile.profile}:verify` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
-            Verify Login
-          </Button>
-          <Button type="button" size="sm" variant="outline" onClick={onEdit}>
-            Edit
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={onDelete} disabled={statusBusy}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+        <div className="flex flex-col gap-2 xl:items-end">
+          <div className="flex flex-wrap gap-2 xl:flex-nowrap xl:justify-end">
+            <Button type="button" size="sm" variant="secondary" onClick={onLogin} disabled={statusBusy}>
+              {statusBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
+              Open Login
+            </Button>
+            <Button type="button" size="sm" variant="secondary" onClick={onVerify} disabled={statusBusy}>
+              {busy === `${profile.platform}:${profile.profile}:verify` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+              Verify Login
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2 xl:justify-end">
+            <Button type="button" size="sm" variant="ghost" onClick={copyAgentRef} aria-label="Copy agent reference">
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={onEdit}>
+              Edit
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={onDelete} disabled={statusBusy} aria-label="Delete social profile">
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
