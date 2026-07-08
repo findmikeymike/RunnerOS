@@ -37,11 +37,17 @@ flowchart LR
   A_setup_concierge --> S_source_recipe["skill:source-recipe"]
   Registry --> A_hypermotion_agent["Hypermotion Agent\nask\nContent Creation"]
   A_hypermotion_agent --> S_hyperframes["skill:hyperframes"]
+  A_hypermotion_agent --> S_spotify_canvas_video["skill:spotify-canvas-video"]
   A_hypermotion_agent --> T_hypermotion["source:hypermotion"]
   A_hypermotion_agent -. hidden .-> Workers
   Registry --> A_lottie_animation_agent["Lottie Animation Agent\nask\nContent Creation"]
   A_lottie_animation_agent --> T_lottie["source:lottie"]
   A_lottie_animation_agent -. hidden .-> Workers
+  Registry --> A_lyric_video_agent["Lyric Video\nask\nContent Creation"]
+  Workers --> A_lyric_video_agent
+  A_lyric_video_agent --> S_lyric_video_genesis["skill:lyric-video-genesis"]
+  A_lyric_video_agent --> S_spotify_canvas_video["skill:spotify-canvas-video"]
+  A_lyric_video_agent --> T_genesis_lyric["source:genesis-lyric"]
   Registry --> A_raw_video_editor["Raw Video Editor\nask\nContent Creation"]
   Workers --> A_raw_video_editor
   A_raw_video_editor --> S_raw_video_editor["skill:raw-video-editor"]

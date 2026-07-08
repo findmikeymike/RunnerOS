@@ -174,6 +174,16 @@ describe('workspace local source paths', () => {
     expect(sources[0].config.local?.path).toContain(join('tools', 'squad'));
     expect(sources[0].guide.raw).toContain('provider-mode');
   });
+
+  test('getSourcesBySlugs resolves the built-in Genesis lyric source', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['genesis-lyric']);
+    expect(sources).toHaveLength(1);
+    expect(sources[0].config.slug).toBe('genesis-lyric');
+    expect(sources[0].config.provider).toBe('runneros-genesis-lyric');
+    expect(sources[0].config.local?.path).toContain(join('tools', 'genesis-lyric'));
+    expect(sources[0].guide.raw).toContain('single-video');
+  });
 });
 
 describe('readGlobalSourcesManifest', () => {
@@ -717,6 +727,18 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.enabled).toBe(true);
     expect(sources[0]!.config.type).toBe('local');
     expect(sources[0]!.config.local?.path).toContain('tools/raw-video-editor');
+  });
+
+  test('resolves genesis-lyric by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['genesis-lyric']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('genesis-lyric');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
+    expect(sources[0]!.config.local?.path).toContain('tools/genesis-lyric');
   });
 
   test('resolves google-ads by slug without workspace activation', () => {

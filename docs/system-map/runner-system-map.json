@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-07",
+  "generatedAt": "2026-07-08",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -22,10 +22,10 @@
     "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts"
   },
   "summary": {
-    "agentCount": 36,
+    "agentCount": 37,
     "domains": {
       "Command": 3,
-      "Content Creation": 4,
+      "Content Creation": 5,
       "Creative": 5,
       "Merch": 2,
       "Operators": 2,
@@ -36,7 +36,7 @@
       "Socials": 2
     },
     "permissionModes": {
-      "ask": 29,
+      "ask": 30,
       "safe": 7
     },
     "hiddenWorkerHomeCount": 6,
@@ -57,11 +57,11 @@
     "finalsPromotionWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 112,
-    "bundledSkillCount": 71,
+    "knownSkillCount": 114,
+    "bundledSkillCount": 73,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 112,
-    "knownSourceCount": 21,
+    "userGlobalSkillCount": 113,
+    "knownSourceCount": 23,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
     "missingSources": [],
@@ -250,23 +250,27 @@
     {
       "slug": "hypermotion-agent",
       "name": "Hypermotion Agent",
-      "description": "Create polished motion graphic videos, captions, and social promos.",
+      "description": "Create polished motion graphics, Spotify Canvas loops, captions, and social promos.",
       "domain": "Content Creation",
       "permissionMode": "ask",
       "thinkingLevel": "high",
       "skills": [
-        "hyperframes"
+        "hyperframes",
+        "spotify-canvas-video"
       ],
       "sources": [
         "hypermotion"
       ],
-      "optionalSources": [],
+      "optionalSources": [
+        "media-generation"
+      ],
       "trustedWorkerTools": [],
       "visualAgent": true,
       "tags": [
         "creative",
         "video",
         "motion",
+        "spotify-canvas",
         "hyperframes",
         "remotion"
       ],
@@ -278,10 +282,11 @@
         "artifact-output-aware",
         "canvas-visual-agent",
         "external-action-boundary",
+        "optional-source-aware",
         "requires-source-activation"
       ],
       "inputs": "A motion/video brief, assets, target platform, duration, format, brand direction, or existing artifact to animate or render.",
-      "outputs": "Canvas-ready HTML previews, MP4 renders, poster frames, asset folders, render receipts, and clear next actions."
+      "outputs": "Canvas-ready HTML previews, Spotify Canvas loops, MP4 renders, poster frames, asset folders, render receipts, and clear next actions."
     },
     {
       "slug": "lottie-animation-agent",
@@ -316,6 +321,49 @@
       ],
       "inputs": "A Lottie animation brief, SVG/path/image reference, timing direction, target platform, dimensions, FPS, duration, and desired editable controls.",
       "outputs": "A verified public/lottie.json animation, optional public/controls.json, preview URL, key-frame checks, and embed guidance for web, mobile, or app use."
+    },
+    {
+      "slug": "lyric-video-agent",
+      "name": "Lyric Video",
+      "description": "Creates single lyric clips from song audio, lyrics, image refs or visual assets, captions, and FFmpeg renders.",
+      "domain": "Content Creation",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "lyric-video-genesis",
+        "spotify-canvas-video"
+      ],
+      "sources": [
+        "genesis-lyric"
+      ],
+      "optionalSources": [
+        "media-generation",
+        "raw-video-editor",
+        "video-studio"
+      ],
+      "trustedWorkerTools": [],
+      "visualAgent": true,
+      "tags": [
+        "creative",
+        "video",
+        "music",
+        "lyrics",
+        "captions",
+        "song-teaser"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "canvas-visual-agent",
+        "external-action-boundary",
+        "optional-source-aware",
+        "requires-source-activation"
+      ],
+      "inputs": "Song audio, lyrics or timed lyric lines, visual source or image reference, platform/aspect ratio, duration, caption style, and output destination.",
+      "outputs": "A single rendered MP4, render report, caption timing notes, and clear blockers when audio/lyrics/visuals are missing."
     },
     {
       "slug": "raw-video-editor",

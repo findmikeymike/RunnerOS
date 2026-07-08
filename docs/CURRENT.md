@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-07
+last_verified: 2026-07-08
 source_of_truth: true
 ---
 
@@ -9,10 +9,10 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-07
+- Date: 2026-07-08
 - Branch: `codex/creator-command-center`
-- Current goal: make paid-ads workers useful for artist campaigns without blocking on Meta/Google API approval or Spotify Ads API setup.
-- Overall state: Ads specialist agents, ad-library intelligence, and the local ads operator are wired and ready for focused smoke testing.
+- Current goal: make paid-ads workers and single-song video helpers useful for artist campaigns without blocking on platform API approval.
+- Overall state: Ads specialist agents, ad-library intelligence, local ads operator, and Genesis lyric-video tooling are wired and ready for focused smoke testing.
 
 ## Recently Completed
 
@@ -28,14 +28,17 @@ source_of_truth: true
 - Updated Ad Runner to use `meta-ads`, `google-ads`, and `paid-ads-browser-operator` skills plus `meta-ads`, `google-ads`, and `ads-operator` sources.
 - Added Spotify Ads browser mode: Ad Runner can guide logged-in Spotify Ads Manager / Spotify Ad Studio setup, while Spotify for Artists is used only for audience/song/city intel.
 - Made Meta account work practical without API approval: use `ads-operator --platform meta`, browser dashboard/export/setup guidance, and explicit approval packets.
+- Added Lyric Video (`lyric-video-agent`) for single lyric clips from song audio, lyrics, and an existing or generated visual asset.
+- Added `lyric-video-genesis` skill and `genesis-lyric` built-in source/tool at `tools/genesis-lyric`.
+- Ported only the needed Genesis source/docs for one-off FFmpeg lyric renders; original Genesis is untouched and its batch/campaign/portal system is not part of RunnerOS.
 - Hardened ChatGPT search retry after unsupported `web_search_preview` failures.
 - Adjusted chat autoscroll so long agent replies do not force the user to the bottom while trying to read from the top.
 - Regenerated Codex catalog after installed agent changes.
 
 ## In Progress
 
-- Live smoke testing the paid-ads chain on campaign example: `Watching Tornado Videos on YouTube`.
-- Current next smoke target: Ad Creative should use `ad-library-intel` first, then return a compact creative packet.
+- Live smoke testing the paid-ads chain and video workers on campaign example: `Watching Tornado Videos on YouTube`.
+- Current next smoke targets: Ad Creative should return a compact creative packet; Lyric Video should render one real song clip from audio, lyrics, and a visual.
 
 ## Next Actions
 
@@ -44,7 +47,8 @@ source_of_truth: true
 3. If browser research loops too long, add a hard cap to `ad-library-intel` and force a best-effort packet.
 4. Smoke Ad Strategy with a `$400` Meta campaign ask and Ad Creative packet input.
 5. Smoke Ad Runner last with approved strategy/creative inputs; it must stop at setup-plan/draft/approval packet before live mutation.
-6. Regenerate `docs/system-map/` after any starter-agent, source, skill, or launch-surface change.
+6. Smoke Lyric Video with real song audio/lyrics and user footage, artwork, or a generated still/video path.
+7. Regenerate `docs/system-map/` after any starter-agent, source, skill, or launch-surface change.
 
 ## Verification State
 
@@ -56,6 +60,8 @@ source_of_truth: true
 /Users/michaelb.williams/.bun/bin/bun run typecheck:shared
 (cd packages/pi-agent-server && /Users/michaelb.williams/.bun/bin/bun run typecheck)
 (cd apps/electron && /Users/michaelb.williams/.bun/bin/bun run typecheck)
+node tools/genesis-lyric/bin/genesis-lyric.mjs doctor --json
+node --test tools/genesis-lyric/bin/genesis-lyric.test.mjs
 git diff --check
 python3 /Users/michaelb.williams/.codex/scripts/rebuild_codex_catalog.py
 ```
@@ -63,6 +69,7 @@ python3 /Users/michaelb.williams/.codex/scripts/rebuild_codex_catalog.py
 - Electron dev app relaunched from this worktree.
 - Startup log confirmed ads specialist migration ran.
 - Ad Creative setup now shows `ad-library-intel` in Skills and no bundled account Tools.
+- Genesis Lyric CLI doctor, unit tests, and synthetic FFmpeg render smoke passed.
 
 ## Known Limits
 
@@ -70,9 +77,11 @@ python3 /Users/michaelb.williams/.codex/scripts/rebuild_codex_catalog.py
 - TikTok Creative Center / public pages may vary by region, availability, and automation blocking.
 - Meta/Google/Spotify account operations require connected accounts or browser-guided user sessions.
 - No agent should publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations without explicit approval naming account, action, and spend impact.
+- `genesis-lyric` assembles lyric clips from supplied media; use media-generation/raw video tools first when the visual asset does not exist yet.
 
 ## Notes For Next Agent
 
 - Start from `HANDOFF.md`, this file, `docs/backlog/paid-ads-execution-prep.md`, and `tools/ads-operator/README.md`.
 - Do not re-add account tools to Ad Creative. It is a creative/research worker.
 - Ad Runner is the account operator and approval-packet owner.
+- For lyric videos, start from `tools/genesis-lyric/README.md`; do not touch the original Genesis checkout unless explicitly asked.

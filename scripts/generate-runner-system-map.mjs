@@ -539,8 +539,7 @@ function renderMarkdown(map) {
   lines.push('- Context-doc routing is summarized from launch/runtime code, not enumerated per workspace doc.');
   lines.push('- Live user/global agent overrides in `~/.agents/agents` are not included; this maps starter code, not machine-local mutations.');
   lines.push('- If Reference Health flags a missing skill/source that intentionally lives only in a user workspace, document that exception here.');
-  lines.push('');
-  return `${lines.join('\n')}\n`;
+  return `${lines.join('\n').trimEnd()}\n`;
 }
 
 function renderMermaid(map) {

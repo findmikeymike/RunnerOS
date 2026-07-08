@@ -68,6 +68,7 @@ files:
   - tools/ads-operator/**/*
   - tools/shopify/**/*
   - tools/printify/**/*
+  - tools/genesis-lyric/**/*
   # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
 
@@ -161,6 +162,11 @@ mac:
     # Managed local Printify Printing Press wrapper.
     - from: ../../tools/printify
       to: app/tools/printify
+      filter:
+        - "**/*"
+    # Managed local Genesis single-video lyric wrapper.
+    - from: ../../tools/genesis-lyric
+      to: app/tools/genesis-lyric
       filter:
         - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
@@ -284,6 +290,11 @@ win:
       to: app/tools/printify
       filter:
         - "**/*"
+    # Managed local Genesis single-video lyric wrapper.
+    - from: ../../tools/genesis-lyric
+      to: app/tools/genesis-lyric
+      filter:
+        - "**/*"
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: vendor/codex/win32-x64
@@ -366,6 +377,11 @@ linux:
     # Managed local Printify Printing Press wrapper.
     - from: ../../tools/printify
       to: app/tools/printify
+      filter:
+        - "**/*"
+    # Managed local Genesis single-video lyric wrapper.
+    - from: ../../tools/genesis-lyric
+      to: app/tools/genesis-lyric
       filter:
         - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).

@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-07
+last_verified: 2026-07-08
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-07-07
+Generated: 2026-07-08
 
 ## Why This Exists
 
@@ -37,16 +37,16 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Summary
 
-- Agents mapped: 36
+- Agents mapped: 37
 - Hidden from Workers home: 6
 - Campaign default workers: `content-genius`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
-- Domains: Command 3, Content Creation 4, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
-- Permission modes: ask 29, safe 7
-- Known skills: 112 (71 bundled, 6 system, 112 user-global on this machine)
-- Known builtin sources: 21
+- Domains: Command 3, Content Creation 5, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
+- Permission modes: ask 30, safe 7
+- Known skills: 114 (73 bundled, 6 system, 113 user-global on this machine)
+- Known builtin sources: 23
 
 ## Reference Health
 
@@ -153,17 +153,17 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Hypermotion Agent (`hypermotion-agent`)
 
-- Description: Create polished motion graphic videos, captions, and social promos.
+- Description: Create polished motion graphics, Spotify Canvas loops, captions, and social promos.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `hidden-from-workers-home`
-- Skills: `hyperframes`
+- Skills: `hyperframes`, `spotify-canvas-video`
 - Sources: `hypermotion`
-- Optional sources: none
+- Optional sources: `media-generation`
 - Trusted tools: none
-- Tags: `creative`, `video`, `motion`, `hyperframes`, `remotion`
-- Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `external-action-boundary`, `requires-source-activation`
+- Tags: `creative`, `video`, `motion`, `spotify-canvas`, `hyperframes`, `remotion`
+- Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`
 - Inputs: A motion/video brief, assets, target platform, duration, format, brand direction, or existing artifact to animate or render.
-- Outputs: Canvas-ready HTML previews, MP4 renders, poster frames, asset folders, render receipts, and clear next actions.
+- Outputs: Canvas-ready HTML previews, Spotify Canvas loops, MP4 renders, poster frames, asset folders, render receipts, and clear next actions.
 
 #### Lottie Animation Agent (`lottie-animation-agent`)
 
@@ -178,6 +178,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `requires-source-activation`
 - Inputs: A Lottie animation brief, SVG/path/image reference, timing direction, target platform, dimensions, FPS, duration, and desired editable controls.
 - Outputs: A verified public/lottie.json animation, optional public/controls.json, preview URL, key-frame checks, and embed guidance for web, mobile, or app use.
+
+#### Lyric Video (`lyric-video-agent`)
+
+- Description: Creates single lyric clips from song audio, lyrics, image refs or visual assets, captions, and FFmpeg renders.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `lyric-video-genesis`, `spotify-canvas-video`
+- Sources: `genesis-lyric`
+- Optional sources: `media-generation`, `raw-video-editor`, `video-studio`
+- Trusted tools: none
+- Tags: `creative`, `video`, `music`, `lyrics`, `captions`, `song-teaser`
+- Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`
+- Inputs: Song audio, lyrics or timed lyric lines, visual source or image reference, platform/aspect ratio, duration, caption style, and output destination.
+- Outputs: A single rendered MP4, render report, caption timing notes, and clear blockers when audio/lyrics/visuals are missing.
 
 #### Raw Video Editor (`raw-video-editor`)
 

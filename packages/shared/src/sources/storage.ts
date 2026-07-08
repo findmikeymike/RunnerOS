@@ -21,7 +21,7 @@ import type {
 import { validateSourceConfig } from '../config/validators.ts';
 import { debug } from '../utils/debug.ts';
 import { readJsonFileSync } from '../utils/files.ts';
-import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getSquadSource, getGoogleAdsSource, getAdsOperatorSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getMediaGenerationSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
+import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getSquadSource, getGenesisLyricSource, getGoogleAdsSource, getAdsOperatorSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getOpenSlideSource, getZeroSource, getMediaGenerationSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
 import {
@@ -546,6 +546,8 @@ export function getSourcesBySlugs(workspaceRootPath: string, slugs: string[]): L
         sources.push({ ...getRawVideoEditorSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'squad') {
         sources.push({ ...getSquadSource(workspaceId, workspaceRootPath), tier: 'project' });
+      } else if (slug === 'genesis-lyric') {
+        sources.push({ ...getGenesisLyricSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'google-ads') {
         sources.push({ ...getGoogleAdsSource(workspaceId, workspaceRootPath), tier: 'project' });
       } else if (slug === 'ads-operator') {

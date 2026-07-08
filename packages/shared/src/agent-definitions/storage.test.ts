@@ -684,6 +684,20 @@ body
     expect(hypermotionAgent?.systemPrompt).toContain('showInCanvas')
   })
 
+  test('starter library includes the Lyric Video Agent with Genesis lyric source', () => {
+    const lyricVideoAgent = STARTER_AGENTS.find((agent) => agent.slug === 'lyric-video-agent')
+
+    expect(lyricVideoAgent).toBeDefined()
+    expect(lyricVideoAgent?.metadata.name).toBe('Lyric Video')
+    expect(lyricVideoAgent?.metadata.visualAgent).toBe(true)
+    expect(lyricVideoAgent?.metadata.skills).toContain('lyric-video-genesis')
+    expect(lyricVideoAgent?.metadata.sources).toContain('genesis-lyric')
+    expect(lyricVideoAgent?.metadata.optionalSources).toContain('media-generation')
+    expect(lyricVideoAgent?.systemPrompt).toContain('single song lyric clips')
+    expect(lyricVideoAgent?.systemPrompt).toContain('node bin/genesis-lyric.mjs doctor')
+    expect(lyricVideoAgent?.systemPrompt).toContain('Do not claim success until')
+  })
+
   test('starter library includes the Lottie Animation Agent with official player workflow', () => {
     const lottieAgent = STARTER_AGENTS.find((agent) => agent.slug === 'lottie-animation-agent')
 

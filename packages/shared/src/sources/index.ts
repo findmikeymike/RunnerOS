@@ -126,6 +126,7 @@ export {
   getFieldTheorySource,
   getLottieSource,
   getVideoStudioSource,
+  getGenesisLyricSource,
   getZeroSource,
   getDocsSource,
   getBuiltinSources,

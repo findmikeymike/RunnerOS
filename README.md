@@ -7,12 +7,14 @@
 
 Active worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/creator-command-center`
 
-Current focus: Artist OS paid-ads workers for upcoming song campaigns.
+Current focus: Artist OS paid-ads workers plus single-song video production helpers for upcoming releases.
 
 - Ad Creative (`ad-creative-agent`): researches public high-performing music ad patterns, then builds hooks, copy, creative angles, format tests, and asset needs.
 - Ad Strategy (`ads-strategist`): turns artist/campaign context, including Spotify for Artists intel when available, into budget, audience, territory, platform, and test strategy.
 - Ad Runner (`ads-agent`): handles Meta/Google/Spotify account-side inspection, exports, browser setup guidance, draft setup plans, approval packets, and explicit-approval handoff.
+- Lyric Video (`lyric-video-agent`): creates one lyric clip from song audio, lyrics, image refs or visual assets, captions, and FFmpeg render output.
 - `tools/ads-operator`: read-only local CLI for ad CSV import/audit, public ad-library planning/analyze, campaign/setup plans, approval packets, and receipts.
+- `tools/genesis-lyric`: RunnerOS-owned lightweight Genesis fork for single lyric videos only; the original Genesis project is untouched and the 20-day/batch campaign system was not ported.
 
 Start from [HANDOFF.md](./HANDOFF.md), [docs/CURRENT.md](./docs/CURRENT.md), and [docs/system-map](./docs/system-map/) before continuing this branch.
 

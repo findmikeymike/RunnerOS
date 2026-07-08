@@ -1,0 +1,12 @@
+{
+  "name": "runneros-genesis-lyric",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "genesis-lyric": "bin/genesis-lyric.mjs"
+  },
+  "scripts": {
+    "test": "node --test bin/genesis-lyric.test.mjs"
+  }
+}
