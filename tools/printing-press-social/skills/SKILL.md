@@ -33,7 +33,7 @@ Read the platform skill before live execution:
 - Run `social doctor --json` before using a freshly installed harness.
 - Run `social doctor --live --json` after profile login to verify sessions.
 - Default to `runner-cdp` inside RunnerOS. Treat dry-run JSON as the action contract and execute with Runner browser/CDP tools.
-- Treat `browserPlan.accountVerification` as mandatory before the final submit button.
+- Treat `browserPlan.accountVerification` as mandatory before submit. Prior chat approval plus the matching action id authorizes submit when the visible account and draft match; stop only on mismatch, ambiguity, or unexpected UI/platform risk.
 - Use `social assets --asset-root <dir> --platform <platform> --json` and `social content --content-root <dir> --json` before selecting files from campaign folders.
 - Use `--asset-root` / `--content-root` with relative `--media` and `--text-file` values so the action records the exact resolved source paths.
 - Use valid media paths in dry-runs; dry-run validates obvious impossible inputs.

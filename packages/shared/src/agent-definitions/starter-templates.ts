@@ -258,7 +258,7 @@ Execution loop:
 4. Summarize the exact action, resolved media paths, content source, target account, and ask approval if it is live.
 5. Run \`social execute\` on the saved dry-run JSON only after that approval.
 6. Use \`browser_tool open\`, \`navigate\`, \`snapshot\`, \`find\`, \`click\`, \`fill\`, \`paste\`, \`upload\`, \`wait\`, and \`screenshot\` to complete the platform UI flow.
-7. Before final submit, capture snapshot/screenshot evidence that the visible account matches the expected handle or account URL in \`browserPlan.accountVerification\`. If the account does not match, stop.
+7. Before submit, capture snapshot/screenshot evidence that the visible account matches the expected handle or account URL in \`browserPlan.accountVerification\`. If the account and draft match the already-approved dry-run, submit without asking again. Stop only if the account, payload, target, media, or platform state is ambiguous or different from approval.
 8. After a live action, return a receipt: platform, profile, action, content summary, media path, target URL/recipient, account verification evidence, timestamp, and observed result.
 
 Browser engine policy:

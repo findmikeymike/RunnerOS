@@ -21,7 +21,7 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 6. Ask for explicit approval before any live publish/send action.
 7. Save the full dry-run result JSON and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`.
 8. Execute through Runner `browser_tool` using the returned `RUNNER_CDP_DELEGATED` handoff and browser plan.
-9. Treat `browserPlan.accountVerification` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before final submit. If `verificationTargetKnown` is false, stop and add a profile `--handle` or `--account-url`.
+9. Treat `browserPlan.accountVerification` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before submit. If `verificationTargetKnown` is false, stop and add a profile `--handle` or `--account-url`.
 10. Return a receipt with platform, profile, action, payload summary, media path, target, account verification evidence, timestamp, and observed result.
 
 ## Existing Chrome Sessions
@@ -78,7 +78,7 @@ CLI safety behavior:
 - After explicit user approval, pass `--confirm yes` only for the exact approved live action. Do not use `--autorun` for write actions.
 - Reuse a stable `--idempotency-key` for retried live actions so the CLI can dedupe accidental repeats.
 - Use `--asset-root` and `--content-root` so receipts and dry-runs preserve exact source folders and resolved files.
-- When using `runner-cdp`, `social execute` validates the approved dry-run result and returns a Runner browser handoff. The agent must still use `browserPlan.accountVerification` and browser evidence before live submit.
+- When using `runner-cdp`, `social execute` validates the approved dry-run result and returns a Runner browser handoff. Prior chat approval plus the matching `--expected-action-id` is the final approval. The agent should submit without asking again when the visible account and draft match approval; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
 
 ## Universal Payload Rules
 

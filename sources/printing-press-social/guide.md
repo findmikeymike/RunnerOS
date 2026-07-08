@@ -41,7 +41,7 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - Use `node src/social.mjs doctor --live --json` before claiming a profile is ready for live execution.
 - Use `--json` and parse structured output instead of scraping text.
 - Dry-run every post, comment, or DM before live execution.
-- With `runner-cdp`, treat CLI output as the action contract/plan. After approval, run `social execute` on the saved dry-run result to re-check provenance and account-verification readiness, then execute the returned handoff through Runner's native browser tools.
+- With `runner-cdp`, treat CLI output as the action contract/plan. After approval, run `social execute` on the saved dry-run result to re-check provenance and account-verification readiness, then execute the returned handoff through Runner's native browser tools. Do not ask for a second approval in the browser when the visible account and draft match the approved dry-run; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
 - Do not run a live post, comment, or DM unless the user has explicitly approved the exact platform, profile, payload, and target URL/recipient.
 - Do not default to Computer Use. In RunnerOS, use the guarded CLI handoff plus native `browser_tool`; standalone fallback engines are optional.
 - Use Playwright only when explicitly running the standalone fallback engine outside Runner.

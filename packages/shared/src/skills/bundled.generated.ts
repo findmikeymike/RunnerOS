@@ -22279,7 +22279,7 @@ Posting flow:
 2. Upload video.
 3. Add caption.
 4. Check cover, privacy, comments, duet/stitch, and commercial disclosure settings.
-5. Ask approval at final submit if not already approved.
+5. Submit if the exact action was already approved in chat and the visible account/draft match. Ask only if approval is missing or the UI state differs.
 
 ## Instagram
 
@@ -22299,7 +22299,7 @@ Posting flow:
 3. Pick format and crop.
 4. Add caption, location, collaborator/product tags only if requested.
 5. Check cover frame and share-to-feed setting.
-6. Ask approval at final share if not already approved.
+6. Share if the exact action was already approved in chat and the visible account/draft match. Ask only if approval is missing or the UI state differs.
 
 ## X
 
@@ -22321,7 +22321,7 @@ Posting flow:
 2. Paste text rather than typing long copy manually.
 3. Attach media if requested.
 4. Check account/profile, audience, and reply target.
-5. Ask approval at final Post/Reply/Send.
+5. Post, reply, or send if the exact action was already approved in chat and the visible account/draft match. Ask only if approval is missing or the UI state differs.
 
 ## YouTube
 
@@ -22339,7 +22339,7 @@ Posting flow:
 2. Upload media.
 3. Add title, description, thumbnail/cover if available, playlist only if requested.
 4. Complete audience, paid promotion, checks, visibility, and schedule settings.
-5. Ask approval before final publish/schedule.
+5. Publish or schedule if the exact action was already approved in chat and the visible account/draft match. Ask only if approval is missing or the UI state differs.
 
 ## Cross-Platform Campaign Loop
 
@@ -22376,7 +22376,7 @@ When the user is new to the system, guide them through this sequence:
 
 Account switch rule:
 - Never assume the active browser account is correct.
-- Before final submit, check the visible account name/avatar/handle when the platform UI exposes it.
+- Before submit, check the visible account name/avatar/handle when the platform UI exposes it.
 - If the visible account does not match the requested profile, stop and ask the user to choose or re-login.
 `,
       },
@@ -22405,7 +22405,7 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 6. Ask for explicit approval before any live publish/send action.
 7. Save the full dry-run result JSON and run \`node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json\`.
 8. Execute through Runner \`browser_tool\` using the returned \`RUNNER_CDP_DELEGATED\` handoff and browser plan.
-9. Treat \`browserPlan.accountVerification\` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before final submit. If \`verificationTargetKnown\` is false, stop and add a profile \`--handle\` or \`--account-url\`.
+9. Treat \`browserPlan.accountVerification\` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before submit. If \`verificationTargetKnown\` is false, stop and add a profile \`--handle\` or \`--account-url\`.
 10. Return a receipt with platform, profile, action, payload summary, media path, target, account verification evidence, timestamp, and observed result.
 
 ## Existing Chrome Sessions
@@ -22462,7 +22462,7 @@ CLI safety behavior:
 - After explicit user approval, pass \`--confirm yes\` only for the exact approved live action. Do not use \`--autorun\` for write actions.
 - Reuse a stable \`--idempotency-key\` for retried live actions so the CLI can dedupe accidental repeats.
 - Use \`--asset-root\` and \`--content-root\` so receipts and dry-runs preserve exact source folders and resolved files.
-- When using \`runner-cdp\`, \`social execute\` validates the approved dry-run result and returns a Runner browser handoff. The agent must still use \`browserPlan.accountVerification\` and browser evidence before live submit.
+- When using \`runner-cdp\`, \`social execute\` validates the approved dry-run result and returns a Runner browser handoff. Prior chat approval plus the matching \`--expected-action-id\` is the final approval. The agent should submit without asking again when the visible account and draft match approval; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
 
 ## Universal Payload Rules
 

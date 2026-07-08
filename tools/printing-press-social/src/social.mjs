@@ -276,7 +276,7 @@ async function runExecute(args) {
       next: [
         'Open the browser session named in browserPlan.sessionPath.',
         'Verify the visible account matches browserPlan.accountVerification.',
-        'Execute the browserPlan steps, then pause before final submit for approval.',
+        'Execute the browserPlan steps and submit when the visible account and draft match the approved dry-run; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.',
       ],
     };
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
