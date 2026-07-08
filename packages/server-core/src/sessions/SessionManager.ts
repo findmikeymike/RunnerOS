@@ -4905,6 +4905,16 @@ user a clickable link to where the thing now lives.`
           return outputService.getVisualSurfaceState(managed.workspace.id, managed.id)
         },
         saveSecretFn: async (input) => {
+          if ((managed.permissionMode ?? 'ask') === 'allow-all') {
+            return {
+              ok: false,
+              target: input.target,
+              name: input.name,
+              sourceSlug: input.sourceSlug,
+              error: 'save_secret requires explicit per-use approval. Switch this session to Ask mode and approve the save.',
+            }
+          }
+
           if (input.target === 'env') {
             const normalized = normalizeUserSecretName(input.name ?? '')
             if (!isValidUserSecretName(normalized)) {

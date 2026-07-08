@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { isIP } from 'node:net';
 import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import type { SessionToolContext } from '../context.ts';
 import { errorResponse } from '../response.ts';
@@ -52,6 +53,10 @@ const PROVIDERS: Record<MediaProvider, ProviderConfig> = {
     baseUrl: 'https://api.wavespeed.ai/api/v3',
   },
 };
+
+const MAX_DOWNLOAD_COUNT = 8;
+const MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024;
+const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 function baseDir(ctx: SessionToolContext): string {
   return ctx.workingDirectory || ctx.workspacePath;
@@ -119,6 +124,44 @@ function looksLikeMediaUrl(value: string): boolean {
   }
 }
 
+function isPrivateOrLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local')) return true;
+
+  const ipVersion = isIP(host);
+  if (ipVersion === 4) {
+    const parts = host.split('.').map((part) => Number(part));
+    const [a, b] = parts;
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    return false;
+  }
+  if (ipVersion === 6) {
+    return host === '::1' || host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:');
+  }
+  return false;
+}
+
+function validateDownloadUrl(urlValue: string): string | null {
+  try {
+    const url = new URL(urlValue);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return 'Only http(s) media downloads are supported.';
+    if (isPrivateOrLocalHost(url.hostname)) return 'Refusing to download media from local or private network hosts.';
+    return null;
+  } catch {
+    return 'Invalid media download URL.';
+  }
+}
+
+function isAllowedMediaResponse(urlValue: string, contentType: string): boolean {
+  const normalized = contentType.toLowerCase();
+  if (normalized.startsWith('image/') || normalized.startsWith('video/') || normalized.startsWith('audio/')) return true;
+  if (normalized.includes('octet-stream')) return /\.(png|jpe?g|webp|gif|mp4|mov|webm|mp3|wav|m4a)(?:$|\?)/i.test(urlValue);
+  return false;
+}
+
 function collectMediaUrls(value: unknown, urls: Set<string> = new Set()): Set<string> {
   if (typeof value === 'string') {
     if (looksLikeMediaUrl(value)) urls.add(value);
@@ -158,12 +201,32 @@ function extensionFromUrl(urlValue: string, contentType: string): string {
 }
 
 async function downloadAsset(url: string, outputDir: string, prefix: string, index: number): Promise<DownloadedAsset> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Download failed for ${url}: HTTP ${response.status}`);
+  const validationError = validateDownloadUrl(url);
+  if (validationError) throw new Error(validationError);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Download failed for ${url}: HTTP ${response.status}`);
+    }
+  } finally {
+    clearTimeout(timeout);
   }
   const contentType = response.headers.get('content-type') || 'application/octet-stream';
+  if (!isAllowedMediaResponse(url, contentType)) {
+    throw new Error(`Refusing to download unsupported media type: ${contentType}`);
+  }
+  const contentLength = Number(response.headers.get('content-length') || '0');
+  if (contentLength > MAX_DOWNLOAD_BYTES) {
+    throw new Error(`Media download is too large: ${contentLength} bytes`);
+  }
   const buffer = Buffer.from(await response.arrayBuffer());
+  if (buffer.byteLength > MAX_DOWNLOAD_BYTES) {
+    throw new Error(`Media download is too large: ${buffer.byteLength} bytes`);
+  }
   const ext = extensionFromUrl(url, contentType);
   const filePath = join(outputDir, `${prefix}-${String(index + 1).padStart(2, '0')}${ext}`);
   writeFileSync(filePath, buffer);
@@ -217,6 +280,9 @@ export async function handleMediaProviderRequest(ctx: SessionToolContext, args: 
   const mediaUrls = [...collectMediaUrls(parsed)];
   const downloaded: DownloadedAsset[] = [];
   if (args.downloadMedia !== false && mediaUrls.length > 0) {
+    if (mediaUrls.length > MAX_DOWNLOAD_COUNT) {
+      return errorResponse(`Provider returned too many media URLs to download at once: ${mediaUrls.length}. Limit is ${MAX_DOWNLOAD_COUNT}.`);
+    }
     const root = baseDir(ctx);
     const outputDir = resolveInside(
       root,

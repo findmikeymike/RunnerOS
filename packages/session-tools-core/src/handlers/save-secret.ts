@@ -22,6 +22,7 @@ export interface SaveSecretResult {
 
 const ENV_SECRET_RE = /^[A-Z_][A-Z0-9_]*$/;
 const SOURCE_SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
+const SOURCE_CREDENTIAL_UNSUPPORTED_SLUGS = new Set(['media-generation']);
 const BLOCKED_NAME_HINTS = [
   'PASSWORD',
   'PASSWD',
@@ -60,6 +61,9 @@ function validateInput(args: SaveSecretToolInput): string | null {
 
   if (!args.sourceSlug || !SOURCE_SLUG_RE.test(args.sourceSlug)) {
     return 'sourceSlug is required for source credential targets.';
+  }
+  if (SOURCE_CREDENTIAL_UNSUPPORTED_SLUGS.has(args.sourceSlug)) {
+    return 'media-generation credentials must be saved as env secrets such as FAL_API_KEY, WAVESPEED_API_KEY, or REPLICATE_API_TOKEN.';
   }
   return null;
 }
