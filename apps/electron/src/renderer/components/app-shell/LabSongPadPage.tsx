@@ -918,7 +918,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                 onChange={(event) => setRoughText(event.target.value)}
                 onSelect={(event) => capturePadSelection('rough', event.currentTarget)}
                 onKeyUp={(event) => capturePadSelection('rough', event.currentTarget)}
-                onMouseUp={(event) => capturePadSelection('rough', event.currentTarget, { x: event.clientX + 12, y: event.clientY - 18 })}
+                onMouseUp={(event) => capturePadSelection('rough', event.currentTarget, { x: event.clientX + 4, y: event.clientY - 34 })}
                 placeholder="Dump lines, images, hooks, bad drafts, voice notes transcribed into words..."
                 className={textareaBase('min-h-[560px]')}
               />
@@ -937,7 +937,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                 onChange={(event) => setRememberText(event.target.value)}
                 onSelect={(event) => capturePadSelection('remember', event.currentTarget)}
                 onKeyUp={(event) => capturePadSelection('remember', event.currentTarget)}
-                onMouseUp={(event) => capturePadSelection('remember', event.currentTarget, { x: event.clientX + 12, y: event.clientY - 18 })}
+                onMouseUp={(event) => capturePadSelection('remember', event.currentTarget, { x: event.clientX + 4, y: event.clientY - 34 })}
                 placeholder="Park strong lines, title ideas, images, references, or alternate bars here."
                 className={textareaBase('min-h-[170px] text-white/66')}
               />
@@ -1109,7 +1109,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     onChange={(event) => updateSection(section.id, event.target.value)}
                     onSelect={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
                     onKeyUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
-                    onMouseUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget, { x: event.clientX + 12, y: event.clientY - 18 })}
+                    onMouseUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget, { x: event.clientX + 4, y: event.clientY - 34 })}
                     placeholder={section.optional ? 'Optional' : 'Write lyrics here.'}
                     className={textareaBase('overflow-hidden text-white/76 placeholder:text-white/14')}
                   />
