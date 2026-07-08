@@ -2492,7 +2492,7 @@ export class SessionManager implements ISessionManager {
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
         // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Hypermotion, Lottie Animation,
-        // Video Editor, Content Genius, promotion helpers, Shopify, Print Agent,
+        // Video Editor, Lyric Video, Content Genius, promotion helpers, Shopify, Print Agent,
         // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
         // and Update System Agent.
         const required = STARTER_AGENTS.filter(
@@ -2504,6 +2504,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'hypermotion-agent'
             || a.slug === 'lottie-animation-agent'
             || a.slug === 'video-editor-agent'
+            || a.slug === 'lyric-video-agent'
             || a.slug === 'content-genius'
             || a.slug === 'ads-strategist'
             || a.slug === 'ad-creative-agent'
@@ -2659,16 +2660,17 @@ export class SessionManager implements ISessionManager {
           } else if (missingArtDirectorSkills.length > 0) {
             sessionLog.warn(`[agent-definitions] Art Director skill bundle incomplete: ${missingArtDirectorSkills.join(', ')}`)
           }
-          const defaultPowerUpAgentSlugs = [
+          const defaultActivatedAgentSlugs = [
             'ads-strategist',
             'ad-creative-agent',
             'ads-agent',
+            'lyric-video-agent',
             'ig-trending-power-up',
             'influencer-campaign-power-up',
             'playlisting-power-up',
             'record-doctor',
           ]
-          for (const agentSlug of defaultPowerUpAgentSlugs) {
+          for (const agentSlug of defaultActivatedAgentSlugs) {
             const agent = STARTER_AGENTS.find(candidate => candidate.slug === agentSlug)
             const skillSlugs = agent?.metadata.skills ?? []
             const missingSkills = skillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
