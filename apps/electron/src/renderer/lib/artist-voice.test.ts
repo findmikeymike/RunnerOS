@@ -33,11 +33,13 @@ describe('artist voice context', () => {
       version: 1,
       summary: 'Plainspoken, dry, and sharp.',
       captionExamples: 'not everything needs a rollout. some things just need to land.',
+      commentReplyExamples: 'appreciate you. this one felt different.',
       updatedAt: '2026-07-02T00:00:00.000Z',
     }
     const parsed = parseArtistVoiceDocResult(makeDoc(serializeArtistVoiceBody(voice)))
     expect(parsed.ok).toBe(true)
     expect(parsed.voice.summary).toBe('Plainspoken, dry, and sharp.')
     expect(parsed.voice.captionExamples).toContain('rollout')
+    expect(parsed.voice.commentReplyExamples).toContain('felt different')
   })
 })

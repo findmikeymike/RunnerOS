@@ -20,9 +20,8 @@ describe('release board utilities', () => {
       'content',
       'setup',
       'promotion',
-      'team',
     ])
-    expect(getBoardTotals(board)).toEqual({ done: 0, total: 25 })
+    expect(getBoardTotals(board)).toEqual({ done: 0, total: 21 })
     expect(board.categories.find((category) => category.id === 'content')?.items.map((item) => item.label)).toEqual([
       'Idea generation',
       'Lyric clips',

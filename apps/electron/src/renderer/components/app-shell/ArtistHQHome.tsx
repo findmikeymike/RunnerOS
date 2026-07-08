@@ -216,6 +216,7 @@ const emptyVoiceDraft: VoiceDraft = {
   vocabulary: '',
   avoid: '',
   captionExamples: '',
+  commentReplyExamples: '',
   postExamples: '',
   writingExcerpts: '',
 }
@@ -2085,6 +2086,9 @@ function ArtistVoiceForm({
       <ProfileField label="Caption examples" wide>
         <TextArea value={draft.captionExamples ?? ''} onChange={(captionExamples) => onChange({ ...draft, captionExamples })} placeholder="Paste real captions. Include good examples and notes if useful." />
       </ProfileField>
+      <ProfileField label="Comment reply examples" wide>
+        <TextArea value={draft.commentReplyExamples ?? ''} onChange={(commentReplyExamples) => onChange({ ...draft, commentReplyExamples })} placeholder="Paste examples of how the artist replies to fans, compliments, jokes, questions, criticism, or DMs. Social posting agents use this for reply tone." />
+      </ProfileField>
       <ProfileField label="Post examples" wide>
         <TextArea value={draft.postExamples ?? ''} onChange={(postExamples) => onChange({ ...draft, postExamples })} placeholder="Paste posts, tweets, threads, announcements, replies, or email/social copy that sounds right." />
       </ProfileField>
@@ -2714,6 +2718,7 @@ function voiceToDraft(voice: ArtistVoice): VoiceDraft {
     vocabulary: voice.vocabulary ?? '',
     avoid: voice.avoid ?? '',
     captionExamples: voice.captionExamples ?? '',
+    commentReplyExamples: voice.commentReplyExamples ?? '',
     postExamples: voice.postExamples ?? '',
     writingExcerpts: voice.writingExcerpts ?? '',
   }

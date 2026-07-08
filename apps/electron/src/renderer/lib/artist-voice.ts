@@ -22,6 +22,7 @@ export interface ArtistVoice {
   vocabulary?: string
   avoid?: string
   captionExamples?: string
+  commentReplyExamples?: string
   postExamples?: string
   writingExcerpts?: string
   updatedAt: string
@@ -102,6 +103,7 @@ export function voiceCompletion(voice: ArtistVoice): number {
     'vocabulary',
     'avoid',
     'captionExamples',
+    'commentReplyExamples',
     'postExamples',
     'writingExcerpts',
   ]
@@ -117,6 +119,7 @@ function normalizeVoice(voice: Partial<ArtistVoice>): ArtistVoice {
     vocabulary: clean(voice.vocabulary),
     avoid: clean(voice.avoid),
     captionExamples: clean(voice.captionExamples),
+    commentReplyExamples: clean(voice.commentReplyExamples),
     postExamples: clean(voice.postExamples),
     writingExcerpts: clean(voice.writingExcerpts),
     updatedAt: new Date().toISOString(),

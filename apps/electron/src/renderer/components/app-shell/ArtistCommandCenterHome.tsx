@@ -2,7 +2,6 @@ import * as React from 'react'
 import {
   ArrowRight,
   Bot,
-  CalendarClock,
   Check,
   CheckCircle2,
   Circle,
@@ -10,15 +9,13 @@ import {
   Disc3,
   Eye,
   Megaphone,
+  Plus,
   Settings2,
   ShieldCheck,
   Users,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
-import { navigate, routes } from '@/lib/navigate'
-import { useOutputs } from '@/hooks/useOutputs'
-import { FinalsWidget } from '@/components/outputs/FinalsWidget'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +29,17 @@ import {
   ARTIST_PROFILE_CONTEXT_SLUG,
   parseArtistProfileDocResult,
 } from '@/lib/artist-profile'
+import {
+  ARTIST_NETWORK_CONTEXT_SLUG,
+  artistNetworkMetadata,
+  linkNetworkPersonToWorkspace,
+  networkPeopleForWorkspace,
+  parseArtistNetworkDocResult,
+  serializeArtistNetworkBody,
+  unlinkNetworkPersonFromWorkspace,
+  type ArtistNetwork,
+  type ArtistNetworkPerson,
+} from '@/lib/artist-network'
 import {
   CAMPAIGN_WORKER_CONTEXT_SLUG,
   campaignWorkerContextMetadata,
@@ -120,11 +128,14 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
   const lastAutoSavedReleaseBoardBody = React.useRef<string | null>(null)
   const lastAutoSavedWorkerContextBody = React.useRef<string | null>(null)
   const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
-  const { outputs, loading: outputsLoading } = useOutputs(workspaceId)
   const inheritedArtistProfileWorkspaceId = artistProfileWorkspaceId && artistProfileWorkspaceId !== workspaceId
     ? artistProfileWorkspaceId
     : null
-  const { docs: inheritedArtistProfileDocs, loading: inheritedArtistProfileLoading } = useWorkspaceContext(inheritedArtistProfileWorkspaceId)
+  const {
+    docs: inheritedArtistProfileDocs,
+    loading: inheritedArtistProfileLoading,
+    upsert: upsertArtistProfileContext,
+  } = useWorkspaceContext(inheritedArtistProfileWorkspaceId)
 
   const savedMission = React.useMemo(() => {
     const doc = docs.find((item) => item.slug === MISSION_BRIEF_CONTEXT_SLUG)
@@ -135,6 +146,15 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     () => parseArtistProfileDocResult(artistProfileDocs.find((item) => item.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
     [artistProfileDocs],
   )
+  const artistNetworkResult = React.useMemo(
+    () => parseArtistNetworkDocResult(artistProfileDocs.find((item) => item.slug === ARTIST_NETWORK_CONTEXT_SLUG)),
+    [artistProfileDocs],
+  )
+  const artistNetwork = artistNetworkResult.network
+  const campaignTeam = React.useMemo(
+    () => networkPeopleForWorkspace(artistNetwork.people, workspaceId),
+    [artistNetwork.people, workspaceId],
+  )
 
   const [optimisticMission, setOptimisticMission] = React.useState<MissionBrief | null>(null)
   const savedReleaseBoard = React.useMemo(() => {
@@ -142,6 +162,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     return parseReleaseBoardDoc(doc)
   }, [docs])
   const [optimisticReleaseBoard, setOptimisticReleaseBoard] = React.useState<ReleaseBoard | null>(null)
+  const [teamPickerOpen, setTeamPickerOpen] = React.useState(false)
 
   React.useEffect(() => {
     if (savedMission) setOptimisticMission(null)
@@ -160,10 +181,13 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     () => optimisticReleaseBoard ?? savedReleaseBoard ?? buildDefaultReleaseBoard(workspaceId || 'workspace'),
     [optimisticReleaseBoard, savedReleaseBoard, workspaceId],
   )
-  const releaseBoard = React.useMemo(
-    () => mergeReleaseBoardWithAssets(releaseBoardBase, assetManifest),
-    [assetManifest, releaseBoardBase],
-  )
+  const releaseBoard = React.useMemo(() => {
+    const merged = mergeReleaseBoardWithAssets(releaseBoardBase, assetManifest)
+    return {
+      ...merged,
+      categories: merged.categories.filter((category) => category.id !== 'team'),
+    }
+  }, [assetManifest, releaseBoardBase])
   const releaseBoardBody = React.useMemo(
     () => serializeReleaseBoardBody(releaseBoard),
     [releaseBoard],
@@ -187,8 +211,6 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     : 'Start with a goal, files, or a worker.'
   const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Campaign active' : 'No brief yet')
   const readinessLabel = hasMission ? `${mission.completeness}% ready` : 'Not started'
-  const nextMove = workerReadiness.nextMove
-
   React.useEffect(() => {
     let cancelled = false
     if (!workspaceId) return
@@ -344,6 +366,47 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     [releaseBoard, saveReleaseBoard],
   )
 
+  const saveArtistNetwork = React.useCallback(async (nextNetwork: ArtistNetwork) => {
+    if (!inheritedArtistProfileWorkspaceId) {
+      toast.error('No Artist HQ workspace found for Network.')
+      return
+    }
+    if (!artistNetworkResult.ok) {
+      toast.error(`${artistNetworkResult.error} Open HQ Network to recover it before saving.`)
+      return
+    }
+    await upsertArtistProfileContext({
+      slug: ARTIST_NETWORK_CONTEXT_SLUG,
+      metadata: artistNetworkMetadata(),
+      body: serializeArtistNetworkBody(nextNetwork),
+    })
+  }, [artistNetworkResult, inheritedArtistProfileWorkspaceId, upsertArtistProfileContext])
+
+  const toggleCampaignTeamPerson = React.useCallback(async (person: ArtistNetworkPerson) => {
+    const linked = person.workspaceLinks.some((link) => link.workspaceId === workspaceId)
+    const nextPeople = artistNetwork.people.map((item) => {
+      if (item.id !== person.id) return item
+      return linked
+        ? unlinkNetworkPersonFromWorkspace(item, workspaceId)
+        : linkNetworkPersonToWorkspace(item, {
+            workspaceId,
+            workspaceName: mission.title || 'Campaign',
+            role: item.canHelpWith || item.role || undefined,
+          })
+    })
+    try {
+      await saveArtistNetwork({
+        version: 1,
+        categories: artistNetwork.categories,
+        people: nextPeople,
+        updatedAt: new Date().toISOString(),
+      })
+      toast.success(linked ? 'Removed from release team' : 'Added to release team')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [artistNetwork.categories, artistNetwork.people, mission.title, saveArtistNetwork, workspaceId])
+
   const chooseAndImport = React.useCallback(
     async (kindHint: MissionAssetKindHint = 'any') => {
       if (!hasMission) {
@@ -370,18 +433,6 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
         <section className="relative min-h-[230px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
           <div className="absolute -left-[20%] -top-[40%] h-[600px] w-[600px] rounded-full bg-orange-600/10 blur-[120px]" />
           <div className="absolute -bottom-[40%] -right-[10%] h-[600px] w-[600px] rounded-full bg-indigo-600/5 blur-[120px]" />
-
-          <div className="absolute bottom-7 right-8 hidden w-[28%] rounded-[24px] border border-white/[0.04] bg-white/[0.015] p-4 2xl:block">
-            <p className="mb-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/35">Campaign Context</p>
-            <div className="h-1 overflow-hidden rounded-full bg-white/[0.05]">
-              <div className="h-full rounded-full bg-orange-400" style={{ width: `${mission.completeness}%` }} />
-            </div>
-            <p className="mt-3 text-xs leading-5 text-white/42">
-              {hasMission
-                ? 'The command center is now using this campaign brief as workspace context.'
-                : 'Nothing is required before workers can work. The brief just makes them sharper.'}
-            </p>
-          </div>
 
           <div className="relative z-10 flex min-h-[230px] flex-col justify-between p-6 lg:p-8">
             <div className="flex items-start justify-between gap-4">
@@ -410,23 +461,12 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
 
             <div className="flex flex-col gap-4 border-t border-white/[0.05] pt-4 md:flex-row md:items-end md:justify-between">
               <div className="flex w-full max-w-2xl flex-col gap-4 md:flex-row md:items-end md:gap-8">
-                <div className="w-full max-w-[250px]">
-                  <div className="mb-2 flex justify-between text-[9px] font-medium uppercase tracking-[0.18em] text-white/40">
-                    <span>Brief</span>
-                    <span className="text-white/60">{readinessLabel}</span>
+                <div className="shrink-0">
+                  <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.18em] text-white/35">Brief</p>
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/[0.035] px-2.5 py-1">
+                    <span className={cn('h-1.5 w-1.5 rounded-full', hasMission ? 'bg-emerald-400/80' : 'bg-white/30')} />
+                    <span className="text-[10px] font-medium text-white/55">{readinessLabel}</span>
                   </div>
-                  <div className="h-1 overflow-hidden rounded-full bg-white/[0.04]">
-                    <div className="h-full rounded-full bg-orange-500/80" style={{ width: `${mission.completeness}%` }} />
-                  </div>
-                  <p className="mt-2 text-xs font-medium text-white/72">
-                    {hasMission ? 'Campaign context saved' : 'No campaign brief yet'}
-                  </p>
-                </div>
-                <div className="hidden md:block">
-                  <p className="mb-1 text-[9px] font-medium uppercase tracking-[0.18em] text-white/40">Next Move</p>
-                  <p className="text-xs font-medium text-white/80">
-                    {nextMove}
-                  </p>
                 </div>
               </div>
 
@@ -449,44 +489,16 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
           onSelectCategory={setSelectedReleaseCategoryId}
         />
 
-        <FinalsWidget
-          title="Finals / Campaign Kit"
-          outputs={outputs}
-          scope="campaign"
-          campaignId={workspaceId}
-          loading={outputsLoading}
-          onOpenOutput={(id) => navigate(routes.view.output(id))}
-        />
-
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <CommandCard>
-            <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" />
-            <EmptyCardLine
-              title="No pending approvals"
-              detail={hasMission ? 'Approvals will appear when workflows create review points.' : 'Create a campaign before approval workflows matter.'}
-            />
-          </CommandCard>
+          <TeamCard
+            people={campaignTeam}
+            networkPeople={artistNetwork.people}
+            disabled={!artistNetworkResult.ok || !inheritedArtistProfileWorkspaceId}
+            onOpenPicker={() => setTeamPickerOpen(true)}
+          />
 
           <CommandCard>
-            <SectionTitle icon={CalendarClock} title="Today" meta="Local" />
-            {mission.timeline || mission.releaseDate ? (
-              <div className="relative mt-2.5 space-y-3.5 pl-3.5 before:absolute before:bottom-1 before:left-[5.5px] before:top-1 before:w-px before:bg-white/[0.04]">
-                <TimelineLine time="Now" title={mission.timeline || mission.releaseDate || 'Campaign timeline'} area="Campaign" />
-                <TimelineLine time="Next" title="Ask a worker to turn this into a plan" area="Delegation" />
-              </div>
-            ) : (
-              <EmptyCardLine title="No timeline yet" detail="Add a release date or rough window in the campaign brief." />
-            )}
-          </CommandCard>
-
-          <CommandCard>
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Bot className="h-3 w-3 text-white/40" />
-                <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">Active Workers</h3>
-              </div>
-              <span className="text-[8px] font-medium uppercase tracking-widest text-white/30">Quiet</span>
-            </div>
+            <SectionTitle icon={Bot} title="Active Workers" meta="Quiet" />
 
             <div className="rounded-xl border border-white/[0.03] bg-white/[0.012] p-4">
               <div className="flex items-start gap-3">
@@ -499,6 +511,14 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
                 </div>
               </div>
             </div>
+          </CommandCard>
+
+          <CommandCard>
+            <SectionTitle icon={ShieldCheck} title="Approvals" meta="None" />
+            <EmptyCardLine
+              title="No pending approvals"
+              detail={hasMission ? 'Approvals will appear when workflows create review points.' : 'Create a campaign before approval workflows matter.'}
+            />
           </CommandCard>
         </div>
       </div>
@@ -539,6 +559,15 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
         }}
         onToggleItem={toggleReleaseItem}
       />
+
+      <TeamPickerDialog
+        open={teamPickerOpen}
+        people={artistNetwork.people}
+        campaignPeople={campaignTeam}
+        disabled={!artistNetworkResult.ok || !inheritedArtistProfileWorkspaceId}
+        onOpenChange={setTeamPickerOpen}
+        onTogglePerson={toggleCampaignTeamPerson}
+      />
     </div>
   )
 }
@@ -549,7 +578,7 @@ const releaseCategoryIcons: Record<ReleaseBoardCategory['id'], React.ComponentTy
   setup: Settings2,
   content: ClipboardCheck,
   promotion: Megaphone,
-  team: Users,
+  team: CheckCircle2,
 }
 
 function ReleaseBoardRow({
@@ -563,31 +592,27 @@ function ReleaseBoardRow({
   const percentComplete = totals.total > 0 ? Math.round((totals.done / totals.total) * 100) : 0
 
   return (
-    <CommandCard className="overflow-hidden p-0">
-      <div className="flex items-center justify-between border-b border-white/[0.04] bg-white/[0.01] px-5 py-4">
+    <CommandCard className="p-5">
+      <div className="mb-5 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-          </div>
           <div>
-            <h2 className="text-sm font-medium tracking-wide text-white/90">Launch Sequence</h2>
-            <p className="mt-0.5 text-[11px] text-white/40">{totals.done} of {totals.total} tasks completed</p>
+            <h2 className="text-sm font-medium tracking-wide text-white/90">Release Board</h2>
+            <p className="mt-0.5 text-[11px] text-white/40">{totals.done} of {totals.total} handled</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs font-mono text-emerald-400/80">{percentComplete}%</span>
-          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.05]">
-            <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${percentComplete}%` }} />
+          <span className="text-[11px] font-medium text-emerald-300/80">{percentComplete}%</span>
+          <div className="h-px w-28 overflow-hidden bg-white/[0.08]">
+            <div className="h-full bg-emerald-400 transition-all duration-500" style={{ width: `${percentComplete}%` }} />
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col divide-y divide-white/[0.04] lg:flex-row lg:divide-x lg:divide-y-0">
-        {board.categories.map((category, idx) => (
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        {board.categories.map((category) => (
           <ReleaseBoardTile
             key={category.id}
             category={category}
-            index={idx}
             onClick={() => onSelectCategory(category.id)}
           />
         ))}
@@ -598,11 +623,9 @@ function ReleaseBoardRow({
 
 function ReleaseBoardTile({
   category,
-  index,
   onClick,
 }: {
   category: ReleaseBoardCategory
-  index: number
   onClick: () => void
 }) {
   const Icon = releaseCategoryIcons[category.id] || CheckCircle2
@@ -613,49 +636,31 @@ function ReleaseBoardTile({
     <button
       type="button"
       onClick={onClick}
-      className="group relative flex-1 p-5 text-left transition-all hover:bg-white/[0.02]"
+      className="group rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.025]"
     >
-      <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-      
-      <div className="relative flex h-full flex-col justify-between gap-6">
-        <div className="flex items-start justify-between">
-          <span className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-300',
-            allDone 
-              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]' 
-              : 'border-white/[0.06] bg-white/[0.02] text-white/40 group-hover:border-white/[0.15] group-hover:bg-white/[0.04] group-hover:text-white/80',
-          )}>
-            <Icon className="h-4 w-4" />
-          </span>
-          <span className="text-[10px] font-mono tracking-widest text-white/20 transition-colors group-hover:text-white/40">
-            0{index + 1}
-          </span>
+      <div className="flex min-h-[68px] flex-col justify-between">
+        <div>
+          <div className="mb-2 flex items-center gap-2">
+            <Icon className={cn('h-4 w-4', allDone ? 'text-emerald-300/80' : 'text-white/38 group-hover:text-white/62')} />
+            <p className={cn(
+              'text-sm font-medium transition-colors',
+              allDone ? 'text-white/88' : 'text-white/72 group-hover:text-white/88',
+            )}>
+              {category.label}
+            </p>
+          </div>
         </div>
 
         <div>
-          <p className={cn(
-            "text-sm font-medium tracking-wide transition-colors",
-            allDone ? "text-white/90" : "text-white/70 group-hover:text-white"
-          )}>
-            {category.label}
-          </p>
-          <p className="line-clamp-1 mt-1 text-[11px] text-white/30 transition-colors group-hover:text-white/50">
-            {progress.done}/{progress.total} items
-          </p>
-          
-          <div className="mt-4 flex h-1 gap-1">
-            {category.items.map((item) => (
-              <span
-                key={item.id}
-                className={cn(
-                  'h-full flex-1 rounded-full transition-all duration-300',
-                  item.status === 'done' 
-                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' 
-                    : 'bg-white/[0.08] group-hover:bg-white/[0.15]',
-                )}
-              />
-            ))}
+          <div className="mb-2 h-px overflow-hidden bg-white/[0.08]">
+            <div
+              className={cn('h-full transition-all duration-300', allDone ? 'bg-emerald-300/80' : 'bg-emerald-400/70')}
+              style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
+            />
           </div>
+          <p className="text-[10px] text-white/30">
+            {progress.done}/{progress.total}
+          </p>
         </div>
       </div>
     </button>
@@ -748,15 +753,121 @@ function EmptyCardLine({ title, detail }: { title: string; detail: string }) {
   )
 }
 
-function TimelineLine({ time, title, area }: { time: string; title: string; area: string }) {
+function TeamCard({
+  people,
+  networkPeople,
+  disabled,
+  onOpenPicker,
+}: {
+  people: ArtistNetworkPerson[]
+  networkPeople: ArtistNetworkPerson[]
+  disabled: boolean
+  onOpenPicker: () => void
+}) {
   return (
-    <div className="relative flex gap-3">
-      <span className="absolute -left-[16px] top-1.5 h-1.5 w-1.5 rounded-full bg-white/20 ring-[3px] ring-[#0A0A0A]" />
-      <span className="w-9 shrink-0 pt-0.5 text-[9px] font-medium tracking-widest text-white/30">{time}</span>
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-xs font-medium text-white/80">{title}</span>
-        <span className="text-[8px] font-medium uppercase tracking-[0.2em] text-white/30">{area}</span>
+    <CommandCard>
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Users className="h-3 w-3 text-white/40" />
+          <h3 className="text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">Team</h3>
+        </div>
+        <button
+          type="button"
+          onClick={onOpenPicker}
+          disabled={disabled}
+          aria-label="Add people from Network"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.035] text-white/58 hover:bg-white/[0.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
       </div>
-    </div>
+      {people.length === 0 ? (
+        <EmptyCardLine
+          title="No release team yet"
+          detail={networkPeople.length > 0 ? 'Add people from HQ Network who are helping with this release.' : 'Add people in HQ Network, then tag them to this release.'}
+        />
+      ) : (
+        <div className="space-y-2">
+          {people.slice(0, 4).map((person) => (
+            <div key={person.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.03] bg-white/[0.012] px-3 py-2">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-white/76">{person.name}</p>
+                <p className="mt-0.5 truncate text-[11px] text-white/36">{person.canHelpWith || person.role || person.contact || 'Release helper'}</p>
+              </div>
+            </div>
+          ))}
+          {people.length > 4 ? (
+            <p className="text-[10px] text-white/32">+{people.length - 4} more</p>
+          ) : null}
+        </div>
+      )}
+    </CommandCard>
+  )
+}
+
+function TeamPickerDialog({
+  open,
+  people,
+  campaignPeople,
+  disabled,
+  onOpenChange,
+  onTogglePerson,
+}: {
+  open: boolean
+  people: ArtistNetworkPerson[]
+  campaignPeople: ArtistNetworkPerson[]
+  disabled: boolean
+  onOpenChange: (open: boolean) => void
+  onTogglePerson: (person: ArtistNetworkPerson) => void
+}) {
+  const campaignPersonIds = React.useMemo(() => new Set(campaignPeople.map((person) => person.id)), [campaignPeople])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[78vh] overflow-hidden border-white/[0.08] bg-[#070707] text-white shadow-modal-small sm:max-w-[620px]">
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-base font-medium text-white/88">Add From Network</DialogTitle>
+          <DialogDescription className="text-xs text-white/38">
+            Tag existing HQ Network people who are helping with this release.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="min-h-0 overflow-y-auto pr-1">
+          {people.length === 0 ? (
+            <EmptyCardLine title="No Network people yet" detail="Add people in HQ Network first, then tag them to the release." />
+          ) : (
+            <div className="space-y-2">
+              {people.map((person) => {
+                const selected = campaignPersonIds.has(person.id)
+                return (
+                  <button
+                    key={person.id}
+                    type="button"
+                    onClick={() => onTogglePerson(person)}
+                    disabled={disabled}
+                    className={cn(
+                      'flex w-full items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                      selected
+                        ? 'border-emerald-400/20 bg-emerald-400/10'
+                        : 'border-white/[0.045] bg-white/[0.012] hover:bg-white/[0.035]',
+                    )}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-white/80">{person.name}</span>
+                      <span className="mt-0.5 block truncate text-[11px] text-white/38">{person.canHelpWith || person.role || person.contact || 'No role added'}</span>
+                    </span>
+                    <span className={cn(
+                      'shrink-0 rounded-full px-2 py-1 text-[10px] font-medium',
+                      selected ? 'bg-emerald-400/14 text-emerald-200' : 'bg-white/[0.04] text-white/42',
+                    )}>
+                      {selected ? 'Added' : 'Add'}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

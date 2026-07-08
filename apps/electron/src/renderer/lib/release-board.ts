@@ -35,7 +35,6 @@ const DEFAULT_CATEGORIES: Omit<ReleaseBoardCategory, 'items'>[] = [
   { id: 'content', label: 'Content', detail: 'Short-form pieces and copy' },
   { id: 'setup', label: 'Release Setup', detail: 'Links, metadata, and delivery' },
   { id: 'promotion', label: 'Promotion', detail: 'Audience push and spend' },
-  { id: 'team', label: 'Team', detail: 'People, approvals, and owners' },
 ]
 
 const DEFAULT_ITEMS: Record<ReleaseBoardCategory['id'], ReleaseBoardItem[]> = {
@@ -70,12 +69,7 @@ const DEFAULT_ITEMS: Record<ReleaseBoardCategory['id'], ReleaseBoardItem[]> = {
     { id: 'playlist-targets', label: 'Playlist targets', status: 'needed' },
     { id: 'press-list', label: 'Press list', status: 'needed', assetKinds: ['press-doc'] },
   ],
-  team: [
-    { id: 'owners', label: 'Owners named', status: 'needed' },
-    { id: 'collaborators', label: 'Collaborators noted', status: 'needed' },
-    { id: 'approvals', label: 'Approval path', status: 'needed' },
-    { id: 'handoff-notes', label: 'Handoff notes', status: 'needed' },
-  ],
+  team: [],
 }
 
 export function buildDefaultReleaseBoard(workspaceId: string): ReleaseBoard {
