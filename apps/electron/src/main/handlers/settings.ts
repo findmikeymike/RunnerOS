@@ -219,8 +219,21 @@ async function verifySocialBrowserProfile(
   status: SocialAccountStatusResult,
 ): Promise<SocialBrowserVerification | null> {
   const instanceId = socialBrowserInstanceId(ref)
-  const instance = browserPaneManager.getInstance(instanceId)
+  let instance = browserPaneManager.getInstance(instanceId)
+  if (!instance) {
+    browserPaneManager.createInstance(instanceId, {
+      show: true,
+      partition: socialBrowserPartition(ref),
+    })
+    instance = browserPaneManager.getInstance(instanceId)
+  }
   if (!instance) return null
+
+  browserPaneManager.focus(instanceId)
+  if (!isSocialPlatformUrl(ref.platform, instance.currentUrl)) {
+    await browserPaneManager.navigate(instanceId, socialLoginUrl(ref.platform))
+    await wait(1500)
+  }
 
   const page = await browserPaneManager.evaluate(instanceId, `(() => {
     const links = Array.from(document.querySelectorAll('a[href]')).slice(0, 500).map((a) => a.href)
@@ -275,6 +288,18 @@ function hasLoggedInSignal(platform: string, text: string, urls: string[]): bool
       || lower.includes('create') || lower.includes('your channel')
   }
   return false
+}
+
+function isSocialPlatformUrl(platform: string, value: string): boolean {
+  if (platform === 'instagram') return /(^|\/\/)(www\.)?instagram\.com\//i.test(value)
+  if (platform === 'tiktok') return /(^|\/\/)(www\.)?tiktok\.com\//i.test(value)
+  if (platform === 'x') return /(^|\/\/)(www\.)?(x|twitter)\.com\//i.test(value)
+  if (platform === 'youtube') return /(^|\/\/)(www\.)?youtube\.com\//i.test(value)
+  return false
+}
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function pageHasHandle(text: string, urls: string[], expectedHandle: string): boolean {
