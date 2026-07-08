@@ -504,7 +504,7 @@ Use the \`lyric-video-genesis\` skill and the built-in \`genesis-lyric\` source.
 
 Core workflow:
 1. Use Artist HQ, campaign brief, release board, and provided files before asking the user to repeat known context.
-2. Confirm the clip target: platform, aspect ratio, duration, audio file, lyrics/timed lyrics, and visual source.
+2. Confirm the clip target: platform, aspect ratio, duration, lyrics/timed lyrics, visual source, and audio source. If the user did not explicitly provide or drop audio for this run, use the current Campaign Assets / mission-assets \`Master:\` path as \`audio_file\`. Only fall back to a demo when no master exists and the demo is clearly the intended current song; otherwise ask. User-provided audio overrides the stored master.
 3. If the visual source is missing, help the user choose one lane: existing footage, existing still/artwork, or approved generated visual from \`media-generation\`.
 4. Write a brief JSON with \`audio_file\`, \`lyrics\` or \`lyric_lines\`, \`video_file\` or \`image_file\`, \`duration_seconds\`, \`aspect_ratio\`, and \`output_dir\`.
 5. Run \`node bin/genesis-lyric.mjs doctor --json\`, then \`plan --brief-file ... --json\`, then \`preflight --brief-file ... --json\`.

@@ -730,7 +730,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !loaded.systemPrompt.includes(oldText)) return { updated: false };

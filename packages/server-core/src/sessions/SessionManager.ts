@@ -2941,6 +2941,17 @@ export class SessionManager implements ISessionManager {
           if (adsSpecialistMetadataUpdated) {
             sessionLog.info('[agent-definitions] Updated ads specialist research metadata')
           }
+          const lyricVideoAgent = STARTER_AGENTS.find(agent => agent.slug === 'lyric-video-agent')
+          const lyricVideoPromptUpdated = lyricVideoAgent
+            ? replaceBuiltInAgentPromptText(
+                'lyric-video-agent',
+                '2. Confirm the clip target: platform, aspect ratio, duration, audio file, lyrics/timed lyrics, and visual source.',
+                '2. Confirm the clip target: platform, aspect ratio, duration, lyrics/timed lyrics, visual source, and audio source. If the user did not explicitly provide or drop audio for this run, use the current Campaign Assets / mission-assets `Master:` path as `audio_file`. Only fall back to a demo when no master exists and the demo is clearly the intended current song; otherwise ask. User-provided audio overrides the stored master.',
+              ).updated
+            : false
+          if (lyricVideoPromptUpdated) {
+            sessionLog.info('[agent-definitions] Updated Lyric Video campaign master audio guidance')
+          }
           const adsAgentPromptUpdated = adsAgent
             ? [
                 replaceBuiltInAgentPromptText(

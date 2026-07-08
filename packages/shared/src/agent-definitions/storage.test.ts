@@ -694,6 +694,8 @@ body
     expect(lyricVideoAgent?.metadata.sources).toContain('genesis-lyric')
     expect(lyricVideoAgent?.metadata.optionalSources).toContain('media-generation')
     expect(lyricVideoAgent?.systemPrompt).toContain('single song lyric clips')
+    expect(lyricVideoAgent?.systemPrompt).toContain('Campaign Assets / mission-assets `Master:` path as `audio_file`')
+    expect(lyricVideoAgent?.systemPrompt).toContain('User-provided audio overrides the stored master')
     expect(lyricVideoAgent?.systemPrompt).toContain('node bin/genesis-lyric.mjs doctor')
     expect(lyricVideoAgent?.systemPrompt).toContain('Do not claim success until')
   })
@@ -1158,6 +1160,28 @@ body
     expect(loadGlobalAgent('concierge', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew shipped paragraph\nAfter')
     expect(replaceBuiltInAgentPromptText('writer', 'old shipped paragraph', 'new shipped paragraph', { globalAgentsDir }).updated).toBe(false)
     expect(loadGlobalAgent('writer', { globalAgentsDir })!.systemPrompt).toBe('old shipped paragraph')
+  })
+
+  test('replaceBuiltInAgentPromptText can patch Lyric Video prompt guidance', () => {
+    writeGlobalAgent(
+      {
+        slug: 'lyric-video-agent',
+        metadata: {
+          name: 'Lyric Video',
+          description: 'Creates lyric clips.',
+        },
+        systemPrompt: 'Before\nold lyric prompt line\nAfter',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(replaceBuiltInAgentPromptText(
+      'lyric-video-agent',
+      'old lyric prompt line',
+      'new lyric prompt line',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+    expect(loadGlobalAgent('lyric-video-agent', { globalAgentsDir })!.systemPrompt).toBe('Before\nnew lyric prompt line\nAfter')
   })
 
   test('replaceBuiltInAgentMetadata can patch Industry Hunter array metadata without touching other agents', () => {
