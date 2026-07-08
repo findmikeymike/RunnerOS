@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildProsodySelection, replaceSelectedRange } from './prosody-selection'
+import { buildProsodySelection } from './prosody-selection'
 
 describe('prosody selection helpers', () => {
   test('accepts a selected final word at the end of a line', () => {
@@ -27,12 +27,12 @@ describe('prosody selection helpers', () => {
     expect(buildProsodySelection(value, start, start + 'fire'.length)).toBeNull()
   })
 
-  test('replaces only the original selected range', () => {
+  test('keeps selected range metadata for non-mutating rhyme lookup', () => {
     const value = 'I set myself on fire'
     const start = value.indexOf('fire')
     const selection = buildProsodySelection(value, start, start + 'fire'.length)
 
-    expect(selection).toBeDefined()
-    expect(replaceSelectedRange(value, selection!, 'wire')).toBe('I set myself on wire')
+    expect(selection?.start).toBe(start)
+    expect(selection?.end).toBe(start + 'fire'.length)
   })
 })

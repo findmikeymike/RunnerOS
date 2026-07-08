@@ -31,12 +31,3 @@ export function buildProsodySelection(
     line: value.slice(lineStart, lineEnd).trim(),
   }
 }
-
-export function replaceSelectedRange(
-  value: string,
-  selection: Pick<ProsodySelectionInfo, 'selectedText' | 'start' | 'end'>,
-  replacement: string,
-): string {
-  if (value.slice(selection.start, selection.end) !== selection.selectedText) return value
-  return `${value.slice(0, selection.start)}${replacement}${value.slice(selection.end)}`
-}

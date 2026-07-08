@@ -28,7 +28,6 @@ import {
 } from '@/lib/lab-worker-routing'
 import {
   buildProsodySelection,
-  replaceSelectedRange,
   type ProsodySelectionInfo,
 } from '@/lib/prosody-selection'
 import {
@@ -429,6 +428,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const [prosodySelection, setProsodySelection] = React.useState<ProsodySelectionState | null>(null)
   const [prosodyResult, setProsodyResult] = React.useState<ProsodyLookupResult | null>(null)
   const [prosodyBusy, setProsodyBusy] = React.useState(false)
+  const [prosodyCopiedWord, setProsodyCopiedWord] = React.useState<string | null>(null)
   const [showEmptySections, setShowEmptySections] = React.useState(true)
   const [activeAgentSectionId, setActiveAgentSectionId] = React.useState<string | null>(null)
   const [agentOutput, setAgentOutput] = React.useState('')
@@ -502,6 +502,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
       sectionId,
       anchor: selectionAnchor(node, point),
     })
+    setProsodyCopiedWord(null)
   }, [])
 
   const capturePadSelection = React.useCallback((
@@ -666,6 +667,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
       prosodyLookupRunIdRef.current += 1
       setProsodyBusy(false)
       setProsodyResult(null)
+      setProsodyCopiedWord(null)
       return
     }
 
@@ -673,6 +675,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     prosodyLookupRunIdRef.current = runId
     setProsodyBusy(true)
     setProsodyResult(null)
+    setProsodyCopiedWord(null)
 
     const timer = window.setTimeout(async () => {
       try {
@@ -695,23 +698,14 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     }
   }, [prosodySelection])
 
-  const applyProsodyRhyme = React.useCallback((item: ProsodyRhymeItem) => {
-    if (!prosodySelection) return
-    if (prosodySelection.source === 'rough') {
-      setRoughText((current) => replaceSelectedRange(current, prosodySelection, item.word))
-    } else if (prosodySelection.source === 'remember') {
-      setRememberText((current) => replaceSelectedRange(current, prosodySelection, item.word))
-    } else if (prosodySelection.sectionId) {
-      setSections((current) => current.map((section) => (
-        section.id === prosodySelection.sectionId
-          ? { ...section, text: replaceSelectedRange(section.text, prosodySelection, item.word) }
-          : section
-      )))
+  const copyProsodyRhyme = React.useCallback(async (item: ProsodyRhymeItem) => {
+    try {
+      await navigator.clipboard?.writeText(item.word)
+      setProsodyCopiedWord(item.word)
+    } catch {
+      setProsodyCopiedWord(null)
     }
-    setProsodySelection(null)
-    setProsodyResult(null)
-    setProsodyBusy(false)
-  }, [prosodySelection])
+  }, [])
 
   const visibleSections = showEmptySections
     ? sections
@@ -729,7 +723,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
         >
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="min-w-0 truncate text-[9px] font-medium uppercase tracking-[0.16em] text-white/36">
-              Rhymes · {prosodySelection.selectedText.trim()}
+              Forward rhymes · {prosodySelection.selectedText.trim()}
             </div>
             <button
               type="button"
@@ -761,10 +755,11 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                   <button
                     key={`perfect-${item.word}`}
                     type="button"
-                    onClick={() => applyProsodyRhyme(item)}
+                    title="Copy rhyme"
+                    onClick={() => copyProsodyRhyme(item)}
                     className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1 text-[11px] text-white/62 hover:bg-white/[0.06] hover:text-white/86"
                   >
-                    {item.word}
+                    {prosodyCopiedWord === item.word ? 'Copied' : item.word}
                   </button>
                 ))}
               </div>
@@ -780,10 +775,10 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     key={`slant-${item.word}-${item.kind}`}
                     type="button"
                     title={item.kind}
-                    onClick={() => applyProsodyRhyme(item)}
+                    onClick={() => copyProsodyRhyme(item)}
                     className="inline-flex items-center gap-1 rounded-full border border-[#fb923c]/20 bg-[#fb923c]/10 px-2.5 py-1 text-[11px] text-[#f8d7a4]/78 hover:bg-[#fb923c]/15 hover:text-[#ffe2b5]"
                   >
-                    <span>{item.word}</span>
+                    <span>{prosodyCopiedWord === item.word ? 'Copied' : item.word}</span>
                     <span className="text-[8px] uppercase tracking-[0.1em] text-[#fbbf24]/45">{item.kind}</span>
                   </button>
                 ))}
