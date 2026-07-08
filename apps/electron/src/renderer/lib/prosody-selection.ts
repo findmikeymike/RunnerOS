@@ -6,6 +6,7 @@ export interface ProsodySelectionInfo {
 }
 
 const TRAILING_LINE_END = /^[\s.,!?;:)"'’”\]-]*$/
+const MAX_PROSODY_SELECTION_WORDS = 4
 
 export function buildProsodySelection(
   value: string,
@@ -17,6 +18,7 @@ export function buildProsodySelection(
   const selectedText = value.slice(selectionStart, selectionEnd)
   if (!selectedText.trim()) return null
   if (!/[A-Za-z]/.test(selectedText)) return null
+  if (selectedText.trim().split(/\s+/).filter(Boolean).length > MAX_PROSODY_SELECTION_WORDS) return null
 
   const lineStart = value.lastIndexOf('\n', Math.max(0, selectionStart - 1)) + 1
   const nextLineBreak = value.indexOf('\n', selectionEnd)
