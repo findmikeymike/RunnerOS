@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -113,6 +113,27 @@ test('updates, statuses, and deletes an X profile with normalized JSON', () => {
   assert.equal(liveStatus.live.delegated, true);
   assert.equal(liveStatus.live.code, 'RUNNER_CDP_DELEGATED');
   assert.equal(liveStatus.live.browserPlan.accountVerification.verificationTargetKnown, true);
+  assert.equal(liveStatus.live.browserPlan.accountVerification.identityProbe.normalizedExpectedHandle, '@artist-main');
+
+  mkdirSync(path.join(home, 'sessions', 'x', 'artist01'), { recursive: true });
+  const verified = JSON.parse(run([
+    'profile', 'status', 'x',
+    '--profile', 'artist01',
+    '--live',
+    '--verification-json', JSON.stringify({
+      platform: 'x',
+      profile: 'artist01',
+      loggedIn: true,
+      visibleIdentity: { handle: '@artist-main' },
+    }),
+    '--json',
+  ], env));
+  assert.equal(verified.ready, true);
+  assert.equal(verified.profileStatus, 'verified');
+  assert.equal(verified.loggedIn, true);
+  assert.equal(verified.matchesExpected, true);
+  assert.equal(verified.evidence.type, 'live_check');
+  assert.equal(verified.evidence.visibleIdentity.handle, '@artist-main');
 
   const login = JSON.parse(run(['profile', 'login', 'x', '--profile', 'artist01', '--json'], env));
   assert.equal(login.ok, true);

@@ -25,6 +25,7 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - Update profile: `node src/social.mjs profile update <platform> --profile <profile> --handle <handle> --account-url <url> --json`
 - Delete profile metadata: `node src/social.mjs profile delete <platform> --profile <profile> --json`
 - With default `runner-cdp`, profile login/status live checks return a delegated browser plan for RunnerOS native browser tools instead of driving the browser inside the CLI process.
+- Runner browser tools can complete delegated readiness checks by passing non-secret observed identity back with `node src/social.mjs profile status <platform> --profile <profile> --live --verification-result <json-file> --json`.
 - Profile status JSON includes UI-ready fields: `profileStatus`, `severity`, `message`, `nextAction`, `lastCheckedAt`, and redacted `evidence`.
 - Instagram dry-run post: `node src/social.mjs post instagram --profile <profile> --text "<caption>" --media <image> --dry-run --json`
 - Instagram dry-run comment: `node src/social.mjs comment instagram --profile <profile> --url "<url>" --text "<comment>" --dry-run --json`
@@ -49,6 +50,7 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - Use `--json` and parse structured output instead of scraping text.
 - Dry-run every post, comment, or DM before live execution.
 - With `runner-cdp`, treat CLI output as the action contract/plan. After approval, run `social execute` on the saved dry-run result to re-check provenance and account-verification readiness, then execute the returned handoff through Runner's native browser tools. Do not ask for a second approval in the browser when the visible account and draft match the approved dry-run; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
+- Verification result files must contain only non-secret evidence, for example `{ "loggedIn": true, "visibleIdentity": { "handle": "@artist" } }`. Never write cookies, tokens, passwords, or 2FA codes.
 - Do not run a live post, comment, or DM unless the user has explicitly approved the exact platform, profile, payload, and target URL/recipient.
 - Do not default to Computer Use. In RunnerOS, use the guarded CLI handoff plus native `browser_tool`; standalone fallback engines are optional.
 - Use Playwright only when explicitly running the standalone fallback engine outside Runner.
