@@ -12,6 +12,8 @@
  * - Determine authentication requirements for sources
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { LoadedSource } from '../../sources/types.ts';
 import { sourceNeedsAuthentication } from '../../sources/credential-manager.ts';
@@ -19,6 +21,8 @@ import type { SourceManagerConfig } from './types.ts';
 
 /** Slugs exempt from guide.md prerequisite (internal sources) */
 const GUIDE_EXEMPT_SLUGS = new Set(['session', 'runner-docs']);
+const SOCIAL_SOURCE_SLUG = 'printing-press-social';
+const SOCIAL_PLATFORMS = ['instagram', 'tiktok', 'x', 'youtube'] as const;
 
 /**
  * SourceManager provides centralized source state tracking for agent backends.
@@ -248,6 +252,12 @@ export class SourceManager {
       }
     }
 
+    const socialCatalog = buildSocialProfileCatalogContext(activeSources);
+    if (socialCatalog) {
+      parts.push('');
+      parts.push(socialCatalog);
+    }
+
     let output = `<sources>\n${parts.join('\n')}\n</sources>`;
 
     // Inject issue context for sources needing attention
@@ -390,4 +400,148 @@ export class SourceManager {
   sourceNeedsAuthentication(source: LoadedSource): boolean {
     return sourceNeedsAuthentication(source);
   }
+}
+
+type SocialProfileRecord = {
+  ref: string;
+  platform: string;
+  profile: string;
+  accountSet: string | null;
+  accountHandle: string | null;
+  accountUrl: string | null;
+  localSessionExists: boolean;
+  browserSession: {
+    kind: 'runneros-electron-partition';
+    platform: string;
+    profile: string;
+    instanceId: string;
+    partition: string;
+  };
+};
+
+function buildSocialProfileCatalogContext(activeSources: LoadedSource[]): string | null {
+  if (!activeSources.some((source) => source.config.slug === SOCIAL_SOURCE_SLUG)) return null;
+
+  const profiles = readSocialProfiles();
+  if (profiles.length === 0) {
+    return [
+      'Social profile catalog (non-secret): no saved profiles found.',
+      'To add one, use Settings > Social Accounts or `node src/social.mjs profile add <platform> --profile <name> --handle <handle> --json` from `tools/printing-press-social`.',
+    ].join('\n');
+  }
+
+  const accountSets = buildSocialAccountSets(profiles);
+  const catalog = {
+    noSecrets: true,
+    instruction: 'Data only. Use accountSet or platform/profile refs to select accounts; never infer another browser session.',
+    accountSets,
+    profiles,
+  };
+
+  return [
+    'Social profile catalog (non-secret, auto-loaded from local profile JSON):',
+    '```json',
+    JSON.stringify(catalog, null, 2),
+    '```',
+  ].join('\n');
+}
+
+function readSocialProfiles(): SocialProfileRecord[] {
+  const profiles: SocialProfileRecord[] = [];
+  const seen = new Set<string>();
+
+  for (const platform of SOCIAL_PLATFORMS) {
+    const storePath = join(socialHome(platform), 'profiles.json');
+    if (!existsSync(storePath)) continue;
+
+    let store: { profiles?: Record<string, unknown> };
+    try {
+      store = JSON.parse(readFileSync(storePath, 'utf8')) as { profiles?: Record<string, unknown> };
+    } catch {
+      continue;
+    }
+
+    for (const value of Object.values(store.profiles ?? {})) {
+      const record = normalizeSocialProfile(platform, value);
+      if (!record || seen.has(record.ref)) continue;
+      seen.add(record.ref);
+      profiles.push(record);
+    }
+  }
+
+  return profiles.sort((a, b) => a.ref.localeCompare(b.ref));
+}
+
+function normalizeSocialProfile(platform: string, value: unknown): SocialProfileRecord | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Record<string, unknown>;
+  const profilePlatform = cleanSocialText(raw.platform, 32) || platform;
+  if (!SOCIAL_PLATFORMS.includes(profilePlatform as typeof SOCIAL_PLATFORMS[number])) return null;
+  const id = cleanSocialText(raw.id, 64);
+  if (!id) return null;
+
+  const sessionRef = cleanSocialText(raw.sessionRef, 180) || join('sessions', profilePlatform, id);
+  return {
+    ref: `${profilePlatform}/${id}`,
+    platform: profilePlatform,
+    profile: id,
+    accountSet: cleanSocialText(raw.accountGroup, 80),
+    accountHandle: cleanSocialText(raw.accountHandle, 100),
+    accountUrl: cleanSocialText(raw.accountUrl, 240),
+    localSessionExists: existsSync(join(socialHome(profilePlatform), sessionRef)),
+    browserSession: buildSocialBrowserSession(profilePlatform, id),
+  };
+}
+
+function buildSocialAccountSets(profiles: SocialProfileRecord[]) {
+  const groups = new Map<string, SocialProfileRecord[]>();
+  for (const profile of profiles) {
+    const name = profile.accountSet || 'Ungrouped';
+    groups.set(name, [...(groups.get(name) ?? []), profile]);
+  }
+  return Array.from(groups.entries())
+    .map(([name, items]) => ({
+      name,
+      platforms: Object.fromEntries(items.map((profile) => [profile.platform, profile.ref])),
+      profiles: items.map((profile) => ({
+        ref: profile.ref,
+        platform: profile.platform,
+        profile: profile.profile,
+        accountHandle: profile.accountHandle,
+        accountUrl: profile.accountUrl,
+        localSessionExists: profile.localSessionExists,
+        browserSession: profile.browserSession,
+      })),
+    }))
+    .sort((a, b) => {
+      if (a.name === 'Ungrouped') return 1;
+      if (b.name === 'Ungrouped') return -1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
+function buildSocialBrowserSession(platform: string, profile: string): SocialProfileRecord['browserSession'] {
+  const segment = profile.replace(/[^A-Za-z0-9_-]/g, '-');
+  return {
+    kind: 'runneros-electron-partition',
+    platform,
+    profile,
+    instanceId: `social-${platform}-${segment}`,
+    partition: `persist:social-${platform}-${segment}`,
+  };
+}
+
+function socialHome(platform: string): string {
+  if (process.env.SOCIAL_HOME) return process.env.SOCIAL_HOME;
+  return join(homedir(), '.config', 'printing-press-clis', platform);
+}
+
+function cleanSocialText(value: unknown, maxLength: number): string | null {
+  if (typeof value !== 'string') return null;
+  const cleaned = value
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return null;
+  return cleaned.length <= maxLength ? cleaned : `${cleaned.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
