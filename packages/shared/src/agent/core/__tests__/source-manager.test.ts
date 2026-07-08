@@ -5,6 +5,9 @@
  * ClaudeAgent and CodexAgent.
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { SourceManager } from '../source-manager.ts';
 import type { LoadedSource } from '../../../sources/types.ts';
 
@@ -230,6 +233,56 @@ describe('SourceManager', () => {
       expect(formatted).not.toContain('3d-cell-forge (no tools)');
       expect(formatted).toContain('Local path (cli-tool): /Users/example/3DCellForge');
       expect(formatted).toContain('Use the Bash tool for documented local CLI commands');
+    });
+
+    it('should auto-inject a non-secret social profile catalog for printing press social', () => {
+      const socialHome = mkdtempSync(join(tmpdir(), 'runneros-social-catalog-'));
+      const previousSocialHome = process.env.SOCIAL_HOME;
+      process.env.SOCIAL_HOME = socialHome;
+      try {
+        mkdirSync(join(socialHome, 'sessions', 'instagram', 'music_ig'), { recursive: true });
+        writeFileSync(join(socialHome, 'profiles.json'), `${JSON.stringify({
+          version: 1,
+          profiles: {
+            'instagram:music_ig': {
+              id: 'music_ig',
+              platform: 'instagram',
+              sessionRef: 'sessions/instagram/music_ig',
+              accountGroup: 'Music Fan Page',
+              accountHandle: '@musicfan',
+              accountUrl: 'https://www.instagram.com/musicfan/',
+              sessionPath: '/secret/should-not-leak',
+              token: 'secret-token',
+            },
+          },
+        })}\n`);
+
+        sourceManager.setAllSources([
+          createMockSource('printing-press-social', {
+            type: 'local',
+            local: { path: '/repo/tools/printing-press-social', format: 'cli-tool' },
+            tagline: 'Social publishing',
+          }),
+        ]);
+        sourceManager.updateActiveState([], [], ['printing-press-social']);
+
+        const formatted = sourceManager.formatSourceState();
+
+        expect(formatted).toContain('Social profile catalog');
+        expect(formatted).toContain('"name": "Music Fan Page"');
+        expect(formatted).toContain('"instagram": "instagram/music_ig"');
+        expect(formatted).toContain('"accountHandle": "@musicfan"');
+        expect(formatted).toContain('"localSessionExists": true');
+        expect(formatted).toContain('"instanceId": "social-instagram-music_ig"');
+        expect(formatted).toContain('"partition": "persist:social-instagram-music_ig"');
+        expect(formatted).not.toContain('sessionPath');
+        expect(formatted).not.toContain('secret-token');
+        expect(formatted).not.toContain('/secret/should-not-leak');
+      } finally {
+        if (previousSocialHome === undefined) delete process.env.SOCIAL_HOME;
+        else process.env.SOCIAL_HOME = previousSocialHome;
+        rmSync(socialHome, { recursive: true, force: true });
+      }
     });
   });
 
