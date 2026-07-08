@@ -5,12 +5,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import subprocess
 import sys
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Any
 
 
@@ -65,9 +66,17 @@ def read_json(path: str | None) -> dict[str, Any]:
     if not p.exists():
         emit({"ok": False, "error": f"Brief file not found: {p}"}, status=1)
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        parsed = json.loads(p.read_text(encoding="utf-8"))
     except Exception as exc:
         emit({"ok": False, "error": f"Could not parse brief JSON: {exc}", "brief_file": str(p)}, status=1)
+    if not isinstance(parsed, dict):
+        emit({
+            "ok": False,
+            "code": "invalid_brief",
+            "error": "Brief JSON must be an object.",
+            "brief_file": str(p),
+        }, status=1)
+    return parsed
 
 
 def path_from(value: Any) -> Path | None:
@@ -106,7 +115,10 @@ def clean_text(value: Any) -> str:
 
 
 def parse_float(value: Any) -> float:
-    return float(value)
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        raise ValueError("number must be finite")
+    return parsed
 
 
 def safe_float(value: Any, default: float) -> float:
@@ -171,11 +183,31 @@ def numeric_blockers(brief: dict[str, Any], args: argparse.Namespace) -> list[di
     return blockers
 
 
+def path_blockers(brief: dict[str, Any]) -> list[dict[str, str]]:
+    blockers: list[dict[str, str]] = []
+    raw_run_id = brief.get("run_id")
+    if raw_run_id not in (None, ""):
+        run_id = str(raw_run_id)
+        posix_path = Path(run_id)
+        windows_path = PureWindowsPath(run_id)
+        if (
+            posix_path.is_absolute()
+            or windows_path.is_absolute()
+            or ".." in posix_path.parts
+            or ".." in windows_path.parts
+        ):
+            blockers.append({
+                "code": "invalid_run_id",
+                "message": "run_id must stay inside output_dir; do not use absolute paths or parent directory segments.",
+            })
+    return blockers
+
+
 def target_duration(brief: dict[str, Any], args: argparse.Namespace) -> float:
     explicit = brief_value(brief, args, "duration_seconds")
     if explicit:
         try:
-            return max(0.1, float(explicit))
+            return max(0.1, parse_float(explicit))
         except (TypeError, ValueError):
             pass
 
@@ -196,7 +228,7 @@ def target_duration(brief: dict[str, Any], args: argparse.Namespace) -> float:
     max_end = 0.0
     for line in lines:
         try:
-            max_end = max(max_end, float(line.get("end_time", line.get("end", 0.0)) or 0.0))
+            max_end = max(max_end, parse_float(line.get("end_time", line.get("end", 0.0)) or 0.0))
         except (TypeError, ValueError):
             pass
     if max_end > 0:
@@ -255,7 +287,7 @@ def maybe_align_lines(lines: list[dict[str, Any]], brief: dict[str, Any], audio_
             lines,
             str(audio_path),
             model_name=str(brief.get("alignment_model") or "base"),
-            min_confidence=float(brief.get("alignment_min_confidence") or 0.5),
+            min_confidence=safe_float(brief.get("alignment_min_confidence"), 0.5),
         )
         aligned = [
             {
@@ -440,7 +472,7 @@ def build_preflight(brief: dict[str, Any], args: argparse.Namespace) -> dict[str
     image = path_from(brief_value(brief, args, "image_file"))
     lines = normalized_lyric_lines(brief, duration)
     aspect = requested_aspect(brief)
-    blockers: list[dict[str, str]] = numeric_blockers(brief, args)
+    blockers: list[dict[str, str]] = numeric_blockers(brief, args) + path_blockers(brief)
     warnings: list[dict[str, str]] = []
     if aspect not in ASPECT_RESOLUTIONS:
         blockers.append({

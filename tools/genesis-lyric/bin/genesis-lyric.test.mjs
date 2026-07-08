@@ -28,6 +28,13 @@ function briefFile(extra = {}) {
   return file;
 }
 
+function rawBriefFile(contents) {
+  const dir = mkdtempSync(join(tmpdir(), 'runneros-genesis-lyric-test-'));
+  const file = join(dir, 'brief.json');
+  writeFileSync(file, contents);
+  return file;
+}
+
 describe('runneros genesis lyric wrapper', () => {
   it('prefers bundled uv runtime when CRAFT_UV is provided', () => {
     const dir = mkdtempSync(join(tmpdir(), 'runneros-genesis-lyric-test-'));
@@ -97,6 +104,26 @@ describe('runneros genesis lyric wrapper', () => {
     const payload = JSON.parse(result.stdout);
     assert.ok(payload.blockers.some((blocker) => blocker.code === 'invalid_numeric'));
     assert.ok(payload.blockers.some((blocker) => blocker.code === 'invalid_lyric_timing'));
+  });
+
+  it('preflight blocks non-object brief JSON without traceback', () => {
+    const result = run(['preflight', '--brief-file', rawBriefFile('[]')]);
+    assert.notEqual(result.status, 0);
+    assert.equal(result.stderr, '');
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.code, 'invalid_brief');
+  });
+
+  it('preflight blocks non-finite numeric values and unsafe run ids', () => {
+    const result = run(['preflight', '--brief-file', briefFile({
+      duration_seconds: 'NaN',
+      run_id: '../../escape',
+    })]);
+    assert.notEqual(result.status, 0);
+    assert.equal(result.stderr, '');
+    const payload = JSON.parse(result.stdout);
+    assert.ok(payload.blockers.some((blocker) => blocker.code === 'invalid_numeric'));
+    assert.ok(payload.blockers.some((blocker) => blocker.code === 'invalid_run_id'));
   });
 
   it('render stops without approval', () => {
