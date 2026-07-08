@@ -248,8 +248,12 @@ async function runExecute(args) {
 
   const approved = readApprovedActionFile(actionFile);
   const { action, browserPlan } = approved;
-  if (flags['expected-action-id'] && flags['expected-action-id'] !== action.actionId) {
-    throw new CliError(`Action id mismatch: expected ${flags['expected-action-id']}, got ${action.actionId}`, 'ACTION_ID_MISMATCH');
+  const expectedActionId = flags['expected-action-id'];
+  if (!expectedActionId || expectedActionId === true) {
+    throw new CliError('execute needs --expected-action-id <act_...>', 'EXPECTED_ACTION_ID_REQUIRED');
+  }
+  if (expectedActionId !== action.actionId) {
+    throw new CliError(`Action id mismatch: expected ${expectedActionId}, got ${action.actionId}`, 'ACTION_ID_MISMATCH');
   }
   if (!action.options?.dryRun) {
     throw new CliError('execute only accepts action files produced by a dry-run result', 'ACTION_NOT_DRY_RUN');
@@ -259,15 +263,15 @@ async function runExecute(args) {
   const engine = flags.engine || process.env.SOCIAL_BROWSER_ENGINE || DEFAULT_BROWSER_ENGINE;
   if (engine === 'runner-cdp') {
     const result = {
-      ok: false,
-      status: 'failed',
+      ok: true,
+      status: 'delegated',
       command: `execute.${action.platform}`,
       actionId: action.actionId,
       platform: action.platform,
       profile: action.profile,
       action,
       browserPlan,
-      error: 'runner-cdp execution is delegated to RunnerOS native browser tools after account verification and approval.',
+      message: 'runner-cdp execution is delegated to RunnerOS native browser tools after account verification and approval.',
       code: 'RUNNER_CDP_DELEGATED',
       next: [
         'Open the browser session named in browserPlan.sessionPath.',
@@ -276,7 +280,7 @@ async function runExecute(args) {
       ],
     };
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    process.exit(1);
+    return;
   }
 
   const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
@@ -456,7 +460,7 @@ Commands:
   social repl
   social assets --asset-root ./assets --platform instagram --json
   social content --content-root ./content --json
-  social execute --action-file ./dry-run-result.json --confirm yes --json
+  social execute --action-file ./dry-run-result.json --expected-action-id act_... --confirm yes --json
   social profile add instagram --profile artist01 --json
   social profile add tiktok --profile creator01 --json
   social profile add x --profile artist01 --json

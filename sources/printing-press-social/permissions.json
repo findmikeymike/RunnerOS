@@ -29,7 +29,7 @@
       "comment": "Dry-run social DM commands only"
     },
     {
-      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+\\S+(?:\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+)?\\s+--confirm\\s+yes\\s+--json$",
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+\\S+\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--confirm\\s+yes\\s+--json$",
       "comment": "Execute approved dry-run social handoff through the guarded Runner handoff command"
     }
   ],
