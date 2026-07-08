@@ -106,6 +106,23 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
 
   server.handle(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS, async (_ctx, input: SocialAccountStatusInput) => {
     const ref = assertSocialRef(input)
+    if (input.live && deps.browserPaneManager) {
+      const current = await runSocialJson([
+        'profile', 'status', ref.platform,
+        '--profile', ref.profile,
+        '--json',
+      ]) as SocialAccountStatusResult
+      const verification = await verifySocialBrowserProfile(deps.browserPaneManager, ref, current)
+      if (verification) {
+        return runSocialJson([
+          'profile', 'status', ref.platform,
+          '--profile', ref.profile,
+          '--live',
+          '--verification-json', JSON.stringify(verification),
+          '--json',
+        ])
+      }
+    }
     return runSocialJson([
       'profile', 'status', ref.platform,
       '--profile', ref.profile,
@@ -136,6 +153,25 @@ type SocialAccountCommandResult = {
   localSessionExists?: unknown
   data?: Record<string, unknown>
   [key: string]: unknown
+}
+
+type SocialAccountStatusResult = SocialAccountCommandResult & {
+  accountHandle?: unknown
+  accountUrl?: unknown
+}
+
+type SocialBrowserVerification = {
+  platform: string
+  profile: string
+  source: 'runner-electron-browser'
+  loggedIn: boolean
+  visibleIdentity: {
+    handle: string | null
+    accountUrl: string | null
+    rawText: string
+    url: string
+  }
+  checkedAt: string
 }
 
 function assertSocialRef(input: SocialAccountRef): { platform: string; profile: string } {
@@ -175,6 +211,93 @@ function socialLoginUrl(platform: string): string {
   if (platform === 'x') return 'https://x.com/'
   if (platform === 'youtube') return 'https://www.youtube.com/'
   return 'https://www.google.com/'
+}
+
+async function verifySocialBrowserProfile(
+  browserPaneManager: NonNullable<HandlerDeps['browserPaneManager']>,
+  ref: { platform: string; profile: string },
+  status: SocialAccountStatusResult,
+): Promise<SocialBrowserVerification | null> {
+  const instanceId = socialBrowserInstanceId(ref)
+  const instance = browserPaneManager.getInstance(instanceId)
+  if (!instance) return null
+
+  const page = await browserPaneManager.evaluate(instanceId, `(() => {
+    const links = Array.from(document.querySelectorAll('a[href]')).slice(0, 500).map((a) => a.href)
+    return {
+      url: location.href,
+      title: document.title,
+      text: (document.body?.innerText || '').slice(0, 50000),
+      links,
+    }
+  })()`) as { url?: string; title?: string; text?: string; links?: string[] } | null
+  if (!page) return null
+
+  const expectedHandle = normalizeHandle(status.accountHandle)
+  const expectedUrl = normalizeComparableUrl(status.accountUrl)
+  const rawText = String(page.text || '')
+  const urls = [String(page.url || ''), ...(Array.isArray(page.links) ? page.links : [])]
+  const hasExpectedUrl = expectedUrl ? urls.some((url) => normalizeComparableUrl(url) === expectedUrl) : false
+  const hasExpectedHandle = expectedHandle ? pageHasHandle(rawText, urls, expectedHandle) : false
+  const loggedIn = hasLoggedInSignal(ref.platform, rawText, urls)
+
+  return {
+    platform: ref.platform,
+    profile: ref.profile,
+    source: 'runner-electron-browser',
+    loggedIn,
+    visibleIdentity: {
+      handle: hasExpectedHandle ? `@${expectedHandle}` : null,
+      accountUrl: hasExpectedUrl ? String(status.accountUrl || page.url || '') : null,
+      rawText,
+      url: String(page.url || ''),
+    },
+    checkedAt: new Date().toISOString(),
+  }
+}
+
+function hasLoggedInSignal(platform: string, text: string, urls: string[]): boolean {
+  const lower = text.toLowerCase()
+  if (platform === 'instagram') {
+    return urls.some((url) => /instagram\.com\/(direct|accounts\/edit|create)/i.test(url))
+      || /\b(home|messages|notifications|create|profile)\b/i.test(text)
+  }
+  if (platform === 'x') {
+    return urls.some((url) => /x\.com\/(compose|home|messages|notifications|settings)/i.test(url))
+      || /\b(post|messages|notifications|premium)\b/i.test(text)
+  }
+  if (platform === 'tiktok') {
+    return urls.some((url) => /tiktok\.com\/(upload|messages|setting|creator-center)/i.test(url))
+      || /\b(upload|messages|profile|following)\b/i.test(text)
+  }
+  if (platform === 'youtube') {
+    return urls.some((url) => /youtube\.com\/(feed|account|channel|@|upload|studio)/i.test(url))
+      || lower.includes('create') || lower.includes('your channel')
+  }
+  return false
+}
+
+function pageHasHandle(text: string, urls: string[], expectedHandle: string): boolean {
+  const escaped = expectedHandle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  if (new RegExp(`(^|[^a-z0-9_])@?${escaped}([^a-z0-9_]|$)`, 'i').test(text)) return true
+  return urls.some((url) => new RegExp(`/${escaped}([/?#]|$)`, 'i').test(url))
+}
+
+function normalizeHandle(value: unknown): string | null {
+  const normalized = typeof value === 'string' ? value.trim().replace(/^@+/, '').toLowerCase() : ''
+  return normalized || null
+}
+
+function normalizeComparableUrl(value: unknown): string | null {
+  if (!value) return null
+  try {
+    const url = new URL(String(value))
+    url.hash = ''
+    url.search = ''
+    return `${url.hostname.replace(/^www\./, '').toLowerCase()}${url.pathname.replace(/\/+$/, '')}`
+  } catch {
+    return null
+  }
 }
 
 function socialToolDir(): string {
