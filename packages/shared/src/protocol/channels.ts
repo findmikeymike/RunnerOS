@@ -222,6 +222,12 @@ export const RPC_CHANNELS = {
     GET_SERVER_CONFIG: 'settings:getServerConfig',
     SET_SERVER_CONFIG: 'settings:setServerConfig',
     GET_SERVER_STATUS: 'settings:getServerStatus',
+    SOCIAL_ACCOUNTS_LIST: 'settings:socialAccounts:list',
+    SOCIAL_ACCOUNTS_ADD: 'settings:socialAccounts:add',
+    SOCIAL_ACCOUNTS_UPDATE: 'settings:socialAccounts:update',
+    SOCIAL_ACCOUNTS_DELETE: 'settings:socialAccounts:delete',
+    SOCIAL_ACCOUNTS_LOGIN: 'settings:socialAccounts:login',
+    SOCIAL_ACCOUNTS_STATUS: 'settings:socialAccounts:status',
   },
   pi: {
     GET_API_KEY_PROVIDERS: 'pi:getApiKeyProviders',

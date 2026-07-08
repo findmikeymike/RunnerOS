@@ -40,7 +40,10 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     description: 'Apps and services',
     icon: KeyRound,
     landing: 'secrets',
-    pages: [{ id: 'secrets', label: 'Services' }],
+    pages: [
+      { id: 'secrets', label: 'Services' },
+      { id: 'social-accounts', label: 'Social Accounts' },
+    ],
   },
   {
     id: 'messaging',

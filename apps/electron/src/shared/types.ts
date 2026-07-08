@@ -794,6 +794,14 @@ export interface ElectronAPI {
   getNetworkProxySettings(): Promise<NetworkProxySettings | undefined>
   setNetworkProxySettings(settings: NetworkProxySettings): Promise<void>
 
+  // Social accounts
+  listSocialAccounts(): Promise<SocialAccountsDoctorResult>
+  addSocialAccount(input: SocialAccountInput): Promise<SocialAccountCommandResult>
+  updateSocialAccount(input: SocialAccountInput): Promise<SocialAccountCommandResult>
+  deleteSocialAccount(input: SocialAccountDeleteInput): Promise<SocialAccountCommandResult>
+  loginSocialAccount(input: SocialAccountProfileRef): Promise<SocialAccountCommandResult>
+  getSocialAccountStatus(input: SocialAccountStatusInput): Promise<SocialAccountProfileStatus>
+
   refreshBadge(): Promise<void>
   setDockIconWithBadge(dataUrl: string): Promise<void>
   onBadgeDraw(callback: (data: { count: number; iconDataUrl: string }) => void): () => void
@@ -1146,6 +1154,80 @@ export interface MessagingPlatformRuntimeInfo {
   identity?: string
   lastError?: string
   updatedAt: number
+}
+
+export type SocialPlatform = 'instagram' | 'tiktok' | 'x' | 'youtube'
+
+export interface SocialAccountProfileRef {
+  platform: SocialPlatform
+  profile: string
+}
+
+export interface SocialAccountInput extends SocialAccountProfileRef {
+  handle?: string
+  accountUrl?: string
+}
+
+export interface SocialAccountDeleteInput extends SocialAccountProfileRef {}
+
+export interface SocialAccountStatusInput extends SocialAccountProfileRef {
+  live?: boolean
+}
+
+export interface SocialAccountProfileStatus extends SocialAccountProfileRef {
+  id: string
+  accountHandle: string | null
+  accountUrl: string | null
+  sessionPath: string | null
+  confirmPolicy: string | null
+  browserEngine: string | null
+  profileStatus: string | null
+  severity: 'info' | 'warning' | 'error' | string | null
+  message: string | null
+  nextAction: string | null
+  lastCheckedAt: string | null
+  ready: boolean
+  localSessionExists: boolean
+  liveChecked: boolean
+  loggedIn: boolean | null
+  matchesExpected: boolean | null
+  evidence: Record<string, unknown> | null
+  live: Record<string, unknown> | null
+  error: string | null
+}
+
+export interface SocialAccountsDoctorResult {
+  ok: boolean
+  status: string
+  command: 'doctor'
+  liveChecked: boolean
+  summary: {
+    totalProfiles: number
+    readyProfiles: number
+    loginNeeded: number
+    unverified: number
+    wrongAccount: number
+    failed: number
+  }
+  platforms: Array<{
+    platform: SocialPlatform
+    ok: boolean
+    profiles: SocialAccountProfileStatus[]
+  }>
+}
+
+export interface SocialAccountCommandResult {
+  ok: boolean
+  status: string
+  command: string
+  platform?: SocialPlatform
+  profile?: string
+  deleted?: boolean
+  data?: Record<string, unknown>
+  browserPlan?: Record<string, unknown>
+  code?: string
+  message?: string
+  error?: string
 }
 
 /** Event payloads broadcast from the WhatsApp subprocess to the UI. */

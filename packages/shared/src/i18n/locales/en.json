@@ -942,6 +942,8 @@
   "settings.server.token": "Token",
   "settings.shortcuts.description": "Keyboard shortcuts",
   "settings.shortcuts.title": "Shortcuts",
+  "settings.socialAccounts.description": "Instagram, TikTok, X, YouTube",
+  "settings.socialAccounts.title": "Social Accounts",
   "settings.tools.builtInBrowser": "Built-in browser",
   "settings.tools.builtInBrowserDesc": "Disable if you use external browser tools like Playwright, Puppeteer, or browser MCP servers.",
   "settings.tools.title": "Tools",

@@ -234,6 +234,7 @@ const SETTINGS_ICONS: Record<SettingsSubpage, string> = {
   app: 'ToggleRight',
   ai: 'Sparkles',
   secrets: 'KeyRound',
+  'social-accounts': 'Share2',
   appearance: 'Palette',
   input: 'Keyboard',
   workspace: 'Building2',
