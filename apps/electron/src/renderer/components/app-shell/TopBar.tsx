@@ -253,7 +253,7 @@ export function TopBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <TopBarButton onClick={onToggleSidebar} aria-label={t("menu.toggleSidebar")}>
-              <PanelLeftRounded className="h-[18px] w-[18px] text-foreground/70" />
+              <PanelLeftRounded className="h-[18px] w-[18px] text-white/62" />
             </TopBarButton>
           </TooltipTrigger>
           <TooltipContent side="bottom">{t("menu.toggleSidebar")}</TooltipContent>
@@ -378,7 +378,7 @@ export function TopBar({
           <Tooltip>
             <TooltipTrigger asChild>
               <TopBarButton onClick={onBack} disabled={!canGoBack} aria-label={t("common.back")}>
-                <Icons.ChevronLeft className="h-[18px] w-[18px] text-foreground/70" strokeWidth={1.5} />
+                <Icons.ChevronLeft className="h-[18px] w-[18px] text-white/62" strokeWidth={1.5} />
               </TopBarButton>
             </TooltipTrigger>
             <TooltipContent side="bottom">{t("common.back")} {goBackHotkey}</TooltipContent>
@@ -387,7 +387,7 @@ export function TopBar({
           <Tooltip>
             <TooltipTrigger asChild>
               <TopBarButton onClick={onForward} disabled={!canGoForward} aria-label={t("common.forward")}>
-                <Icons.ChevronRight className="h-[18px] w-[18px] text-foreground/70" strokeWidth={1.5} />
+                <Icons.ChevronRight className="h-[18px] w-[18px] text-white/62" strokeWidth={1.5} />
               </TopBarButton>
             </TooltipTrigger>
             <TooltipContent side="bottom">{t("common.forward")} {goForwardHotkey}</TooltipContent>
@@ -404,7 +404,7 @@ export function TopBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label={t("sidebar.library")} className="h-[26px] w-[26px] rounded-lg">
-              <Icons.Wrench className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.Wrench className="h-4 w-4 text-white/54" strokeWidth={1.5} />
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="end" minWidth="min-w-44">
@@ -425,7 +425,7 @@ export function TopBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <TopBarButton onClick={onOpenOutputs} aria-label="Outputs" className="h-[26px] w-[26px] rounded-lg">
-              <Icons.PackageOpen className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.PackageOpen className="h-4 w-4 text-white/54" strokeWidth={1.5} />
             </TopBarButton>
           </TooltipTrigger>
           <TooltipContent side="bottom">Outputs</TooltipContent>
@@ -434,7 +434,7 @@ export function TopBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <TopBarButton onClick={onOpenSettings} aria-label={t("menu.settings")} className="h-[26px] w-[26px] rounded-lg">
-              <Icons.Settings className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.Settings className="h-4 w-4 text-white/54" strokeWidth={1.5} />
             </TopBarButton>
           </TooltipTrigger>
           <TooltipContent side="bottom">{t("menu.settings")}</TooltipContent>
@@ -442,7 +442,7 @@ export function TopBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label={t("menu.addPanelMenu")} className="ml-1 h-[26px] w-[26px] rounded-lg">
-              <Icons.Plus className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.Plus className="h-4 w-4 text-white/54" strokeWidth={1.5} />
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="end" minWidth="min-w-56">
@@ -461,7 +461,7 @@ export function TopBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label={t("menu.helpAndDocs")} className="h-[26px] w-[26px] rounded-lg">
-              <Icons.HelpCircle className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.HelpCircle className="h-4 w-4 text-white/54" strokeWidth={1.5} />
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="end" minWidth="min-w-48">
