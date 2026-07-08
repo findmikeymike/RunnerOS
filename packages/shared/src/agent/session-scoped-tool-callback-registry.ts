@@ -86,7 +86,16 @@ export interface SessionScopedToolCallbacks {
   /** Resolve a status display name to its ID. */
   resolveStatusFn?: (status: string) => import('@craft-agent/session-tools-core').ResolvedStatusResult;
   /** Send a message to another session (inter-session messaging). */
-  sendAgentMessageFn?: (sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>) => Promise<void>;
+  sendAgentMessageFn?: (
+    sessionId: string,
+    message: string,
+    attachments?: Array<{ path: string; name?: string }>,
+    options?: { deliveryMode?: 'normal' | 'passive' },
+  ) => Promise<void>;
+  /** Delegate a bounded task to a saved agent and return a receipt/result. */
+  messageAgentFn?: (
+    input: import('@craft-agent/session-tools-core').MessageAgentToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').MessageAgentToolResult>;
   /**
    * Activate a source in the running session (source_test auto-enable flow).
    * Wired by SessionManager to the per-session onSourceActivationRequest callback
@@ -133,6 +142,10 @@ export interface SessionScopedToolCallbacks {
   createOutputFn?: (
     input: import('@craft-agent/session-tools-core').CreateOutputToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').CreateOutputResult>;
+  /** Promote an output to the workspace Finals registry. */
+  promoteOutputToFinalFn?: (
+    input: import('@craft-agent/session-tools-core').PromoteOutputToFinalToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').PromoteOutputToFinalResult>;
   /** Apply a safe visual surface operation to the current session Canvas. */
   applyVisualSurfaceEventFn?: (
     input: import('@craft-agent/session-tools-core').VisualSurfaceToolInput,

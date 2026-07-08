@@ -13,6 +13,7 @@ import {
   createBackendFromConnection,
   resolveBackendContext,
   createBackendFromResolvedContext,
+  resolveModelForProvider,
   cleanupSourceRuntimeArtifacts,
   providerTypeToAgentProvider,
   type AgentBackend,
@@ -96,6 +97,8 @@ import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
+import { AgentMessageService } from '../agent-messaging/AgentMessageService'
+import { agentMatchesSearch } from './agent-search'
 import {
   createAgentMemorySidecarApplyMemory,
   createMemorySidecarReviewer,
@@ -1192,9 +1195,9 @@ interface ManagedSession {
   sharedId?: string
   // Model to use for this session (overrides global config if set)
   model?: string
-  // LLM connection slug for this session (locked after first message)
+  // LLM connection slug for this session.
   llmConnection?: string
-  // Whether the connection is locked (cannot be changed after first agent creation)
+  // Whether the session has selected a sticky connection. Users may still switch deliberately.
   connectionLocked?: boolean
   // Thinking level for this session ('off', 'think', 'max')
   thinkingLevel?: ThinkingLevel
@@ -1374,6 +1377,29 @@ function resolveSupportsBranching(managed: ManagedSession): boolean {
 const DEFAULT_TOKEN_USAGE = {
   inputTokens: 0, outputTokens: 0, totalTokens: 0,
   contextTokens: 0, costUsd: 0,
+}
+
+const AGENT_MESSAGE_DEPTH_LABEL_PREFIX = 'agent-message-depth:'
+
+function getAgentMessageDepth(labels: string[] | undefined): number {
+  const label = labels?.find((value) => value.startsWith(AGENT_MESSAGE_DEPTH_LABEL_PREFIX))
+  if (!label) return 0
+  const parsed = Number.parseInt(label.slice(AGENT_MESSAGE_DEPTH_LABEL_PREFIX.length), 10)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+}
+
+function getCompletedToolUseSummary(managed: ManagedSession | undefined): { count: number; names: string[] } {
+  if (!managed) return { count: 0, names: [] }
+  const names = managed.messages
+    .filter((message) => (
+      message.role === 'tool' &&
+      message.toolStatus === 'completed' &&
+      message.isError !== true &&
+      typeof message.toolName === 'string' &&
+      message.toolName.length > 0
+    ))
+    .map((message) => message.toolName!)
+  return { count: names.length, names: Array.from(new Set(names)).sort() }
 }
 
 /**
@@ -2466,6 +2492,8 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'ads-agent'
             || a.slug === 'youtube-research-agent'
             || a.slug === 'hypermotion-agent'
+            || a.slug === 'lottie-animation-agent'
+            || a.slug === 'video-editor-agent'
             || a.slug === 'shopify-agent'
             || a.slug === 'print-agent'
             || a.slug === 'update-system-agent',
@@ -2863,6 +2891,30 @@ user a clickable link to where the thing now lives.`
   // Flush a specific session immediately (call on session close/switch)
   async flushSession(sessionId: string): Promise<void> {
     await sessionPersistenceQueue.flush(sessionId)
+  }
+
+  private async deliverPassiveAgentMessage(managed: ManagedSession, message: string): Promise<void> {
+    await this.ensureMessagesLoaded(managed)
+
+    const userMessage: Message = {
+      id: generateMessageId(),
+      role: 'user',
+      content: message,
+      timestamp: this.monotonic(),
+      displayIntent: 'agent-message-passive',
+    }
+
+    managed.messages.push(userMessage)
+    managed.lastMessageRole = 'user'
+    this.persistSession(managed)
+    await this.flushSession(managed.id)
+
+    this.sendEvent({
+      type: 'user_message',
+      sessionId: managed.id,
+      message: userMessage,
+      status: 'accepted',
+    }, managed.workspace.id)
   }
 
   // Flush all pending sessions (call on app quit)
@@ -3766,7 +3818,7 @@ user a clickable link to where the thing now lives.`
    * Creates the appropriate backend agent based on LLM connection.
    *
    * Provider resolution order:
-   * 1. session.llmConnection (locked after first message)
+   * 1. session.llmConnection
    * 2. workspace.defaults.defaultLlmConnection
    * 3. global defaultLlmConnection
    * 4. fallback: no connection configured
@@ -3783,8 +3835,7 @@ user a clickable link to where the thing now lives.`
       })
       const connection = backendContext.connection
 
-      // Lock the connection after first resolution
-      // This ensures the session always uses the same provider
+      // Stick to the resolved connection until the user deliberately changes it.
       if (connection && !managed.connectionLocked) {
         managed.llmConnection = connection.slug
         managed.connectionLocked = true
@@ -4789,6 +4840,28 @@ user a clickable link to where the thing now lives.`
             output: input,
           })
         },
+        promoteOutputToFinalFn: async (input) => {
+          const outputService = new OutputService({
+            getWorkspaceRootPath: (workspaceId) => {
+              if (workspaceId !== managed.workspace.id) {
+                throw new Error(`Workspace not available for this session: ${workspaceId}`)
+              }
+              return managed.workspace.rootPath
+            },
+            emitOutputsUpdated: (workspaceId) => {
+              this.eventSink?.(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+            },
+          })
+          try {
+            const final = await outputService.promoteToFinal(managed.workspace.id, {
+              ...input,
+              promotedBy: 'agent',
+            })
+            return { ok: true, finalId: final.id }
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
+        },
         applyVisualSurfaceEventFn: async (input) => {
           const outputService = new OutputService({
             getWorkspaceRootPath: (workspaceId) => {
@@ -4894,15 +4967,7 @@ user a clickable link to where the thing now lives.`
             })
           }
           if (options?.search?.trim()) {
-            const needle = options.search.trim().toLowerCase()
-            agents = agents.filter(agent => [
-              agent.slug,
-              agent.name,
-              agent.description,
-              agent.inputs ?? '',
-              agent.outputs ?? '',
-              agent.tags.join(' '),
-            ].join(' ').toLowerCase().includes(needle))
+            agents = agents.filter(agent => agentMatchesSearch(agent, options.search!))
           }
 
           agents.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name))
@@ -5169,7 +5234,22 @@ user a clickable link to where the thing now lives.`
 
           return { resolved: null, available }
         },
-        sendAgentMessageFn: async (sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>) => {
+        sendAgentMessageFn: async (
+          sessionId: string,
+          message: string,
+          attachments?: Array<{ path: string; name?: string }>,
+          options?: { deliveryMode?: 'normal' | 'passive' },
+        ) => {
+          const target = this.sessions.get(sessionId)
+          if (!target) throw new Error(`Session ${sessionId} not found`)
+          if (target.workspace.id !== managed.workspace.id) {
+            throw new Error(`Session "${sessionId}" is not in this workspace.`)
+          }
+
+          if (options?.deliveryMode === 'passive' && attachments?.length) {
+            throw new Error('Passive agent messages do not support attachments.')
+          }
+
           // Build FileAttachment[] from paths (same pattern as spawn_session)
           let fileAttachments: FileAttachment[] | undefined
           if (attachments?.length) {
@@ -5191,7 +5271,58 @@ user a clickable link to where the thing now lives.`
             if (builtAttachments.length > 0) fileAttachments = builtAttachments
           }
 
+          if (options?.deliveryMode === 'passive') {
+            await this.deliverPassiveAgentMessage(target, message)
+            return
+          }
+
           await this.sendMessage(sessionId, message, fileAttachments)
+        },
+        messageAgentFn: async (input) => {
+          const service = new AgentMessageService({
+            createSession: (wsId, opts) => this.createSession(wsId, opts).then((session) => ({ id: session.id })),
+            resolveAgentSessionOptions: (wsId, agentSlug) => this.resolveAgentSessionOptions(wsId, agentSlug),
+            sendMessage: (sessionId, prompt, options) => this.sendMessage(
+              sessionId,
+              prompt,
+              undefined,
+              undefined,
+              options?.skillSlugs?.length ? { skillSlugs: options.skillSlugs } : undefined,
+            ),
+            abortSession: async (sessionId) => {
+              const target = this.sessions.get(sessionId)
+              if (!target) return
+              target.agent?.forceAbort(AbortReason.UserStop)
+            },
+            getLastAssistantText: (sessionId) => this.getLastAssistantTextForSession(sessionId),
+            getSessionToolUseSummary: (sessionId) => getCompletedToolUseSummary(this.sessions.get(sessionId)),
+            getWorkspaceRootPath: (workspaceId) => {
+              const workspace = getWorkspaceByNameOrId(workspaceId)
+              if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+              return workspace.rootPath
+            },
+            resolveUsableSourceSlugs: (workspaceId, sourceSlugs) => {
+              const workspace = getWorkspaceByNameOrId(workspaceId)
+              if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+              const sources = getSourcesBySlugs(workspace.rootPath, sourceSlugs)
+              const usable = new Set(sources.filter(isSourceUsable).map((source) => source.config.slug))
+              return {
+                usable: sourceSlugs.filter((slug) => usable.has(slug)),
+                unavailable: sourceSlugs.filter((slug) => !usable.has(slug)),
+              }
+            },
+          })
+
+          return service.messageAgent({
+            workspaceId: managed.workspace.id,
+            parentSessionId: managed.id,
+            parentRunId: managed.launchReceipt?.workflow?.runId,
+            parentStepId: managed.launchReceipt?.workflow?.stepId,
+            callerAgentSlug: managed.spawnedFromAgent?.agentSlug,
+            callerAgentName: managed.spawnedFromAgent?.agentName,
+            parentPermissionMode: managed.permissionMode ?? 'ask',
+            depth: getAgentMessageDepth(managed.labels),
+          }, input)
         },
         createAgentFn: async (input) => {
           const {
@@ -5664,7 +5795,7 @@ user a clickable link to where the thing now lives.`
 
   /**
    * Set the LLM connection for a session.
-   * Can only be changed before the first message is sent (connection is locked after).
+   * Can only be changed between turns.
    * This determines which LLM provider/backend will be used for this session.
    */
   async setSessionConnection(sessionId: string, connectionSlug: string): Promise<void> {
@@ -5674,10 +5805,9 @@ user a clickable link to where the thing now lives.`
       throw new Error(`Session ${sessionId} not found`)
     }
 
-    // Only allow changing connection before first message (session hasn't started)
-    if (managed.messages && managed.messages.length > 0) {
-      sessionLog.warn(`setSessionConnection: cannot change connection after session has started (${sessionId})`)
-      throw new Error('Cannot change connection after session has started')
+    if (managed.isProcessing) {
+      sessionLog.warn(`setSessionConnection: cannot change connection while session is processing (${sessionId})`)
+      throw new Error('Stop the current response before switching models.')
     }
 
     // Validate connection exists
@@ -5689,6 +5819,12 @@ user a clickable link to where the thing now lives.`
     }
 
     managed.llmConnection = connectionSlug
+    managed.connectionLocked = true
+    if (managed.agent) {
+      sessionLog.info(`setSessionConnection: rebuilding agent for session ${sessionId} after connection switch to ${connectionSlug}`)
+      managed.agent.dispose()
+      managed.agent = null
+    }
     // Persist in-memory state directly to avoid race with pending queue writes
     this.persistSession(managed)
     await this.flushSession(managed.id)
@@ -6442,37 +6578,70 @@ user a clickable link to where the thing now lives.`
   /**
    * Update the model for a session
    * Pass null to clear the session-specific model (will use global config)
-   * @param connection - Optional LLM connection slug (only applied if not already locked)
+   * @param connection - Optional LLM connection slug.
    */
   async updateSessionModel(sessionId: string, workspaceId: string, model: string | null, connection?: string): Promise<void> {
     sessionLog.info(`[updateSessionModel] sessionId=${sessionId}, model=${model}, connection=${connection}`)
     const managed = this.sessions.get(sessionId)
     if (managed) {
-      managed.model = model ?? undefined
-      // Also update connection if provided and not already locked
-      if (connection && !managed.connectionLocked) {
+      if (managed.isProcessing) {
+        sessionLog.warn(`[updateSessionModel] Rejecting model change while session is processing (${sessionId})`)
+        throw new Error('Stop the current response before switching models.')
+      }
+
+      const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
+      const previousConnectionSlug = managed.llmConnection
+      const effectiveConnectionSlug = connection ?? managed.llmConnection
+      const sessionConn = resolveSessionConnection(effectiveConnectionSlug, wsConfig?.defaults?.defaultLlmConnection)
+      const provider = providerTypeToAgentProvider(sessionConn?.providerType || 'anthropic')
+      const requestedModel = model ?? undefined
+      const resolvedModel = resolveModelForProvider(provider, requestedModel, sessionConn)
+      const modelToPersist = requestedModel && resolvedModel !== requestedModel ? undefined : requestedModel
+
+      if (requestedModel && !modelToPersist) {
+        sessionLog.warn(`[updateSessionModel] Ignoring incompatible model "${requestedModel}" for connection "${effectiveConnectionSlug ?? 'default'}"; using "${resolvedModel}"`)
+      }
+
+      managed.model = modelToPersist
+      const connectionChanged = !!connection && connection !== previousConnectionSlug
+      // Deliberate user/provider switches are allowed; rebuild the backend below.
+      if (connection) {
         managed.llmConnection = connection
+        managed.connectionLocked = true
       }
       // Persist to disk (include connection if it was updated)
-      const updates: { model?: string; llmConnection?: string } = { model: model ?? undefined }
-      if (connection && !managed.connectionLocked) {
+      const updates: { model?: string; llmConnection?: string } = { model: modelToPersist }
+      if (connection) {
         updates.llmConnection = connection
       }
       await updateSessionMetadata(managed.workspace.rootPath, sessionId, updates)
+
+      if (connectionChanged && managed.agent) {
+        sessionLog.info(`[updateSessionModel] Rebuilding agent for session ${sessionId} after connection switch ${previousConnectionSlug ?? '(none)'} -> ${connection}`)
+        managed.agent.dispose()
+        managed.agent = null
+      }
+
       // Update agent model if it already exists (takes effect on next query)
       if (managed.agent) {
         // Fallback chain: session model > workspace default > connection default
-        const wsConfig = loadWorkspaceConfig(managed.workspace.rootPath)
-        const sessionConn = resolveSessionConnection(managed.llmConnection, wsConfig?.defaults?.defaultLlmConnection)
-        const effectiveModel = model ?? wsConfig?.defaults?.model ?? sessionConn?.defaultModel!
+        const effectiveModel = modelToPersist ?? wsConfig?.defaults?.model ?? sessionConn?.defaultModel!
         sessionLog.info(`[updateSessionModel] Calling agent.setModel(${effectiveModel}) [agent exists=${!!managed.agent}, connectionLocked=${managed.connectionLocked}]`)
         managed.agent.setModel(effectiveModel)
       } else {
         sessionLog.info(`[updateSessionModel] No agent yet, model will apply on next agent creation`)
       }
       // Notify renderer of the model change
-      this.sendEvent({ type: 'session_model_changed', sessionId, model }, managed.workspace.id)
-      sessionLog.info(`Session ${sessionId} model updated to: ${model ?? '(global config)'}`)
+      if (connectionChanged) {
+        this.sendEvent({
+          type: 'connection_changed',
+          sessionId,
+          connectionSlug: connection,
+          supportsBranching: resolveSupportsBranching(managed),
+        }, managed.workspace.id)
+      }
+      this.sendEvent({ type: 'session_model_changed', sessionId, model: modelToPersist ?? null }, managed.workspace.id)
+      sessionLog.info(`Session ${sessionId} model updated to: ${modelToPersist ?? '(global config)'}`)
     }
   }
 

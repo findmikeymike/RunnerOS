@@ -198,6 +198,13 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.settings.GET_NETWORK_PROXY,
   RPC_CHANNELS.settings.SET_NETWORK_PROXY,
 
+  // secrets — local credential setup and OS-backed helper installation
+  RPC_CHANNELS.secrets.LIST,
+  RPC_CHANNELS.secrets.SAVE,
+  RPC_CHANNELS.secrets.DELETE,
+  RPC_CHANNELS.secrets.ZERO_STATUS,
+  RPC_CHANNELS.secrets.INSTALL_ZERO,
+
   // server config — local embedded server settings
   RPC_CHANNELS.settings.GET_SERVER_CONFIG,
   RPC_CHANNELS.settings.SET_SERVER_CONFIG,
@@ -228,6 +235,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.sessions.DELETE,
   RPC_CHANNELS.sessions.GET_MESSAGES,
   RPC_CHANNELS.sessions.SEND_MESSAGE,
+  RPC_CHANNELS.sessions.QUEUE_CANVAS_VISUAL_REVIEW,
   RPC_CHANNELS.sessions.CANCEL,
   RPC_CHANNELS.sessions.KILL_SHELL,
   RPC_CHANNELS.sessions.RESPOND_TO_PERMISSION,
@@ -495,6 +503,8 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.outputs.LIST,
   RPC_CHANNELS.outputs.GET,
   RPC_CHANNELS.outputs.DELETE,
+  RPC_CHANNELS.outputs.PROMOTE_TO_FINAL,
+  RPC_CHANNELS.outputs.REMOVE_FROM_FINAL,
   RPC_CHANNELS.outputs.GET_VISUAL_BOARD,
   RPC_CHANNELS.outputs.SAVE_VISUAL_BOARD,
   RPC_CHANNELS.outputs.APPLY_VISUAL_SURFACE_EVENT,

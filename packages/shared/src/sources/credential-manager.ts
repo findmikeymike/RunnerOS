@@ -23,9 +23,12 @@ import {
   type SlackService,
   type MicrosoftService,
 } from './types.ts';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildAuthorizationHeader } from './api-tools.ts';
 import type { CredentialId, StoredCredential } from '../credentials/types.ts';
 import { getCredentialManager } from '../credentials/index.ts';
+import { CONFIG_DIR } from '../config/paths.ts';
 import { CraftOAuth, getMcpBaseUrl, prepareMcpOAuth, exchangeMcpOAuth, type OAuthCallbacks, type OAuthTokens } from '../auth/oauth.ts';
 import { type OAuthSessionContext } from '../auth/types.ts';
 import { OAUTH_RELAY_CALLBACK_URL, wrapPreparedOAuthFlowForRelay } from '../auth/oauth-relay.ts';
@@ -96,6 +99,12 @@ export type MultiHeaderCredential = Record<string, string>;
 export type ApiCredential = string | BasicAuthCredential | MultiHeaderCredential;
 
 const GOOGLE_ADS_SOURCE_SLUG = 'google-ads';
+const SHARED_GOOGLE_SOURCE_SLUGS = new Set(['gmail', 'google-calendar', 'google-drive']);
+
+interface GoogleOAuthClientConfig {
+  clientId?: string;
+  clientSecret?: string;
+}
 
 interface GoogleAdsCredentialValue {
   accessToken?: string;
@@ -105,6 +114,71 @@ interface GoogleAdsCredentialValue {
 
 function isGoogleAdsSource(source: LoadedSource): boolean {
   return source.config.slug === GOOGLE_ADS_SOURCE_SLUG;
+}
+
+function isSharedGoogleSource(source: LoadedSource): boolean {
+  return source.config.provider === 'google' && SHARED_GOOGLE_SOURCE_SLUGS.has(source.config.slug);
+}
+
+function googleServiceForSource(source: LoadedSource): GoogleService | undefined {
+  return source.config.api?.googleService ?? inferGoogleServiceFromUrl(source.config.api?.baseUrl);
+}
+
+export function findReusableGoogleOAuthClientConfig(
+  source: LoadedSource,
+  configDir = CONFIG_DIR,
+): GoogleOAuthClientConfig {
+  const sourceApi = source.config.api;
+  const direct = {
+    clientId: sourceApi?.googleOAuthClientId?.trim(),
+    clientSecret: sourceApi?.googleOAuthClientSecret?.trim(),
+  };
+  if (direct.clientId && direct.clientSecret) return direct;
+
+  const service = googleServiceForSource(source);
+  const workspacesDir = join(configDir, 'workspaces');
+  if (!service || !existsSync(workspacesDir)) return {};
+
+  try {
+    for (const workspaceName of readdirSync(workspacesDir)) {
+      const sourcesDir = join(workspacesDir, workspaceName, 'sources');
+      if (!existsSync(sourcesDir)) continue;
+
+      for (const sourceName of readdirSync(sourcesDir)) {
+        const configPath = join(sourcesDir, sourceName, 'config.json');
+        if (!existsSync(configPath)) continue;
+
+        try {
+          const parsed = JSON.parse(readFileSync(configPath, 'utf8')) as {
+            provider?: unknown;
+            api?: {
+              baseUrl?: unknown;
+              googleService?: unknown;
+              googleOAuthClientId?: unknown;
+              googleOAuthClientSecret?: unknown;
+            };
+          };
+          if (parsed.provider !== 'google') continue;
+
+          const api = parsed.api;
+          const candidateService = typeof api?.googleService === 'string'
+            ? api.googleService as GoogleService
+            : inferGoogleServiceFromUrl(typeof api?.baseUrl === 'string' ? api.baseUrl : undefined);
+          if (candidateService !== service) continue;
+
+          const clientId = typeof api?.googleOAuthClientId === 'string' ? api.googleOAuthClientId.trim() : '';
+          const clientSecret = typeof api?.googleOAuthClientSecret === 'string' ? api.googleOAuthClientSecret.trim() : '';
+          if (clientId && clientSecret) return { clientId, clientSecret };
+        } catch {
+          // Ignore malformed workspace source configs.
+        }
+      }
+    }
+  } catch {
+    // Ignore unreadable workspace trees.
+  }
+
+  return {};
 }
 
 function parseGoogleAdsCredentialValue(value: string | null | undefined): GoogleAdsCredentialValue {
@@ -283,7 +357,10 @@ export class SourceCredentialManager {
    */
   async loadEffective(source: LoadedSource): Promise<StoredCredential | null> {
     if (source.tier !== 'global') {
-      return this.load(source);
+      const direct = await this.load(source);
+      if (direct) return direct;
+      if (isSharedGoogleSource(source)) return this.loadSharedGoogleCredential(source);
+      return null;
     }
 
     const manager = getCredentialManager();
@@ -308,6 +385,20 @@ export class SourceCredentialManager {
       }
     }
 
+    return null;
+  }
+
+  private async loadSharedGoogleCredential(source: LoadedSource): Promise<StoredCredential | null> {
+    const manager = getCredentialManager();
+    const ids = await manager.list({ type: 'source_oauth' });
+    for (const id of ids) {
+      if (id.sourceId !== source.config.slug || id.workspaceId === source.workspaceId) continue;
+      const cred = await manager.get(id);
+      if (cred?.value || cred?.refreshToken) {
+        debug(`[SourceCredentialManager] Reusing Google credential for ${source.config.slug} from workspace ${id.workspaceId}`);
+        return cred;
+      }
+    }
     return null;
   }
 
@@ -606,13 +697,15 @@ export class SourceCredentialManager {
           }
         }
 
+        const oauthClientConfig = findReusableGoogleOAuthClientConfig(source);
+
         prepared = prepareGoogleOAuth({
           service,
           scopes,
           callbackPort,
           callbackUrl: providerCallbackUrl,
-          clientId: api?.googleOAuthClientId,
-          clientSecret: api?.googleOAuthClientSecret,
+          clientId: oauthClientConfig.clientId,
+          clientSecret: oauthClientConfig.clientSecret,
         });
         break;
       }
@@ -886,9 +979,7 @@ export class SourceCredentialManager {
         service,
         scopes,
         appType: 'electron',
-        // Pass user-provided OAuth credentials from source config (if available)
-        clientId: api?.googleOAuthClientId,
-        clientSecret: api?.googleOAuthClientSecret,
+        ...findReusableGoogleOAuthClientConfig(source),
         sessionContext,
       };
 
@@ -1090,7 +1181,9 @@ export class SourceCredentialManager {
    * Internal refresh implementation
    */
   private async doRefresh(source: LoadedSource): Promise<string | null> {
-    const cred = await this.load(source);
+    const cred = isSharedGoogleSource(source)
+      ? await this.loadEffective(source)
+      : await this.load(source);
     if (!cred) {
       debug(`[SourceCredentialManager] No credential for ${source.config.slug}`);
       return null;

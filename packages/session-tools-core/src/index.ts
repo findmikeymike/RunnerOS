@@ -82,6 +82,11 @@ export {
   getEffectiveHeaderNames,
 } from './source-helpers.ts';
 
+export type {
+  MessageAgentToolInput,
+  MessageAgentToolResult,
+} from './handlers/message-agent.ts';
+
 // Validation
 export {
   // Result helpers
@@ -205,6 +210,7 @@ export {
   handleRecallMemory,
   // Outputs
   handleCreateOutput,
+  handlePromoteOutputToFinal,
   // Visual surface
   handleVisualSurface,
   handleVisualSurfaceState,
@@ -277,11 +283,15 @@ export type {
   MemoryType,
   CreateOutputToolInput,
   CreateOutputResult,
+  PromoteOutputToFinalToolInput,
+  PromoteOutputToFinalResult,
   OutputKind,
   OutputAssetRole,
   CreateOutputFileInput,
   CreateOutputLinkInput,
   CreateOutputReceiptInput,
+  CreateOutputContextInput,
+  CreateOutputApprovalInput,
   VisualSurfaceToolInput,
   VisualSurfaceToolResult,
   VisualSurfaceStateCapture,
@@ -320,6 +330,7 @@ export {
   ForgetMemorySchema,
   RecallMemorySchema,
   CreateOutputSchema,
+  PromoteOutputToFinalSchema,
   VisualSurfaceSchema,
   VisualSurfaceStateSchema,
   // Descriptions

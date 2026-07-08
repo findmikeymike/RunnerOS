@@ -291,13 +291,10 @@ export interface SessionToolContext {
   testGoogleSource?(source: SourceConfig): Promise<ApiTestResult>;
 
   /**
-   * Test a local source (filesystem or bundled local tool validation).
+   * Test a local CLI source with backend-owned readiness checks.
+   * Handlers fall back to path existence when this is unavailable.
    */
-  testLocalSource?(source: SourceConfig): Promise<ApiTestResult & {
-    message?: string;
-    lines?: string[];
-    fix?: string;
-  }>;
+  testLocalSource?(source: SourceConfig): Promise<LocalSourceTestResult>;
 
   // ============================================================
   // Preferences (for update_user_preferences)
@@ -425,10 +422,19 @@ export interface SessionToolContext {
   recallMemory?(input: import('./handlers/memory.ts').RecallMemoryToolInput): Promise<import('./handlers/memory.ts').RecallMemoryResult>;
 
   /**
+   * Delegate a bounded task to another saved agent. Backend creates a hidden
+   * child session, enforces readiness/permission limits, and returns a receipt.
+   */
+  messageAgent?(input: import('./handlers/message-agent.ts').MessageAgentToolInput): Promise<import('./handlers/message-agent.ts').MessageAgentToolResult>;
+
+  /**
    * Publish a first-class user-facing output from the current session.
    * Backend owns output storage, provenance, asset validation, and route creation.
    */
   createOutput?(input: import('./handlers/outputs.ts').CreateOutputToolInput): Promise<import('./handlers/outputs.ts').CreateOutputResult>;
+
+  /** Promote an output to the workspace Finals registry. */
+  promoteOutputToFinal?(input: import('./handlers/outputs.ts').PromoteOutputToFinalToolInput): Promise<import('./handlers/outputs.ts').PromoteOutputToFinalResult>;
 
   /**
    * Apply a validated visual surface operation to the current session Canvas.
@@ -447,7 +453,12 @@ export interface SessionToolContext {
   // ============================================================
 
   /** Send a message to another session. Injected by backend (SessionManager). */
-  sendAgentMessage?(sessionId: string, message: string, attachments?: Array<{ path: string; name?: string }>): Promise<void>;
+  sendAgentMessage?(
+    sessionId: string,
+    message: string,
+    attachments?: Array<{ path: string; name?: string }>,
+    options?: { deliveryMode?: 'normal' | 'passive' },
+  ): Promise<void>;
 
   /** Delegate a bounded task to a saved agent and wait for a structured result. */
   messageAgent?(input: import('./handlers/message-agent.ts').MessageAgentToolInput): Promise<import('./handlers/message-agent.ts').MessageAgentToolResult>;
@@ -864,6 +875,16 @@ export interface ApiTestResult {
   status?: number;
   error?: string;
   hint?: string;
+}
+
+/**
+ * Result from local source readiness test
+ */
+export interface LocalSourceTestResult {
+  success: boolean;
+  message: string;
+  error?: string;
+  lines?: string[];
 }
 
 // ============================================================

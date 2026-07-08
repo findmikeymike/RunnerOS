@@ -73,6 +73,8 @@ export function toOutputSummary(manifest: OutputManifest): OutputSummary {
     preview: manifest.preview,
     primaryAssetId: manifest.primary?.id,
     previewMode: manifest.preview?.mode,
+    context: manifest.context,
+    approval: manifest.approval,
     assetCount: manifest.assets.length,
     receiptCount: manifest.receipts.length,
     linkCount: manifest.links.length,
