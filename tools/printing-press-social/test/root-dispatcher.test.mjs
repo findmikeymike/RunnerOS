@@ -73,6 +73,11 @@ test('root dispatcher routes normalized profile lifecycle commands', () => {
   assert.equal(status.accountUrl, 'https://x.com/artist01');
   assert.equal(status.sessionPath, path.join(home, 'sessions', 'x', 'artist01'));
   assert.equal(status.sessionExists, false);
+  assert.equal(status.profileStatus, 'login_needed');
+  assert.equal(status.severity, 'warning');
+  assert.equal(status.nextAction, 'open_login');
+  assert.equal(status.lastCheckedAt, null);
+  assert.equal(status.evidence.type, 'none');
   assert.equal(status.liveChecked, false);
   assert.equal(status.loggedIn, null);
   assert.equal(status.matchesExpected, null);
@@ -80,6 +85,11 @@ test('root dispatcher routes normalized profile lifecycle commands', () => {
   const liveStatus = JSON.parse(run(['profile', 'status', 'x', '--profile', 'artist01', '--live', '--json'], env));
   assert.equal(liveStatus.ok, true);
   assert.equal(liveStatus.ready, false);
+  assert.equal(liveStatus.profileStatus, 'login_needed');
+  assert.equal(liveStatus.severity, 'warning');
+  assert.equal(liveStatus.nextAction, 'open_login');
+  assert.equal(liveStatus.evidence.type, 'delegated_browser_plan');
+  assert.equal(liveStatus.evidence.code, 'RUNNER_CDP_DELEGATED');
   assert.equal(liveStatus.live.delegated, true);
   assert.equal(liveStatus.live.code, 'RUNNER_CDP_DELEGATED');
 
@@ -87,6 +97,15 @@ test('root dispatcher routes normalized profile lifecycle commands', () => {
   assert.equal(login.ok, true);
   assert.equal(login.status, 'delegated');
   assert.equal(login.code, 'RUNNER_CDP_DELEGATED');
+
+  mkdirSync(status.sessionPath, { recursive: true });
+  const unverified = JSON.parse(run(['profile', 'status', 'x', '--profile', 'artist01', '--json'], env));
+  assert.equal(unverified.ready, false);
+  assert.equal(unverified.localSessionExists, true);
+  assert.equal(unverified.profileStatus, 'session_exists_unverified');
+  assert.equal(unverified.severity, 'warning');
+  assert.equal(unverified.nextAction, 'verify_session');
+  assert.equal(unverified.evidence.type, 'local_session');
 
   const deleted = JSON.parse(run(['profile', 'delete', 'x', '--profile', 'artist01', '--json'], env));
   assert.equal(deleted.ok, true);

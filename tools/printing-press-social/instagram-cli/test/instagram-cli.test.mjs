@@ -88,6 +88,11 @@ test('updates, statuses, and deletes an Instagram profile with normalized JSON',
   assert.equal(status.profileId, 'artist01');
   assert.equal(status.accountHandle, '@artist-main');
   assert.equal(status.sessionExists, false);
+  assert.equal(status.profileStatus, 'login_needed');
+  assert.equal(status.severity, 'warning');
+  assert.equal(status.nextAction, 'open_login');
+  assert.equal(status.lastCheckedAt, null);
+  assert.equal(status.evidence.type, 'none');
   assert.equal(status.liveChecked, false);
   assert.equal(status.loggedIn, null);
   assert.equal(status.matchesExpected, null);
@@ -96,6 +101,11 @@ test('updates, statuses, and deletes an Instagram profile with normalized JSON',
   const liveStatus = JSON.parse(run(['profile', 'status', 'instagram', '--profile', 'artist01', '--live', '--json'], env));
   assert.equal(liveStatus.ok, true);
   assert.equal(liveStatus.ready, false);
+  assert.equal(liveStatus.profileStatus, 'login_needed');
+  assert.equal(liveStatus.severity, 'warning');
+  assert.equal(liveStatus.nextAction, 'open_login');
+  assert.equal(liveStatus.evidence.type, 'delegated_browser_plan');
+  assert.equal(liveStatus.evidence.code, 'RUNNER_CDP_DELEGATED');
   assert.equal(liveStatus.liveChecked, false);
   assert.equal(liveStatus.loggedIn, null);
   assert.equal(liveStatus.matchesExpected, null);
