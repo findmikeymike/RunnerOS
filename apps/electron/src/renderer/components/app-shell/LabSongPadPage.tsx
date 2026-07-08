@@ -171,15 +171,7 @@ function sectionRows(text: string) {
 function selectionAnchor(
   node: HTMLTextAreaElement,
   selection: Pick<ProsodySelectionInfo, 'end'>,
-  point?: { x: number; y: number },
 ): { x: number; y: number } {
-  if (point) {
-    return {
-      x: point.x + 10,
-      y: point.y - 6,
-    }
-  }
-
   const rect = node.getBoundingClientRect()
   const style = window.getComputedStyle(node)
   const valueBeforeSelection = node.value.slice(0, selection.end)
@@ -197,14 +189,14 @@ function selectionAnchor(
   const lineHeight = Number.parseFloat(style.lineHeight) || 28
 
   return {
-    x: Math.min(rect.right - 14, rect.left + paddingLeft + measuredTextWidth + 10),
-    y: Math.min(rect.bottom - 18, rect.top + paddingTop + (lineIndex * lineHeight) + 6),
+    x: Math.min(rect.right - 8, rect.left + paddingLeft + measuredTextWidth - node.scrollLeft + 4),
+    y: Math.min(rect.bottom - 18, rect.top + paddingTop + (lineIndex * lineHeight) - node.scrollTop + 2),
   }
 }
 
 function prosodyPopoverPosition(anchor: { x: number; y: number }) {
   const width = 300
-  const gutter = 10
+  const gutter = 6
   const wouldOverflowRight = typeof window !== 'undefined' && anchor.x + width + gutter > window.innerWidth
   const preferredLeft = wouldOverflowRight ? anchor.x - width - gutter : anchor.x + gutter
   const left = typeof window === 'undefined'
@@ -212,7 +204,7 @@ function prosodyPopoverPosition(anchor: { x: number; y: number }) {
     : Math.min(Math.max(12, preferredLeft), Math.max(12, window.innerWidth - width - 12))
   const top = typeof window === 'undefined'
     ? anchor.y
-    : Math.min(Math.max(12, anchor.y - 8), Math.max(12, window.innerHeight - 260))
+    : Math.min(Math.max(12, anchor.y - 6), Math.max(12, window.innerHeight - 260))
   return { left, top }
 }
 
@@ -514,7 +506,6 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const captureProsodySelection = React.useCallback((
     source: ProsodySelectionSource,
     node: HTMLTextAreaElement,
-    point?: { x: number; y: number },
     sectionId?: string,
   ) => {
     const selection = buildProsodySelection(node.value, node.selectionStart, node.selectionEnd)
@@ -526,7 +517,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
       ...selection,
       source,
       sectionId,
-      anchor: selectionAnchor(node, selection, point),
+      anchor: selectionAnchor(node, selection),
     })
     setProsodyCopiedWord(null)
   }, [])
@@ -534,21 +525,19 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const capturePadSelection = React.useCallback((
     source: SelectionSource,
     node: HTMLTextAreaElement | null,
-    point?: { x: number; y: number },
   ) => {
     if (!node) return
     const value = node.value.slice(node.selectionStart, node.selectionEnd)
     setSelectionSource(source)
     setSelectedText(value)
-    captureProsodySelection(source, node, point)
+    captureProsodySelection(source, node)
   }, [captureProsodySelection])
 
   const captureSectionProsodySelection = React.useCallback((
     sectionId: string,
     node: HTMLTextAreaElement,
-    point?: { x: number; y: number },
   ) => {
-    captureProsodySelection('section', node, point, sectionId)
+    captureProsodySelection('section', node, sectionId)
   }, [captureProsodySelection])
 
   const clearMovedText = React.useCallback((text: string) => {
@@ -897,7 +886,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                 onChange={(event) => setRoughText(event.target.value)}
                 onSelect={(event) => capturePadSelection('rough', event.currentTarget)}
                 onKeyUp={(event) => capturePadSelection('rough', event.currentTarget)}
-                onMouseUp={(event) => capturePadSelection('rough', event.currentTarget, { x: event.clientX, y: event.clientY })}
+                onMouseUp={(event) => capturePadSelection('rough', event.currentTarget)}
                 placeholder="Dump lines, images, hooks, bad drafts, voice notes transcribed into words..."
                 className={textareaBase('min-h-[560px]')}
               />
@@ -916,7 +905,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                 onChange={(event) => setRememberText(event.target.value)}
                 onSelect={(event) => capturePadSelection('remember', event.currentTarget)}
                 onKeyUp={(event) => capturePadSelection('remember', event.currentTarget)}
-                onMouseUp={(event) => capturePadSelection('remember', event.currentTarget, { x: event.clientX, y: event.clientY })}
+                onMouseUp={(event) => capturePadSelection('remember', event.currentTarget)}
                 placeholder="Park strong lines, title ideas, images, references, or alternate bars here."
                 className={textareaBase('min-h-[170px] text-white/66')}
               />
@@ -1088,7 +1077,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     onChange={(event) => updateSection(section.id, event.target.value)}
                     onSelect={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
                     onKeyUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
-                    onMouseUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget, { x: event.clientX, y: event.clientY })}
+                    onMouseUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
                     placeholder={section.optional ? 'Optional' : 'Write lyrics here.'}
                     className={textareaBase('overflow-hidden text-white/76 placeholder:text-white/14')}
                   />
