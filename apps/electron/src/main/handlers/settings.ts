@@ -60,8 +60,8 @@ export function registerSettingsGuiHandlers(server: RpcServer, _deps: HandlerDep
     return runSocialJson([
       'profile', 'update', ref.platform,
       '--profile', ref.profile,
-      ...optionalFlag('--handle', input.handle),
-      ...optionalFlag('--account-url', input.accountUrl),
+      ...optionalStringOrClear('--handle', '--clear-handle', input.handle),
+      ...optionalStringOrClear('--account-url', '--clear-account-url', input.accountUrl),
       '--json',
     ])
   })
@@ -112,6 +112,12 @@ function assertSocialRef(input: SocialAccountRef): { platform: string; profile: 
 function optionalFlag(name: string, value: unknown): string[] {
   const normalized = typeof value === 'string' ? value.trim() : ''
   return normalized ? [name, normalized] : []
+}
+
+function optionalStringOrClear(name: string, clearName: string, value: unknown): string[] {
+  if (value === undefined) return []
+  const normalized = typeof value === 'string' ? value.trim() : ''
+  return normalized ? [name, normalized] : [clearName]
 }
 
 function socialToolDir(): string {
