@@ -152,6 +152,10 @@ export interface SessionScopedToolCallbacks {
   ) => Promise<import('@craft-agent/session-tools-core').VisualSurfaceToolResult>;
   /** Read current session Canvas and visual Output state. */
   getVisualSurfaceStateFn?: () => Promise<import('@craft-agent/session-tools-core').VisualSurfaceStateToolResult>;
+  /** Save an encrypted RunnerOS secret or source credential. */
+  saveSecretFn?: (
+    input: import('@craft-agent/session-tools-core').SaveSecretToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').SaveSecretResult>;
 }
 
 // Registry of callbacks keyed by sessionId

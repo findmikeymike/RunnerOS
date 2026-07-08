@@ -43,6 +43,14 @@ export type {
 export { handleCredentialPrompt } from './credential-prompt.ts';
 export type { CredentialPromptArgs } from './credential-prompt.ts';
 
+// Save Secret
+export { handleSaveSecret } from './save-secret.ts';
+export type {
+  SaveSecretToolInput,
+  SaveSecretResult,
+  SaveSecretTarget,
+} from './save-secret.ts';
+
 // Update Preferences
 export { handleUpdatePreferences } from './update-preferences.ts';
 export type { UpdatePreferencesArgs } from './update-preferences.ts';

@@ -202,6 +202,7 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.secrets.LIST,
   RPC_CHANNELS.secrets.SAVE,
   RPC_CHANNELS.secrets.DELETE,
+  RPC_CHANNELS.secrets.CHANGED,
   RPC_CHANNELS.secrets.ZERO_STATUS,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
 

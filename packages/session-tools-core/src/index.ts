@@ -182,6 +182,8 @@ export {
   handleMicrosoftOAuthTrigger,
   // Credential Prompt
   handleCredentialPrompt,
+  // Save Secret
+  handleSaveSecret,
   // Update Preferences
   handleUpdatePreferences,
   // Transform Data
@@ -260,6 +262,9 @@ export type {
   SlackOAuthTriggerArgs,
   MicrosoftOAuthTriggerArgs,
   CredentialPromptArgs,
+  SaveSecretToolInput,
+  SaveSecretResult,
+  SaveSecretTarget,
   UpdatePreferencesArgs,
   TransformDataArgs,
   ScriptSandboxArgs,
@@ -309,6 +314,7 @@ export {
   SourceTestSchema,
   SourceOAuthTriggerSchema,
   CredentialPromptSchema,
+  SaveSecretSchema,
   CallLlmSchema,
   UpdatePreferencesSchema,
   TransformDataSchema,

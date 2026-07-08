@@ -40,6 +40,11 @@ async function applyStoredSecretsToProcessEnv(): Promise<void> {
   for (const [key, value] of Object.entries(env)) process.env[key] = value
 }
 
+function broadcastSecretsChanged(deps: HandlerDeps): void {
+  const wsServerLike = (deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } })
+  wsServerLike.wsServer?.push?.(RPC_CHANNELS.secrets.CHANGED, { to: 'all' })
+}
+
 async function getZeroCliStatus() {
   const zeroPath = await commandExists('zero')
   if (!zeroPath) {
@@ -135,6 +140,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     }
     await getCredentialManager().setUserSecret(normalized, value)
     process.env[normalized] = value
+    broadcastSecretsChanged(deps)
     return { success: true }
   })
 
@@ -142,6 +148,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     const normalized = normalizeUserSecretName(name)
     const success = await getCredentialManager().deleteUserSecret(normalized)
     delete process.env[normalized]
+    broadcastSecretsChanged(deps)
     return { success }
   })
 

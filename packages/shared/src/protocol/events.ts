@@ -54,6 +54,7 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.pulses.TICK]: [workspaceId: string, tick: PulseTickEntry]
   [RPC_CHANNELS.skills.CHANGED]: [workspaceId: string, skills: LoadedSkill[]]
   [RPC_CHANNELS.llmConnections.CHANGED]: []
+  [RPC_CHANNELS.secrets.CHANGED]: []
   [RPC_CHANNELS.permissions.DEFAULTS_CHANGED]: [value: null]
 
   // Theme broadcasts (global)
