@@ -2409,6 +2409,7 @@ function AppFileAttachmentPicker({
         const next = groups
           .flat()
           .filter((file) => file.type === 'file')
+          .filter(isAttachableAppFile)
           .filter((file) => {
             if (seen.has(file.path)) return false
             seen.add(file.path)
@@ -2509,7 +2510,7 @@ function buildAppFileBuckets(workspaceRootPath: string | null, workingDirectory?
   if (!workspaceRootPath) return []
 
   const buckets: AppFileBucket[] = []
-  if (workingDirectory && pathIsInside(workingDirectory, workspaceRootPath)) {
+  if (workingDirectory && workingDirectory !== workspaceRootPath && pathIsInside(workingDirectory, workspaceRootPath)) {
     buckets.push({
       id: 'current',
       label: 'Current Folder',
@@ -2519,7 +2520,6 @@ function buildAppFileBuckets(workspaceRootPath: string | null, workingDirectory?
   }
 
   buckets.push(
-    { id: 'workspace', label: 'Workspace', description: 'All app files', paths: [workspaceRootPath] },
     { id: 'outputs', label: 'Outputs', description: 'Generated work', paths: [joinPath(workspaceRootPath, 'outputs')] },
     { id: 'finals', label: 'Finals', description: 'Approved assets', paths: [joinPath(workspaceRootPath, 'finals'), joinPath(workspaceRootPath, 'output-finals')] },
     { id: 'photos', label: 'Photos', description: 'Image assets', paths: [joinPath(workspaceRootPath, 'photos'), joinPath(workspaceRootPath, 'Photos'), joinPath(workspaceRootPath, 'assets', 'photos')] },
@@ -2528,6 +2528,22 @@ function buildAppFileBuckets(workspaceRootPath: string | null, workingDirectory?
   )
 
   return buckets
+}
+
+function isAttachableAppFile(file: FileSearchResult): boolean {
+  const lowerName = file.name.toLowerCase()
+  const lowerPath = file.relativePath.toLowerCase()
+
+  if (lowerName === 'config.json') return false
+  if (lowerName === 'views.json') return false
+  if (lowerName === 'events.jsonl') return false
+  if (lowerName === 'activated-agents.json') return false
+  if (lowerName === 'activated-workflows.json') return false
+  if (lowerPath.startsWith('labels/')) return false
+  if (lowerPath.startsWith('sources/')) return false
+  if (lowerPath.startsWith('sessions/')) return false
+
+  return true
 }
 
 function joinPath(...parts: string[]): string {
