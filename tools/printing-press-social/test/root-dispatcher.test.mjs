@@ -42,8 +42,35 @@ test('root doctor reports install and platform health', () => {
   assert.equal(result.browserEngine, 'runner-cdp');
   assert.equal(result.checks.find((check) => check.name === 'browser-engine')?.mode, 'delegated');
   assert.equal(result.platforms.length, 4);
+  assert.deepEqual(result.summary, {
+    totalProfiles: 0,
+    readyProfiles: 0,
+    loginNeeded: 0,
+    unverified: 0,
+    wrongAccount: 0,
+    failed: 0,
+  });
   assert.ok(result.platforms.find((platform) => platform.platform === 'x'));
   assert.ok(result.checks.find((check) => check.name === 'browser-engine'));
+});
+
+test('root doctor surfaces Settings-ready profile status fields', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  run(['profile', 'add', 'x', '--profile', 'artist01', '--handle', '@artist01', '--json'], env);
+  mkdirSync(path.join(home, 'sessions', 'x', 'artist01'), { recursive: true });
+
+  const result = JSON.parse(run(['doctor', '--json'], env));
+  const profile = result.platforms.find((item) => item.platform === 'x').profiles[0];
+  assert.equal(result.summary.totalProfiles, 1);
+  assert.equal(result.summary.unverified, 1);
+  assert.equal(profile.profileStatus, 'session_exists_unverified');
+  assert.equal(profile.severity, 'warning');
+  assert.equal(profile.nextAction, 'verify_session');
+  assert.equal(profile.accountHandle, '@artist01');
+  assert.equal(profile.ready, false);
+  assert.equal(profile.localSessionExists, true);
+  assert.equal(profile.evidence.type, 'local_session');
 });
 
 test('root dispatcher routes normalized profile lifecycle commands', () => {

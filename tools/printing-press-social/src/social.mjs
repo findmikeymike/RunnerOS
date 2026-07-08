@@ -146,15 +146,7 @@ async function runDoctor(args) {
             '--json',
             ...(flags.live ? ['--live'] : []),
           ]);
-          platformResult.profiles.push({
-            id: profile.id,
-            confirmPolicy: profile.confirmPolicy,
-            browserEngine: profile.browserEngine,
-            ready: status.ok ? status.data.ready : false,
-            localSessionExists: status.ok ? status.data.localSessionExists : false,
-            live: status.ok ? status.data.live || null : null,
-            error: status.ok ? null : status.error,
-          });
+          platformResult.profiles.push(doctorProfileJson(profile, status));
         }
       } else {
         platformResult.ok = false;
@@ -166,6 +158,7 @@ async function runDoctor(args) {
   }
 
   const ok = checks.every((check) => check.ok) && platforms.every((platform) => platform.ok);
+  const summary = doctorSummary(platforms);
   const result = {
     ok,
     status: ok ? 'succeeded' : 'failed',
@@ -173,6 +166,7 @@ async function runDoctor(args) {
     model: registry.model,
     browserEngine,
     liveChecked: Boolean(flags.live),
+    summary,
     checks,
     platforms,
     next: [
@@ -192,6 +186,82 @@ async function runDoctor(args) {
   for (const platform of platforms) {
     console.log(`${platform.platform}: ${platform.ok ? 'ok' : 'failed'} profiles=${platform.profiles.length}`);
   }
+}
+
+function doctorProfileJson(profile, status) {
+  if (!status.ok) {
+    return {
+      id: profile.id,
+      profile: profile.id,
+      platform: profile.platform,
+      accountHandle: profile.accountHandle || null,
+      accountUrl: profile.accountUrl || null,
+      confirmPolicy: profile.confirmPolicy,
+      browserEngine: profile.browserEngine,
+      profileStatus: 'verification_failed',
+      severity: 'error',
+      message: 'Could not load profile status.',
+      nextAction: 'retry_verify',
+      lastCheckedAt: null,
+      ready: false,
+      localSessionExists: false,
+      liveChecked: false,
+      loggedIn: null,
+      matchesExpected: null,
+      evidence: { type: 'error', summary: status.error || 'profile status failed' },
+      live: null,
+      error: status.error,
+    };
+  }
+
+  const data = status.data;
+  return {
+    id: data.profileId || profile.id,
+    profile: data.profileId || profile.id,
+    platform: data.platform || profile.platform,
+    accountHandle: data.accountHandle || null,
+    accountUrl: data.accountUrl || null,
+    sessionPath: data.sessionPath || null,
+    confirmPolicy: profile.confirmPolicy,
+    browserEngine: profile.browserEngine,
+    profileStatus: data.profileStatus || null,
+    severity: data.severity || null,
+    message: data.message || null,
+    nextAction: data.nextAction || null,
+    lastCheckedAt: data.lastCheckedAt || null,
+    ready: Boolean(data.ready),
+    localSessionExists: Boolean(data.localSessionExists),
+    liveChecked: Boolean(data.liveChecked),
+    loggedIn: data.loggedIn ?? null,
+    matchesExpected: data.matchesExpected ?? null,
+    evidence: data.evidence || null,
+    live: data.live || null,
+    error: null,
+  };
+}
+
+function doctorSummary(platforms) {
+  const summary = {
+    totalProfiles: 0,
+    readyProfiles: 0,
+    loginNeeded: 0,
+    unverified: 0,
+    wrongAccount: 0,
+    failed: 0,
+  };
+
+  for (const platform of platforms) {
+    for (const profile of platform.profiles || []) {
+      summary.totalProfiles += 1;
+      if (profile.ready) summary.readyProfiles += 1;
+      if (profile.profileStatus === 'login_needed') summary.loginNeeded += 1;
+      else if (profile.profileStatus === 'session_exists_unverified') summary.unverified += 1;
+      else if (profile.profileStatus === 'wrong_account') summary.wrongAccount += 1;
+      else if (profile.profileStatus === 'verification_failed') summary.failed += 1;
+    }
+  }
+
+  return summary;
 }
 
 async function runAssets(args) {
