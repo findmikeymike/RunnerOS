@@ -170,23 +170,49 @@ function sectionRows(text: string) {
 
 function selectionAnchor(
   node: HTMLTextAreaElement,
+  selection: Pick<ProsodySelectionInfo, 'end'>,
   point?: { x: number; y: number },
 ): { x: number; y: number } {
+  if (point) {
+    return {
+      x: point.x + 10,
+      y: point.y - 6,
+    }
+  }
+
   const rect = node.getBoundingClientRect()
+  const style = window.getComputedStyle(node)
+  const valueBeforeSelection = node.value.slice(0, selection.end)
+  const lineStart = valueBeforeSelection.lastIndexOf('\n') + 1
+  const lineText = valueBeforeSelection.slice(lineStart)
+  const lineIndex = valueBeforeSelection.slice(0, lineStart).split('\n').length - 1
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  if (context) {
+    context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+  }
+  const measuredTextWidth = context?.measureText(lineText).width ?? 0
+  const paddingLeft = Number.parseFloat(style.paddingLeft) || 0
+  const paddingTop = Number.parseFloat(style.paddingTop) || 0
+  const lineHeight = Number.parseFloat(style.lineHeight) || 28
+
   return {
-    x: point?.x ?? Math.min(rect.right - 24, rect.left + rect.width * 0.72),
-    y: point?.y ?? Math.min(rect.bottom - 28, rect.top + 44),
+    x: Math.min(rect.right - 14, rect.left + paddingLeft + measuredTextWidth + 10),
+    y: Math.min(rect.bottom - 18, rect.top + paddingTop + (lineIndex * lineHeight) + 6),
   }
 }
 
 function prosodyPopoverPosition(anchor: { x: number; y: number }) {
-  const width = 320
+  const width = 300
+  const gutter = 10
+  const wouldOverflowRight = typeof window !== 'undefined' && anchor.x + width + gutter > window.innerWidth
+  const preferredLeft = wouldOverflowRight ? anchor.x - width - gutter : anchor.x + gutter
   const left = typeof window === 'undefined'
-    ? anchor.x
-    : Math.min(Math.max(12, anchor.x), Math.max(12, window.innerWidth - width - 12))
+    ? preferredLeft
+    : Math.min(Math.max(12, preferredLeft), Math.max(12, window.innerWidth - width - 12))
   const top = typeof window === 'undefined'
     ? anchor.y
-    : Math.min(Math.max(12, anchor.y + 12), Math.max(12, window.innerHeight - 280))
+    : Math.min(Math.max(12, anchor.y - 8), Math.max(12, window.innerHeight - 260))
   return { left, top }
 }
 
@@ -500,7 +526,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
       ...selection,
       source,
       sectionId,
-      anchor: selectionAnchor(node, point),
+      anchor: selectionAnchor(node, selection, point),
     })
     setProsodyCopiedWord(null)
   }, [])
@@ -718,17 +744,17 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     <div className="runneros-glass-route flex h-full min-h-0 flex-col overflow-hidden bg-[#050505] text-white">
       {prosodySelection && prosodyPosition && (prosodyBusy || prosodyResult) ? (
         <div
-          className="fixed z-[90] w-[320px] rounded-xl border border-white/[0.08] bg-[#090909]/95 p-2.5 text-white shadow-modal-small backdrop-blur-xl"
+          className="fixed z-[90] w-[300px] rounded-xl border border-white/[0.16] bg-[#242424]/96 p-2.5 text-white shadow-strong backdrop-blur-xl"
           style={{ left: prosodyPosition.left, top: prosodyPosition.top }}
         >
           <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="min-w-0 truncate text-[9px] font-medium uppercase tracking-[0.16em] text-white/36">
+            <div className="min-w-0 truncate text-[9px] font-semibold uppercase tracking-[0.14em] text-white/52">
               Forward rhymes · {prosodySelection.selectedText.trim()}
             </div>
             <button
               type="button"
               onClick={() => setProsodySelection(null)}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/24 hover:bg-white/[0.05] hover:text-white/55"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/42 hover:bg-white/[0.08] hover:text-white/76"
               title="Close rhymes"
             >
               <X className="h-3 w-3" />
@@ -736,20 +762,20 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
           </div>
 
           {prosodyBusy ? (
-            <div className="rounded-lg border border-white/[0.055] bg-white/[0.018] px-2.5 py-2 text-[11px] text-white/38">
+            <div className="rounded-lg border border-white/[0.1] bg-white/[0.055] px-2.5 py-2 text-[11px] font-medium text-white/58">
               Finding rhymes...
             </div>
           ) : null}
 
           {!prosodyBusy && prosodyResult && !hasProsodyMatches ? (
-            <div className="rounded-lg border border-white/[0.055] bg-white/[0.018] px-2.5 py-2 text-[11px] text-white/34">
+            <div className="rounded-lg border border-white/[0.1] bg-white/[0.055] px-2.5 py-2 text-[11px] font-medium text-white/54">
               No clean matches.
             </div>
           ) : null}
 
           {!prosodyBusy && prosodyResult?.perfect.length ? (
             <div className="mb-2">
-              <div className="mb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-white/30">Perfect</div>
+              <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/48">Perfect</div>
               <div className="flex flex-wrap gap-1.5">
                 {prosodyResult.perfect.slice(0, 10).map((item) => (
                   <button
@@ -757,7 +783,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     type="button"
                     title="Copy rhyme"
                     onClick={() => copyProsodyRhyme(item)}
-                    className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1 text-[11px] text-white/62 hover:bg-white/[0.06] hover:text-white/86"
+                    className="rounded-full border border-white/[0.14] bg-[#303030] px-2.5 py-1 text-[11px] font-medium text-white/78 hover:bg-[#393939] hover:text-white"
                   >
                     {prosodyCopiedWord === item.word ? 'Copied' : item.word}
                   </button>
@@ -768,7 +794,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
 
           {!prosodyBusy && prosodyResult?.slant.length ? (
             <div>
-              <div className="mb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-white/30">Slant</div>
+              <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/48">Slant</div>
               <div className="flex flex-wrap gap-1.5">
                 {prosodyResult.slant.slice(0, 12).map((item) => (
                   <button
@@ -776,10 +802,10 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     type="button"
                     title={item.kind}
                     onClick={() => copyProsodyRhyme(item)}
-                    className="inline-flex items-center gap-1 rounded-full border border-[#fb923c]/20 bg-[#fb923c]/10 px-2.5 py-1 text-[11px] text-[#f8d7a4]/78 hover:bg-[#fb923c]/15 hover:text-[#ffe2b5]"
+                    className="inline-flex items-center gap-1 rounded-full border border-[#fb923c]/35 bg-[#3a281a] px-2.5 py-1 text-[11px] font-medium text-[#ffe0b0]/88 hover:bg-[#4a311d] hover:text-[#fff0d2]"
                   >
                     <span>{prosodyCopiedWord === item.word ? 'Copied' : item.word}</span>
-                    <span className="text-[8px] uppercase tracking-[0.1em] text-[#fbbf24]/45">{item.kind}</span>
+                    <span className="text-[8px] uppercase tracking-[0.1em] text-[#fbbf24]/62">{item.kind}</span>
                   </button>
                 ))}
               </div>
