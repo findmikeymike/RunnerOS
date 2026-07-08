@@ -34,6 +34,7 @@ const PLATFORMS: Array<{ id: SocialPlatform; label: string }> = [
 ]
 
 type Draft = {
+  accountGroup: string
   platform: SocialPlatform
   profile: string
   handle: string
@@ -41,6 +42,7 @@ type Draft = {
 }
 
 const EMPTY_DRAFT: Draft = {
+  accountGroup: '',
   platform: 'instagram',
   profile: '',
   handle: '',
@@ -59,11 +61,25 @@ export default function SocialAccountsSettingsPage() {
     () => doctor?.platforms.flatMap((platform) => platform.profiles) ?? [],
     [doctor],
   )
-  const profilesByPlatform = React.useMemo(
-    () => PLATFORMS.map((platform) => ({
-      ...platform,
-      profiles: profiles.filter((profile) => profile.platform === platform.id),
-    })),
+  const profileGroups = React.useMemo(() => {
+    const groups = new Map<string, SocialAccountProfileStatus[]>()
+    for (const profile of profiles) {
+      const group = profile.accountGroup?.trim() || 'Ungrouped'
+      groups.set(group, [...(groups.get(group) ?? []), profile])
+    }
+    return Array.from(groups.entries())
+      .map(([name, items]) => ({
+        name,
+        profiles: [...items].sort((a, b) => platformLabel(a.platform).localeCompare(platformLabel(b.platform))),
+      }))
+      .sort((a, b) => {
+        if (a.name === 'Ungrouped') return 1
+        if (b.name === 'Ungrouped') return -1
+        return a.name.localeCompare(b.name)
+      })
+  }, [profiles])
+  const accountGroupOptions = React.useMemo(
+    () => Array.from(new Set(profiles.map((profile) => profile.accountGroup?.trim()).filter(Boolean) as string[])).sort(),
     [profiles],
   )
 
@@ -94,6 +110,7 @@ export default function SocialAccountsSettingsPage() {
       const input = {
         platform: draft.platform,
         profile,
+        accountGroup: exists ? draft.accountGroup.trim() : draft.accountGroup.trim() || undefined,
         handle: exists ? draft.handle.trim() : draft.handle.trim() || undefined,
         accountUrl: exists ? draft.accountUrl.trim() : draft.accountUrl.trim() || undefined,
       }
@@ -112,6 +129,7 @@ export default function SocialAccountsSettingsPage() {
 
   const edit = (profile: SocialAccountProfileStatus) => {
     setDraft({
+      accountGroup: profile.accountGroup ?? '',
       platform: profile.platform,
       profile: profile.profile,
       handle: profile.accountHandle ?? '',
@@ -162,7 +180,7 @@ export default function SocialAccountsSettingsPage() {
         <div className="space-y-6 p-6">
           <SettingsSection
             title="Social Accounts"
-            description="Add one named profile per account, then tell @social-publisher which profile to use."
+            description="Group platform accounts by persona or brand, while keeping one isolated login session per platform account."
             action={
               <Button type="button" size="sm" variant="secondary" onClick={load} disabled={busy === 'load'}>
                 {busy === 'load' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
@@ -172,7 +190,11 @@ export default function SocialAccountsSettingsPage() {
           >
             <SettingsCard>
               <SettingsCardContent>
-                <div className="grid gap-3 md:grid-cols-[150px_1fr_1fr_1.2fr_auto]">
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_150px_1fr_1fr_1.2fr_auto]">
+                  <Field label="Account Set" value={draft.accountGroup} placeholder="Music Fan Page" listId="social-account-groups" onChange={(accountGroup) => setDraft((prev) => ({ ...prev, accountGroup }))} />
+                  <datalist id="social-account-groups">
+                    {accountGroupOptions.map((group) => <option key={group} value={group} />)}
+                  </datalist>
                   <label className="space-y-1">
                     <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/34">Platform</span>
                     <select
@@ -205,7 +227,7 @@ export default function SocialAccountsSettingsPage() {
             </SettingsCard>
           </SettingsSection>
 
-          <SettingsSection title="Profiles" description="Use the platform/profile reference in chat, like instagram/brand-main. Writes still require approval.">
+          <SettingsSection title="Account Sets" description="Tell @social-publisher either the account set or the exact platform/profile reference. Writes still require approval.">
             <div className="space-y-2.5">
               {profiles.length === 0 ? (
                 <SettingsCard>
@@ -213,15 +235,18 @@ export default function SocialAccountsSettingsPage() {
                     <p className="text-sm text-white/46">No social profiles yet.</p>
                   </SettingsCardContent>
                 </SettingsCard>
-              ) : profilesByPlatform.map((platform) => platform.profiles.length > 0 && (
-                <div key={platform.id} className="space-y-2">
-                  <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-[0.14em] text-white/34">
-                    <span>{platform.label}</span>
+              ) : profileGroups.map((group) => (
+                <div key={group.name} className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2 px-1">
+                    <span className="text-xs font-semibold uppercase tracking-[0.14em] text-white/42">{group.name}</span>
                     <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] text-white/42">
-                      {platform.profiles.length}
+                      {group.profiles.length} {group.profiles.length === 1 ? 'account' : 'accounts'}
+                    </span>
+                    <span className="text-[11px] text-white/32">
+                      {group.profiles.map((profile) => platformLabel(profile.platform)).join(', ')}
                     </span>
                   </div>
-                  {platform.profiles.map((profile) => (
+                  {group.profiles.map((profile) => (
                     <ProfileRow
                       key={`${profile.platform}:${profile.profile}`}
                       profile={profile}
@@ -264,12 +289,14 @@ function Field({
   value,
   placeholder,
   disabled,
+  listId,
   onChange,
 }: {
   label: string
   value: string
   placeholder: string
   disabled?: boolean
+  listId?: string
   onChange: (value: string) => void
 }) {
   return (
@@ -279,6 +306,7 @@ function Field({
         value={value}
         placeholder={placeholder}
         disabled={disabled}
+        list={listId}
         onChange={(event) => onChange(event.target.value)}
         className="h-9 w-full rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/22 disabled:cursor-not-allowed disabled:opacity-55"
       />
@@ -356,6 +384,7 @@ function ProfileRow({
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/42">
               <span className="font-mono text-white/58">{agentRef}</span>
+              <span>{profile.accountGroup || 'No account set'}</span>
               <span>{profile.accountHandle || 'No handle'}</span>
               <span>{profile.accountUrl || 'No account URL'}</span>
               <span>{profile.message || profile.profileStatus || 'Unknown status'}</span>

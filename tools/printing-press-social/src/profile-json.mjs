@@ -13,6 +13,7 @@ export function createProfile({ platform, profileId, flags, browserEngine, confi
     proxyId: flags['proxy-id'] || null,
     ratePolicy: flags['rate-policy'] || 'normal',
     confirmPolicy,
+    accountGroup: flags['account-group'] || flags.persona || null,
     accountHandle: flags.handle || flags['account-handle'] || null,
     accountUrl: flags['account-url'] || null,
     createdAt: new Date().toISOString(),
@@ -33,6 +34,10 @@ export function updateProfile(profile, flags, { browserEngine, confirmPolicy } =
   if (flags['proxy-id'] !== undefined) next.proxyId = flags['proxy-id'] || null;
   if (flags['rate-policy'] !== undefined) next.ratePolicy = flags['rate-policy'] || 'normal';
   if (flags['confirm-policy'] !== undefined && confirmPolicy) next.confirmPolicy = confirmPolicy;
+  if (flags['account-group'] !== undefined || flags.persona !== undefined) {
+    next.accountGroup = flags['account-group'] || flags.persona || null;
+  }
+  if (flags['clear-account-group'] || flags['clear-persona']) next.accountGroup = null;
   if (flags['clear-handle']) next.accountHandle = null;
   if (flags['clear-account-url']) next.accountUrl = null;
   next.updatedAt = new Date().toISOString();
@@ -60,6 +65,7 @@ export function profileJson(profile, { sessionPath = null, sessionExists = null 
     proxyId: profile.proxyId || null,
     ratePolicy: profile.ratePolicy || 'normal',
     confirmPolicy: profile.confirmPolicy || 'require-confirm',
+    accountGroup: profile.accountGroup || null,
     createdAt: profile.createdAt || null,
     updatedAt: profile.updatedAt || null,
   };
@@ -101,6 +107,7 @@ export function profileStatusJson({ command, platform, profileId, profile, sessi
     profileId,
     accountHandle: profile.accountHandle || null,
     accountUrl: profile.accountUrl || null,
+    accountGroup: profile.accountGroup || null,
     sessionRef: profile.sessionRef || path.join('sessions', platform, profileId),
     sessionPath,
     sessionExists,
@@ -235,6 +242,7 @@ export function profileLoginJson({ platform, profileId, profile, sessionPath, re
     profileId,
     accountHandle: profile.accountHandle || null,
     accountUrl: profile.accountUrl || null,
+    accountGroup: profile.accountGroup || null,
     sessionRef: profile.sessionRef || path.join('sessions', platform, profileId),
     sessionPath,
     sessionExists,

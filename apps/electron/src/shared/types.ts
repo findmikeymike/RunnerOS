@@ -1164,6 +1164,7 @@ export interface SocialAccountProfileRef {
 }
 
 export interface SocialAccountInput extends SocialAccountProfileRef {
+  accountGroup?: string
   handle?: string
   accountUrl?: string
 }
@@ -1178,6 +1179,7 @@ export interface SocialAccountProfileStatus extends SocialAccountProfileRef {
   id: string
   accountHandle: string | null
   accountUrl: string | null
+  accountGroup: string | null
   sessionPath: string | null
   confirmPolicy: string | null
   browserEngine: string | null

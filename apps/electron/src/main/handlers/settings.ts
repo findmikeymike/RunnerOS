@@ -49,6 +49,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
     return runSocialJson([
       'profile', 'add', ref.platform,
       '--profile', ref.profile,
+      ...optionalFlag('--account-group', input.accountGroup),
       ...optionalFlag('--handle', input.handle),
       ...optionalFlag('--account-url', input.accountUrl),
       '--json',
@@ -60,6 +61,7 @@ export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps
     return runSocialJson([
       'profile', 'update', ref.platform,
       '--profile', ref.profile,
+      ...optionalStringOrClear('--account-group', '--clear-account-group', input.accountGroup),
       ...optionalStringOrClear('--handle', '--clear-handle', input.handle),
       ...optionalStringOrClear('--account-url', '--clear-account-url', input.accountUrl),
       '--json',
@@ -119,6 +121,7 @@ type SocialAccountRef = {
 }
 
 type SocialAccountInput = SocialAccountRef & {
+  accountGroup?: string
   handle?: string
   accountUrl?: string
 }
