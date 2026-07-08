@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, LogIn, Plus, RefreshCcw, Save, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ChevronRight, Copy, Loader2, LogIn, Plus, RefreshCcw, Save, ShieldCheck, Trash2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -99,6 +99,21 @@ export default function SocialAccountsSettingsPage() {
     } finally {
       setBusy(null)
     }
+  }, [])
+
+  const patchProfileStatus = React.useCallback((updated: SocialAccountProfileStatus) => {
+    setDoctor((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        platforms: prev.platforms.map((platform) => ({
+          ...platform,
+          profiles: platform.profiles.map((profile) =>
+            profile.platform === updated.platform && profile.profile === updated.profile ? updated : profile,
+          ),
+        })),
+      }
+    })
   }, [])
 
   React.useEffect(() => {
@@ -217,10 +232,48 @@ export default function SocialAccountsSettingsPage() {
       setLoginPlan(result)
       await load()
       toast.success(result.browserInstanceId ? 'Login browser opened' : 'Login handoff prepared')
+      void pollVerification(profile, 24)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not start login')
     } finally {
       setBusy(null)
+    }
+  }
+
+  const verify = async (profile: SocialAccountProfileStatus, options: { quiet?: boolean } = {}) => {
+    setBusy(`${profile.platform}:${profile.profile}:verify`)
+    try {
+      const result = await window.electronAPI.getSocialAccountStatus({
+        platform: profile.platform,
+        profile: profile.profile,
+        live: true,
+      }) as SocialAccountProfileStatus
+      patchProfileStatus(result)
+      if (!options.quiet) {
+        if (result.ready) toast.success('Social login verified')
+        else toast.warning(result.message || 'Login still needs verification')
+      }
+      return result
+    } catch (error) {
+      if (!options.quiet) toast.error(error instanceof Error ? error.message : 'Could not verify login')
+      return null
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const pollVerification = async (profile: SocialAccountProfileStatus, attempts: number) => {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5000))
+      const result = await verify(profile, { quiet: true })
+      if (result?.ready) {
+        toast.success('Social login verified')
+        return
+      }
+      if (result?.profileStatus === 'wrong_account') {
+        toast.error(result.message || 'Logged into the wrong account')
+        return
+      }
     }
   }
 
@@ -294,6 +347,7 @@ export default function SocialAccountsSettingsPage() {
                               onEdit={() => edit(profile)}
                               onDelete={() => setPendingDelete(profile)}
                               onLogin={() => login(profile)}
+                              onVerify={() => verify(profile)}
                             />
                           ))}
                           {editingThisGroup ? (
@@ -470,12 +524,14 @@ function ProfileRow({
   onEdit,
   onDelete,
   onLogin,
+  onVerify,
 }: {
   profile: SocialAccountProfileStatus
   busy: string | null
   onEdit: () => void
   onDelete: () => void
   onLogin: () => void
+  onVerify: () => void
 }) {
   const statusBusy = busy?.startsWith(`${profile.platform}:${profile.profile}:`)
   const agentRef = `${profile.platform}/${profile.profile}`
@@ -512,6 +568,10 @@ function ProfileRow({
           <Button type="button" size="sm" variant="secondary" onClick={onLogin} disabled={statusBusy}>
             {statusBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
             Open Login
+          </Button>
+          <Button type="button" size="sm" variant="secondary" onClick={onVerify} disabled={statusBusy}>
+            {busy === `${profile.platform}:${profile.profile}:verify` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
+            Verify Login
           </Button>
           <Button type="button" size="sm" variant="outline" onClick={onEdit}>
             Edit
