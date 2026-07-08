@@ -1,36 +1,72 @@
 {
   "allowedBashPatterns": [
     {
+      "pattern": "^cd\\s+tools/printing-press-social$",
+      "comment": "Enter the bundled Printing Press Social tool directory"
+    },
+    {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+registry\\s+--json$",
       "comment": "Inspect the root social CLI registry"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+registry\\s+--json$",
+      "comment": "Inspect the root social CLI registry from the tool directory"
     },
     {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+doctor\\s+--json$",
       "comment": "Check local install and profile metadata without live platform checks"
     },
     {
+      "pattern": "^node\\s+src/social\\.mjs\\s+doctor\\s+--json$",
+      "comment": "Check local install and profile metadata without live platform checks from the tool directory"
+    },
+    {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+doctor\\s+--live\\s+--json$",
       "comment": "Check live login/session readiness for configured social profiles"
     },
     {
-      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+npm\\s+test$",
-      "comment": "Run Printing Press CLI test suite"
+      "pattern": "^node\\s+src/social\\.mjs\\s+doctor\\s+--live\\s+--json$",
+      "comment": "Check live login/session readiness for configured social profiles from the tool directory"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+assets\\s+--asset-root\\s+.+?(?:\\s+--platform\\s+(instagram|tiktok|x|youtube))?\\s+--json$",
+      "comment": "List social assets from an explicit root"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+content\\s+--content-root\\s+.+?\\s+--json$",
+      "comment": "List social content from an explicit root"
     },
     {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+post\\s+(instagram|tiktok|x|youtube)\\s+.*\\s+--dry-run\\s+--json$",
       "comment": "Dry-run social post/upload commands only"
     },
     {
+      "pattern": "^node\\s+src/social\\.mjs\\s+post\\s+(instagram|tiktok|x|youtube)\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run social post/upload commands only from the tool directory"
+    },
+    {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+comment\\s+(instagram|tiktok|x|youtube)\\s+.*\\s+--dry-run\\s+--json$",
       "comment": "Dry-run social comment/reply commands only"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+comment\\s+(instagram|tiktok|x|youtube)\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run social comment/reply commands only from the tool directory"
     },
     {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+dm\\s+(instagram|tiktok|x)\\s+.*\\s+--dry-run\\s+--json$",
       "comment": "Dry-run social DM commands only"
     },
     {
-      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+\\S+\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--confirm\\s+yes\\s+--json$",
+      "pattern": "^node\\s+src/social\\.mjs\\s+dm\\s+(instagram|tiktok|x)\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run social DM commands only from the tool directory"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--confirm\\s+yes\\s+--json$",
       "comment": "Execute approved dry-run social handoff through the guarded Runner handoff command"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--confirm\\s+yes\\s+--json$",
+      "comment": "Execute approved dry-run social handoff from the tool directory through the guarded Runner handoff command"
     }
   ],
   "blockedCommandHints": [
@@ -66,7 +102,7 @@
     },
     {
       "command": "node src/social.mjs execute",
-      "whenNotMatching": "--action-file\\s+\\S+.*--confirm\\s+yes\\s+--json",
+      "whenNotMatching": "--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--confirm\\s+yes\\s+--json",
       "reason": "Approved social execution can mutate real channels.",
       "context": "Only execute a full dry-run result JSON after explicit user approval of the exact action.",
       "tryInstead": [

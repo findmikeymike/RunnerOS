@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { validateBashCommand } from '../src/agent/bash-validator.ts'
 import { getCraftAgentReadOnlyBashPatterns } from '../src/config/cli-domains.ts'
 
 type AllowedBashEntry = { pattern: string; comment?: string }
+type CompiledBashEntry = { regex: RegExp; source: string }
+
+function compileBashPatterns(entries: AllowedBashEntry[] = []): CompiledBashEntry[] {
+  return entries.map(entry => ({ regex: new RegExp(entry.pattern), source: entry.pattern }))
+}
 
 describe('permissions craft-agent allowlist sync', () => {
   it('keeps default.json craft-agent read-only rules aligned with shared CLI domain policy', () => {
@@ -40,8 +46,17 @@ describe('permissions craft-agent allowlist sync', () => {
     expect(executePattern!.pattern).toContain('--confirm\\s+yes')
     expect(executePattern!.pattern).toContain('--json')
 
-    const regex = new RegExp(executePattern!.pattern)
-    expect(regex.test('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --expected-action-id act_abc-123 --confirm yes --json')).toBe(true)
-    expect(regex.test('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --confirm yes --json')).toBe(false)
+    const patterns = compileBashPatterns(permissions.allowedBashPatterns)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs registry --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs doctor --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs assets --asset-root assets --platform x --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs assets --asset-root "/tmp/my assets" --platform x --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs content --content-root content --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs content --content-root "/tmp/my content" --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs post x --profile p --text hi --dry-run --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs post x --profile p && echo BAD --dry-run --json', patterns).allowed).toBe(false)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --expected-action-id act_abc-123 --confirm yes --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file "/tmp/dry runs/dry-run.json" --expected-action-id act_abc-123 --confirm yes --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --confirm yes --json', patterns).allowed).toBe(false)
   })
 })
