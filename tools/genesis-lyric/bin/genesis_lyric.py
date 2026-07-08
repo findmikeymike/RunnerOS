@@ -12,6 +12,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path, PureWindowsPath
+from types import SimpleNamespace
 from typing import Any
 
 
@@ -26,6 +27,77 @@ ASPECT_RESOLUTIONS = {
     "1:1": (1080, 1080),
     "16:9": (1920, 1080),
 }
+
+GENESIS_DIRECTOR_SOURCES = {
+    "creative_director_spec": "Genesis/Docs/Creative_Director_Agent_Spec.md",
+    "motion_director_spec": "Genesis/Docs/MOTION_DIRECTOR_SPEC.md",
+    "cinema_modes": "Genesis/agent/cinema_modes.py",
+    "capture_realism": "Genesis/core/capture_realism.py",
+    "motion_compiler": "Genesis/core/motion_compiler.py",
+    "motion_qa": "Genesis/services/motion_qa.py",
+}
+
+FAMILY_PROFILES = {
+    "analog_photo": {
+        "label": "LOFI_FLASH_FILM / ANALOG_PHOTO",
+        "prompt": "1990s underground music-magazine photography, direct flash residue, expired 35mm scan texture, warm dust, imperfect framing, emotionally specific and unpolished",
+        "avoid": "glossy fashion ad, sterile studio perfection, clean corporate editorial, generic HD portrait, readable text, logos",
+        "wet": False,
+        "humans": True,
+        "density": "light",
+    },
+    "surreal_dream": {
+        "label": "SURREAL_DREAM",
+        "prompt": "lonely surreal dream logic, simple impossible event, vast negative space, tactile objects behaving emotionally, elegant strangeness",
+        "avoid": "busy fantasy clutter, random horror chaos, generic neon vaporwave, screensaver psychedelia, readable text, logos",
+        "wet": False,
+        "humans": True,
+        "density": "heavy",
+    },
+    "performance": {
+        "label": "PERFORMANCE",
+        "prompt": "music performance film language, stage haze, practical light, imperfect venue texture, crowd depth implied without extra identifiable faces",
+        "avoid": "generic neon room, glossy concert commercial, lip-sync fakery, extra identifiable faces, readable text, logos",
+        "wet": False,
+        "humans": True,
+        "density": "heavy",
+    },
+    "street_expressionist": {
+        "label": "STREET / EXPRESSIONIST",
+        "prompt": "raw hand-authored street-expressionist image world, rough paper/canvas surface, visible pressure, overpainted revisions, emotionally loaded marks",
+        "avoid": "spray-paint wall clichés, subway tags, generic graffiti pastiche, photographic gear language, readable text, logos",
+        "wet": False,
+        "humans": False,
+        "density": "thin",
+    },
+}
+
+SHOT_SEQUENCE = [
+    {
+        "shot_type": "wide_establishing",
+        "camera_movement": "slow_push",
+        "role": "establish",
+        "frame": "wide environmental frame with the subject small inside the world",
+    },
+    {
+        "shot_type": "close_up",
+        "camera_movement": "handheld_drift",
+        "role": "explore",
+        "frame": "intimate close frame built around one emotionally loaded detail",
+    },
+    {
+        "shot_type": "overhead",
+        "camera_movement": "slow_pull",
+        "role": "transform",
+        "frame": "overhead or off-axis frame where the room/object reveals the consequence",
+    },
+    {
+        "shot_type": "wide_establishing",
+        "camera_movement": "locked_push",
+        "role": "resolve",
+        "frame": "aftermath frame with more negative space than subject",
+    },
+]
 
 
 def emit(payload: dict[str, Any], *, status: int = 0) -> None:
@@ -275,6 +347,271 @@ def normalized_lyric_lines(brief: dict[str, Any], duration: float) -> list[dict[
     return lines
 
 
+def slug_token(value: Any) -> str:
+    token = clean_text(value).lower().replace("-", "_").replace(" ", "_")
+    return "".join(ch for ch in token if ch.isalnum() or ch == "_")
+
+
+def storyboard_family(brief: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    raw = slug_token(
+        brief.get("visual_family")
+        or brief.get("aesthetic_family")
+        or brief.get("style_family")
+        or brief.get("visual_world")
+        or "analog_photo"
+    )
+    if "surreal" in raw or "dream" in raw or "psychedelic" in raw:
+        key = "surreal_dream"
+    elif "perform" in raw or "stage" in raw or "concert" in raw:
+        key = "performance"
+    elif "street" in raw or "expression" in raw or "paint" in raw or "graphic" in raw:
+        key = "street_expressionist"
+    else:
+        key = "analog_photo"
+    return key, FAMILY_PROFILES[key]
+
+
+def storyboard_mode(brief: dict[str, Any], family_key: str) -> str:
+    explicit = clean_text(brief.get("cinema_mode") or brief.get("mode"))
+    if explicit:
+        return explicit
+    if family_key == "performance":
+        return "M4"
+    if family_key == "surreal_dream":
+        return "M5"
+    if family_key == "street_expressionist":
+        return "M2"
+    return "M1"
+
+
+def scene_count_for(lines: list[dict[str, Any]], duration: float) -> int:
+    if duration <= 5.5 or len(lines) <= 1:
+        return 1
+    if duration <= 12 or len(lines) <= 3:
+        return min(3, max(2, len(lines)))
+    return min(4, max(3, len(lines)))
+
+
+def grouped_lines(lines: list[dict[str, Any]], count: int, duration: float) -> list[dict[str, Any]]:
+    if not lines:
+        return []
+    groups: list[list[dict[str, Any]]] = [[] for _ in range(count)]
+    for index, line in enumerate(lines):
+        target = min(count - 1, int(index * count / max(1, len(lines))))
+        groups[target].append(line)
+    out = []
+    for index, group in enumerate(groups):
+        if not group:
+            start = round(index * duration / count, 3)
+            end = round((index + 1) * duration / count, 3)
+            out.append({"text": "", "start_time": start, "end_time": end})
+            continue
+        out.append({
+            "text": " / ".join(clean_text(item.get("text")) for item in group if clean_text(item.get("text"))),
+            "start_time": float(group[0].get("start_time", index * duration / count)),
+            "end_time": float(group[-1].get("end_time", (index + 1) * duration / count)),
+        })
+    return out
+
+
+def beat_namespace(t_start: float, t_end: float, event: str) -> SimpleNamespace:
+    return SimpleNamespace(t_start=t_start, t_end=t_end, event=event)
+
+
+def build_shot_direction(
+    *,
+    scene: dict[str, Any],
+    index: int,
+    duration: float,
+    mode: str,
+    family: dict[str, Any],
+) -> SimpleNamespace:
+    from agent.cinema_modes import build_camera_capture, normalize_mode_id
+    from core.capture_realism import build_capture_realism
+
+    role = scene["role"]
+    lyric = scene["lyric"] or "the instrumental emotional turn"
+    short_duration = max(0.5, float(scene["end_time"]) - float(scene["start_time"]))
+    mode_id = normalize_mode_id(mode)
+    if role == "establish":
+        subject_action = f"the figure or central object enters the visual world through absence, reacting to the lyric '{lyric}' without acting it out literally"
+        camera_motion = "slow motivated push from environment into the emotional subject"
+        environmental_motion = "dust, haze, window light, and small room details move before the subject does"
+        micro_motion = "breath-level movement, fabric settling, tiny light flicker"
+        purpose = "to let the viewer feel the world before reading the lyric"
+        last = "the frame lands with the subject held small but unmistakably emotionally trapped inside the world"
+    elif role == "explore":
+        subject_action = f"one concrete detail carries the feeling of '{lyric}' while the rest of the world stays withheld"
+        camera_motion = "handheld drift that searches rather than announces"
+        environmental_motion = "background planes breathe with film grain, soft haze, and faint practical-light pulse"
+        micro_motion = "tiny facial or object-level motion, hair or fabric tremor, shallow focus breathing"
+        purpose = "to make the emotion intimate without turning it into a literal illustration"
+        last = "the shot lands on the detail as if it has become the whole memory"
+    elif role == "transform":
+        subject_action = f"the image world quietly changes under the pressure of '{lyric}', turning a normal room or object into a consequence"
+        camera_motion = "slow pull or off-axis drift revealing the transformation"
+        environmental_motion = "paper, shadow, light, or weather shifts in layers from foreground to background"
+        micro_motion = "small edge shimmer, fabric drag, dust suspension, imperfect scan texture"
+        purpose = "to show what the line does to the world instead of showing the line itself"
+        last = "the frame lands after the transformation, with the old scene visibly changed"
+    else:
+        subject_action = f"the human presence recedes and the aftermath of '{lyric}' becomes the subject"
+        camera_motion = "locked-off hold with an extremely slow final push"
+        environmental_motion = "air, grain, and distant light continue moving after the action has ended"
+        micro_motion = "near-stillness with only breath, fabric, and atmospheric motion"
+        purpose = "to make the ending feel like a consequence, not a caption"
+        last = "the final frame holds more absence than action, clean enough to loop or cut"
+
+    capture = build_capture_realism(
+        wet=bool(family.get("wet")),
+        humans=bool(family.get("humans")),
+        density=str(family.get("density") or "light"),
+        far_element="the far background",
+    )
+    return SimpleNamespace(
+        cinema_mode=mode_id,
+        mode_contrast_reason="",
+        subject_action=subject_action,
+        micro_motion=micro_motion,
+        environmental_motion=environmental_motion,
+        camera_motion=camera_motion,
+        motion_purpose=purpose,
+        beats=[
+            beat_namespace(0.0, round(short_duration * 0.5, 3), "world and subject relationship is established"),
+            beat_namespace(round(short_duration * 0.5, 3), round(short_duration, 3), "camera lands on the emotional consequence"),
+        ],
+        last_frame=last,
+        capture_realism=capture,
+        camera_capture=build_camera_capture(mode_id, duration_seconds=short_duration),
+        duration_seconds=short_duration,
+    )
+
+
+def shot_to_dict(shot: SimpleNamespace) -> dict[str, Any]:
+    return {
+        "cinema_mode": shot.cinema_mode,
+        "duration_seconds": shot.duration_seconds,
+        "qa_checked": True,
+        "compiled": "Use image_prompt and motion_prompt for provider work.",
+    }
+
+
+def compact_capture_realism_for_image(family: dict[str, Any]) -> str:
+    wet_clause = "damp matte surfaces without shine, " if family.get("wet") else ""
+    human_clause = "skin matte with real fine texture, " if family.get("humans") else "surfaces matte not glossy, "
+    return (
+        "Capture realism: real atmospheric depth between foreground and background, "
+        f"{wet_clause}{human_clause}lifted shadows, rolled-off highlights, no plastic sheen, photographed not generated."
+    )
+
+
+def storyboard_negative_prompt(family: dict[str, Any], face_refs: list[str]) -> str:
+    base = [
+        str(family["avoid"]),
+        "photorealistic 4K, 8K, HDR, stock photo, AI plastic skin, beauty filter, generic cinematic, random symbols",
+    ]
+    if face_refs:
+        base.append("extra identifiable faces, second face, different person, celebrity likeness drift")
+    return ", ".join(base)
+
+
+def face_reference_paths(brief: dict[str, Any]) -> list[str]:
+    raw = brief.get("face_reference_paths") or brief.get("artist_face_reference_paths") or []
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    return [str(item) for item in raw if clean_text(item)]
+
+
+def command_storyboard(args: argparse.Namespace) -> None:
+    brief = read_json(args.brief_file)
+    duration = target_duration(brief, args)
+    aspect = requested_aspect(brief)
+    lines = normalized_lyric_lines(brief, duration)
+    family_key, family = storyboard_family(brief)
+    mode = storyboard_mode(brief, family_key)
+    count = scene_count_for(lines, duration)
+    groups = grouped_lines(lines, count, duration)
+    face_refs = face_reference_paths(brief)
+    title = clean_text(brief.get("title") or brief.get("song_title") or "Untitled lyric clip")
+    mood = clean_text(brief.get("mood") or brief.get("emotional_direction") or "emotionally specific, lonely, memorable")
+    concept = clean_text(brief.get("creative_thesis") or brief.get("concept") or f"{title} as a concise visual memory that changes with each lyric beat")
+
+    from core.motion_compiler import compile_motion_prompt
+    from services.motion_qa import validate_shot_direction
+
+    scenes = []
+    blockers: list[dict[str, str]] = []
+    if aspect not in ASPECT_RESOLUTIONS:
+        blockers.append({"code": "unsupported_aspect_ratio", "message": f"aspect_ratio must be one of: {', '.join(ASPECT_RESOLUTIONS.keys())}."})
+    if not lines:
+        blockers.append({"code": "missing_lyrics", "message": "Storyboard needs lyrics or lyric_lines."})
+
+    for index, group in enumerate(groups):
+        template = SHOT_SEQUENCE[min(index, len(SHOT_SEQUENCE) - 1)]
+        scene = {
+            "index": index + 1,
+            "role": template["role"] if index < count - 1 else ("resolve" if count > 1 else "hero"),
+            "shot_type": template["shot_type"],
+            "camera_movement": template["camera_movement"],
+            "frame": template["frame"],
+            "lyric": group["text"],
+            "start_time": group["start_time"],
+            "end_time": group["end_time"],
+        }
+        shot = build_shot_direction(scene=scene, index=index, duration=duration, mode=mode, family=family)
+        findings = validate_shot_direction(shot, bible_mode=mode, duration_seconds=shot.duration_seconds)
+        motion_prompt = compile_motion_prompt(shot, provider=str(brief.get("video_provider") or "wavespeed"), duration_seconds=shot.duration_seconds)
+        ref_clause = " Use the supplied artist face reference for the only identifiable face." if face_refs else " If a human appears, prefer silhouette, partial crop, back turned, reflection, or implied presence."
+        image_prompt = (
+            f"Vertical {aspect} {family['prompt']}. {scene['frame']}. "
+            f"Mood: {mood}. Visual thesis: {concept}. "
+            f"Lyric beat: {scene['lyric'] or 'instrumental turn'}. "
+            f"No readable text, no logos.{ref_clause} "
+            f"{compact_capture_realism_for_image(family)}"
+        )
+        scenes.append({
+            **scene,
+            "duration_seconds": round(float(scene["end_time"]) - float(scene["start_time"]), 3),
+            "image_prompt": image_prompt,
+            "motion_prompt": motion_prompt,
+            "shot_direction": shot_to_dict(shot),
+            "qa_findings": [vars(finding) for finding in findings],
+        })
+
+    ok = len(blockers) == 0 and all(not any(f["severity"] == "fail" for f in scene["qa_findings"]) for scene in scenes)
+    emit({
+        "ok": ok,
+        "mode": "runneros_genesis_lyric_storyboard",
+        "provider_spend_enabled": False,
+        "single_video_only": True,
+        "director_stack": "Genesis Creative Director + Motion Director grammar",
+        "title": title,
+        "core_thesis": concept,
+        "visual_family": family["label"],
+        "cinema_mode": mode,
+        "aspect_ratio": aspect,
+        "duration_seconds": duration,
+        "face_reference_paths": face_refs,
+        "negative_prompt": storyboard_negative_prompt(family, face_refs),
+        "scene_count": len(scenes),
+        "blockers": blockers,
+        "scenes": scenes,
+        "media_generation": {
+            "image_first": True,
+            "image_prompt_goes_to": "approved image generation tool",
+            "motion_prompt_goes_to": "approved image-to-video tool",
+            "expected_asset": "image_file or video_file for genesis-lyric render",
+        },
+        "next_actions": [
+            "Review storyboard before provider spend.",
+            "Generate/animate the chosen visual from image_prompt and motion_prompt.",
+            "Pass the selected asset back as image_file or video_file, then preflight and approval-gated render.",
+        ],
+    }, status=0 if ok else 1)
+
+
 def maybe_align_lines(lines: list[dict[str, Any]], brief: dict[str, Any], audio_path: Path | None) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not bool(brief.get("align_with_audio")):
         return lines, {"applied": False, "reason": "alignment not requested"}
@@ -458,6 +795,7 @@ def command_plan(args: argparse.Namespace) -> None:
         "lyric_lines": lines,
         "visual_source": "video_file" if brief.get("video_file") else ("image_file" if brief.get("image_file") else "needed"),
         "next_actions": [
+            "Run storyboard first when the visual asset needs to be generated or creatively directed.",
             "Use or generate one visual asset as video_file or image_file.",
             "Run preflight before render.",
             "Run render only after explicit user approval.",
@@ -576,7 +914,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     doctor = sub.add_parser("doctor")
     doctor.add_argument("--json", action="store_true")
-    for name in ["plan", "preflight", "render"]:
+    for name in ["storyboard", "plan", "preflight", "render"]:
         p = sub.add_parser(name)
         p.add_argument("--brief-file")
         p.add_argument("--audio-file")
@@ -595,6 +933,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.command == "doctor":
         command_doctor(args)
+    if args.command == "storyboard":
+        command_storyboard(args)
     if args.command == "plan":
         command_plan(args)
     if args.command == "preflight":

@@ -29,10 +29,12 @@ function usage() {
       '',
       'Commands:',
       '  doctor --json',
+      '  storyboard --brief-file brief.json --json',
       '  plan --brief-file brief.json --json',
       '  preflight --brief-file brief.json --json',
       '  render --brief-file brief.json --approved --json',
       '',
+      'Storyboard is no-spend Genesis director planning for shots, image prompts, and motion prompts.',
       'Render accepts existing video_file/image_file assets and burns lyric captions with the audio.',
     ],
   });
@@ -77,6 +79,7 @@ const result = spawnSync(runtime.command, [...runtime.argsPrefix, pythonScript, 
   cwd: toolRoot,
   env,
   encoding: 'utf-8',
+  maxBuffer: 8 * 1024 * 1024,
 });
 
 if (result.stdout) process.stdout.write(result.stdout);

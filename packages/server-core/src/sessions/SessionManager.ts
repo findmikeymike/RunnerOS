@@ -2952,6 +2952,19 @@ export class SessionManager implements ISessionManager {
             '9. Publish the final MP4 as an Output and set `showInCanvas: true` when available.',
           ].join('\n')
           const lyricVideoNewVisualWorkflow = [
+            '3. Write a brief JSON with `audio_file`, `lyrics` or `lyric_lines`, optional `video_file`/`image_file`, `duration_seconds`, `aspect_ratio`, and `output_dir`.',
+            '4. Before generating or choosing visuals, run `node bin/genesis-lyric.mjs storyboard --brief-file ... --json`. Use its Genesis Creative Director / Motion Director output as the source of truth for scenes, image prompts, motion prompts, and QA findings.',
+            '5. If the visual source is missing, help the user choose one lane: existing footage, existing still/artwork, artist-photo/face-reference from Artist Vault, or approved generated visual from `media-generation`. Generated visuals must follow the storyboard `image_prompt` and `motion_prompt`.',
+            '6. Only publish a storyboard to Canvas when it is visual or review-useful: individual frames, a side-by-side/linear storyboard board, image strip, or approved durable handoff. Keep plain text planning/storyboard notes in chat.',
+            '7. For storyboard images, avoid cramped stacked/contact-sheet collages. Prefer large chronological frames side-by-side or a linear sequence where each scene can be inspected clearly.',
+            '8. Add the chosen generated or user-provided visual back to the brief as `video_file` or `image_file`.',
+            '9. Run `node bin/genesis-lyric.mjs doctor --json`, then `plan --brief-file ... --json`, then `preflight --brief-file ... --json`.',
+            '10. Stop on preflight blockers. Missing visual means generate/attach one first; do not pretend the render can proceed.',
+            '11. Render only after explicit user approval: `node bin/genesis-lyric.mjs render --brief-file ... --approved --json`.',
+            '12. Do not claim success until `final.mp4` and `render-report.json` exist.',
+            '13. Publish the final MP4 as an Output with `showInCanvas: true` so it becomes the visible Canvas card; do not leave the user on an older storyboard card.',
+          ].join('\n')
+          const lyricVideoIntermediateVisualWorkflow = [
             '3. Before generating or choosing visuals, storyboard the lyric section in chat: 3-6 chronological scenes with lyric/time anchor, frame size, camera direction, movement, mood, and transition logic. Think in shots, not just one prompt.',
             '4. If the visual source is missing, help the user choose one lane: existing footage, existing still/artwork, artist-photo/face-reference from Artist Vault, or approved generated visual from `media-generation`.',
             '5. Only publish a storyboard to Canvas when it is visual or review-useful: individual frames, a side-by-side/linear storyboard board, image strip, or approved durable handoff. Keep plain text planning/storyboard notes in chat.',
@@ -2973,6 +2986,11 @@ export class SessionManager implements ISessionManager {
                 replaceBuiltInAgentPromptText(
                   'lyric-video-agent',
                   lyricVideoOldVisualWorkflow,
+                  lyricVideoNewVisualWorkflow,
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'lyric-video-agent',
+                  lyricVideoIntermediateVisualWorkflow,
                   lyricVideoNewVisualWorkflow,
                 ).updated,
               ].some(Boolean)

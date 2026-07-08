@@ -183,6 +183,8 @@ describe('workspace local source paths', () => {
     expect(sources[0].config.provider).toBe('runneros-genesis-lyric');
     expect(sources[0].config.local?.path).toContain(join('tools', 'genesis-lyric'));
     expect(sources[0].guide.raw).toContain('single-video');
+    expect(sources[0].guide.raw).toContain('storyboard --brief-file');
+    expect(sources[0].guide.raw).toContain('Motion Director');
   });
 });
 

@@ -22,20 +22,25 @@ Commands:
 
 ```bash
 node bin/genesis-lyric.mjs doctor --json
+node bin/genesis-lyric.mjs storyboard --brief-file <brief.json> --json
 node bin/genesis-lyric.mjs plan --brief-file <brief.json> --json
 node bin/genesis-lyric.mjs preflight --brief-file <brief.json> --json
 node bin/genesis-lyric.mjs render --brief-file <brief.json> --approved --json
 ```
 
+`storyboard` is no-spend. It uses the ported Genesis Creative Director / Motion Director grammar: cinema modes, capture realism, shot direction, compiled motion prompts, and motion QA. Use it before generating visuals when the visual source is missing or when the user wants a cinematic shot plan.
+
 ## Workflow
 
 1. Confirm the clip target: platform, aspect ratio, duration, lyrics, audio file, and visual source.
-2. If no visual exists, ask whether to use a still, user footage, or generate one through an approved media tool.
-3. Write a brief JSON with `lyrics` or `lyric_lines`, `audio_file`, one of `video_file`/`image_file`, `duration_seconds`, `aspect_ratio`, and `output_dir`.
-4. Run `doctor`, then `plan`, then `preflight`.
-5. Stop if preflight has blockers. Do not render around missing audio, missing visual, or missing lyrics.
-6. Render only after explicit approval.
-7. Do not claim completion until `render-report.json` and `final.mp4` exist.
+2. Write a brief JSON with `lyrics` or `lyric_lines`, `audio_file`, optional `video_file`/`image_file`, `duration_seconds`, `aspect_ratio`, and `output_dir`.
+3. If no visual exists, or if the visual needs creative direction, run `storyboard` before any image/video generation.
+4. Use the storyboard `image_prompt` and `motion_prompt` with the approved media-generation tool. Do not let generated visuals invent a separate concept.
+5. Add the selected visual asset back to the brief as `video_file` or `image_file`.
+6. Run `doctor`, then `plan`, then `preflight`.
+7. Stop if preflight has blockers. Do not render around missing audio, missing visual, or missing lyrics.
+8. Render only after explicit approval.
+9. Do not claim completion until `render-report.json` and `final.mp4` exist.
 
 ## Output
 

@@ -11,6 +11,7 @@ function run(args, env = {}) {
   return spawnSync(process.execPath, [BIN, ...args, '--json'], {
     encoding: 'utf-8',
     env: { ...process.env, ...env },
+    maxBuffer: 8 * 1024 * 1024,
   });
 }
 
@@ -75,6 +76,35 @@ describe('runneros genesis lyric wrapper', () => {
     assert.equal(payload.lyric_line_count, 2);
     assert.equal(payload.lyric_lines[0].start_time, 0);
     assert.equal(payload.lyric_lines[1].end_time, 6);
+  });
+
+  it('storyboard creates no-spend Genesis director scenes before a visual exists', () => {
+    const result = run(['storyboard', '--brief-file', briefFile({
+      title: 'Summer Clip',
+      lyrics: 'one summer memory',
+      duration_seconds: 5,
+      visual_family: 'analog_photo',
+      mood: 'nostalgic summer grief',
+    })]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.mode, 'runneros_genesis_lyric_storyboard');
+    assert.equal(payload.provider_spend_enabled, false);
+    assert.equal(payload.director_stack, 'Genesis Creative Director + Motion Director grammar');
+    assert.ok(payload.scenes.length >= 1);
+    assert.ok(payload.scenes[0].image_prompt.includes('Capture realism'));
+    assert.ok(payload.scenes[0].motion_prompt.includes('Movement:'));
+    assert.ok(payload.scenes[0].motion_prompt.includes('Camera Capture:'));
+    assert.equal(payload.media_generation.image_first, true);
+  });
+
+  it('storyboard blocks missing lyrics without traceback', () => {
+    const result = run(['storyboard', '--brief-file', briefFile({ lyrics: '', lyric_lines: [] })]);
+    assert.notEqual(result.status, 0);
+    assert.equal(result.stderr, '');
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.mode, 'runneros_genesis_lyric_storyboard');
+    assert.ok(payload.blockers.some((blocker) => blocker.code === 'missing_lyrics'));
   });
 
   it('preflight blocks render when no visual asset is present', () => {

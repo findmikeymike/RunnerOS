@@ -45,7 +45,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Outputs -> Finals promotion: wired
 - Domains: Command 3, Content Creation 5, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
 - Permission modes: ask 30, safe 7
-- Known skills: 114 (73 bundled, 6 system, 113 user-global on this machine)
+- Known skills: 114 (73 bundled, 6 system, 114 user-global on this machine)
 - Known builtin sources: 23
 
 ## Reference Health
