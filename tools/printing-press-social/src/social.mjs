@@ -56,6 +56,11 @@ async function main() {
     return;
   }
 
+  if (argv[0] === 'catalog') {
+    await runCatalog(argv.slice(1));
+    return;
+  }
+
   if (argv[0] === 'assets') {
     await runAssets(argv.slice(1));
     return;
@@ -103,6 +108,53 @@ async function runRepl() {
 
 async function runDoctor(args) {
   const flags = parseFlags(args);
+  const result = await buildDoctorResult({ live: Boolean(flags.live) });
+
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  console.log(`${result.status}: ${result.command}`);
+  for (const platform of result.platforms) {
+    console.log(`${platform.platform}: ${platform.ok ? 'ok' : 'failed'} profiles=${platform.profiles.length}`);
+  }
+}
+
+async function runCatalog(args) {
+  const flags = parseFlags(args);
+  const doctor = await buildDoctorResult({ live: Boolean(flags.live) });
+  const profiles = doctor.platforms.flatMap((platform) => platform.profiles || []);
+  const safeProfiles = profiles.map((profile) => safeCatalogProfile(profile));
+  const accountSets = buildAccountSets(safeProfiles);
+  const result = {
+    ok: doctor.ok,
+    status: doctor.status,
+    command: 'catalog',
+    liveChecked: doctor.liveChecked,
+    summary: {
+      accountSets: accountSets.length,
+      profiles: safeProfiles.length,
+      readyProfiles: safeProfiles.filter((profile) => profile.ready).length,
+      unverifiedProfiles: safeProfiles.filter((profile) => !profile.ready).length,
+    },
+    accountSets,
+    profiles: safeProfiles,
+    noSecrets: true,
+  };
+
+  if (flags.json) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    return;
+  }
+
+  console.log(`${result.status}: ${result.command}`);
+  for (const set of accountSets) {
+    console.log(`${set.name}: ${set.profiles.map((profile) => profile.ref).join(', ')}`);
+  }
+}
+
+async function buildDoctorResult({ live = false } = {}) {
   const registry = JSON.parse(fs.readFileSync(REGISTRY_PATH, 'utf8'));
   const checks = [];
   const platforms = [];
@@ -146,7 +198,7 @@ async function runDoctor(args) {
             '--profile',
             profile.id,
             '--json',
-            ...(flags.live ? ['--live'] : []),
+            ...(live ? ['--live'] : []),
           ]);
           platformResult.profiles.push(doctorProfileJson(profile, status));
         }
@@ -160,15 +212,14 @@ async function runDoctor(args) {
   }
 
   const ok = checks.every((check) => check.ok) && platforms.every((platform) => platform.ok);
-  const summary = doctorSummary(platforms);
-  const result = {
+  return {
     ok,
     status: ok ? 'succeeded' : 'failed',
     command: 'doctor',
     model: registry.model,
     browserEngine,
-    liveChecked: Boolean(flags.live),
-    summary,
+    liveChecked: live,
+    summary: doctorSummary(platforms),
     checks,
     platforms,
     next: [
@@ -178,16 +229,44 @@ async function runDoctor(args) {
       'Dry-run every action before live execution',
     ],
   };
+}
 
-  if (flags.json) {
-    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-    return;
-  }
+function safeCatalogProfile(profile) {
+  const browserSession = buildProfileBrowserSession({ platform: profile.platform, id: profile.profile });
+  return {
+    ref: `${profile.platform}/${profile.profile}`,
+    platform: profile.platform,
+    profile: profile.profile,
+    accountSet: profile.accountGroup || null,
+    accountHandle: profile.accountHandle || null,
+    accountUrl: profile.accountUrl || null,
+    status: profile.profileStatus || null,
+    ready: Boolean(profile.ready),
+    nextAction: profile.nextAction || null,
+    message: profile.message || null,
+    browserSession,
+  };
+}
 
-  console.log(`${result.status}: ${result.command}`);
-  for (const platform of platforms) {
-    console.log(`${platform.platform}: ${platform.ok ? 'ok' : 'failed'} profiles=${platform.profiles.length}`);
+function buildAccountSets(profiles) {
+  const groups = new Map();
+  for (const profile of profiles) {
+    const name = profile.accountSet || 'Ungrouped';
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(profile);
   }
+  return Array.from(groups.entries())
+    .map(([name, items]) => ({
+      name,
+      profiles: items.sort((a, b) => a.platform.localeCompare(b.platform)),
+      platforms: Object.fromEntries(items.map((profile) => [profile.platform, profile.ref])),
+      ready: items.length > 0 && items.every((profile) => profile.ready),
+    }))
+    .sort((a, b) => {
+      if (a.name === 'Ungrouped') return 1;
+      if (b.name === 'Ungrouped') return -1;
+      return a.name.localeCompare(b.name);
+    });
 }
 
 function doctorProfileJson(profile, status) {
@@ -583,6 +662,7 @@ function printHelp() {
 
 Commands:
   social registry --json
+  social catalog --json
   social doctor --json
   social doctor --live --json
   social repl

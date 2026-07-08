@@ -30,6 +30,7 @@
   },
   "commands": [
     { "verb": "doctor", "platform": "*" },
+    { "verb": "catalog", "platform": "*" },
     { "verb": "execute", "platform": "*" },
     { "verb": "profile", "platform": "instagram" },
     { "verb": "post", "platform": "instagram" },

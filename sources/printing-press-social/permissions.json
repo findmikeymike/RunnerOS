@@ -21,6 +21,14 @@
       "comment": "Check local install and profile metadata without live platform checks from the tool directory"
     },
     {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+catalog\\s+--json$",
+      "comment": "Read agent-safe social account sets and profile catalog"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+catalog\\s+--json$",
+      "comment": "Read agent-safe social account sets and profile catalog from the tool directory"
+    },
+    {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+doctor\\s+--live\\s+--json$",
       "comment": "Check live login/session readiness for configured social profiles"
     },

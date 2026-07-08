@@ -29,6 +29,7 @@ test('root registry returns CLI-Anything style command metadata', () => {
   assert.ok(registry.platforms.x);
   assert.ok(registry.platforms.youtube);
   assert.ok(registry.commands.some((command) => command.verb === 'doctor'));
+  assert.ok(registry.commands.some((command) => command.verb === 'catalog'));
   assert.ok(registry.commands.some((command) => command.verb === 'execute'));
 });
 
@@ -71,6 +72,35 @@ test('root doctor surfaces Settings-ready profile status fields', () => {
   assert.equal(profile.ready, false);
   assert.equal(profile.localSessionExists, true);
   assert.equal(profile.evidence.type, 'local_session');
+});
+
+test('root catalog groups account sets without exposing local session paths or secrets', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  run(['profile', 'add', 'instagram', '--profile', 'mikey-ig', '--account-group', 'MikeyReal', '--handle', '@mikeyreal', '--json'], env);
+  run(['profile', 'add', 'tiktok', '--profile', 'mikey-tt', '--account-group', 'MikeyReal', '--handle', '@mikeyreal', '--json'], env);
+  run(['profile', 'add', 'youtube', '--profile', 'music-fan-yt', '--account-group', 'Music Fan Page', '--account-url', 'https://www.youtube.com/@musicfan', '--json'], env);
+
+  const result = JSON.parse(run(['catalog', '--json'], env));
+  const serialized = JSON.stringify(result);
+  const mikeyReal = result.accountSets.find((set) => set.name === 'MikeyReal');
+  const musicFan = result.accountSets.find((set) => set.name === 'Music Fan Page');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.command, 'catalog');
+  assert.equal(result.noSecrets, true);
+  assert.equal(result.summary.accountSets, 2);
+  assert.deepEqual(mikeyReal.platforms, {
+    instagram: 'instagram/mikey-ig',
+    tiktok: 'tiktok/mikey-tt',
+  });
+  assert.deepEqual(musicFan.platforms, {
+    youtube: 'youtube/music-fan-yt',
+  });
+  assert.equal(result.profiles.find((profile) => profile.ref === 'instagram/mikey-ig').browserSession.partition, 'persist:social-instagram-mikey-ig');
+  assert.ok(!serialized.includes(home));
+  assert.ok(!serialized.includes('sessionPath'));
+  assert.ok(!serialized.match(/cookie|token|password|2fa/i));
 });
 
 test('root dispatcher routes normalized profile lifecycle commands', () => {

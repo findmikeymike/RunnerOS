@@ -21245,8 +21245,8 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 ## Core Flow
 
 1. Read \`sources/printing-press-social/guide.md\` when available.
-2. Run \`node src/social.mjs doctor --json\` from \`tools/printing-press-social\`.
-3. Resolve the exact \`platform/profile\` first. Users can copy this reference from Settings -> Social Accounts, for example \`instagram/brand-main\`.
+2. Run \`node src/social.mjs catalog --json\` from \`tools/printing-press-social\`.
+3. Resolve the exact \`platform/profile\` first. Users can name an account set from Settings -> Social Accounts, such as \`MikeyReal\`, or an exact reference like \`instagram/brand-main\`.
 4. If a campaign/release/client folder is involved, list candidate media with \`node src/social.mjs assets --asset-root <dir> --platform <platform> --json\` and copy with \`node src/social.mjs content --content-root <dir> --json\`.
 5. For post/comment/DM, run the exact CLI action with the selected \`--profile\`, \`--asset-root\`, \`--content-root\`, relative file names, and \`--dry-run --json\`.
 6. Validate the payload against the platform checklist below.
@@ -21272,17 +21272,21 @@ Use \`chrome-cdp\` when the user explicitly wants the agent to inspect or operat
 Explain this model when the user is setting up social publishing or seems confused:
 
 - Each platform/profile should have its own saved browser session, such as \`tiktok/main\`, \`instagram/brand\`, or \`youtube/client-a\`.
+- Account sets group platform profiles by persona or brand. Example: \`MikeyReal\` can contain \`instagram/mikey-ig\`, \`tiktok/mikey-tt\`, \`youtube/mikey-yt\`, and \`x/mikey-x\`.
+- Resolve account sets with \`node src/social.mjs catalog --json\`. If the user says "post to MikeyReal on IG and TikTok", use the catalog \`platforms\` map to resolve \`instagram/<profile>\` and \`tiktok/<profile>\`.
+- If the requested platform is missing from an account set, stop and say exactly which platform is missing.
 - Users should log in once per profile. The saved browser session keeps cookies/login state so they do not retype passwords every run.
 - If multiple profiles exist for a platform, never guess. Ask the user which \`platform/profile\` to use unless they already named it.
-- If the user names a handle or account URL instead of a profile ID, match it against \`doctor --json\`; ask if more than one profile matches.
+- If the user names a handle or account URL instead of a profile ID, match it against \`catalog --json\`; ask if more than one profile matches.
 - Passwords, recovery codes, tokens, cookies, and 2FA secrets must never be written into Workspace Context, memory, source guides, or chat prompts.
 - Workspace Context should store only non-secret defaults: profile IDs, handles, account URLs, tone, posting defaults, and account notes.
 - Before live work, run \`node src/social.mjs doctor --live --json\` and verify the visible logged-in account matches the profile handle or account URL.
 - If a session expires, pause and guide the user through logging in again for that specific profile.
 
-Use profile-specific commands:
+Use catalog and profile-specific commands:
 
 \`\`\`bash
+node src/social.mjs catalog --json
 node src/social.mjs post tiktok --profile client-a --dry-run --json
 node src/social.mjs post instagram --profile brand --dry-run --json
 node src/social.mjs post youtube --profile main --dry-run --json

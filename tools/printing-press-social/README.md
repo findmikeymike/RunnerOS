@@ -15,6 +15,7 @@ Recommended next check after install:
 
 ```bash
 social doctor --json
+social catalog --json
 ```
 
 Profile JSON commands:
@@ -28,6 +29,8 @@ social profile delete <platform> --profile <profile> --json
 ```
 
 Profiles are account selectors. Users can keep multiple accounts per platform, then tell the agent which one to use with `platform/profile`, such as `instagram/brand-main` or `youtube/client-a`. Agents must not guess when multiple profiles exist for a platform.
+
+Account sets group platform profiles by persona or brand. Use `social catalog --json` to resolve a set such as `MikeyReal` into exact platform refs like `instagram/mikey-ig` and `tiktok/mikey-tt`. Catalog output is safe for agents: it includes handles, URLs, readiness, and Runner browser session targets, but not cookies, tokens, passwords, 2FA codes, or local session paths.
 
 With the default `runner-cdp` engine, profile login and live status return a delegated browser plan for RunnerOS native browser tools. They do not drive the browser inside this CLI process.
 

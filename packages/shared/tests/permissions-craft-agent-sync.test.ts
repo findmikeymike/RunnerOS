@@ -49,6 +49,7 @@ describe('permissions craft-agent allowlist sync', () => {
     const patterns = compileBashPatterns(permissions.allowedBashPatterns)
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs registry --json', patterns).allowed).toBe(true)
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs doctor --json', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs catalog --json', patterns).allowed).toBe(true)
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs assets --asset-root assets --platform x --json', patterns).allowed).toBe(true)
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs assets --asset-root "/tmp/my assets" --platform x --json', patterns).allowed).toBe(true)
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs content --content-root content --json', patterns).allowed).toBe(true)

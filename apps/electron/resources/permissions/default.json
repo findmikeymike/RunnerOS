@@ -78,6 +78,14 @@
       "comment": "Inspect bundled Printing Press Social CLI registry from the tool directory"
     },
     {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+catalog\\s+--json$",
+      "comment": "Read agent-safe Printing Press Social account catalog"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+catalog\\s+--json$",
+      "comment": "Read agent-safe Printing Press Social account catalog from the tool directory"
+    },
+    {
       "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+doctor\\s+(?:--live\\s+)?--json$",
       "comment": "Check bundled Printing Press Social CLI install and profile readiness"
     },
