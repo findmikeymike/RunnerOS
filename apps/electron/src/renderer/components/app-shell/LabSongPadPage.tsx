@@ -1,6 +1,6 @@
 import * as React from 'react'
 import {
-  ChevronDown,
+  ChevronRight,
   Copy,
   Eye,
   EyeOff,
@@ -765,7 +765,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const prosodyPosition = prosodySelection ? prosodyPopoverPosition(prosodySelection.anchor) : null
   const hasProsodyMatches = Boolean((prosodyResult?.perfect.length ?? 0) + (prosodyResult?.slant.length ?? 0))
   const primarySlants = prosodyResult?.slant.slice(0, 12) ?? []
-  const moreSlants = prosodyResult?.slant.slice(12, 36) ?? []
+  const moreSlants = prosodyResult?.slant.slice(12, 60) ?? []
 
   return (
     <div className="runneros-glass-route flex h-full min-h-0 flex-col overflow-hidden bg-[#050505] text-white">
@@ -783,13 +783,13 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                 <button
                   type="button"
                   onClick={() => setProsodyMorePage((current) => !current)}
-                  className={cn(
-                    'flex h-5 w-5 items-center justify-center rounded-full text-white/38 hover:bg-white/[0.08] hover:text-white/76',
+                    className={cn(
+                      'flex h-5 w-5 items-center justify-center rounded-full text-white/38 hover:bg-white/[0.08] hover:text-white/76',
                     prosodyMorePage && 'rotate-180 bg-white/[0.06] text-white/68',
                   )}
                   title={prosodyMorePage ? 'Show first page' : 'Show more rhymes'}
                 >
-                  <ChevronDown className="h-3 w-3" />
+                  <ChevronRight className="h-3 w-3" />
                 </button>
               ) : null}
               <button
