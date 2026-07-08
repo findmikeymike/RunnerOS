@@ -284,7 +284,7 @@ function ledgerPath(socialHome) {
 }
 
 function ledgerKey(action) {
-  return action.options?.idempotencyKey || null;
+  return action.options?.idempotencyKey || payloadDigest(action);
 }
 
 function payloadDigest(action) {
