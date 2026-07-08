@@ -493,7 +493,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
           link.variant === "default"
             ? "border border-[#fb923c]/25 bg-[#fb923c]/10 text-white shadow-middle"
             // Highlight on hover, context menu open (data-state), or EditPopover active (data-edit-active)
-            : "text-white/70 hover:bg-white/[0.055] hover:text-white data-[state=open]:bg-white/[0.055] data-[edit-active=true]:bg-white/[0.055]",
+            : "text-white/78 hover:bg-white/[0.055] hover:text-white data-[state=open]:bg-white/[0.055] data-[edit-active=true]:bg-white/[0.055]",
           extraClassName,
         )}
       >
@@ -516,7 +516,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
               >
                 <ChevronRight
                   className={cn(
-                    "h-3.5 w-3.5 text-muted-foreground transition-transform duration-200",
+                    "h-3.5 w-3.5 text-white/58 transition-transform duration-200",
                     link.expanded && "rotate-90"
                   )}
                 />
@@ -551,13 +551,10 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
 function renderIcon(link: LinkItem) {
   const isComponent = typeof link.icon === 'function' ||
     (typeof link.icon === 'object' && link.icon !== null && 'render' in link.icon)
-  // Default color for items without explicit iconColor (foreground at 60% opacity)
-  const defaultColor = 'color-mix(in oklch, var(--foreground) 60%, transparent)'
-
   // Lucide components are always colorable; ReactNode icons check iconColorable
   // Default to true for backwards compatibility (most icons are colorable)
   const applyColor = link.iconColorable !== false
-  const colorStyle = applyColor ? { color: link.iconColor || defaultColor } : undefined
+  const colorStyle = applyColor && link.iconColor ? { color: link.iconColor } : undefined
 
   if (isComponent) {
     const Icon = link.icon as React.ComponentType<{ className?: string; style?: React.CSSProperties }>

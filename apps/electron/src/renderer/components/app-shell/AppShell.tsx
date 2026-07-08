@@ -2420,13 +2420,6 @@ function AppShellContent({
           onClick: handleCampaignHomeClick,
         },
         {
-          id: "nav:chat",
-          title: "Chat",
-          icon: MessageSquare,
-          variant: workChatActive ? "default" : "ghost",
-          onClick: handleWorkChatClick,
-        },
-        {
           id: "nav:work",
           title: "Work",
           icon: Briefcase,
@@ -2464,6 +2457,13 @@ function AppShellContent({
             },
           ] : [],
         },
+        {
+          id: "nav:chat",
+          title: "Chat",
+          icon: MessageSquare,
+          variant: workChatActive ? "default" : "ghost",
+          onClick: handleWorkChatClick,
+        },
         { id: "separator:sessions", type: "separator" },
         {
           id: "nav:sessions",
@@ -2483,13 +2483,6 @@ function AppShellContent({
         icon: Globe,
         variant: hqHomeActive ? "default" : "ghost",
         onClick: () => handleArtistHQNavClick('home'),
-      },
-      {
-        id: "nav:work-chat",
-        title: "Chat",
-        icon: MessageSquare,
-        variant: workChatActive ? "default" : "ghost",
-        onClick: handleWorkChatClick,
       },
       {
         id: "nav:plan",
@@ -2590,6 +2583,13 @@ function AppShellContent({
             onClick: handleSessionsNavClick,
           },
         ],
+      },
+      {
+        id: "nav:work-chat",
+        title: "Chat",
+        icon: MessageSquare,
+        variant: workChatActive ? "default" : "ghost",
+        onClick: handleWorkChatClick,
       },
       { id: "nav:brain-separator", type: 'separator' },
       {

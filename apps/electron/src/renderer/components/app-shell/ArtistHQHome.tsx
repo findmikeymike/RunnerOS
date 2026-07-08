@@ -1001,7 +1001,7 @@ export function ArtistHQHome({
           description: 'Schedule, events, and important dates for the artist.',
           orb1: 'bg-indigo-600/10',
           orb2: 'bg-purple-500/5',
-          icon: <CalendarDays className="h-3.5 w-3.5 text-indigo-300/80" />,
+          icon: <CalendarDays className="h-3.5 w-3.5 text-white/58" />,
           label: 'Schedule',
         }
       case 'network':
@@ -1010,7 +1010,7 @@ export function ArtistHQHome({
           description: 'Relationships, roles, contact info, and context on everyone who matters to the artist.',
           orb1: 'bg-emerald-600/10',
           orb2: 'bg-teal-500/5',
-          icon: <Users className="h-3.5 w-3.5 text-emerald-300/80" />,
+          icon: <Users className="h-3.5 w-3.5 text-white/58" />,
           label: 'Contacts',
         }
       case 'profile':
@@ -1019,7 +1019,7 @@ export function ArtistHQHome({
           description: 'Global context every worker should know before touching campaigns, content, research, ads, or outreach.',
           orb1: 'bg-blue-600/10',
           orb2: 'bg-indigo-500/5',
-          icon: <UserRound className="h-3.5 w-3.5 text-blue-300/80" />,
+          icon: <UserRound className="h-3.5 w-3.5 text-white/58" />,
           label: 'Context',
         }
       case 'voice':
@@ -1028,7 +1028,7 @@ export function ArtistHQHome({
           description: 'How the artist talks, writes captions, phrases ideas, and wants public copy to sound.',
           orb1: 'bg-pink-600/10',
           orb2: 'bg-orange-500/5',
-          icon: <MessageSquareText className="h-3.5 w-3.5 text-pink-300/80" />,
+          icon: <MessageSquareText className="h-3.5 w-3.5 text-white/58" />,
           label: 'Style',
         }
       case 'branding':
@@ -1037,7 +1037,7 @@ export function ArtistHQHome({
           description: 'Artist positioning, narrative, voice, references, and creative direction.',
           orb1: 'bg-blue-600/10',
           orb2: 'bg-emerald-500/5',
-          icon: <Sparkles className="h-3.5 w-3.5 text-blue-300/80" />,
+          icon: <Sparkles className="h-3.5 w-3.5 text-white/58" />,
           label: 'Brain',
         }
       default:
@@ -1046,7 +1046,7 @@ export function ArtistHQHome({
           description: 'Global career context, signals, calendar, network, and research. Campaign workspaces pull from here.',
           orb1: 'bg-orange-600/10',
           orb2: 'bg-cyan-500/5',
-          icon: <Sparkles className="h-3.5 w-3.5 text-orange-300/80" />,
+          icon: <Sparkles className="h-3.5 w-3.5 text-white/58" />,
           label: 'Artist HQ',
         }
     }
@@ -1062,9 +1062,9 @@ export function ArtistHQHome({
           <div className={cn("absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full blur-[120px]", headerProps.orb2)} />
           <div className="relative z-10">
             <div className="flex items-start justify-between gap-4">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5">
+              <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4">
                 {headerProps.icon}
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/65">{headerProps.label}</span>
+                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/70">{headerProps.label}</span>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/35">Next</p>

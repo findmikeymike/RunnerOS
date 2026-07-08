@@ -80,7 +80,7 @@ export function BellMenu({ workspaceId }: BellMenuProps) {
           aria-label={t('notifications.bellTitle')}
           className="relative h-[26px] w-[26px] rounded-lg"
         >
-          <Bell className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+          <Bell className="h-4 w-4" strokeWidth={1.5} />
           {badgeColor && unreadCount > 0 && (
             <span
               className={cn(

@@ -404,7 +404,7 @@ export function TopBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label={t("sidebar.library")} className="h-[26px] w-[26px] rounded-lg">
-              <Icons.Wrench className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.Wrench className="h-4 w-4" strokeWidth={1.5} />
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="end" minWidth="min-w-44">
@@ -425,7 +425,7 @@ export function TopBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <TopBarButton onClick={onOpenOutputs} aria-label="Outputs" className="h-[26px] w-[26px] rounded-lg">
-              <Icons.PackageOpen className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.PackageOpen className="h-4 w-4" strokeWidth={1.5} />
             </TopBarButton>
           </TooltipTrigger>
           <TooltipContent side="bottom">Outputs</TooltipContent>
@@ -434,7 +434,7 @@ export function TopBar({
         <Tooltip>
           <TooltipTrigger asChild>
             <TopBarButton onClick={onOpenSettings} aria-label={t("menu.settings")} className="h-[26px] w-[26px] rounded-lg">
-              <Icons.Settings className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.Settings className="h-4 w-4" strokeWidth={1.5} />
             </TopBarButton>
           </TooltipTrigger>
           <TooltipContent side="bottom">{t("menu.settings")}</TooltipContent>
@@ -442,7 +442,7 @@ export function TopBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label={t("menu.addPanelMenu")} className="ml-1 h-[26px] w-[26px] rounded-lg">
-              <Icons.Plus className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.Plus className="h-4 w-4" strokeWidth={1.5} />
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="end" minWidth="min-w-56">
@@ -461,7 +461,7 @@ export function TopBar({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <TopBarButton aria-label={t("menu.helpAndDocs")} className="h-[26px] w-[26px] rounded-lg">
-              <Icons.HelpCircle className="h-4 w-4 text-foreground/50" strokeWidth={1.5} />
+              <Icons.HelpCircle className="h-4 w-4" strokeWidth={1.5} />
             </TopBarButton>
           </DropdownMenuTrigger>
           <StyledDropdownMenuContent align="end" minWidth="min-w-48">
