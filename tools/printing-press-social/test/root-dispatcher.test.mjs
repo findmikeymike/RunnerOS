@@ -307,6 +307,13 @@ test('root dispatcher routes X dry-run', () => {
 
   assert.equal(result.ok, true);
   assert.equal(result.platform, 'x');
+  assert.deepEqual(result.browserPlan.browserSession, {
+    kind: 'runneros-electron-partition',
+    platform: 'x',
+    profile: 'smoke',
+    instanceId: 'social-x-smoke',
+    partition: 'persist:social-x-smoke',
+  });
 });
 
 test('root dispatcher lists assets and content from explicit roots', () => {
@@ -696,8 +703,96 @@ test('root execute returns delegated runner-cdp result for approved dry-run resu
   assert.equal(result.status, 'delegated');
   assert.equal(result.actionId, dryRun.actionId);
   assert.equal(result.code, 'RUNNER_CDP_DELEGATED');
+  assert.deepEqual(result.browserPlan.browserSession, {
+    kind: 'runneros-electron-partition',
+    platform: 'x',
+    profile: 'artist01',
+    instanceId: 'social-x-artist01',
+    partition: 'persist:social-x-artist01',
+  });
+  assert.match(result.next.join(' '), /browserPlan\.browserSession/);
   assert.match(result.next.join(' '), /submit when the visible account and draft match/);
   assert.doesNotMatch(result.next.join(' '), /pause before final submit/i);
+});
+
+test('root execute rejects dry-runs when current profile verification target changed', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  run([
+    'profile', 'add', 'x',
+    '--profile', 'artist01',
+    '--handle', '@artist01',
+    '--json',
+  ], { SOCIAL_HOME: home });
+
+  const dryRun = JSON.parse(run([
+    'post', 'x',
+    '--profile', 'artist01',
+    '--text', 'hello',
+    '--dry-run',
+    '--json',
+  ], { SOCIAL_HOME: home }));
+  run([
+    'profile', 'update', 'x',
+    '--profile', 'artist01',
+    '--handle', '@artist02',
+    '--json',
+  ], { SOCIAL_HOME: home });
+
+  const actionFile = path.join(home, 'dry-run.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+
+  let result;
+  try {
+    run([
+      'execute',
+      '--action-file', actionFile,
+      '--expected-action-id', dryRun.actionId,
+      '--confirm', 'yes',
+      '--json',
+    ], { SOCIAL_HOME: home });
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'PROFILE_VERIFICATION_MISMATCH');
+});
+
+test('root execute rejects dry-runs with tampered browser session identity', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  run([
+    'profile', 'add', 'x',
+    '--profile', 'artist01',
+    '--handle', '@artist01',
+    '--json',
+  ], { SOCIAL_HOME: home });
+
+  const dryRun = JSON.parse(run([
+    'post', 'x',
+    '--profile', 'artist01',
+    '--text', 'hello',
+    '--dry-run',
+    '--json',
+  ], { SOCIAL_HOME: home }));
+  dryRun.browserPlan.browserSession.partition = 'persist:social-x-other';
+  const actionFile = path.join(home, 'dry-run.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+
+  let result;
+  try {
+    run([
+      'execute',
+      '--action-file', actionFile,
+      '--expected-action-id', dryRun.actionId,
+      '--confirm', 'yes',
+      '--json',
+    ], { SOCIAL_HOME: home });
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'PROFILE_BROWSER_SESSION_MISMATCH');
 });
 
 test('root dispatcher does not allow smoke profile for live actions', () => {
