@@ -524,34 +524,32 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
     [outputs, session?.id],
   )
   const latestSessionVisualOutput = sessionVisualOutputs.find((output) => !output.tags?.includes(VISUAL_BOARD_TAG))
-  const seenCanvasIntentOutputIdsRef = React.useRef<Record<string, Set<string>>>({})
+  const lastAutoFocusedCanvasOutputBySessionRef = React.useRef<Record<string, string>>({})
 
   useEffect(() => {
     if (!session?.id || !currentWorkspaceId || outputsLoading) return
-    const seen = seenCanvasIntentOutputIdsRef.current[session.id]
-    if (!seen) {
-      seenCanvasIntentOutputIdsRef.current[session.id] = new Set(sessionVisualOutputs.map((output) => output.id))
-      return
-    }
-
-    const nextCanvasOutput = sessionVisualOutputs.find((output) =>
-      !seen.has(output.id)
-      && !output.tags?.includes(VISUAL_BOARD_TAG)
+    const latestCanvasOutput = sessionVisualOutputs.find((output) =>
+      !output.tags?.includes(VISUAL_BOARD_TAG)
       && output.tags?.includes(OUTPUT_SHOW_IN_CANVAS_TAG)
     )
-    for (const output of sessionVisualOutputs) seen.add(output.id)
-    if (!nextCanvasOutput) return
+    if (!latestCanvasOutput) return
+    if (activeSessionVisualSurface?.outputId === latestCanvasOutput.id) {
+      lastAutoFocusedCanvasOutputBySessionRef.current[session.id] = latestCanvasOutput.id
+      return
+    }
+    if (lastAutoFocusedCanvasOutputBySessionRef.current[session.id] === latestCanvasOutput.id) return
 
     openOutputVisualSurface({
       workspaceId: currentWorkspaceId,
       sessionId: session.id,
-      outputId: nextCanvasOutput.id,
-      title: nextCanvasOutput.title,
-      kind: nextCanvasOutput.kind,
-      createdAt: nextCanvasOutput.createdAt,
-      updatedAt: nextCanvasOutput.updatedAt,
+      outputId: latestCanvasOutput.id,
+      title: latestCanvasOutput.title,
+      kind: latestCanvasOutput.kind,
+      createdAt: latestCanvasOutput.createdAt,
+      updatedAt: latestCanvasOutput.updatedAt,
     })
-  }, [currentWorkspaceId, openOutputVisualSurface, outputsLoading, session?.id, sessionVisualOutputs])
+    lastAutoFocusedCanvasOutputBySessionRef.current[session.id] = latestCanvasOutput.id
+  }, [activeSessionVisualSurface?.outputId, currentWorkspaceId, openOutputVisualSurface, outputsLoading, session?.id, sessionVisualOutputs])
 
   // Input is only disabled when explicitly disabled (e.g., agent needs activation)
   // User can type during streaming - submitting will stop the stream and send

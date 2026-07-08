@@ -2942,15 +2942,43 @@ export class SessionManager implements ISessionManager {
             sessionLog.info('[agent-definitions] Updated ads specialist research metadata')
           }
           const lyricVideoAgent = STARTER_AGENTS.find(agent => agent.slug === 'lyric-video-agent')
+          const lyricVideoOldVisualWorkflow = [
+            '3. If the visual source is missing, help the user choose one lane: existing footage, existing still/artwork, or approved generated visual from `media-generation`.',
+            '4. Write a brief JSON with `audio_file`, `lyrics` or `lyric_lines`, `video_file` or `image_file`, `duration_seconds`, `aspect_ratio`, and `output_dir`.',
+            '5. Run `node bin/genesis-lyric.mjs doctor --json`, then `plan --brief-file ... --json`, then `preflight --brief-file ... --json`.',
+            '6. Stop on preflight blockers. Missing visual means generate/attach one first; do not pretend the render can proceed.',
+            '7. Render only after explicit user approval: `node bin/genesis-lyric.mjs render --brief-file ... --approved --json`.',
+            '8. Do not claim success until `final.mp4` and `render-report.json` exist.',
+            '9. Publish the final MP4 as an Output and set `showInCanvas: true` when available.',
+          ].join('\n')
+          const lyricVideoNewVisualWorkflow = [
+            '3. Before generating or choosing visuals, storyboard the lyric section in chat: 3-6 chronological scenes with lyric/time anchor, frame size, camera direction, movement, mood, and transition logic. Think in shots, not just one prompt.',
+            '4. If the visual source is missing, help the user choose one lane: existing footage, existing still/artwork, artist-photo/face-reference from Artist Vault, or approved generated visual from `media-generation`.',
+            '5. Only publish a storyboard to Canvas when it is visual or review-useful: individual frames, a side-by-side/linear storyboard board, image strip, or approved durable handoff. Keep plain text planning/storyboard notes in chat.',
+            '6. For storyboard images, avoid cramped stacked/contact-sheet collages. Prefer large chronological frames side-by-side or a linear sequence where each scene can be inspected clearly.',
+            '7. Write a brief JSON with `audio_file`, `lyrics` or `lyric_lines`, `video_file` or `image_file`, `duration_seconds`, `aspect_ratio`, and `output_dir`.',
+            '8. Run `node bin/genesis-lyric.mjs doctor --json`, then `plan --brief-file ... --json`, then `preflight --brief-file ... --json`.',
+            '9. Stop on preflight blockers. Missing visual means generate/attach one first; do not pretend the render can proceed.',
+            '10. Render only after explicit user approval: `node bin/genesis-lyric.mjs render --brief-file ... --approved --json`.',
+            '11. Do not claim success until `final.mp4` and `render-report.json` exist.',
+            '12. Publish the final MP4 as an Output with `showInCanvas: true` so it becomes the visible Canvas card; do not leave the user on an older storyboard card.',
+          ].join('\n')
           const lyricVideoPromptUpdated = lyricVideoAgent
-            ? replaceBuiltInAgentPromptText(
-                'lyric-video-agent',
-                '2. Confirm the clip target: platform, aspect ratio, duration, audio file, lyrics/timed lyrics, and visual source.',
-                '2. Confirm the clip target: platform, aspect ratio, duration, lyrics/timed lyrics, visual source, and audio source. If the user did not explicitly provide or drop audio for this run, use the current Campaign Assets / mission-assets `Master:` path as `audio_file`. Only fall back to a demo when no master exists and the demo is clearly the intended current song; otherwise ask. User-provided audio overrides the stored master.',
-              ).updated
+            ? [
+                replaceBuiltInAgentPromptText(
+                  'lyric-video-agent',
+                  '2. Confirm the clip target: platform, aspect ratio, duration, audio file, lyrics/timed lyrics, and visual source.',
+                  '2. Confirm the clip target: platform, aspect ratio, duration, lyrics/timed lyrics, visual source, and audio source. If the user did not explicitly provide or drop audio for this run, use the current Campaign Assets / mission-assets `Master:` path as `audio_file`. Only fall back to a demo when no master exists and the demo is clearly the intended current song; otherwise ask. User-provided audio overrides the stored master.',
+                ).updated,
+                replaceBuiltInAgentPromptText(
+                  'lyric-video-agent',
+                  lyricVideoOldVisualWorkflow,
+                  lyricVideoNewVisualWorkflow,
+                ).updated,
+              ].some(Boolean)
             : false
           if (lyricVideoPromptUpdated) {
-            sessionLog.info('[agent-definitions] Updated Lyric Video campaign master audio guidance')
+            sessionLog.info('[agent-definitions] Updated Lyric Video storyboard and Canvas guidance')
           }
           const artDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'art-director')
           const artDirectorMetadataUpdated = artDirectorAgent

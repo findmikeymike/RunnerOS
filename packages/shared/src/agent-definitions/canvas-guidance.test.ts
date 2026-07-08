@@ -11,6 +11,7 @@ describe('buildCanvasGuidanceSection', () => {
     expect(result).toContain('HTML for local/generated web');
     expect(result).toContain('.chart.json for charts');
     expect(result).toContain('.workflow.json for workflow maps');
+    expect(result).toContain('Keep ordinary planning, notes, rough storyboards, and text-only thinking in chat');
     expect(result).not.toContain('Visual agent mode:');
   });
 

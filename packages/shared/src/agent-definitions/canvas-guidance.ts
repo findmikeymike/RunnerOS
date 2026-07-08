@@ -12,6 +12,7 @@ export function buildCanvasGuidanceSection(agent: { metadata: Pick<AgentMetadata
     '- Set showInCanvas true when the user asks to see, preview, compare, review, present, open, or iterate on the artifact right away.',
     '- Prefer Canvas-native formats: HTML for local/generated web, PNG/JPG/WebP/SVG for images, MP4/WebM/MOV for video, Markdown for reports, CSV/TSV for tables, .chart.json for charts, .workflow.json for workflow maps, and HTML preview plus PPTX/PDF exports for slide decks.',
     '- Use link or receipt Outputs for external services, then attach/export image, PDF, video, or HTML previews when available.',
+    '- Keep ordinary planning, notes, rough storyboards, and text-only thinking in chat unless the user asks for a durable doc or the format is genuinely useful to preview, compare, present, or hand off.',
     '- Do not use Canvas as a substitute for chat, and avoid creating duplicate Canvas items when the artifact is already visible.',
   ];
 
