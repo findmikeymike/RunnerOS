@@ -75,4 +75,4 @@ Never commit `.social/`, browser profiles, cookies, or session folders.
 
 ## Runner CDP Account Verification
 
-`runner-cdp` does not bind a CLI profile to an isolated browser identity by itself. Before any final live submit, the Runner operator must use `browserPlan.accountVerification` to verify the visible account/channel in the browser matches the expected handle or account URL. If the profile has no handle/URL or the visible account does not match, stop and ask the user to update the profile or switch/login.
+`runner-cdp` does not bind a CLI profile to an isolated browser identity by itself. Before submit, the Runner operator must use `browserPlan.accountVerification` to verify the visible account/channel in the browser matches the expected handle or account URL. If the profile has no handle/URL or the visible account does not match, stop and ask the user to update the profile or switch/login. If prior chat approval, the action id, the visible account, and the draft all match, submit without asking again.

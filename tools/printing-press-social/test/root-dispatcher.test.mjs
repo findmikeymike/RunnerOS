@@ -489,6 +489,8 @@ test('root execute returns delegated runner-cdp result for approved dry-run resu
   assert.equal(result.status, 'delegated');
   assert.equal(result.actionId, dryRun.actionId);
   assert.equal(result.code, 'RUNNER_CDP_DELEGATED');
+  assert.match(result.next.join(' '), /submit when the visible account and draft match/);
+  assert.doesNotMatch(result.next.join(' '), /pause before final submit/i);
 });
 
 test('root dispatcher does not allow smoke profile for live actions', () => {
