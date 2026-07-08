@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import { OAUTH_RELAY_CALLBACK_URL, isOAuthRelayState } from '../../auth/oauth-relay.ts';
-import { SourceCredentialManager } from '../credential-manager.ts';
+import { findReusableGoogleOAuthClientConfig, SourceCredentialManager } from '../credential-manager.ts';
 import type { LoadedSource, FolderSourceConfig } from '../types.ts';
 
 function createApiSource(overrides: Partial<FolderSourceConfig> = {}): LoadedSource {
@@ -119,5 +122,40 @@ describe('SourceCredentialManager.prepareOAuth relay wrapping', () => {
     const state = authUrl.searchParams.get('state');
     expect(state).toBeTruthy();
     expect(isOAuthRelayState(state!)).toBe(false);
+  });
+});
+
+describe('findReusableGoogleOAuthClientConfig', () => {
+  it('reuses matching Google service OAuth client config from another workspace source', () => {
+    const configDir = join(tmpdir(), `runneros-google-oauth-config-${Date.now()}`);
+    const sourceDir = join(configDir, 'workspaces', 'campaign-a', 'sources', 'google-calendar');
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(join(sourceDir, 'config.json'), JSON.stringify({
+      provider: 'google',
+      api: {
+        baseUrl: 'https://www.googleapis.com/calendar/v3',
+        googleService: 'calendar',
+        googleOAuthClientId: 'shared-client-id',
+        googleOAuthClientSecret: 'shared-client-secret',
+      },
+    }));
+
+    try {
+      const result = findReusableGoogleOAuthClientConfig(createApiSource({
+        slug: 'google-calendar',
+        api: {
+          baseUrl: 'https://www.googleapis.com/calendar/v3',
+          authType: 'oauth',
+          googleService: 'calendar',
+        },
+      }), configDir);
+
+      expect(result).toEqual({
+        clientId: 'shared-client-id',
+        clientSecret: 'shared-client-secret',
+      });
+    } finally {
+      rmSync(configDir, { recursive: true, force: true });
+    }
   });
 });

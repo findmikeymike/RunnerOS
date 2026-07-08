@@ -2,12 +2,16 @@ import { describe, expect, it } from 'bun:test';
 import type { SessionToolContext } from '../context.ts';
 import {
   handleCreateOutput,
+  handlePromoteOutputToFinal,
   type CreateOutputResult,
   type CreateOutputToolInput,
+  type PromoteOutputToFinalResult,
+  type PromoteOutputToFinalToolInput,
 } from './outputs.ts';
 
 function makeCtx(opts?: {
   createOutput?: (input: CreateOutputToolInput) => Promise<CreateOutputResult>;
+  promoteOutputToFinal?: (input: PromoteOutputToFinalToolInput) => Promise<PromoteOutputToFinalResult>;
 }): SessionToolContext {
   const ctx: Partial<SessionToolContext> = {
     sessionId: 't',
@@ -28,6 +32,7 @@ function makeCtx(opts?: {
     get skillsPath() { return '/tmp/skills'; },
   };
   if (opts?.createOutput) ctx.createOutput = opts.createOutput;
+  if (opts?.promoteOutputToFinal) ctx.promoteOutputToFinal = opts.promoteOutputToFinal;
   return ctx as SessionToolContext;
 }
 
@@ -151,6 +156,103 @@ describe('output handlers', () => {
       shownInCanvas: true,
       canvasReceipt: 'Pinned output x to Canvas.',
     });
+  });
+
+  it('create_output accepts Work Product context and approval metadata', async () => {
+    let captured: CreateOutputToolInput | undefined;
+    const ctx = makeCtx({
+      createOutput: async (input) => {
+        captured = input;
+        return { ok: true, outputId: '11111111-1111-4111-8111-111111111111' };
+      },
+    });
+
+    const result = await handleCreateOutput(ctx, {
+      title: 'Press email draft',
+      kind: 'document',
+      summary: 'Draft press email for campaign approval.',
+      context: { scope: 'campaign', campaignId: 'blue-moon' },
+      approval: { state: 'pending', note: 'Approve before send.' },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(captured?.context).toEqual({ scope: 'campaign', campaignId: 'blue-moon' });
+    expect(captured?.approval).toEqual({ state: 'pending', note: 'Approve before send.' });
+  });
+
+  it('create_output rejects incomplete Work Product metadata', async () => {
+    let called = false;
+    const ctx = makeCtx({
+      createOutput: async () => {
+        called = true;
+        return { ok: true };
+      },
+    });
+
+    const missingCampaign = await handleCreateOutput(ctx, {
+      title: 'Press email draft',
+      kind: 'document',
+      summary: 'Draft press email.',
+      context: { scope: 'campaign' },
+    });
+    const badApproval = await handleCreateOutput(ctx, {
+      title: 'Press email draft',
+      kind: 'document',
+      summary: 'Draft press email.',
+      approval: { state: 'blocked' as never },
+    });
+
+    expect(missingCampaign.isError).toBe(true);
+    expect(badApproval.isError).toBe(true);
+    expect(called).toBe(false);
+  });
+
+  it('promote_output_to_final validates campaign id before calling capability', async () => {
+    let called = false;
+    const ctx = makeCtx({
+      promoteOutputToFinal: async () => {
+        called = true;
+        return { ok: true, finalId: 'final-1' };
+      },
+    });
+
+    const result = await handlePromoteOutputToFinal(ctx, {
+      outputId: 'output-1',
+      scope: 'campaign',
+      slot: 'Cover Art',
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain('campaignId is required');
+    expect(called).toBe(false);
+  });
+
+  it('promote_output_to_final trims input and returns final id', async () => {
+    let captured: PromoteOutputToFinalToolInput | undefined;
+    const ctx = makeCtx({
+      promoteOutputToFinal: async (input) => {
+        captured = input;
+        return { ok: true, finalId: 'final-1' };
+      },
+    });
+
+    const result = await handlePromoteOutputToFinal(ctx, {
+      outputId: ' output-1 ',
+      scope: 'campaign',
+      campaignId: ' campaign-1 ',
+      slot: ' Cover Art ',
+      makePrimary: true,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(captured).toMatchObject({
+      outputId: 'output-1',
+      scope: 'campaign',
+      campaignId: 'campaign-1',
+      slot: 'Cover Art',
+      makePrimary: true,
+    });
+    expect(result.structuredContent).toEqual({ ok: true, finalId: 'final-1' });
   });
 
   describe('receipt occurredAt validation', () => {

@@ -276,7 +276,7 @@ export interface Message {
   // Content badges for inline display (sources, skills)
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
-  displayIntent?: 'canvas-visual-review';
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive';
   /** Annotation payloads for this message */
   annotations?: AnnotationV1[];
   isError?: boolean;
@@ -366,7 +366,7 @@ export interface StoredMessage {
   /** Content badges for inline display (sources, skills) */
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
-  displayIntent?: 'canvas-visual-review';
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive';
   /** Annotations persisted at message level */
   annotations?: AnnotationV1[];
   // Turn grouping - critical for TurnCard rendering after reload

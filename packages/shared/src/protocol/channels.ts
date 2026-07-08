@@ -495,6 +495,8 @@ export const RPC_CHANNELS = {
     LIST: 'outputs:list',
     GET: 'outputs:get',
     DELETE: 'outputs:delete',
+    PROMOTE_TO_FINAL: 'outputs:promoteToFinal',
+    REMOVE_FROM_FINAL: 'outputs:removeFromFinal',
     GET_VISUAL_BOARD: 'outputs:getVisualBoard',
     SAVE_VISUAL_BOARD: 'outputs:saveVisualBoard',
     APPLY_VISUAL_SURFACE_EVENT: 'outputs:applyVisualSurfaceEvent',

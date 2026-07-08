@@ -2,6 +2,8 @@ import { basename, isAbsolute, relative, resolve } from 'node:path';
 import type {
   OutputAsset,
   OutputAssetRole,
+  OutputApproval,
+  OutputContext,
   OutputKind,
   OutputLink,
   OutputManifest,
@@ -38,6 +40,8 @@ const ASSET_ROLES: ReadonlySet<OutputAssetRole> = new Set([
 const RECEIPT_STATUSES = new Set(['succeeded', 'failed', 'pending']);
 const LINK_ROLES = new Set(['primary', 'source', 'related', 'external']);
 const ORIGIN_SOURCES = new Set(['workflow', 'session', 'automation', 'manual', 'deep-research']);
+const OUTPUT_CONTEXT_SCOPES: ReadonlySet<OutputContext['scope']> = new Set(['hq', 'campaign']);
+const OUTPUT_APPROVAL_STATES: ReadonlySet<OutputApproval['state']> = new Set(['none', 'pending', 'approved', 'changes_requested']);
 const PREVIEW_MODES: ReadonlySet<OutputPreviewMode> = new Set([
   'markdown',
   'text',
@@ -171,6 +175,22 @@ function isOutputPreview(value: unknown, assetIds: ReadonlySet<string>): value i
   return true;
 }
 
+function isOutputContext(value: unknown): value is OutputContext {
+  if (!isRecord(value)) return false;
+  if (typeof value.scope !== 'string' || !OUTPUT_CONTEXT_SCOPES.has(value.scope as OutputContext['scope'])) return false;
+  if (value.campaignId !== undefined && (typeof value.campaignId !== 'string' || !value.campaignId.trim())) return false;
+  if (value.scope === 'campaign' && typeof value.campaignId !== 'string') return false;
+  return true;
+}
+
+function isOutputApproval(value: unknown): value is OutputApproval {
+  if (!isRecord(value)) return false;
+  if (typeof value.state !== 'string' || !OUTPUT_APPROVAL_STATES.has(value.state as OutputApproval['state'])) return false;
+  if (!isOptionalString(value.note)) return false;
+  if (value.updatedAt !== undefined && !isIsoDateString(value.updatedAt)) return false;
+  return true;
+}
+
 export function isOutputManifest(value: unknown, expectedOutputId?: string): value is OutputManifest {
   if (!isRecord(value)) return false;
   if (value.schemaVersion !== 1) return false;
@@ -200,6 +220,8 @@ export function isOutputManifest(value: unknown, expectedOutputId?: string): val
     if (!assetIds.has(value.primary.id)) return false;
   }
   if (value.preview !== undefined && !isOutputPreview(value.preview, assetIds)) return false;
+  if (value.context !== undefined && !isOutputContext(value.context)) return false;
+  if (value.approval !== undefined && !isOutputApproval(value.approval)) return false;
   if (value.tags !== undefined && !isStringArray(value.tags)) return false;
   return true;
 }

@@ -285,6 +285,8 @@ export function createOutputBundle(workspaceRootPath: string, input: CreateOutpu
     receipts: input.receipts ?? [],
     links: input.links ?? [],
     preview,
+    context: input.context,
+    approval: input.approval,
     tags: input.tags,
   };
 

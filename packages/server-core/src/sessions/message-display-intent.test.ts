@@ -15,4 +15,18 @@ describe('message display intent', () => {
     expect(stored.displayIntent).toBe('canvas-visual-review');
     expect(storedToMessage(stored).displayIntent).toBe('canvas-visual-review');
   });
+
+  it('persists passive agent message display intent', () => {
+    const message: Message = {
+      id: 'msg-2',
+      role: 'user',
+      content: 'Passive agent update.',
+      timestamp: 123,
+      displayIntent: 'agent-message-passive',
+    };
+
+    const stored = messageToStored(message);
+    expect(stored.displayIntent).toBe('agent-message-passive');
+    expect(storedToMessage(stored).displayIntent).toBe('agent-message-passive');
+  });
 });
