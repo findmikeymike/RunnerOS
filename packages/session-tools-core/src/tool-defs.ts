@@ -57,6 +57,7 @@ import {
   handleRecallMemory,
 } from './handlers/memory.ts';
 import { handleCreateOutput, handlePromoteOutputToFinal } from './handlers/outputs.ts';
+import { handleMediaProviderRequest } from './handlers/media-provider-request.ts';
 import { handleVisualSurface } from './handlers/visual-surface.ts';
 import { handleVisualSurfaceState } from './handlers/visual-surface-state.ts';
 import {
@@ -582,6 +583,17 @@ export const PromoteOutputToFinalSchema = z.object({
   assetId: z.string().optional().describe('Optional asset ID inside the output. Defaults to the output primary asset.'),
   makePrimary: z.boolean().optional().describe('When true, replaces the primary final for this slot/scope.'),
   note: z.string().optional().describe('Optional note explaining why this output is final.'),
+});
+
+export const MediaProviderRequestSchema = z.object({
+  provider: z.enum(['fal', 'replicate', 'wavespeed']).describe('Media provider to call. Uses keys saved in Settings/env.'),
+  path: z.string().min(1).describe('Provider API path or allowed provider URL. Fal paths resolve under https://queue.fal.run/. Replicate paths resolve under https://api.replicate.com/v1/. WaveSpeed paths resolve under https://api.wavespeed.ai/api/v3/.'),
+  method: z.enum(['GET', 'POST']).optional().describe('HTTP method. Defaults to POST.'),
+  body: z.record(z.string(), z.unknown()).optional().describe('JSON body for POST requests. Use the exact provider/model schema.'),
+  headers: z.record(z.string(), z.string()).optional().describe('Optional extra headers. Authorization is added automatically.'),
+  downloadMedia: z.boolean().optional().describe('Download media URLs found in the JSON response into the workspace. Defaults to true.'),
+  outputDir: z.string().optional().describe('Output folder for downloaded media. Relative paths resolve from the session working directory and must stay inside it.'),
+  fileNamePrefix: z.string().optional().describe('Filename prefix for downloaded media assets.'),
 });
 
 export const VideoProjectCreateSchema = z.object({
@@ -1205,6 +1217,15 @@ Use this after create_output when the user or workflow has chosen a keeper/final
 
 Use scope "hq" for workspace-level finals and scope "campaign" with campaignId for campaign-specific finals. Set makePrimary when this should become the primary final for that slot.`,
 
+  media_provider_request: `Call a connected media-generation provider API and optionally download returned media files into the workspace.
+
+Use this only after the user has approved the generation brief and any paid/API spend. The tool handles saved keys and auth headers for:
+- Fal: \`FAL_API_KEY\` or legacy \`SQUAD_FAL_API_KEY\`, with \`Authorization: Key ...\`
+- Replicate: \`REPLICATE_API_TOKEN\`, with \`Authorization: Bearer ...\`
+- WaveSpeed: \`WAVESPEED_API_KEY\` or legacy \`SQUAD_WAVESPEED_API_KEY\`, with \`Authorization: Bearer ...\`
+
+Pass the provider path/model endpoint and exact JSON body required by that provider. The tool returns provider JSON plus downloaded local file paths when media URLs are present. Publish user-facing files with \`create_output\` and \`showInCanvas: true\` when they should appear in Canvas.`,
+
   video_project_create: `Create a local RunnerOS Video Studio project file.
 
 Use this before timeline edits. The project file is the source of truth for both agents and the future Video Studio UI.
@@ -1358,6 +1379,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'recall_memory', description: TOOL_DESCRIPTIONS.recall_memory, inputSchema: RecallMemorySchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleRecallMemory },
   { name: 'create_output', description: TOOL_DESCRIPTIONS.create_output, inputSchema: CreateOutputSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateOutput },
   { name: 'promote_output_to_final', description: TOOL_DESCRIPTIONS.promote_output_to_final, inputSchema: PromoteOutputToFinalSchema, executionMode: 'registry', safeMode: 'block', handler: handlePromoteOutputToFinal },
+  { name: 'media_provider_request', description: TOOL_DESCRIPTIONS.media_provider_request, inputSchema: MediaProviderRequestSchema, executionMode: 'registry', safeMode: 'block', handler: handleMediaProviderRequest },
   { name: 'video_project_create', description: TOOL_DESCRIPTIONS.video_project_create, inputSchema: VideoProjectCreateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectCreate },
   { name: 'video_project_update', description: TOOL_DESCRIPTIONS.video_project_update, inputSchema: VideoProjectUpdateSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoProjectUpdate },
   { name: 'video_media_import', description: TOOL_DESCRIPTIONS.video_media_import, inputSchema: VideoMediaImportSchema, executionMode: 'registry', safeMode: 'block', handler: handleVideoMediaImport },

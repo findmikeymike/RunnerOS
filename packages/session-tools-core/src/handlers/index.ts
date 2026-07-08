@@ -191,6 +191,12 @@ export type {
   CreateOutputContextInput,
   CreateOutputApprovalInput,
 } from './outputs.ts';
+export { handleMediaProviderRequest } from './media-provider-request.ts';
+export type {
+  MediaProvider,
+  MediaProviderRequestInput,
+  MediaRequestMethod,
+} from './media-provider-request.ts';
 
 // Video Studio
 export {
