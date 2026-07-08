@@ -4,6 +4,14 @@ import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type {
@@ -42,8 +50,10 @@ const EMPTY_DRAFT: Draft = {
 export default function SocialAccountsSettingsPage() {
   const [doctor, setDoctor] = React.useState<SocialAccountsDoctorResult | null>(null)
   const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
+  const [editingRef, setEditingRef] = React.useState<{ platform: SocialPlatform; profile: string } | null>(null)
   const [busy, setBusy] = React.useState<string | null>('load')
   const [loginPlan, setLoginPlan] = React.useState<SocialAccountCommandResult | null>(null)
+  const [pendingDelete, setPendingDelete] = React.useState<SocialAccountProfileStatus | null>(null)
 
   const profiles = React.useMemo(
     () => doctor?.platforms.flatMap((platform) => platform.profiles) ?? [],
@@ -84,12 +94,13 @@ export default function SocialAccountsSettingsPage() {
       const input = {
         platform: draft.platform,
         profile,
-        handle: draft.handle.trim() || undefined,
-        accountUrl: draft.accountUrl.trim() || undefined,
+        handle: exists ? draft.handle.trim() : draft.handle.trim() || undefined,
+        accountUrl: exists ? draft.accountUrl.trim() : draft.accountUrl.trim() || undefined,
       }
       if (exists) await window.electronAPI.updateSocialAccount(input)
       else await window.electronAPI.addSocialAccount(input)
       setDraft(EMPTY_DRAFT)
+      setEditingRef(null)
       await load()
       toast.success(exists ? 'Social profile updated' : 'Social profile added')
     } catch (error) {
@@ -106,13 +117,22 @@ export default function SocialAccountsSettingsPage() {
       handle: profile.accountHandle ?? '',
       accountUrl: profile.accountUrl ?? '',
     })
+    setEditingRef({ platform: profile.platform, profile: profile.profile })
   }
 
-  const remove = async (profile: SocialAccountProfileStatus) => {
+  const cancelEdit = () => {
+    setDraft(EMPTY_DRAFT)
+    setEditingRef(null)
+  }
+
+  const remove = async () => {
+    if (!pendingDelete) return
+    const profile = pendingDelete
     setBusy(`${profile.platform}:${profile.profile}:delete`)
     try {
       await window.electronAPI.deleteSocialAccount({ platform: profile.platform, profile: profile.profile })
       await load()
+      setPendingDelete(null)
       toast.success('Social profile deleted')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not delete social profile')
@@ -157,6 +177,7 @@ export default function SocialAccountsSettingsPage() {
                     <select
                       value={draft.platform}
                       onChange={(event) => setDraft((prev) => ({ ...prev, platform: event.target.value as SocialPlatform }))}
+                      disabled={Boolean(editingRef)}
                       className="h-9 w-full rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm text-white outline-none"
                     >
                       {PLATFORMS.map((platform) => (
@@ -164,14 +185,19 @@ export default function SocialAccountsSettingsPage() {
                       ))}
                     </select>
                   </label>
-                  <Field label="Profile" value={draft.profile} placeholder="artist-main" onChange={(profile) => setDraft((prev) => ({ ...prev, profile }))} />
+                  <Field label="Profile" value={draft.profile} placeholder="artist-main" disabled={Boolean(editingRef)} onChange={(profile) => setDraft((prev) => ({ ...prev, profile }))} />
                   <Field label="Handle" value={draft.handle} placeholder="@yourhandle" onChange={(handle) => setDraft((prev) => ({ ...prev, handle }))} />
                   <Field label="Account URL" value={draft.accountUrl} placeholder="https://instagram.com/yourhandle" onChange={(accountUrl) => setDraft((prev) => ({ ...prev, accountUrl }))} />
-                  <div className="flex items-end">
+                  <div className="flex items-end gap-2">
                     <Button type="button" onClick={save} disabled={busy === 'save'} className="w-full">
                       {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" /> : draft.profile ? <Save className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
                       Save
                     </Button>
+                    {editingRef && (
+                      <Button type="button" variant="outline" onClick={cancelEdit} disabled={busy === 'save'}>
+                        Cancel
+                      </Button>
+                    )}
                   </div>
                 </div>
               </SettingsCardContent>
@@ -200,7 +226,7 @@ export default function SocialAccountsSettingsPage() {
                       profile={profile}
                       busy={busy}
                       onEdit={() => edit(profile)}
-                      onDelete={() => remove(profile)}
+                      onDelete={() => setPendingDelete(profile)}
                       onLogin={() => login(profile)}
                     />
                   ))}
@@ -220,23 +246,75 @@ export default function SocialAccountsSettingsPage() {
               </SettingsCard>
             </SettingsSection>
           )}
+          <DeleteProfileDialog
+            profile={pendingDelete}
+            busy={Boolean(pendingDelete && busy === `${pendingDelete.platform}:${pendingDelete.profile}:delete`)}
+            onCancel={() => setPendingDelete(null)}
+            onConfirm={remove}
+          />
         </div>
       </ScrollArea>
     </div>
   )
 }
 
-function Field({ label, value, placeholder, onChange }: { label: string; value: string; placeholder: string; onChange: (value: string) => void }) {
+function Field({
+  label,
+  value,
+  placeholder,
+  disabled,
+  onChange,
+}: {
+  label: string
+  value: string
+  placeholder: string
+  disabled?: boolean
+  onChange: (value: string) => void
+}) {
   return (
     <label className="space-y-1">
       <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-white/34">{label}</span>
       <input
         value={value}
         placeholder={placeholder}
+        disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
-        className="h-9 w-full rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/22"
+        className="h-9 w-full rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/22 disabled:cursor-not-allowed disabled:opacity-55"
       />
     </label>
+  )
+}
+
+function DeleteProfileDialog({
+  profile,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  profile: SocialAccountProfileStatus | null
+  busy: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  const agentRef = profile ? `${profile.platform}/${profile.profile}` : ''
+  return (
+    <Dialog open={Boolean(profile)} onOpenChange={(open) => { if (!open && !busy) onCancel() }}>
+      <DialogContent className="sm:max-w-[420px]">
+        <DialogHeader>
+          <DialogTitle>Delete social profile?</DialogTitle>
+          <DialogDescription>
+            This removes the saved profile entry for <span className="font-mono text-white/72">{agentRef}</span>. The agent will no longer be able to select it.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>Cancel</Button>
+          <Button type="button" variant="destructive" onClick={onConfirm} disabled={busy}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            Delete
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

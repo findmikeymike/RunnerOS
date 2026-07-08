@@ -94,6 +94,27 @@ test('root dispatcher routes normalized profile lifecycle commands', () => {
   assert.equal(updated.command, 'profile.update');
   assert.equal(updated.data.accountUrl, 'https://x.com/artist01');
 
+  const cleared = JSON.parse(run([
+    'profile', 'update', 'x',
+    '--profile', 'artist01',
+    '--clear-handle',
+    '--clear-account-url',
+    '--json',
+  ], env));
+  assert.equal(cleared.command, 'profile.update');
+  assert.equal(cleared.data.accountHandle, null);
+  assert.equal(cleared.data.accountUrl, null);
+
+  const restored = JSON.parse(run([
+    'profile', 'update', 'x',
+    '--profile', 'artist01',
+    '--handle', '@artist01',
+    '--account-url', 'https://x.com/artist01',
+    '--json',
+  ], env));
+  assert.equal(restored.data.accountHandle, '@artist01');
+  assert.equal(restored.data.accountUrl, 'https://x.com/artist01');
+
   const status = JSON.parse(run(['profile', 'status', 'x', '--profile', 'artist01', '--json'], env));
   assert.equal(status.profileId, 'artist01');
   assert.equal(status.accountHandle, '@artist01');
