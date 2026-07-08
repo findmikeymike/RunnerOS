@@ -551,8 +551,8 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
 function renderIcon(link: LinkItem) {
   const isComponent = typeof link.icon === 'function' ||
     (typeof link.icon === 'object' && link.icon !== null && 'render' in link.icon)
-  // Default color for items without explicit iconColor (foreground at 60% opacity)
-  const defaultColor = 'color-mix(in oklch, var(--foreground) 60%, transparent)'
+  // Keep nav icons readable on dark workspace surfaces.
+  const defaultColor = 'rgb(255 255 255 / 0.58)'
 
   // Lucide components are always colorable; ReactNode icons check iconColorable
   // Default to true for backwards compatibility (most icons are colorable)
