@@ -771,6 +771,23 @@ body
     expect(contentGenius?.systemPrompt).toContain('Do not treat this as video editing or publishing')
   })
 
+  test('starter library includes Scroll Stopper as a content concept worker', () => {
+    const scrollStopper = STARTER_AGENTS.find((agent) => agent.slug === 'scroll-stopper')
+
+    expect(scrollStopper).toBeDefined()
+    expect(scrollStopper?.metadata.name).toBe('Scroll Stopper')
+    expect(scrollStopper?.metadata.permissionMode).toBe('ask')
+    expect(scrollStopper?.metadata.thinkingLevel).toBe('high')
+    expect(scrollStopper?.metadata.skills).toEqual(['scroll-stopper'])
+    expect(scrollStopper?.metadata.tags).toContain('content')
+    expect(scrollStopper?.metadata.tags).toContain('ai-video')
+    expect(scrollStopper?.metadata.tags).toContain('campaigns')
+    expect(scrollStopper?.systemPrompt).toContain('absurd vertical AI-video concepts')
+    expect(scrollStopper?.systemPrompt).toContain('cover frame is the main product')
+    expect(scrollStopper?.systemPrompt).toContain('No real named people, deepfakes')
+    expect(scrollStopper?.systemPrompt).toContain('hand off to the appropriate video, social, or ads worker')
+  })
+
   test('starter library includes the Shopify Agent with bundled Shopify source', () => {
     const shopifyAgent = STARTER_AGENTS.find((agent) => agent.slug === 'shopify-agent')
 

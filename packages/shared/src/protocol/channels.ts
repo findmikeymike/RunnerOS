@@ -434,6 +434,8 @@ export const RPC_CHANNELS = {
     PLAN_IMPORT: 'missionAssets:planImport',
     CHOOSE_FILES: 'missionAssets:chooseFiles',
     IMPORT: 'missionAssets:import',
+    TRANSCRIBE_LYRICS: 'missionAssets:transcribeLyrics',
+    SAVE_LYRICS: 'missionAssets:saveLyrics',
     SCAN: 'missionAssets:scan',
     OPEN_FOLDER: 'missionAssets:openFolder',
   },

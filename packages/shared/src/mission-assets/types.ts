@@ -25,6 +25,26 @@ export type MissionAssetStorageMode = 'copied' | 'linked' | 'mixed';
 
 export type MissionAssetKindHint = 'master' | 'lyrics' | 'cover-art' | 'any';
 
+export interface MissionLyricsLine {
+  text: string;
+  start_time: number;
+  end_time: number;
+}
+
+export interface MissionAssetLyricsMetadata {
+  text: string;
+  lyricLines?: MissionLyricsLine[];
+  reviewRequired: boolean;
+  status: 'machine' | 'approved' | 'manual';
+  sourceAudioAssetId?: string;
+  sourceAudioPath?: string;
+  transcriptRelativePath?: string;
+  model?: string;
+  engine?: string;
+  generatedAt?: string;
+  reviewedAt?: string;
+}
+
 export interface MissionAssetRecord {
   id: string;
   kind: MissionAssetKind;
@@ -38,6 +58,7 @@ export interface MissionAssetRecord {
   status: MissionAssetStatus;
   usableByAgents: boolean;
   notes?: string;
+  lyrics?: MissionAssetLyricsMetadata;
   createdAt: string;
   updatedAt: string;
 }
@@ -83,4 +104,37 @@ export interface MissionAssetScanResult {
   manifest: MissionAssetManifest;
   added: MissionAssetRecord[];
   skipped: Array<{ path: string; reason: string }>;
+}
+
+export interface MissionAssetSaveLyricsInput {
+  lyricsText: string;
+  lyricLines?: MissionLyricsLine[];
+  assetId?: string;
+  sourceAudioAssetId?: string;
+  transcriptRelativePath?: string;
+  model?: string;
+  engine?: string;
+  generatedAt?: string;
+  reviewRequired?: boolean;
+  status?: MissionAssetLyricsMetadata['status'];
+}
+
+export interface MissionAssetSaveLyricsResult {
+  manifest: MissionAssetManifest;
+  lyricsAsset: MissionAssetRecord;
+}
+
+export interface MissionAssetTranscribeLyricsOptions {
+  audioAssetId?: string;
+  model?: string;
+  force?: boolean;
+}
+
+export interface MissionAssetTranscribeLyricsResult {
+  ok: boolean;
+  manifest: MissionAssetManifest;
+  lyricsAsset?: MissionAssetRecord;
+  audioAsset?: MissionAssetRecord;
+  error?: string;
+  blockers?: Array<{ code: string; message: string }>;
 }

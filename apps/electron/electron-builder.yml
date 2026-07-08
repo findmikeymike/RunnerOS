@@ -69,6 +69,7 @@ files:
   - tools/shopify/**/*
   - tools/printify/**/*
   - tools/genesis-lyric/**/*
+  - tools/lyrics-transcriber/**/*
   # Exclude everything from node_modules (will use extraResources for SDK)
   - "!node_modules/**/*"
 
@@ -167,6 +168,11 @@ mac:
     # Managed local Genesis single-video lyric wrapper.
     - from: ../../tools/genesis-lyric
       to: app/tools/genesis-lyric
+      filter:
+        - "**/*"
+    # Managed local Whisper lyrics transcription wrapper.
+    - from: ../../tools/lyrics-transcriber
+      to: app/tools/lyrics-transcriber
       filter:
         - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).
@@ -295,6 +301,11 @@ win:
       to: app/tools/genesis-lyric
       filter:
         - "**/*"
+    # Managed local Whisper lyrics transcription wrapper.
+    - from: ../../tools/lyrics-transcriber
+      to: app/tools/lyrics-transcriber
+      filter:
+        - "**/*"
     - from: vendor/bun/bun.exe
       to: vendor/bun/bun.exe
     - from: vendor/codex/win32-x64
@@ -382,6 +393,11 @@ linux:
     # Managed local Genesis single-video lyric wrapper.
     - from: ../../tools/genesis-lyric
       to: app/tools/genesis-lyric
+      filter:
+        - "**/*"
+    # Managed local Whisper lyrics transcription wrapper.
+    - from: ../../tools/lyrics-transcriber
+      to: app/tools/lyrics-transcriber
       filter:
         - "**/*"
     # WhatsApp worker subprocess (self-contained; Baileys bundled in).

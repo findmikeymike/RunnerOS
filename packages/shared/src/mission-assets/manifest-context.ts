@@ -43,7 +43,31 @@ function keyAssetLines(files: MissionAssetRecord[]): string[] {
     `- Master: ${master ?? 'missing'}`,
     `- Cover art: ${cover ?? 'missing'}`,
     `- Lyrics: ${lyrics ?? 'missing'}`,
+    ...lyricsStatusLines(files),
   ];
+}
+
+function lyricsStatusLines(files: MissionAssetRecord[]): string[] {
+  const record = firstLyricsRecord(files);
+  if (!record?.lyrics) return ['- Lyrics status: missing'];
+  const status = record.lyrics.reviewRequired ? 'needs review' : 'approved';
+  const lines = [
+    `- Lyrics status: ${status}`,
+    `- Lyrics source audio: ${record.lyrics.sourceAudioPath ?? 'unknown'}`,
+  ];
+  if (record.lyrics.text) {
+    lines.push('', '## Saved Lyrics', '', record.lyrics.text);
+  }
+  if (record.lyrics.lyricLines?.length) {
+    lines.push('', '## Timed Lyric Lines', '', '```json', JSON.stringify(record.lyrics.lyricLines, null, 2), '```');
+  }
+  return lines;
+}
+
+function firstLyricsRecord(files: MissionAssetRecord[]): MissionAssetRecord | null {
+  return files.find((file) => file.kind === 'lyrics' && file.status === 'available' && file.lyrics && !file.lyrics.reviewRequired)
+    ?? files.find((file) => file.kind === 'lyrics' && file.status === 'available' && file.lyrics)
+    ?? null;
 }
 
 function bucketLines(files: MissionAssetRecord[]): string[] {

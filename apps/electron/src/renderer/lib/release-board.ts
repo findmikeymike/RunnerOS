@@ -149,7 +149,7 @@ export function mergeReleaseBoardWithAssets(board: ReleaseBoard, manifest: Missi
     ...category,
     items: category.items.map((item) => {
       if (item.status === 'done' || item.status === 'skipped' || !item.assetKinds?.length) return item
-      const asset = files.find((file) => item.assetKinds?.includes(file.kind))
+      const asset = files.find((file) => assetSatisfiesItem(file, item))
       if (!asset) return item
       changed = true
       return {
@@ -162,6 +162,12 @@ export function mergeReleaseBoardWithAssets(board: ReleaseBoard, manifest: Missi
   }))
 
   return changed ? { ...board, categories, updatedAt: new Date().toISOString() } : board
+}
+
+function assetSatisfiesItem(asset: MissionAssetManifest['files'][number], item: ReleaseBoardItem): boolean {
+  if (!item.assetKinds?.includes(asset.kind)) return false
+  if (item.id === 'lyrics') return Boolean(asset.lyrics && !asset.lyrics.reviewRequired)
+  return true
 }
 
 export function toggleReleaseBoardItem(board: ReleaseBoard, categoryId: ReleaseBoardCategory['id'], itemId: string): ReleaseBoard {

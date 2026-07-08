@@ -52,6 +52,7 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   SETUP_CONCIERGE_SLUG,
   SOCIAL_PUBLISHER_SLUG,
   'content-genius',
+  'scroll-stopper',
   'video-director',
   'video-editor-agent',
   'raw-video-editor',

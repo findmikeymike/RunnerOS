@@ -1,0 +1,12 @@
+{
+  "name": "whisper-cli",
+  "source": "https://github.com/ggml-org/whisper.cpp.git#v1.9.1-f049fff95a089aa9969deb009cdd4892b3e74916",
+  "sourcePath": "/tmp/runneros-whisper-build/whisper.cpp/build-runneros/bin/whisper-cli",
+  "license": "MIT",
+  "targetPlatform": "darwin",
+  "targetArch": "arm64",
+  "sizeBytes": 2404888,
+  "sha256": "2d5d80a6071b5c1498c5080503f41984a3fe47e1e0bf9fc1728db373171eef1a",
+  "portableCheck": "passed",
+  "copiedAt": "2026-07-08T17:44:38.375Z"
+}

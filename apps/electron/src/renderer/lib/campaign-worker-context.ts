@@ -36,11 +36,13 @@ export function campaignWorkerContextMetadata(readiness: CampaignWorkerReadiness
 
 export function getCampaignWorkerReadiness(input: CampaignWorkerContextInput): CampaignWorkerReadiness {
   const files = availableFiles(input.assetManifest)
+  const lyrics = firstLyrics(files)
+  const lyricsNeedsReview = Boolean(lyrics?.lyrics?.reviewRequired)
   const essentials = {
     campaignBrief: input.mission.status !== 'empty' && Boolean(input.mission.title || input.mission.goal),
     artistProfile: Boolean(input.artistProfile?.artistName || input.artistProfile?.bio || input.artistProfile?.sound),
     master: hasKind(files, ['master', 'demo']),
-    lyrics: hasKind(files, ['lyrics']),
+    lyrics: Boolean(lyrics?.lyrics && !lyrics.lyrics.reviewRequired),
     coverArt: hasKind(files, ['cover-art']),
   }
   const missing = [
@@ -49,6 +51,7 @@ export function getCampaignWorkerReadiness(input: CampaignWorkerContextInput): C
     essentials.master ? null : 'Master or demo',
     essentials.coverArt ? null : 'Cover art',
     input.mission.targetListener || input.artistProfile?.audience ? null : 'Target listener',
+    lyricsNeedsReview ? 'Approved lyrics' : null,
   ].filter((value): value is string => Boolean(value))
 
   return {
@@ -88,6 +91,9 @@ export function serializeCampaignWorkerContext(input: CampaignWorkerContextInput
     assets: {
       master: firstPath(files, ['master', 'demo']),
       lyrics: firstPath(files, ['lyrics']),
+      lyricsStatus: firstLyrics(files)?.lyrics?.reviewRequired ? 'needs-review' : firstLyrics(files)?.lyrics ? 'approved' : 'missing',
+      lyricsText: firstLyrics(files)?.lyrics?.text ?? null,
+      lyricLines: firstLyrics(files)?.lyrics?.lyricLines ?? null,
       coverArt: firstPath(files, ['cover-art']),
       rawVideoCount: countKinds(files, ['raw-video']),
       finalVideoCount: countKinds(files, ['edited-video', 'final-video']),
@@ -115,6 +121,7 @@ function nextMove(essentials: CampaignWorkerReadiness['essentials'], input: Camp
   if (!essentials.master) return 'Add the master or demo in Campaign Assets.'
   if (!essentials.coverArt) return 'Add cover art in Campaign Assets.'
   if (!input.mission.targetListener && !input.artistProfile?.audience) return 'Add the target listener.'
+  if (!essentials.lyrics && firstLyrics(availableFiles(input.assetManifest))?.lyrics?.reviewRequired) return 'Review and approve lyrics.'
   if (!essentials.lyrics) return 'Add lyrics when available.'
   return 'Ready to launch workers from this campaign context.'
 }
@@ -130,6 +137,12 @@ function hasKind(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][
 function firstPath(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][]): string | null {
   const file = files.find((record) => kinds.includes(record.kind))
   return file?.relativePath ?? file?.absolutePath ?? null
+}
+
+function firstLyrics(files: MissionAssetRecord[]): MissionAssetRecord | null {
+  return files.find((record) => record.kind === 'lyrics' && record.lyrics && !record.lyrics.reviewRequired)
+    ?? files.find((record) => record.kind === 'lyrics' && record.lyrics)
+    ?? null
 }
 
 function countKinds(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][]): number {

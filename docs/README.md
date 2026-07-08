@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-07
+last_verified: 2026-07-08
 source_of_truth: true
 ---
 
@@ -17,6 +17,8 @@ Start here when you need project context without reading the whole repo.
 4. [system-map](./system-map/) - generated map of workers, skills, sources, launch surfaces, and approval boundaries.
 5. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
 6. [user](./user/) - concise user-facing guides for surfaces, advanced abilities, and service keys.
+7. [backlog/tool-licensing-packaging-audit.md](./backlog/tool-licensing-packaging-audit.md) - release gate for bundled/downloaded local runtimes.
+8. [backlog/windows-version.md](./backlog/windows-version.md) - Windows parity/runtime backlog.
 
 Current active work:
 
@@ -25,6 +27,9 @@ Current active work:
 - Ad Strategy owns budget, audience, territory, platform, and test planning.
 - Ad Runner owns Meta/Google/Spotify account inspection, browser/export setup, draft setup plans, approval packets, and account-side handoff.
 - `tools/ads-operator` is the local read-only paid-ads helper for imports, audits, ad-library plans/analyze, campaign/setup plans, packets, and receipts.
+- `tools/genesis-lyric` is the local single-song lyric-video renderer/storyboard helper.
+- `tools/lyrics-transcriber` is the local Whisper/FFmpeg wrapper for Vault song transcription and timed lyric review.
+- Mac arm64 transcription has bundled app-owned binaries; Windows/Linux runtime parity is tracked in backlog and intentionally blocked until verified.
 - Older active specs remain relevant: [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md), [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md), and [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md).
 
 ## Main Areas

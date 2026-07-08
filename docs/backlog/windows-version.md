@@ -1,7 +1,7 @@
 ---
 status: backlog
 owner: agent
-last_verified: 2026-07-07
+last_verified: 2026-07-08
 source_of_truth: false
 ---
 
@@ -25,6 +25,7 @@ Create and maintain a tool/runtime matrix:
 | YouTube Research | bundled | bundled | bundled | bundled | bundled | YouTube API key/cache | no | verify packaged PC path |
 | Ads browser operator | needs QA | needs QA | needs QA | needs QA | needs QA | platform accounts | yes | browser/CDP path detection needed |
 | Printing Press Social | needs QA | needs QA | needs QA | needs QA | needs QA | platform creds | browser/CLI | currently dirty work in progress |
+| Lyrics Transcriber | bundled | missing | missing | missing | missing | no | no | Windows needs bundled `whisper-cli.exe` + `ffmpeg.exe` with provenance before ship |
 
 ## First Priorities
 
@@ -34,6 +35,16 @@ Create and maintain a tool/runtime matrix:
 4. Add provenance rows and SHA256 values to `tools/printify/THIRD_PARTY.md`.
 5. Build a Windows packaged app smoke: launch app, open Settings, verify Printify source status, run `doctor`.
 6. Add a simple runtime compatibility report in Settings or diagnostics so missing platform binaries are obvious.
+7. Build/fetch clean Windows x64 lyrics runtime binaries:
+   - `tools/lyrics-transcriber/bin/win32/x64/whisper-cli.exe`
+   - `tools/lyrics-transcriber/bin/win32/x64/whisper-cli.exe.provenance.json`
+   - `tools/lyrics-transcriber/bin/win32/x64/ffmpeg.exe`
+   - `tools/lyrics-transcriber/bin/win32/x64/ffmpeg.exe.provenance.json`
+8. Run the Windows lyrics runtime gate and smoke:
+   - `bun run scripts/prepare-lyrics-runtime.ts gate --platform win32 --arch x64`
+   - packaged-mode `lyrics-transcriber doctor --json`
+   - packaged-mode transcription against WAV, MP3, and M4A inputs.
+9. Keep Windows dist blocked until the above passes on a real Windows machine or Windows CI.
 
 ## Agent / Tool Rules For Windows
 

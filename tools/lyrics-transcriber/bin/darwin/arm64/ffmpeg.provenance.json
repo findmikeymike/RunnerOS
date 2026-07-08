@@ -1,0 +1,12 @@
+{
+  "name": "ffmpeg",
+  "source": "https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz",
+  "sourcePath": "/tmp/runneros-ffmpeg-build/ffmpeg-8.1.2/ffmpeg",
+  "license": "LGPL-2.1-or-later, configured without GPL/nonfree/external libraries",
+  "targetPlatform": "darwin",
+  "targetArch": "arm64",
+  "sizeBytes": 2024056,
+  "sha256": "2d2a5b17f7be0729baeb7f2975d0077f031cecde89a249addae208cff247a141",
+  "portableCheck": "passed",
+  "copiedAt": "2026-07-08T17:46:21.660Z"
+}

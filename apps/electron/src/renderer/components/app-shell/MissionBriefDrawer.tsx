@@ -63,6 +63,8 @@ interface MissionBriefDrawerProps {
   releaseBoard: ReleaseBoard
   onAddAsset: (kindHint: MissionAssetKindHint) => Promise<void>
   onImportAssetPaths: (filePaths: string[], kindHint?: MissionAssetKindHint) => Promise<void>
+  onTranscribeLyrics: () => Promise<void>
+  onSaveLyrics: (lyricsText: string, assetId?: string, sourceAudioAssetId?: string) => Promise<void>
   onOpenAssetsFolder: () => Promise<void>
 }
 
@@ -78,6 +80,8 @@ export function MissionBriefDrawer({
   releaseBoard,
   onAddAsset,
   onImportAssetPaths,
+  onTranscribeLyrics,
+  onSaveLyrics,
   onOpenAssetsFolder,
 }: MissionBriefDrawerProps) {
   const [activeTab, setActiveTab] = React.useState<DrawerTab>('brief')
@@ -289,6 +293,8 @@ export function MissionBriefDrawer({
               busy={assetBusy}
               releaseBoard={releaseBoard}
               onAdd={onAddAsset}
+              onTranscribeLyrics={onTranscribeLyrics}
+              onSaveLyrics={onSaveLyrics}
               onDrop={handleDrop}
               onOpenFolder={onOpenAssetsFolder}
             />
@@ -385,6 +391,8 @@ function AssetsSetup({
   busy,
   releaseBoard,
   onAdd,
+  onTranscribeLyrics,
+  onSaveLyrics,
   onDrop,
   onOpenFolder,
 }: {
@@ -392,12 +400,20 @@ function AssetsSetup({
   busy: boolean
   releaseBoard: ReleaseBoard
   onAdd: (kindHint: MissionAssetKindHint) => Promise<void>
+  onTranscribeLyrics: () => Promise<void>
+  onSaveLyrics: (lyricsText: string, assetId?: string, sourceAudioAssetId?: string) => Promise<void>
   onDrop: (event: React.DragEvent<HTMLDivElement>) => void
   onOpenFolder: () => Promise<void>
 }) {
   const files = manifest?.files ?? []
   const master = firstAsset(files, ['master', 'demo'])
-  const lyrics = firstAsset(files, ['lyrics'])
+  const lyrics = firstLyricsAsset(files)
+  const lyricsApproved = Boolean(lyrics?.lyrics && !lyrics.lyrics.reviewRequired)
+  const lyricsDraftExists = Boolean(lyrics?.lyrics?.reviewRequired)
+  const [lyricsDraft, setLyricsDraft] = React.useState('')
+  React.useEffect(() => {
+    setLyricsDraft(lyrics?.lyrics?.text ?? '')
+  }, [lyrics?.id, lyrics?.lyrics?.text])
   const cover = firstAsset(files, ['cover-art'])
   const photos = files.filter((file) => file.status === 'available' && file.kind === 'press-photo').length
   const rawVideo = files.filter((file) => file.status === 'available' && file.kind === 'raw-video').length
@@ -434,7 +450,14 @@ function AssetsSetup({
 
         <div className="grid grid-cols-2 gap-2">
           <AssetBucket icon={Music2} label="Master" value={master?.label ?? 'Missing'} active={Boolean(master)} busy={busy} onClick={() => onAdd('master')} />
-          <AssetBucket icon={FileText} label="Lyrics" value={lyrics?.label ?? 'Missing'} active={Boolean(lyrics)} busy={busy} onClick={() => onAdd('lyrics')} />
+          <AssetBucket
+            icon={FileText}
+            label="Lyrics"
+            value={lyricsApproved ? 'Approved' : lyricsDraftExists ? 'Needs review' : lyrics?.label ?? 'Missing'}
+            active={lyricsApproved}
+            busy={busy}
+            onClick={() => onAdd('lyrics')}
+          />
           <AssetBucket icon={ImageIcon} label="Cover Art" value={cover?.label ?? 'Missing'} active={Boolean(cover)} busy={busy} onClick={() => onAdd('cover-art')} />
           <AssetBucket icon={ImageIcon} label="Photos" value={photos ? `${photos} added` : 'Add'} active={photos > 0} busy={busy} onClick={() => onAdd('any')} />
           <AssetBucket icon={Video} label="Raw Video" value={rawVideo ? `${rawVideo} added` : 'Add'} active={rawVideo > 0} busy={busy} onClick={() => onAdd('any')} />
@@ -450,6 +473,44 @@ function AssetsSetup({
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
           Drop files here or add to Vault
         </button>
+
+        <div className="mt-3 rounded-xl border border-white/[0.045] bg-white/[0.012] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white/72">Lyrics</p>
+              <p className="mt-0.5 text-xs text-white/34">
+                {lyricsDraftExists ? 'Lyrics draft needs review.' : lyricsApproved ? 'Approved lyrics saved for agents.' : master ? 'Use master audio to create lyrics.' : 'Add master audio first.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={busy || !master || lyricsApproved}
+              onClick={() => void onTranscribeLyrics()}
+              className="inline-flex h-8 shrink-0 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 text-xs font-medium text-white/62 hover:bg-white/[0.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+              Transcribe
+            </button>
+          </div>
+          {lyrics ? (
+            <div className="mt-3 grid gap-2">
+              <textarea
+                value={lyricsDraft}
+                onChange={(event) => setLyricsDraft(event.target.value)}
+                className="min-h-[140px] w-full resize-y rounded-lg border border-white/[0.07] bg-black/25 px-3 py-2 text-xs leading-5 text-white/72 outline-none placeholder:text-white/22 focus:border-orange-300/45"
+                placeholder="Review or paste approved lyrics..."
+              />
+              <button
+                type="button"
+                disabled={busy || !lyricsDraft.trim()}
+                onClick={() => void onSaveLyrics(lyricsDraft, lyrics.id, master?.id)}
+                className="inline-flex h-8 items-center justify-center rounded-full bg-orange-500 px-3 text-xs font-medium text-black hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Save approved lyrics
+              </button>
+            </div>
+          ) : null}
+        </div>
       </section>
 
       <section className="rounded-2xl border border-white/[0.06] bg-[#0b0b0b] p-4">
@@ -521,6 +582,12 @@ function AssetBucket({
 
 function firstAsset(files: MissionAssetRecord[], kinds: MissionAssetRecord['kind'][]): MissionAssetRecord | null {
   return files.find((file) => file.status === 'available' && kinds.includes(file.kind)) ?? null
+}
+
+function firstLyricsAsset(files: MissionAssetRecord[]): MissionAssetRecord | null {
+  return files.find((file) => file.status === 'available' && file.kind === 'lyrics' && file.lyrics && !file.lyrics.reviewRequired)
+    ?? files.find((file) => file.status === 'available' && file.kind === 'lyrics' && file.lyrics)
+    ?? firstAsset(files, ['lyrics'])
 }
 
 function parseList(value: string): string[] {

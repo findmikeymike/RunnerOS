@@ -137,6 +137,20 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     }
   });
 
+  it('includes scroll-stopper with its engine reference', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'scroll-stopper');
+
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('scroll-stopper');
+    expect(parsed.data.category).toBe('content-generation');
+    expect(parsed.content).toContain('Use `references/engine.json` as the source of truth');
+    const engine = skill!.files.find(f => f.path === 'references/engine.json');
+    expect(engine?.content).toContain('Scroll Stoppers');
+    expect(engine?.content).toContain('cover_doctrine');
+    expect(engine?.content).toContain('realism_doctrine');
+  });
+
   it('includes artist-industry-hunter for the Industry Hunter worker', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'artist-industry-hunter');
     expect(skill).toBeDefined();

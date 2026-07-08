@@ -54,6 +54,8 @@ export const LOCAL_ONLY_CHANNELS = new Set<string>([
   RPC_CHANNELS.missionAssets.PLAN_IMPORT,
   RPC_CHANNELS.missionAssets.CHOOSE_FILES,
   RPC_CHANNELS.missionAssets.IMPORT,
+  RPC_CHANNELS.missionAssets.TRANSCRIBE_LYRICS,
+  RPC_CHANNELS.missionAssets.SAVE_LYRICS,
   RPC_CHANNELS.missionAssets.SCAN,
   RPC_CHANNELS.missionAssets.OPEN_FOLDER,
   RPC_CHANNELS.artistVault.GET,
@@ -297,8 +299,12 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.secrets.LIST,
   RPC_CHANNELS.secrets.SAVE,
   RPC_CHANNELS.secrets.DELETE,
+  RPC_CHANNELS.secrets.CHANGED,
   RPC_CHANNELS.secrets.ZERO_STATUS,
   RPC_CHANNELS.secrets.INSTALL_ZERO,
+  RPC_CHANNELS.secrets.INIT_ZERO,
+  RPC_CHANNELS.secrets.FUND_ZERO,
+  RPC_CHANNELS.secrets.CLAIM_ZERO_WELCOME,
 
   // llmConnections — LLM config lives on server running workspace
   RPC_CHANNELS.llmConnections.LIST,

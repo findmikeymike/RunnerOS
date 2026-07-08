@@ -48,11 +48,16 @@ flowchart LR
   A_lyric_video_agent --> S_lyric_video_genesis["skill:lyric-video-genesis"]
   A_lyric_video_agent --> S_spotify_canvas_video["skill:spotify-canvas-video"]
   A_lyric_video_agent --> T_genesis_lyric["source:genesis-lyric"]
+  A_lyric_video_agent --> T_lyrics_transcriber["source:lyrics-transcriber"]
   Registry --> A_raw_video_editor["Raw Video Editor\nask\nContent Creation"]
   Workers --> A_raw_video_editor
   A_raw_video_editor --> S_raw_video_editor["skill:raw-video-editor"]
   A_raw_video_editor --> T_raw_video_editor["source:raw-video-editor"]
   A_raw_video_editor --> T_video_studio["source:video-studio"]
+  Registry --> A_scroll_stopper["Scroll Stopper\nask\nContent Creation"]
+  Workers --> A_scroll_stopper
+  A_scroll_stopper --> S_scroll_stopper["skill:scroll-stopper"]
+  Campaign["Campaign Workspace"] --> A_scroll_stopper
   Registry --> A_video_editor_agent["Video Editor Agent\nask\nContent Creation"]
   Workers --> A_video_editor_agent
   A_video_editor_agent --> T_video_studio["source:video-studio"]
@@ -125,6 +130,7 @@ flowchart LR
   Workers --> A_ad_creative_agent
   A_ad_creative_agent --> S_artist_ad_dna["skill:artist-ad-dna"]
   A_ad_creative_agent --> S_ad_library_intel["skill:ad-library-intel"]
+  A_ad_creative_agent --> S_music_ad_visual_hooks["skill:music-ad-visual-hooks"]
   A_ad_creative_agent --> S_ads_creative_development["skill:ads-creative-development"]
   A_ad_creative_agent --> S_ad_creative["skill:ad-creative"]
   A_ad_creative_agent --> S_artist_campaign_angle_builder["skill:artist-campaign-angle-builder"]
@@ -134,6 +140,7 @@ flowchart LR
   A_ads_agent --> S_meta_ads["skill:meta-ads"]
   A_ads_agent --> S_google_ads["skill:google-ads"]
   A_ads_agent --> S_paid_ads_browser_operator["skill:paid-ads-browser-operator"]
+  A_ads_agent --> S_music_ad_conversion_protocol["skill:music-ad-conversion-protocol"]
   A_ads_agent --> T_meta_ads["source:meta-ads"]
   A_ads_agent --> T_google_ads["source:google-ads"]
   A_ads_agent --> T_ads_operator["source:ads-operator"]
@@ -143,6 +150,7 @@ flowchart LR
   A_ads_strategist --> S_artist_ad_dna["skill:artist-ad-dna"]
   A_ads_strategist --> S_ad_library_intel["skill:ad-library-intel"]
   A_ads_strategist --> S_ads_strategy["skill:ads-strategy"]
+  A_ads_strategist --> S_music_ad_conversion_protocol["skill:music-ad-conversion-protocol"]
   Campaign["Campaign Workspace"] --> A_ads_strategist
   Registry --> A_branding_agent["Branding Agent\nask\nPromotion"]
   Workers --> A_branding_agent

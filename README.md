@@ -7,7 +7,7 @@
 
 Active worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/creator-command-center`
 
-Current focus: Artist OS paid-ads workers plus single-song video production helpers for upcoming releases.
+Current focus: Artist OS paid-ads workers plus single-song video and lyrics-transcription helpers for upcoming releases.
 
 - Ad Creative (`ad-creative-agent`): researches public high-performing music ad patterns, then builds hooks, copy, creative angles, format tests, and asset needs.
 - Ad Strategy (`ads-strategist`): turns artist/campaign context, including Spotify for Artists intel when available, into budget, audience, territory, platform, and test strategy.
@@ -15,6 +15,12 @@ Current focus: Artist OS paid-ads workers plus single-song video production help
 - Lyric Video (`lyric-video-agent`): creates one lyric clip from song audio, lyrics, image refs or visual assets, captions, and FFmpeg render output.
 - `tools/ads-operator`: read-only local CLI for ad CSV import/audit, public ad-library planning/analyze, campaign/setup plans, approval packets, and receipts.
 - `tools/genesis-lyric`: RunnerOS-owned lightweight Genesis fork for single lyric videos only; the original Genesis project is untouched and the 20-day/batch campaign system was not ported.
+- `tools/lyrics-transcriber`: RunnerOS-owned Whisper/FFmpeg wrapper for Vault song transcription, timed lyrics, review/approval, and packaged-runtime checks.
+
+Current packaging truth:
+
+- Mac arm64 transcription has bundled `whisper-cli` and LGPL FFmpeg with provenance under `tools/lyrics-transcriber/bin/darwin/arm64`.
+- Windows/Linux transcription builds are intentionally blocked until their platform binaries and provenance are added and smoked on those platforms.
 
 Start from [HANDOFF.md](./HANDOFF.md), [docs/CURRENT.md](./docs/CURRENT.md), and [docs/system-map](./docs/system-map/) before continuing this branch.
 

@@ -177,7 +177,7 @@ function classifyDomain(agent) {
 
   const joined = `${slug} ${name} ${description} ${tags.join(' ')}`.toLowerCase();
   if (matchesAny(joined, ['social publisher', 'trypost', 'socials', 'social posting', 'posting', 'publisher'])) return 'Socials';
-  if (matchesAny(joined, ['content genius', 'hypermotion', 'lottie', 'video director', 'video editor', '3d agent', '3dcellforge', 'motion', 'caption', 'clip'])) return 'Content Creation';
+  if (matchesAny(joined, ['scroll stopper', 'scroll-stopper', 'content genius', 'hypermotion', 'lottie', 'video director', 'video editor', '3d agent', '3dcellforge', 'motion', 'caption', 'clip', 'shortform'])) return 'Content Creation';
   if (matchesAny(joined, ['anr', 'a&r', 'industry', 'artist development', 'label operator', 'labels', 'sync', 'outreach', 'comms', 'press', 'email'])) return 'Outreach';
   if (matchesAny(joined, ['ads', 'marketing', 'campaign', 'growth', 'meta ads', 'google ads', 'power-up', 'power up', 'service-handoff', 'ig trending', 'influencer campaign', 'playlisting power'])) return 'Promotion';
   if (matchesAny(joined, ['shopify', 'printify', 'print agent', 'merch', 'storefront', 'commerce', 'pod', 'apparel'])) return 'Merch';

@@ -153,6 +153,11 @@ chmod +x "$ELECTRON_DIR/vendor/bun/bun"
 # electron-builder only sees apps/electron/, so both packages must exist there.
 copy_claude_sdk
 
+# 4b. Verify app-owned lyrics transcription runtime is bundled.
+echo "Verifying Lyrics Transcriber runtime..."
+cd "$ROOT_DIR"
+bun run scripts/prepare-lyrics-runtime.ts gate --platform darwin --arch "$ARCH"
+
 # 5. Copy interceptor
 INTERCEPTOR_SOURCE="$ROOT_DIR/packages/shared/src/unified-network-interceptor.ts"
 require_path "$INTERCEPTOR_SOURCE" "Interceptor" "Ensure packages/shared/src/unified-network-interceptor.ts exists."

@@ -17149,6 +17149,716 @@ See \`examples/\` for before/after blueprints across domains (product launches, 
     ],
   },
   {
+    slug: "scroll-stopper",
+    files: [
+      {
+        path: "references/engine.json",
+        content: `{
+  "meta": {
+    "name": "Scroll Stoppers — Absurd Viral Video Engine",
+    "version": "1.0.0",
+    "updated": "2026-07-07",
+    "format": "vertical 9:16 (Reels / Shorts / TikTok)",
+    "purpose": "A combinatorial engine for inventing absurd, polarizing, scroll-stopping AI-video concepts — the kind built on one commanding cover frame that makes a thumb stop. Cross a violation LEVER x a mundane SETTING x an instant-read CHARACTER x an emotional TRIGGER to generate near-infinite premises with built-in logic. The scroll-stopper Skill uses this scaffold to generate concepts, cover-shot art direction, and ready-to-paste gen prompts.",
+    "how_it_works": "Every viral absurdity = a mundane, instantly-legible setting + a norm violation + an instantly-readable character + a reaction that raises stakes, resolved into ONE commanding freeze-frame. Pick from the banks or let the agent combine; the cover shot is designed as hard as the idea.",
+    "field_guide": {
+      "levers": "the violation operators — the engine of the absurdity",
+      "settings": "mundane, universally-legible places that need no setup",
+      "characters": "instantly-readable human/animal archetypes",
+      "triggers": "the emotional/engagement lever that makes people watch and comment",
+      "cover_doctrine": "rules for the single freeze-frame that stops the scroll",
+      "scoring": "dimensions to rate and kill weak concepts",
+      "realism_doctrine": "why found-footage jank beats cinematic polish for the 'is this real?' effect",
+      "examples": "worked concepts for calibration and inspiration"
+    }
+  },
+  "levers": [
+    {
+      "id": "wrong-agent",
+      "name": "Wrong Agent",
+      "desc": "An incongruous person performs the act — the last person you'd expect, doing it with total commitment.",
+      "example": "An old woman in a wheelchair rolling herself off the high dive."
+    },
+    {
+      "id": "wrong-object",
+      "name": "Wrong Object",
+      "desc": "The right ritual or action, performed with an absurd object.",
+      "example": "Testing a Goodwill toaster by putting an actual slice of bread in it before buying."
+    },
+    {
+      "id": "wrong-scale",
+      "name": "Wrong Scale / Intensity",
+      "desc": "A trivial cause produces catastrophic drama — or a catastrophe gets a shrug. The mismatch is the joke.",
+      "example": "A single squirrel aggressively attacking a bride's dress while the whole church erupts in panic."
+    },
+    {
+      "id": "wrong-context",
+      "name": "Wrong Context",
+      "desc": "Chaos or the wildly inappropriate invades a sacred / high-stakes / solemn moment.",
+      "example": "A man doing full pull-ups on the casket rail at a funeral, dead serious."
+    },
+    {
+      "id": "wrong-reaction",
+      "name": "Wrong Reaction",
+      "desc": "A crowd panics over nothing, or stays perfectly deadpan in the face of something enormous.",
+      "example": "An entire office calmly keeps typing as a llama walks through and lies down on the conference table."
+    },
+    {
+      "id": "casual-taboo",
+      "name": "Casual Taboo / Nonchalant Danger",
+      "desc": "A forbidden, unsafe, or socially unthinkable act done totally matter-of-factly, like it's normal.",
+      "example": "A woman calmly flossing her teeth using the airport security conveyor rollers."
+    },
+    {
+      "id": "over-commitment",
+      "name": "Over-Commitment",
+      "desc": "Someone takes a profoundly dumb premise with the seriousness of an Olympic event or a religious rite.",
+      "example": "A grandpa treating the grocery self-checkout like a boss battle, sweating, taunting the machine."
+    },
+    {
+      "id": "forbidden-competence",
+      "name": "Forbidden Competence",
+      "desc": "Someone is shockingly, inexplicably elite at something they have no business doing there.",
+      "example": "A nun at a county fair casually dunking a basketball over three teenagers."
+    },
+    {
+      "id": "mundane-apocalypse",
+      "name": "Mundane Apocalypse",
+      "desc": "A tiny domestic problem is staged with the scale, lighting, and gravity of the end of the world (or vice versa).",
+      "example": "A toddler surveying a dropped ice cream cone like a general over a fallen city, sirens in the distance."
+    },
+    {
+      "id": "animal-agency",
+      "name": "Animal With an Agenda",
+      "desc": "An animal performs a very human, dramatic, intentional act — with clear motive and attitude.",
+      "example": "A goose filing a complaint at the DMV, sliding a webbed foot onto the counter for its number."
+    }
+  ],
+  "settings": [
+    {
+      "id": "altar",
+      "name": "Wedding altar",
+      "note": "sacred, high-stakes, everyone watching"
+    },
+    {
+      "id": "funeral",
+      "name": "Funeral / graveside",
+      "note": "solemn, taboo to disrupt"
+    },
+    {
+      "id": "church",
+      "name": "Church service",
+      "note": "quiet, reverent, communal"
+    },
+    {
+      "id": "goodwill",
+      "name": "Thrift store / Goodwill",
+      "note": "mundane, bargain logic, odd objects"
+    },
+    {
+      "id": "dmv",
+      "name": "DMV",
+      "note": "universally miserable, bureaucratic"
+    },
+    {
+      "id": "highdive",
+      "name": "Public pool / high dive",
+      "note": "danger, spectacle, crowd below"
+    },
+    {
+      "id": "gym",
+      "name": "Gym",
+      "note": "ego, mirrors, performative effort"
+    },
+    {
+      "id": "selfcheckout",
+      "name": "Grocery self-checkout",
+      "note": "low-grade daily frustration"
+    },
+    {
+      "id": "drivethru",
+      "name": "Fast-food drive-thru",
+      "note": "transactional, captive audience"
+    },
+    {
+      "id": "nailsalon",
+      "name": "Nail salon",
+      "note": "intimate, gossipy, still"
+    },
+    {
+      "id": "airport",
+      "name": "Airport gate / security",
+      "note": "stress, rules, strangers packed together"
+    },
+    {
+      "id": "courtroom",
+      "name": "Courtroom",
+      "note": "formal, high-stakes, hushed"
+    },
+    {
+      "id": "interview",
+      "name": "Job interview",
+      "note": "performance anxiety, judgment"
+    },
+    {
+      "id": "meeting",
+      "name": "Office meeting",
+      "note": "forced politeness, boredom"
+    },
+    {
+      "id": "waitingroom",
+      "name": "Hospital / vet waiting room",
+      "note": "anxious, quiet, captive"
+    },
+    {
+      "id": "kidparty",
+      "name": "Kid's birthday party",
+      "note": "chaos-tolerant, sugar, parents watching"
+    },
+    {
+      "id": "elevator",
+      "name": "Elevator",
+      "note": "forced proximity, no escape"
+    },
+    {
+      "id": "laundromat",
+      "name": "Laundromat",
+      "note": "liminal, fluorescent, waiting"
+    },
+    {
+      "id": "farmersmarket",
+      "name": "Farmers market",
+      "note": "wholesome, crunchy, earnest"
+    },
+    {
+      "id": "library",
+      "name": "Library",
+      "note": "enforced silence, tension to break"
+    },
+    {
+      "id": "bankline",
+      "name": "Bank / post office line",
+      "note": "slow, orderly, simmering"
+    },
+    {
+      "id": "ikea",
+      "name": "IKEA showroom",
+      "note": "fake rooms, maze, dreamlike"
+    },
+    {
+      "id": "schoolpickup",
+      "name": "School pickup line",
+      "note": "suburban ritual, competitive parents"
+    },
+    {
+      "id": "karaoke",
+      "name": "Karaoke bar",
+      "note": "vulnerability, spotlight, liquid courage"
+    },
+    {
+      "id": "retirementhome",
+      "name": "Retirement home",
+      "note": "gentle, then subverted"
+    },
+    {
+      "id": "mall",
+      "name": "Mall / escalator",
+      "note": "public, echoey, spectacle-ready"
+    },
+    {
+      "id": "dentist",
+      "name": "Dentist office",
+      "note": "captive, vulnerable, sterile"
+    },
+    {
+      "id": "hoa",
+      "name": "HOA meeting",
+      "note": "petty stakes treated as war"
+    },
+    {
+      "id": "opengym",
+      "name": "Kids' trampoline park",
+      "note": "padded chaos, adults out of place"
+    },
+    {
+      "id": "cruise",
+      "name": "Cruise ship buffet",
+      "note": "excess, contained, weirdly formal"
+    }
+  ],
+  "characters": [
+    {
+      "id": "grandma",
+      "name": "Sweet grandma",
+      "reads_as": "vulnerability + surprise defiance"
+    },
+    {
+      "id": "grandpa",
+      "name": "Stoic grandpa",
+      "reads_as": "deadpan authority, unbothered"
+    },
+    {
+      "id": "bride",
+      "name": "Bride at the altar",
+      "reads_as": "peak stakes, sacred moment"
+    },
+    {
+      "id": "groom",
+      "name": "Groom",
+      "reads_as": "nervous, all eyes on him"
+    },
+    {
+      "id": "toddler",
+      "name": "Tiny toddler",
+      "reads_as": "innocence + unearned gravitas"
+    },
+    {
+      "id": "suit",
+      "name": "Businessman in a suit",
+      "reads_as": "seriousness begging to be broken"
+    },
+    {
+      "id": "securityguard",
+      "name": "Mall cop / security guard",
+      "reads_as": "petty authority, over-invested"
+    },
+    {
+      "id": "referee",
+      "name": "Referee / umpire",
+      "reads_as": "rules enforcer in the wrong place"
+    },
+    {
+      "id": "nun",
+      "name": "Nun or priest",
+      "reads_as": "piety, purity to subvert"
+    },
+    {
+      "id": "influencer",
+      "name": "Influencer mid-filming",
+      "reads_as": "self-absorption, meta-cringe"
+    },
+    {
+      "id": "tsa",
+      "name": "TSA agent",
+      "reads_as": "humorless bureaucratic power"
+    },
+    {
+      "id": "cheerleader",
+      "name": "Cheerleader",
+      "reads_as": "relentless peppy energy"
+    },
+    {
+      "id": "mascot",
+      "name": "Sports mascot",
+      "reads_as": "silent, oversized, uncanny"
+    },
+    {
+      "id": "karen",
+      "name": "The 'let me speak to the manager' archetype",
+      "reads_as": "entitled outrage, rage-bait"
+    },
+    {
+      "id": "delivery",
+      "name": "Delivery driver",
+      "reads_as": "in a hurry, doesn't care"
+    },
+    {
+      "id": "gymbro",
+      "name": "Gym bro",
+      "reads_as": "performative intensity"
+    },
+    {
+      "id": "beautyqueen",
+      "name": "Pageant queen",
+      "reads_as": "frozen smile, poise cracking"
+    },
+    {
+      "id": "cowboy",
+      "name": "Cowboy",
+      "reads_as": "stoic, out of era/place"
+    },
+    {
+      "id": "mime",
+      "name": "Mime",
+      "reads_as": "silent commitment, unsettling"
+    },
+    {
+      "id": "substitute",
+      "name": "Overwhelmed substitute teacher",
+      "reads_as": "losing control, sympathetic"
+    },
+    {
+      "id": "clerk",
+      "name": "Bored DMV clerk",
+      "reads_as": "dead inside, immovable"
+    },
+    {
+      "id": "grandmagang",
+      "name": "A pack of grandmas",
+      "reads_as": "cute turned menacing in numbers"
+    },
+    {
+      "id": "squirrel",
+      "name": "Aggressive squirrel",
+      "reads_as": "tiny chaos with a vendetta"
+    },
+    {
+      "id": "goose",
+      "name": "Goose",
+      "reads_as": "entitled, fearless, menacing"
+    },
+    {
+      "id": "raccoon",
+      "name": "Raccoon",
+      "reads_as": "criminal intent, dexterous"
+    },
+    {
+      "id": "tinydog",
+      "name": "Tiny dog with big attitude",
+      "reads_as": "Napoleon energy"
+    },
+    {
+      "id": "goldenlab",
+      "name": "Golden retriever",
+      "reads_as": "pure joy, oblivious chaos"
+    },
+    {
+      "id": "cat",
+      "name": "Unbothered cat",
+      "reads_as": "contempt, causes chaos then leaves"
+    }
+  ],
+  "triggers": [
+    {
+      "id": "cringe",
+      "name": "Secondhand embarrassment",
+      "desc": "You physically wince for them; you can't look away.",
+      "polarity": "cringe / empathy"
+    },
+    {
+      "id": "danger",
+      "name": "Danger / 'she's gonna get hurt'",
+      "desc": "Implied peril makes you watch to see if it lands.",
+      "polarity": "suspense"
+    },
+    {
+      "id": "isthisreal",
+      "name": "'Is this even real?'",
+      "desc": "Uncanny plausibility drives the comments and rewatches.",
+      "polarity": "disbelief / debate"
+    },
+    {
+      "id": "wholesomechaos",
+      "name": "Wholesome chaos",
+      "desc": "Delightful mayhem with no real victim; you smile and share.",
+      "polarity": "delight"
+    },
+    {
+      "id": "ragebait",
+      "name": "Righteous outrage",
+      "desc": "Something feels unfair or entitled; people argue in the replies.",
+      "polarity": "anger / debate"
+    },
+    {
+      "id": "awe",
+      "name": "Awe / spectacle",
+      "desc": "Improbable scale or skill; jaw-drop.",
+      "polarity": "wonder"
+    },
+    {
+      "id": "disgust",
+      "name": "Mild disgust / ick",
+      "desc": "A gross-but-safe violation you rubberneck at.",
+      "polarity": "revulsion"
+    },
+    {
+      "id": "injustice",
+      "name": "'Somebody do something'",
+      "desc": "A wrong unfolding while bystanders fail to act; you want to intervene.",
+      "polarity": "frustration"
+    },
+    {
+      "id": "underdog",
+      "name": "Underdog / unexpected win",
+      "desc": "The overlooked one triumphs; pride and surprise.",
+      "polarity": "triumph"
+    },
+    {
+      "id": "liminal",
+      "name": "Uncanny / liminal",
+      "desc": "Something is subtly, dreamily off; unsettling and hypnotic.",
+      "polarity": "unease"
+    }
+  ],
+  "cover_doctrine": [
+    {
+      "id": "one-glance",
+      "name": "One-glance legibility",
+      "rule": "The absurd juxtaposition must be fully readable in a fraction of a second — a stranger gets the whole gag before they decide to scroll past."
+    },
+    {
+      "id": "peak-freeze",
+      "name": "Peak-tension freeze",
+      "rule": "Freeze the moment BEFORE resolution — poised at the edge, mid-reach, about-to — so the frame itself is a curiosity gap. Never the aftermath."
+    },
+    {
+      "id": "wrong-centered",
+      "name": "Wrong element dead center",
+      "rule": "Put the incongruous thing at the optical center with clear scale/context contrast so it pops instantly."
+    },
+    {
+      "id": "face-in-frame",
+      "name": "A face or reaction in frame",
+      "rule": "Include a human face mid-reaction (the subject's or a bystander's). Faces stop scrolls harder than anything; expression sells the stakes."
+    },
+    {
+      "id": "silhouette",
+      "name": "Silhouette / thumbnail test",
+      "rule": "You should recognize the entire concept from the outline alone, at thumbnail size, on a cracked phone in sunlight."
+    },
+    {
+      "id": "mute-legible",
+      "name": "Mute-legible",
+      "rule": "It must read with zero audio. Most first views are silent — the image alone carries the hook."
+    },
+    {
+      "id": "implied-motion",
+      "name": "Implied motion / about-to-happen",
+      "rule": "Compose so the eye feels the next second coming. Tension lives in the not-yet."
+    },
+    {
+      "id": "double-take",
+      "name": "The double-take",
+      "rule": "Reward a second look: one detail that makes them go 'wait—' after the first glance (the bread already in the toaster, the wheelchair brake off)."
+    }
+  ],
+  "realism_doctrine": {
+    "principle": "For the 'is this real?' effect, found-footage jank beats cinematic polish. Over-produced looks fake and screams AI; imperfect looks true.",
+    "tactics": [
+      "Shoot like a bystander's phone: slightly shaky handheld, vertical, a beat late to the action.",
+      "Use security-cam / CCTV / doorbell-cam framing for 'accidental witness' credibility.",
+      "Imperfect exposure and autofocus hunt; a thumb half over the lens for a second.",
+      "Ambient authentic sound (gasps, a distant 'oh my god', room noise) over music.",
+      "No captions burned in at the cover stage — let the image do it; add the reaction caption after.",
+      "Mundane, real-world lighting: fluorescent, overcast, gym-bright — not golden-hour cinematic."
+    ]
+  },
+  "scoring": [
+    {
+      "id": "scrollstop",
+      "name": "Scroll-stop power",
+      "q": "Does the cover frame physically stop a thumb in under a second?"
+    },
+    {
+      "id": "absurdity",
+      "name": "Absurdity",
+      "q": "Is the premise genuinely surprising, not just quirky?"
+    },
+    {
+      "id": "legibility",
+      "name": "Instant legibility",
+      "q": "Can a stranger get it with no setup, on mute?"
+    },
+    {
+      "id": "commentbait",
+      "name": "Comment-bait / polarization",
+      "q": "Does it force a reaction — argue, tag a friend, 'no way'?"
+    },
+    {
+      "id": "tellafriend",
+      "name": "Describe-to-a-friend",
+      "q": "Can it be pitched in one sentence they'd repeat?"
+    },
+    {
+      "id": "originality",
+      "name": "Originality",
+      "q": "Does it avoid the done-to-death formats? Penalize the derivative."
+    },
+    {
+      "id": "feasibility",
+      "name": "Gen-feasibility",
+      "q": "Can an AI video tool actually render it convincingly at 9:16?"
+    },
+    {
+      "id": "safety",
+      "name": "Safety / brand check",
+      "q": "Clearly absurd-fictional; no real people, no imitable real danger, no cruelty or minors in harm?"
+    }
+  ],
+  "examples": [
+    {
+      "logline": "An old woman calmly rolls her wheelchair off the public-pool high dive while lifeguards sprint.",
+      "lever": "wrong-agent",
+      "setting": "highdive",
+      "character": "grandma",
+      "trigger": "danger",
+      "cover": "Low-angle from the pool deck: grandma's wheelchair balanced right at the diving board's lip, front wheels just over the edge, her face serene, a lifeguard frozen mid-leap up the ladder below. Peak-freeze, wrong element centered, danger on every face."
+    },
+    {
+      "logline": "A single squirrel aggressively attacks a bride's dress at the altar as the whole church erupts in panic.",
+      "lever": "wrong-scale",
+      "setting": "altar",
+      "character": "bride",
+      "trigger": "wholesomechaos",
+      "cover": "Straight-on aisle shot: the bride mid-shriek clutching her skirt, one squirrel latched to the train, guests in the pews rising in a wave of panic behind her. Face-in-frame, tiny cause / huge reaction."
+    },
+    {
+      "logline": "A man at Goodwill drops a real slice of bread into a used toaster to 'test it' before buying.",
+      "lever": "wrong-object",
+      "setting": "goodwill",
+      "character": "suit",
+      "trigger": "isthisreal",
+      "cover": "Eye-level in a cluttered thrift aisle: a serious man in a blazer crouched, bread halfway into a dusty toaster he's plugged into a floor outlet, price tag dangling. Double-take detail: the bread. Deadpan over-commitment."
+    },
+    {
+      "logline": "A grandpa treats the grocery self-checkout like a final boss, sweating and taunting the machine.",
+      "lever": "over-commitment",
+      "setting": "selfcheckout",
+      "character": "grandpa",
+      "trigger": "cringe",
+      "cover": "Over-the-shoulder: grandpa in a battle stance, sleeves rolled, glaring at the 'unexpected item in bagging area' screen, one banana raised like a weapon, a line forming behind him. Face mid-snarl."
+    },
+    {
+      "logline": "A goose walks into the DMV, takes a number, and waits in a chair like everyone else.",
+      "lever": "animal-agency",
+      "setting": "dmv",
+      "character": "goose",
+      "trigger": "isthisreal",
+      "cover": "CCTV-style wide from the corner: a goose seated in a plastic waiting chair under the fluorescent lights, ticket '#47' on the floor beside a webbed foot, bored humans not reacting. Deadpan, uncanny."
+    },
+    {
+      "logline": "A nun at the county fair casually dunks a basketball over three teenagers.",
+      "lever": "forbidden-competence",
+      "setting": "mall",
+      "character": "nun",
+      "trigger": "awe",
+      "cover": "Ground-level action freeze: a nun in full habit mid-air above the rim, ball cocked back, three teens ducking below her, habit flaring. Silhouette-legible spectacle."
+    },
+    {
+      "logline": "An entire office keeps typing, unfazed, as a llama strolls in and lies down on the conference table.",
+      "lever": "wrong-reaction",
+      "setting": "meeting",
+      "trigger": "liminal",
+      "cover": "Boardroom wide: a llama sprawled across the polished table mid-meeting, employees calmly looking at laptops, one person reaching past its neck for the coffee pot. Deadpan to the enormous."
+    },
+    {
+      "logline": "A toddler stands over a dropped ice cream cone like a general surveying a fallen city.",
+      "lever": "mundane-apocalypse",
+      "setting": "mall",
+      "character": "toddler",
+      "trigger": "awe",
+      "cover": "Dramatic low-angle looking up at a tiny toddler, hands clasped behind back, gazing down at a single melting scoop on the tile, distant blurred crowd. Epic gravity on a trivial loss."
+    },
+    {
+      "logline": "A woman calmly flosses her teeth using the airport security conveyor rollers as the line waits.",
+      "lever": "casual-taboo",
+      "setting": "airport",
+      "character": "karen",
+      "trigger": "disgust",
+      "cover": "Tight over the X-ray belt: a woman leaned into the rollers mid-floss, bins of shoes beside her, a TSA agent's horrified face just entering frame. Ick + one-glance clarity."
+    },
+    {
+      "logline": "An HOA meeting descends into a slow-motion brawl over a single garden gnome.",
+      "lever": "wrong-scale",
+      "setting": "hoa",
+      "character": "suit",
+      "trigger": "ragebait",
+      "cover": "Church-basement fluorescent wide: two neighbors lunging across folding chairs, a lone garden gnome held aloft between them like a holy relic, others recoiling. Petty stakes / total war."
+    }
+  ]
+}`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: scroll-stopper
+description: >-
+  Invent absurd, polarizing, scroll-stopping AI-video concepts for vertical short-form
+  Reels, Shorts, and TikTok. Use when a creator needs viral video ideas, absurd
+  premises, stop-the-scroll concepts, cover-shot art direction, or ready-to-paste
+  AI-video generation prompts.
+category: content-generation
+tags:
+  - content
+  - short-form
+  - viral
+  - ai-video
+  - hooks
+---
+
+# Scroll Stopper
+
+Generate absurd, polarizing, scroll-stopping AI-video concepts built around one
+commanding cover frame.
+
+Core formula:
+
+**mundane instantly-legible setting + norm violation + instantly-readable
+character + reaction that raises the stakes = one commanding freeze-frame.**
+
+Use \`references/engine.json\` as the source of truth for levers, settings,
+characters, triggers, cover doctrine, realism doctrine, scoring, and examples.
+
+## Operating Rules
+
+1. Start from a violation lever: Wrong Agent, Wrong Object, Wrong Scale, Wrong
+   Context, Wrong Reaction, Casual Taboo, Over-Commitment, Forbidden Competence,
+   Mundane Apocalypse, or Animal With an Agenda.
+2. Cross the lever with a mundane setting, instant-read character, and emotional
+   trigger.
+3. Generate several rough premises, then cut hard using the scoring rubric:
+   scroll-stop power, absurdity, legibility, comment-bait, describe-to-a-friend,
+   originality, gen feasibility, and safety.
+4. Design the cover frame as the main deliverable. If the idea cannot read in
+   one glance, it is not ready.
+5. Prefer found-footage realism over polish: phone/CCTV/doorbell framing,
+   imperfect exposure, ambient sound, autofocus hunt, and real-world lighting.
+
+## Output Per Concept
+
+For each keeper, return:
+
+1. **Logline**: one repeatable sentence, plus lever / setting / character /
+   trigger tags.
+2. **Cover-shot art direction**: angle, camera height, framing, wrong element,
+   reaction face, double-take detail, implied motion, and why it stops the
+   scroll.
+3. **Ready-to-paste generation prompt**:
+
+\`\`\`text
+[VIDEO - 9:16 vertical, ~6-10s]
+Shot: <handheld phone / CCTV / doorbell-cam> footage, vertical, slightly shaky, a beat late to the action.
+Subject: <character, specific, instantly readable>.
+Action: <the violation, described as it unfolds; the beat that resolves>.
+Setting: <mundane setting, specific real-world details>.
+Reaction: <bystanders / crowd / stakes>.
+Camera: <angle, height, movement>. Lens feel: phone-wide, autofocus hunt.
+Lighting: <fluorescent / overcast / gym-bright; not cinematic golden hour>.
+Audio: ambient/authentic; gasps, room noise, a distant "oh my god"; no music.
+Style: photoreal, found-footage, imperfect, un-produced. Not glossy, not cinematic.
+
+[COVER FRAME - 9:16 still]
+<Peak-tension freeze, exact moment before resolution. Wrong element dead center,
+a face mid-reaction, double-take detail visible, mute-legible, thumbnail-legible.>
+\`\`\`
+
+## Guardrails
+
+Keep concepts absurd-fictional and comedic. Do not create:
+
+- real named people or deepfakes
+- real dangerous stunts framed as imitable how-to
+- sexualized or endangered minors
+- cruelty to real identifiable victims
+- fake-news realism meant to deceive
+
+When a premise drifts unsafe, preserve the violation lever and swap the payload
+to something plainly fictional, comedic, and platform-safe.
+`,
+      },
+    ],
+  },
+  {
     slug: "serve",
     files: [
       {

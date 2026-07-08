@@ -236,6 +236,60 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     [hasMission, upsert, workspaceId],
   )
 
+  const syncMissionAssetContext = React.useCallback(
+    async (manifest: MissionAssetManifest) => {
+      setAssetManifest(manifest)
+      await upsert({
+        slug: MISSION_ASSET_CONTEXT_SLUG,
+        metadata: missionAssetContextMetadata(),
+        body: serializeMissionAssetContext(manifest),
+      })
+    },
+    [upsert],
+  )
+
+  const transcribeLyrics = React.useCallback(async () => {
+    if (!hasMission) {
+      setDrawerOpen(true)
+      toast.info('Create the campaign first, then transcribe lyrics.')
+      return
+    }
+    setAssetBusy(true)
+    try {
+      const result = await window.electronAPI.transcribeMissionAssetLyrics(workspaceId)
+      await syncMissionAssetContext(result.manifest)
+      if (!result.ok) {
+        toast.error(result.error ?? 'Lyrics transcription failed', {
+          description: result.blockers?.map((blocker) => blocker.message).join(' '),
+        })
+        return
+      }
+      toast.success('Lyrics transcribed. Review and save corrections.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAssetBusy(false)
+    }
+  }, [hasMission, syncMissionAssetContext, workspaceId])
+
+  const saveLyrics = React.useCallback(async (lyricsText: string, assetId?: string, sourceAudioAssetId?: string) => {
+    if (!lyricsText.trim()) return
+    setAssetBusy(true)
+    try {
+      const result = await window.electronAPI.saveMissionAssetLyrics(workspaceId, {
+        lyricsText,
+        assetId,
+        sourceAudioAssetId,
+      })
+      await syncMissionAssetContext(result.manifest)
+      toast.success('Approved lyrics saved for agents.')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAssetBusy(false)
+    }
+  }, [syncMissionAssetContext, workspaceId])
+
   const saveReleaseBoard = React.useCallback(
     async (nextBoard: ReleaseBoard) => {
       setOptimisticReleaseBoard(nextBoard)
@@ -461,6 +515,8 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
         releaseBoard={releaseBoard}
         onAddAsset={chooseAndImport}
         onImportAssetPaths={importAssetPaths}
+        onTranscribeLyrics={transcribeLyrics}
+        onSaveLyrics={saveLyrics}
         onOpenAssetsFolder={async () => {
           if (!hasMission) {
             setDrawerOpen(true)

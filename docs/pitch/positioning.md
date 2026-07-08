@@ -23,7 +23,9 @@ Primary users:
 
 - independent artists
 - emerging artists with small teams
+- self-managed artists
 - artist managers
+- indie labels and label-services teams
 - label services operators
 - creative directors and campaign leads around artists
 
@@ -71,3 +73,13 @@ It is a command center for the work around the music.
 Generic agent hubs are built around the agent.
 
 Artist OS Desktop is built around the artist, the release, the assets, the campaign, and the manager's operating reality.
+
+## Founder / Culture Angle
+
+Artist OS Desktop should feel built by an artist for artists, not like enterprise software wearing a creative skin.
+
+Core attitude:
+
+```text
+Independent artists should not need a label-sized machine to move with label-level coordination.
+```

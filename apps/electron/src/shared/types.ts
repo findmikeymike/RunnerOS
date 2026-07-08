@@ -150,7 +150,11 @@ import type {
   MissionAssetKindHint,
   MissionAssetManifest,
   MissionAssetRecord,
+  MissionAssetSaveLyricsInput,
+  MissionAssetSaveLyricsResult,
   MissionAssetScanResult,
+  MissionAssetTranscribeLyricsOptions,
+  MissionAssetTranscribeLyricsResult,
 } from '@craft-agent/shared/mission-assets';
 export type {
   MissionAssetImportCandidate,
@@ -159,7 +163,11 @@ export type {
   MissionAssetKindHint,
   MissionAssetManifest,
   MissionAssetRecord,
+  MissionAssetSaveLyricsInput,
+  MissionAssetSaveLyricsResult,
   MissionAssetScanResult,
+  MissionAssetTranscribeLyricsOptions,
+  MissionAssetTranscribeLyricsResult,
 };
 
 // Memory — DTOs are plain JSON entries. Import from the browser-safe type
@@ -923,6 +931,8 @@ export interface ElectronAPI {
   }>
   chooseMissionAssetFiles(workspaceId: string, kindHint?: MissionAssetKindHint): Promise<string[]>
   importMissionAssets(workspaceId: string, filePaths: string[], options?: MissionAssetImportOptions): Promise<MissionAssetImportResult>
+  transcribeMissionAssetLyrics(workspaceId: string, options?: MissionAssetTranscribeLyricsOptions): Promise<MissionAssetTranscribeLyricsResult>
+  saveMissionAssetLyrics(workspaceId: string, input: MissionAssetSaveLyricsInput): Promise<MissionAssetSaveLyricsResult>
   scanMissionAssets(workspaceId: string): Promise<MissionAssetScanResult>
   openMissionAssetsFolder(workspaceId: string): Promise<boolean>
 

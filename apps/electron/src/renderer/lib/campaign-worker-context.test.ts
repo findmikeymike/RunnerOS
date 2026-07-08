@@ -16,23 +16,33 @@ const artistProfile: ArtistProfile = {
   updatedAt: '2026-06-30T00:00:00.000Z',
 }
 
-function manifest(kinds: Array<'master' | 'lyrics' | 'cover-art'>): MissionAssetManifest {
+type ManifestFixtureKind = 'master' | 'lyrics' | 'approved-lyrics' | 'review-needed-lyrics' | 'cover-art'
+
+function manifest(kinds: ManifestFixtureKind[]): MissionAssetManifest {
   return {
     version: 1,
     workspaceId: 'workspace-1',
     assetsRoot: 'assets',
     storageMode: 'copied',
-    files: kinds.map((kind) => ({
-      id: `asset-${kind}`,
-      kind,
-      label: kind,
-      relativePath: `assets/${kind}.txt`,
-      source: 'copy',
-      status: 'available',
-      usableByAgents: true,
-      createdAt: '2026-06-30T00:00:00.000Z',
-      updatedAt: '2026-06-30T00:00:00.000Z',
-    })),
+    files: kinds.map((fixtureKind) => {
+      const kind = fixtureKind === 'approved-lyrics' || fixtureKind === 'review-needed-lyrics' ? 'lyrics' : fixtureKind
+      return {
+        id: `asset-${fixtureKind}`,
+        kind,
+        label: kind,
+        relativePath: `assets/${kind}.txt`,
+        source: 'copy',
+        status: 'available',
+        usableByAgents: true,
+        lyrics: fixtureKind === 'approved-lyrics'
+          ? { text: 'approved line', reviewRequired: false, status: 'approved' }
+          : fixtureKind === 'review-needed-lyrics'
+            ? { text: 'draft line', reviewRequired: true, status: 'machine' }
+            : undefined,
+        createdAt: '2026-06-30T00:00:00.000Z',
+        updatedAt: '2026-06-30T00:00:00.000Z',
+      }
+    }),
     updatedAt: '2026-06-30T00:00:00.000Z',
   }
 }
@@ -66,12 +76,12 @@ describe('campaign worker context', () => {
     const body = serializeCampaignWorkerContext({
       mission,
       artistProfile,
-      assetManifest: manifest(['master', 'lyrics', 'cover-art']),
+      assetManifest: manifest(['master', 'approved-lyrics', 'cover-art']),
     })
     const readiness = getCampaignWorkerReadiness({
       mission,
       artistProfile,
-      assetManifest: manifest(['master', 'lyrics', 'cover-art']),
+      assetManifest: manifest(['master', 'approved-lyrics', 'cover-art']),
     })
 
     expect(readiness.ready).toBe(true)
@@ -81,5 +91,31 @@ describe('campaign worker context', () => {
     expect(body).toContain('"title": "Night Drive"')
     expect(body).toContain('"name": "HNlC"')
     expect(body).toContain('"master": "assets/master.txt"')
+  })
+
+  test('review-needed lyrics block launch-ready context until approved', () => {
+    const mission = buildMissionBrief('workspace-1', {
+      missionType: 'single',
+      title: 'Night Drive',
+      goal: 'Build presave momentum.',
+      timeline: 'June 30',
+      targetListener: 'Night-drive pop fans.',
+    })
+
+    const readiness = getCampaignWorkerReadiness({
+      mission,
+      artistProfile,
+      assetManifest: manifest(['master', 'review-needed-lyrics', 'cover-art']),
+    })
+    const body = serializeCampaignWorkerContext({
+      mission,
+      artistProfile,
+      assetManifest: manifest(['master', 'review-needed-lyrics', 'cover-art']),
+    })
+
+    expect(readiness.ready).toBe(false)
+    expect(readiness.nextMove).toBe('Review and approve lyrics.')
+    expect(readiness.missing).toContain('Approved lyrics')
+    expect(body).toContain('"lyricsStatus": "needs-review"')
   })
 })

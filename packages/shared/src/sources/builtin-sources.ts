@@ -19,6 +19,7 @@ const VIDEO_STUDIO_SLUG = 'video-studio';
 const RAW_VIDEO_EDITOR_SLUG = 'raw-video-editor';
 const SQUAD_SLUG = 'squad';
 const GENESIS_LYRIC_SLUG = 'genesis-lyric';
+const LYRICS_TRANSCRIBER_SLUG = 'lyrics-transcriber';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const ADS_OPERATOR_SLUG = 'ads-operator';
 const GOOGLE_CALENDAR_SLUG = 'google-calendar';
@@ -221,6 +222,21 @@ function getGenesisLyricPath(): string {
       join(process.cwd(), 'tools', 'genesis-lyric'),
     ],
     join('tools', 'genesis-lyric')
+  );
+}
+
+function getLyricsTranscriberPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'lyrics-transcriber') : '',
+      join(appRoot, 'tools', 'lyrics-transcriber'),
+      join(REPO_ROOT, 'tools', 'lyrics-transcriber'),
+      join(process.cwd(), 'tools', 'lyrics-transcriber'),
+    ],
+    join('tools', 'lyrics-transcriber')
   );
 }
 
@@ -436,6 +452,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getRawVideoEditorSource(workspaceId, workspaceRootPath),
     getSquadSource(workspaceId, workspaceRootPath),
     getGenesisLyricSource(workspaceId, workspaceRootPath),
+    getLyricsTranscriberSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getAdsOperatorSource(workspaceId, workspaceRootPath),
     getGoogleCalendarSource(workspaceId, workspaceRootPath),
@@ -924,6 +941,54 @@ export function getGenesisLyricSource(workspaceId: string, workspaceRootPath: st
         'Silent Spotify Canvas loops without lyric text belong in the Spotify Canvas/Hypermotion lane, not this source.',
         '',
         'This source is single-video only. Do not use it for Genesis campaign planning, 20-day content batches, worker loops, portal/API operations, or auto-posting.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
+ * Built-in source for local song/master audio transcription.
+ */
+export function getLyricsTranscriberSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getLyricsTranscriberPath();
+  const config: FolderSourceConfig = {
+    id: 'builtin-lyrics-transcriber',
+    name: 'Lyrics Transcriber',
+    slug: LYRICS_TRANSCRIBER_SLUG,
+    enabled: true,
+    provider: 'runneros-lyrics-transcriber',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Local whisper.cpp wrapper for song audio transcription, timed lyrics, and Vault/Lyric Video handoff.',
+    icon: '📝',
+    isAuthenticated: true,
+    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
+    connectionError: existsSync(toolPath) ? undefined : 'Bundled lyrics transcriber tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Lyrics Transcriber',
+        '',
+        'Use this source to transcribe song/master audio into review-needed `lyrics_text` and `lyric_lines` for Vault and Lyric Video workflows.',
+        '',
+        'Core commands:',
+        '1. `node bin/lyrics-transcriber.mjs doctor --json` to verify `whisper-cli`, FFmpeg, and the selected model.',
+        '2. `node bin/lyrics-transcriber.mjs install-model --model base.en --json` to download a whisper.cpp model into `~/.runneros/whisper/models`.',
+        '3. `node bin/lyrics-transcriber.mjs transcribe --audio-file <audio> --model base.en --out-dir <dir> --json` to write `transcript.json` and `lyrics.txt`.',
+        '',
+        'The transcriber accepts common song/master audio files, converts them through FFmpeg, and returns timed lyric lines. Sung lyrics can be misheard, so keep `review_required` true until the user confirms the transcript.',
+        '',
+        'When the user has a master audio file stored in Vault and does not provide another audio file, use that master audio as the default transcription source.',
       ].join('\n'),
     },
     isBuiltin: true,
@@ -1810,6 +1875,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === RAW_VIDEO_EDITOR_SLUG
     || slug === SQUAD_SLUG
     || slug === GENESIS_LYRIC_SLUG
+    || slug === LYRICS_TRANSCRIBER_SLUG
     || slug === GOOGLE_ADS_SLUG
     || slug === ADS_OPERATOR_SLUG
     || slug === GOOGLE_CALENDAR_SLUG

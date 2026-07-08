@@ -27,6 +27,7 @@ It is not generic AI chat. It is a music-specific work system with specialist ag
 - [Landing Page](./landing-page.md): page structure, proof sections, and conversion blocks.
 - [Built-In Artist Team](./built-in-artist-team.md): agent-directory/dropdown content for the landing page.
 - [Proof Gallery](./proof-gallery.md): output examples and demos the landing page should show.
+- [Audience And Voice](./audience-and-voice.md): independent-artist posture, founder voice, and brand attitude.
 - [Artist And Manager Value](./artist-and-manager-value.md): value for artists and managers.
 - [Human Layer](./human-layer.md): vetted partner and expert-access layer.
 - [Claims To Prove](./claims-to-prove.md): strong claims that need demos, screenshots, tests, or proof before public launch.
@@ -53,3 +54,4 @@ The result is closer to having a lightweight management team inside the app than
 - Social operations: agents can prepare and execute approved posts, comment replies, and DMs across multiple social profiles.
 - Approval control: agents prepare real work, but risky external actions stay user-approved.
 - Proof gallery: show real examples, not abstract feature claims.
+- Founder posture: built by an artist, not an enterprise software committee.

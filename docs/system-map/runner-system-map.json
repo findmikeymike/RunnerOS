@@ -22,10 +22,10 @@
     "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts"
   },
   "summary": {
-    "agentCount": 37,
+    "agentCount": 38,
     "domains": {
       "Command": 3,
-      "Content Creation": 5,
+      "Content Creation": 6,
       "Creative": 5,
       "Merch": 2,
       "Operators": 2,
@@ -36,12 +36,13 @@
       "Socials": 2
     },
     "permissionModes": {
-      "ask": 30,
+      "ask": 31,
       "safe": 7
     },
     "hiddenWorkerHomeCount": 6,
     "campaignDefaultWorkerSlugs": [
       "content-genius",
+      "scroll-stopper",
       "art-director",
       "ad-creative-agent",
       "ads-strategist",
@@ -57,11 +58,11 @@
     "finalsPromotionWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 114,
-    "bundledSkillCount": 73,
+    "knownSkillCount": 119,
+    "bundledSkillCount": 76,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 114,
-    "knownSourceCount": 23,
+    "userGlobalSkillCount": 119,
+    "knownSourceCount": 24,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
     "missingSources": [],
@@ -127,7 +128,7 @@
   "inferredRuntimeRules": [
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
-    "Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
+    "Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
@@ -334,7 +335,8 @@
         "spotify-canvas-video"
       ],
       "sources": [
-        "genesis-lyric"
+        "genesis-lyric",
+        "lyrics-transcriber"
       ],
       "optionalSources": [
         "media-generation",
@@ -403,6 +405,40 @@
       ],
       "inputs": "A folder of existing video/audio files, desired platform/aspect ratio, target runtime, pacing direction, must-keep moments, must-cut moments, caption style, and brand/editing notes.",
       "outputs": "An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, self-check notes, and clear limits when source media or transcription is missing."
+    },
+    {
+      "slug": "scroll-stopper",
+      "name": "Scroll Stopper",
+      "description": "Invents absurd, polarizing AI-video concepts with hard cover-shot direction and paste-ready vertical generation prompts.",
+      "domain": "Content Creation",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "scroll-stopper"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "content",
+        "shortform",
+        "viral",
+        "ai-video",
+        "hooks",
+        "campaigns"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "external-action-boundary"
+      ],
+      "inputs": "Campaign context, artist world, content lane, platform, niche, vibe, constraints, reference ideas, or a rough premise that needs to become a vertical AI-video concept.",
+      "outputs": "Scroll-stopping short-form concepts with loglines, lever/setting/character/trigger tags, cover-shot art direction, safety notes, and ready-to-paste 9:16 AI-video prompts."
     },
     {
       "slug": "video-editor-agent",
@@ -985,6 +1021,7 @@
       "skills": [
         "artist-ad-dna",
         "ad-library-intel",
+        "music-ad-visual-hooks",
         "ads-creative-development",
         "ad-creative",
         "artist-campaign-angle-builder"
@@ -1023,7 +1060,8 @@
       "skills": [
         "meta-ads",
         "google-ads",
-        "paid-ads-browser-operator"
+        "paid-ads-browser-operator",
+        "music-ad-conversion-protocol"
       ],
       "sources": [
         "meta-ads",
@@ -1067,7 +1105,8 @@
       "skills": [
         "artist-ad-dna",
         "ad-library-intel",
-        "ads-strategy"
+        "ads-strategy",
+        "music-ad-conversion-protocol"
       ],
       "sources": [],
       "optionalSources": [],

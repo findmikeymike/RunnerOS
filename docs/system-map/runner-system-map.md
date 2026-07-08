@@ -37,16 +37,16 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Summary
 
-- Agents mapped: 37
+- Agents mapped: 38
 - Hidden from Workers home: 6
-- Campaign default workers: `content-genius`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
+- Campaign default workers: `content-genius`, `scroll-stopper`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
-- Domains: Command 3, Content Creation 5, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
-- Permission modes: ask 30, safe 7
-- Known skills: 114 (73 bundled, 6 system, 114 user-global on this machine)
-- Known builtin sources: 23
+- Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
+- Permission modes: ask 31, safe 7
+- Known skills: 119 (76 bundled, 6 system, 119 user-global on this machine)
+- Known builtin sources: 24
 
 ## Reference Health
 
@@ -56,7 +56,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
-- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
+- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -185,7 +185,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
 - Skills: `lyric-video-genesis`, `spotify-canvas-video`
-- Sources: `genesis-lyric`
+- Sources: `genesis-lyric`, `lyrics-transcriber`
 - Optional sources: `media-generation`, `raw-video-editor`, `video-studio`
 - Trusted tools: none
 - Tags: `creative`, `video`, `music`, `lyrics`, `captions`, `song-teaser`
@@ -206,6 +206,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
 - Inputs: A folder of existing video/audio files, desired platform/aspect ratio, target runtime, pacing direction, must-keep moments, must-cut moments, caption style, and brand/editing notes.
 - Outputs: An edit folder with inventory, packed transcript, EDL, preview/final MP4 paths, self-check notes, and clear limits when source media or transcription is missing.
+
+#### Scroll Stopper (`scroll-stopper`)
+
+- Description: Invents absurd, polarizing AI-video concepts with hard cover-shot direction and paste-ready vertical generation prompts.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Skills: `scroll-stopper`
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `content`, `shortform`, `viral`, `ai-video`, `hooks`, `campaigns`
+- Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`
+- Inputs: Campaign context, artist world, content lane, platform, niche, vibe, constraints, reference ideas, or a rough premise that needs to become a vertical AI-video concept.
+- Outputs: Scroll-stopping short-form concepts with loglines, lever/setting/character/trigger tags, cover-shot art direction, safety notes, and ready-to-paste 9:16 AI-video prompts.
 
 #### Video Editor Agent (`video-editor-agent`)
 
@@ -448,7 +462,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Researches and finds high-performing artist ads, then helps craft creative, hooks, copy, and variants for paid campaigns.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
-- Skills: `artist-ad-dna`, `ad-library-intel`, `ads-creative-development`, `ad-creative`, `artist-campaign-angle-builder`
+- Skills: `artist-ad-dna`, `ad-library-intel`, `music-ad-visual-hooks`, `ads-creative-development`, `ad-creative`, `artist-campaign-angle-builder`
 - Sources: none
 - Optional sources: none
 - Trusted tools: none
@@ -462,7 +476,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Plan, review, and run Meta, Google, Spotify ads.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
-- Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`
+- Skills: `meta-ads`, `google-ads`, `paid-ads-browser-operator`, `music-ad-conversion-protocol`
 - Sources: `meta-ads`, `google-ads`, `ads-operator`
 - Optional sources: none
 - Trusted tools: none
@@ -476,7 +490,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Builds Meta, Google, and Spotify paid-ad campaign strategy, budget, audience, territory, and testing plans from artist context before Ad Runner executes.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
-- Skills: `artist-ad-dna`, `ad-library-intel`, `ads-strategy`
+- Skills: `artist-ad-dna`, `ad-library-intel`, `ads-strategy`, `music-ad-conversion-protocol`
 - Sources: none
 - Optional sources: none
 - Trusted tools: none

@@ -2492,7 +2492,7 @@ export class SessionManager implements ISessionManager {
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
         // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Hypermotion, Lottie Animation,
-        // Video Editor, Lyric Video, Content Genius, promotion helpers, Shopify, Print Agent,
+        // Video Editor, Lyric Video, Content Genius, Scroll Stopper, promotion helpers, Shopify, Print Agent,
         // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
         // and Update System Agent.
         const required = STARTER_AGENTS.filter(
@@ -2506,6 +2506,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'video-editor-agent'
             || a.slug === 'lyric-video-agent'
             || a.slug === 'content-genius'
+            || a.slug === 'scroll-stopper'
             || a.slug === 'ads-strategist'
             || a.slug === 'ad-creative-agent'
             || a.slug === 'ads-agent'
@@ -2665,6 +2666,7 @@ export class SessionManager implements ISessionManager {
             'ad-creative-agent',
             'ads-agent',
             'lyric-video-agent',
+            'scroll-stopper',
             'ig-trending-power-up',
             'influencer-campaign-power-up',
             'playlisting-power-up',

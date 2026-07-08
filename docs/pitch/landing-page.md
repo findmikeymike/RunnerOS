@@ -43,6 +43,12 @@ Key points:
 - stocked with music-specific workers, tools, and skills
 - designed around campaigns, assets, approvals, and outputs
 
+Optional founder/culture block:
+
+```text
+Built by an artist, not an enterprise software committee.
+```
+
 ## Section 2: Your Built-In Artist Team
 
 Use an expandable dropdown or categorized directory.
@@ -192,4 +198,24 @@ Examples:
 
 ```text
 Build the command center around your next release.
+```
+
+## Attitude Options
+
+Cleaner:
+
+```text
+Give yourself the edge in the new era of independent music.
+```
+
+Sharper:
+
+```text
+Move like you have the team, even before the industry gives you one.
+```
+
+Raw/internal:
+
+```text
+Fuck a label. Build the machine yourself.
 ```

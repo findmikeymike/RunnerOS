@@ -36,6 +36,8 @@ import {
   type MissionAssetImportResult,
   type MissionAssetManifest,
   type MissionAssetRecord,
+  type MissionAssetSaveLyricsInput,
+  type MissionAssetSaveLyricsResult,
   type MissionAssetScanResult,
 } from './types.ts';
 
@@ -57,6 +59,7 @@ const DEFAULT_DIRECTORIES = [
   'exports/epk',
 ];
 const MAX_INLINE_HASH_BYTES = 256 * 1024 * 1024;
+const MAX_INLINE_LYRICS_BYTES = 512 * 1024;
 
 export function getMissionAssetsRoot(workspaceRootPath: string): string {
   return join(workspaceRootPath, MISSION_ASSETS_DIR);
@@ -137,6 +140,109 @@ export async function saveMissionAssetManifestAsync(workspaceRootPath: string, m
   const file = getMissionAssetManifestPath(workspaceRootPath);
   await atomicWriteJsonAsync(file, manifest);
   return manifest;
+}
+
+export function selectMissionAudioForLyrics(manifest: MissionAssetManifest, audioAssetId?: string): MissionAssetRecord | null {
+  const available = manifest.files.filter((file) => file.status === 'available');
+  if (audioAssetId) {
+    return available.find((file) => file.id === audioAssetId && ['master', 'demo'].includes(file.kind)) ?? null;
+  }
+  return available.find((file) => file.kind === 'master')
+    ?? available.find((file) => file.kind === 'demo')
+    ?? null;
+}
+
+export function findCanonicalLyricsAsset(manifest: MissionAssetManifest): MissionAssetRecord | null {
+  const lyrics = manifest.files.filter((file) => file.kind === 'lyrics' && file.status === 'available');
+  return lyrics.find((file) => file.lyrics && !file.lyrics.reviewRequired)
+    ?? lyrics.find((file) => file.lyrics)
+    ?? lyrics[0]
+    ?? null;
+}
+
+export async function saveMissionLyricsAsync(
+  workspaceRootPath: string,
+  workspaceId: string,
+  input: MissionAssetSaveLyricsInput,
+): Promise<MissionAssetSaveLyricsResult> {
+  const lyricsText = input.lyricsText.trim();
+  if (!lyricsText) throw new Error('lyricsText is required');
+  await ensureMissionAssetsFoldersAsync(workspaceRootPath);
+  const manifest = await loadMissionAssetManifestForImportAsync(workspaceRootPath, workspaceId);
+  const now = new Date().toISOString();
+  const sourceAudio = input.sourceAudioAssetId
+    ? manifest.files.find((file) => file.id === input.sourceAudioAssetId)
+    : selectMissionAudioForLyrics(manifest);
+  const existing = input.assetId
+    ? manifest.files.find((file) => file.id === input.assetId && file.kind === 'lyrics')
+    : null;
+  const relativePath = existing?.relativePath
+    ?? await uniqueDestinationRelativePathAsync(
+      workspaceRootPath,
+      'docs/lyrics',
+      `${slugify(sourceAudio?.label || sourceAudio?.relativePath || 'approved-lyrics')}-lyrics.md`,
+      trackedManifestPaths(manifest),
+    );
+  const absolutePath = resolve(workspaceRootPath, relativePath);
+  await mkdirAsync(dirname(absolutePath), { recursive: true });
+  await writeFileAsync(absolutePath, `${lyricsText}\n`, 'utf-8');
+  const { sizeBytes, sha256 } = await sizeAndHashAsync(absolutePath);
+  const lyrics = {
+    text: lyricsText,
+    lyricLines: input.lyricLines,
+    reviewRequired: input.reviewRequired ?? false,
+    status: input.status ?? 'approved',
+    sourceAudioAssetId: sourceAudio?.id,
+    sourceAudioPath: sourceAudio?.relativePath ?? sourceAudio?.absolutePath,
+    transcriptRelativePath: input.transcriptRelativePath ?? existing?.lyrics?.transcriptRelativePath,
+    model: input.model ?? existing?.lyrics?.model,
+    engine: input.engine ?? existing?.lyrics?.engine,
+    generatedAt: input.generatedAt ?? existing?.lyrics?.generatedAt,
+    reviewedAt: input.reviewRequired ? existing?.lyrics?.reviewedAt : now,
+  };
+
+  let lyricsAsset: MissionAssetRecord;
+  if (existing) {
+    lyricsAsset = {
+      ...existing,
+      label: 'Lyrics',
+      relativePath,
+      mimeType: 'text/markdown',
+      sizeBytes,
+      sha256,
+      source: input.status === 'machine' ? 'agent-output' : existing.source,
+      status: 'available',
+      usableByAgents: true,
+      notes: input.reviewRequired ? 'Machine transcript needs lyric review' : 'Approved lyrics for campaign agents',
+      lyrics,
+      updatedAt: now,
+    };
+    manifest.files = manifest.files.map((file) => file.id === existing.id ? lyricsAsset : file);
+  } else {
+    lyricsAsset = {
+      id: `asset_${randomUUID()}`,
+      kind: 'lyrics',
+      label: 'Lyrics',
+      relativePath,
+      mimeType: 'text/markdown',
+      sizeBytes,
+      sha256,
+      source: input.status === 'machine' ? 'agent-output' : 'manual',
+      status: 'available',
+      usableByAgents: true,
+      notes: input.reviewRequired ? 'Machine transcript needs lyric review' : 'Approved lyrics for campaign agents',
+      lyrics,
+      createdAt: now,
+      updatedAt: now,
+    };
+    manifest.files.push(lyricsAsset);
+  }
+
+  manifest.workspaceId = workspaceId;
+  manifest.assetsRoot = MISSION_ASSETS_DIR;
+  manifest.updatedAt = now;
+  await saveMissionAssetManifestAsync(workspaceRootPath, manifest);
+  return { manifest, lyricsAsset };
 }
 
 export function planMissionAssetImports(
@@ -250,7 +356,7 @@ export function importMissionAssets(
       mkdirSync(dirname(destination), { recursive: true });
       copyFileSync(candidate.sourcePath, destination);
       const { sizeBytes, sha256 } = sizeAndHash(destination);
-      const record: MissionAssetRecord = {
+      let record: MissionAssetRecord = {
         id: `asset_${randomUUID()}`,
         kind: candidate.kind,
         label: displayKind(candidate.kind),
@@ -265,6 +371,7 @@ export function importMissionAssets(
         createdAt: now,
         updatedAt: now,
       };
+      record = withImportedLyricsMetadata(record, destination, now);
       imported.push(record);
       manifest.files.push(record);
     } catch (err) {
@@ -302,7 +409,7 @@ export async function importMissionAssetsAsync(
       await mkdirAsync(dirname(destination), { recursive: true });
       await copyFileAsync(candidate.sourcePath, destination);
       const { sizeBytes, sha256 } = await sizeAndHashAsync(destination);
-      const record: MissionAssetRecord = {
+      let record: MissionAssetRecord = {
         id: `asset_${randomUUID()}`,
         kind: candidate.kind,
         label: displayKind(candidate.kind),
@@ -317,6 +424,7 @@ export async function importMissionAssetsAsync(
         createdAt: now,
         updatedAt: now,
       };
+      record = await withImportedLyricsMetadataAsync(record, destination, now);
       imported.push(record);
       manifest.files.push(record);
     } catch (err) {
@@ -355,7 +463,7 @@ export function scanMissionAssets(
     try {
       const classification = classifyMissionAsset(absolutePath);
       const { sizeBytes, sha256 } = sizeAndHash(absolutePath);
-      const record: MissionAssetRecord = {
+      let record: MissionAssetRecord = {
         id: `asset_${randomUUID()}`,
         kind: kindFromRelativePath(relativePath) ?? classification.kind,
         label: displayKind(kindFromRelativePath(relativePath) ?? classification.kind),
@@ -370,6 +478,7 @@ export function scanMissionAssets(
         createdAt: now,
         updatedAt: now,
       };
+      record = withImportedLyricsMetadata(record, absolutePath, now);
       added.push(record);
       manifest.files.push(record);
       trackedPaths.add(relativePath);
@@ -408,7 +517,7 @@ export async function scanMissionAssetsAsync(
       const folderKind = kindFromRelativePath(relativePath);
       const kind = folderKind ?? classification.kind;
       const { sizeBytes, sha256 } = await sizeAndHashAsync(absolutePath);
-      const record: MissionAssetRecord = {
+      let record: MissionAssetRecord = {
         id: `asset_${randomUUID()}`,
         kind,
         label: displayKind(kind),
@@ -423,6 +532,7 @@ export async function scanMissionAssetsAsync(
         createdAt: now,
         updatedAt: now,
       };
+      record = await withImportedLyricsMetadataAsync(record, absolutePath, now);
       added.push(record);
       manifest.files.push(record);
       trackedPaths.add(relativePath);
@@ -551,6 +661,71 @@ function uniqueDestinationRelativePath(
     if (!existsSync(absolute) && !plannedDestinations.has(relative)) return relative;
     index += 1;
   }
+}
+
+function slugify(value: string): string {
+  return basename(value, extname(value))
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    || 'lyrics';
+}
+
+function withImportedLyricsMetadata(record: MissionAssetRecord, absolutePath: string, now: string): MissionAssetRecord {
+  if (record.kind !== 'lyrics' || record.lyrics || !isPlainLyricsFile(record, absolutePath)) return record;
+  const text = readImportedLyricsText(absolutePath);
+  if (!text) return record;
+  return {
+    ...record,
+    usableByAgents: true,
+    notes: appendNote(record.notes, 'Imported lyrics need review'),
+    lyrics: {
+      text,
+      reviewRequired: true,
+      status: 'manual',
+      generatedAt: now,
+    },
+  };
+}
+
+async function withImportedLyricsMetadataAsync(record: MissionAssetRecord, absolutePath: string, now: string): Promise<MissionAssetRecord> {
+  if (record.kind !== 'lyrics' || record.lyrics || !isPlainLyricsFile(record, absolutePath)) return record;
+  const text = await readImportedLyricsTextAsync(absolutePath);
+  if (!text) return record;
+  return {
+    ...record,
+    usableByAgents: true,
+    notes: appendNote(record.notes, 'Imported lyrics need review'),
+    lyrics: {
+      text,
+      reviewRequired: true,
+      status: 'manual',
+      generatedAt: now,
+    },
+  };
+}
+
+function isPlainLyricsFile(record: MissionAssetRecord, absolutePath: string): boolean {
+  const mime = record.mimeType ?? inferMimeType(absolutePath);
+  const ext = extname(absolutePath).toLowerCase();
+  return mime === 'text/plain' || mime === 'text/markdown' || ext === '.txt' || ext === '.md';
+}
+
+function readImportedLyricsText(absolutePath: string): string | null {
+  if (statSync(absolutePath).size > MAX_INLINE_LYRICS_BYTES) return null;
+  const text = readFileSync(absolutePath, 'utf-8').trim();
+  return text || null;
+}
+
+async function readImportedLyricsTextAsync(absolutePath: string): Promise<string | null> {
+  const { size } = await statAsync(absolutePath);
+  if (size > MAX_INLINE_LYRICS_BYTES) return null;
+  const text = (await readFileAsync(absolutePath, 'utf-8')).trim();
+  return text || null;
+}
+
+function appendNote(existing: string | undefined, note: string): string {
+  return existing ? `${existing}; ${note}` : note;
 }
 
 async function pathExists(path: string): Promise<boolean> {

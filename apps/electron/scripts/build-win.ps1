@@ -200,6 +200,15 @@ try {
 # 4. Copy Claude SDK from root node_modules (main package + native executable package).
 Copy-ClaudeSdk
 
+# 4b. Verify app-owned lyrics transcription runtime is bundled.
+Write-Host "Verifying Lyrics Transcriber runtime..."
+Push-Location $RootDir
+try {
+    bun run scripts/prepare-lyrics-runtime.ts gate --platform win32 --arch x64
+} finally {
+    Pop-Location
+}
+
 # 5. Copy interceptor
 $InterceptorSource = "$RootDir\packages\shared\src\unified-network-interceptor.ts"
 if (-not (Test-Path $InterceptorSource)) {

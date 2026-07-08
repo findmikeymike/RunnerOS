@@ -10,6 +10,7 @@ import {
   loadMissionAssetManifest,
   missionAssetContextMetadata,
   planMissionAssetImports,
+  saveMissionLyricsAsync,
   scanMissionAssets,
   serializeMissionAssetContext,
 } from './index.ts';
@@ -78,6 +79,49 @@ describe('mission assets', () => {
     expect(result.imported).toHaveLength(1);
     expect(imported?.sizeBytes).toBe(257 * 1024 * 1024);
     expect(imported?.sha256).toBeUndefined();
+  });
+
+  test('saves approved lyrics as canonical mission context', async () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'night-drive-final.wav');
+    writeFileSync(source, 'fake audio');
+    const imported = importMissionAssets(workspace, 'workspace-1', [source], { kindHint: 'master' }).imported[0];
+
+    const result = await saveMissionLyricsAsync(workspace, 'workspace-1', {
+      sourceAudioAssetId: imported?.id,
+      lyricsText: 'first line\nsecond line',
+      lyricLines: [
+        { text: 'first line', start_time: 0, end_time: 2.5 },
+        { text: 'second line', start_time: 2.5, end_time: 5 },
+      ],
+    });
+    const body = serializeMissionAssetContext(result.manifest);
+
+    expect(result.lyricsAsset.kind).toBe('lyrics');
+    expect(result.lyricsAsset.lyrics?.reviewRequired).toBe(false);
+    expect(result.lyricsAsset.lyrics?.sourceAudioAssetId).toBe(imported?.id);
+    expect(result.lyricsAsset.relativePath).toContain('assets/docs/lyrics/');
+    expect(existsSync(join(workspace, result.lyricsAsset.relativePath!))).toBe(true);
+    expect(body).toContain('Lyrics status: approved');
+    expect(body).toContain('first line');
+    expect(body).toContain('Timed Lyric Lines');
+  });
+
+  test('imports plain lyrics text as review-needed callable lyrics', async () => {
+    const workspace = tempWorkspace();
+    const source = join(workspace, 'lyrics-final.txt');
+    writeFileSync(source, 'line one\nline two\n');
+
+    const result = await importMissionAssetsAsync(workspace, 'workspace-1', [source], { kindHint: 'lyrics' });
+    const imported = result.imported[0];
+    const body = serializeMissionAssetContext(result.manifest);
+
+    expect(imported?.kind).toBe('lyrics');
+    expect(imported?.lyrics?.text).toBe('line one\nline two');
+    expect(imported?.lyrics?.reviewRequired).toBe(true);
+    expect(imported?.lyrics?.status).toBe('manual');
+    expect(body).toContain('Lyrics status: needs review');
+    expect(body).toContain('line one');
   });
 
   test('async import copies media and writes manifest', async () => {

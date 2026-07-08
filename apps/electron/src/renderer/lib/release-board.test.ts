@@ -48,13 +48,22 @@ describe('release board utilities', () => {
 
   test('marks asset-backed items done when matching files exist', () => {
     const board = buildDefaultReleaseBoard('workspace-1')
-    const merged = mergeReleaseBoardWithAssets(board, manifestWith('master', 'lyrics', 'cover-art'))
+    const merged = mergeReleaseBoardWithAssets(board, manifestWith('master', 'approved-lyrics', 'cover-art'))
 
     expect(itemStatus(merged, 'music', 'master')).toBe('done')
     expect(itemStatus(merged, 'music', 'lyrics')).toBe('done')
     expect(itemStatus(merged, 'visuals', 'cover-art')).toBe('done')
     expect(itemStatus(merged, 'promotion', 'ad-creatives')).toBe('needed')
     expect(getBoardTotals(merged).done).toBe(3)
+  })
+
+  test('does not mark lyrics done until lyrics are approved', () => {
+    const board = buildDefaultReleaseBoard('workspace-1')
+    const generic = mergeReleaseBoardWithAssets(board, manifestWith('lyrics'))
+    const reviewNeeded = mergeReleaseBoardWithAssets(board, manifestWith('review-needed-lyrics'))
+
+    expect(itemStatus(generic, 'music', 'lyrics')).toBe('needed')
+    expect(itemStatus(reviewNeeded, 'music', 'lyrics')).toBe('needed')
   })
 
   test('does not mark generated deliverables done from generic media files', () => {
@@ -94,22 +103,32 @@ function itemStatus(
     ?.status
 }
 
-function manifestWith(...kinds: MissionAssetManifest['files'][number]['kind'][]): MissionAssetManifest {
+type ManifestFixtureKind = MissionAssetManifest['files'][number]['kind'] | 'approved-lyrics' | 'review-needed-lyrics'
+
+function manifestWith(...kinds: ManifestFixtureKind[]): MissionAssetManifest {
   return {
     version: 1,
     workspaceId: 'workspace-1',
     assetsRoot: '/tmp/assets',
     storageMode: 'copied',
     updatedAt: new Date().toISOString(),
-    files: kinds.map((kind, index) => ({
-      id: `${kind}-${index}`,
-      kind,
-      label: kind,
-      source: 'copy',
-      status: 'available',
-      usableByAgents: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    })),
+    files: kinds.map((fixtureKind, index) => {
+      const kind = fixtureKind === 'approved-lyrics' || fixtureKind === 'review-needed-lyrics' ? 'lyrics' : fixtureKind
+      return {
+        id: `${kind}-${index}`,
+        kind,
+        label: kind,
+        source: 'copy',
+        status: 'available',
+        usableByAgents: true,
+        lyrics: fixtureKind === 'approved-lyrics'
+          ? { text: 'approved line', reviewRequired: false, status: 'approved' }
+          : fixtureKind === 'review-needed-lyrics'
+            ? { text: 'draft line', reviewRequired: true, status: 'machine' }
+            : undefined,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+    }),
   }
 }
