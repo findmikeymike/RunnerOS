@@ -323,7 +323,30 @@ function getPrintifyAuthState(): { configured: boolean } {
   return { configured: Boolean(process.env.PRINTIFY_API_TOKEN?.trim()) };
 }
 
-function getMediaGenerationAuthState(): { configured: boolean; providers: string[] } {
+type MediaProviderPreference = 'auto' | 'fal' | 'replicate' | 'wavespeed';
+type MediaProviderStrategy = 'balanced' | 'speed' | 'quality' | 'cost';
+
+function getMediaProviderPreference(name: string): MediaProviderPreference {
+  const value = process.env[name]?.trim().toLowerCase();
+  if (value === 'fal' || value === 'replicate' || value === 'wavespeed') return value;
+  return 'auto';
+}
+
+function getMediaProviderStrategy(): MediaProviderStrategy {
+  const value = process.env.MEDIA_PROVIDER_STRATEGY?.trim().toLowerCase();
+  if (value === 'speed' || value === 'quality' || value === 'cost') return value;
+  return 'balanced';
+}
+
+function getMediaGenerationAuthState(): {
+  configured: boolean;
+  providers: string[];
+  preferences: {
+    imageProvider: MediaProviderPreference;
+    videoProvider: MediaProviderPreference;
+    strategy: MediaProviderStrategy;
+  };
+} {
   const providers: string[] = [];
   if ((process.env.FAL_API_KEY || process.env.SQUAD_FAL_API_KEY)?.trim()) providers.push('Fal');
   if ((process.env.WAVESPEED_API_KEY || process.env.SQUAD_WAVESPEED_API_KEY)?.trim()) providers.push('WaveSpeed');
@@ -331,7 +354,15 @@ function getMediaGenerationAuthState(): { configured: boolean; providers: string
   if ((process.env.HEYGEN_API_KEY || process.env.SQUAD_HEYGEN_API_KEY)?.trim()) providers.push('HeyGen');
   if (process.env.MUAPI_API_KEY?.trim()) providers.push('MuAPI');
   if (process.env.RUNPOD_API_KEY?.trim()) providers.push('RunPod');
-  return { configured: providers.length > 0, providers };
+  return {
+    configured: providers.length > 0,
+    providers,
+    preferences: {
+      imageProvider: getMediaProviderPreference('MEDIA_IMAGE_PROVIDER'),
+      videoProvider: getMediaProviderPreference('MEDIA_VIDEO_PROVIDER'),
+      strategy: getMediaProviderStrategy(),
+    },
+  };
 }
 
 /**
@@ -1161,6 +1192,7 @@ export function getMediaGenerationSource(workspaceId: string, workspaceRootPath:
   };
 
   const connected = authState.providers.length ? authState.providers.join(', ') : 'none';
+  const { imageProvider, videoProvider, strategy } = authState.preferences;
 
   return {
     workspaceId,
@@ -1172,6 +1204,9 @@ export function getMediaGenerationSource(workspaceId: string, workspaceRootPath:
         '# Media Generation',
         '',
         `Connected providers: ${connected}.`,
+        `Default image provider: ${imageProvider}.`,
+        `Default video provider: ${videoProvider}.`,
+        `Generation priority: ${strategy}.`,
         '',
         'Use this source for AI image, video, avatar, and render generation after the user approves the creative brief and any spend.',
         '',
@@ -1182,6 +1217,7 @@ export function getMediaGenerationSource(workspaceId: string, workspaceRootPath:
         '- `HEYGEN_API_KEY` for HeyGen. Legacy alias: `SQUAD_HEYGEN_API_KEY`.',
         '- `MUAPI_API_KEY` for MuAPI.',
         '- `RUNPOD_API_KEY` and optional `RUNPOD_LTX_ENDPOINT_ID` for RunPod.',
+        '- Optional routing preferences: `MEDIA_IMAGE_PROVIDER`, `MEDIA_VIDEO_PROVIDER`, and `MEDIA_PROVIDER_STRATEGY`.',
         '',
         'Provider auth facts:',
         '- Fal uses `Authorization: Key $FAL_API_KEY`.',
@@ -1189,12 +1225,15 @@ export function getMediaGenerationSource(workspaceId: string, workspaceRootPath:
         '- WaveSpeed uses `Authorization: Bearer $WAVESPEED_API_KEY`.',
         '',
         'Routing rules:',
-        '1. Choose the provider by job fit: still image, image reference, image edit, short video, avatar, render, speed, cost, and connected keys.',
-        '2. Do not spend or call paid generation until the user approves the exact brief.',
-        '3. Never put secret values in chat, files, outputs, or logs. Reference env vars in commands.',
-        '4. Save generated files locally, then publish user-facing results with `create_output` and `showInCanvas: true` when available.',
-        '5. For artwork with typography, generate base art first, then finish layout/type through `artwork_compose`.',
-        '6. If no connected provider fits the job, return a production-ready prompt/spec and name the missing key.',
+        '1. If the user names a provider, use that provider when it is connected and fit for the job.',
+        '2. Otherwise use `MEDIA_IMAGE_PROVIDER` for image work and `MEDIA_VIDEO_PROVIDER` for video work when the selected provider is connected.',
+        '3. If the selected default is `auto`, missing, or wrong for the job, choose by job fit and `MEDIA_PROVIDER_STRATEGY`: speed, quality, cost, or balanced.',
+        '4. Do not spend or call paid generation until the user approves the exact brief.',
+        '5. Never put secret values in chat, files, outputs, or logs. Reference env vars in commands.',
+        '6. Use `media_provider_request` for approved Fal, Replicate, or WaveSpeed calls. Pass the provider path/model endpoint and exact JSON body.',
+        '7. Save generated files locally, then publish user-facing results with `create_output` and `showInCanvas: true` when available.',
+        '8. For artwork with typography, generate base art first, then finish layout/type through `artwork_compose`.',
+        '9. If no connected provider fits the job, return a production-ready prompt/spec and name the missing key.',
       ].join('\n'),
     },
     isBuiltin: true,
