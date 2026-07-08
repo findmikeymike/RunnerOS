@@ -107,6 +107,44 @@ test('root dispatcher routes normalized profile lifecycle commands', () => {
   assert.equal(unverified.nextAction, 'verify_session');
   assert.equal(unverified.evidence.type, 'local_session');
 
+  const verificationFile = path.join(home, 'verification.json');
+  writeFileSync(verificationFile, JSON.stringify({
+    platform: 'x',
+    profile: 'artist01',
+    loggedIn: true,
+    visibleIdentity: { handle: '@artist01' },
+  }));
+  const verified = JSON.parse(run([
+    'profile', 'status', 'x',
+    '--profile', 'artist01',
+    '--live',
+    '--verification-result', verificationFile,
+    '--json',
+  ], env));
+  assert.equal(verified.ready, true);
+  assert.equal(verified.profileStatus, 'verified');
+  assert.equal(verified.evidence.type, 'live_check');
+  assert.equal(verified.evidence.visibleIdentity.handle, '@artist01');
+
+  writeFileSync(verificationFile, JSON.stringify({
+    platform: 'x',
+    profile: 'artist01',
+    loggedIn: true,
+    visibleIdentity: { handle: '@other-account' },
+  }));
+  const wrongAccount = JSON.parse(run([
+    'profile', 'status', 'x',
+    '--profile', 'artist01',
+    '--live',
+    '--verification-result', verificationFile,
+    '--json',
+  ], env));
+  assert.equal(wrongAccount.ready, false);
+  assert.equal(wrongAccount.profileStatus, 'wrong_account');
+  assert.equal(wrongAccount.severity, 'error');
+  assert.equal(wrongAccount.matchesExpected, false);
+  assert.equal(wrongAccount.evidence.visibleIdentity.handle, '@other-account');
+
   const deleted = JSON.parse(run(['profile', 'delete', 'x', '--profile', 'artist01', '--json'], env));
   assert.equal(deleted.ok, true);
   assert.equal(deleted.deleted, true);

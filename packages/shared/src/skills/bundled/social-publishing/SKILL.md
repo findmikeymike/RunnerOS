@@ -22,6 +22,7 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 7. Save the full dry-run result JSON and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`.
 8. Execute through Runner `browser_tool` using the returned `RUNNER_CDP_DELEGATED` handoff and browser plan.
 9. Treat `browserPlan.accountVerification` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before submit. If `verificationTargetKnown` is false, stop and add a profile `--handle` or `--account-url`.
+   - For profile readiness checks, use `accountVerification.identityProbe`, then pass only non-secret observed identity back with `profile status <platform> --profile <id> --live --verification-result <json-file> --json`.
 10. Return a receipt with platform, profile, action, payload summary, media path, target, account verification evidence, timestamp, and observed result.
 
 ## Existing Chrome Sessions

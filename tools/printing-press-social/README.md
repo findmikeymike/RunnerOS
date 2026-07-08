@@ -48,6 +48,7 @@ Safety defaults:
 - Successful live actions with `--idempotency-key` are recorded in a local ledger to avoid accidental duplicate execution.
 - A per-profile lock prevents two social actions from driving the same browser session at once.
 - Dry-run browser plans include `accountVerification`; Runner/browser operators must verify the visible logged-in account or channel matches the requested handle/URL before submit. Prior chat approval plus the matching action id authorizes submit when the draft matches; stop only on mismatch, ambiguity, or unexpected UI/platform risk.
+- Live profile status plans include `accountVerification.identityProbe`. After Runner browser tools inspect the visible account, pass non-secret evidence back with `profile status <platform> --profile <id> --live --verification-result <json-file> --json` or `--verification-json '{"loggedIn":true,"visibleIdentity":{"handle":"@..."}}'`.
 - `social execute` only accepts full dry-run result JSON with a browser plan and still requires `--confirm yes`; with default `runner-cdp`, it returns a delegated handoff for RunnerOS browser tools.
 
 Asset and content roots:

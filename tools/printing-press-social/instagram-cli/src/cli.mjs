@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, resolveBrowserEngine, launchBrowserContextForEngine } from '../../src/browser-engines.mjs';
 import { buildContentContext, resolveMediaList, resolveText } from '../../src/content-assets.mjs';
 import { createProfile, profileJson, profileListJson, profileLoginJson, profileStatusJson, updateProfile } from '../../src/profile-json.mjs';
+import { readProfileVerificationResult } from '../../src/profile-verification.mjs';
 import {
   acquireProfileLock,
   assertConfirmPolicy,
@@ -490,6 +491,9 @@ async function loginInstagram(profile, flags) {
 }
 
 async function checkInstagramSession(profile, flags) {
+  const verification = readProfileVerificationResult(profile, flags);
+  if (verification) return verification;
+
   if (resolveBrowserEngine(flags, profile) === 'runner-cdp') {
     return {
       checked: false,

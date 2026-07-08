@@ -90,6 +90,7 @@ export function buildBrowserPlan({ profile, sessionPath, steps }) {
       expectedHandle: profile.accountHandle || null,
       expectedAccountUrl: profile.accountUrl || null,
       fallbackExpectedIdentity: expectedIdentity,
+      identityProbe: buildIdentityProbe(profile),
       evidenceRequired: [
         ...(expectedIdentity ? [] : ['Add --handle or --account-url to this profile before any live submit.']),
         'Run browser_tool snapshot or screenshot after opening the logged-in account surface.',
@@ -100,6 +101,50 @@ export function buildBrowserPlan({ profile, sessionPath, steps }) {
   };
 }
 
+export function buildIdentityProbe(profile = {}) {
+  const handle = normalizeHandle(profile.accountHandle);
+  const accountUrl = profile.accountUrl || null;
+  const profilePath = accountUrl ? safeUrlPath(accountUrl) : (handle ? `/${handle}` : null);
+  const common = {
+    platform: profile.platform,
+    profile: profile.id,
+    expectedHandle: profile.accountHandle || null,
+    normalizedExpectedHandle: handle ? `@${handle}` : null,
+    expectedAccountUrl: accountUrl,
+    expectedPath: profilePath,
+    resultContract: {
+      checked: 'boolean',
+      loggedIn: 'boolean',
+      visibleIdentity: '{ handle?: string, accountUrl?: string, displayName?: string, url?: string, rawText?: string }',
+      matchesExpected: 'boolean|null',
+      checkedAt: 'ISO-8601 timestamp',
+    },
+  };
+
+  if (profile.platform === 'youtube') {
+    return {
+      ...common,
+      openUrl: 'https://www.youtube.com/',
+      loggedInSignals: ['#avatar-btn', 'button[aria-label*="Account menu" i]', 'text=Create'],
+      identitySurfaces: ['account menu channel handle', 'channel URL', 'YouTube Studio channel switcher'],
+      expectedMatchRule: 'visible channel handle or channel URL must match expectedHandle or expectedAccountUrl',
+    };
+  }
+
+  const homeUrls = {
+    instagram: 'https://www.instagram.com/',
+    tiktok: 'https://www.tiktok.com/',
+    x: 'https://x.com/',
+  };
+  return {
+    ...common,
+    openUrl: homeUrls[profile.platform] || null,
+    loggedInSignals: ['profile/avatar navigation', 'create/upload/post controls', 'account menu'],
+    identitySurfaces: ['profile/account menu handle', 'current profile link', 'visible account URL'],
+    expectedMatchRule: 'visible handle or profile URL must match expectedHandle or expectedAccountUrl',
+  };
+}
+
 function addAccountVerificationStep(steps, platform) {
   if (steps.some((step) => /verify visible account/i.test(step))) return steps;
   const verifyStep = platform === 'youtube'
@@ -107,6 +152,19 @@ function addAccountVerificationStep(steps, platform) {
     : 'verify visible account matches profile';
   if (steps.length <= 1) return [...steps, verifyStep];
   return [steps[0], verifyStep, ...steps.slice(1)];
+}
+
+function normalizeHandle(value) {
+  if (!value) return null;
+  return String(value).trim().replace(/^@+/, '').toLowerCase() || null;
+}
+
+function safeUrlPath(value) {
+  try {
+    return new URL(value).pathname.replace(/\/+$/, '') || '/';
+  } catch {
+    return null;
+  }
 }
 
 export function acquireProfileLock({ action, socialHome }) {
