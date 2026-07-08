@@ -196,21 +196,37 @@ function runSocialJson(args: string[]): Promise<unknown> {
     const child = spawn(process.execPath, [path.join(cwd, 'src', 'social.mjs'), ...args], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
     })
     let stdout = ''
     let stderr = ''
+    let settled = false
+    const finish = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      fn()
+    }
+    const timer = setTimeout(() => {
+      finish(() => {
+        child.kill('SIGKILL')
+        reject(new Error(`Social CLI timed out while running: ${args.join(' ')}`))
+      })
+    }, 30_000)
     child.stdout.on('data', (chunk) => { stdout += chunk.toString() })
     child.stderr.on('data', (chunk) => { stderr += chunk.toString() })
-    child.on('error', reject)
+    child.on('error', (error) => finish(() => reject(error)))
     child.on('close', (code) => {
-      const text = stdout.trim() || stderr.trim()
-      try {
-        const parsed = text ? JSON.parse(text) as { error?: string } : null
-        if (code === 0) resolve(parsed)
-        else reject(new Error(parsed?.error || stderr || `social exited ${code}`))
-      } catch (error) {
-        reject(new Error(`Invalid social CLI response: ${error instanceof Error ? error.message : String(error)}`))
-      }
+      finish(() => {
+        const text = stdout.trim() || stderr.trim()
+        try {
+          const parsed = text ? JSON.parse(text) as { error?: string } : null
+          if (code === 0) resolve(parsed)
+          else reject(new Error(parsed?.error || stderr || `social exited ${code}`))
+        } catch (error) {
+          reject(new Error(`Invalid social CLI response: ${error instanceof Error ? error.message : String(error)}`))
+        }
+      })
     })
   })
 }
