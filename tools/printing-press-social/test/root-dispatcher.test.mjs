@@ -46,6 +46,53 @@ test('root doctor reports install and platform health', () => {
   assert.ok(result.checks.find((check) => check.name === 'browser-engine'));
 });
 
+test('root dispatcher routes normalized profile lifecycle commands', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  const added = JSON.parse(run([
+    'profile', 'add', 'x',
+    '--profile', 'artist01',
+    '--handle', '@artist01',
+    '--json',
+  ], env));
+  assert.equal(added.ok, true);
+  assert.equal(added.data.accountHandle, '@artist01');
+
+  const updated = JSON.parse(run([
+    'profile', 'update', 'x',
+    '--profile', 'artist01',
+    '--account-url', 'https://x.com/artist01',
+    '--json',
+  ], env));
+  assert.equal(updated.command, 'profile.update');
+  assert.equal(updated.data.accountUrl, 'https://x.com/artist01');
+
+  const status = JSON.parse(run(['profile', 'status', 'x', '--profile', 'artist01', '--json'], env));
+  assert.equal(status.profileId, 'artist01');
+  assert.equal(status.accountHandle, '@artist01');
+  assert.equal(status.accountUrl, 'https://x.com/artist01');
+  assert.equal(status.sessionPath, path.join(home, 'sessions', 'x', 'artist01'));
+  assert.equal(status.sessionExists, false);
+  assert.equal(status.liveChecked, false);
+  assert.equal(status.loggedIn, null);
+  assert.equal(status.matchesExpected, null);
+
+  const liveStatus = JSON.parse(run(['profile', 'status', 'x', '--profile', 'artist01', '--live', '--json'], env));
+  assert.equal(liveStatus.ok, true);
+  assert.equal(liveStatus.ready, false);
+  assert.equal(liveStatus.live.delegated, true);
+  assert.equal(liveStatus.live.code, 'RUNNER_CDP_DELEGATED');
+
+  const login = JSON.parse(run(['profile', 'login', 'x', '--profile', 'artist01', '--json'], env));
+  assert.equal(login.ok, true);
+  assert.equal(login.status, 'delegated');
+  assert.equal(login.code, 'RUNNER_CDP_DELEGATED');
+
+  const deleted = JSON.parse(run(['profile', 'delete', 'x', '--profile', 'artist01', '--json'], env));
+  assert.equal(deleted.ok, true);
+  assert.equal(deleted.deleted, true);
+});
+
 test('root dispatcher routes Instagram dry-run', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
   const media = path.join(home, 'image.jpg');
