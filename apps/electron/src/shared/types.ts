@@ -525,6 +525,7 @@ export interface ElectronAPI {
   listSecrets(): Promise<UserSecretSummary[]>
   saveSecret(name: string, value: string): Promise<{ success: boolean; error?: string }>
   deleteSecret(name: string): Promise<{ success: boolean }>
+  onSecretsChanged(callback: () => void): () => void
   getZeroStatus(): Promise<ZeroStatus>
   installZero(): Promise<{ success: boolean; error?: string }>
 
