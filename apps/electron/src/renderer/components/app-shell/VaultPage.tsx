@@ -111,6 +111,14 @@ const CATEGORY_KIND_LABELS: Record<VaultCategory, Array<{ kind: VaultAssetKind; 
 
 const emptyImportDraft: ImportDraft = { open: false, kindHint: 'any', paths: [], plan: null }
 const INPUT_CLASS = 'h-9 w-full rounded-[10px] border border-white/[0.06] bg-[#0b0b0b] px-3 text-sm text-white/76 outline-none placeholder:text-white/26 focus:border-[#f97316]/35'
+const QUICK_TAGS: Record<VaultCategory, string[]> = {
+  music: ['master', 'demo', 'stem', 'clean-version', 'lyrics', 'mix-ref'],
+  video: ['final-video', 'raw-footage', 'clip', 'b-roll', 'vertical', 'captioned'],
+  visuals: ['cover-art', 'press-shot', 'face-ref', 'logo', 'moodboard', 'reference'],
+  campaigns: ['social-pack', 'ad-asset', 'press', 'release', 'approved'],
+  business: ['contract', 'split-sheet', 'invoice', 'private', 'approved'],
+  references: ['inspiration', 'swipe-file', 'similar-artist', 'moodboard', 'reference'],
+}
 
 export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   const [manifest, setManifest] = React.useState<VaultManifest | null>(null)
@@ -123,6 +131,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   const [query, setQuery] = React.useState('')
   const [agentFilter, setAgentFilter] = React.useState<'all' | 'usable' | 'private'>('all')
   const [importDraft, setImportDraft] = React.useState<ImportDraft>(emptyImportDraft)
+  const [dragActive, setDragActive] = React.useState(false)
 
   const refresh = React.useCallback(async () => {
     if (!workspaceId) return
@@ -179,20 +188,46 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     setSelectedAssetId(categoryAssets.find((asset) => kind === 'all' || asset.kind === kind)?.id ?? null)
   }, [categoryAssets])
 
+  const planImportPaths = React.useCallback(async (paths: string[], kindHint: VaultKindHint) => {
+    if (!workspaceId) return
+    if (!paths.length) return
+    const plan = await window.electronAPI.planArtistVaultImports(workspaceId, paths, { kindHint })
+    setImportDraft({ open: true, kindHint, paths, plan })
+  }, [workspaceId])
+
   const startImport = React.useCallback(async (kindHint: VaultKindHint) => {
     if (!workspaceId) return
     setBusy(`choose:${kindHint}`)
     try {
       const paths = await window.electronAPI.chooseArtistVaultAssetFiles(workspaceId, kindHint)
-      if (!paths.length) return
-      const plan = await window.electronAPI.planArtistVaultImports(workspaceId, paths, { kindHint })
-      setImportDraft({ open: true, kindHint, paths, plan })
+      await planImportPaths(paths, kindHint)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setBusy(null)
     }
-  }, [workspaceId])
+  }, [planImportPaths, workspaceId])
+
+  const handleDrop = React.useCallback(async (event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setDragActive(false)
+    const paths = Array.from(event.dataTransfer.files)
+      .map((file) => (file as File & { path?: string }).path)
+      .filter((path): path is string => Boolean(path))
+    if (!paths.length) {
+      toast.error('Drop files from your computer to add them to Vault.')
+      return
+    }
+    setBusy('drop')
+    try {
+      await planImportPaths(paths, addHintForSelection(selectedCategory, selectedKind))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(null)
+    }
+  }, [planImportPaths, selectedCategory, selectedKind])
 
   const confirmImport = React.useCallback(async () => {
     if (!workspaceId || !importDraft.paths.length) return
@@ -306,40 +341,61 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
           </div>
         </header>
 
-        <div className="mb-3 grid shrink-0 grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-          {CATEGORIES.map((category) => {
-            const count = assets.filter((asset) => asset.category === category.id).length
-            const Icon = category.icon
-            const active = selectedCategory === category.id
-            return (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => {
-                  setSelectedCategory(category.id)
-                  setSelectedKind('all')
-                  setSelectedAssetId(assets.find((asset) => asset.category === category.id)?.id ?? null)
-                }}
-                className={cn(
-                  'group flex h-[76px] items-center justify-between rounded-[14px] border px-4 text-left transition-colors',
-                  active ? 'border-[#f97316]/40 bg-[#f97316]/10' : 'border-white/[0.055] bg-[#0b0b0b] hover:border-white/[0.12] hover:bg-white/[0.035]',
-                )}
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] border', active ? 'border-[#f97316]/25 bg-[#f97316]/12' : 'border-white/[0.055] bg-white/[0.025]')}>
-                    <Icon className={cn('h-4 w-4', active ? 'text-[#f97316]' : 'text-white/42')} />
-                  </span>
-                  <div className="truncate text-sm font-semibold text-white/84">{category.label}</div>
-                </div>
-                <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[10px]', active ? 'border-[#f97316]/20 text-white/70' : 'border-white/[0.06] text-white/42')}>{count}</span>
-              </button>
-            )
-          })}
-        </div>
-
         <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <main className="min-h-0 overflow-hidden rounded-[18px] border border-white/[0.055] bg-[#080808]">
+          <main
+            onDragEnter={(event) => {
+              event.preventDefault()
+              setDragActive(true)
+            }}
+            onDragOver={(event) => {
+              event.preventDefault()
+              setDragActive(true)
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragActive(false)
+            }}
+            onDrop={(event) => void handleDrop(event)}
+            className={cn(
+              'relative min-h-0 overflow-hidden rounded-[18px] border border-dashed bg-[#080808] transition-colors',
+              dragActive ? 'border-[#f97316]/55 bg-[#140a04] shadow-[0_0_40px_rgba(249,115,22,0.12)]' : 'border-white/[0.08]',
+            )}
+          >
+            {dragActive && (
+              <div className="pointer-events-none absolute inset-3 z-10 flex items-center justify-center rounded-[14px] border border-[#f97316]/35 bg-black/70">
+                <div className="text-center">
+                  <Upload className="mx-auto mb-3 h-7 w-7 text-[#fb923c]" />
+                  <div className="text-sm font-semibold text-white/86">Drop files into Vault</div>
+                  <div className="mt-1 text-xs text-white/42">They will be staged before import.</div>
+                </div>
+              </div>
+            )}
             <div className="border-b border-white/[0.06] p-4">
+              <div className="mb-3 flex gap-1.5 overflow-x-auto pb-0.5">
+                {CATEGORIES.map((category) => {
+                  const count = assets.filter((asset) => asset.category === category.id).length
+                  const Icon = category.icon
+                  const active = selectedCategory === category.id
+                  return (
+                    <button
+                      key={category.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory(category.id)
+                        setSelectedKind('all')
+                        setSelectedAssetId(assets.find((asset) => asset.category === category.id)?.id ?? null)
+                      }}
+                      className={cn(
+                        'inline-flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-colors',
+                        active ? 'border-[#f97316]/45 bg-[#2a1206]/70 text-white' : 'border-white/[0.06] bg-white/[0.025] text-white/58 hover:border-white/[0.14] hover:text-white/82',
+                      )}
+                    >
+                      <Icon className={cn('h-3.5 w-3.5', active ? 'text-[#fb923c]' : 'text-white/42')} />
+                      {category.label}
+                      <span className="text-white/32">{count}</span>
+                    </button>
+                  )
+                })}
+              </div>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-lg font-semibold text-white/88">{categoryLabel(selectedCategory)}</h2>
@@ -481,15 +537,16 @@ function AssetDetailPanel({
       <aside className="hidden rounded-[18px] border border-white/[0.055] bg-[#080808] p-5 xl:flex xl:items-center xl:justify-center">
         <div className="text-center">
           <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-[14px] border border-white/[0.055] bg-white/[0.025]">
-            <FileText className="h-5 w-5 text-white/24" />
+            <Tags className="h-5 w-5 text-white/24" />
           </div>
-          <div className="text-sm font-medium text-white/58">Select an asset</div>
-          <div className="mt-1 text-xs text-white/30">Details appear here.</div>
+          <div className="text-sm font-medium text-white/58">Tag after import</div>
+          <div className="mt-1 max-w-[220px] text-xs leading-5 text-white/30">Drop files into the library, select one, then mark what it is and whether agents can use it.</div>
         </div>
       </aside>
     )
   }
 
+  const quickTags = QUICK_TAGS[asset.category] ?? QUICK_TAGS.references
   const save = () => onUpdate(asset.id, {
     kind,
     label,
@@ -538,6 +595,25 @@ function AssetDetailPanel({
             ))}
           </select>
         </Field>
+
+        <div className="rounded-[12px] border border-white/[0.055] bg-white/[0.018] p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <Tags className="h-3.5 w-3.5 text-[#fb923c]" />
+            <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-white/40">Quick Tags</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {quickTags.map((tag) => (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => setTags((current) => appendListValue(current, tag))}
+                className="rounded-full border border-white/[0.06] bg-white/[0.025] px-2.5 py-1 text-[11px] text-white/56 hover:border-[#f97316]/35 hover:text-white/86"
+              >
+                + {formatTag(tag)}
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -749,7 +825,7 @@ function EmptyState({ category }: { category: VaultCategory }) {
         <Icon className="h-5 w-5 text-white/24" />
       </div>
       <div className="text-sm font-semibold text-white/64">No {categoryLabel(category).toLowerCase()} assets yet</div>
-      <div className="mt-1 text-xs text-white/30">Use Add above to import files.</div>
+      <div className="mt-1 text-xs text-white/30">Drop files here, or use Add above.</div>
     </div>
   )
 }
@@ -825,8 +901,17 @@ function formatKind(value: string): string {
   return value.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+function formatTag(value: string): string {
+  return value.replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
 function splitList(value: string): string[] {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))]
+}
+
+function appendListValue(current: string, value: string): string {
+  const items = splitList(current)
+  return items.includes(value) ? current : [...items, value].join(', ')
 }
 
 function parseBpm(value: string): number | null {
