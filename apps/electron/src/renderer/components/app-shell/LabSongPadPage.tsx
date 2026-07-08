@@ -1,5 +1,6 @@
 import * as React from 'react'
 import {
+  ChevronDown,
   Copy,
   Eye,
   EyeOff,
@@ -467,6 +468,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const [prosodyResult, setProsodyResult] = React.useState<ProsodyLookupResult | null>(null)
   const [prosodyBusy, setProsodyBusy] = React.useState(false)
   const [prosodyCopiedWord, setProsodyCopiedWord] = React.useState<string | null>(null)
+  const [prosodyMorePage, setProsodyMorePage] = React.useState(false)
   const [showEmptySections, setShowEmptySections] = React.useState(true)
   const [activeAgentSectionId, setActiveAgentSectionId] = React.useState<string | null>(null)
   const [agentOutput, setAgentOutput] = React.useState('')
@@ -715,6 +717,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
       setProsodyBusy(false)
       setProsodyResult(null)
       setProsodyCopiedWord(null)
+      setProsodyMorePage(false)
       return
     }
 
@@ -723,6 +726,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     setProsodyBusy(true)
     setProsodyResult(null)
     setProsodyCopiedWord(null)
+    setProsodyMorePage(false)
 
     const timer = window.setTimeout(async () => {
       try {
@@ -760,6 +764,8 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const selectedCount = selectedText.trim().split(/\s+/).filter(Boolean).length
   const prosodyPosition = prosodySelection ? prosodyPopoverPosition(prosodySelection.anchor) : null
   const hasProsodyMatches = Boolean((prosodyResult?.perfect.length ?? 0) + (prosodyResult?.slant.length ?? 0))
+  const primarySlants = prosodyResult?.slant.slice(0, 12) ?? []
+  const moreSlants = prosodyResult?.slant.slice(12, 36) ?? []
 
   return (
     <div className="runneros-glass-route flex h-full min-h-0 flex-col overflow-hidden bg-[#050505] text-white">
@@ -772,14 +778,29 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
             <div className="min-w-0 truncate text-[9px] font-semibold uppercase tracking-[0.14em] text-white/52">
               Forward rhymes · {prosodySelection.selectedText.trim()}
             </div>
-            <button
-              type="button"
-              onClick={() => setProsodySelection(null)}
-              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/42 hover:bg-white/[0.08] hover:text-white/76"
-              title="Close rhymes"
-            >
-              <X className="h-3 w-3" />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              {moreSlants.length ? (
+                <button
+                  type="button"
+                  onClick={() => setProsodyMorePage((current) => !current)}
+                  className={cn(
+                    'flex h-5 w-5 items-center justify-center rounded-full text-white/38 hover:bg-white/[0.08] hover:text-white/76',
+                    prosodyMorePage && 'rotate-180 bg-white/[0.06] text-white/68',
+                  )}
+                  title={prosodyMorePage ? 'Show first page' : 'Show more rhymes'}
+                >
+                  <ChevronDown className="h-3 w-3" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => setProsodySelection(null)}
+                className="flex h-5 w-5 items-center justify-center rounded-full text-white/42 hover:bg-white/[0.08] hover:text-white/76"
+                title="Close rhymes"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
           </div>
 
           {prosodyBusy ? (
@@ -794,7 +815,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
             </div>
           ) : null}
 
-          {!prosodyBusy && prosodyResult?.perfect.length ? (
+          {!prosodyBusy && prosodyResult?.perfect.length && !prosodyMorePage ? (
             <div className="mb-2">
               <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/48">Perfect</div>
               <div className="flex flex-wrap gap-1.5">
@@ -813,20 +834,37 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
             </div>
           ) : null}
 
-          {!prosodyBusy && prosodyResult?.slant.length ? (
+          {!prosodyBusy && primarySlants.length && !prosodyMorePage ? (
             <div>
               <div className="mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/48">Slant</div>
               <div className="flex flex-wrap gap-1.5">
-                {prosodyResult.slant.slice(0, 12).map((item) => (
+                {primarySlants.map((item) => (
                   <button
                     key={`slant-${item.word}-${item.kind}`}
                     type="button"
                     title={item.kind}
                     onClick={() => copyProsodyRhyme(item)}
-                    className="inline-flex items-center gap-1 rounded-full border border-[#fb923c]/35 bg-[#3a281a] px-2.5 py-1 text-[11px] font-medium text-[#ffe0b0]/88 hover:bg-[#4a311d] hover:text-[#fff0d2]"
+                    className="rounded-full border border-[#fb923c]/35 bg-[#3a281a] px-2.5 py-1 text-[11px] font-medium text-[#ffe0b0]/88 hover:bg-[#4a311d] hover:text-[#fff0d2]"
                   >
-                    <span>{prosodyCopiedWord === item.word ? 'Copied' : item.word}</span>
-                    <span className="text-[8px] uppercase tracking-[0.1em] text-[#fbbf24]/62">{item.kind}</span>
+                    {prosodyCopiedWord === item.word ? 'Copied' : item.word}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {!prosodyBusy && moreSlants.length && prosodyMorePage ? (
+            <div className="max-h-[250px] overflow-auto pr-1">
+              <div className="flex flex-wrap gap-1.5">
+                {moreSlants.map((item) => (
+                  <button
+                    key={`more-slant-${item.word}-${item.kind}`}
+                    type="button"
+                    title={item.kind}
+                    onClick={() => copyProsodyRhyme(item)}
+                    className="rounded-full border border-white/[0.12] bg-[#303030] px-2.5 py-1 text-[11px] font-medium text-white/74 hover:bg-[#393939] hover:text-white"
+                  >
+                    {prosodyCopiedWord === item.word ? 'Copied' : item.word}
                   </button>
                 ))}
               </div>
