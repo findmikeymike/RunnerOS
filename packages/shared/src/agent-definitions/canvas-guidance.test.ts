@@ -20,5 +20,10 @@ describe('buildCanvasGuidanceSection', () => {
     expect(result).toContain('Visual agent mode:');
     expect(result).toContain('Proactively create durable Outputs');
     expect(result).toContain('make one focused fix');
+    expect(result).toContain('Artist Vault visual assets:');
+    expect(result).toContain('check the Artist Vault context for agent-usable paths');
+    expect(result).toContain('Use `artist-photo` for general artist photos');
+    expect(result).toContain('Use `face-reference` only when the goal is the artist\'s actual likeness');
+    expect(result).toContain('Never invent a real artist likeness from text alone');
   });
 });

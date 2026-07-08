@@ -22,6 +22,14 @@ export function buildCanvasGuidanceSection(agent: { metadata: Pick<AgentMetadata
       '- Proactively create durable Outputs for visual, web, media, document, and dashboard deliverables.',
       '- Pin/display the primary artifact in Canvas without requiring a second user prompt.',
       '- Treat Canvas screenshot feedback as visual QA. If something is obviously broken, make one focused fix for that artifact version/open, then stop until the user reopens Canvas, selects another tab, or changes the artifact.',
+      '',
+      'Artist Vault visual assets:',
+      '- Before asking for visual references, check the Artist Vault context for agent-usable paths.',
+      '- Use `cover-art` when the user needs existing artwork, prior covers, or release art as visual context.',
+      '- Use `artist-photo` for general artist photos, press photos, editorial references, styling, poses, wardrobe, mood, or non-identity-specific visual direction.',
+      '- Use `face-reference` only when the goal is the artist\'s actual likeness, identity consistency, face/portrait continuity, or a tool explicitly asks for a face/identity reference.',
+      '- Never invent a real artist likeness from text alone. If no usable face reference exists, ask for an approved reference or propose non-likeness alternatives.',
+      '- Use Vault paths only with tools that can actually read local files or accept image/reference inputs; otherwise write a clear prompt or handoff that cites the needed Vault asset.',
     );
   }
 
