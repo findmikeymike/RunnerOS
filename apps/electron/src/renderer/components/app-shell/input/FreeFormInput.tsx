@@ -2429,14 +2429,14 @@ function AppFileAttachmentPicker({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="flex max-h-[calc(100vh-48px)] flex-col overflow-hidden sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Attach from RunnerOS</DialogTitle>
           <DialogDescription>Pick from app folders first, or browse your computer.</DialogDescription>
         </DialogHeader>
 
-        <div className="grid min-h-[360px] gap-4 md:grid-cols-[190px_minmax(0,1fr)]">
-          <div className="space-y-1">
+        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[190px_minmax(0,1fr)]">
+          <div className="min-h-0 space-y-1 overflow-y-auto pr-1">
             {buckets.map((bucket) => (
               <button
                 key={bucket.id}
@@ -2456,21 +2456,21 @@ function AppFileAttachmentPicker({
             ))}
           </div>
 
-          <div className="flex min-w-0 flex-col gap-3">
+          <div className="flex min-h-0 min-w-0 flex-col gap-3">
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search app files"
               className="h-9 rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/28"
             />
-            <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-white/[0.07] bg-black/18">
+            <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-white/[0.07] bg-black/18">
               {loading ? (
-                <div className="flex h-full min-h-[260px] items-center justify-center text-sm text-white/48">
+                <div className="flex h-full min-h-[220px] items-center justify-center text-sm text-white/48">
                   <Spinner className="mr-2 h-4 w-4" />
                   Loading files...
                 </div>
               ) : files.length === 0 ? (
-                <div className="flex h-full min-h-[260px] items-center justify-center px-6 text-center text-sm text-white/42">
+                <div className="flex h-full min-h-[220px] items-center justify-center px-6 text-center text-sm text-white/42">
                   No files found here yet. Use Browse Computer for anything outside RunnerOS.
                 </div>
               ) : (
