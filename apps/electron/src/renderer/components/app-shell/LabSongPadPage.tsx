@@ -174,23 +174,44 @@ function selectionAnchor(
 ): { x: number; y: number } {
   const rect = node.getBoundingClientRect()
   const style = window.getComputedStyle(node)
-  const valueBeforeSelection = node.value.slice(0, selection.end)
-  const lineStart = valueBeforeSelection.lastIndexOf('\n') + 1
-  const lineText = valueBeforeSelection.slice(lineStart)
-  const lineIndex = valueBeforeSelection.slice(0, lineStart).split('\n').length - 1
-  const canvas = document.createElement('canvas')
-  const context = canvas.getContext('2d')
-  if (context) {
-    context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`
+
+  const mirror = document.createElement('div')
+  const marker = document.createElement('span')
+  mirror.style.position = 'fixed'
+  mirror.style.left = `${rect.left}px`
+  mirror.style.top = `${rect.top}px`
+  mirror.style.width = `${rect.width}px`
+  mirror.style.height = 'auto'
+  mirror.style.visibility = 'hidden'
+  mirror.style.pointerEvents = 'none'
+  mirror.style.whiteSpace = 'pre-wrap'
+  mirror.style.overflowWrap = 'break-word'
+  mirror.style.boxSizing = style.boxSizing
+  mirror.style.padding = style.padding
+  mirror.style.border = style.border
+  mirror.style.font = style.font
+  mirror.style.letterSpacing = style.letterSpacing
+  mirror.style.lineHeight = style.lineHeight
+  mirror.style.textAlign = style.textAlign
+  mirror.style.textTransform = style.textTransform
+  mirror.style.tabSize = style.tabSize
+  marker.textContent = '\u200b'
+  mirror.append(document.createTextNode(node.value.slice(0, selection.end)), marker)
+  document.body.appendChild(mirror)
+
+  const markerRect = marker.getBoundingClientRect()
+  mirror.remove()
+
+  if (markerRect.width || markerRect.height) {
+    return {
+      x: Math.min(rect.right - 8, markerRect.left - node.scrollLeft + 4),
+      y: Math.min(rect.bottom - 18, markerRect.top - node.scrollTop + 2),
+    }
   }
-  const measuredTextWidth = context?.measureText(lineText).width ?? 0
-  const paddingLeft = Number.parseFloat(style.paddingLeft) || 0
-  const paddingTop = Number.parseFloat(style.paddingTop) || 0
-  const lineHeight = Number.parseFloat(style.lineHeight) || 28
 
   return {
-    x: Math.min(rect.right - 8, rect.left + paddingLeft + measuredTextWidth - node.scrollLeft + 4),
-    y: Math.min(rect.bottom - 18, rect.top + paddingTop + (lineIndex * lineHeight) - node.scrollTop + 2),
+    x: Math.min(rect.right - 8, rect.left + rect.width * 0.5),
+    y: Math.min(rect.bottom - 18, rect.top + 28),
   }
 }
 
