@@ -12,6 +12,7 @@ import { openDemoVisualSurfaceAtom, openOutputVisualSurfaceAtom } from '@/atoms/
 import { findVideoProjectAsset } from '@/components/outputs/video-project-output'
 import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
 import { isAdOutput } from '@/lib/output-finals-actions'
+import type { VaultKindHint } from '@craft-agent/shared/artist-vault'
 
 interface Props {
   workspaceId: string
@@ -27,8 +28,16 @@ type OutputsElectronAPI = typeof window.electronAPI & {
     sessionId: string,
     input: { action: 'add_image' | 'add_video'; outputId: string },
   ) => Promise<{ ok: boolean; receipt?: string; error?: string }>
-  saveOutputAssetToVault?: (workspaceId: string, outputId: string, assetId?: string, options?: { kindHint?: 'master-final' | 'demo' | 'raw-footage' | 'cover-art' | 'artist-photo' | 'contract' | 'ad-asset' | 'any' }) => Promise<{ imported: unknown[]; skipped: Array<{ path: string; reason: string }> }>
+  saveOutputAssetToVault?: (workspaceId: string, outputId: string, assetId?: string, options?: { kindHint?: VaultKindHint }) => Promise<{ imported: unknown[]; skipped: Array<{ path: string; reason: string }> }>
 }
+
+type ImageOutputVaultKindHint = Extract<VaultKindHint, 'cover-art' | 'artist-photo' | 'face-reference'>
+
+const IMAGE_OUTPUT_VAULT_KIND_OPTIONS: Array<{ value: ImageOutputVaultKindHint; label: string }> = [
+  { value: 'cover-art', label: 'Cover Art' },
+  { value: 'artist-photo', label: 'Artist Photo' },
+  { value: 'face-reference', label: 'Face Reference' },
+]
 
 export default function OutputDetailPage({ workspaceId, outputId, currentCampaignId }: Props) {
   const { navigate } = useNavigation()
@@ -38,6 +47,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const [manifest, setManifest] = React.useState<OutputManifestDTO | null>(null)
   const [detailError, setDetailError] = React.useState<string | null>(null)
   const [savingToVault, setSavingToVault] = React.useState(false)
+  const [imageVaultKindHint, setImageVaultKindHint] = React.useState<ImageOutputVaultKindHint>('cover-art')
   const [finalAction, setFinalAction] = React.useState<'promote' | 'primary' | 'remove' | null>(null)
 
   React.useEffect(() => {
@@ -73,6 +83,10 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
     return () => { mounted = false }
   }, [getOutput, outputId, outputs])
 
+  React.useEffect(() => {
+    setImageVaultKindHint('cover-art')
+  }, [manifest?.id])
+
   if (!outputId) {
     return (
       <div className="runneros-glass-route flex h-full items-center justify-center text-sm text-white/48">
@@ -99,6 +113,7 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
   const sessionId = manifest.origin.sessionId
   const canSendToCanvas = manifest.kind === 'image' || manifest.kind === 'video' || manifest.kind === 'model'
   const isFinal = Boolean(manifest.finals?.length)
+  const canChooseVaultKind = canChooseImageVaultKind(manifest)
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto">
@@ -151,7 +166,14 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
             )}
             {primary && (
               <>
-                <Button size="sm" variant="outline" disabled={savingToVault} className="border-[#f97316]/25 bg-[#f97316]/12 text-white/82 hover:bg-[#f97316]/20 hover:text-white disabled:cursor-wait disabled:opacity-60" onClick={() => void saveOutputToVault(workspaceId, manifest, primary, setSavingToVault)}>
+                {canChooseVaultKind && (
+                  <ImageVaultKindSelect
+                    value={imageVaultKindHint}
+                    disabled={savingToVault}
+                    onChange={setImageVaultKindHint}
+                  />
+                )}
+                <Button size="sm" variant="outline" disabled={savingToVault} className="border-[#f97316]/25 bg-[#f97316]/12 text-white/82 hover:bg-[#f97316]/20 hover:text-white disabled:cursor-wait disabled:opacity-60" onClick={() => void saveOutputToVault(workspaceId, manifest, primary, imageVaultKindHint, setSavingToVault)}>
                   {savingToVault ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Archive className="mr-1.5 h-3.5 w-3.5" />}
                   Save to Vault
                 </Button>
@@ -357,6 +379,33 @@ function ExternalButton({ url }: { url: string }) {
   )
 }
 
+function ImageVaultKindSelect({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: ImageOutputVaultKindHint
+  disabled?: boolean
+  onChange: (value: ImageOutputVaultKindHint) => void
+}) {
+  return (
+    <label className="flex h-9 min-w-[11.5rem] items-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.045] px-2 text-xs text-white/55">
+      <span className="shrink-0">Vault as</span>
+      <select
+        aria-label="Vault image type"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value as ImageOutputVaultKindHint)}
+        className="min-w-0 flex-1 bg-transparent text-sm text-white/78 outline-none disabled:cursor-wait disabled:opacity-60"
+      >
+        {IMAGE_OUTPUT_VAULT_KIND_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
 function KeyValueRows({ rows }: { rows: Array<[string, unknown]> }) {
   return (
     <div className="grid gap-1 text-sm">
@@ -392,6 +441,7 @@ async function saveOutputToVault(
   workspaceId: string,
   manifest: OutputManifestDTO,
   asset: OutputAssetDTO,
+  imageKindHint: ImageOutputVaultKindHint,
   setSaving: (saving: boolean) => void,
 ) {
   const electronAPI = window.electronAPI as OutputsElectronAPI
@@ -402,7 +452,7 @@ async function saveOutputToVault(
   setSaving(true)
   try {
     const result = await electronAPI.saveOutputAssetToVault(workspaceId, manifest.id, asset.id, {
-      kindHint: vaultKindHintForOutput(manifest),
+      kindHint: vaultKindHintForOutput(manifest, imageKindHint),
     })
     if (result.imported.length > 0) {
       toast.success('Saved to Artist Vault.')
@@ -416,12 +466,16 @@ async function saveOutputToVault(
   }
 }
 
-function vaultKindHintForOutput(manifest: OutputManifestDTO): 'master-final' | 'raw-footage' | 'cover-art' | 'ad-asset' | 'any' {
+function vaultKindHintForOutput(manifest: OutputManifestDTO, imageKindHint: ImageOutputVaultKindHint = 'cover-art'): VaultKindHint {
   if (isAdOutput(manifest)) return 'ad-asset'
   if (manifest.kind === 'audio') return 'master-final'
   if (manifest.kind === 'video') return 'raw-footage'
-  if (manifest.kind === 'image') return 'cover-art'
+  if (manifest.kind === 'image') return imageKindHint
   return 'any'
+}
+
+function canChooseImageVaultKind(manifest: OutputManifestDTO): boolean {
+  return manifest.kind === 'image' && !isAdOutput(manifest)
 }
 
 function reportActionError(err: unknown) {

@@ -14,10 +14,19 @@ import {
 } from '@/atoms/visual-surfaces'
 import { renderVisualSurfaceAdapter, type VisualSurfaceAdapterContext } from './VisualSurfaceAdapters'
 import { toast } from 'sonner'
+import type { VaultKindHint } from '@craft-agent/shared/artist-vault'
 
 interface VisualSurfacePanelProps {
   presentation: 'inline' | 'overlay' | 'rollup'
 }
+
+type ImageOutputVaultKindHint = Extract<VaultKindHint, 'cover-art' | 'artist-photo' | 'face-reference'>
+
+const IMAGE_OUTPUT_VAULT_KIND_OPTIONS: Array<{ value: ImageOutputVaultKindHint; label: string }> = [
+  { value: 'cover-art', label: 'Cover Art' },
+  { value: 'artist-photo', label: 'Artist Photo' },
+  { value: 'face-reference', label: 'Face Reference' },
+]
 
 export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
   const { activeSurface, isCollapsed, focusedAt } = useAtomValue(visualSidecarAtom)
@@ -51,6 +60,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
   const [selectedManifest, setSelectedManifest] = React.useState<OutputManifestDTO | null>(null)
   const [manifestError, setManifestError] = React.useState<string | null>(null)
   const [savingToVault, setSavingToVault] = React.useState(false)
+  const [imageVaultKindHint, setImageVaultKindHint] = React.useState<ImageOutputVaultKindHint>('cover-art')
   const selectedCaptureVersion = React.useMemo(
     () => selectedManifest ? visualCaptureVersion(selectedManifest) : null,
     [selectedManifest],
@@ -82,6 +92,10 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     })
     return () => { mounted = false }
   }, [getOutput, selectedOutputId])
+
+  React.useEffect(() => {
+    setImageVaultKindHint('cover-art')
+  }, [selectedOutputId])
 
   React.useEffect(() => {
     setPreviewSettledKey(null)
@@ -147,7 +161,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     setSavingToVault(true)
     try {
       const result = await window.electronAPI.saveOutputAssetToVault(activeSurface.workspaceId, selectedManifest.id, undefined, {
-        kindHint: vaultKindHintForOutput(selectedManifest),
+        kindHint: vaultKindHintForOutput(selectedManifest, imageVaultKindHint),
       })
       if (result.imported.length > 0) {
         toast.success('Saved to Artist Vault.')
@@ -159,7 +173,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     } finally {
       setSavingToVault(false)
     }
-  }, [activeSurface?.workspaceId, selectedManifest])
+  }, [activeSurface?.workspaceId, imageVaultKindHint, selectedManifest])
 
   const handlePreviewSettled = React.useCallback(() => {
     if (selectedCaptureKey) setPreviewSettledKey(selectedCaptureKey)
@@ -259,6 +273,7 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
     onPreviewSettled: handlePreviewSettled,
   }
   const selectedIsBoard = selectedManifest?.tags?.includes(VISUAL_BOARD_TAG) === true
+  const canChooseVaultKind = selectedManifest ? canChooseImageVaultKind(selectedManifest) : false
   const canSendSelectedOutputToCanvas = !!activeSurface.sessionId
     && !!selectedManifest
     && !selectedIsBoard
@@ -346,42 +361,51 @@ export function VisualSurfacePanel({ presentation }: VisualSurfacePanelProps) {
           ) : null}
 
           {presentation === 'rollup' ? null : (
-            <div className="flex shrink-0 gap-2">
-              {selectedManifest && !selectedIsBoard ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="h-8 flex-1 justify-center"
+            <div className="flex shrink-0 flex-col gap-2">
+              {selectedManifest && !selectedIsBoard && canChooseVaultKind ? (
+                <ImageVaultKindSelect
+                  value={imageVaultKindHint}
                   disabled={savingToVault}
-                  onClick={() => void saveSelectedOutputToVault()}
-                >
-                  {savingToVault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
-                  Vault
-                </Button>
+                  onChange={setImageVaultKindHint}
+                />
               ) : null}
-              {canSendSelectedOutputToCanvas ? (
+              <div className="flex gap-2">
+                {selectedManifest && !selectedIsBoard ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-8 flex-1 justify-center"
+                    disabled={savingToVault}
+                    onClick={() => void saveSelectedOutputToVault()}
+                  >
+                    {savingToVault ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Archive className="h-3.5 w-3.5" />}
+                    Vault
+                  </Button>
+                ) : null}
+                {canSendSelectedOutputToCanvas ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-8 flex-1 justify-center"
+                    onClick={sendSelectedOutputToCanvas}
+                  >
+                    <PanelTopOpen className="h-3.5 w-3.5" />
+                    Add to board
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   className="h-8 flex-1 justify-center"
-                  onClick={sendSelectedOutputToCanvas}
+                  onClick={focusSidecar}
                 >
-                  <PanelTopOpen className="h-3.5 w-3.5" />
-                  Add to board
+                  <Maximize2 className="h-3.5 w-3.5" />
+                  Focus visual
                 </Button>
-              ) : null}
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="h-8 flex-1 justify-center"
-                onClick={focusSidecar}
-              >
-                <Maximize2 className="h-3.5 w-3.5" />
-                Focus visual
-              </Button>
+              </div>
             </div>
           )}
         </div>
@@ -416,12 +440,43 @@ function visualCaptureVersion(manifest: OutputManifestDTO): string {
   })
 }
 
-function vaultKindHintForOutput(manifest: OutputManifestDTO): 'master-final' | 'raw-footage' | 'cover-art' | 'ad-asset' | 'any' {
+function vaultKindHintForOutput(manifest: OutputManifestDTO, imageKindHint: ImageOutputVaultKindHint = 'cover-art'): VaultKindHint {
   if (isAdOutput(manifest)) return 'ad-asset'
   if (manifest.kind === 'audio') return 'master-final'
   if (manifest.kind === 'video') return 'raw-footage'
-  if (manifest.kind === 'image') return 'cover-art'
+  if (manifest.kind === 'image') return imageKindHint
   return 'any'
+}
+
+function canChooseImageVaultKind(manifest: OutputManifestDTO): boolean {
+  return manifest.kind === 'image' && !isAdOutput(manifest)
+}
+
+function ImageVaultKindSelect({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: ImageOutputVaultKindHint
+  disabled?: boolean
+  onChange: (value: ImageOutputVaultKindHint) => void
+}) {
+  return (
+    <label className="flex h-8 min-w-0 items-center gap-2 rounded-md border border-border/60 bg-background/60 px-2 text-xs text-muted-foreground">
+      <span className="shrink-0">Vault as</span>
+      <select
+        aria-label="Vault image type"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value as ImageOutputVaultKindHint)}
+        className="min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none disabled:cursor-wait disabled:opacity-60"
+      >
+        {IMAGE_OUTPUT_VAULT_KIND_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </label>
+  )
 }
 
 function OutputSelector({
