@@ -29,6 +29,8 @@ social profile delete <platform> --profile <profile> --json
 
 With the default `runner-cdp` engine, profile login and live status return a delegated browser plan for RunnerOS native browser tools. They do not drive the browser inside this CLI process.
 
+Profile status JSON includes `profileStatus`, `severity`, `message`, `nextAction`, `lastCheckedAt`, and redacted `evidence` for Settings UI consumption.
+
 Approved Runner handoff workflow:
 
 ```bash
