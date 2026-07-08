@@ -22,6 +22,14 @@ import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
 import { ServerDirectoryBrowser } from '@/components/ServerDirectoryBrowser'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   InlineSlashCommand,
   useInlineSlashCommand,
   type SlashCommandId,
@@ -76,7 +84,7 @@ import { SourceSelectorPopover } from '@/components/ui/SourceSelectorPopover'
 import { ConnectionIcon } from '@/components/icons/ConnectionIcon'
 import { FreeFormInputContextBadge } from './FreeFormInputContextBadge'
 import { derivePickerMode } from './picker-mode'
-import type { FileAttachment, LoadedSource, LoadedSkill, LlmConnectionWithStatus } from '../../../../shared/types'
+import type { FileAttachment, FileSearchResult, LoadedSource, LoadedSkill, LlmConnectionWithStatus } from '../../../../shared/types'
 import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import { type ThinkingLevel, THINKING_LEVELS, getThinkingLevelNameKey } from '@craft-agent/shared/agent/thinking-levels'
 import { useEscapeInterrupt } from '@/context/EscapeInterruptContext'
@@ -459,6 +467,7 @@ export function FreeFormInput({
   // Sync TO parent on blur/submit (debounced persistence)
   const [input, setInput] = React.useState(() => coerceInputText(inputValue))
   const [attachments, setAttachments] = React.useState<FileAttachment[]>(attachmentsValue ?? [])
+  const [attachmentPickerOpen, setAttachmentPickerOpen] = React.useState(false)
 
   // Ref to track current attachments for use in event handlers (avoids stale closure issues)
   const attachmentsRef = React.useRef<FileAttachment[]>([])
@@ -1067,7 +1076,36 @@ export function FreeFormInput({
   // File attachment handlers
   const handleAttachClick = () => {
     if (disabled) return
+    if (workspaceRootPath && hasElectronAPI) {
+      setAttachmentPickerOpen(true)
+      return
+    }
     fileInputRef.current?.click()
+  }
+
+  const handleBrowseComputer = () => {
+    setAttachmentPickerOpen(false)
+    window.setTimeout(() => fileInputRef.current?.click(), 0)
+  }
+
+  const handleAttachAppFile = async (path: string) => {
+    if (disabled) return
+    setLoadingCount(prev => prev + 1)
+    try {
+      const attachment = await window.electronAPI.readFileAttachment(path)
+      if (attachment) {
+        setAttachments(prev => [...prev, attachment])
+        toast.success('File attached')
+      } else {
+        toast.error('Could not attach that file')
+      }
+    } catch (error) {
+      toast.error('Could not attach that file', {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setLoadingCount(prev => prev - 1)
+    }
   }
 
   const handleFileInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1754,6 +1792,14 @@ export function FreeFormInput({
             className="hidden"
             onChange={handleFileInputChange}
           />
+          <AppFileAttachmentPicker
+            open={attachmentPickerOpen}
+            workspaceRootPath={workspaceRootPath}
+            workingDirectory={workingDirectory}
+            onOpenChange={setAttachmentPickerOpen}
+            onSelectFile={handleAttachAppFile}
+            onBrowseComputer={handleBrowseComputer}
+          />
 
           {/* Compact mode: permission mode drawer + standard icon badges for attach/sources/working dir */}
           {compactMode && (
@@ -2311,6 +2357,189 @@ export function FreeFormInput({
       </div>
     </form>
   )
+}
+
+type AppFileBucket = {
+  id: string
+  label: string
+  description: string
+  paths: string[]
+}
+
+function AppFileAttachmentPicker({
+  open,
+  workspaceRootPath,
+  workingDirectory,
+  onOpenChange,
+  onSelectFile,
+  onBrowseComputer,
+}: {
+  open: boolean
+  workspaceRootPath: string | null
+  workingDirectory?: string
+  onOpenChange: (open: boolean) => void
+  onSelectFile: (path: string) => void
+  onBrowseComputer: () => void
+}) {
+  const buckets = React.useMemo(() => buildAppFileBuckets(workspaceRootPath, workingDirectory), [workspaceRootPath, workingDirectory])
+  const [activeBucketId, setActiveBucketId] = React.useState('')
+  const [query, setQuery] = React.useState('')
+  const [files, setFiles] = React.useState<FileSearchResult[]>([])
+  const [loading, setLoading] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!open) return
+    setActiveBucketId((current) => current && buckets.some((bucket) => bucket.id === current) ? current : buckets[0]?.id ?? '')
+  }, [buckets, open])
+
+  const activeBucket = buckets.find((bucket) => bucket.id === activeBucketId) ?? buckets[0]
+
+  React.useEffect(() => {
+    if (!open || !activeBucket) {
+      setFiles([])
+      return
+    }
+
+    let cancelled = false
+    setLoading(true)
+    Promise.all(activeBucket.paths.map((path) => window.electronAPI.searchFiles(path, query.trim())))
+      .then((groups) => {
+        if (cancelled) return
+        const seen = new Set<string>()
+        const next = groups
+          .flat()
+          .filter((file) => file.type === 'file')
+          .filter((file) => {
+            if (seen.has(file.path)) return false
+            seen.add(file.path)
+            return true
+          })
+          .slice(0, 40)
+        setFiles(next)
+      })
+      .catch(() => {
+        if (!cancelled) setFiles([])
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [activeBucket, open, query])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle>Attach from RunnerOS</DialogTitle>
+          <DialogDescription>Pick from app folders first, or browse your computer.</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid min-h-[360px] gap-4 md:grid-cols-[190px_minmax(0,1fr)]">
+          <div className="space-y-1">
+            {buckets.map((bucket) => (
+              <button
+                key={bucket.id}
+                type="button"
+                onClick={() => setActiveBucketId(bucket.id)}
+                className={cn(
+                  'flex w-full items-start gap-2 rounded-md px-3 py-2 text-left transition-colors',
+                  activeBucket?.id === bucket.id ? 'bg-white/[0.08] text-white' : 'text-white/58 hover:bg-white/[0.045] hover:text-white/78',
+                )}
+              >
+                <Folder className="mt-0.5 h-4 w-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium">{bucket.label}</span>
+                  <span className="block truncate text-xs text-white/36">{bucket.description}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex min-w-0 flex-col gap-3">
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search app files"
+              className="h-9 rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/28"
+            />
+            <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-white/[0.07] bg-black/18">
+              {loading ? (
+                <div className="flex h-full min-h-[260px] items-center justify-center text-sm text-white/48">
+                  <Spinner className="mr-2 h-4 w-4" />
+                  Loading files...
+                </div>
+              ) : files.length === 0 ? (
+                <div className="flex h-full min-h-[260px] items-center justify-center px-6 text-center text-sm text-white/42">
+                  No files found here yet. Use Browse Computer for anything outside RunnerOS.
+                </div>
+              ) : (
+                <div className="divide-y divide-white/[0.055]">
+                  {files.map((file) => (
+                    <button
+                      key={file.path}
+                      type="button"
+                      onClick={() => onSelectFile(file.path)}
+                      className="flex w-full items-center gap-3 px-3 py-2.5 text-left hover:bg-white/[0.04]"
+                      title={file.path}
+                    >
+                      <Paperclip className="h-4 w-4 shrink-0 text-white/42" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm text-white/82">{file.name}</span>
+                        <span className="block truncate text-xs text-white/36">{file.relativePath}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onBrowseComputer}>Browse Computer</Button>
+          <Button type="button" variant="secondary" onClick={() => onOpenChange(false)}>Done</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function buildAppFileBuckets(workspaceRootPath: string | null, workingDirectory?: string): AppFileBucket[] {
+  if (!workspaceRootPath) return []
+
+  const buckets: AppFileBucket[] = []
+  if (workingDirectory && pathIsInside(workingDirectory, workspaceRootPath)) {
+    buckets.push({
+      id: 'current',
+      label: 'Current Folder',
+      description: getPathBasename(workingDirectory) || 'Working folder',
+      paths: [workingDirectory],
+    })
+  }
+
+  buckets.push(
+    { id: 'workspace', label: 'Workspace', description: 'All app files', paths: [workspaceRootPath] },
+    { id: 'outputs', label: 'Outputs', description: 'Generated work', paths: [joinPath(workspaceRootPath, 'outputs')] },
+    { id: 'finals', label: 'Finals', description: 'Approved assets', paths: [joinPath(workspaceRootPath, 'finals'), joinPath(workspaceRootPath, 'output-finals')] },
+    { id: 'photos', label: 'Photos', description: 'Image assets', paths: [joinPath(workspaceRootPath, 'photos'), joinPath(workspaceRootPath, 'Photos'), joinPath(workspaceRootPath, 'assets', 'photos')] },
+    { id: 'content', label: 'Content', description: 'Copy and content files', paths: [joinPath(workspaceRootPath, 'content'), joinPath(workspaceRootPath, 'Content')] },
+    { id: 'campaigns', label: 'Campaigns', description: 'Campaign folders', paths: [joinPath(workspaceRootPath, 'campaigns'), joinPath(workspaceRootPath, 'Campaigns')] },
+  )
+
+  return buckets
+}
+
+function joinPath(...parts: string[]): string {
+  return parts
+    .map((part, index) => index === 0 ? part.replace(/[\\/]$/, '') : part.replace(/^[\\/]|[\\/]$/g, ''))
+    .filter(Boolean)
+    .join(PATH_SEP)
+}
+
+function pathIsInside(path: string, root: string): boolean {
+  const normalizedRoot = root.endsWith(PATH_SEP) ? root : `${root}${PATH_SEP}`
+  return path === root || path.startsWith(normalizedRoot)
 }
 
 /**
