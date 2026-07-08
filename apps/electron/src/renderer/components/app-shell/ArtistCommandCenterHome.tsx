@@ -560,23 +560,34 @@ function ReleaseBoardRow({
   onSelectCategory: (categoryId: ReleaseBoardCategory['id']) => void
 }) {
   const totals = getBoardTotals(board)
+  const percentComplete = totals.total > 0 ? Math.round((totals.done / totals.total) * 100) : 0
 
   return (
-    <CommandCard className="p-3">
-      <div className="mb-2.5 flex items-center gap-2.5">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <CheckCircle2 className="h-3.5 w-3.5 text-white/45" />
-          <p className="min-w-0 truncate text-sm font-medium text-white/82">
-            Release Board <span className="text-xs font-normal text-white/32">({totals.done}/{totals.total})</span>
-          </p>
+    <CommandCard className="overflow-hidden p-0">
+      <div className="flex items-center justify-between border-b border-white/[0.04] bg-white/[0.01] px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-emerald-500/20 bg-emerald-500/10">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+          </div>
+          <div>
+            <h2 className="text-sm font-medium tracking-wide text-white/90">Launch Sequence</h2>
+            <p className="mt-0.5 text-[11px] text-white/40">{totals.done} of {totals.total} tasks completed</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-mono text-emerald-400/80">{percentComplete}%</span>
+          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-white/[0.05]">
+            <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${percentComplete}%` }} />
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
-        {board.categories.map((category) => (
+      <div className="flex flex-col divide-y divide-white/[0.04] lg:flex-row lg:divide-x lg:divide-y-0">
+        {board.categories.map((category, idx) => (
           <ReleaseBoardTile
             key={category.id}
             category={category}
+            index={idx}
             onClick={() => onSelectCategory(category.id)}
           />
         ))}
@@ -587,12 +598,14 @@ function ReleaseBoardRow({
 
 function ReleaseBoardTile({
   category,
+  index,
   onClick,
 }: {
   category: ReleaseBoardCategory
+  index: number
   onClick: () => void
 }) {
-  const Icon = releaseCategoryIcons[category.id]
+  const Icon = releaseCategoryIcons[category.id] || CheckCircle2
   const progress = getCategoryProgress(category)
   const allDone = progress.total > 0 && progress.done === progress.total
 
@@ -600,31 +613,50 @@ function ReleaseBoardTile({
     <button
       type="button"
       onClick={onClick}
-      className="group min-w-0 rounded-xl border border-white/[0.045] bg-white/[0.012] p-2.5 text-left transition-colors hover:border-white/[0.09] hover:bg-white/[0.035]"
+      className="group relative flex-1 p-5 text-left transition-all hover:bg-white/[0.02]"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+      
+      <div className="relative flex h-full flex-col justify-between gap-6">
+        <div className="flex items-start justify-between">
           <span className={cn(
-            'flex h-7 w-7 shrink-0 items-center justify-center rounded-full border',
-            allDone ? 'border-emerald-400/20 bg-emerald-400/10' : 'border-white/[0.05] bg-white/[0.02]',
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-300',
+            allDone 
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.15)]' 
+              : 'border-white/[0.06] bg-white/[0.02] text-white/40 group-hover:border-white/[0.15] group-hover:bg-white/[0.04] group-hover:text-white/80',
           )}>
-            <Icon className={cn('h-3.5 w-3.5', allDone ? 'text-emerald-300/80' : 'text-white/45')} />
+            <Icon className="h-4 w-4" />
           </span>
-          <div className="min-w-0">
-            <p className="truncate text-xs font-medium text-white/78">{category.label}</p>
+          <span className="text-[10px] font-mono tracking-widest text-white/20 transition-colors group-hover:text-white/40">
+            0{index + 1}
+          </span>
+        </div>
+
+        <div>
+          <p className={cn(
+            "text-sm font-medium tracking-wide transition-colors",
+            allDone ? "text-white/90" : "text-white/70 group-hover:text-white"
+          )}>
+            {category.label}
+          </p>
+          <p className="line-clamp-1 mt-1 text-[11px] text-white/30 transition-colors group-hover:text-white/50">
+            {progress.done}/{progress.total} items
+          </p>
+          
+          <div className="mt-4 flex h-1 gap-1">
+            {category.items.map((item) => (
+              <span
+                key={item.id}
+                className={cn(
+                  'h-full flex-1 rounded-full transition-all duration-300',
+                  item.status === 'done' 
+                    ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]' 
+                    : 'bg-white/[0.08] group-hover:bg-white/[0.15]',
+                )}
+              />
+            ))}
           </div>
         </div>
-      </div>
-      <div className="mt-2.5 flex gap-1">
-        {category.items.map((item) => (
-          <span
-            key={item.id}
-            className={cn(
-              'h-1 flex-1 rounded-full',
-              item.status === 'done' ? 'bg-emerald-400/70' : 'bg-white/[0.07]',
-            )}
-          />
-        ))}
       </div>
     </button>
   )
