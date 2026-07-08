@@ -79,39 +79,47 @@ test('root dispatcher routes normalized profile lifecycle commands', () => {
   const added = JSON.parse(run([
     'profile', 'add', 'x',
     '--profile', 'artist01',
+    '--account-group', 'MikeyReal',
     '--handle', '@artist01',
     '--json',
   ], env));
   assert.equal(added.ok, true);
+  assert.equal(added.data.accountGroup, 'MikeyReal');
   assert.equal(added.data.accountHandle, '@artist01');
 
   const updated = JSON.parse(run([
     'profile', 'update', 'x',
     '--profile', 'artist01',
+    '--account-group', 'Music Fan Page',
     '--account-url', 'https://x.com/artist01',
     '--json',
   ], env));
   assert.equal(updated.command, 'profile.update');
+  assert.equal(updated.data.accountGroup, 'Music Fan Page');
   assert.equal(updated.data.accountUrl, 'https://x.com/artist01');
 
   const cleared = JSON.parse(run([
     'profile', 'update', 'x',
     '--profile', 'artist01',
+    '--clear-account-group',
     '--clear-handle',
     '--clear-account-url',
     '--json',
   ], env));
   assert.equal(cleared.command, 'profile.update');
+  assert.equal(cleared.data.accountGroup, null);
   assert.equal(cleared.data.accountHandle, null);
   assert.equal(cleared.data.accountUrl, null);
 
   const restored = JSON.parse(run([
     'profile', 'update', 'x',
     '--profile', 'artist01',
+    '--account-group', 'MikeyReal',
     '--handle', '@artist01',
     '--account-url', 'https://x.com/artist01',
     '--json',
   ], env));
+  assert.equal(restored.data.accountGroup, 'MikeyReal');
   assert.equal(restored.data.accountHandle, '@artist01');
   assert.equal(restored.data.accountUrl, 'https://x.com/artist01');
 
@@ -119,6 +127,7 @@ test('root dispatcher routes normalized profile lifecycle commands', () => {
   assert.equal(status.profileId, 'artist01');
   assert.equal(status.accountHandle, '@artist01');
   assert.equal(status.accountUrl, 'https://x.com/artist01');
+  assert.equal(status.accountGroup, 'MikeyReal');
   assert.equal(status.sessionPath, path.join(home, 'sessions', 'x', 'artist01'));
   assert.equal(status.sessionExists, false);
   assert.equal(status.profileStatus, 'login_needed');
