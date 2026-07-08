@@ -22397,7 +22397,7 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 
 ## Core Flow
 
-1. Read \`sources/printing-press-social/guide.md\` when available.
+1. Read \`sources/printing-press-social/guide.md\` directly before using the source or CLI. Do not search for this guide first; it is the canonical path in RunnerOS workspaces. Use \`tools/printing-press-social/README.md\` only if that direct read fails.
 2. Run \`node src/social.mjs catalog --json\` from \`tools/printing-press-social\`.
 3. Resolve the exact \`platform/profile\` first. Users can name an account set from Settings -> Social Accounts, such as \`MikeyReal\`, or an exact reference like \`instagram/brand-main\`.
 4. If a campaign/release/client folder is involved, list candidate media with \`node src/social.mjs assets --asset-root <dir> --platform <platform> --json\` and copy with \`node src/social.mjs content --content-root <dir> --json\`.
