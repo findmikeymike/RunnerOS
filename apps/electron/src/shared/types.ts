@@ -1225,6 +1225,8 @@ export interface SocialAccountCommandResult {
   deleted?: boolean
   data?: Record<string, unknown>
   browserPlan?: Record<string, unknown>
+  browserInstanceId?: string
+  browserPartition?: string
   code?: string
   message?: string
   error?: string

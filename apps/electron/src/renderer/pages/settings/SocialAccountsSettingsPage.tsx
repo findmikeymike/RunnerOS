@@ -146,7 +146,8 @@ export default function SocialAccountsSettingsPage() {
     try {
       const result = await window.electronAPI.loginSocialAccount({ platform: profile.platform, profile: profile.profile })
       setLoginPlan(result)
-      toast.success('Login handoff prepared')
+      await load()
+      toast.success(result.browserInstanceId ? 'Login browser opened' : 'Login handoff prepared')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not start login')
     } finally {
@@ -236,7 +237,7 @@ export default function SocialAccountsSettingsPage() {
           </SettingsSection>
 
           {loginPlan?.browserPlan && (
-            <SettingsSection title="Login Handoff" description="Use this delegated plan with Runner browser tools until profile-bound browser sessions are wired.">
+            <SettingsSection title="Login Browser" description={loginPlan.browserInstanceId ? `Opened browser ${loginPlan.browserInstanceId}. Log in manually, then refresh or verify status.` : 'Use this delegated plan with Runner browser tools.'}>
               <SettingsCard>
                 <SettingsCardContent>
                   <pre className="max-h-64 overflow-auto rounded-md bg-black/35 p-3 text-[11px] leading-5 text-white/68">
@@ -366,7 +367,7 @@ function ProfileRow({
             </Button>
             <Button type="button" size="sm" variant="secondary" onClick={onLogin} disabled={statusBusy}>
               {statusBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
-              Prepare Login
+              Open Login
             </Button>
             <Button type="button" size="sm" variant="outline" onClick={onEdit}>
               Edit

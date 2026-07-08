@@ -11,6 +11,17 @@ const createdWindows: any[] = []
 let toolbarLoadFailuresRemaining = 0
 const mockShellOpenExternal = mock(async () => {})
 const mockIpcMainHandle = mock(() => {})
+const mockSessionFromPartition = mock((_partition: string) => ({
+  protocol: { handle: () => {} },
+  setPermissionCheckHandler: mock(() => {}),
+  setPermissionRequestHandler: mock(() => {}),
+  webRequest: {
+    onBeforeRequest: mock((_cb: any) => {}),
+    onCompleted: mock((_cb: any) => {}),
+    onErrorOccurred: mock((_cb: any) => {}),
+  },
+  on: mock((_event: string, _cb: any) => {}),
+}))
 
 function createMockWebContents() {
   const listeners: Record<string, Function[]> = {}
@@ -78,9 +89,10 @@ function createMockWebContents() {
   }
 }
 
-function createMockBrowserView() {
+function createMockBrowserView(opts?: any) {
   const webContents = createMockWebContents()
   return {
+    _opts: opts,
     webContents,
     setBounds: mock(() => {}),
     setAutoResize: mock(() => {}),
@@ -96,6 +108,7 @@ function createMockWindow(opts?: { width?: number; height?: number; minWidth?: n
   const minHeight = opts?.minHeight ?? 0
 
   const win = {
+    _opts: opts,
     webContents,
     on: (event: string, cb: Function) => {
       if (!listeners[event]) listeners[event] = []
@@ -150,8 +163,8 @@ mock.module('electron', () => ({
   },
   BrowserView: class MockBrowserView {
     webContents: any
-    constructor(_opts?: any) {
-      const view = createMockBrowserView()
+    constructor(opts?: any) {
+      const view = createMockBrowserView(opts)
       this.webContents = view.webContents
       Object.assign(this, view)
     }
@@ -175,17 +188,7 @@ mock.module('electron', () => ({
   },
   protocol: { handle: () => {} },
   session: {
-    fromPartition: mock(() => ({
-      protocol: { handle: () => {} },
-      setPermissionCheckHandler: mock(() => {}),
-      setPermissionRequestHandler: mock(() => {}),
-      webRequest: {
-        onBeforeRequest: mock((_cb: any) => {}),
-        onCompleted: mock((_cb: any) => {}),
-        onErrorOccurred: mock((_cb: any) => {}),
-      },
-      on: mock((_event: string, _cb: any) => {}),
-    })),
+    fromPartition: mockSessionFromPartition,
   },
 }))
 
@@ -252,6 +255,7 @@ describe('BrowserPaneManager', () => {
     toolbarLoadFailuresRemaining = 0
     mockShellOpenExternal.mockClear()
     mockIpcMainHandle.mockClear()
+    mockSessionFromPartition.mockClear()
     manager = new BrowserPaneManager()
   })
 
@@ -287,6 +291,21 @@ describe('BrowserPaneManager', () => {
     expect(result.overrideBrowserWindowOptions?.webPreferences?.partition).toBe('persist:browser-pane')
     expect(result.overrideBrowserWindowOptions?.webPreferences?.nodeIntegration).toBe(false)
     expect(result.overrideBrowserWindowOptions?.webPreferences?.contextIsolation).toBe(true)
+  })
+
+  it('allows http(s) popups with the parent custom partition', () => {
+    ;(manager as any).createInstance('popup-social', { partition: 'persist:social-x-brand' })
+    const instance = (manager as any).instances.get('popup-social')
+    const openHandler = instance.pageView.webContents.setWindowOpenHandler.mock.calls[0][0]
+
+    const result = openHandler({
+      url: 'https://accounts.google.com/o/oauth2/v2/auth',
+      disposition: 'new-popup',
+      frameName: 'oauth-popup',
+    })
+
+    expect(result.action).toBe('allow')
+    expect(result.overrideBrowserWindowOptions?.webPreferences?.partition).toBe('persist:social-x-brand')
   })
 
   it('denies app deep-link popups and forwards to deep-link handler', async () => {
@@ -414,6 +433,26 @@ describe('BrowserPaneManager', () => {
     expect(info.ownerSessionId).toBe('sess-reuse')
     expect(info.boundSessionId).toBe('sess-reuse')
     expect(manager.listInstances()).toHaveLength(1)
+  })
+
+  it('createForSession does not reuse custom-partition manual windows', () => {
+    ;(manager as any).createInstance('social-window', { partition: 'persist:social-instagram-main' })
+
+    const id = manager.createForSession('sess-default')
+
+    expect(id).not.toBe('social-window')
+    expect(manager.listInstances()).toHaveLength(2)
+    expect(manager.listInstances().find((info) => info.id === 'social-window')?.ownerType).toBe('manual')
+  })
+
+  it('creates custom-partition instances for isolated browser state', () => {
+    ;(manager as any).createInstance('social-instagram-main', { partition: 'persist:social-instagram-main' })
+    const instance = (manager as any).instances.get('social-instagram-main')
+
+    expect(instance.partition).toBe('persist:social-instagram-main')
+    expect(mockSessionFromPartition).toHaveBeenCalledWith('persist:social-instagram-main')
+    expect(createdWindows[0]._opts.webPreferences.partition).toBe('persist:social-instagram-main')
+    expect(instance.pageView._opts.webPreferences.partition).toBe('persist:social-instagram-main')
   })
 
   it('navigate normalizes hostnames to https', async () => {
