@@ -28,6 +28,7 @@ type ApiToChannelMapKeys = Exclude<
   | 'onTransferProgress' // direct IPC listener — chunk upload progress
   | 'changeLanguage' // direct IPC to main process — syncs i18n language
   | 'captureVisualElement' // direct IPC to main process — captures the renderer window
+  | 'lookupProsodyRhymes' // direct IPC to main process — local ambient rhyme engine
   | 'getFilePath' // renderer-local — webUtils.getPathForFile, no IPC round-trip
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string

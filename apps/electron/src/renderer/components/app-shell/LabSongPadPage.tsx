@@ -27,6 +27,11 @@ import {
   type LabWorkerRouteResult,
 } from '@/lib/lab-worker-routing'
 import {
+  buildProsodySelection,
+  replaceSelectedRange,
+  type ProsodySelectionInfo,
+} from '@/lib/prosody-selection'
+import {
   ARTIST_PROFILE_CONTEXT_SLUG,
   parseArtistProfileDocResult,
   type ArtistProfile,
@@ -41,7 +46,7 @@ import {
   upsertLabUiSong,
   type LabUiSong,
 } from '@/lib/lab-song-state'
-import type { AgentDefinitionDTO } from '../../../shared/types'
+import type { AgentDefinitionDTO, ProsodyLookupResult, ProsodyRhymeItem } from '../../../shared/types'
 
 interface LabSongPadPageProps {
   workspaceId?: string
@@ -51,6 +56,14 @@ interface LabSongPadPageProps {
 }
 
 type SelectionSource = 'rough' | 'remember'
+
+type ProsodySelectionSource = SelectionSource | 'section'
+
+type ProsodySelectionState = ProsodySelectionInfo & {
+  source: ProsodySelectionSource
+  sectionId?: string
+  anchor: { x: number; y: number }
+}
 
 type SongSection = {
   id: string
@@ -154,6 +167,28 @@ function textareaBase(extra?: string) {
 
 function sectionRows(text: string) {
   return Math.max(2, text.split('\n').length + 1)
+}
+
+function selectionAnchor(
+  node: HTMLTextAreaElement,
+  point?: { x: number; y: number },
+): { x: number; y: number } {
+  const rect = node.getBoundingClientRect()
+  return {
+    x: point?.x ?? Math.min(rect.right - 24, rect.left + rect.width * 0.72),
+    y: point?.y ?? Math.min(rect.bottom - 28, rect.top + 44),
+  }
+}
+
+function prosodyPopoverPosition(anchor: { x: number; y: number }) {
+  const width = 320
+  const left = typeof window === 'undefined'
+    ? anchor.x
+    : Math.min(Math.max(12, anchor.x), Math.max(12, window.innerWidth - width - 12))
+  const top = typeof window === 'undefined'
+    ? anchor.y
+    : Math.min(Math.max(12, anchor.y + 12), Math.max(12, window.innerHeight - 280))
+  return { left, top }
 }
 
 function buildLyricAgentPayload({
@@ -375,6 +410,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const roughRef = React.useRef<HTMLTextAreaElement>(null)
   const rememberRef = React.useRef<HTMLTextAreaElement>(null)
   const activeWorkerRunIdRef = React.useRef(0)
+  const prosodyLookupRunIdRef = React.useRef(0)
   const savingSongRef = React.useRef(false)
   const initialSongRef = React.useRef<LabUiSong | null>(null)
   const readInitialSong = () => {
@@ -390,6 +426,9 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const [sections, setSections] = React.useState<SongSection[]>(() => readInitialSong().sections.length ? readInitialSong().sections : INITIAL_SECTIONS)
   const [selectedText, setSelectedText] = React.useState('')
   const [selectionSource, setSelectionSource] = React.useState<SelectionSource>('rough')
+  const [prosodySelection, setProsodySelection] = React.useState<ProsodySelectionState | null>(null)
+  const [prosodyResult, setProsodyResult] = React.useState<ProsodyLookupResult | null>(null)
+  const [prosodyBusy, setProsodyBusy] = React.useState(false)
   const [showEmptySections, setShowEmptySections] = React.useState(true)
   const [activeAgentSectionId, setActiveAgentSectionId] = React.useState<string | null>(null)
   const [agentOutput, setAgentOutput] = React.useState('')
@@ -439,20 +478,51 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     window.queueMicrotask(() => {
       savingSongRef.current = false
     })
-  }, [activeSongId, title, project, projectColor, roughText, rememberText, sections])
+  }, [activeSongId, title, project, projectColor, roughText, rememberText, sections, workspaceId])
 
   const artistProfile = React.useMemo(
     () => parseArtistProfileDocResult(artistProfileDocs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
     [artistProfileDocs],
   )
 
-  const captureSelection = React.useCallback((source: SelectionSource) => {
-    const node = source === 'rough' ? roughRef.current : rememberRef.current
+  const captureProsodySelection = React.useCallback((
+    source: ProsodySelectionSource,
+    node: HTMLTextAreaElement,
+    point?: { x: number; y: number },
+    sectionId?: string,
+  ) => {
+    const selection = buildProsodySelection(node.value, node.selectionStart, node.selectionEnd)
+    if (!selection) {
+      setProsodySelection(null)
+      return
+    }
+    setProsodySelection({
+      ...selection,
+      source,
+      sectionId,
+      anchor: selectionAnchor(node, point),
+    })
+  }, [])
+
+  const capturePadSelection = React.useCallback((
+    source: SelectionSource,
+    node: HTMLTextAreaElement | null,
+    point?: { x: number; y: number },
+  ) => {
     if (!node) return
     const value = node.value.slice(node.selectionStart, node.selectionEnd)
     setSelectionSource(source)
     setSelectedText(value)
-  }, [])
+    captureProsodySelection(source, node, point)
+  }, [captureProsodySelection])
+
+  const captureSectionProsodySelection = React.useCallback((
+    sectionId: string,
+    node: HTMLTextAreaElement,
+    point?: { x: number; y: number },
+  ) => {
+    captureProsodySelection('section', node, point, sectionId)
+  }, [captureProsodySelection])
 
   const clearMovedText = React.useCallback((text: string) => {
     if (selectionSource === 'rough') {
@@ -591,13 +661,137 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     await runResolvedWorker(pendingWorkerRun.section, pendingWorkerRun.action, workerRoute, candidate)
   }, [pendingWorkerRun, runResolvedWorker, workerRoute])
 
+  React.useEffect(() => {
+    if (!prosodySelection) {
+      prosodyLookupRunIdRef.current += 1
+      setProsodyBusy(false)
+      setProsodyResult(null)
+      return
+    }
+
+    const runId = prosodyLookupRunIdRef.current + 1
+    prosodyLookupRunIdRef.current = runId
+    setProsodyBusy(true)
+    setProsodyResult(null)
+
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await window.electronAPI.lookupProsodyRhymes({
+          selection: prosodySelection.selectedText,
+          line: prosodySelection.line,
+        })
+        if (prosodyLookupRunIdRef.current !== runId) return
+        setProsodyResult(result.ok && result.inDictionary ? result : null)
+      } catch {
+        if (prosodyLookupRunIdRef.current !== runId) return
+        setProsodyResult(null)
+      } finally {
+        if (prosodyLookupRunIdRef.current === runId) setProsodyBusy(false)
+      }
+    }, 150)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [prosodySelection])
+
+  const applyProsodyRhyme = React.useCallback((item: ProsodyRhymeItem) => {
+    if (!prosodySelection) return
+    if (prosodySelection.source === 'rough') {
+      setRoughText((current) => replaceSelectedRange(current, prosodySelection, item.word))
+    } else if (prosodySelection.source === 'remember') {
+      setRememberText((current) => replaceSelectedRange(current, prosodySelection, item.word))
+    } else if (prosodySelection.sectionId) {
+      setSections((current) => current.map((section) => (
+        section.id === prosodySelection.sectionId
+          ? { ...section, text: replaceSelectedRange(section.text, prosodySelection, item.word) }
+          : section
+      )))
+    }
+    setProsodySelection(null)
+    setProsodyResult(null)
+    setProsodyBusy(false)
+  }, [prosodySelection])
+
   const visibleSections = showEmptySections
     ? sections
     : sections.filter((section) => section.text.trim())
   const selectedCount = selectedText.trim().split(/\s+/).filter(Boolean).length
+  const prosodyPosition = prosodySelection ? prosodyPopoverPosition(prosodySelection.anchor) : null
+  const hasProsodyMatches = Boolean((prosodyResult?.perfect.length ?? 0) + (prosodyResult?.slant.length ?? 0))
 
   return (
     <div className="runneros-glass-route flex h-full min-h-0 flex-col overflow-hidden bg-[#050505] text-white">
+      {prosodySelection && prosodyPosition && (prosodyBusy || prosodyResult) ? (
+        <div
+          className="fixed z-[90] w-[320px] rounded-xl border border-white/[0.08] bg-[#090909]/95 p-2.5 text-white shadow-modal-small backdrop-blur-xl"
+          style={{ left: prosodyPosition.left, top: prosodyPosition.top }}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="min-w-0 truncate text-[9px] font-medium uppercase tracking-[0.16em] text-white/36">
+              Rhymes · {prosodySelection.selectedText.trim()}
+            </div>
+            <button
+              type="button"
+              onClick={() => setProsodySelection(null)}
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-white/24 hover:bg-white/[0.05] hover:text-white/55"
+              title="Close rhymes"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+
+          {prosodyBusy ? (
+            <div className="rounded-lg border border-white/[0.055] bg-white/[0.018] px-2.5 py-2 text-[11px] text-white/38">
+              Finding rhymes...
+            </div>
+          ) : null}
+
+          {!prosodyBusy && prosodyResult && !hasProsodyMatches ? (
+            <div className="rounded-lg border border-white/[0.055] bg-white/[0.018] px-2.5 py-2 text-[11px] text-white/34">
+              No clean matches.
+            </div>
+          ) : null}
+
+          {!prosodyBusy && prosodyResult?.perfect.length ? (
+            <div className="mb-2">
+              <div className="mb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-white/30">Perfect</div>
+              <div className="flex flex-wrap gap-1.5">
+                {prosodyResult.perfect.slice(0, 10).map((item) => (
+                  <button
+                    key={`perfect-${item.word}`}
+                    type="button"
+                    onClick={() => applyProsodyRhyme(item)}
+                    className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1 text-[11px] text-white/62 hover:bg-white/[0.06] hover:text-white/86"
+                  >
+                    {item.word}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {!prosodyBusy && prosodyResult?.slant.length ? (
+            <div>
+              <div className="mb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-white/30">Slant</div>
+              <div className="flex flex-wrap gap-1.5">
+                {prosodyResult.slant.slice(0, 12).map((item) => (
+                  <button
+                    key={`slant-${item.word}-${item.kind}`}
+                    type="button"
+                    title={item.kind}
+                    onClick={() => applyProsodyRhyme(item)}
+                    className="inline-flex items-center gap-1 rounded-full border border-[#fb923c]/20 bg-[#fb923c]/10 px-2.5 py-1 text-[11px] text-[#f8d7a4]/78 hover:bg-[#fb923c]/15 hover:text-[#ffe2b5]"
+                  >
+                    <span>{item.word}</span>
+                    <span className="text-[8px] uppercase tracking-[0.1em] text-[#fbbf24]/45">{item.kind}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="shrink-0 border-b border-white/[0.04] px-6 py-3">
         <div className="flex w-full items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
@@ -680,9 +874,9 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                 ref={roughRef}
                 value={roughText}
                 onChange={(event) => setRoughText(event.target.value)}
-                onSelect={() => captureSelection('rough')}
-                onKeyUp={() => captureSelection('rough')}
-                onMouseUp={() => captureSelection('rough')}
+                onSelect={(event) => capturePadSelection('rough', event.currentTarget)}
+                onKeyUp={(event) => capturePadSelection('rough', event.currentTarget)}
+                onMouseUp={(event) => capturePadSelection('rough', event.currentTarget, { x: event.clientX, y: event.clientY })}
                 placeholder="Dump lines, images, hooks, bad drafts, voice notes transcribed into words..."
                 className={textareaBase('min-h-[560px]')}
               />
@@ -699,9 +893,9 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                 ref={rememberRef}
                 value={rememberText}
                 onChange={(event) => setRememberText(event.target.value)}
-                onSelect={() => captureSelection('remember')}
-                onKeyUp={() => captureSelection('remember')}
-                onMouseUp={() => captureSelection('remember')}
+                onSelect={(event) => capturePadSelection('remember', event.currentTarget)}
+                onKeyUp={(event) => capturePadSelection('remember', event.currentTarget)}
+                onMouseUp={(event) => capturePadSelection('remember', event.currentTarget, { x: event.clientX, y: event.clientY })}
                 placeholder="Park strong lines, title ideas, images, references, or alternate bars here."
                 className={textareaBase('min-h-[170px] text-white/66')}
               />
@@ -871,6 +1065,9 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     value={section.text}
                     rows={sectionRows(section.text)}
                     onChange={(event) => updateSection(section.id, event.target.value)}
+                    onSelect={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
+                    onKeyUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
+                    onMouseUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget, { x: event.clientX, y: event.clientY })}
                     placeholder={section.optional ? 'Optional' : 'Write lyrics here.'}
                     className={textareaBase('overflow-hidden text-white/76 placeholder:text-white/14')}
                   />

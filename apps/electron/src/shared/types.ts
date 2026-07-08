@@ -402,6 +402,31 @@ export interface CommunityEmailSendResult {
   error?: string
 }
 
+export interface ProsodyLookupRequest {
+  selection: string
+  line: string
+}
+
+export interface ProsodyRhymeItem {
+  word: string
+  syllables?: number
+  stress?: string
+  kind: 'perfect' | 'assonance' | 'consonance' | 'near'
+}
+
+export interface ProsodyLookupResult {
+  ok: boolean
+  target: string
+  selection: string
+  line: string
+  inDictionary: boolean
+  syllables?: number
+  stress?: string
+  perfect: ProsodyRhymeItem[]
+  slant: ProsodyRhymeItem[]
+  error?: string
+}
+
 export interface ElectronAPI {
   // Session management
   getSessions(): Promise<Session[]>
@@ -514,6 +539,9 @@ export interface ElectronAPI {
   generateThumbnail(base64: string, mimeType: string): Promise<string | null>
   /** Returns the absolute filesystem path for a File (only works for file-picker / OS-drag Files). */
   getFilePath(file: File): string | null
+
+  // Ambient songwriting utilities
+  lookupProsodyRhymes(input: ProsodyLookupRequest): Promise<ProsodyLookupResult>
 
   // Filesystem search (for @ mention file selection)
   searchFiles(basePath: string, query: string): Promise<FileSearchResult[]>

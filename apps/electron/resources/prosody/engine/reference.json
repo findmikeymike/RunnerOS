@@ -1,0 +1,61 @@
+{
+  "meta": {
+    "name": "Prosody Engine — craft reference",
+    "version": "1.0.0",
+    "updated": "2026-07-07",
+    "purpose": "The craft knowledge the agent applies as TASTE on top of the deterministic rhyme_engine.py: rhyme types (so the agent can name and choose slants), metrical feet, the cliché-rhyme blacklist to avoid, and sung-vowel notes. The live rhyme/meter computation lives in rhyme_engine.py (CMUdict); this is the human reference and the agent's taste rubric.",
+    "note": "A browsable in-page rhymer isn't shipped here because it would need the whole 135k-word pronunciation dictionary inlined. Live lookups run through rhyme_engine.py; this browser is the craft cheat-sheet."
+  },
+  "rhyme_types": [
+    {"id":"perfect","name":"Perfect (full) rhyme","desc":"Final stressed vowel and everything after it match exactly.","example":"time / crime, heart / start","use":"Strong closure; can feel expected — the engine's 'perfect' list, ranked by frequency."},
+    {"id":"slant","name":"Slant / near rhyme","desc":"Close but not exact — the ear accepts it. Umbrella for assonance and consonance.","example":"love / enough, home / alone, orange / sponge","use":"Freshness and honesty; modern pop/folk/rap lean on it. This is where the agent adds the most value."},
+    {"id":"assonance","name":"Assonance","desc":"Same vowel sound, different ending consonants.","example":"lake / fate, love / does","use":"Soft, open connection; keeps momentum without a hard click."},
+    {"id":"consonance","name":"Consonance","desc":"Same ending consonant(s), different vowel.","example":"blank / think, home / time (m)","use":"Grittier, subtler tie; good for tension or unresolved feeling."},
+    {"id":"multisyllabic","name":"Multisyllabic / rich rhyme","desc":"Two or more syllables rhyme together.","example":"emotion / devotion, faded / persuaded","use":"Signals craft and flow (rap especially). Captured by the engine's 'perfect' from the last stressed vowel."},
+    {"id":"feminine","name":"Feminine rhyme","desc":"Stressed syllable followed by an unstressed one (ends soft).","example":"crying / dying, over / lover","use":"Gentle, falling, wistful landings."},
+    {"id":"masculine","name":"Masculine rhyme","desc":"Rhyme on the final stressed syllable (ends hard).","example":"defend / pretend, alone / stone","use":"Punchy, definite closure — good for a hook's last word."},
+    {"id":"identity","name":"Identity / rime riche","desc":"Same sound including the onset consonant (or a homophone).","example":"bare / bear, night / knight","use":"Wordplay and double meaning; use sparingly."},
+    {"id":"eye","name":"Eye rhyme","desc":"Looks like a rhyme on the page but doesn't sound like one.","example":"love / move, though / rough","use":"Avoid when writing for the ear — it won't rhyme when sung."},
+    {"id":"forced","name":"Forced rhyme","desc":"A rhyme achieved by bending grammar, pronunciation, or sense.","example":"contorted syntax just to land a rhyme","use":"A warning flag: if the line only exists to hit the rhyme, rewrite it."}
+  ],
+  "meter_feet": [
+    {"id":"iamb","name":"Iamb","pattern":"da-DUM (x /)","example":"a-LONE, the DARK","note":"The most natural English rhythm; conversational."},
+    {"id":"trochee","name":"Trochee","pattern":"DUM-da (/ x)","example":"NIGHT-fall, BRO-ken","note":"Falling, insistent; good for chants and urgency."},
+    {"id":"anapest","name":"Anapest","pattern":"da-da-DUM (x x /)","example":"in the DARK, on a WHIM","note":"Galloping, propulsive; folk and story-songs."},
+    {"id":"dactyl","name":"Dactyl","pattern":"DUM-da-da (/ x x)","example":"HOLD-ing me, TEN-der-ly","note":"Tumbling, waltz-like; feels tender or nostalgic."},
+    {"id":"spondee","name":"Spondee","pattern":"DUM-DUM (/ /)","example":"HEART-BREAK, DEAD-WEIGHT","note":"Two hits in a row; slams weight onto a phrase."},
+    {"id":"pyrrhic","name":"Pyrrhic","pattern":"da-da (x x)","example":"in the, of a","note":"Two unstressed beats; speeds a line up between stresses."}
+  ],
+  "cliche_rhymes": {
+    "note": "The most worn rhyme pairs in pop/rock. Not banned — but if you land on one, either twist it or reach for a slant instead. The agent flags these and offers a fresher partner.",
+    "pairs": [
+      "fire / desire", "heart / apart", "love / above", "girl / world", "time / mine",
+      "night / light", "cry / why", "believe / leave", "arms / harm", "rain / pain",
+      "eyes / lies", "kiss / miss", "dance / chance", "hold / cold", "dream / seem",
+      "together / forever", "sky / high", "day / away", "true / you", "heart / start",
+      "goodbye / cry", "fall / all", "alone / phone", "break / take", "soul / whole"
+    ]
+  },
+  "sung_vowels": {
+    "note": "How words FEEL in the mouth when sung — sound is co-equal with meaning in a hook. CMUdict is spoken English; singers bend vowels, so treat this as taste, not law.",
+    "open_singable": [
+      {"vowel":"ah (AA/AO)","why":"Most open, most resonant — easiest to belt and hold.","example":"'far', 'call', 'heart'"},
+      {"vowel":"oh (OW)","why":"Round, warm, sustains beautifully.","example":"'home', 'know', 'alone'"},
+      {"vowel":"ay (EY)","why":"Bright and forward; carries in a big room.","example":"'stay', 'away', 'day'"},
+      {"vowel":"eye (AY)","why":"Opens as it sings (ah→ee glide); emotive.","example":"'fire', 'why', 'goodbye'"},
+      {"vowel":"oo (UW)","why":"Dark, intimate, closes a phrase softly.","example":"'you', 'through', 'blue'"}
+    ],
+    "harder_to_sing": [
+      {"vowel":"ih (IH) / ee (IY) on high loud notes","why":"Tight, thin; hard to belt — singers often open them toward 'eh/ah'.","example":"'this', 'him', 'be'"},
+      {"vowel":"nasals + hard stops closing a held note","why":"'-nt', '-ck', '-t' choke a sustain; put hard stops at the START of a word, not the end of a held one.","example":"avoid holding 'want', 'back'"}
+    ],
+    "principle":"Land the emotional/held words of a hook on open vowels (ah, oh, ay, eye, oo). Save tight vowels and hard consonant stops for quick, punchy syllables — not the notes you want to ring."
+  },
+  "engine_commands": [
+    {"cmd":"rhymes WORD","desc":"Perfect + slant rhymes, frequency-ranked.","example":"python3 engine/rhyme_engine.py rhymes orange"},
+    {"cmd":"rhymes WORD --type slant --syllables 1","desc":"Only slant rhymes, filtered to a syllable count so they fit the pocket.","example":"rhymes love --type slant --syllables 1"},
+    {"cmd":"rhymes WORD --json","desc":"Machine-readable output for the skill to rank with taste.","example":"rhymes home --json"},
+    {"cmd":"scan \"a line\"","desc":"Total syllables + stress pattern of a whole line.","example":"scan \"I set myself on fire\""},
+    {"cmd":"fit \"a line\" --meter x/x/x/","desc":"Rough check of a line's stresses against a target meter.","example":"fit \"the dark of you\" --meter x/x/"}
+  ]
+}

@@ -98,6 +98,7 @@ import { BrowserPaneManager } from './browser-pane-manager'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { registerThumbnailScheme, registerThumbnailHandler } from './thumbnail-protocol'
 import { registerOutputAssetHandler } from './output-asset-protocol'
+import { registerProsodyIpcHandlers } from './prosody-engine'
 import log, { isDebugMode, mainLog, getLogFilePath, getMessagingGatewayLogFilePath, messagingGatewayLog } from './logger'
 import { setPerfEnabled, enableDebug } from '@craft-agent/shared/utils'
 import { registerPiModelResolver } from '@craft-agent/shared/config'
@@ -550,6 +551,7 @@ app.whenReady().then(async () => {
         height: image.getSize().height,
       }
     })
+    registerProsodyIpcHandlers()
 
     if (!isClientOnly) {
       // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
