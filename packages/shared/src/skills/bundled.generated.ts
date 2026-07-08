@@ -14389,6 +14389,370 @@ A 60-grade idea with 90-grade delivery (title, thumbnail, hook, pacing) beats a 
     ],
   },
   {
+    slug: "music-ad-conversion-protocol",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: music-ad-conversion-protocol
+description: Plan and audit Meta music conversion campaigns for streaming growth, including smart-link flow, pixel events, manual Instagram placements, tiered geos, creative testing, benchmarks, and Spotify quality checks.
+tags: [ads, meta, spotify-growth, campaign-strategy, paid-media, music-marketing]
+---
+
+# Music Ad Conversion Protocol
+
+Use this when planning, auditing, or handing off a Meta music campaign whose goal is real streaming growth, saves, and active Spotify listener quality.
+
+This skill plans and audits. It does not publish, pause, spend, or change ad accounts.
+
+## Conversion Ecosystem
+
+In music marketing, "conversion ads" usually mean:
+
+1. Instagram/Facebook ad.
+2. Smart landing page such as SubmitHub Links, Hypeddit, Feature.fm, Smart Noise, or similar.
+3. Listener chooses Spotify, Apple Music, YouTube, etc.
+4. Pixel event fires when the user clicks the streaming-service button.
+5. Listener ideally streams, saves, follows, or enters the artist's catalog.
+
+Do not optimize for accidental landing-page visits. Optimize for the service-button click event:
+
+- SubmitHub Links: usually \`View Content\`.
+- Hypeddit: usually Smart Link Click / Click.
+- Feature.fm: usually FeatureFM Click.
+- Other smart links: use the deepest available DSP button-click event.
+
+## Pixel Validation
+
+Before launch, require proof that the bridge works:
+
+1. Use Chrome.
+2. Disable ad blockers and third-party cookie blockers.
+3. Open Meta Events Manager Test Events.
+4. Load landing page and confirm Page View fires.
+5. Click Spotify/Apple/YouTube button and confirm \`View Content\` or equivalent fires.
+6. Confirm Pixel/Data Set ID exactly matches the landing page settings.
+
+Page View is a weak signal. The streaming-service click event is the campaign's real optimization event.
+
+## Manual Meta Setup
+
+Default music protocol:
+
+- Objective: Engagement.
+- Conversion location: Website.
+- Optimization event: \`View Content\` or equivalent smart-link click.
+- Start budget: about $10/day for a cautious test.
+- Testing phase: ABO / ad set budget so each audience or creative lane gets spend.
+- Scaling phase: CBO only after winners are proven.
+- Safety: campaign spending limit around the planned test window, commonly at least $100 for a 10-day test.
+
+Reject or question default ecommerce-style automation:
+
+- Do not rely on Sales/Leads defaults for a streaming campaign.
+- Use Manual Setup when Meta suggests Advantage+ paths.
+- Disable Advantage+ Audience during controlled tests.
+- Disable Advantage+ Placements for music testing.
+- Disable Creative Enhancements / AI Edits so Meta does not crop, brighten, rewrite, or damage the visual language.
+
+## Placement Protocol
+
+For early high-quality music conversion tests, prefer Instagram-only:
+
+1. Instagram Feed.
+2. Instagram Stories.
+3. Instagram Reels.
+4. Instagram Explore.
+
+Turn off Facebook, Audience Network, and Messenger unless there is account-specific evidence that they produce quality streaming outcomes.
+
+Audience Network can make costs look cheap while sending low-intent or bot-like traffic.
+
+## Geo Protocol
+
+Do not use worldwide targeting for early quality tests.
+
+Use tiering:
+
+- Tier 1: USA, UK, Canada, Australia, New Zealand, Germany.
+- Tier 2: Brazil, Mexico, Italy.
+
+Tier 1 costs more but tends to produce higher-value Spotify behavior and royalty value. Tier 2 can add efficient volume.
+
+Be cautious with regions that can produce cheap conversions but weak Spotify outcomes, especially when Spotify Free usage or bot density makes actual stream/save quality poor.
+
+## Audience Structure
+
+Use layered targeting when manual control is needed:
+
+- Layer 1: streaming behavior or app affinity such as Spotify OR Apple Music.
+- Layer 2: relevant genre, artist, band, scene, subculture, or lifestyle signal.
+
+The logic: find people who both fit the sound and plausibly use streaming services.
+
+Do not over-trust a single broad interest. Do not use irrelevant lifestyle targeting just because CPM is cheap.
+
+## Creative Testing Requirement
+
+Do not risk the whole test on one clip.
+
+Require a minimum viable creative set:
+
+- 4 video assets minimum.
+- 4-8 preferred.
+- At least two distinct visual formats.
+- At least two song sections if the song has multiple plausible hooks.
+
+Approved creative lanes:
+
+- lip-sync/performance
+- lyric hook
+- mood/cinematic b-roll
+- AMV/cartoon/fandom edit
+- stock/Kashi-style fallback
+- direct "for fans of" bridge
+- meme/UGC native format
+
+If every ad is expensive, pivot creative format before blaming the audience.
+
+## Learning Phase
+
+Do not overreact during the first 3-4 days. A 3-7 day marination window is normal.
+
+Avoid touching budget, targeting, placements, or creative during the first 96 hours unless there is a clear technical failure, policy issue, or spend safety problem.
+
+## Benchmarks
+
+Use these as directional benchmarks, not promises.
+
+For mixed Tier 1/Tier 2 campaigns:
+
+- Great: $0.20-$0.30 per conversion.
+- Good: $0.30-$0.40.
+- Mediocre: $0.40-$0.50.
+- Poor: over $0.50.
+
+For Tier 1-only campaigns, $0.35-$0.45 can still be strong because CPMs are higher.
+
+Some highly relatable meme/UGC ads can get below $0.10, but this should be treated as an upside case, not a forecast.
+
+## Spotify Reality Check
+
+Meta conversions are not enough. Cross-check quality in Spotify for Artists when available:
+
+- saves
+- playlist adds
+- followers
+- source of streams
+- "Your Profile and Catalog" share
+- listener retention
+- top cities
+- algorithmic lift from Radio or Discover Weekly 2-3 weeks later
+
+Strong campaign quality means active intent, not just cheap clicks.
+
+## Kill, Hold, Scale, Pivot
+
+Default rules:
+
+- Great conversion cost plus Spotify quality signals: hold until stable, then scale 10-20%.
+- Good cost but weak Spotify saves/catalog behavior: inspect landing page and targeting quality before scaling.
+- Mediocre: test new visuals or song sections.
+- Poor: kill the ad/ad set or restart with new creative.
+- High watch time but no conversions: destination/CTA is unclear.
+- Cheap conversions but no streams/saves: geo, placement, or traffic quality problem.
+
+Never recommend scale from Meta dashboard alone.
+
+## Runner Handoff Fields
+
+When handing to Ad Runner, include:
+
+- platform: Meta
+- campaign objective and conversion event
+- smart-link URL and landing-page tool
+- Pixel/Data Set ID validation status
+- account/business if known
+- budget and test window
+- geos
+- placements
+- audience layers
+- creative asset list
+- CTA and destination cue
+- spending limit
+- kill/hold/scale rules
+- approval-needed actions
+
+## Safety
+
+- Never claim a campaign was launched unless Ad Runner verified it.
+- Never recommend any live account mutation without explicit current-conversation approval.
+- Never ask for passwords, cookies, 2FA codes, access tokens, or recovery codes.
+- State uncertainty when Pixel, Spotify for Artists, or export data is missing.
+`,
+      },
+    ],
+  },
+  {
+    slug: "music-ad-visual-hooks",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: music-ad-visual-hooks
+description: Build high-conversion music ad visual hooks by matching the song's sonic world to UGC, mood, performance, AMV, movie, lyric, and hybrid formats while avoiding salesy creative that triggers ad resistance.
+tags: [ads, creative, music-marketing, meta, spotify-growth, visual-strategy]
+---
+
+# Music Ad Visual Hooks
+
+Use this when building or judging artist ad creative, especially Meta/Instagram/Spotify-growth ads where the visual hook decides whether a listener scrolls, clicks, saves, or ignores the song.
+
+This skill is for creative judgment. It does not operate ad accounts.
+
+## Core Truth
+
+People hate feeling advertised to. The ad should feel like a native discovery, not a label shouting "out now."
+
+The viewer should connect with the vibe, identity, or situation first. Branding and CTA can arrive after the emotional hook has landed.
+
+## Sonic World Method
+
+Before writing hooks or choosing visuals, listen to the track and define:
+
+1. Setting: Where does the song live visually?
+2. Subculture: What scene, fandom, lifestyle, or identity would recognize itself in the sound?
+3. Activity fit: What is the listener doing while this song makes sense?
+4. Emotional temperature: late-night, euphoric, heartbroken, dangerous, nostalgic, cinematic, funny, intimate, etc.
+5. Tempo logic: Does the visual movement match the track's pace and energy?
+
+Never pair visuals only by mood. Pair them by **mood plus objective setting**. A slow laid-back song over workout footage may look polished but convert poorly because the use-case logic is broken.
+
+## Format Catalog
+
+Use at least 4 distinct video assets for a serious test. Prefer 4-8 when budget allows.
+
+### Meme / UGC
+
+- Best for relatability, humor, low sales resistance, and low-cost testing.
+- Looks like something made by a friend, fan, creator, or page.
+- Use casual POV text, CapCut-style fonts, and organic framing.
+- Strong examples:
+  - "POV: You found the perfect late-night R&B vibe."
+  - "POV: You found a chill song mid-scroll."
+  - "POV: This song got stuck in your head."
+- Avoid polished label language in the first frame.
+
+### Mood / Cinematic B-roll
+
+- Best for atmosphere, lifestyle, nostalgia, and "this song belongs in my world."
+- Use city nights, beach/sunset, car windows, rooms, rain, nature, crowds, or other clear world signals.
+- Use delayed branding: introduce Spotify/logo/cover art midway, after the vibe hook.
+- If high-concept performance fails, pivot to neutral high-quality stock or Kashi-style b-roll quickly.
+
+### Performance / POV
+
+- Best for artist identity and personal connection.
+- Can be official video, phone-shot lip sync, live clip, studio clip, or casual direct-to-camera performance.
+- Should feel intimate and human, not corporate.
+
+### AMV / Cartoon / Fandom Edit
+
+- Best for subculture familiarity and repeat listening when the song fits anime, game, cartoon, or fandom aesthetics.
+- Use only when the visual world genuinely matches the song.
+- Do not force fandom bait onto a song that does not belong there.
+
+### Movie / Film Edit
+
+- Best for narrative songs and emotional shorthand.
+- Match the scene's story to the lyric or feeling.
+- Can be hybridized with meme framing to make the edit more relatable.
+
+### Lyric Edit
+
+- Best when songwriting, vocal delivery, or a quotable line is the hook.
+- Keep it raw, vertical, and nonchalant.
+- Avoid basic lyric-video styling that looks like a template.
+- Include a subtle CTA cue so viewers know how to act.
+
+## Hybrid Rule
+
+Formats are not boxes. Strong music ads often mash principles together:
+
+- meme framing over a movie edit
+- lyric hook over UGC footage
+- performance clip with POV caption
+- AMV with a direct fan-identity hook
+- mood b-roll with delayed Spotify/cover reveal
+
+The goal is not purity. The goal is a believable native discovery vehicle.
+
+## Anti-Sales Rules
+
+Avoid leading with:
+
+- "Out now"
+- "Listen now"
+- "New single"
+- "Stream my song"
+- generic genre bait like "Metal lovers unite" or "R&B fans tap in"
+
+Prefer:
+
+- a feeling
+- a situation
+- a POV
+- a social identity
+- a lyric moment
+- a cinematic setup
+- a curiosity line that the song actually pays off
+
+## CTA Timing
+
+Use a half-CTA when the ad is mood-based or cinematic:
+
+1. First seconds: hook the vibe or situation.
+2. Middle: introduce Spotify logo, cover art, artist name, or smart-link cue.
+3. End: make the next action clear.
+
+For direct performance or lyric ads, the CTA can arrive earlier, but it should still feel native.
+
+## Creative Testing Packet
+
+When producing ad creative, include:
+
+1. Sonic world summary.
+2. Format mix: 4-8 assets across at least two distinct visual lanes.
+3. Song-section tests: chorus, verse, bridge, intro, or first four bars if relevant.
+4. Hook text for each asset.
+5. CTA timing for each asset.
+6. Asset notes: exact footage, font style, crop, logo/cover timing, and destination cue.
+7. Risk flags: salesy language, tempo mismatch, unsupported claims, off-brand visual, platform-policy risk.
+8. Pivot plan: what to test next if CPR is high.
+
+## Benchmarks And Diagnostics
+
+Creative can hit very low cost-per-result when the match is strong; sub-10-cent results are possible but should not be promised.
+
+Diagnose:
+
+- High watch time, low click/conversion: add clearer destination cue or delayed Spotify/cover reveal.
+- Low thumb-stop: hook/visual is not native or not specific enough.
+- High CPR across all assets: change visual world, not just copy.
+- One format wins clearly: build variants around that format before scaling.
+- A pretty ad fails: check tempo-setting mismatch and sales resistance.
+
+## Guardrails
+
+- Do not invent performance claims, testimonials, saves, streams, press, or fan quotes.
+- Do not copy another artist's ad. Borrow mechanics, then rebuild for this artist's world.
+- Do not treat public ad presence as proof of performance.
+- Do not operate ad accounts or imply anything has been launched.
+`,
+      },
+    ],
+  },
+  {
     slug: "open-slide-decks",
     files: [
       {

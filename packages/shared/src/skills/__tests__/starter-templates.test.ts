@@ -281,4 +281,24 @@ describe('BUNDLED_STARTER_SKILLS', () => {
       expect(parsed.content).toContain(slug === 'ad-library-intel' ? 'Ad Library Intel Packet' : 'Ads Agent');
     }
   });
+
+  it('bundles music-specific Meta conversion and visual hook doctrine', () => {
+    const conversion = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'music-ad-conversion-protocol');
+    const visual = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'music-ad-visual-hooks');
+
+    expect(conversion).toBeDefined();
+    expect(visual).toBeDefined();
+
+    const conversionParsed = matter(getSkillMd(conversion!));
+    expect(conversionParsed.content).toContain('Optimize for the service-button click event');
+    expect(conversionParsed.content).toContain('Instagram Feed');
+    expect(conversionParsed.content).toContain('Spotify Reality Check');
+    expect(conversionParsed.content).toContain('Never recommend any live account mutation');
+
+    const visualParsed = matter(getSkillMd(visual!));
+    expect(visualParsed.content).toContain('Sonic World Method');
+    expect(visualParsed.content).toContain('Meme / UGC');
+    expect(visualParsed.content).toContain('delayed Spotify/cover reveal');
+    expect(visualParsed.content).toContain('Do not operate ad accounts');
+  });
 });
