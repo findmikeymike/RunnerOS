@@ -24,6 +24,7 @@ const OPEN_SLIDE_SLUG = 'open-slide';
 const ZERO_SLUG = 'zero';
 const SHOPIFY_SLUG = 'shopify';
 const PRINTIFY_SLUG = 'printify';
+const MEDIA_GENERATION_SLUG = 'media-generation';
 const RUNNER_DOCS_SLUG = 'runner-docs';
 const CRAFT_AGENTS_DOCS_SLUG = 'craft-agents-docs';
 const DEFAULT_SQUAD_HOME = '/Users/michaelb.williams/CAS4/Squad';
@@ -322,6 +323,17 @@ function getPrintifyAuthState(): { configured: boolean } {
   return { configured: Boolean(process.env.PRINTIFY_API_TOKEN?.trim()) };
 }
 
+function getMediaGenerationAuthState(): { configured: boolean; providers: string[] } {
+  const providers: string[] = [];
+  if ((process.env.FAL_API_KEY || process.env.SQUAD_FAL_API_KEY)?.trim()) providers.push('Fal');
+  if ((process.env.WAVESPEED_API_KEY || process.env.SQUAD_WAVESPEED_API_KEY)?.trim()) providers.push('WaveSpeed');
+  if (process.env.REPLICATE_API_TOKEN?.trim()) providers.push('Replicate');
+  if ((process.env.HEYGEN_API_KEY || process.env.SQUAD_HEYGEN_API_KEY)?.trim()) providers.push('HeyGen');
+  if (process.env.MUAPI_API_KEY?.trim()) providers.push('MuAPI');
+  if (process.env.RUNPOD_API_KEY?.trim()) providers.push('RunPod');
+  return { configured: providers.length > 0, providers };
+}
+
 /**
  * Get all built-in sources for a workspace.
  *
@@ -344,6 +356,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
     getZeroSource(workspaceId, workspaceRootPath),
+    getMediaGenerationSource(workspaceId, workspaceRootPath),
     getShopifySource(workspaceId, workspaceRootPath),
     getPrintifySource(workspaceId, workspaceRootPath),
   ];
@@ -1119,6 +1132,76 @@ export function getZeroSource(workspaceId: string, workspaceRootPath: string): L
 }
 
 /**
+ * Built-in source for shared AI media generation providers.
+ *
+ * This is intentionally a provider-routing guide/source, not a Squad-only
+ * connection. Art Director, Content Genius, Video Director, and future visual
+ * agents can all use the same user-saved keys.
+ */
+export function getMediaGenerationSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const authState = getMediaGenerationAuthState();
+  const config: FolderSourceConfig = {
+    id: 'builtin-media-generation',
+    name: 'Media Generation',
+    slug: MEDIA_GENERATION_SLUG,
+    enabled: true,
+    provider: 'media-generation',
+    type: 'local',
+    local: {
+      path: workspaceRootPath,
+      format: 'provider-router',
+    },
+    tagline: 'Shared image, video, avatar, and render provider keys for creative agents.',
+    icon: '✦',
+    isAuthenticated: authState.configured,
+    connectionStatus: authState.configured ? 'connected' : 'needs_auth',
+    connectionError: authState.configured
+      ? undefined
+      : 'Add at least one media provider key in Settings: Fal, WaveSpeed, Replicate, HeyGen, MuAPI, or RunPod.',
+  };
+
+  const connected = authState.providers.length ? authState.providers.join(', ') : 'none';
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Media Generation',
+        '',
+        `Connected providers: ${connected}.`,
+        '',
+        'Use this source for AI image, video, avatar, and render generation after the user approves the creative brief and any spend.',
+        '',
+        'Environment keys used by this app:',
+        '- `FAL_API_KEY` for Fal. Legacy alias: `SQUAD_FAL_API_KEY`.',
+        '- `WAVESPEED_API_KEY` for WaveSpeed. Legacy alias: `SQUAD_WAVESPEED_API_KEY`.',
+        '- `REPLICATE_API_TOKEN` for Replicate.',
+        '- `HEYGEN_API_KEY` for HeyGen. Legacy alias: `SQUAD_HEYGEN_API_KEY`.',
+        '- `MUAPI_API_KEY` for MuAPI.',
+        '- `RUNPOD_API_KEY` and optional `RUNPOD_LTX_ENDPOINT_ID` for RunPod.',
+        '',
+        'Provider auth facts:',
+        '- Fal uses `Authorization: Key $FAL_API_KEY`.',
+        '- Replicate uses `Authorization: Bearer $REPLICATE_API_TOKEN`.',
+        '- WaveSpeed uses `Authorization: Bearer $WAVESPEED_API_KEY`.',
+        '',
+        'Routing rules:',
+        '1. Choose the provider by job fit: still image, image reference, image edit, short video, avatar, render, speed, cost, and connected keys.',
+        '2. Do not spend or call paid generation until the user approves the exact brief.',
+        '3. Never put secret values in chat, files, outputs, or logs. Reference env vars in commands.',
+        '4. Save generated files locally, then publish user-facing results with `create_output` and `showInCanvas: true` when available.',
+        '5. For artwork with typography, generate base art first, then finish layout/type through `artwork_compose`.',
+        '6. If no connected provider fits the job, return a production-ready prompt/spec and name the missing key.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Built-in source for Shopify Admin GraphQL operations.
  *
  * Reads can execute directly. Writes are routed through the bundled local
@@ -1342,6 +1425,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === YOUTUBE_RESEARCH_SLUG
     || slug === OPEN_SLIDE_SLUG
     || slug === ZERO_SLUG
+    || slug === MEDIA_GENERATION_SLUG
     || slug === SHOPIFY_SLUG
     || slug === PRINTIFY_SLUG
     || slug === RUNNER_DOCS_SLUG
