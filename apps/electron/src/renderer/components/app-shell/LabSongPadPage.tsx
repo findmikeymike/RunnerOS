@@ -101,8 +101,8 @@ const INITIAL_SECTIONS: SongSection[] = [
     text: 'Pretty trouble, dressed like I meant it\nSoft disaster, nobody gets it',
   },
   { id: 'verse-2', label: 'V2', text: '', optional: true },
-  { id: 'bridge', label: 'Bridge', text: '', optional: true },
   { id: 'final-chorus', label: 'Chorus 2', text: '', optional: true },
+  { id: 'bridge', label: 'Bridge', text: '', optional: true },
 ]
 
 function fallbackSong(workspaceId?: string): LabUiSong {
@@ -150,11 +150,6 @@ function appendText(existing: string, incoming: string) {
   const clean = incoming.trim()
   if (!clean) return existing
   return existing.trim() ? `${existing.trim()}\n${clean}` : clean
-}
-
-function removeSelectedText(existing: string, selected: string) {
-  if (!selected.trim()) return existing
-  return existing.replace(selected, '').replace(/\n{3,}/g, '\n\n').trimStart()
 }
 
 function textareaBase(extra?: string) {
@@ -588,36 +583,25 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     captureProsodySelection('section', node, sectionId, explicitAnchor)
   }, [captureProsodySelection])
 
-  const clearMovedText = React.useCallback((text: string) => {
-    if (selectionSource === 'rough') {
-      setRoughText((current) => removeSelectedText(current, text))
-    } else {
-      setRememberText((current) => removeSelectedText(current, text))
-    }
-    setSelectedText('')
-  }, [selectionSource])
-
-  const sendSelectionToSection = React.useCallback((sectionId: string, shouldDuplicate = false) => {
+  const sendSelectionToSection = React.useCallback((sectionId: string) => {
     const text = selectedText.trim()
     if (!text) return
     setSections((current) => current.map((section) => (
       section.id === sectionId ? { ...section, text: appendText(section.text, text) } : section
     )))
     flashSentTarget(sectionId)
-    if (!shouldDuplicate) clearMovedText(selectedText)
-    else setSelectedText('')
+    setSelectedText('')
     setProsodySelection(null)
-  }, [clearMovedText, flashSentTarget, selectedText])
+  }, [flashSentTarget, selectedText])
 
-  const sendSelectionToRemember = React.useCallback((shouldDuplicate = false) => {
+  const sendSelectionToRemember = React.useCallback(() => {
     const text = selectedText.trim()
     if (!text) return
     setRememberText((current) => appendText(current, text))
     flashSentTarget('remember')
-    if (!shouldDuplicate) clearMovedText(selectedText)
-    else setSelectedText('')
+    setSelectedText('')
     setProsodySelection(null)
-  }, [clearMovedText, flashSentTarget, selectedText])
+  }, [flashSentTarget, selectedText])
 
   const updateSection = React.useCallback((sectionId: string, text: string) => {
     setSections((current) => current.map((section) => (
@@ -971,7 +955,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                   type="button"
                   title="Copy to Chorus"
                   disabled={!selectedText.trim()}
-                  onClick={() => sendSelectionToSection('chorus', true)}
+                  onClick={() => sendSelectionToSection('chorus')}
                   className={cn(
                     'inline-flex h-6 w-6 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-35',
                     sentFlashTarget === 'chorus'
@@ -992,7 +976,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                 onSelect={(event) => capturePadSelection('rough', event.currentTarget)}
                 onKeyUp={(event) => capturePadSelection('rough', event.currentTarget)}
                 onMouseUp={(event) => capturePadSelection('rough', event.currentTarget, { x: event.clientX + 4, y: event.clientY - 34 })}
-                placeholder="Dump lines, images, hooks, bad drafts, voice notes transcribed into words..."
+                placeholder=""
                 className={textareaBase('min-h-[560px]')}
               />
 
@@ -1018,7 +1002,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
 
             <div className="flex shrink-0 items-center justify-between border-t border-white/[0.04] px-4 py-3 text-[11px] text-white/34">
               <span>{selectedText.trim() ? `${selectedCount} selected word${selectedCount === 1 ? '' : 's'} from ${selectionSource}` : 'Select a line or phrase to move it.'}</span>
-              <span>Move organizes. It never locks.</span>
+              <span>Send copies. Your rough pad stays intact.</span>
             </div>
           </section>
 

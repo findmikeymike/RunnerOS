@@ -41,8 +41,8 @@ export const LAB_DEFAULT_SECTIONS: LabUiSongSection[] = [
   { id: 'pre-chorus', label: 'Pre1', text: '', optional: true },
   { id: 'chorus', label: 'Chorus', text: '' },
   { id: 'verse-2', label: 'V2', text: '', optional: true },
-  { id: 'bridge', label: 'Bridge', text: '', optional: true },
   { id: 'final-chorus', label: 'Chorus 2', text: '', optional: true },
+  { id: 'bridge', label: 'Bridge', text: '', optional: true },
 ]
 
 const SEED_SONGS: LabUiSong[] = [
