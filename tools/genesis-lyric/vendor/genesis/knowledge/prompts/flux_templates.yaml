@@ -1,0 +1,86 @@
+# FLUX Image Generation Prompt Templates
+
+templates:
+  portrait_emotional:
+    id: portrait_emotional
+    name: "Portrait Emotional"
+    description: "Character portrait with emotional weight"
+    base_template: |
+      {style_prefix}, {shot_type} of {subject_description},
+      {emotional_state} expression, {lighting_description},
+      {environment_hint}, {texture_quality}, cinematic still
+    required_vars:
+      - style_prefix
+      - shot_type
+      - subject_description
+      - emotional_state
+    optional_vars:
+      - lighting_description
+      - environment_hint
+      - texture_quality
+    example: |
+      Wong Kar-wai cinematography style, close-up portrait of a young woman,
+      melancholic longing expression, neon reflections on face,
+      rain-soaked urban night background, heavy film grain, cinematic still
+
+  environment_establishing:
+    id: environment_establishing
+    name: "Environment Establishing"
+    description: "Wide shot establishing location/mood"
+    base_template: |
+      {style_prefix}, wide establishing shot of {environment_description},
+      {atmosphere_description}, {time_of_day}, {weather_elements},
+      {mood_descriptors}, cinematic landscape photography
+    required_vars:
+      - style_prefix
+      - environment_description
+      - atmosphere_description
+    optional_vars:
+      - time_of_day
+      - weather_elements
+      - mood_descriptors
+    example: |
+      A24 film aesthetic, wide establishing shot of empty motel parking lot,
+      eerie quiet atmosphere, dusk golden hour, humid summer haze,
+      lonely isolated mood, cinematic landscape photography
+
+  abstract_mood:
+    id: abstract_mood
+    name: "Abstract Mood"
+    description: "Non-literal visual representing emotion/concept"
+    base_template: |
+      {style_prefix}, abstract visual representation of {concept},
+      {visual_metaphor}, {color_dominant}, {texture_description},
+      {movement_suggestion}, fine art photography
+    required_vars:
+      - style_prefix
+      - concept
+      - visual_metaphor
+    optional_vars:
+      - color_dominant
+      - texture_description
+      - movement_suggestion
+    example: |
+      Dali surrealism style, abstract visual representation of time passing,
+      melting clock faces floating in desert, golden amber dominant,
+      hyper-real smooth textures, frozen motion suggestion, fine art photography
+
+  detail_intimate:
+    id: detail_intimate
+    name: "Detail Intimate"
+    description: "Extreme close-up on meaningful detail"
+    base_template: |
+      {style_prefix}, extreme close-up macro shot of {detail_subject},
+      {surface_texture}, {lighting_quality}, {symbolic_weight},
+      shallow depth of field, intimate detail photography
+    required_vars:
+      - style_prefix
+      - detail_subject
+      - surface_texture
+    optional_vars:
+      - lighting_quality
+      - symbolic_weight
+    example: |
+      70s vintage film aesthetic, extreme close-up macro shot of hands holding photograph,
+      weathered skin texture with film grain, warm golden hour side lighting,
+      nostalgic memory symbolism, shallow depth of field, intimate detail photography

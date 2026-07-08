@@ -1,0 +1,102 @@
+# Environment & Mood Styles
+
+liminal_spaces:
+  id: liminal_spaces
+  name: "Liminal Spaces"
+  category: environment
+  description: "Empty transitional spaces, eerie calm, fluorescent unease"
+  visual:
+    color_grade: "muted institutional tones, sickly fluorescent, beige and pale green"
+    lighting: "harsh overhead fluorescent, flat unsettling"
+    texture: "worn carpet, drop ceiling tiles, institutional decay"
+    contrast: "flat, even, unsettlingly shadowless"
+  mood:
+    primary: "uncanny"
+    secondary: ["lonely", "nostalgic", "anxious", "dreamlike"]
+    energy: "still, waiting, suspended"
+  camera:
+    movement: "slow creeping, static unease, subtle push"
+    framing: "empty center, long corridors, vanishing points"
+    angles: "eye-level, straight on, architectural"
+  prompt_prefix: "liminal space aesthetic, empty transitional environment, harsh fluorescent lighting, eerie calm, faded institutional colors, worn carpet, uncanny valley, backrooms aesthetic"
+  negative_prompt: "crowded, natural lighting, warm, cozy, populated, outdoor nature"
+  kling_motion_hints:
+    - "slow unsettling push forward"
+    - "flickering fluorescent light"
+    - "creeping drift through empty space"
+
+neon_city:
+  id: neon_city
+  name: "Neon City"
+  category: environment
+  description: "Rain-soaked urban night, neon reflections, Blade Runner atmosphere"
+  visual:
+    color_grade: "deep teals and magentas, neon pink and blue, dark shadows"
+    lighting: "neon signs, wet street reflections, fog diffusion"
+    texture: "rain on glass, wet pavement, chrome surfaces, steam"
+    contrast: "high, deep blacks with neon pops"
+  mood:
+    primary: "noir"
+    secondary: ["melancholic", "futuristic", "isolated", "mysterious"]
+    energy: "slow pulse, urban rhythm, contemplative"
+  camera:
+    movement: "slow drift through streets, reflections tracking"
+    framing: "faces in neon, silhouettes, city reflections"
+    angles: "street level, looking up at signs"
+  prompt_prefix: "neon city night, rain-soaked urban streets, neon reflections on wet pavement, Blade Runner atmosphere, cyan and magenta lighting, fog and steam, cyberpunk noir"
+  negative_prompt: "daylight, natural, rural, clean dry streets, warm sunny"
+  kling_motion_hints:
+    - "rain falling through neon light"
+    - "slow drift past neon signs"
+    - "reflections rippling in puddles"
+
+
+desert_isolation:
+  id: desert_isolation
+  name: "Desert/Isolation"
+  category: environment
+  description: "Vast emptiness, heat haze, single figure against expanse"
+  visual:
+    color_grade: "warm earth tones, bleached highlights, orange and tan"
+    lighting: "harsh midday sun, heat shimmer, long shadows at golden hour"
+    texture: "dust, cracked earth, sand grain, heat distortion"
+    contrast: "high, harsh sun, deep shadows"
+  mood:
+    primary: "isolation"
+    secondary: ["existential", "vast", "spiritual", "searching"]
+    energy: "slow, meditative, expansive"
+  camera:
+    movement: "slow pan across landscape, distant figure tracking"
+    framing: "small subject in vast space, horizon dominant"
+    angles: "low looking up, emphasizing sky and scale"
+  prompt_prefix: "desert isolation aesthetic, vast empty landscape, single figure against expanse, heat haze distortion, warm earth tones, harsh sunlight, existential mood, cinematic wide shot"
+  negative_prompt: "crowded, urban, lush green, water, rain, night"
+  kling_motion_hints:
+    - "slow pan across endless horizon"
+    - "heat shimmer distortion"
+    - "dust particles floating"
+
+clean_modern:
+  id: clean_modern
+  name: "Clean Modern"
+  category: environment
+  description: "Minimal contemporary aesthetic, white space, sharp lines"
+  visual:
+    color_grade: "neutral whites and grays, selective color accents, clean"
+    lighting: "soft even studio light, diffused, shadowless"
+    texture: "smooth surfaces, matte finishes, crisp edges"
+    contrast: "low-medium, controlled, balanced"
+  mood:
+    primary: "contemporary"
+    secondary: ["minimal", "sophisticated", "calm", "luxurious"]
+    energy: "still, poised, intentional"
+  camera:
+    movement: "smooth slow dolly, precise tracking"
+    framing: "negative space, centered subjects, geometric"
+    angles: "straight on, architectural precision"
+  prompt_prefix: "clean modern aesthetic, minimal white space, contemporary design, soft even lighting, sharp lines, sophisticated simplicity, high-end product photography style"
+  negative_prompt: "cluttered, vintage, grunge, warm tones, chaos, organic mess"
+  kling_motion_hints:
+    - "smooth precise dolly movement"
+    - "slow elegant orbit"
+    - "static with subtle light shift"

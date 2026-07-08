@@ -1,0 +1,321 @@
+{
+  "_meta": {
+    "description": "Initial seed primitives for PHOTO_EDITORIAL family. Decomposed from DP and Art.txt reference prompts. Hand-curated, not auto-extracted. All entries tagged family=photo_editorial.",
+    "version": 1,
+    "count": 31,
+    "loaded_by": "core/prompt_alchemy.py at import time; merged into PRIMITIVES dict."
+  },
+
+  "primitives": {
+
+    "kit_of_parts_breakdown": {
+      "family": "photo_editorial",
+      "category": "composition",
+      "name": "Kit-of-Parts Breakdown",
+      "prompt_snippet": "collage-like breakdown of subject, central medium-length shot with multiple detailed close-up inset panels arranged within same frame, each inset bordered by thin white line, white target reticle symbol centered within each inset, detailed inspection aesthetic",
+      "negative": "chaotic, untidy, random placement, clip-art",
+      "tags": ["editorial", "analytical", "detail_forward", "high_fashion"],
+      "intensity": "bold"
+    },
+
+    "stacked_triptych_fragments": {
+      "family": "photo_editorial",
+      "category": "composition",
+      "name": "Stacked Triptych Fragments",
+      "prompt_snippet": "subject face cropped into three vertically-stacked sections (top: eye, middle: nose, bottom: mouth), each section displayed in its own vertically aligned object/screen, centered composition",
+      "negative": "single frame, unified face, symmetrical halves",
+      "tags": ["editorial", "surreal", "fragmentation", "object_forward"],
+      "intensity": "bold"
+    },
+
+    "floating_dominant_subject": {
+      "family": "photo_editorial",
+      "category": "composition",
+      "name": "Floating Dominant Subject",
+      "prompt_snippet": "large floating photograph of subject dominating open space, fragments of the image slowly falling like dust, symbolic composition",
+      "negative": "grounded, static, fully intact",
+      "tags": ["editorial", "symbolic", "fine_art", "fragment"],
+      "intensity": "bold"
+    },
+
+    "crouch_on_platform": {
+      "family": "photo_editorial",
+      "category": "composition",
+      "name": "Crouch on Platform",
+      "prompt_snippet": "subject crouches powerfully center frame, one knee raised, one hand flat on the ground, positioned on a single perfectly square intensely bright illuminated platform",
+      "negative": "standing, seated in chair, reclining",
+      "tags": ["editorial", "powerful", "fashion", "void"],
+      "intensity": "bold"
+    },
+
+    "vertical_stacked_figures": {
+      "family": "photo_editorial",
+      "category": "composition",
+      "name": "Vertical Stacked Figures",
+      "prompt_snippet": "three overlapping figures in vertical layered composition, foremost figure sharply illuminated and dominating the scene, the others emerging partially from shadows behind and above, cascading stacked structure, solemn and theatrical arrangement",
+      "negative": "horizontal arrangement, equal lighting, isolated figures",
+      "tags": ["editorial", "baroque", "theatrical", "sacred"],
+      "intensity": "bold"
+    },
+
+    "centered_surreal_object": {
+      "family": "photo_editorial",
+      "category": "composition",
+      "name": "Centered Surreal Object",
+      "prompt_snippet": "single object centered on surreal minimalist landscape, clear sky, strict symmetrical framing, object occupies center third of frame",
+      "negative": "cluttered, off-center, multiple objects",
+      "tags": ["surreal", "minimal", "editorial"],
+      "intensity": "moderate"
+    },
+
+    "knitted_portrait": {
+      "family": "photo_editorial",
+      "category": "composition",
+      "name": "Knitted Portrait",
+      "prompt_snippet": "close up horizontally oriented portrait of subject rendered as knitted fabric, floating against a solid background, subject fills frame",
+      "negative": "full scene, landscape orientation, realistic skin",
+      "tags": ["editorial", "textile", "craft", "surreal"],
+      "intensity": "bold"
+    },
+
+    "layered_collage_portrait": {
+      "family": "photo_editorial",
+      "category": "composition",
+      "name": "Layered Collage Portrait",
+      "prompt_snippet": "layered collage art, subject profile shot with integrated textures as overlays, mixed-media composition, sophisticated layering",
+      "negative": "flat single-layer photo, no overlay",
+      "tags": ["editorial", "collage", "mixed_media", "fine_art"],
+      "intensity": "moderate"
+    },
+
+    "hard_on_camera_flash": {
+      "family": "photo_editorial",
+      "category": "lighting",
+      "name": "Hard On-Camera Flash",
+      "prompt_snippet": "hard on-camera flash photography, high-contrast sharp shadows cast behind subject on back wall, overexposed highlights, direct frontal flash",
+      "negative": "soft lighting, diffused, natural light, golden hour",
+      "tags": ["editorial", "flash", "documentary", "raw"],
+      "intensity": "bold"
+    },
+
+    "single_source_underlighting": {
+      "family": "photo_editorial",
+      "category": "lighting",
+      "name": "Single-Source Underlighting",
+      "prompt_snippet": "single source extreme underlighting from below the subject, dramatic upward shadows on face and body, mysterious futuristic editorial mood",
+      "negative": "top-down, ambient, multi-source, soft overhead",
+      "tags": ["editorial", "dramatic", "futuristic", "void"],
+      "intensity": "bold"
+    },
+
+    "caravaggio_chiaroscuro": {
+      "family": "photo_editorial",
+      "category": "lighting",
+      "name": "Caravaggio Chiaroscuro",
+      "prompt_snippet": "strong single directional light source, deep black shadows, sculptural illumination of subject, rich chiaroscuro, baroque contrast, painterly shadow falloff",
+      "negative": "flat lighting, ambient, high-key, soft shadows",
+      "tags": ["baroque", "dramatic", "sacred", "painterly"],
+      "intensity": "bold"
+    },
+
+    "midnight_neon_ambient": {
+      "family": "photo_editorial",
+      "category": "lighting",
+      "name": "Midnight Neon Ambient",
+      "prompt_snippet": "deep midnight blue neon ambient lighting along edges, warm amber accent from single vintage lamp, cool-vs-warm dual temperature contrast, atmospheric depth",
+      "negative": "daylight, single-temperature, harsh",
+      "tags": ["nocturne", "atmospheric", "editorial", "cool_warm_contrast"],
+      "intensity": "moderate"
+    },
+
+    "studio_controlled_cinematic": {
+      "family": "photo_editorial",
+      "category": "lighting",
+      "name": "Studio Controlled Cinematic",
+      "prompt_snippet": "soft overhead key light with faint front fill, controlled shadows, slight specular highlights on reflective surfaces, clean studio lighting",
+      "negative": "harsh, uncontrolled, natural, documentary",
+      "tags": ["studio", "editorial", "cinematic", "clean"],
+      "intensity": "subtle"
+    },
+
+    "point_and_shoot_flash": {
+      "family": "photo_editorial",
+      "category": "camera_grammar",
+      "name": "Point-and-Shoot Flash",
+      "prompt_snippet": "point-and-shoot flash photograph aesthetic, consumer-grade 35mm compact camera look, slight color cast, authentic candid quality",
+      "negative": "professional digital, medium format, shallow DOF",
+      "tags": ["casual", "raw", "authentic", "90s"],
+      "intensity": "moderate"
+    },
+
+    "crt_monochrome_signal": {
+      "family": "photo_editorial",
+      "category": "camera_grammar",
+      "name": "CRT Monochrome Signal",
+      "prompt_snippet": "red monochrome CRT signal, visible scanlines, slight distortion, plastic casing wear, dust on screen, subtle chromatic aberration, CRT glass reflection",
+      "negative": "sharp digital, clean LCD, color video",
+      "tags": ["analog", "retro", "degraded", "object_forward"],
+      "intensity": "bold"
+    },
+
+    "arri_alexa_studio": {
+      "family": "photo_editorial",
+      "category": "camera_grammar",
+      "name": "ARRI Alexa 35 Studio",
+      "prompt_snippet": "shot on ARRI Alexa 35 with Zeiss Ultra Prime 50mm lens at f/4, subtle film grain, soft halation, slight chromatic aberration, no oversharpening, cinematic material realism",
+      "negative": "oversharpened, digital smoothness, phone camera",
+      "tags": ["cinematic", "studio", "editorial", "professional"],
+      "intensity": "subtle"
+    },
+
+    "kodak_vision3_500t": {
+      "family": "photo_editorial",
+      "category": "camera_grammar",
+      "name": "Kodak Vision3 500T Film",
+      "prompt_snippet": "shot on 35mm motion picture film, Kodak Vision3 500T, 50mm lens, subtle halation and light bloom, high gloss specular highlights where appropriate",
+      "negative": "digital video aesthetic, oversharpened",
+      "tags": ["cinematic", "film", "editorial", "high_fashion"],
+      "intensity": "moderate"
+    },
+
+    "fujifilm_velvia_50": {
+      "family": "photo_editorial",
+      "category": "camera_grammar",
+      "name": "Fujifilm Velvia 50",
+      "prompt_snippet": "shot on Fujifilm Velvia 50 film, saturated color reproduction, fine grain, rich tonal depth, vintage slide film aesthetic",
+      "negative": "desaturated, modern digital, muted",
+      "tags": ["film", "saturated", "editorial", "vintage"],
+      "intensity": "moderate"
+    },
+
+    "kintsugi_porcelain_skin": {
+      "family": "photo_editorial",
+      "category": "material_modifier",
+      "name": "Kintsugi Porcelain Skin",
+      "prompt_snippet": "porcelain pale skin with golden kintsugi veins as real textured cracks filled with warm matte gold along temples, cheekbones and fingers, luminous fracture aesthetic",
+      "negative": "smooth unbroken skin, painted-on gold, digital overlay",
+      "tags": ["material_realism", "kintsugi", "editorial", "hybrid"],
+      "intensity": "bold"
+    },
+
+    "porcelain_miniature": {
+      "family": "photo_editorial",
+      "category": "material_modifier",
+      "name": "Porcelain Miniature",
+      "prompt_snippet": "smooth porcelain skin, glossy reflective surface, miniature scale, pale white tone, reflective highlights, ultra-smooth ceramic finish",
+      "negative": "rough texture, matte, full-size, skin pores",
+      "tags": ["miniature", "ceramic", "editorial", "surreal"],
+      "intensity": "bold"
+    },
+
+    "knitted_fabric_surface": {
+      "family": "photo_editorial",
+      "category": "material_modifier",
+      "name": "Knitted Fabric Surface",
+      "prompt_snippet": "rendered as knitted fabric, visible yarn weave, textile texture, handcrafted wool or cotton quality, tactile surface",
+      "negative": "smooth skin, photographic subject, digital render",
+      "tags": ["textile", "craft", "surreal", "material_swap"],
+      "intensity": "bold"
+    },
+
+    "silk_embroidery_overlay": {
+      "family": "photo_editorial",
+      "category": "material_modifier",
+      "name": "Silk Embroidery Overlay",
+      "prompt_snippet": "integrated textures of vintage Chinese silk embroidery layered onto surface, thread detail visible, rich textile pattern",
+      "negative": "plain fabric, printed graphic, digital texture",
+      "tags": ["textile", "global_fusion", "fine_art"],
+      "intensity": "moderate"
+    },
+
+    "gold_leaf_kintsugi_overlay": {
+      "family": "photo_editorial",
+      "category": "material_modifier",
+      "name": "Gold Leaf Kintsugi Overlay",
+      "prompt_snippet": "gold leaf kintsugi cracks across the face, delicate metallic overlay, thin veins of warm gold, preserved imperfection aesthetic",
+      "negative": "painted gold, shiny plastic, unbroken surface",
+      "tags": ["kintsugi", "gold_leaf", "fine_art", "hybrid"],
+      "intensity": "moderate"
+    },
+
+    "editorial_void_platform": {
+      "family": "photo_editorial",
+      "category": "scene_archetype",
+      "name": "Editorial Void Platform",
+      "prompt_snippet": "vast pitch-black void background, single perfectly square intensely bright illuminated platform at center, strong negative space, dramatic shadow masking",
+      "negative": "busy background, any environment, ambient light elsewhere",
+      "tags": ["editorial", "void", "futuristic", "platform"],
+      "intensity": "bold"
+    },
+
+    "voyeuristic_contained_space": {
+      "family": "photo_editorial",
+      "category": "scene_archetype",
+      "name": "Voyeuristic Contained Space",
+      "prompt_snippet": "3D-rendered transparent glass box revealing intimate interior scene, slight lens condensation on glass walls, voyeuristic composition peering in from outside",
+      "negative": "open environment, no containment, direct framing",
+      "tags": ["contained", "voyeuristic", "surreal", "intimate"],
+      "intensity": "bold"
+    },
+
+    "surreal_minimal_landscape": {
+      "family": "photo_editorial",
+      "category": "scene_archetype",
+      "name": "Surreal Minimal Landscape",
+      "prompt_snippet": "clear blue sky above a small grassy hill, vast minimalist landscape, single subject perched atop, dreamlike stillness",
+      "negative": "complex environment, urban, interior, cluttered",
+      "tags": ["surreal", "minimal", "landscape", "editorial"],
+      "intensity": "moderate"
+    },
+
+    "symbolic_fragment_scene": {
+      "family": "photo_editorial",
+      "category": "scene_archetype",
+      "name": "Symbolic Fragment Scene",
+      "prompt_snippet": "dramatic lighting reveals large floating object in open space, fragments slowly falling like dust, symbolic fine-art composition, quiet ominous energy",
+      "negative": "intact objects, chaotic motion, bright daylight",
+      "tags": ["symbolic", "fragment", "fine_art", "dust"],
+      "intensity": "bold"
+    },
+
+    "creative_workspace_nocturne": {
+      "family": "photo_editorial",
+      "category": "scene_archetype",
+      "name": "Creative Workspace Nocturne",
+      "prompt_snippet": "intimate midnight creative workspace, walls layered with reference prints pinned chaotically, string connections between references, scattered materials on desk, late-night intensity",
+      "negative": "clean minimalist studio, empty desk, daylight",
+      "tags": ["intimate", "creative", "nocturne", "layered"],
+      "intensity": "moderate"
+    },
+
+    "baroque_sacred_chamber": {
+      "family": "photo_editorial",
+      "category": "scene_archetype",
+      "name": "Baroque Sacred Chamber",
+      "prompt_snippet": "deep black baroque background, expressive drapery, sculptural surfaces, monumental vertical composition, sacred and ominous atmosphere",
+      "negative": "modern, minimal, bright, casual",
+      "tags": ["baroque", "sacred", "dramatic", "monumental"],
+      "intensity": "bold"
+    },
+
+    "global_fusion_texture": {
+      "family": "photo_editorial",
+      "category": "aesthetic_modifier",
+      "name": "Global Fusion Texture",
+      "prompt_snippet": "global-fusion aesthetic, combining textile embroidery, architectural blueprints, gold leaf accents, ink wash background, sophisticated and rich layered texture",
+      "negative": "single-tradition, monocultural, flat texture",
+      "tags": ["global_fusion", "layered", "fine_art"],
+      "intensity": "moderate"
+    },
+
+    "scanline_chromatic_aberration": {
+      "family": "photo_editorial",
+      "category": "aesthetic_modifier",
+      "name": "Scanlines + Chromatic Aberration",
+      "prompt_snippet": "visible scanlines across image, subtle RGB chromatic aberration along high-contrast edges, analog video degradation aesthetic",
+      "negative": "clean digital, sharp modern, no artifacts",
+      "tags": ["analog", "degraded", "retro", "object_forward"],
+      "intensity": "subtle"
+    }
+  }
+}

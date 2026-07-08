@@ -1,0 +1,80 @@
+# Genre & Aesthetic Styles
+
+a24:
+  id: a24
+  name: "A24"
+  category: genre
+  description: "Moody indie cinema, natural light, soft diffusion, dreamy grain, emotional honesty, slightly eerie"
+  visual:
+    color_grade: "naturalistic with mood push, desaturated earth tones, subtle color cast"
+    lighting: "natural light dominant, soft diffusion, window light, practicals"
+    texture: "organic film grain, soft focus moments, natural imperfections"
+    contrast: "medium, natural dynamic range, lifted shadows"
+  mood:
+    primary: "emotional"
+    secondary: ["honest", "eerie", "intimate", "melancholic", "human"]
+    energy: "quiet, observational, building tension"
+  camera:
+    movement: "handheld intimacy, slow contemplative, breathing camera"
+    framing: "faces in thought, environmental portraits, negative space"
+    angles: "natural eye-level, occasionally unsettling"
+  prompt_prefix: "A24 film aesthetic, moody indie cinema, natural soft lighting, dreamy film grain, emotional honesty, slightly eerie atmosphere, intimate cinematography, naturalistic color grading, human moments"
+  negative_prompt: "blockbuster, CGI, oversaturated, action movie, generic hollywood, bright cheerful"
+  kling_motion_hints:
+    - "subtle handheld breathing"
+    - "slow contemplative drift"
+    - "natural light shifting"
+    - "intimate push toward face"
+
+giallo:
+  id: giallo
+  name: "Giallo"
+  category: genre
+  description: "Italian horror aesthetic, bold primary colors, dramatic shadows, stylized violence, operatic"
+  visual:
+    color_grade: "bold saturated primaries, deep reds, electric blues, sickly greens"
+    lighting: "dramatic colored gels, harsh shadows, expressionistic"
+    texture: "70s film grain, soft focus glamour, rich saturation"
+    contrast: "extreme, deep blacks, colored highlights"
+  mood:
+    primary: "dread"
+    secondary: ["stylish", "operatic", "sensual", "violent", "mysterious"]
+    energy: "building tension, sudden violence, baroque"
+  camera:
+    movement: "stalking POV, dramatic reveals, slow zoom"
+    framing: "eyes in shadow, gloved hands, fragmented bodies"
+    angles: "dutch angles, extreme close-ups, voyeuristic"
+  prompt_prefix: "Giallo film aesthetic, Italian horror style, bold primary color lighting, deep red and electric blue gels, dramatic expressionistic shadows, 70s film texture, operatic dread, Argento Bava style"
+  negative_prompt: "natural lighting, desaturated, realistic, daytime, cheerful, modern horror"
+  kling_motion_hints:
+    - "slow stalking push forward"
+    - "dramatic zoom into detail"
+    - "shadows moving across frame"
+    - "voyeuristic drift"
+
+
+bw_editorial:
+  id: bw_editorial
+  name: "B&W Model/Editorial"
+  category: aesthetic
+  description: "High fashion black and white, dramatic contrast, model photography, sculptural lighting"
+  visual:
+    color_grade: "pure black and white, rich tonal range, silver gelatin quality"
+    lighting: "dramatic sculpted light, hard shadows, rim lighting, studio controlled"
+    texture: "smooth skin, sharp details, fine grain or clean digital"
+    contrast: "high, deep blacks, bright highlights, strong tonal separation"
+  mood:
+    primary: "elegant"
+    secondary: ["powerful", "timeless", "sculptural", "sophisticated"]
+    energy: "poised, confident, still power"
+  camera:
+    movement: "slow elegant orbit, subtle push, mostly static"
+    framing: "strong poses, negative space, face and form"
+    angles: "slightly low heroic, straight on confrontational"
+  prompt_prefix: "black and white editorial photography, high fashion model aesthetic, dramatic sculptural lighting, deep contrast, elegant poses, timeless sophistication, studio lighting, silver gelatin print quality"
+  negative_prompt: "color, casual, snapshot, amateur, soft lighting, low contrast"
+  kling_motion_hints:
+    - "slow elegant rotation"
+    - "subtle light movement across form"
+    - "static with breathing presence"
+    - "slow push to detail"

@@ -1,0 +1,308 @@
+{
+  "_meta": {
+    "description": "Seed primitives for STREET family — framed as gallery-level neo-expressionist work (Basquiat, Haring) at full aesthetic weight. Explicitly EXCLUDES: handwritten words/text (AI generates random copy), spray-paint graffiti clichés, subway-tag wannabe aesthetics. Symbol-based iconography only. Kanye/Elon-tier monumental minimalism and Basquiat/Haring's actual gallery work. All entries tagged family=street.",
+    "version": 2,
+    "count": 29,
+    "loaded_by": "core/prompt_alchemy.py at import time; merged into PRIMITIVES dict alongside PHOTO_EDITORIAL seeds.",
+    "coexistence_note": "Existing TREATMENTS dict has basquiat, haring, graffiti_simple as monolithic fallbacks. New PRIMITIVES below enable compositional mode for STREET family.",
+    "design_principles": [
+      "No handwritten words or text generation. AI cannot know what word is contextually correct, defaults to random cringe.",
+      "Symbols only (crown, skull, halo, ©, arrow, figure). Shapes carry meaning without literal text.",
+      "No graffiti-coded aesthetics (spray paint on walls, subway tags, aged tag layers). Gallery-level medium only.",
+      "Monumental, minimal, concept-driven. Basquiat's canvases hang in the Whitney. Frame accordingly."
+    ]
+  },
+
+  "primitives": {
+
+    "crown_and_skull_focal": {
+      "family": "street",
+      "category": "composition",
+      "name": "Crown and Skull Focal",
+      "prompt_snippet": "single central subject with a three-point crown above and an anatomical-study skull adjacent or overlapping, composition anchored on this iconographic pairing, monumental focal weight",
+      "negative": "multiple subjects, decorative crown, cartoon skull, busy background",
+      "tags": ["basquiat", "iconic", "central_figure", "monumental"],
+      "intensity": "bold"
+    },
+
+    "monolithic_single_form": {
+      "family": "street",
+      "category": "composition",
+      "name": "Monolithic Single Form",
+      "prompt_snippet": "one massive sculptural subject positioned dead center with architectural weight, occupying two-thirds of the frame, treated as a monument, commanding presence",
+      "negative": "small subject, cluttered, multiple competing elements",
+      "tags": ["monumental", "minimal", "architectural"],
+      "intensity": "bold"
+    },
+
+    "whited_out_revision": {
+      "family": "street",
+      "category": "composition",
+      "name": "Whited-Out Revision",
+      "prompt_snippet": "earlier marks and shapes partially painted over in thick white paint, ghosts of prior gestures visible through the white, revision itself becomes the aesthetic, Basquiat's overpaint technique",
+      "negative": "pristine first-pass painting, no revision, clean surface",
+      "tags": ["basquiat", "process_forward", "revision", "gallery"],
+      "intensity": "bold"
+    },
+
+    "edge_to_edge_density": {
+      "family": "street",
+      "category": "composition",
+      "name": "Edge-to-Edge Density",
+      "prompt_snippet": "dense field of gestural marks and symbolic shapes extending fully to every edge, all-over composition with no negative space, no singular focal point, activated surface",
+      "negative": "negative space, centered subject, clean empty areas",
+      "tags": ["basquiat", "dense", "all_over"],
+      "intensity": "bold"
+    },
+
+    "dancing_figure_radiant": {
+      "family": "street",
+      "category": "composition",
+      "name": "Dancing Figure with Radiant Lines",
+      "prompt_snippet": "single simple figure caught mid-motion, short bold radiating lines emanating from the body to suggest energy and movement, centered composition",
+      "negative": "static figure, detailed anatomy, no motion indication",
+      "tags": ["haring", "movement", "iconic"],
+      "intensity": "bold"
+    },
+
+    "oil_stick_on_raw_canvas": {
+      "family": "street",
+      "category": "medium_grammar",
+      "name": "Oil Stick on Raw Canvas",
+      "prompt_snippet": "rendered in oil stick marks on raw unprimed linen canvas, visible canvas weave between marks, waxy pigment texture, exposed ground, museum-quality Basquiat medium",
+      "negative": "digital finish, primed smooth surface, fully covered canvas",
+      "tags": ["basquiat", "gallery", "tactile", "raw_canvas"],
+      "intensity": "bold"
+    },
+
+    "oil_on_primed_linen": {
+      "family": "street",
+      "category": "medium_grammar",
+      "name": "Oil on Primed Linen",
+      "prompt_snippet": "oil paint applied to primed linen canvas with mixed brush and oil stick, visible brushwork, deliberate mark-making, Basquiat's later-career gallery medium",
+      "negative": "acrylic plastic sheen, digital flat fill, no visible brushwork",
+      "tags": ["basquiat_mature", "gallery", "oil"],
+      "intensity": "moderate"
+    },
+
+    "marker_on_cardboard": {
+      "family": "street",
+      "category": "medium_grammar",
+      "name": "Marker on Cardboard",
+      "prompt_snippet": "thick black marker strokes on corrugated cardboard, cardboard flute texture beneath, some ink bleeding into corrugation, raw studio-floor quality",
+      "negative": "thin pen, smooth white paper, digital line",
+      "tags": ["raw", "studio", "bold_line"],
+      "intensity": "moderate"
+    },
+
+    "acrylic_drip_on_canvas": {
+      "family": "street",
+      "category": "medium_grammar",
+      "name": "Acrylic Drip on Canvas",
+      "prompt_snippet": "acrylic paint with visible brushstrokes, intentional vertical drips of wet paint running down from fresh marks, canvas texture at edges, gestural control",
+      "negative": "flat digital fill, no visible medium",
+      "tags": ["painterly", "drip", "gestural"],
+      "intensity": "moderate"
+    },
+
+    "pastel_on_kraft": {
+      "family": "street",
+      "category": "medium_grammar",
+      "name": "Oil Pastel on Kraft Paper",
+      "prompt_snippet": "oil pastel smearing and layered on brown kraft paper, rich pigment buildup, paper texture showing through, gallery-level works-on-paper medium",
+      "negative": "spray paint, digital fill, clean lined drawing",
+      "tags": ["works_on_paper", "gallery", "pigment"],
+      "intensity": "moderate"
+    },
+
+    "basquiat_primary_on_black": {
+      "family": "street",
+      "category": "aesthetic_modifier",
+      "name": "Basquiat Primaries",
+      "prompt_snippet": "raw primary color palette of red, yellow, blue, and black, applied flatly, neo-expressionist color ethos, unmixed pigment",
+      "negative": "muted pastels, gradient blending, realistic skin tones",
+      "tags": ["basquiat", "primary", "neo_expressionist"],
+      "intensity": "bold"
+    },
+
+    "haring_pop_primaries": {
+      "family": "street",
+      "category": "aesthetic_modifier",
+      "name": "Haring Pop Primaries",
+      "prompt_snippet": "bold pop primary palette — red, yellow, blue, green — applied as flat saturated fills on black or white ground",
+      "negative": "muted, desaturated, realistic, gradient shading",
+      "tags": ["haring", "pop", "flat_fill"],
+      "intensity": "bold"
+    },
+
+    "monochrome_high_contrast": {
+      "family": "street",
+      "category": "aesthetic_modifier",
+      "name": "Monochrome High Contrast",
+      "prompt_snippet": "pure black marks on white ground or pure white on black, high contrast with no grey tones, single-ink clarity",
+      "negative": "grey tones, color accents, soft shading",
+      "tags": ["monochrome", "stark", "ink"],
+      "intensity": "moderate"
+    },
+
+    "raw_canvas_earth_tones": {
+      "family": "street",
+      "category": "aesthetic_modifier",
+      "name": "Raw Canvas Earth Tones",
+      "prompt_snippet": "natural linen canvas color as the dominant ground, earth-tone marks in ochre, burnt umber, raw sienna, with occasional pops of red or black",
+      "negative": "saturated pop colors, pure white background, neon",
+      "tags": ["basquiat", "earth", "canvas_ground"],
+      "intensity": "subtle"
+    },
+
+    "crown_motif": {
+      "family": "street",
+      "category": "motif",
+      "name": "Three-Point Crown",
+      "prompt_snippet": "three-point crown symbol rendered with quick gestural marks, sitting above or on the primary subject, Basquiat crown iconography, symbol only",
+      "negative": "photorealistic crown, ornate metal crown, detailed jewels",
+      "tags": ["basquiat", "iconic", "sovereignty"],
+      "intensity": "moderate"
+    },
+
+    "skull_motif": {
+      "family": "street",
+      "category": "motif",
+      "name": "Anatomical Study Skull",
+      "prompt_snippet": "human skull rendered as anatomical-study drawing with gestural quick marks, sketched as if from a medical textbook but raw, integrated into composition",
+      "negative": "Halloween cartoon skull, decorative sugar skull, photorealistic",
+      "tags": ["basquiat", "anatomy", "mortality"],
+      "intensity": "moderate"
+    },
+
+    "radiant_baby": {
+      "family": "street",
+      "category": "motif",
+      "name": "Radiant Baby",
+      "prompt_snippet": "simple crawling baby figure with short bold lines radiating outward from its body, Keith Haring iconography, symbol only",
+      "negative": "realistic infant, detailed baby rendering",
+      "tags": ["haring", "iconic", "innocence"],
+      "intensity": "moderate"
+    },
+
+    "barking_dog": {
+      "family": "street",
+      "category": "motif",
+      "name": "Barking Dog",
+      "prompt_snippet": "three-legged barking dog figure in bold simple outline, short motion lines near mouth, Haring-adjacent iconography, flat profile view",
+      "negative": "realistic dog, detailed breed, photographic",
+      "tags": ["haring", "iconic", "animal"],
+      "intensity": "moderate"
+    },
+
+    "halo_icon": {
+      "family": "street",
+      "category": "motif",
+      "name": "Halo Icon",
+      "prompt_snippet": "simple halo ring drawn in a single gesture above a figure's head, uneven circle, deliberate imperfection, ironic-sacred framing",
+      "negative": "gilded baroque halo, perfect geometric circle, religious icon painting",
+      "tags": ["basquiat", "sacred_ironic", "symbol"],
+      "intensity": "subtle"
+    },
+
+    "copyright_mark": {
+      "family": "street",
+      "category": "motif",
+      "name": "Copyright Mark",
+      "prompt_snippet": "copyright symbol (©) placed incongruously in the composition, recontextualized commercial iconography as symbol not text",
+      "negative": "printed corporate logo, polished branding, slick vector",
+      "tags": ["basquiat", "commercial_critique", "symbol"],
+      "intensity": "subtle"
+    },
+
+    "primitive_figure": {
+      "family": "street",
+      "category": "motif",
+      "name": "Primitive Figure",
+      "prompt_snippet": "abstracted human figure with stick-like limbs and a tribal-mask face, Basquiat's recurring figure language, raw gestural construction",
+      "negative": "anatomically correct figure, polished illustration, cartoon character",
+      "tags": ["basquiat", "figure", "raw"],
+      "intensity": "moderate"
+    },
+
+    "arrow_gesture": {
+      "family": "street",
+      "category": "motif",
+      "name": "Arrow Gesture",
+      "prompt_snippet": "short bold arrow drawn in a single gestural stroke, pointing into empty space or toward another element, no text attached",
+      "negative": "diagram arrow with label, polished vector arrow, directional road sign",
+      "tags": ["basquiat", "gesture", "symbol"],
+      "intensity": "subtle"
+    },
+
+    "paint_drip": {
+      "family": "street",
+      "category": "surface_artifact",
+      "name": "Vertical Paint Drip",
+      "prompt_snippet": "clear vertical runs of wet paint dripping from fresh marks, gravity visible in the medium, imperfection as evidence of process",
+      "negative": "dry controlled paint, no drip, clean edges",
+      "tags": ["gestural", "wet", "process"],
+      "intensity": "moderate"
+    },
+
+    "whitewash_revision": {
+      "family": "street",
+      "category": "surface_artifact",
+      "name": "Whitewash Revision",
+      "prompt_snippet": "sections of the composition painted over in thick white, earlier marks ghosted beneath the white layer, visible edit history, Basquiat's overpaint as concept",
+      "negative": "pristine first-draft finish, no correction visible",
+      "tags": ["basquiat", "revision", "process_forward"],
+      "intensity": "bold"
+    },
+
+    "canvas_staple_showing": {
+      "family": "street",
+      "category": "surface_artifact",
+      "name": "Canvas Staples Showing",
+      "prompt_snippet": "raw linen canvas wraps around stretcher bars with visible staples along the edges, unprimed rough edge, studio-rawness as gallery aesthetic",
+      "negative": "finished framed artwork, clean gallery presentation with frame",
+      "tags": ["basquiat", "raw", "unfinished"],
+      "intensity": "subtle"
+    },
+
+    "aged_patina": {
+      "family": "street",
+      "category": "surface_artifact",
+      "name": "Aged Patina",
+      "prompt_snippet": "surface carries history through wear — slight stains, aged yellowing of canvas or paper, evidence of handling and time, without graffiti layers",
+      "negative": "pristine new surface, graffiti tags over old work, manufactured aging",
+      "tags": ["aged", "evidence", "authentic"],
+      "intensity": "subtle"
+    },
+
+    "gallery_mounted_canvas": {
+      "family": "street",
+      "category": "scene_archetype",
+      "name": "Gallery Mounted Canvas",
+      "prompt_snippet": "raw canvas hung on a white gallery wall, single dramatic light from above, artwork presented in contemporary art context, wooden floor below, museum-quality framing",
+      "negative": "street context, cluttered studio, outdoor wall setting",
+      "tags": ["gallery", "white_cube", "museum"],
+      "intensity": "subtle"
+    },
+
+    "sacred_white_room": {
+      "family": "street",
+      "category": "scene_archetype",
+      "name": "Sacred White Room",
+      "prompt_snippet": "vast minimalist white room with polished concrete floor, singular artwork installed with monumental weight, DONDA-era Yeezy-compound austerity, architectural sacredness",
+      "negative": "decorated gallery, multiple artworks, warm cozy lighting",
+      "tags": ["monumental", "minimal", "sacred", "kanye_tier"],
+      "intensity": "bold"
+    },
+
+    "studio_floor_in_progress": {
+      "family": "street",
+      "category": "scene_archetype",
+      "name": "Studio Floor In Progress",
+      "prompt_snippet": "raw work laid flat on studio floor, paint cans and oil sticks scattered around, in-process evidence, working document energy, no gallery polish yet",
+      "negative": "finished framed wall-hung piece, pristine studio, staged photograph",
+      "tags": ["process", "raw", "authentic"],
+      "intensity": "moderate"
+    }
+  }
+}

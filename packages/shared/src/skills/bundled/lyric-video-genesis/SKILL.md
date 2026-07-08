@@ -28,7 +28,9 @@ node bin/genesis-lyric.mjs preflight --brief-file <brief.json> --json
 node bin/genesis-lyric.mjs render --brief-file <brief.json> --approved --json
 ```
 
-`storyboard` is no-spend. It uses the ported Genesis Creative Director / Motion Director grammar: cinema modes, capture realism, shot direction, compiled motion prompts, and motion QA. Use it before generating visuals when the visual source is missing or when the user wants a cinematic shot plan.
+`storyboard` is no-spend. It uses the ported Genesis Creative Director assets plus Motion Director compiler: prompt doctrine, seed primitives, knowledge libraries, cinema modes, capture realism, shot direction, negative prompts, compiled motion prompts, and motion QA. Use it before generating visuals when the visual source is missing or when the user wants a cinematic shot plan. It does not call the original Genesis LLM/provider runtime.
+
+`doctor` validates FFmpeg plus the vendored Creative Director prompt, primitive vocabulary, and knowledge files. Treat Creative Director blockers as real setup blockers.
 
 ## Workflow
 

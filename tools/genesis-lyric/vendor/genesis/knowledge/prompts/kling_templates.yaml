@@ -1,0 +1,115 @@
+# Kling Video Generation Motion Templates
+
+templates:
+  subtle_life:
+    id: subtle_life
+    name: "Subtle Life"
+    description: "Minimal movement bringing still image to life"
+    base_template: |
+      {camera_movement}, {atmospheric_motion}, {subject_micro_movement},
+      maintaining composition, {style_motion_hint}
+    required_vars:
+      - camera_movement
+      - atmospheric_motion
+    optional_vars:
+      - subject_micro_movement
+      - style_motion_hint
+    example: |
+      static camera with subtle drift, light particles floating through frame,
+      subtle breathing chest movement, maintaining composition,
+      dreamy slow motion quality
+    energy_range: ["low"]
+
+  emotional_push:
+    id: emotional_push
+    name: "Emotional Push"
+    description: "Slow push building emotional intensity"
+    base_template: |
+      slow push in toward {focus_point}, {atmospheric_motion},
+      {emotional_intensifier}, building tension, {style_motion_hint}
+    required_vars:
+      - focus_point
+      - atmospheric_motion
+    optional_vars:
+      - emotional_intensifier
+      - style_motion_hint
+    example: |
+      slow push in toward subject's eyes, rain streaking across frame,
+      subtle expression shift, building tension, Wong Kar-wai motion blur trails
+    energy_range: ["low", "medium", "building"]
+
+  environment_alive:
+    id: environment_alive
+    name: "Environment Alive"
+    description: "Establishing shot with living atmosphere"
+    base_template: |
+      {camera_movement} across {environment}, {weather_motion},
+      {light_changes}, {environmental_life}, cinematic atmosphere
+    required_vars:
+      - camera_movement
+      - environment
+      - weather_motion
+    optional_vars:
+      - light_changes
+      - environmental_life
+    example: |
+      slow pan across neon city street, rain falling through lights,
+      flickering neon signs, distant figures moving, cinematic atmosphere
+    energy_range: ["low", "medium"]
+
+  dreamy_float:
+    id: dreamy_float
+    name: "Dreamy Float"
+    description: "Ethereal floating movement for surreal/emotional"
+    base_template: |
+      gentle floating {movement_direction}, {dreamlike_elements},
+      {soft_focus_shifts}, weightless quality, {style_motion_hint}
+    required_vars:
+      - movement_direction
+      - dreamlike_elements
+    optional_vars:
+      - soft_focus_shifts
+      - style_motion_hint
+    example: |
+      gentle floating drift upward, fabric and hair flowing weightlessly,
+      soft focus pulls between elements, weightless quality, ethereal slow motion
+    energy_range: ["low"]
+
+  energy_burst:
+    id: energy_burst
+    name: "Energy Burst"
+    description: "High energy movement for drops/climax"
+    base_template: |
+      {dynamic_camera_move}, {impact_elements}, {particle_effects},
+      {speed_quality}, explosive energy, {style_motion_hint}
+    required_vars:
+      - dynamic_camera_move
+      - impact_elements
+    optional_vars:
+      - particle_effects
+      - speed_quality
+      - style_motion_hint
+    example: |
+      rapid orbit around subject, shattered glass exploding outward,
+      sparks and debris flying, speed ramping slow to fast,
+      explosive energy, Gaspar Noé strobing quality
+    energy_range: ["high", "climax"]
+
+  orbit_reveal:
+    id: orbit_reveal
+    name: "Orbit Reveal"
+    description: "Circular movement revealing subject"
+    base_template: |
+      {orbit_speed} orbit around {subject}, {lighting_shift},
+      {reveal_element}, cinematic rotation, {style_motion_hint}
+    required_vars:
+      - orbit_speed
+      - subject
+    optional_vars:
+      - lighting_shift
+      - reveal_element
+      - style_motion_hint
+    example: |
+      slow 180-degree orbit around figure, shadows shifting across face,
+      revealing environment behind, cinematic rotation, Fincher precision movement
+    energy_range: ["medium"]

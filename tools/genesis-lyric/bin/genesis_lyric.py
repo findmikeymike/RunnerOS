@@ -7,6 +7,7 @@ import argparse
 import json
 import math
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -30,12 +31,21 @@ ASPECT_RESOLUTIONS = {
 
 GENESIS_DIRECTOR_SOURCES = {
     "creative_director_spec": "Genesis/Docs/Creative_Director_Agent_Spec.md",
+    "creative_director_prompt": "Genesis/agent/system_prompt_v2.md",
+    "creative_director_vocabulary": "Genesis/agent/vocabulary/*.json",
+    "creative_director_knowledge": "Genesis/knowledge/**/*.yaml",
     "motion_director_spec": "Genesis/Docs/MOTION_DIRECTOR_SPEC.md",
     "cinema_modes": "Genesis/agent/cinema_modes.py",
     "capture_realism": "Genesis/core/capture_realism.py",
     "motion_compiler": "Genesis/core/motion_compiler.py",
     "motion_qa": "Genesis/services/motion_qa.py",
 }
+
+MAX_LYRIC_ANCHOR_CHARS = 180
+MAX_CONCEPT_CHARS = 260
+MAX_IMAGE_PROMPT_WORDS = 190
+MAX_DIRECTOR_PRIMITIVES = 3
+MAX_KNOWLEDGE_HINTS = 4
 
 FAMILY_PROFILES = {
     "analog_photo": {
@@ -53,6 +63,14 @@ FAMILY_PROFILES = {
         "wet": False,
         "humans": True,
         "density": "heavy",
+    },
+    "photo_editorial": {
+        "label": "PHOTO_EDITORIAL",
+        "prompt": "high-concept editorial photography with one strong art-directed visual thesis, restrained surreal object logic, precise material detail, authored composition",
+        "avoid": "generic fashion ad, luxury influencer lighting, sterile commercial studio, random collage clutter, unreadable concept, readable text, logos",
+        "wet": False,
+        "humans": True,
+        "density": "light",
     },
     "performance": {
         "label": "PERFORMANCE",
@@ -184,6 +202,52 @@ def brief_value(brief: dict[str, Any], args: argparse.Namespace, key: str, defau
 
 def clean_text(value: Any) -> str:
     return " ".join(str(value or "").split()).strip()
+
+
+def compact_text(value: Any, limit: int) -> str:
+    text = clean_text(value)
+    if len(text) <= limit:
+        return text
+    shortened = text[:limit].rsplit(" ", 1)[0].rstrip(" ,.;:-")
+    return f"{shortened}..."
+
+
+def limit_words(value: str, max_words: int) -> str:
+    words = value.split()
+    if len(words) <= max_words:
+        return value
+    return " ".join(words[:max_words]).rstrip(" ,.;:-") + "..."
+
+
+def read_text_if_exists(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+    except Exception:
+        return ""
+
+
+def quoted_yaml_values(text: str, key: str) -> list[str]:
+    pattern = re.compile(rf"^\s*{re.escape(key)}:\s*\"([^\"]+)\"\s*$", re.MULTILINE)
+    return [compact_text(match.group(1), 160) for match in pattern.finditer(text)]
+
+
+def block_values(text: str, key: str) -> list[str]:
+    pattern = re.compile(rf"^\s*{re.escape(key)}:\s*\|\s*\n((?:\s{{4,}}.+\n?)+)", re.MULTILINE)
+    values = []
+    for match in pattern.finditer(text):
+        cleaned = clean_text(match.group(1))
+        if cleaned:
+            values.append(compact_text(cleaned, 220))
+    return values
+
+
+def yaml_record_field(text: str, record_id: str, field: str) -> str:
+    pattern = re.compile(rf"^\s{{2}}{re.escape(record_id)}:\s*\n(?P<body>(?:\s{{4,}}.+\n?)+)", re.MULTILINE)
+    match = pattern.search(text)
+    if not match:
+        return ""
+    values = quoted_yaml_values(match.group("body"), field)
+    return values[0] if values else ""
 
 
 def parse_float(value: Any) -> float:
@@ -362,6 +426,8 @@ def storyboard_family(brief: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     )
     if "surreal" in raw or "dream" in raw or "psychedelic" in raw:
         key = "surreal_dream"
+    elif "photo" in raw and "editorial" in raw:
+        key = "photo_editorial"
     elif "perform" in raw or "stage" in raw or "concert" in raw:
         key = "performance"
     elif "street" in raw or "expression" in raw or "paint" in raw or "graphic" in raw:
@@ -406,12 +472,166 @@ def grouped_lines(lines: list[dict[str, Any]], count: int, duration: float) -> l
             end = round((index + 1) * duration / count, 3)
             out.append({"text": "", "start_time": start, "end_time": end})
             continue
+        full_text = " / ".join(clean_text(item.get("text")) for item in group if clean_text(item.get("text")))
         out.append({
-            "text": " / ".join(clean_text(item.get("text")) for item in group if clean_text(item.get("text"))),
+            "text": compact_text(full_text, MAX_LYRIC_ANCHOR_CHARS),
+            "line_count": len(group),
+            "full_text_chars": len(full_text),
             "start_time": float(group[0].get("start_time", index * duration / count)),
             "end_time": float(group[-1].get("end_time", (index + 1) * duration / count)),
         })
     return out
+
+
+def load_director_assets() -> dict[str, Any]:
+    agent_root = GENESIS_ROOT / "agent"
+    knowledge_root = GENESIS_ROOT / "knowledge"
+    prompt_path = agent_root / "system_prompt_v2.md"
+    vocab_paths = sorted((agent_root / "vocabulary").glob("*.json"))
+    knowledge_paths = sorted(knowledge_root.glob("**/*.yaml"))
+    system_prompt = read_text_if_exists(prompt_path)
+    knowledge_text: dict[str, str] = {
+        str(path.relative_to(GENESIS_ROOT)): read_text_if_exists(path)
+        for path in knowledge_paths
+    }
+    primitives: list[dict[str, Any]] = []
+    vocab_errors: list[str] = []
+    for path in vocab_paths:
+        try:
+            parsed = json.loads(path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            vocab_errors.append(f"{path.name}: {exc}")
+            continue
+        raw = parsed.get("primitives") if isinstance(parsed, dict) else None
+        if isinstance(raw, dict):
+            for key, item in raw.items():
+                if isinstance(item, dict):
+                    primitives.append({"id": key, **item})
+    raw_authentic = knowledge_text.get("knowledge/styles/raw_authentic.yaml", "")
+    anti_slop = knowledge_text.get("knowledge/authenticity/anti_slop.yaml", "")
+    shot_types = knowledge_text.get("knowledge/shots/shot_types.yaml", "")
+    camera_movements = knowledge_text.get("knowledge/shots/camera_movements.yaml", "")
+    transitions = knowledge_text.get("knowledge/transitions/transitions.yaml", "")
+    flux_templates = knowledge_text.get("knowledge/prompts/flux_templates.yaml", "")
+    kling_templates = knowledge_text.get("knowledge/prompts/kling_templates.yaml", "")
+    knowledge_hints = {
+        "style_prefixes": quoted_yaml_values(raw_authentic, "prompt_prefix")[:MAX_KNOWLEDGE_HINTS],
+        "style_negative_prompts": quoted_yaml_values(raw_authentic, "negative_prompt")[:MAX_KNOWLEDGE_HINTS],
+        "anti_slop_principles": block_values(anti_slop, "description")[:2],
+        "flux_templates": block_values(flux_templates, "base_template")[:MAX_KNOWLEDGE_HINTS],
+        "kling_templates": block_values(kling_templates, "base_template")[:MAX_KNOWLEDGE_HINTS],
+        "transition_names": quoted_yaml_values(transitions, "name")[:MAX_KNOWLEDGE_HINTS],
+    }
+    return {
+        "system_prompt_path": str(prompt_path) if prompt_path.exists() else None,
+        "system_prompt_chars": len(system_prompt),
+        "vocabulary_files": [path.name for path in vocab_paths],
+        "knowledge_files": [str(path.relative_to(GENESIS_ROOT)) for path in knowledge_paths],
+        "primitive_count": len(primitives),
+        "primitives": primitives,
+        "vocab_errors": vocab_errors,
+        "knowledge_hints": knowledge_hints,
+        "shot_hints": {
+            "shot_types": shot_types,
+            "camera_movements": camera_movements,
+        },
+        "doctrine": [
+            phrase for phrase in [
+                "solve a visual problem, do not pick a style" if "Solve a Visual Problem" in system_prompt else "",
+                "lyrics are metaphors, not literal illustrations" if "Lyrics are metaphors" in system_prompt else "",
+                "one strong visual thesis per video" if "One strong concept per video" in system_prompt else "",
+                "each scene must reveal a new facet, not the same image closer" if "Each scene reveals something" in system_prompt else "",
+                "motion needs a concrete scene event, not only camera movement" if "Do not rely on camera movement alone" in system_prompt else "",
+                "avoid generic AI photorealism and lazy genre suffixes" if "Avoid generic photorealistic AI slop" in system_prompt else "",
+            ] if phrase
+        ],
+    }
+
+
+def primitive_family(family_key: str) -> str | None:
+    if family_key == "street_expressionist":
+        return "street"
+    if family_key == "photo_editorial":
+        return "photo_editorial"
+    return None
+
+
+def select_director_primitives(assets: dict[str, Any], family_key: str, scene_index: int) -> list[dict[str, str]]:
+    target_family = primitive_family(family_key)
+    if not target_family:
+        return []
+    matching = [
+        item for item in assets.get("primitives", [])
+        if clean_text(item.get("family")).lower() == target_family
+    ]
+    if not matching:
+        return []
+    start = (scene_index * MAX_DIRECTOR_PRIMITIVES) % len(matching)
+    picked = (matching + matching)[start:start + MAX_DIRECTOR_PRIMITIVES]
+    return [
+        {
+            "name": clean_text(item.get("name") or item.get("id")),
+            "category": clean_text(item.get("category")),
+            "prompt_snippet": compact_text(item.get("prompt_snippet"), 180),
+        }
+        for item in picked
+    ]
+
+
+def director_assets_summary(assets: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": "Genesis system_prompt_v2.md, seed primitives, knowledge YAML, and Motion Director modules",
+        "runtime": "no-spend deterministic storyboard planner; does not call the original Genesis LLM runtime",
+        "system_prompt_loaded": bool(assets.get("system_prompt_path")),
+        "system_prompt_chars": assets.get("system_prompt_chars", 0),
+        "vocabulary_files": assets.get("vocabulary_files", []),
+        "knowledge_file_count": len(assets.get("knowledge_files", [])),
+        "primitive_count": assets.get("primitive_count", 0),
+        "doctrine": assets.get("doctrine", []),
+        "knowledge_hints_applied": {
+            key: len(value) if isinstance(value, list) else 0
+            for key, value in assets.get("knowledge_hints", {}).items()
+        },
+        "vocab_errors": assets.get("vocab_errors", []),
+    }
+
+
+def director_asset_blockers(assets: dict[str, Any]) -> list[dict[str, str]]:
+    blockers = []
+    if not assets.get("system_prompt_path") or int(assets.get("system_prompt_chars") or 0) <= 0:
+        blockers.append({"code": "missing_creative_director_prompt", "message": "Genesis Creative Director system_prompt_v2.md is missing or empty."})
+    if int(assets.get("primitive_count") or 0) <= 0:
+        blockers.append({"code": "missing_creative_director_primitives", "message": "Genesis Creative Director seed primitives are missing or empty."})
+    if len(assets.get("knowledge_files", [])) <= 0:
+        blockers.append({"code": "missing_creative_director_knowledge", "message": "Genesis Creative Director knowledge YAML files are missing."})
+    for error in assets.get("vocab_errors", []):
+        blockers.append({"code": "invalid_creative_director_vocabulary", "message": error})
+    return blockers
+
+
+def knowledge_style_hint(assets: dict[str, Any], family_key: str, scene_index: int) -> str:
+    hints = assets.get("knowledge_hints", {})
+    style_prefixes = hints.get("style_prefixes") or []
+    if not style_prefixes:
+        return ""
+    if family_key in {"analog_photo", "surreal_dream", "performance"}:
+        return style_prefixes[scene_index % len(style_prefixes)]
+    return ""
+
+
+def knowledge_negative_hint(assets: dict[str, Any], scene_index: int) -> str:
+    hints = assets.get("knowledge_hints", {})
+    negatives = hints.get("style_negative_prompts") or []
+    return negatives[scene_index % len(negatives)] if negatives else ""
+
+
+def shot_knowledge_hint(assets: dict[str, Any], shot_type: str, camera_movement: str) -> dict[str, str]:
+    shot_hints = assets.get("shot_hints", {})
+    return {
+        "shot_flux_hint": yaml_record_field(str(shot_hints.get("shot_types") or ""), shot_type, "flux_hint"),
+        "shot_kling_hint": yaml_record_field(str(shot_hints.get("shot_types") or ""), shot_type, "kling_hint"),
+        "camera_motion_hint": yaml_record_field(str(shot_hints.get("camera_movements") or ""), camera_movement, "kling_hint"),
+    }
 
 
 def beat_namespace(t_start: float, t_end: float, event: str) -> SimpleNamespace:
@@ -529,6 +749,7 @@ def command_storyboard(args: argparse.Namespace) -> None:
     duration = target_duration(brief, args)
     aspect = requested_aspect(brief)
     lines = normalized_lyric_lines(brief, duration)
+    director_assets = load_director_assets()
     family_key, family = storyboard_family(brief)
     mode = storyboard_mode(brief, family_key)
     count = scene_count_for(lines, duration)
@@ -536,13 +757,18 @@ def command_storyboard(args: argparse.Namespace) -> None:
     face_refs = face_reference_paths(brief)
     title = clean_text(brief.get("title") or brief.get("song_title") or "Untitled lyric clip")
     mood = clean_text(brief.get("mood") or brief.get("emotional_direction") or "emotionally specific, lonely, memorable")
-    concept = clean_text(brief.get("creative_thesis") or brief.get("concept") or f"{title} as a concise visual memory that changes with each lyric beat")
+    concept = compact_text(
+        brief.get("creative_thesis")
+        or brief.get("concept")
+        or f"{title} as one cohesive visual thesis that changes through lyric pressure instead of illustrating words literally",
+        MAX_CONCEPT_CHARS,
+    )
 
     from core.motion_compiler import compile_motion_prompt
     from services.motion_qa import validate_shot_direction
 
     scenes = []
-    blockers: list[dict[str, str]] = []
+    blockers: list[dict[str, str]] = director_asset_blockers(director_assets)
     if aspect not in ASPECT_RESOLUTIONS:
         blockers.append({"code": "unsupported_aspect_ratio", "message": f"aspect_ratio must be one of: {', '.join(ASPECT_RESOLUTIONS.keys())}."})
     if not lines:
@@ -556,7 +782,10 @@ def command_storyboard(args: argparse.Namespace) -> None:
             "shot_type": template["shot_type"],
             "camera_movement": template["camera_movement"],
             "frame": template["frame"],
+            "lyric_anchor": group["text"],
             "lyric": group["text"],
+            "lyric_line_count": group.get("line_count", 0),
+            "lyric_full_text_chars": group.get("full_text_chars", len(group["text"])),
             "start_time": group["start_time"],
             "end_time": group["end_time"],
         }
@@ -564,17 +793,47 @@ def command_storyboard(args: argparse.Namespace) -> None:
         findings = validate_shot_direction(shot, bible_mode=mode, duration_seconds=shot.duration_seconds)
         motion_prompt = compile_motion_prompt(shot, provider=str(brief.get("video_provider") or "wavespeed"), duration_seconds=shot.duration_seconds)
         ref_clause = " Use the supplied artist face reference for the only identifiable face." if face_refs else " If a human appears, prefer silhouette, partial crop, back turned, reflection, or implied presence."
+        primitives = select_director_primitives(director_assets, family_key, index)
+        style_hint = knowledge_style_hint(director_assets, family_key, index)
+        negative_hint = knowledge_negative_hint(director_assets, index)
+        shot_hints = shot_knowledge_hint(director_assets, str(scene["shot_type"]), str(scene["camera_movement"]))
+        primitive_clause = ""
+        if primitives:
+            primitive_clause = " Genesis vocabulary: " + "; ".join(item["prompt_snippet"] for item in primitives if item["prompt_snippet"]) + "."
+        knowledge_clause = f" Genesis knowledge style: {style_hint}." if style_hint else ""
+        shot_clause = f" Shot grammar: {shot_hints['shot_flux_hint']}." if shot_hints.get("shot_flux_hint") else ""
         image_prompt = (
             f"Vertical {aspect} {family['prompt']}. {scene['frame']}. "
             f"Mood: {mood}. Visual thesis: {concept}. "
-            f"Lyric beat: {scene['lyric'] or 'instrumental turn'}. "
+            f"Lyric anchor: {scene['lyric_anchor'] or 'instrumental turn'}; interpret as metaphor, not literal action."
+            f"{primitive_clause}{knowledge_clause}{shot_clause} "
             f"No readable text, no logos.{ref_clause} "
             f"{compact_capture_realism_for_image(family)}"
         )
+        image_prompt = limit_words(image_prompt, MAX_IMAGE_PROMPT_WORDS)
+        motion_knowledge = " ".join(
+            value for value in [
+                shot_hints.get("shot_kling_hint"),
+                shot_hints.get("camera_motion_hint"),
+            ]
+            if value
+        )
+        if motion_knowledge:
+            motion_prompt = f"{motion_prompt}\nGenesis motion knowledge: {motion_knowledge}"
+        scene_negative_prompt = storyboard_negative_prompt(family, face_refs)
+        if negative_hint:
+            scene_negative_prompt = f"{scene_negative_prompt}, Genesis style exclusion: {negative_hint}"
         scenes.append({
             **scene,
             "duration_seconds": round(float(scene["end_time"]) - float(scene["start_time"]), 3),
+            "director_primitives": primitives,
+            "director_knowledge": {
+                "style_hint": style_hint,
+                "negative_hint": negative_hint,
+                **shot_hints,
+            },
             "image_prompt": image_prompt,
+            "negative_prompt": scene_negative_prompt,
             "motion_prompt": motion_prompt,
             "shot_direction": shot_to_dict(shot),
             "qa_findings": [vars(finding) for finding in findings],
@@ -586,7 +845,8 @@ def command_storyboard(args: argparse.Namespace) -> None:
         "mode": "runneros_genesis_lyric_storyboard",
         "provider_spend_enabled": False,
         "single_video_only": True,
-        "director_stack": "Genesis Creative Director + Motion Director grammar",
+        "director_stack": "Genesis Creative Director assets + Motion Director compiler",
+        "creative_director": director_assets_summary(director_assets),
         "title": title,
         "core_thesis": concept,
         "visual_family": family["label"],
@@ -758,12 +1018,16 @@ def output_dir_for(brief: dict[str, Any], args: argparse.Namespace) -> Path:
 
 
 def command_doctor(_args: argparse.Namespace) -> None:
+    director_assets = load_director_assets()
+    director_blockers = director_asset_blockers(director_assets)
     checks: dict[str, Any] = {
         "vendor_root": str(GENESIS_ROOT),
         "vendor_exists": GENESIS_ROOT.exists(),
         "ffmpeg": usable_binary("ffmpeg"),
         "ffprobe": usable_binary("ffprobe"),
         "python": sys.executable,
+        "creative_director": director_assets_summary(director_assets),
+        "creative_director_blockers": director_blockers,
     }
     imports: dict[str, bool] = {}
     for module in ["core.captions", "core.lyric_alignment", "core.media_binaries", "core.assembler", "core.typography"]:
@@ -775,7 +1039,7 @@ def command_doctor(_args: argparse.Namespace) -> None:
     checks["imports"] = imports
     checks["provider_spend_enabled"] = False
     checks["provider_generation_modules"] = "not bundled"
-    ok = checks["vendor_exists"] and bool(checks["ffmpeg"]) and bool(checks["ffprobe"]) and imports["core.captions"]
+    ok = checks["vendor_exists"] and bool(checks["ffmpeg"]) and bool(checks["ffprobe"]) and imports["core.captions"] and not director_blockers
     emit({"ok": ok, "mode": "runneros_genesis_lyric_doctor", **checks}, status=0 if ok else 1)
 
 

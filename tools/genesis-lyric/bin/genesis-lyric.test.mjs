@@ -65,6 +65,10 @@ describe('runneros genesis lyric wrapper', () => {
     assert.equal(payload.mode, 'runneros_genesis_lyric_doctor');
     assert.equal(typeof payload.vendor_exists, 'boolean');
     assert.equal(typeof payload.imports, 'object');
+    assert.equal(payload.creative_director.system_prompt_loaded, true);
+    assert.ok(payload.creative_director.knowledge_file_count > 0);
+    assert.ok(payload.creative_director.primitive_count > 0);
+    assert.deepEqual(payload.creative_director_blockers, []);
   });
 
   it('plan normalizes untimed lyrics into one single-video plan', () => {
@@ -90,12 +94,38 @@ describe('runneros genesis lyric wrapper', () => {
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.mode, 'runneros_genesis_lyric_storyboard');
     assert.equal(payload.provider_spend_enabled, false);
-    assert.equal(payload.director_stack, 'Genesis Creative Director + Motion Director grammar');
+    assert.equal(payload.director_stack, 'Genesis Creative Director assets + Motion Director compiler');
+    assert.equal(payload.creative_director.system_prompt_loaded, true);
+    assert.ok(payload.creative_director.primitive_count > 0);
+    assert.ok(payload.creative_director.knowledge_hints_applied.style_prefixes > 0);
+    assert.ok(payload.creative_director.doctrine.includes('lyrics are metaphors, not literal illustrations'));
     assert.ok(payload.scenes.length >= 1);
     assert.ok(payload.scenes[0].image_prompt.includes('Capture realism'));
+    assert.ok(payload.scenes[0].director_knowledge.style_hint);
+    assert.ok(payload.scenes[0].negative_prompt.includes('Genesis style exclusion'));
     assert.ok(payload.scenes[0].motion_prompt.includes('Movement:'));
     assert.ok(payload.scenes[0].motion_prompt.includes('Camera Capture:'));
     assert.equal(payload.media_generation.image_first, true);
+  });
+
+  it('storyboard caps long lyric groups and image prompts', () => {
+    const longLine = 'this is a very long lyric line with too many emotional details and repeated phrasing about summer memory collapse';
+    const lyrics = Array.from({ length: 24 }, (_, index) => `${longLine} ${index + 1} ${longLine}`).join('\n');
+    const result = run(['storyboard', '--brief-file', briefFile({
+      title: 'Long Summer Test',
+      lyrics,
+      duration_seconds: 30,
+      visual_family: 'analog_photo',
+    })]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.ok(payload.scenes.length <= 4);
+    for (const scene of payload.scenes) {
+      assert.ok(scene.lyric.length <= 183);
+      assert.ok(scene.lyric_full_text_chars > scene.lyric.length);
+      assert.ok(scene.image_prompt.split(/\s+/).length <= 190);
+      assert.ok(scene.motion_prompt.length < 1200);
+    }
   });
 
   it('storyboard blocks missing lyrics without traceback', () => {

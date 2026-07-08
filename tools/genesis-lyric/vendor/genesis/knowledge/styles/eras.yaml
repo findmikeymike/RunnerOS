@@ -1,0 +1,167 @@
+# Era Styles
+# Visual aesthetics inspired by specific time periods and film formats
+
+vhs_camcorder:
+  id: vhs_camcorder
+  name: "VHS/Camcorder"
+  category: era
+  description: "Home video aesthetic, worn tape texture, lo-fi warmth, crushed blacks, analog distortion, nostalgic memory flashback"
+
+  visual:
+    color_grade: "warm oversaturated, blown-out highlights, color bleeding, slight magenta-cyan shift, faded blacks"
+    lighting: "harsh on-camera flash, overexposed faces, fluorescent hum, living-room lamps"
+    texture: "tracking lines, VHS noise, timestamp overlay, tape wear, scan lines, chroma bleeding, drop-frame tears, static bursts, VHS snow"
+    contrast: "crushed, limited dynamic range, analog compression artifacts"
+
+  mood:
+    primary: "nostalgic"
+    secondary: ["amateur", "lo-fi", "intimate", "found footage", "flashback"]
+    energy: "casual, spontaneous, analog memory"
+
+  camera:
+    movement: "shaky handheld, tape wobble, sudden zooms, pause-record glitches"
+    framing: "imperfect, off-center, accidental cropping, documentary snapshot"
+    angles: "varied, unstable, shoulder-mounted camcorder"
+
+  prompt_prefix: "extremely worn VHS camcorder footage, late 80s/90s home video aesthetic, lo-fi analog warmth, severe tape grain and VHS snow, rolling tracking lines, horizontal signal tearing, timestamp overlay text with date/time, chroma bleed, color fringing, warped blacks, blown-out highlights, buzzing static in shadows, fuzzy soft focus, handheld jitter, pause-record glitches, dropout artifacts, nostalgic flashback energy, cozy interior lighting, analog distortion everywhere"
+
+  negative_prompt: "clean digital, pristine focus, HDR, cinematic lighting, modern camera, crisp edges, glossy CGI, UHD clarity"
+
+  kling_motion_hints:
+    - "shaky handheld wobble"
+    - "sudden amateur reframing and zoom"
+    - "tracking distortion sweep"
+    - "pause-record glitch stutter"
+
+
+90s_film:
+  id: 90s_film
+  name: "90s Film"
+  category: era
+  description: "Street photography aesthetic, point-and-shoot film camera, grungy urban, harsh fluorescent"
+
+  visual:
+    color_grade: "subtle green tint, muted tones, underexposed shadows, natural skin tones"
+    lighting: "harsh fluorescent, available light, flash photography, unflattering practical"
+    texture: "heavy film grain and noise, dust and film specks, soft focus, real-world imperfections"
+    contrast: "medium-high, underexposed shadows, gritty"
+
+  mood:
+    primary: "gritty"
+    secondary: ["candid", "urban", "moody", "raw", "documentary"]
+    energy: "spontaneous, street-level, observational"
+
+  camera:
+    movement: "handheld documentary, reactive, following action"
+    framing: "candid composition, slight fisheye distortion, snapshot aesthetic"
+    angles: "eye-level, street perspective, point-and-shoot casual"
+
+  prompt_prefix: "90s street photography aesthetic, point-and-shoot film camera look, harsh fluorescent lighting, subtle green tint, heavy film grain and noise, soft focus, slight fisheye distortion, candid composition, underexposed shadows, gritty urban texture, dust and film specks, real-world imperfections, handheld documentary vibe"
+
+  negative_prompt: "clean digital, perfect exposure, studio lighting, sharp modern lens, HDR, oversaturated"
+
+  kling_motion_hints:
+    - "handheld documentary movement"
+    - "reactive following motion"
+    - "subtle camera shake"
+    - "candid observational drift"
+
+
+
+y2k:
+  id: y2k
+  name: "Y2K"
+  category: era
+  description: "Millennium futurism, metallic sheen, bubble aesthetics, early CGI optimism"
+
+  visual:
+    color_grade: "cool metallics, chrome reflections, silver and baby blue, iridescent"
+    lighting: "clean studio flash, ring light, high-key futuristic"
+    texture: "smooth, glossy, plastic, digital sheen, low-res digital artifacts"
+    contrast: "medium, clean highlights, soft futuristic glow"
+
+  mood:
+    primary: "futuristic"
+    secondary: ["optimistic", "digital", "glossy", "playful", "tech"]
+    energy: "upbeat, shiny, forward-looking"
+
+  camera:
+    movement: "smooth digital, matrix-style rotation, clean tracking"
+    framing: "centered, clean composition, product-shot aesthetic"
+    angles: "dynamic low angles, hero shots, aspirational"
+
+  prompt_prefix: "Y2K aesthetic, millennium futurism, metallic chrome surfaces, iridescent sheen, baby blue and silver color palette, glossy plastic textures, early 2000s digital optimism, bubble fonts aesthetic, clean futuristic lighting"
+
+  negative_prompt: "vintage, film grain, warm tones, organic textures, gritty, analog"
+
+  kling_motion_hints:
+    - "smooth rotating orbit"
+    - "clean digital tracking"
+    - "gentle floating movement"
+    - "subtle chrome reflections shifting"
+
+
+70s_vintage:
+  id: 70s_vintage
+  name: "70s Vintage"
+  category: era
+  description: "Warm analog, faded film, light leaks, golden hour nostalgia, soft romantic"
+
+  visual:
+    color_grade: "warm faded tones, orange and brown dominant, desaturated greens, lifted blacks"
+    lighting: "golden hour, soft diffused daylight, warm practicals, hazy"
+    texture: "heavy film grain, light leaks, soft focus, film burns, dust particles"
+    contrast: "low-medium, faded blacks, hazy highlights"
+
+  mood:
+    primary: "nostalgic"
+    secondary: ["romantic", "warm", "dreamy", "carefree", "analog"]
+    energy: "slow, hazy, wistful"
+
+  camera:
+    movement: "slow lazy pans, soft focus drifts, handheld warmth"
+    framing: "casual, intimate, snapshot memories"
+    angles: "natural, unforced, candid feeling"
+
+  prompt_prefix: "70s vintage film aesthetic, warm faded color palette, orange and brown tones, heavy film grain, light leaks and film burns, soft focus, golden hour lighting, lifted blacks, analog photography texture, nostalgic hazy quality"
+
+  negative_prompt: "sharp digital, cool tones, high contrast, modern, clean, blue tint"
+
+  kling_motion_hints:
+    - "slow hazy drift"
+    - "soft focus shifts"
+    - "gentle warm light flickering"
+    - "lazy nostalgic movement"
+
+
+super_8:
+  id: super_8
+  name: "Super 8"
+  category: era
+  description: "8mm home movie aesthetic, heavy grain, light burns, silent film texture, memory fragments"
+
+  visual:
+    color_grade: "faded, slightly desaturated, warm amber tint, color shifting"
+    lighting: "overexposed daylight, light burns, flares, uncontrolled natural"
+    texture: "extreme grain, scratches, hair and dust, sprocket holes, frame jitter"
+    contrast: "variable, blown highlights, unstable exposure"
+
+  mood:
+    primary: "memory"
+    secondary: ["fragmented", "precious", "fleeting", "innocent", "lost"]
+    energy: "flickering, unstable, dreamlike"
+
+  camera:
+    movement: "jittery handheld, frame skips, unstable, home movie"
+    framing: "amateur, spontaneous, imperfect focus"
+    angles: "casual, documentary, capturing moments"
+
+  prompt_prefix: "Super 8mm film aesthetic, extreme film grain, light leaks and burns, scratches and dust particles, faded warm amber tones, overexposed highlights, frame jitter, home movie texture, nostalgic memory quality, sprocket hole visible edges"
+
+  negative_prompt: "clean digital, sharp, stable, professional, modern camera, high resolution"
+
+  kling_motion_hints:
+    - "jittery frame movement"
+    - "slight speed variations"
+    - "light flicker and burn"
+    - "unstable home movie motion"

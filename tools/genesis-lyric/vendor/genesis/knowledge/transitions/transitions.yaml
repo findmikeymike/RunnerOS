@@ -1,0 +1,67 @@
+# Transitions Library
+
+transitions:
+  hard_cut:
+    id: hard_cut
+    name: "Hard Cut"
+    description: "Instant switch between clips. Most common."
+    use_case: "beat hits, energy moments, standard editing"
+    ffmpeg_approach: "direct concatenation, no filter"
+    duration_frames: 0
+
+  crossfade:
+    id: crossfade
+    name: "Crossfade"
+    description: "Gradual blend between clips."
+    use_case: "dreamy transitions, time passage, smooth flow"
+    ffmpeg_approach: "xfade filter with fade transition"
+    duration_frames: 15  # ~0.5s at 30fps
+
+  fade_black:
+    id: fade_black
+    name: "Fade to Black"
+    description: "Fade out to black, then fade in from black."
+    use_case: "section endings, dramatic pause, finality"
+    ffmpeg_approach: "fade filter to black between clips"
+    duration_frames: 20
+
+  flash_white:
+    id: flash_white
+    name: "Flash White"
+    description: "Brief white flash between clips."
+    use_case: "drops, high energy, impact moments"
+    ffmpeg_approach: "overlay white frame with fade"
+    duration_frames: 4  # quick flash
+
+  dip_black:
+    id: dip_black
+    name: "Dip to Black"
+    description: "Quick dip through black."
+    use_case: "subtle section break, beat sync"
+    ffmpeg_approach: "quick fade through black"
+    duration_frames: 8
+
+  whip:
+    id: whip
+    name: "Whip/Wipe"
+    description: "Motion blur wipe between clips."
+    use_case: "energy, movement, fast transitions"
+    ffmpeg_approach: "xfade with wipeleft/wiperight or motion blur"
+    duration_frames: 6
+
+  match_cut:
+    id: match_cut
+    name: "Match Cut"
+    description: "Cut on visual similarity or action continuation."
+    use_case: "storytelling, visual rhyme, sophistication"
+    ffmpeg_approach: "hard cut (matching handled in shot selection)"
+    duration_frames: 0
+    note: "Requires agent to select matching compositions"
+
+  glitch:
+    id: glitch
+    name: "Glitch"
+    description: "Digital distortion transition."
+    use_case: "electronic music, disorientation, style choice"
+    ffmpeg_approach: "displacement map + RGB split + frame hold"
+    duration_frames: 8

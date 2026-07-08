@@ -1,0 +1,576 @@
+# Artistic Styles
+# 2025-12-15 (updated)
+# Pure artistic rendering styles for consistent, stylized imagery
+# Includes grungy 90s photo styles for Midjourney v6
+
+# ============================================
+# GRUNGY 90s PHOTO STYLES (Best with Midjourney v6)
+# ============================================
+
+grungy_90s:
+  id: grungy_90s
+  name: "Grungy 90s Photo"
+  category: photo_artistic
+  description: "Disposable camera aesthetic, film grain, desaturated colors, urban decay, grunge era vibes"
+
+  visual:
+    color_grade: "desaturated, muted colors, green/yellow tint, faded blacks"
+    lighting: "harsh flash, overexposed highlights, deep shadows, light leaks"
+    texture: "heavy film grain, dust particles, scratches, vignette"
+    contrast: "crushed blacks, blown highlights, lo-fi quality"
+
+  mood:
+    primary: "nostalgic"
+    secondary: ["raw", "authentic", "gritty", "melancholic"]
+    energy: "restless, angsty, introspective"
+
+  prompt_prefix: "90s disposable camera photo, heavy film grain, desaturated colors, flash photography, lo-fi aesthetic, grunge era, urban decay, authentic candid moment, Kodak Gold 400 film, light leaks, vignette edges"
+
+  negative_prompt: "digital, clean, sharp, modern, HDR, oversaturated, professional lighting, studio shot, polished"
+
+  kling_motion_hints:
+    - "subtle camera shake"
+    - "film flicker effect"
+    - "slow deliberate movement"
+    - "handheld documentary feel"
+
+
+polaroid_grunge:
+  id: polaroid_grunge
+  name: "Polaroid Grunge"
+  category: photo_artistic
+  description: "Instant film aesthetic with grunge textures, washed out colors, nostalgic imperfection"
+
+  visual:
+    color_grade: "warm yellow cast, faded pastels, low saturation, creamy whites"
+    lighting: "soft diffused, overexposed center, dark corners"
+    texture: "polaroid border, chemical imperfections, dust, fingerprints"
+    contrast: "low contrast, milky shadows, soft highlights"
+
+  mood:
+    primary: "dreamy"
+    secondary: ["nostalgic", "intimate", "fleeting", "vulnerable"]
+    energy: "quiet, contemplative, bittersweet"
+
+  prompt_prefix: "polaroid instant photo, faded colors, warm yellow tint, soft focus, chemical imperfections, white border frame, 90s nostalgia, intimate candid shot, Polaroid 600 film, light leak artifacts"
+
+  negative_prompt: "digital, sharp, modern, clean, professional, studio lighting, HDR, oversaturated"
+
+  kling_motion_hints:
+    - "gentle sway"
+    - "soft focus drift"
+    - "subtle light flicker"
+    - "dreamy slow motion"
+
+
+vhs_aesthetic:
+  id: vhs_aesthetic
+  name: "VHS Aesthetic"
+  category: photo_artistic
+  description: "Video tape degradation, tracking lines, RGB shift, analog warmth"
+
+  visual:
+    color_grade: "oversaturated reds, bleeding colors, warm analog tint"
+    lighting: "CRT glow, scan lines visible, blooming highlights"
+    texture: "tracking errors, horizontal lines, tape noise, RGB chromatic aberration"
+    contrast: "boosted, crushed blacks, glowing whites"
+
+  mood:
+    primary: "retro"
+    secondary: ["eerie", "nostalgic", "degraded", "hypnotic"]
+    energy: "unsettling, hypnotic, time-displaced"
+
+  prompt_prefix: "VHS tape aesthetic, scan lines, tracking errors, RGB color shift, analog video noise, 90s camcorder footage, tape degradation, CRT monitor glow, chromatic aberration, retro video artifact"
+
+  negative_prompt: "digital, clean, 4K, modern, sharp, professional video, HD quality"
+
+  kling_motion_hints:
+    - "VHS tracking glitch"
+    - "scan line flicker"
+    - "tape wobble effect"
+    - "analog distortion pulse"
+
+
+# ============================================
+# PURE ARTISTIC STYLES (Original)
+# ============================================
+
+rotoscope:
+  id: rotoscope
+  name: "Rotoscope Line Art"
+  category: artistic
+  description: "Bold traced outlines over form, A-ha Take On Me aesthetic, hand-drawn animation cel look"
+
+  visual:
+    color_grade: "limited palette, 2-4 colors max, high contrast black outlines"
+    lighting: "flat shading, no realistic lighting, cel-shaded shadows"
+    texture: "clean ink lines, hand-drawn quality, slight line weight variation"
+    contrast: "high, bold black outlines against flat color fills"
+
+  mood:
+    primary: "dynamic"
+    secondary: ["nostalgic", "energetic", "graphic", "bold"]
+    energy: "kinetic, animated, alive"
+
+  prompt_prefix: "rotoscoped line art animation, bold black ink outlines tracing form, hand-drawn animation cel, A-ha Take On Me style, limited flat color palette, cel-shaded, visible pen strokes, comic book inking"
+
+  negative_prompt: "photorealistic, 3D render, photograph, film grain, cinema, soft lighting, gradients, realistic shading, natural colors"
+
+  kling_motion_hints:
+    - "subtle line wobble animation"
+    - "hand-drawn frame jitter"
+    - "ink lines shifting slightly"
+    - "cel animation movement"
+
+
+charcoal_sketch:
+  id: charcoal_sketch
+  name: "Charcoal Sketch"
+  category: artistic
+  description: "Raw charcoal and graphite on paper, smudged edges, unfinished quality, expressive marks"
+
+  visual:
+    color_grade: "monochrome, black and white with gray tones, paper texture visible"
+    lighting: "dramatic value contrast, no color, pure light and shadow"
+    texture: "heavy charcoal grain, smudged edges, paper tooth visible, rough marks"
+    contrast: "high, deep blacks, bright paper whites"
+
+  mood:
+    primary: "raw"
+    secondary: ["intense", "unfinished", "emotional", "expressive"]
+    energy: "urgent, gestural, immediate"
+
+  prompt_prefix: "charcoal sketch on textured paper, heavy graphite marks, smudged edges, expressive gestural drawing, raw unfinished quality, visible paper texture, dramatic black and white values, artist sketch study"
+
+  negative_prompt: "color, photorealistic, clean lines, digital, smooth gradients, finished polished look, photograph, 3D render"
+
+  kling_motion_hints:
+    - "subtle paper texture movement"
+    - "charcoal marks shifting"
+    - "smudge effects drifting"
+    - "sketch lines appearing"
+
+
+oil_painting:
+  id: oil_painting
+  name: "Oil Painting"
+  category: artistic
+  description: "Visible brushstrokes, impasto texture, painterly color mixing, gallery art quality"
+
+  visual:
+    color_grade: "rich pigment colors, visible color mixing on canvas, warm undertones"
+    lighting: "painted light, not realistic, impressionistic light handling"
+    texture: "heavy impasto brushstrokes, canvas weave visible, thick paint texture"
+    contrast: "medium-high, painterly value structure"
+
+  mood:
+    primary: "contemplative"
+    secondary: ["timeless", "artistic", "emotional", "classic"]
+    energy: "still, meditative, gallery-worthy"
+
+  prompt_prefix: "oil painting on canvas, visible impasto brushstrokes, thick paint texture, painterly style, impressionist color mixing, museum quality fine art, canvas weave texture, artist palette knife marks"
+
+  negative_prompt: "photorealistic, photograph, digital art, smooth blending, airbrushed, 3D render, clean edges, film still"
+
+  kling_motion_hints:
+    - "subtle brushstroke shimmer"
+    - "paint texture movement"
+    - "impressionist light shifts"
+    - "canvas breathing effect"
+
+
+collage:
+  id: collage
+  name: "Paper Collage"
+  category: artistic
+  description: "Cut paper, torn edges, layered textures, mixed media, punk zine aesthetic"
+
+  visual:
+    color_grade: "mismatched color sources, newsprint, magazine cutouts, varied paper tones"
+    lighting: "flat, no realistic lighting, paper shadows from layering"
+    texture: "torn paper edges, visible glue, overlapping layers, mixed paper types"
+    contrast: "varied, depends on source materials"
+
+  mood:
+    primary: "chaotic"
+    secondary: ["punk", "DIY", "rebellious", "fragmented", "raw"]
+    energy: "frenetic, layered, handmade"
+
+  prompt_prefix: "paper collage art, torn paper edges, cut and paste aesthetic, mixed media layers, magazine cutouts, newsprint texture, punk zine style, visible glue and tape, handmade DIY quality, Terry Gilliam animation style"
+
+  negative_prompt: "photorealistic, clean edges, digital, smooth, photograph, 3D render, polished, professional"
+
+  kling_motion_hints:
+    - "paper layers shifting"
+    - "cutout elements moving independently"
+    - "collage pieces floating"
+    - "stop-motion paper animation"
+
+
+risograph:
+  id: risograph
+  name: "Risograph Print"
+  category: artistic
+  description: "Limited color screen print, halftone dots, misregistration, indie poster aesthetic"
+
+  visual:
+    color_grade: "2-3 spot colors only, fluorescent inks, color overlap creates new tones"
+    lighting: "flat, no gradients, pure graphic shapes"
+    texture: "halftone dot pattern, slight misregistration, paper grain, ink texture"
+    contrast: "high, bold graphic shapes"
+
+  mood:
+    primary: "graphic"
+    secondary: ["indie", "retro", "bold", "minimal", "punk"]
+    energy: "punchy, immediate, poster-like"
+
+  prompt_prefix: "risograph print style, limited 2-3 color palette, halftone dot pattern, slight color misregistration, screen print texture, indie poster aesthetic, bold graphic shapes, fluorescent ink colors, zine artwork"
+
+  negative_prompt: "photorealistic, full color, gradients, smooth blending, photograph, 3D render, realistic shading"
+
+  kling_motion_hints:
+    - "halftone dots shifting"
+    - "color layers misaligning"
+    - "print texture movement"
+    - "graphic shapes animating"
+
+
+woodblock:
+  id: woodblock
+  name: "Woodblock Print"
+  category: artistic
+  description: "Japanese ukiyo-e inspired, carved wood texture, bold outlines, flat color areas"
+
+  visual:
+    color_grade: "limited traditional palette, flat color areas, no gradients"
+    lighting: "no realistic lighting, decorative flat rendering"
+    texture: "wood grain texture in lines, carved edge quality, paper texture"
+    contrast: "high, bold black outlines against color"
+
+  mood:
+    primary: "serene"
+    secondary: ["traditional", "elegant", "contemplative", "timeless"]
+    energy: "still, meditative, classical"
+
+  prompt_prefix: "Japanese woodblock print style, ukiyo-e aesthetic, bold carved outlines, flat color areas, wood grain texture in lines, traditional limited color palette, decorative composition, Hokusai inspired"
+
+  negative_prompt: "photorealistic, gradients, 3D render, photograph, modern, digital, realistic lighting"
+
+  kling_motion_hints:
+    - "subtle wood texture movement"
+    - "waves and clouds drifting"
+    - "traditional animation style"
+    - "paper scroll movement"
+
+
+hasui_kawase:
+  id: hasui_kawase
+  name: "Hasui Kawase Shin-hanga"
+  category: artistic
+  description: "Shin-hanga woodblock print aesthetic inspired by Hasui Kawase: serene Japanese cityscapes and landscapes, atmospheric rain/snow/night, bokashi gradients, quiet melancholy"
+
+  visual:
+    color_grade: "subtle muted palette, cool blues and indigo nights, warm lantern glows, soft tonal gradients"
+    lighting: "atmospheric night lighting, lantern light, moonlight, rain reflections, snow glow"
+    texture: "woodblock print texture, visible paper grain, carved linework, ink pooling, bokashi gradient"
+    contrast: "gentle contrast, deep shadows with soft transitions"
+
+  mood:
+    primary: "serene"
+    secondary: ["melancholic", "dreamlike", "nostalgic", "quiet"]
+    energy: "still, contemplative, hushed"
+
+  prompt_prefix: "Hasui Kawase shin-hanga woodblock print, Japanese woodblock print aesthetic, bokashi gradient sky, carved linework, visible paper grain, atmospheric rain or snow, reflective wet streets, quiet nighttime mood"
+
+  negative_prompt: "photorealistic, modern digital art, 3D render, CGI, glossy, HDR, oversaturated, sharp modern photo, clean vector, anime, cartoon"
+
+  kling_motion_hints:
+    - "gentle drifting camera"
+    - "slow pan across rain reflections"
+    - "subtle snowfall or rain"
+    - "lantern light flicker"
+
+
+watercolor:
+  id: watercolor
+  name: "Watercolor"
+  category: artistic
+  description: "Wet-on-wet bleeding, transparent washes, paper texture, soft organic edges"
+
+  visual:
+    color_grade: "transparent pigment washes, colors bleeding into each other, white paper showing through"
+    lighting: "soft, diffused through transparent paint layers"
+    texture: "watercolor paper grain, wet edges, pigment pooling, salt texture effects"
+    contrast: "soft, transparent layers building value"
+
+  mood:
+    primary: "ethereal"
+    secondary: ["dreamy", "soft", "organic", "flowing", "delicate"]
+    energy: "gentle, flowing, organic"
+
+  prompt_prefix: "watercolor painting, wet-on-wet technique, transparent color washes, pigment bleeding at edges, visible watercolor paper texture, soft organic edges, white paper showing through, loose expressive brushwork"
+
+  negative_prompt: "photorealistic, opaque, digital, hard edges, photograph, 3D render, sharp lines, solid colors"
+
+  kling_motion_hints:
+    - "watercolor bleeding and spreading"
+    - "pigment flowing"
+    - "soft edges shifting"
+    - "wet paint movement"
+
+
+abstract_expressionist:
+  id: abstract_expressionist
+  name: "Abstract Expressionist"
+  category: artistic
+  description: "Rothko color fields, Pollock drips, pure emotion through color and gesture, no literal forms"
+
+  visual:
+    color_grade: "bold emotional color choices, color field relationships, expressive palette"
+    lighting: "no realistic lighting, color creates its own light"
+    texture: "heavy paint texture, drips, splatters, gestural marks"
+    contrast: "varies by emotional intent"
+
+  mood:
+    primary: "emotional"
+    secondary: ["intense", "spiritual", "raw", "primal", "transcendent"]
+    energy: "explosive or meditative depending on approach"
+
+  prompt_prefix: "abstract expressionist painting, bold color fields, gestural paint marks, drips and splatters, Rothko-inspired color relationships, emotional abstraction, no literal forms, pure color and texture, museum quality abstract art"
+
+  negative_prompt: "photorealistic, representational, literal, photograph, 3D render, recognizable objects, faces, figures"
+
+  kling_motion_hints:
+    - "color fields pulsing"
+    - "paint drips flowing"
+    - "gestural marks appearing"
+    - "abstract forms shifting"
+
+
+stop_motion:
+  id: stop_motion
+  name: "Stop Motion Claymation"
+  category: artistic
+  description: "Tactile handmade quality, visible fingerprints, Laika/Aardman aesthetic, imperfect charm"
+
+  visual:
+    color_grade: "matte clay colors, handpainted sets, warm practical lighting feel"
+    lighting: "miniature set lighting, soft shadows, practical miniature feel"
+    texture: "clay fingerprints, fabric textures, handmade imperfections, miniature scale"
+    contrast: "medium, soft and tactile"
+
+  mood:
+    primary: "charming"
+    secondary: ["whimsical", "handmade", "nostalgic", "warm", "quirky"]
+    energy: "jerky, frame-by-frame, tactile"
+
+  prompt_prefix: "stop motion claymation style, handmade clay figures, visible fingerprint texture, miniature set design, Laika animation aesthetic, tactile handcrafted quality, fabric and felt textures, warm practical miniature lighting"
+
+  negative_prompt: "photorealistic, smooth, digital, 3D render, photograph, clean, polished, CGI"
+
+  kling_motion_hints:
+    - "stop motion jitter"
+    - "frame-by-frame movement"
+    - "clay figure animation"
+    - "miniature set subtle shifts"
+
+
+# ============================================
+# MIDJOURNEY V6 OPTIMIZED STYLES (NEW)
+# These patterns produce exceptional results with MJ v6
+# ============================================
+
+dot_art_animal:
+  id: dot_art_animal
+  name: "Dot Art Wildlife"
+  category: mj_optimized
+  description: "Intricate dot pattern rendering of animals, stippled texture, wild energy"
+
+  visual:
+    color_grade: "rich natural tones, earthy palette, subtle gradients through dot density"
+    lighting: "implied through dot spacing, denser dots for shadow, sparse for highlights"
+    texture: "intricate dot patterns forming fur, feathers, scales, organic stippling"
+    contrast: "high through dot density variation"
+
+  mood:
+    primary: "primal"
+    secondary: ["wild", "organic", "textured", "hypnotic"]
+    energy: "still but alive, coiled potential"
+
+  prompt_prefix: "Animal in Dot Art style, realistic depiction with intricate dot patterns for fur and features, stippled texture, organic pointillism --stylize 60 --style raw"
+
+  negative_prompt: "solid colors, smooth gradients, cartoon, digital clean lines, photorealistic"
+
+  kling_motion_hints:
+    - "subtle breathing through dot shimmer"
+    - "slow rotation revealing dot patterns"
+    - "gentle wind through textured form"
+    - "static tension, coiled stillness"
+
+
+neoclassical_distorted:
+  id: neoclassical_distorted
+  name: "Neo-Classical Distorted"
+  category: mj_optimized
+  description: "Classical painting with surreal distortions, mythological grandeur meets reality-bending"
+
+  visual:
+    color_grade: "old master palette, rich ochres, deep shadows, golden highlights"
+    lighting: "dramatic chiaroscuro, divine light sources, painterly atmosphere"
+    texture: "oil painting brushstrokes, canvas texture, craquelure aging"
+    contrast: "dramatic, baroque lighting contrasts"
+
+  mood:
+    primary: "mythological"
+    secondary: ["surreal", "timeless", "grand", "unsettling"]
+    energy: "frozen moment of transcendence"
+
+  prompt_prefix: "Neo-classical painting of a mythological scene, idealized forms, classical composition, distorted reality, Caravaggio lighting, museum masterpiece quality"
+
+  negative_prompt: "modern, digital, clean, photograph, anime, cartoon, contemporary"
+
+  kling_motion_hints:
+    - "slow painterly transformation"
+    - "classical figure coming alive"
+    - "baroque light shifting"
+    - "canvas breathing imperceptibly"
+
+
+pink_floyd_cover:
+  id: pink_floyd_cover
+  name: "Pink Floyd Album Art"
+  category: mj_optimized
+  description: "Hipgnosis-inspired surrealism, impossible photography, concept album aesthetic"
+
+  visual:
+    color_grade: "rich saturated colors or stark minimal palette, high production value"
+    lighting: "impossible light sources, surreal studio lighting, conceptual"
+    texture: "photographic yet impossible, clean surrealism, seamless compositing"
+    contrast: "high, graphic, punchy"
+
+  mood:
+    primary: "conceptual"
+    secondary: ["surreal", "iconic", "thought-provoking", "expansive"]
+    energy: "still, contemplative, infinite"
+
+  prompt_prefix: "In the style of a Pink Floyd album cover, Hipgnosis photography, surreal impossible scene, conceptual art photography, clean surrealism, iconic composition"
+
+  negative_prompt: "low quality, amateur, busy, cluttered, generic, stock photo, obvious CGI"
+
+  kling_motion_hints:
+    - "imperceptible surreal shift"
+    - "impossible physics slowly revealed"
+    - "conceptual elements drifting"
+    - "infinite landscape breathing"
+
+
+soul_album_70s:
+  id: soul_album_70s
+  name: "70s Soul Album Art"
+  category: mj_optimized
+  description: "Warm analog photography, vintage soul record aesthetic, intimate portraiture"
+
+  visual:
+    color_grade: "warm amber, brown tones, golden hour glow, faded vintage"
+    lighting: "soft studio lighting, intimate, warm tungsten, diffused"
+    texture: "film grain, slightly soft focus, vinyl record sleeve quality"
+    contrast: "medium-low, creamy shadows, golden highlights"
+
+  mood:
+    primary: "soulful"
+    secondary: ["intimate", "warm", "nostalgic", "sensual"]
+    energy: "slow groove, intimate moment"
+
+  prompt_prefix: "In the style of a 70s soul album artwork, warm amber tones, vintage photography, intimate portrait, soft focus, film grain, golden hour lighting"
+
+  negative_prompt: "digital, harsh, cold tones, modern, sharp, HDR, oversaturated"
+
+  kling_motion_hints:
+    - "slow soulful sway"
+    - "warm light shifting"
+    - "intimate breathing moment"
+    - "vintage film flicker"
+
+
+minimal_distorted:
+  id: minimal_distorted
+  name: "Minimal Distorted Reality"
+  category: mj_optimized
+  description: "Clean composition with reality-bending elements, less is more surrealism"
+
+  visual:
+    color_grade: "limited palette, often monochromatic or duo-tone, clean"
+    lighting: "simple directional, high-key or dramatic, intentional"
+    texture: "clean surfaces, minimal noise, purposeful imperfections"
+    contrast: "graphic, strong figure-ground relationship"
+
+  mood:
+    primary: "contemplative"
+    secondary: ["surreal", "clean", "unsettling", "poetic"]
+    energy: "still, pregnant pause, tension"
+
+  prompt_prefix: "The feeling of [EMOTION], minimal composition, distorted reality, clean surrealism, graphic simplicity, intentional negative space"
+
+  negative_prompt: "busy, cluttered, photorealistic, mundane, stock, generic"
+
+  kling_motion_hints:
+    - "subtle reality warp"
+    - "minimal element shifting"
+    - "clean camera drift"
+    - "space breathing"
+
+
+minimalist_pop_art:
+  id: minimalist_pop_art
+  name: "Minimalist Pop Drawing"
+  category: mj_optimized
+  description: "Bold simplified forms, Warhol meets illustration, graphic impact"
+
+  visual:
+    color_grade: "bold flat colors, limited palette, high saturation pops"
+    lighting: "flat, no realistic lighting, pure graphic"
+    texture: "clean lines, halftone dots optional, print aesthetic"
+    contrast: "high, graphic, bold outlines"
+
+  mood:
+    primary: "bold"
+    secondary: ["graphic", "iconic", "playful", "immediate"]
+    energy: "punchy, instant impact"
+
+  prompt_prefix: "Minimalist pop art drawing, bold simplified forms, flat colors, graphic composition, clean lines, iconic imagery --sref 270540111"
+
+  negative_prompt: "photorealistic, 3D, gradients, complex, busy, detailed, photograph"
+
+  kling_motion_hints:
+    - "graphic element appearing"
+    - "color field shifting"
+    - "bold line animation"
+    - "pop art transformation"
+
+
+graphic_composition:
+  id: graphic_composition
+  name: "Graphic Composition"
+  category: mj_optimized
+  description: "Strong visual hierarchy, poster-like impact, design-forward imagery"
+
+  visual:
+    color_grade: "intentional limited palette, high contrast color relationships"
+    lighting: "serves composition, not realism, graphic light and shadow"
+    texture: "varies by intent - clean or textured but always intentional"
+    contrast: "high, clear visual hierarchy"
+
+  mood:
+    primary: "striking"
+    secondary: ["designed", "intentional", "bold", "immediate"]
+    energy: "impactful, poster-like"
+
+  prompt_prefix: "Graphic composition, strong visual hierarchy, poster-like impact, intentional color palette, bold design, striking imagery"
+
+  negative_prompt: "cluttered, busy, realistic, photograph, subtle, soft, casual snapshot"
+
+  kling_motion_hints:
+    - "elements sliding into composition"
+    - "graphic layers shifting"
+    - "bold color transitions"
+    - "designed movement"

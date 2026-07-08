@@ -1,0 +1,372 @@
+# Anti-Slop Authenticity System
+# 2025-12-14
+#
+# Core philosophy: Never try to fake reality. Embrace intentional artistic character.
+# The goal is NOT to avoid realism entirely - it's to avoid the uncanny valley of
+# "trying to look like real 4K footage of humans but failing."
+#
+# Good: Surreal sheep in sea of black sheep (realistic-ish but conceptual/abstract)
+# Good: Wong Kar-wai neon blur (stylized, intentional imperfection)
+# Good: Illustrated character (clearly artistic choice)
+# Bad: AI trying to render realistic human face in 4K (uncanny valley slop)
+
+core_principle:
+  name: "Visual Poetry, Not Literal Illustration"
+  description: |
+    We create VISUAL POETRY, not music videos. Lyrics are metaphors to interpret
+    emotionally and abstractly, NEVER literally. "Watching tornado videos" should
+    become swirling abstract forms consuming the frame, NOT a person at a computer.
+
+    Every image MUST have clear artistic intent - rotoscope, illustration,
+    collage, painterly, stop-motion, abstract, OR specific film-stock photography
+    with intentional imperfection (e.g., "shot on 35mm Kodak Vision3 500T, heavy
+    film grain, direct on-camera flash, imperfect scan texture"). Ban generic
+    AI photorealism ("photorealistic, 4K, hyperrealistic, 8K, HDR, stock photo,
+    digital smoothness, beauty filter") but allow art-directed photographic medium
+    when it serves the concept.
+
+  the_test: |
+    Ask THREE questions:
+    1. "Is this a literal interpretation of the lyrics?" → If yes, REDO IT
+    2. "Does this look like stock footage or standard video?" → If yes, ADD ARTISTIC TREATMENT
+    3. "Could this be mistaken for AI trying to fake real footage?" → If yes, STYLIZE IT
+
+  artistic_mandate: |
+    EVERY image must include one of these artistic treatments in the prompt:
+    - "rotoscoped line art style"
+    - "painterly brushstrokes, oil painting texture"
+    - "paper cut-out collage aesthetic"
+    - "risograph print texture, limited color palette"
+    - "stop-motion claymation feel"
+    - "abstract expressionist"
+    - "illustrated, graphic novel style"
+    - "degraded 16mm film, experimental photography"
+    - "charcoal sketch animation"
+    - "woodblock print aesthetic"
+
+# =============================================================================
+# SPECTRUM OF AUTHENTICITY
+# =============================================================================
+# Not binary (realistic vs artistic) - it's a spectrum of "character"
+
+authenticity_spectrum:
+
+  # TIER 1: Fully Stylized (safest, most character)
+  fully_stylized:
+    description: "Clearly artistic, no attempt at photorealism"
+    examples:
+      - "rotoscoped line art"
+      - "painterly rotoscope"
+      - "hand-drawn animation"
+      - "watercolor illustration"
+      - "pixel art / 8-bit"
+      - "paper cut-out collage"
+      - "stop motion claymation feel"
+      - "pencil sketch animation"
+      - "woodblock print style"
+      - "risograph texture"
+    when_to_use:
+      - "Artist wants clearly artistic/animated look"
+      - "Lyrics are highly metaphorical"
+      - "Budget/time constraints (stylized hides imperfections)"
+    flux_modifiers:
+      - "illustrated style"
+      - "hand-drawn aesthetic"
+      - "animation cel"
+      - "artistic rendering"
+
+  # TIER 2: Stylized Realism (realistic base + heavy style treatment)
+  stylized_realism:
+    description: "Photographic base but with heavy stylistic treatment"
+    examples:
+      - "posterized human motion"
+      - "high contrast silhouette"
+      - "fragmented/glitched human form"
+      - "degraded lo-fi film texture"
+      - "VHS tracking artifacts"
+      - "thermal camera aesthetic"
+      - "infrared photography"
+      - "solarized film"
+      - "cross-processed colors"
+      - "extreme film grain"
+      - "motion blur abstraction"
+    when_to_use:
+      - "Want grounded feel but with edge"
+      - "Music has raw/gritty energy"
+      - "Retro/nostalgic vibe"
+    flux_modifiers:
+      - "heavy film grain"
+      - "lo-fi degraded footage"
+      - "VHS aesthetic"
+      - "posterized"
+      - "high contrast"
+
+  # TIER 3: Conceptual Realism (realistic rendering + abstract concept)
+  conceptual_realism:
+    description: |
+      Realistic-looking but the SUBJECT/CONCEPT is abstract or surreal.
+      Like the white sheep in black sheep herd - rendered realistically
+      but the concept itself is metaphorical/surreal.
+    examples:
+      - "surreal composition with realistic elements"
+      - "impossible architecture"
+      - "dreamlike scenarios"
+      - "metaphor made literal"
+      - "scale distortion"
+      - "color-blocked environments"
+      - "symbolic object placement"
+      - "nature as character"
+      - "environmental storytelling"
+      - "objects instead of people"
+    when_to_use:
+      - "Want cinematic quality without fake humans"
+      - "Lyrics have strong metaphors to visualize"
+      - "Artist wants sophisticated/artistic but not 'cartoony'"
+    flux_modifiers:
+      - "surreal composition"
+      - "dreamlike atmosphere"
+      - "metaphorical imagery"
+      - "symbolic"
+    key_insight: |
+      This tier works because even though rendering is realistic,
+      the CONCEPT has character. No one mistakes surreal sheep
+      for "AI trying to fake real footage."
+
+# =============================================================================
+# HUMAN SUBJECT STRATEGIES
+# =============================================================================
+# When lyrics/scenes need "a person" - how to handle without uncanny valley
+
+human_subject_strategies:
+
+  avoid_direct_face:
+    name: "Avoid Direct Face"
+    description: "Show humans without clear facial features"
+    techniques:
+      - id: silhouette
+        name: "Silhouette"
+        prompt_hint: "silhouetted figure, backlit, dark outline against light"
+        best_for: ["emotional distance", "mystery", "universal/everyman"]
+
+      - id: back_of_head
+        name: "Back of Head / Away"
+        prompt_hint: "figure seen from behind, looking away from camera"
+        best_for: ["contemplation", "journey", "longing"]
+
+      - id: partial_obscured
+        name: "Partial / Obscured"
+        prompt_hint: "face partially hidden by shadow, hair, object, or frame edge"
+        best_for: ["intimacy", "vulnerability", "noir"]
+
+      - id: blur_motion
+        name: "Motion Blur"
+        prompt_hint: "figure in motion blur, ghostly movement trail"
+        best_for: ["energy", "passage of time", "emotional turmoil"]
+
+      - id: distance
+        name: "Environmental Distance"
+        prompt_hint: "small figure in vast landscape, human as element of scene"
+        best_for: ["isolation", "scale", "journey"]
+
+  stylize_the_human:
+    name: "Stylize the Human"
+    description: "Render humans in clearly artistic style"
+    techniques:
+      - id: rotoscope
+        name: "Rotoscope / Line Art"
+        prompt_hint: "rotoscoped figure, animated line art over form"
+        best_for: ["music videos", "dreamy", "A-ha Take On Me vibe"]
+
+      - id: painterly
+        name: "Painterly Human"
+        prompt_hint: "figure rendered in painterly brushstrokes, impressionistic"
+        best_for: ["emotional", "artistic", "timeless"]
+
+      - id: collage
+        name: "Collage / Cut-out"
+        prompt_hint: "cut-out paper collage figure, mixed media human form"
+        best_for: ["indie", "DIY aesthetic", "playful"]
+
+      - id: fragmented
+        name: "Fragmented Form"
+        prompt_hint: "fragmented human form, broken into geometric pieces"
+        best_for: ["emotional fracture", "identity", "surreal"]
+
+      - id: posterized
+        name: "Posterized"
+        prompt_hint: "posterized human figure, limited color palette, graphic"
+        best_for: ["bold", "pop art", "high energy"]
+
+  replace_with_symbol:
+    name: "Replace with Symbol"
+    description: "Use objects/symbols instead of humans"
+    techniques:
+      - id: object_as_character
+        name: "Object as Character"
+        prompt_hint: "anthropomorphized object, inanimate thing with presence"
+        best_for: ["metaphor", "conceptual", "unique"]
+
+      - id: nature_as_human
+        name: "Nature as Human"
+        prompt_hint: "natural element embodying human emotion, tree/water/fire as character"
+        best_for: ["elemental", "spiritual", "environmental"]
+
+      - id: hands_only
+        name: "Hands Only"
+        prompt_hint: "close-up of hands, human presence through gesture only"
+        best_for: ["intimacy", "action", "connection"]
+
+      - id: shadow_presence
+        name: "Shadow Presence"
+        prompt_hint: "human presence shown only through cast shadow"
+        best_for: ["noir", "mystery", "absence"]
+
+# =============================================================================
+# GLOBAL NEGATIVE PROMPTS
+# =============================================================================
+# Always add these to prevent slop
+
+global_negative_prompts:
+  # Core anti-slop (human faces)
+  always_avoid:
+    - "generic photorealistic"
+    - "hyperrealistic"
+    - "4K detail"
+    - "8K"
+    - "uncanny valley"
+    - "AI generated face"
+    - "deepfake"
+    - "stock photo human"
+    - "generic AI art"
+    - "oversaturated HDR"
+    - "plastic skin texture"
+    - "dead eyes"
+    - "perfect symmetrical face"
+    - "soulless"
+    - "corporate stock imagery"
+    - "beauty filter"
+    - "instagram filter"
+    - "influencer aesthetic"
+    - "digital smoothness"
+
+  # Anti-generic (fight AI tropes)
+  anti_generic_tropes:
+    - "generic vaporwave"
+    - "generic synthwave aesthetic"
+    - "generic neon city"
+    - "generic cyberpunk"
+    - "generic anime style"
+    - "generic fantasy art"
+    - "artstation trending"
+    - "deviantart"
+    - "pinterest aesthetic"
+    - "tumblr aesthetic"
+    - "instagram filter"
+    - "midjourney default style"
+    - "stable diffusion artifacts"
+    - "AI art cliches"
+    - "overprocessed"
+    - "oversaturated colors"
+    - "fake HDR"
+    - "lens flare abuse"
+    - "generic bokeh"
+    - "stock photography lighting"
+
+  combined_negative: "generic photorealistic, hyperrealistic, 4K detail, 8K, HDR, uncanny valley, AI generated face, deepfake, stock photo, generic AI art, oversaturated HDR, plastic skin, dead eyes, soulless, corporate stock imagery, generic vaporwave, generic synthwave, generic neon city, generic cyberpunk, artstation trending, midjourney default style, AI art cliches, overprocessed, beauty filter, instagram filter, influencer aesthetic, digital smoothness"
+
+# =============================================================================
+# AUTHENTICITY MODIFIERS BY STYLE
+# =============================================================================
+# How to apply anti-slop to each existing style
+
+style_authenticity_modifiers:
+
+  wong_kar_wai:
+    safe_because: "Heavy film grain, motion blur, and neon already provide character"
+    enhance_with: "expired film texture, smeared light trails, dreamy soft focus"
+    human_approach: "faces in shadow, reflection, or motion blur - never crisp"
+
+  wes_anderson:
+    safe_because: "Stylized symmetry and color palette is clearly artistic"
+    enhance_with: "miniature/dollhouse quality, storybook illustration feel"
+    human_approach: "posed like dolls, theatrical staging, slightly uncanny on purpose"
+
+  david_fincher:
+    safe_because: "Dark shadows hide details, clinical mood is intentional"
+    enhance_with: "faces half in shadow, rain-diffused, noir silhouettes"
+    human_approach: "obscured faces, shadow play, environmental dread over human focus"
+
+  gaspar_noe:
+    safe_because: "Strobing, color separation, disorientation is the point"
+    enhance_with: "light trails, motion smear, DMT visual distortion"
+    human_approach: "fragmented, spinning, abstracted through movement"
+
+  a24:
+    safe_because: "Naturalistic but with eerie/dreamy quality"
+    enhance_with: "soft focus moments, film grain, slightly off-kilter framing"
+    human_approach: "environmental portraits, faces in thought, not direct address"
+
+  dali_surreal:
+    safe_because: "Surrealism is inherently non-realistic"
+    enhance_with: "melting forms, impossible physics, dreamscape"
+    human_approach: "warped proportions, symbolic figures, not literal humans"
+
+  character_surrealism:
+    safe_because: "Exaggerated proportions, toy-like quality"
+    enhance_with: "oversized heads, miniature aesthetic, whimsical deadpan"
+    human_approach: "caricature proportions, clearly stylized, not realistic"
+
+# =============================================================================
+# DECISION TREE FOR CREATIVE DIRECTOR
+# =============================================================================
+
+decision_tree:
+  step_1_check_subject:
+    question: "Does this scene need a human figure?"
+    if_no: "Proceed with conceptual/environmental imagery"
+    if_yes: "Go to step 2"
+
+  step_2_check_style:
+    question: "Does the chosen style already have strong character?"
+    if_yes: "Apply style's human_approach from modifiers above"
+    if_no: "Go to step 3"
+
+  step_3_choose_strategy:
+    question: "What's the emotional need?"
+    options:
+      - emotion: "intimacy/vulnerability"
+        strategy: "partial_obscured or painterly"
+      - emotion: "power/presence"
+        strategy: "silhouette or posterized"
+      - emotion: "journey/contemplation"
+        strategy: "back_of_head or distance"
+      - emotion: "energy/chaos"
+        strategy: "blur_motion or fragmented"
+      - emotion: "metaphor/concept"
+        strategy: "replace_with_symbol"
+
+  step_4_apply_negative:
+    action: "Always add global_negative_prompts.combined_negative to generation"
+
+# =============================================================================
+# EXAMPLE TRANSFORMATIONS
+# =============================================================================
+
+examples:
+
+  bad_prompt:
+    original: "beautiful woman singing into microphone, 4K, detailed face, studio lighting"
+    problem: "Will produce uncanny valley AI face slop"
+
+  good_transformations:
+    - tier: "fully_stylized"
+      prompt: "rotoscoped figure singing into vintage microphone, animated line art, hand-drawn aesthetic"
+
+    - tier: "stylized_realism"
+      prompt: "silhouetted singer at microphone, dramatic backlight, high contrast, heavy film grain, noir atmosphere"
+
+    - tier: "conceptual_realism"
+      prompt: "vintage microphone alone on empty stage, dramatic spotlight, dust particles in air, the presence of music without the performer"
+
+    - tier: "wong_kar_wai_treatment"
+      prompt: "figure singing, face obscured by neon light flare, motion blur, expired film stock, smeared colors, In the Mood for Love aesthetic"

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync } from 'node:fs';
+import { existsSync, writeSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -82,8 +82,8 @@ const result = spawnSync(runtime.command, [...runtime.argsPrefix, pythonScript, 
   maxBuffer: 8 * 1024 * 1024,
 });
 
-if (result.stdout) process.stdout.write(result.stdout);
-if (result.stderr) process.stderr.write(result.stderr);
+if (result.stdout) writeSync(1, result.stdout);
+if (result.stderr) writeSync(2, result.stderr);
 
 if (!result.stdout && result.status !== 0) {
   print({

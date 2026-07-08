@@ -16,7 +16,9 @@ node bin/genesis-lyric.mjs preflight --brief-file brief.json --json
 node bin/genesis-lyric.mjs render --brief-file brief.json --approved --json
 ```
 
-`storyboard` is a no-spend Genesis Creative Director / Motion Director planning pass. It ports the real Genesis cinema-mode, capture-realism, motion-compiler, and motion-QA grammar into this app-owned fork. It returns scene beats, image prompts, compiled image-to-video motion prompts, QA findings, media-generation handoff instructions, and the final render handoff.
+`storyboard` is a no-spend Genesis creative-direction planning pass. It ports and applies the real Genesis Creative Director prompt doctrine, seed primitives, knowledge libraries, cinema-mode grammar, capture-realism, motion compiler, and motion QA into this app-owned fork. It returns scene beats, image prompts, negative prompts, compiled image-to-video motion prompts, QA findings, media-generation handoff instructions, and the final render handoff. It does not call the original Genesis LLM/provider runtime.
+
+`doctor` validates FFmpeg plus the vendored Creative Director prompt, primitive vocabulary, and knowledge files. Treat Creative Director blockers as real setup blockers before storyboard or render work.
 
 ## Brief Shape
 
@@ -42,6 +44,6 @@ Supported aspect ratios are `9:16`, `1:1`, and `16:9`.
 - Single lyric videos only.
 - Good for TikTok/Reels/Shorts lyric clips, captioned song teasers, and lyric-first audio-drop videos.
 - Requires `lyrics` or timed `lyric_lines`; silent Spotify Canvas loops belong in the Spotify Canvas/Hypermotion lane.
-- Includes the Genesis shot/motion director grammar for one-off storyboard planning.
+- Includes Genesis Creative Director prompt/vocabulary/knowledge assets plus shot/motion director grammar for one-off storyboard planning.
 - Not the Genesis 20-day campaign planner, portal/API, scheduler, or batch worker architecture.
 - Does not call image/video generation providers or read provider API keys.

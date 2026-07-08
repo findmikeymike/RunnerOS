@@ -2953,7 +2953,7 @@ export class SessionManager implements ISessionManager {
           ].join('\n')
           const lyricVideoNewVisualWorkflow = [
             '3. Write a brief JSON with `audio_file`, `lyrics` or `lyric_lines`, optional `video_file`/`image_file`, `duration_seconds`, `aspect_ratio`, and `output_dir`.',
-            '4. Before generating or choosing visuals, run `node bin/genesis-lyric.mjs storyboard --brief-file ... --json`. Use its Genesis Creative Director / Motion Director output as the source of truth for scenes, image prompts, motion prompts, and QA findings.',
+            '4. Before generating or choosing visuals, run `node bin/genesis-lyric.mjs storyboard --brief-file ... --json`. Use its Genesis Creative Director asset stack plus Motion Director compiler output as the source of truth for scenes, image prompts, motion prompts, and QA findings.',
             '5. If the visual source is missing, help the user choose one lane: existing footage, existing still/artwork, artist-photo/face-reference from Artist Vault, or approved generated visual from `media-generation`. Generated visuals must follow the storyboard `image_prompt` and `motion_prompt`.',
             '6. Only publish a storyboard to Canvas when it is visual or review-useful: individual frames, a side-by-side/linear storyboard board, image strip, or approved durable handoff. Keep plain text planning/storyboard notes in chat.',
             '7. For storyboard images, avoid cramped stacked/contact-sheet collages. Prefer large chronological frames side-by-side or a linear sequence where each scene can be inspected clearly.',

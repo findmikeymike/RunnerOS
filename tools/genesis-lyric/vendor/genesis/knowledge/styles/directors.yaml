@@ -1,0 +1,201 @@
+# Director Styles
+# Visual aesthetics inspired by iconic filmmakers
+
+wong_kar_wai:
+  id: wong_kar_wai
+  name: "Wong Kar-wai"
+  category: director
+  description: "Saturated expired film, neon-soaked yearning, smeared motion blur, intimate urban melancholy"
+
+  visual:
+    color_grade: "saturated expired film stock, heavy cyan and magenta push, warm skin tones against cool backgrounds"
+    lighting: "neon reflections, rain-soaked surfaces, practicals (signs, lamps), night-dominant"
+    texture: "film grain, motion blur, soft focus edges, light leaks"
+    contrast: "medium-high, crushed blacks with neon pops"
+
+  mood:
+    primary: "yearning"
+    secondary: ["melancholic", "romantic", "lonely", "sensual"]
+    energy: "slow, languid, contemplative"
+
+  camera:
+    movement: "handheld with drift, step-printed slow motion, subtle sway"
+    framing: "intimate close-ups, faces in reflection, frames within frames"
+    angles: "eye-level, slight dutch in emotional moments"
+
+  prompt_prefix: "Wong Kar-wai cinematography style, In the Mood for Love aesthetic, saturated expired film stock, heavy cyan and magenta color grading, neon reflections on wet streets, smeared motion blur, intimate shallow depth of field, rain-soaked urban night"
+
+  negative_prompt: "bright daylight, happy, cartoon, anime, 3D render, oversaturated, clean digital look"
+
+  kling_motion_hints:
+    - "slow dreamy movement with motion blur trails"
+    - "rain falling through neon light"
+    - "subtle swaying, breathing atmosphere"
+    - "step-printed slow motion feel"
+
+
+wes_anderson:
+  id: wes_anderson
+  name: "Wes Anderson"
+  category: director
+  description: "Symmetrical compositions, pastel palette, whimsical precision, dollhouse staging"
+
+  visual:
+    color_grade: "pastel palette, desaturated warm tones, mustard yellows, dusty pinks, muted teals"
+    lighting: "flat, even lighting, soft shadows, diffused daylight"
+    texture: "clean, crisp, minimal grain, storybook quality"
+    contrast: "low-medium, soft and even"
+
+  mood:
+    primary: "whimsical"
+    secondary: ["melancholic", "nostalgic", "deadpan", "precise"]
+    energy: "controlled, deliberate, still"
+
+  camera:
+    movement: "precise lateral tracking, snap zooms, static tableaux"
+    framing: "perfect symmetry, centered subjects, planimetric (flat to wall)"
+    angles: "straight-on, 90-degree angles, birds-eye inserts"
+
+  prompt_prefix: "Wes Anderson film style, perfect symmetrical composition, centered framing, pastel color palette, mustard yellow and dusty pink tones, flat even lighting, whimsical deadpan aesthetic, storybook quality, planimetric staging"
+
+  negative_prompt: "asymmetrical, handheld, gritty, dark, horror, realistic grain, chaotic composition"
+
+  kling_motion_hints:
+    - "perfectly smooth lateral tracking shot"
+    - "static frame with subtle character movement"
+    - "slow deliberate zoom"
+    - "mechanical precision movement"
+
+
+
+david_fincher:
+  id: david_fincher
+  name: "David Fincher"
+  category: director
+  description: "Dark, clinical precision, desaturated green-yellow tint, obsessive detail, rain and shadow"
+
+  visual:
+    color_grade: "desaturated, sickly green-yellow tint, teal shadows, muted palette"
+    lighting: "low-key, motivated practicals, shafts of light in darkness, rain-diffused"
+    texture: "digital precision, controlled grain, hyper-sharp details"
+    contrast: "high, deep blacks, selective highlights"
+
+  mood:
+    primary: "dread"
+    secondary: ["clinical", "obsessive", "paranoid", "cold"]
+    energy: "controlled tension, slow burn"
+
+  camera:
+    movement: "smooth dolly, impossible camera moves, slow methodical push"
+    framing: "precise composition, negative space, faces half in shadow"
+    angles: "slightly low, imposing, architectural"
+
+  prompt_prefix: "David Fincher cinematography style, dark desaturated palette, sickly green-yellow color tint, high contrast shadows, clinical precision, rain-soaked night, faces half-hidden in shadow, obsessive detail, cold atmosphere"
+
+  negative_prompt: "warm colors, bright daylight, cheerful, saturated, soft focus, casual framing"
+
+  kling_motion_hints:
+    - "impossibly smooth slow dolly push"
+    - "rain streaking through frame"
+    - "subtle slow zoom into detail"
+    - "methodical tracking shot"
+
+
+sofia_coppola:
+  id: sofia_coppola
+  name: "Sofia Coppola"
+  category: director
+  description: "Dreamy haze, soft pastels, feminine isolation, luxurious ennui, natural light"
+
+  visual:
+    color_grade: "soft pastels, pink and gold tones, overexposed highlights, desaturated but warm"
+    lighting: "natural light, magic hour, soft diffusion, backlit haze"
+    texture: "soft focus, dreamy blur, subtle grain, gauzy quality"
+    contrast: "low, blown highlights, lifted shadows"
+
+  mood:
+    primary: "longing"
+    secondary: ["isolated", "luxurious", "bored", "dreamy", "feminine"]
+    energy: "languid, floating, detached"
+
+  camera:
+    movement: "slow drift, lingering gazes, static contemplation"
+    framing: "intimate but distanced, subjects lost in space, frames within frames"
+    angles: "eye-level, soft, non-confrontational"
+
+  prompt_prefix: "Sofia Coppola film aesthetic, dreamy soft focus, pastel pink and gold tones, natural backlit lighting, overexposed hazy highlights, feminine isolation, luxurious melancholy, magic hour glow, gauzy ethereal quality"
+
+  negative_prompt: "harsh lighting, high contrast, gritty, masculine, dark shadows, sharp focus throughout"
+
+  kling_motion_hints:
+    - "slow dreamy drift through space"
+    - "soft focus shifts"
+    - "gentle floating movement"
+    - "lingering static with subtle atmosphere"
+
+
+
+gaspar_noe:
+  id: gaspar_noe
+  name: "Gaspar Noé"
+  category: director
+  description: "Strobing neon, disorienting camera, confrontational visuals, DMT-inspired, nightclub fever"
+
+  visual:
+    color_grade: "hyper-saturated neon, red and blue dominant, color separation, blown-out highlights"
+    lighting: "strobing, neon tubes, nightclub lighting, harsh unnatural sources"
+    texture: "digital sharpness, intentional artifacts, light trails"
+    contrast: "extreme, crushed blacks with neon burns"
+
+  mood:
+    primary: "disorienting"
+    secondary: ["confrontational", "hypnotic", "ecstatic", "nightmarish"]
+    energy: "intense, overwhelming, pulsing"
+
+  camera:
+    movement: "spinning, floating POV, long unbroken takes, inverted, disorienting"
+    framing: "overhead god shots, POV sequences, unconventional angles"
+    angles: "extreme overhead, inverted, swirling"
+
+  prompt_prefix: "Gaspar Noé visual style, Enter the Void aesthetic, hyper-saturated neon colors, red and blue color separation, strobing nightclub lighting, disorienting perspective, DMT-inspired visuals, long exposure light trails, confrontational imagery"
+
+  negative_prompt: "natural lighting, soft colors, conventional framing, calm, peaceful, daylight"
+
+  kling_motion_hints:
+    - "slow spinning rotation"
+    - "floating overhead POV drift"
+    - "strobing light pulses"
+    - "disorienting swirl movement"
+
+
+quentin_tarantino:
+  id: quentin_tarantino
+  name: "Quentin Tarantino"
+  category: director
+  description: "Bold saturated color, 70s exploitation aesthetic, trunk shots, stylized violence, pulpy"
+
+  visual:
+    color_grade: "bold saturated colors, warm 70s tones, yellow-orange push, film stock texture"
+    lighting: "high contrast, dramatic shadows, practical sources, exploitation film aesthetic"
+    texture: "heavy film grain, 35mm texture, scratches and wear, retro film stock"
+    contrast: "high, punchy blacks, bold color separation"
+
+  mood:
+    primary: "cool"
+    secondary: ["tense", "stylish", "retro", "dangerous", "darkly comedic"]
+    energy: "explosive potential, coiled tension, sudden bursts"
+
+  camera:
+    movement: "crash zooms, whip pans, trunk shots, 360 spins, feet tracking"
+    framing: "low angles looking up, trunk POV, split screen, extreme close-ups"
+    angles: "low powerful angles, worm's eye view, confrontational"
+
+  prompt_prefix: "Quentin Tarantino film style, bold saturated colors, 70s exploitation cinema aesthetic, heavy film grain, dramatic low angle shot, warm yellow-orange color grade, stylized cinematic lighting, retro pulp movie texture"
+
+  negative_prompt: "desaturated, soft, digital clean look, modern minimal, flat lighting, peaceful"
+
+  kling_motion_hints:
+    - "slow dramatic push in"
+    - "crash zoom effect"
+    - "360 degree rotation around subject"
+    - "tracking along ground level"

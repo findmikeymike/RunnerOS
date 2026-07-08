@@ -1,0 +1,65 @@
+# Shot Types Library
+
+shot_types:
+  extreme_close_up:
+    id: extreme_close_up
+    name: "Extreme Close-Up"
+    description: "Tight on eyes, lips, hands, or details. Maximum intimacy."
+    emotional_effect: "intensity, vulnerability, focus on micro-expressions"
+    best_for: ["emotional peaks", "lyric emphasis", "detail reveals"]
+    flux_hint: "extreme close-up shot, tight framing on"
+    kling_hint: "subtle breathing movement, micro-expressions"
+
+  close_up:
+    id: close_up
+    name: "Close-Up"
+    description: "Head and shoulders, face dominant."
+    emotional_effect: "connection, emotion, presence"
+    best_for: ["verses", "emotional delivery", "character establishment"]
+    flux_hint: "close-up portrait shot, head and shoulders"
+    kling_hint: "subtle head movement, eye contact"
+
+  medium_shot:
+    id: medium_shot
+    name: "Medium Shot"
+    description: "Waist up, body language visible."
+    emotional_effect: "balanced, conversational, action-capable"
+    best_for: ["narrative moments", "performance", "interaction"]
+    flux_hint: "medium shot, waist up framing"
+    kling_hint: "natural body movement, gestures"
+
+  wide_establishing:
+    id: wide_establishing
+    name: "Wide/Establishing"
+    description: "Full environment, subject small in frame."
+    emotional_effect: "context, scale, isolation or belonging"
+    best_for: ["intros", "transitions", "showing environment"]
+    flux_hint: "wide establishing shot, full environment"
+    kling_hint: "slow pan or static with atmosphere"
+
+  dutch_angle:
+    id: dutch_angle
+    name: "Dutch Angle"
+    description: "Tilted frame, diagonal horizon."
+    emotional_effect: "tension, unease, disorientation"
+    best_for: ["drops", "tension building", "surreal moments"]
+    flux_hint: "dutch angle, tilted frame"
+    kling_hint: "slight rotation or unsettling stillness"
+
+  overhead:
+    id: overhead
+    name: "Overhead/God Shot"
+    description: "Looking straight down on subject."
+    emotional_effect: "vulnerability, pattern, omniscient view"
+    best_for: ["visual breaks", "symbolic moments", "transitions"]
+    flux_hint: "overhead bird's eye view shot"
+    kling_hint: "slow rotation or drift"
+
+  pov:
+    id: pov
+    name: "POV"
+    description: "First-person perspective, seeing what subject sees."
+    emotional_effect: "immersion, subjective experience"
+    best_for: ["verse storytelling", "journey moments", "discovery"]
+    flux_hint: "first person POV perspective"
+    kling_hint: "walking movement, looking around"

@@ -1,0 +1,66 @@
+# Camera Movements Library
+
+camera_movements:
+  static:
+    id: static
+    name: "Static"
+    description: "Locked off, no movement. Subject moves within frame."
+    emotional_effect: "stability, observation, theatrical"
+    energy_match: ["low", "medium"]
+    kling_prompt: "static camera, locked off frame"
+
+  slow_push:
+    id: slow_push
+    name: "Slow Push"
+    description: "Gradual move toward subject. Building intensity."
+    emotional_effect: "building tension, focus, revelation"
+    energy_match: ["low", "medium", "building"]
+    kling_prompt: "slow push in toward subject, gradual dolly forward"
+
+  slow_pull:
+    id: slow_pull
+    name: "Slow Pull"
+    description: "Gradual move away from subject. Revealing context."
+    emotional_effect: "revelation, isolation, departure"
+    energy_match: ["low", "medium", "falling"]
+    kling_prompt: "slow pull back from subject, gradual dolly backward"
+
+  drift:
+    id: drift
+    name: "Drift"
+    description: "Subtle lateral or floating movement. Dreamy."
+    emotional_effect: "dreamlike, contemplative, floating"
+    energy_match: ["low", "medium"]
+    kling_prompt: "subtle floating drift movement, dreamlike sway"
+
+  orbit:
+    id: orbit
+    name: "Orbit"
+    description: "Circular movement around subject."
+    emotional_effect: "examination, revelation, cinematic"
+    energy_match: ["medium", "high"]
+    kling_prompt: "slow orbit around subject, circular tracking shot"
+
+  crane_up:
+    id: crane_up
+    name: "Crane Up"
+    description: "Rising vertical movement."
+    emotional_effect: "elevation, triumph, transcendence"
+    energy_match: ["medium", "high", "climax"]
+    kling_prompt: "crane up movement, rising vertical shot"
+
+  handheld:
+    id: handheld
+    name: "Handheld"
+    description: "Organic shake, human presence."
+    emotional_effect: "urgency, intimacy, documentary"
+    energy_match: ["medium", "high"]
+    kling_prompt: "handheld camera movement, organic subtle shake"
+
+  whip_pan:
+    id: whip_pan
+    name: "Whip Pan"
+    description: "Fast horizontal blur between subjects."
+    emotional_effect: "energy, transition, surprise"
+    energy_match: ["high"]
+    kling_prompt: "fast whip pan blur, quick horizontal swipe"

@@ -1,0 +1,53 @@
+# Surreal Styles
+
+character_surrealism:
+  id: character_surrealism
+  name: "Character Surrealism"
+  category: surreal
+  description: "Geometric symmetry, bold pastels, toy-like proportions, whimsical deadpan"
+  visual:
+    color_grade: "bold pastel palette, clean saturated colors, candy tones"
+    lighting: "clean hard sunlight, sharp defined shadows, bright even"
+    texture: "ultra-smooth surfaces, toy-like plastic quality, miniature aesthetic"
+    contrast: "medium-high, clean separation, graphic quality"
+  mood:
+    primary: "whimsical"
+    secondary: ["surreal", "deadpan", "playful", "uncanny", "childlike"]
+    energy: "still, posed, tableau vivant"
+  camera:
+    movement: "static or slow precise orbit, dollhouse perspective"
+    framing: "geometric symmetrical, centered, wide-angle perspective"
+    angles: "straight on, slightly elevated, architectural"
+  prompt_prefix: "character surrealism, geometric symmetrical framing, bold pastel color palette, clean hard-sunlight shadows, exaggerated caricature proportions, oversized head, toy-like miniature aesthetic, ultra-smooth textures, whimsical deadpan mood, mid-century surrealism, minimalistic architectural environment, wide-angle perspective, cinematic stillness"
+  negative_prompt: "realistic proportions, gritty, dark, natural lighting, chaotic composition, horror"
+  kling_motion_hints:
+    - "perfectly still tableau"
+    - "slow mechanical rotation"
+    - "subtle toy-like movement"
+    - "miniature dolly effect"
+
+dali_surreal:
+  id: dali_surreal
+  name: "Dali Surreal"
+  category: surreal
+  description: "Salvador Dali-inspired, melting forms, impossible physics, dreamlike desert, symbolic objects"
+  visual:
+    color_grade: "golden hour warmth, desert earth tones, hyper-real saturation"
+    lighting: "long soft shadows, golden hour, impossible light sources"
+    texture: "hyper-real surfaces, painterly yet photorealistic, intricate micro-details"
+    contrast: "medium, soft atmospheric, dreamlike"
+  mood:
+    primary: "dreamlike"
+    secondary: ["surreal", "unsettling", "symbolic", "timeless", "philosophical"]
+    energy: "slow, suspended, eternal"
+  camera:
+    movement: "slow impossible drift, floating perspective"
+    framing: "vast landscapes with symbolic objects, warped architecture"
+    angles: "slightly low, emphasizing surreal scale"
+  prompt_prefix: "Salvador Dali-inspired surrealism, hyper-real textures, melting architectural forms, warped facial structure, desert horizon, floating symbolic objects, impossible shadows, dreamlike physics, intricate micro-details, golden-hour lighting, long soft shadows, surreal clouds, time motifs clocks and gears, painterly yet photorealistic rendering, quiet unsettling mood"
+  negative_prompt: "mundane, realistic physics, urban, modern, casual, cartoon, anime"
+  kling_motion_hints:
+    - "slow melting transformation"
+    - "floating objects drifting"
+    - "impossible physics movement"
+    - "dreamlike slow motion"

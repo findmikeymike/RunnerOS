@@ -1,0 +1,559 @@
+# Raw & Authentic Styles
+# 2025-01-05
+# Styles focused on artistic authenticity over polish
+# Every style here should scream "intentional art" not "AI trying to look real"
+
+# ============================================
+# HAND-DRAWN & ANIMATION
+# ============================================
+
+rotoscope_raw:
+  id: rotoscope_raw
+  name: "Raw Rotoscope"
+  category: hand_drawn
+  description: "Rough rotoscoped animation, A-ha Take On Me aesthetic but rawer, more gestural"
+
+  visual:
+    color_grade: "limited palette, 2-3 colors max, high contrast black outlines"
+    lighting: "flat shading, cel-shaded shadows, no realistic lighting"
+    texture: "hand-drawn line weight variation, sketch quality, paper texture"
+    contrast: "high, bold black against color"
+
+  mood:
+    primary: "dynamic"
+    secondary: ["raw", "energetic", "nostalgic", "artistic"]
+    energy: "kinetic, hand-crafted"
+
+  prompt_prefix: "raw rotoscoped animation frame, bold irregular ink outlines tracing form, hand-drawn cel animation, visible pen strokes with varying pressure, animation frame with sketch quality, limited flat color palette, A-ha Take On Me aesthetic"
+
+  negative_prompt: "photorealistic, 3D render, photograph, smooth gradients, digital clean lines, realistic shading, natural colors, CGI"
+
+  kling_motion_hints:
+    - "subtle hand-drawn line wobble"
+    - "ink lines breathing slightly"
+    - "animation frame jitter"
+    - "sketch lines shifting imperceptibly"
+
+
+charcoal_expressive:
+  id: charcoal_expressive
+  name: "Expressive Charcoal"
+  category: hand_drawn
+  description: "Raw charcoal and graphite, smudged and unfinished, emotionally expressive"
+
+  visual:
+    color_grade: "monochrome, deep blacks, bright paper whites, grey gradations"
+    lighting: "pure value contrast, no color, dramatic light and shadow"
+    texture: "heavy charcoal grain, smudged edges, visible paper tooth, gestural marks"
+    contrast: "extreme, rich blacks against raw paper"
+
+  mood:
+    primary: "raw"
+    secondary: ["intense", "vulnerable", "expressive", "unfinished"]
+    energy: "urgent, gestural, immediate"
+
+  prompt_prefix: "expressive charcoal sketch on rough paper, heavy graphite marks, smudged edges, raw unfinished quality, visible paper texture, dramatic black and white values, gestural drawing, artist sketch study"
+
+  negative_prompt: "color, photorealistic, clean lines, digital, smooth gradients, polished, 3D render, photograph"
+
+  kling_motion_hints:
+    - "charcoal dust settling"
+    - "subtle paper texture shift"
+    - "smudge marks breathing"
+    - "static with grain movement"
+
+
+ink_wash_minimal:
+  id: ink_wash_minimal
+  name: "Minimal Ink Wash"
+  category: hand_drawn
+  description: "Sumi-e inspired, flowing black ink, zen minimalism, negative space"
+
+  visual:
+    color_grade: "black ink gradients on cream/white, no color, ink density variations"
+    lighting: "no realistic lighting, ink defines form"
+    texture: "rice paper grain, wet brush edges, ink pooling, calligraphic strokes"
+    contrast: "high where ink meets paper, soft gradients within washes"
+
+  mood:
+    primary: "contemplative"
+    secondary: ["zen", "minimal", "elegant", "quiet"]
+    energy: "still, meditative, breathing"
+
+  prompt_prefix: "sumi-e ink wash painting, flowing black ink on rice paper, zen minimalism, wet brush strokes, ink bleeding at edges, vast negative space, calligraphic quality, Japanese brush painting aesthetic"
+
+  negative_prompt: "color, photorealistic, busy composition, sharp lines, digital, 3D render, cluttered"
+
+  kling_motion_hints:
+    - "ink slowly bleeding into paper"
+    - "wet edge expanding imperceptibly"
+    - "paper texture breathing"
+    - "static contemplative frame"
+
+
+# ============================================
+# LO-FI PHOTOGRAPHY
+# ============================================
+
+expired_kodak_gold:
+  id: expired_kodak_gold
+  name: "Expired Kodak Gold"
+  category: lo_fi_photo
+  description: "Heavily expired film with warm color shifts, light leaks, chemical decay"
+
+  visual:
+    color_grade: "warm yellow-orange shift, faded greens become yellow, cyan shadows"
+    lighting: "harsh or soft depending on scene, light leaks bleeding in"
+    texture: "extreme grain, dust, scratches, chemical imperfections"
+    contrast: "faded blacks, blown highlights, compressed midtones"
+
+  mood:
+    primary: "nostalgic"
+    secondary: ["faded", "warm", "imperfect", "memory-like"]
+    energy: "slow, contemplative, time-worn"
+
+  prompt_prefix: "photograph shot on heavily expired Kodak Gold 200 film, extreme warm color shift, heavy film grain, light leaks bleeding orange and yellow, chemical degradation marks, faded shadows, scratched negative"
+
+  negative_prompt: "digital, clean, sharp, modern, HDR, neutral colors, perfect exposure"
+
+  kling_motion_hints:
+    - "film grain dancing"
+    - "light leak slowly passing through"
+    - "subtle frame drift"
+    - "chemical artifacts flickering"
+
+
+disposable_flash:
+  id: disposable_flash
+  name: "Disposable Flash"
+  category: lo_fi_photo
+  description: "Harsh disposable camera flash, red eye possibility, amateur aesthetic"
+
+  visual:
+    color_grade: "harsh flash makes subjects pale, background falls to black, green/cyan tint"
+    lighting: "single harsh flash, flat frontal, deep shadows behind"
+    texture: "heavy grain, plastic lens softness, light falloff at edges"
+    contrast: "extreme, blown center, dark edges"
+
+  mood:
+    primary: "raw"
+    secondary: ["candid", "party", "amateur", "authentic"]
+    energy: "snapshot, immediate, unplanned"
+
+  prompt_prefix: "disposable camera photograph, harsh direct flash, heavy film grain, plastic lens quality, light falloff at edges, candid amateur aesthetic, 90s party photo vibe, slightly out of focus"
+
+  negative_prompt: "professional lighting, studio, clean, sharp, digital, balanced exposure"
+
+  kling_motion_hints:
+    - "flash aftermath flicker"
+    - "static snapshot quality"
+    - "grain noise movement"
+    - "minimal motion, frozen moment"
+
+
+polaroid_faded:
+  id: polaroid_faded
+  name: "Faded Polaroid"
+  category: lo_fi_photo
+  description: "Instant film with chemical imperfections, warm yellow cast, soft focus"
+
+  visual:
+    color_grade: "warm yellow cast, faded pastels, desaturated but warm, creamy whites"
+    lighting: "soft diffused, overexposed center, dark corners"
+    texture: "polaroid frame border, chemical swirls, dust, fingerprints"
+    contrast: "low, milky shadows, soft highlights"
+
+  mood:
+    primary: "intimate"
+    secondary: ["nostalgic", "dreamy", "vulnerable", "fleeting"]
+    energy: "quiet, personal, precious"
+
+  prompt_prefix: "faded polaroid instant photo, warm yellow tint throughout, soft focus edges, chemical imperfections visible, white polaroid border frame, dust and fingerprint marks, intimate candid quality"
+
+  negative_prompt: "digital, sharp, modern, professional, clean, studio lighting"
+
+  kling_motion_hints:
+    - "photo developing slowly"
+    - "chemical colors shifting"
+    - "soft focus breathing"
+    - "dust particles floating on surface"
+
+
+vhs_pause:
+  id: vhs_pause
+  name: "VHS Pause Frame"
+  category: lo_fi_photo
+  description: "Frozen VHS frame with scan lines, tracking noise, analog warmth"
+
+  visual:
+    color_grade: "oversaturated reds, bleeding colors, warm analog tint"
+    lighting: "CRT glow quality, blooming highlights, soft edges"
+    texture: "horizontal scan lines, tracking errors, tape noise, RGB shift"
+    contrast: "boosted, crushed blacks with glowing whites"
+
+  mood:
+    primary: "retro"
+    secondary: ["hypnotic", "nostalgic", "degraded", "eerie"]
+    energy: "frozen moment, time displacement"
+
+  prompt_prefix: "VHS pause frame freeze, horizontal scan lines visible, tracking error lines, RGB color bleeding and shift, analog video noise texture, CRT monitor glow, tape degradation artifacts"
+
+  negative_prompt: "digital, clean, 4K, modern, sharp, HD quality, professional video"
+
+  kling_motion_hints:
+    - "scan line flicker"
+    - "tracking error pulse"
+    - "RGB channels shifting"
+    - "tape wobble artifact"
+
+
+thermal_surveillance:
+  id: thermal_surveillance
+  name: "Thermal Surveillance"
+  category: lo_fi_photo
+  description: "Infrared/thermal camera aesthetic, heat signature visualization"
+
+  visual:
+    color_grade: "thermal palette - black/blue cold, yellow/white hot, or green night vision"
+    lighting: "heat sources glow, cold areas dark"
+    texture: "thermal noise pattern, pixelated edges, data overlay"
+    contrast: "based on temperature differential"
+
+  mood:
+    primary: "eerie"
+    secondary: ["surveillance", "cold", "detached", "scientific"]
+    energy: "observational, clinical, distanced"
+
+  prompt_prefix: "thermal camera image, infrared heat signature visualization, cold areas in black/blue, heat sources in yellow/white, thermal noise pattern, surveillance camera aesthetic"
+
+  negative_prompt: "normal colors, natural lighting, photorealistic, clean, artistic"
+
+  kling_motion_hints:
+    - "heat signature pulsing"
+    - "thermal noise shifting"
+    - "cold/hot zones fluctuating"
+    - "surveillance pan movement"
+
+
+# ============================================
+# PRINT & TEXTURE
+# ============================================
+
+risograph_punk:
+  id: risograph_punk
+  name: "Punk Risograph"
+  category: print
+  description: "Bold risograph with intentional misregistration, punk zine aesthetic"
+
+  visual:
+    color_grade: "2-3 fluorescent spot colors, overlaps create new colors"
+    lighting: "flat, no gradients, pure graphic shapes"
+    texture: "heavy halftone dots, paper grain, ink texture, misaligned layers"
+    contrast: "high, bold graphic shapes"
+
+  mood:
+    primary: "rebellious"
+    secondary: ["DIY", "punk", "bold", "raw"]
+    energy: "punchy, immediate, handmade"
+
+  prompt_prefix: "risograph print, fluorescent pink and blue limited palette, visible halftone dot pattern, intentional color misregistration, punk zine aesthetic, paper texture, bold graphic shapes, DIY print quality"
+
+  negative_prompt: "photorealistic, full color, gradients, smooth, digital, professional"
+
+  kling_motion_hints:
+    - "color layers shifting misalignment"
+    - "halftone dots pulsing"
+    - "paper texture movement"
+    - "ink density fluctuation"
+
+
+screen_print_bold:
+  id: screen_print_bold
+  name: "Bold Screen Print"
+  category: print
+  description: "Warhol-inspired screen print, bold color separation, graphic impact"
+
+  visual:
+    color_grade: "limited bold colors, flat areas, color separation"
+    lighting: "flat, posterized, no realistic lighting"
+    texture: "screen mesh texture, ink variations, slight misalignment"
+    contrast: "high, graphic, bold shapes"
+
+  mood:
+    primary: "iconic"
+    secondary: ["pop", "bold", "graphic", "commercial-art"]
+    energy: "immediate, striking, poster-like"
+
+  prompt_prefix: "screen print poster art, bold flat color areas, limited palette color separation, Andy Warhol aesthetic, visible screen mesh texture, graphic pop art quality, poster print"
+
+  negative_prompt: "photorealistic, gradients, 3D render, subtle colors, natural"
+
+  kling_motion_hints:
+    - "color layer slight shift"
+    - "ink texture shimmer"
+    - "static poster quality"
+    - "subtle registration movement"
+
+
+woodblock_modern:
+  id: woodblock_modern
+  name: "Modern Woodblock"
+  category: print
+  description: "Contemporary take on ukiyo-e, bold carved lines, limited palette"
+
+  visual:
+    color_grade: "limited traditional palette updated, flat color areas"
+    lighting: "no realistic lighting, decorative flat"
+    texture: "wood grain texture in lines, carved edge quality, paper texture"
+    contrast: "high, bold black outlines against color"
+
+  mood:
+    primary: "elegant"
+    secondary: ["traditional", "modern", "graphic", "contemplative"]
+    energy: "still, meditative, design-forward"
+
+  prompt_prefix: "modern woodblock print style, bold carved outlines, flat color areas, ukiyo-e influence, wood grain texture visible in lines, limited color palette, decorative composition"
+
+  negative_prompt: "photorealistic, gradients, 3D, photograph, digital smooth"
+
+  kling_motion_hints:
+    - "subtle wood texture shift"
+    - "traditional wave motion"
+    - "paper scroll feel"
+    - "carved line shimmer"
+
+
+linocut_stark:
+  id: linocut_stark
+  name: "Stark Linocut"
+  category: print
+  description: "High contrast linocut, bold black and white, carved texture"
+
+  visual:
+    color_grade: "pure black and white, or black with single accent color"
+    lighting: "contrast defines form, no realistic lighting"
+    texture: "carved line texture, ink variations, paper pressing marks"
+    contrast: "extreme, bold graphic"
+
+  mood:
+    primary: "stark"
+    secondary: ["bold", "graphic", "dramatic", "powerful"]
+    energy: "impactful, immediate"
+
+  prompt_prefix: "linocut print, stark black and white, bold carved lines, high contrast, printmaking texture, ink variations from pressing, paper texture, graphic powerful composition"
+
+  negative_prompt: "photorealistic, gradients, soft, subtle, color, 3D render"
+
+  kling_motion_hints:
+    - "ink density fluctuation"
+    - "carved texture breathing"
+    - "static dramatic quality"
+    - "paper texture shift"
+
+
+# ============================================
+# ABSTRACT & EXPERIMENTAL
+# ============================================
+
+glitch_corrupt:
+  id: glitch_corrupt
+  name: "Corrupted Glitch"
+  category: experimental
+  description: "Heavy data corruption, pixel sorting, broken digital aesthetic"
+
+  visual:
+    color_grade: "corrupted color banding, unexpected hues, channel separation"
+    lighting: "n/a - corruption defines appearance"
+    texture: "pixel sorting, compression artifacts, data fragments"
+    contrast: "unpredictable, based on corruption"
+
+  mood:
+    primary: "chaotic"
+    secondary: ["digital", "broken", "contemporary", "unsettling"]
+    energy: "frenetic, glitching, unstable"
+
+  prompt_prefix: "corrupted glitch art, heavy data corruption aesthetic, pixel sorting artifacts, color channel separation, broken digital image, compression artifacts, fragmented imagery"
+
+  negative_prompt: "clean, pristine, photorealistic, smooth, normal, professional"
+
+  kling_motion_hints:
+    - "pixel sort shifting"
+    - "corruption spreading"
+    - "color channels splitting"
+    - "data fragment movement"
+
+
+double_exposure_dream:
+  id: double_exposure_dream
+  name: "Dreamlike Double Exposure"
+  category: experimental
+  description: "Film double exposure, two images merged, ghostly ethereal overlay"
+
+  visual:
+    color_grade: "blended tones from both images, ethereal overall"
+    lighting: "combined light sources create unexpected results"
+    texture: "film grain, transparency layers, soft merge edges"
+    contrast: "varies, often soft and dreamy"
+
+  mood:
+    primary: "ethereal"
+    secondary: ["dreamlike", "layered", "psychological", "memory"]
+    energy: "floating, merged, contemplative"
+
+  prompt_prefix: "double exposure photograph, two images merged in-camera, ghostly transparency overlay, film photography technique, ethereal layered composition, dreamlike image merge"
+
+  negative_prompt: "single image, clean, digital composite obvious, sharp, separate layers"
+
+  kling_motion_hints:
+    - "exposure layers shifting"
+    - "ghostly merge drifting"
+    - "transparency fluctuating"
+    - "dreamlike slow motion"
+
+
+abstract_color_field:
+  id: abstract_color_field
+  name: "Color Field Abstract"
+  category: experimental
+  description: "Rothko-inspired color fields, emotional abstraction, no literal forms"
+
+  visual:
+    color_grade: "emotional color relationships, soft edges between fields"
+    lighting: "color creates its own luminosity"
+    texture: "paint texture, soft edges, atmospheric depth"
+    contrast: "varies by emotional intent"
+
+  mood:
+    primary: "transcendent"
+    secondary: ["emotional", "spiritual", "meditative", "deep"]
+    energy: "still, pulsing, contemplative"
+
+  prompt_prefix: "abstract color field painting, Rothko inspired, bold emotional color relationships, soft fuzzy edges between color areas, atmospheric depth, no literal forms, pure color and texture, museum quality abstract art"
+
+  negative_prompt: "representational, literal, photorealistic, objects, figures, recognizable forms"
+
+  kling_motion_hints:
+    - "color fields pulsing slowly"
+    - "edges breathing"
+    - "atmospheric depth shifting"
+    - "luminosity fluctuating"
+
+
+# ============================================
+# COLLAGE & MIXED MEDIA
+# ============================================
+
+torn_paper_raw:
+  id: torn_paper_raw
+  name: "Raw Torn Paper"
+  category: collage
+  description: "Aggressive torn paper collage, raw edges, layered chaos"
+
+  visual:
+    color_grade: "mixed paper sources, newsprint, magazine, colored paper"
+    lighting: "flat, shadows from paper layers"
+    texture: "torn paper edges, fibers visible, glue marks, tape"
+    contrast: "varied by source materials"
+
+  mood:
+    primary: "chaotic"
+    secondary: ["raw", "punk", "aggressive", "handmade"]
+    energy: "frenetic, layered, urgent"
+
+  prompt_prefix: "torn paper collage art, aggressive ripped edges, layered paper scraps, visible paper fibers, raw handmade aesthetic, newsprint and magazine fragments, glue and tape visible, punk DIY quality"
+
+  negative_prompt: "clean cuts, digital, photorealistic, smooth, professional"
+
+  kling_motion_hints:
+    - "paper layers shifting"
+    - "torn edges fluttering"
+    - "collage pieces floating"
+    - "handmade jitter movement"
+
+
+mixed_media_layers:
+  id: mixed_media_layers
+  name: "Layered Mixed Media"
+  category: collage
+  description: "Paint over photo over texture, experimental layering"
+
+  visual:
+    color_grade: "varied by materials, paint and photo combined"
+    lighting: "mixed sources, paint modifies photo lighting"
+    texture: "diverse materials, paint strokes over photo, found objects"
+    contrast: "complex, layered"
+
+  mood:
+    primary: "complex"
+    secondary: ["layered", "experimental", "artistic", "textured"]
+    energy: "built-up, archaeological"
+
+  prompt_prefix: "mixed media artwork, paint strokes over photographic elements, texture layers, found object integration, experimental art layering, diverse material surfaces, artistic collage"
+
+  negative_prompt: "clean, single medium, photorealistic only, digital, smooth"
+
+  kling_motion_hints:
+    - "layers breathing independently"
+    - "paint texture movement"
+    - "photo elements shifting"
+    - "material textures interacting"
+
+
+# ============================================
+# STOP MOTION & TACTILE
+# ============================================
+
+claymation_raw:
+  id: claymation_raw
+  name: "Raw Claymation"
+  category: tactile
+  description: "Handmade clay with visible fingerprints, miniature sets, practical lighting"
+
+  visual:
+    color_grade: "matte clay colors, practical miniature lighting warmth"
+    lighting: "miniature set lighting, soft shadows, practical feel"
+    texture: "clay fingerprints everywhere, fabric textures, handmade imperfections"
+    contrast: "medium, soft and tactile"
+
+  mood:
+    primary: "charming"
+    secondary: ["handmade", "warm", "quirky", "imperfect"]
+    energy: "stop-motion jitter, tactile"
+
+  prompt_prefix: "claymation stop motion frame, handmade clay figures with visible fingerprint texture, miniature practical set, Laika animation quality, fabric and felt textures, warm practical lighting, tactile handcrafted quality"
+
+  negative_prompt: "photorealistic, CGI, smooth, digital, polished, clean"
+
+  kling_motion_hints:
+    - "stop motion jitter"
+    - "clay texture subtle shift"
+    - "miniature set breathing"
+    - "frame-by-frame quality"
+
+
+paper_puppet:
+  id: paper_puppet
+  name: "Paper Puppet Theatre"
+  category: tactile
+  description: "Flat paper cutouts, shadow puppet aesthetic, layered depth"
+
+  visual:
+    color_grade: "paper colors, painted surfaces, theatrical lighting"
+    lighting: "backlit for shadow effect, or front lit for color"
+    texture: "cut paper edges, visible layers, cardstock quality"
+    contrast: "high when backlit, softer when front lit"
+
+  mood:
+    primary: "theatrical"
+    secondary: ["whimsical", "narrative", "crafted", "storybook"]
+    energy: "performative, staged"
+
+  prompt_prefix: "paper puppet theatre aesthetic, flat paper cutout figures, layered paper depth, theatrical staging, shadow puppet influence, visible cut edges, storybook quality"
+
+  negative_prompt: "photorealistic, 3D, CGI, smooth, digital"
+
+  kling_motion_hints:
+    - "paper layers parallax"
+    - "cutout figures sliding"
+    - "theatrical staging shift"
+    - "shadow play movement"

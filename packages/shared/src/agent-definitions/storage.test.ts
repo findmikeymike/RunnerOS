@@ -697,7 +697,7 @@ body
     expect(lyricVideoAgent?.systemPrompt).toContain('Campaign Assets / mission-assets `Master:` path as `audio_file`')
     expect(lyricVideoAgent?.systemPrompt).toContain('User-provided audio overrides the stored master')
     expect(lyricVideoAgent?.systemPrompt).toContain('node bin/genesis-lyric.mjs storyboard')
-    expect(lyricVideoAgent?.systemPrompt).toContain('Genesis Creative Director / Motion Director output')
+    expect(lyricVideoAgent?.systemPrompt).toContain('Genesis Creative Director asset stack plus Motion Director compiler output')
     expect(lyricVideoAgent?.systemPrompt).toContain('side-by-side/linear storyboard board')
     expect(lyricVideoAgent?.systemPrompt).toContain('showInCanvas: true` so it becomes the visible Canvas card')
     expect(lyricVideoAgent?.systemPrompt).toContain('node bin/genesis-lyric.mjs doctor')

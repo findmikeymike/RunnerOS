@@ -30,7 +30,7 @@ source_of_truth: true
 - Made Meta account work practical without API approval: use `ads-operator --platform meta`, browser dashboard/export/setup guidance, and explicit approval packets.
 - Added Lyric Video (`lyric-video-agent`) for single lyric clips from song audio, lyrics, and an existing or generated visual asset.
 - Added `lyric-video-genesis` skill and `genesis-lyric` built-in source/tool at `tools/genesis-lyric`.
-- Ported the needed Genesis source/docs for one-off FFmpeg lyric renders plus the Genesis Creative Director / Motion Director grammar for no-spend storyboard planning. Original Genesis is untouched and its batch/campaign/portal system is not part of RunnerOS.
+- Ported the needed Genesis source/docs for one-off FFmpeg lyric renders plus the real Genesis Creative Director prompt/vocabulary/knowledge assets and Motion Director compiler for no-spend storyboard planning. Original Genesis is untouched and its batch/campaign/portal/provider runtime is not part of RunnerOS.
 - Hardened ChatGPT search retry after unsupported `web_search_preview` failures.
 - Adjusted chat autoscroll so long agent replies do not force the user to the bottom while trying to read from the top.
 - Regenerated Codex catalog after installed agent changes.
@@ -78,7 +78,7 @@ python3 /Users/michaelb.williams/.codex/scripts/rebuild_codex_catalog.py
 - TikTok Creative Center / public pages may vary by region, availability, and automation blocking.
 - Meta/Google/Spotify account operations require connected accounts or browser-guided user sessions.
 - No agent should publish, spend, pause, enable, delete, change budget/bids/targeting/creative/keywords/conversions/billing, upload assets, or apply recommendations without explicit approval naming account, action, and spend impact.
-- `genesis-lyric` now has a no-spend `storyboard` command for Genesis-style cinematic shot/image/motion planning before media generation. It still assembles lyric clips only from supplied media; use media-generation/raw video tools to create the visual asset, then pass it back as `image_file` or `video_file`.
+- `genesis-lyric` now has a no-spend `storyboard` command for Genesis-style cinematic shot/image/motion planning before media generation. It uses vendored Creative Director doctrine/assets plus Motion Director modules, caps long lyric anchors/prompts, and still assembles lyric clips only from supplied media; use media-generation/raw video tools to create the visual asset, then pass it back as `image_file` or `video_file`.
 
 ## Notes For Next Agent
 
