@@ -113,7 +113,7 @@ export default function SocialAccountsSettingsPage() {
       return
     }
     if (!profile) {
-      toast.error('Profile name is required')
+      toast.error('Agent Ref ID is required')
       return
     }
     setBusy('save')
@@ -305,10 +305,11 @@ export default function SocialAccountsSettingsPage() {
                               onSave={() => save(group.name)}
                               onCancel={cancelEdit}
                             />
-                          ) : (
+                          ) : null}
+                          {!editingThisGroup && (
                             <Button type="button" size="sm" variant="secondary" onClick={() => openEditor(group.name)}>
                               <Plus className="h-3.5 w-3.5" />
-                              Add Platform Account
+                              Add Another Platform Account
                             </Button>
                           )}
                         </div>
@@ -374,7 +375,14 @@ function AccountEditor({
             ))}
           </select>
         </label>
-        <Field label="Profile" value={draft.profile} placeholder="artist-main" disabled={editing} onChange={(profile) => onDraftChange({ profile })} />
+        <Field
+          label="Agent Ref ID"
+          value={draft.profile}
+          placeholder="theinstaban"
+          disabled={editing}
+          hint="Agent uses this as instagram/theinstaban."
+          onChange={(profile) => onDraftChange({ profile })}
+        />
         <Field label="Handle" value={draft.handle} placeholder="@yourhandle" onChange={(handle) => onDraftChange({ handle })} />
         <Field label="Account URL" value={draft.accountUrl} placeholder="https://instagram.com/yourhandle" onChange={(accountUrl) => onDraftChange({ accountUrl })} />
         <div className="flex items-end gap-2">
@@ -398,12 +406,14 @@ function Field({
   value,
   placeholder,
   disabled,
+  hint,
   onChange,
 }: {
   label: string
   value: string
   placeholder: string
   disabled?: boolean
+  hint?: string
   onChange: (value: string) => void
 }) {
   return (
@@ -416,6 +426,7 @@ function Field({
         onChange={(event) => onChange(event.target.value)}
         className="h-9 w-full rounded-md border border-white/10 bg-white/[0.035] px-3 text-sm text-white outline-none placeholder:text-white/22 disabled:cursor-not-allowed disabled:opacity-55"
       />
+      {hint && <span className="block text-[11px] leading-4 text-white/32">{hint}</span>}
     </label>
   )
 }
