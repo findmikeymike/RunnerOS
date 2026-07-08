@@ -448,6 +448,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const rememberRef = React.useRef<HTMLTextAreaElement>(null)
   const activeWorkerRunIdRef = React.useRef(0)
   const prosodyLookupRunIdRef = React.useRef(0)
+  const sentFlashTimerRef = React.useRef<number | null>(null)
   const savingSongRef = React.useRef(false)
   const initialSongRef = React.useRef<LabUiSong | null>(null)
   const readInitialSong = () => {
@@ -462,6 +463,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
   const [rememberText, setRememberText] = React.useState(() => readInitialSong().rememberText)
   const [sections, setSections] = React.useState<SongSection[]>(() => readInitialSong().sections.length ? readInitialSong().sections : INITIAL_SECTIONS)
   const [selectedText, setSelectedText] = React.useState('')
+  const [sentFlashTarget, setSentFlashTarget] = React.useState<string | null>(null)
   const [selectionSource, setSelectionSource] = React.useState<SelectionSource>('rough')
   const [prosodySelection, setProsodySelection] = React.useState<ProsodySelectionState | null>(null)
   const [prosodyResult, setProsodyResult] = React.useState<ProsodyLookupResult | null>(null)
@@ -523,6 +525,19 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     () => parseArtistProfileDocResult(artistProfileDocs.find((doc) => doc.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
     [artistProfileDocs],
   )
+
+  React.useEffect(() => () => {
+    if (sentFlashTimerRef.current) window.clearTimeout(sentFlashTimerRef.current)
+  }, [])
+
+  const flashSentTarget = React.useCallback((target: string) => {
+    if (sentFlashTimerRef.current) window.clearTimeout(sentFlashTimerRef.current)
+    setSentFlashTarget(target)
+    sentFlashTimerRef.current = window.setTimeout(() => {
+      setSentFlashTarget(null)
+      sentFlashTimerRef.current = null
+    }, 520)
+  }, [])
 
   const captureProsodySelection = React.useCallback((
     source: ProsodySelectionSource,
@@ -588,15 +603,21 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
     setSections((current) => current.map((section) => (
       section.id === sectionId ? { ...section, text: appendText(section.text, text) } : section
     )))
+    flashSentTarget(sectionId)
     if (!shouldDuplicate) clearMovedText(selectedText)
-  }, [clearMovedText, selectedText])
+    else setSelectedText('')
+    setProsodySelection(null)
+  }, [clearMovedText, flashSentTarget, selectedText])
 
   const sendSelectionToRemember = React.useCallback((shouldDuplicate = false) => {
     const text = selectedText.trim()
     if (!text) return
     setRememberText((current) => appendText(current, text))
+    flashSentTarget('remember')
     if (!shouldDuplicate) clearMovedText(selectedText)
-  }, [clearMovedText, selectedText])
+    else setSelectedText('')
+    setProsodySelection(null)
+  }, [clearMovedText, flashSentTarget, selectedText])
 
   const updateSection = React.useCallback((sectionId: string, text: string) => {
     setSections((current) => current.map((section) => (
@@ -922,7 +943,12 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     title={section.title}
                     disabled={!selectedText.trim()}
                     onClick={() => sendSelectionToSection(section.id)}
-                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-[9px] font-semibold text-white/55 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-35"
+                    className={cn(
+                      'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-35',
+                      sentFlashTarget === section.id
+                        ? 'border-[#fb923c]/45 bg-[#fb923c]/16 text-[#fbbf24]'
+                        : 'border-white/[0.06] bg-white/[0.025] text-white/55 hover:bg-white/[0.05]',
+                    )}
                   >
                     {section.label}
                   </button>
@@ -932,7 +958,12 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                   title="Send to Remember This"
                   disabled={!selectedText.trim()}
                   onClick={() => sendSelectionToRemember()}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#fb923c]/35 bg-[#fb923c]/10 text-[9px] font-semibold text-[#fbbf24] hover:bg-[#fb923c]/15 disabled:cursor-not-allowed disabled:opacity-35"
+                  className={cn(
+                    'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[9px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-35',
+                    sentFlashTarget === 'remember'
+                      ? 'border-[#fb923c]/45 bg-[#fb923c]/16 text-[#fbbf24]'
+                      : 'border-white/[0.06] bg-white/[0.025] text-white/55 hover:bg-white/[0.05]',
+                  )}
                 >
                   R
                 </button>
@@ -941,7 +972,12 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                   title="Copy to Chorus"
                   disabled={!selectedText.trim()}
                   onClick={() => sendSelectionToSection('chorus', true)}
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/45 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-35"
+                  className={cn(
+                    'inline-flex h-6 w-6 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-35',
+                    sentFlashTarget === 'chorus'
+                      ? 'border-[#fb923c]/45 bg-[#fb923c]/16 text-[#fbbf24]'
+                      : 'border-white/[0.06] bg-white/[0.025] text-white/45 hover:bg-white/[0.05]',
+                  )}
                 >
                   <Copy className="h-2.5 w-2.5" />
                 </button>
