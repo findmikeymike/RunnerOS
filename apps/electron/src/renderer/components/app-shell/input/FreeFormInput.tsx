@@ -2366,6 +2366,11 @@ type AppFileBucket = {
   paths: string[]
 }
 
+type AppPickerFile = FileSearchResult & {
+  displayName?: string
+  displayPath?: string
+}
+
 function AppFileAttachmentPicker({
   open,
   workspaceRootPath,
@@ -2384,7 +2389,7 @@ function AppFileAttachmentPicker({
   const buckets = React.useMemo(() => buildAppFileBuckets(workspaceRootPath, workingDirectory), [workspaceRootPath, workingDirectory])
   const [activeBucketId, setActiveBucketId] = React.useState('')
   const [query, setQuery] = React.useState('')
-  const [files, setFiles] = React.useState<FileSearchResult[]>([])
+  const [files, setFiles] = React.useState<AppPickerFile[]>([])
   const [loading, setLoading] = React.useState(false)
 
   React.useEffect(() => {
@@ -2402,12 +2407,11 @@ function AppFileAttachmentPicker({
 
     let cancelled = false
     setLoading(true)
-    Promise.all(activeBucket.paths.map((path) => window.electronAPI.searchFiles(path, query.trim())))
+    loadAppPickerFiles(activeBucket, query.trim())
       .then((groups) => {
         if (cancelled) return
         const seen = new Set<string>()
         const next = groups
-          .flat()
           .filter((file) => file.type === 'file')
           .filter(isAttachableAppFile)
           .filter((file) => {
@@ -2486,8 +2490,8 @@ function AppFileAttachmentPicker({
                     >
                       <Paperclip className="h-4 w-4 shrink-0 text-white/42" />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-white/82">{file.name}</span>
-                        <span className="block truncate text-xs text-white/36">{file.relativePath}</span>
+                        <span className="block truncate text-sm text-white/82">{file.displayName ?? file.name}</span>
+                        <span className="block truncate text-xs text-white/36">{file.displayPath ?? file.relativePath}</span>
                       </span>
                     </button>
                   ))}
@@ -2504,6 +2508,88 @@ function AppFileAttachmentPicker({
       </DialogContent>
     </Dialog>
   )
+}
+
+async function loadAppPickerFiles(bucket: AppFileBucket, query: string): Promise<AppPickerFile[]> {
+  if (bucket.id === 'outputs') {
+    return loadOutputPickerFiles(bucket.paths[0] ?? '', query)
+  }
+
+  const groups = await Promise.all(bucket.paths.map((path) => window.electronAPI.searchFiles(path, query)))
+  return groups.flat()
+}
+
+async function loadOutputPickerFiles(outputsPath: string, query: string): Promise<AppPickerFile[]> {
+  if (!outputsPath) return []
+
+  const manifestFiles = await window.electronAPI.searchFiles(outputsPath, 'output.json')
+  const rows = await Promise.all(manifestFiles
+    .filter((file) => file.type === 'file' && file.name === 'output.json')
+    .slice(0, 80)
+    .map(async (file): Promise<AppPickerFile | null> => {
+      try {
+        const raw = await window.electronAPI.readFile(file.path)
+        const manifest = JSON.parse(raw) as {
+          title?: unknown
+          kind?: unknown
+          summary?: unknown
+          primary?: { label?: unknown; path?: unknown; mimeType?: unknown }
+          assets?: Array<{ label?: unknown; path?: unknown; mimeType?: unknown; role?: unknown }>
+        }
+        const title = typeof manifest.title === 'string' && manifest.title.trim()
+          ? manifest.title.trim()
+          : file.relativePath.split(PATH_SEP)[0] ?? 'Output'
+        const asset = pickDisplayOutputAsset(manifest)
+        if (!asset?.path) return null
+
+        const outputDir = dirname(file.path)
+        const outputId = file.relativePath.split('/')[0] ?? file.relativePath
+        const label = typeof asset.label === 'string' && asset.label.trim() ? asset.label.trim() : basenameFromPath(asset.path)
+        const kind = typeof manifest.kind === 'string' && manifest.kind.trim() ? manifest.kind.trim() : 'output'
+        const displayPath = [kind, label].filter(Boolean).join(' · ')
+
+        return {
+          name: title,
+          path: joinPath(outputDir, asset.path),
+          type: 'file',
+          relativePath: `${outputId}/${asset.path}`,
+          displayName: title,
+          displayPath,
+        }
+      } catch {
+        return null
+      }
+    }))
+
+  const normalizedQuery = query.toLowerCase()
+  return rows
+    .filter((row): row is AppPickerFile => Boolean(row))
+    .filter((row) => {
+      if (!normalizedQuery) return true
+      return `${row.displayName ?? row.name} ${row.displayPath ?? row.relativePath}`.toLowerCase().includes(normalizedQuery)
+    })
+}
+
+function pickDisplayOutputAsset(manifest: {
+  primary?: { label?: unknown; path?: unknown; mimeType?: unknown }
+  assets?: Array<{ label?: unknown; path?: unknown; mimeType?: unknown; role?: unknown }>
+}): { label?: string; path: string } | null {
+  const candidates = [
+    manifest.primary,
+    ...(Array.isArray(manifest.assets) ? manifest.assets : []),
+  ]
+
+  for (const asset of candidates) {
+    if (!asset || typeof asset.path !== 'string' || !asset.path.trim()) continue
+    const name = basenameFromPath(asset.path).toLowerCase()
+    if (name === 'output.json' || name === 'board.json') continue
+    return {
+      label: typeof asset.label === 'string' ? asset.label : undefined,
+      path: asset.path,
+    }
+  }
+
+  return null
 }
 
 function buildAppFileBuckets(workspaceRootPath: string | null, workingDirectory?: string): AppFileBucket[] {
@@ -2551,6 +2637,15 @@ function joinPath(...parts: string[]): string {
     .map((part, index) => index === 0 ? part.replace(/[\\/]$/, '') : part.replace(/^[\\/]|[\\/]$/g, ''))
     .filter(Boolean)
     .join(PATH_SEP)
+}
+
+function dirname(path: string): string {
+  const index = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+  return index > 0 ? path.slice(0, index) : path
+}
+
+function basenameFromPath(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path
 }
 
 function pathIsInside(path: string, root: string): boolean {
