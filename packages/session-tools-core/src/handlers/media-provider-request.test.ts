@@ -117,4 +117,100 @@ describe('media_provider_request', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]!.text).toContain('Invalid provider path or URL');
   });
+
+  test('refuses to download media from private hosts', async () => {
+    process.env.FAL_API_KEY = 'fal-test-key';
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.includes('queue.fal.run')) {
+        return new Response(JSON.stringify({ images: [{ url: 'http://127.0.0.1/result.png' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await handleMediaProviderRequest(makeCtx(), {
+      provider: 'fal',
+      path: 'fal-ai/flux/dev',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('Refusing to download media from local or private network hosts');
+  });
+
+  test('refuses oversized media downloads from content-length', async () => {
+    process.env.FAL_API_KEY = 'fal-test-key';
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.includes('queue.fal.run')) {
+        return new Response(JSON.stringify({ images: [{ url: 'https://cdn.example.com/result.png' }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: {
+          'content-type': 'image/png',
+          'content-length': String(60 * 1024 * 1024),
+        },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await handleMediaProviderRequest(makeCtx(), {
+      provider: 'fal',
+      path: 'fal-ai/flux/dev',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('Media download is too large');
+  });
+
+  test('refuses unsupported download content types', async () => {
+    process.env.FAL_API_KEY = 'fal-test-key';
+    globalThis.fetch = (async (input: Parameters<typeof fetch>[0]) => {
+      const url = String(input);
+      if (url.includes('queue.fal.run')) {
+        return new Response(JSON.stringify({ output: 'https://cdn.example.com/download' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response('<html></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' },
+      });
+    }) as unknown as typeof globalThis.fetch;
+
+    const result = await handleMediaProviderRequest(makeCtx(), {
+      provider: 'fal',
+      path: 'fal-ai/flux/dev',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('Refusing to download unsupported media type');
+  });
+
+  test('refuses to download too many returned media URLs at once', async () => {
+    process.env.FAL_API_KEY = 'fal-test-key';
+    globalThis.fetch = (async () => new Response(JSON.stringify({
+      images: Array.from({ length: 9 }, (_, index) => ({ url: `https://cdn.example.com/result-${index}.png` })),
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    })) as unknown as typeof globalThis.fetch;
+
+    const result = await handleMediaProviderRequest(makeCtx(), {
+      provider: 'fal',
+      path: 'fal-ai/flux/dev',
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('too many media URLs');
+  });
 });

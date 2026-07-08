@@ -86,4 +86,16 @@ describe('save_secret handler', () => {
     expect(result.isError).toBe(true);
     expect(result.content[0]?.text).toContain('sourceSlug is required');
   });
+
+  test('rejects media-generation source credential saves', async () => {
+    const result = await handleSaveSecret(createCtx(async () => ({ ok: true })), {
+      target: 'source',
+      sourceSlug: 'media-generation',
+      value: 'abc123',
+      confirmed: true,
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('media-generation credentials must be saved as env secrets');
+  });
 });
