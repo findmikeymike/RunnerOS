@@ -218,7 +218,7 @@ function selectionAnchor(
 function prosodyPopoverPosition(anchor: { x: number; y: number }) {
   const width = 300
   const gutter = 2
-  const preferredLeft = anchor.x - 18
+  const preferredLeft = anchor.x - 118
   const left = typeof window === 'undefined'
     ? preferredLeft
     : Math.min(Math.max(12, preferredLeft), Math.max(12, window.innerWidth - width - 12))
