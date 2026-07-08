@@ -98,7 +98,7 @@ export function SessionProjectDialogHost({ onLabelsChange }: SessionProjectDialo
       return
     }
 
-    toast.success('Deleted project', { description: `${changed} session${changed === 1 ? '' : 's'} moved to General.` })
+    toast.success('Deleted project', { description: `${changed} session${changed === 1 ? '' : 's'} moved to Past.` })
     if (changed > 0) close()
   }, [close, onLabelsChange, sessionMetaMap, state])
 
@@ -127,7 +127,7 @@ export function SessionProjectDialogHost({ onLabelsChange }: SessionProjectDialo
           <DialogHeader>
             <DialogTitle>Delete Project</DialogTitle>
             <DialogDescription>
-              Move every session in {state.kind === 'delete_project' ? state.projectLabel : 'this project'} back to General.
+              Move every session in {state.kind === 'delete_project' ? state.projectLabel : 'this project'} back to Past.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

@@ -106,6 +106,8 @@ interface LeftSidebarProps {
   focusedItemId?: string | null
   /** Whether this is a nested sidebar (child of expandable item) */
   isNested?: boolean
+  /** Optional extension point for custom content directly under a top-level item. */
+  renderAfterItem?: (id: string) => React.ReactNode
 }
 
 // Stagger animation for child items
@@ -165,7 +167,7 @@ const itemVariants: Variants = {
  * - Uses @dnd-kit with DragOverlay portaled to document.body (no clipping)
  * - Two-phase drop animation: overlay fades out, ghost fades in
  */
-export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, isNested }: LeftSidebarProps) {
+export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, isNested, renderAfterItem }: LeftSidebarProps) {
   // For nested sidebars, wrap in motion container for stagger effect
   const NavWrapper = isNested ? motion.nav : 'nav'
   const navProps = isNested ? {
@@ -274,15 +276,22 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
               )}
             </div>
           )
+          const afterItem = !isNested ? renderAfterItem?.(link.id) : null
+          const renderedItem = (
+            <>
+              {content}
+              {afterItem}
+            </>
+          )
 
           // For nested items, wrap in motion.div for stagger animation
           return isNested ? (
             <motion.div key={link.id} variants={itemVariants}>
-              {content}
+              {renderedItem}
             </motion.div>
           ) : (
             <React.Fragment key={link.id}>
-              {content}
+              {renderedItem}
             </React.Fragment>
           )
         })}
@@ -491,7 +500,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
           link.compact ? "py-[4px]" : "py-[6px]",
           "px-2.5 font-medium tracking-[0.01em]",
           link.variant === "default"
-            ? "border border-[#fb923c]/25 bg-[#fb923c]/10 text-white shadow-middle"
+            ? "text-white hover:bg-white/[0.035]"
             // Highlight on hover, context menu open (data-state), or EditPopover active (data-edit-active)
             : "text-white/78 hover:bg-white/[0.055] hover:text-white data-[state=open]:bg-white/[0.055] data-[edit-active=true]:bg-white/[0.055]",
           extraClassName,
@@ -503,7 +512,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
             <>
               {/* Main icon - hidden on hover */}
               <span className="absolute inset-0 flex items-center justify-center group-hover:opacity-0 transition-opacity duration-150">
-                {renderIcon(link)}
+                {renderIcon(link, link.variant === "default")}
               </span>
               {/* Toggle chevron - shown on hover. data-no-dnd prevents drag activation on click. */}
               <span
@@ -523,7 +532,7 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
               </span>
             </>
           ) : (
-            renderIcon(link)
+            renderIcon(link, link.variant === "default")
           )}
         </span>
         <span className="min-w-0 flex-1 truncate text-left">{link.title}</span>
@@ -548,13 +557,15 @@ const SidebarButton = React.forwardRef<HTMLButtonElement, SidebarButtonProps & R
  * Helper to render icon - either component (function/forwardRef) or React element.
  * Colors are always applied via inline style (resolved CSS color strings from EntityColor).
  */
-function renderIcon(link: LinkItem) {
+function renderIcon(link: LinkItem, active = false) {
   const isComponent = typeof link.icon === 'function' ||
     (typeof link.icon === 'object' && link.icon !== null && 'render' in link.icon)
   // Lucide components are always colorable; ReactNode icons check iconColorable
   // Default to true for backwards compatibility (most icons are colorable)
   const applyColor = link.iconColorable !== false
-  const colorStyle = applyColor && link.iconColor ? { color: link.iconColor } : undefined
+  const colorStyle = applyColor && (active || link.iconColor)
+    ? { color: active ? '#fb923c' : link.iconColor }
+    : undefined
 
   if (isComponent) {
     const Icon = link.icon as React.ComponentType<{ className?: string; style?: React.CSSProperties }>

@@ -302,7 +302,7 @@ export function SessionList({
       if (rows.length > 0 && !groupsByKey.has(GENERAL_PROJECT_KEY)) {
         groupsByKey.set(GENERAL_PROJECT_KEY, {
           key: GENERAL_PROJECT_KEY,
-          label: 'General',
+          label: 'Past',
           items: [],
           collapsible: true,
         })
@@ -312,7 +312,7 @@ export function SessionList({
         if (!groupsByKey.has(meta.key)) {
           groupsByKey.set(meta.key, {
             key: meta.key,
-            label: meta.key === GENERAL_PROJECT_KEY ? 'General' : formatProjectLabel(meta.key.replace(/^project:/, '')),
+            label: meta.key === GENERAL_PROJECT_KEY ? 'Past' : formatProjectLabel(meta.key.replace(/^project:/, '')),
             items: [],
             collapsible: true,
             collapsedCount: meta.count,

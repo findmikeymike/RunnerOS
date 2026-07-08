@@ -8,10 +8,10 @@ import {
 } from '../session-project'
 
 describe('getSessionProjectInfo', () => {
-  it('uses General when no project label is present', () => {
+  it('uses Past when no project label is present', () => {
     expect(getSessionProjectInfo({ labels: ['bug', 'priority::2'] })).toEqual({
       key: GENERAL_PROJECT_KEY,
-      label: 'General',
+      label: 'Past',
     })
   })
 

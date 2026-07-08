@@ -149,7 +149,7 @@ import { clearSourceIconCaches } from "@/lib/icon-cache"
 import { dispatchFocusInputEvent } from "./input/focus-input-events"
 import { useOutputs } from "@/hooks/useOutputs"
 import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace } from "@/lib/artist-workspace"
-import { getArtistHqNavActiveState, isConciergeSessionLike, isReusableConciergeSession } from "@/lib/artist-hq-nav-state"
+import { getArtistHqNavActiveState, isReusableConciergeSession } from "@/lib/artist-hq-nav-state"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
 
@@ -1678,20 +1678,17 @@ function AppShellContent({
   }, [isArtistHQWorkspace, activeWorkspaceId])
   React.useEffect(() => {
     if (!isSessionsNavigation(navState)) return
-    setSessionsNavExpanded(!isArtistHQWorkspace)
-  }, [isArtistHQWorkspace, navState])
+    setSessionsNavExpanded(!artistHqHash.startsWith('#artist-hq/'))
+  }, [artistHqHash, navState])
+
+  const handleChatHistoryToggle = useCallback(() => {
+    setSessionsNavExpanded((expanded) => !expanded)
+  }, [])
 
   const handleAgendaNavClick = useCallback(() => {
     setSessionsNavExpanded(false)
     navigate(routes.view.agenda())
   }, [])
-
-  const handleSessionsNavClick = useCallback(() => {
-    setSessionsNavExpanded((expanded) => !expanded)
-    if (!isSessionsNavigation(navState)) {
-      navigate(routes.view.allSessions())
-    }
-  }, [navState])
 
   const handleArtistHQNavClick = useCallback((tab: 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding') => {
     const hqWorkspace = findArtistHQWorkspace(workspaces)
@@ -1717,16 +1714,6 @@ function AppShellContent({
       return next
     })
   }, [])
-
-  const handleNewProjectClick = useCallback(() => {
-    const targetSessionId = focusedSessionId ?? (isSessionsNavigation(navState) ? session.selected : undefined)
-    if (!targetSessionId) {
-      toast.error('Open a session first, then create a project from it.')
-      return
-    }
-    setSessionsNavExpanded(true)
-    setSessionProjectDialog({ kind: 'new_project', sessionId: targetSessionId })
-  }, [focusedSessionId, navState, session.selected, setSessionProjectDialog])
 
   const handleFlaggedClick = useCallback(() => {
     navigate(routes.view.flagged())
@@ -1797,6 +1784,7 @@ function AppShellContent({
 
   const handleWorkChatClick = useCallback(async () => {
     if (!activeWorkspaceId) return
+    setSessionsNavExpanded(true)
     if (window.location.hash.startsWith('#artist-hq/')) {
       window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
       setArtistHqHash('')
@@ -1846,6 +1834,15 @@ function AppShellContent({
       })
     }
   }, [activeAgents, activeWorkspaceId, focusZone, onCreateSession, onInputChange, remoteWorkspaceId, sessionMetaMap, skills, sources])
+
+  const handleSidebarSessionClick = useCallback((sessionId: string) => {
+    setSessionsNavExpanded(true)
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+    navigateToSession(sessionId)
+  }, [navigateToSession])
 
   const handleOutputsClick = useCallback(() => {
     navigate(routes.view.outputs())
@@ -2003,6 +2000,12 @@ function AppShellContent({
   const handleNewChat = useCallback((newPanel: boolean = false) => {
     if (!activeWorkspace) return
 
+    setSessionsNavExpanded(true)
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+
     // Exit search mode and switch to All Sessions
     setSearchActive(false)
     setSearchQuery('')
@@ -2072,20 +2075,11 @@ function AppShellContent({
   }
 
   const activeSessionRouteId = isSessionsNavigation(navState) ? navState.details?.sessionId : undefined
-  const activeSessionIsConcierge = !!activeSessionRouteId
-    && isConciergeSessionLike({
-      conciergeSlug: CONCIERGE_SLUG,
-      ...sessionMetaMap.get(activeSessionRouteId),
-    })
   const artistHqTabOpen = isArtistHQWorkspace && artistHqHash.startsWith('#artist-hq/')
   const workChatActive = isSessionsNavigation(navState)
     && !!activeSessionRouteId
     && !artistHqTabOpen
-    && (
-      activeSessionIsConcierge
-      || isArtistHQWorkspace
-    )
-  const { hqHomeActive, hqSessionsActive } = getArtistHqNavActiveState({
+  const { hqHomeActive } = getArtistHqNavActiveState({
     isArtistHQWorkspace,
     isSessionsNavigation: isSessionsNavigation(navState),
     artistHqHash,
@@ -2095,13 +2089,21 @@ function AppShellContent({
   const vaultActive = isVaultNavigation(navState)
   const campaignHomeActive = !isArtistHQWorkspace && isCampaignNavigation(navState)
   const activeCampaignId = !isArtistHQWorkspace ? activeWorkspaceId ?? undefined : undefined
-  const campaignSessionsActive = !isArtistHQWorkspace
-    && isSessionsNavigation(navState)
-    && !workChatActive
   const planExpanded = expandedMainNavGroups.has('plan')
   const peopleExpanded = expandedMainNavGroups.has('people')
   const workExpanded = expandedMainNavGroups.has('work')
   const brainExpanded = expandedMainNavGroups.has('brain')
+  const planActive = isAgendaNavigation(navState)
+    || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/calendar')
+  const peopleActive = isCommunityNavigation(navState)
+    || (isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/network')
+  const workActive = isAgentsNavigation(navState)
+    || isAutomationsNavigation(navState)
+    || isWorkflowsNavigation(navState)
+    || isWorkflowRunNavigation(navState)
+  const brainActive = isArtistHQWorkspace
+    && isSessionsNavigation(navState)
+    && ['#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash)
 
   const unifiedSidebarItems = React.useMemo((): KeyboardSidebarItem[] => {
     const result: KeyboardSidebarItem[] = []
@@ -2115,7 +2117,6 @@ function AppShellContent({
         result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
         result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
       }
-      result.push({ id: 'nav:sessions', type: 'nav', action: handleSessionsNavClick })
       return result
     }
 
@@ -2137,7 +2138,6 @@ function AppShellContent({
       result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
       result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
       result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
-      result.push({ id: 'nav:sessions', type: 'nav', action: handleSessionsNavClick })
     }
     result.push({ id: 'nav:brain', type: 'nav', action: () => toggleMainNavGroup('brain') })
     if (brainExpanded) {
@@ -2148,7 +2148,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleSessionsNavClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2423,7 +2423,7 @@ function AppShellContent({
           id: "nav:work",
           title: "Work",
           icon: Briefcase,
-          variant: "ghost",
+          variant: workActive ? "default" : "ghost",
           onClick: () => toggleMainNavGroup('work'),
           onToggle: () => toggleMainNavGroup('work'),
           expandable: true,
@@ -2460,18 +2460,13 @@ function AppShellContent({
         {
           id: "nav:chat",
           title: "Chat",
+          label: String(workspaceSessionMetas.length),
           icon: MessageSquare,
           variant: workChatActive ? "default" : "ghost",
           onClick: handleWorkChatClick,
-        },
-        { id: "separator:sessions", type: "separator" },
-        {
-          id: "nav:sessions",
-          title: "Sessions",
-          label: String(workspaceSessionMetas.length),
-          icon: MessageSquare,
-          variant: campaignSessionsActive ? "default" : "ghost",
-          onClick: handleSessionsNavClick,
+          onToggle: handleChatHistoryToggle,
+          expandable: true,
+          expanded: sessionsNavExpanded && workChatActive,
         },
       ]
     }
@@ -2488,7 +2483,7 @@ function AppShellContent({
         id: "nav:plan",
         title: "Plan",
         icon: Calendar,
-        variant: "ghost",
+        variant: planActive ? "default" : "ghost",
         expandable: true,
         expanded: planExpanded,
         onToggle: () => toggleMainNavGroup('plan'),
@@ -2514,7 +2509,7 @@ function AppShellContent({
         id: "nav:people",
         title: "People",
         icon: Users,
-        variant: "ghost",
+        variant: peopleActive ? "default" : "ghost",
         expandable: true,
         expanded: peopleExpanded,
         onToggle: () => toggleMainNavGroup('people'),
@@ -2547,7 +2542,7 @@ function AppShellContent({
         id: "nav:work",
         title: "Work",
         icon: Bot,
-        variant: "ghost",
+        variant: workActive ? "default" : "ghost",
         expandable: true,
         expanded: workExpanded,
         onToggle: () => toggleMainNavGroup('work'),
@@ -2574,29 +2569,25 @@ function AppShellContent({
             variant: isWorkflowsNavigation(navState) ? "default" : "ghost",
             onClick: () => navigate(routes.view.workflows()),
           },
-          {
-            id: "nav:sessions",
-            title: "Sessions",
-            label: String(workspaceSessionMetas.length),
-            icon: MessageSquare,
-            variant: hqSessionsActive ? "default" : "ghost",
-            onClick: handleSessionsNavClick,
-          },
         ],
       },
       {
         id: "nav:work-chat",
         title: "Chat",
+        label: String(workspaceSessionMetas.length),
         icon: MessageSquare,
         variant: workChatActive ? "default" : "ghost",
         onClick: handleWorkChatClick,
+        onToggle: handleChatHistoryToggle,
+        expandable: true,
+        expanded: sessionsNavExpanded && workChatActive,
       },
       { id: "nav:brain-separator", type: 'separator' },
       {
         id: "nav:brain",
         title: "Brain",
         icon: Layers,
-        variant: "ghost",
+        variant: brainActive ? "default" : "ghost",
         expandable: true,
         expanded: brainExpanded,
         onToggle: () => toggleMainNavGroup('brain'),
@@ -2633,7 +2624,107 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainExpanded, campaignHomeActive, campaignSessionsActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleSessionsNavClick, handleWorkChatClick, hqHomeActive, hqSessionsActive, isArtistHQWorkspace, navigate, navState, openAddAutomation, peopleExpanded, planExpanded, sessionsNavExpanded, t, vaultActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignHomeActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleChatHistoryToggle, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, navigate, navState, openAddAutomation, peopleActive, peopleExpanded, planActive, planExpanded, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+
+  const sidebarSessionHistory = React.useMemo(() => {
+    if (!sessionsNavExpanded || !workChatActive) return null
+
+    return (
+      <div className="mt-1 space-y-2 px-3 pb-5">
+        <button
+          type="button"
+          onClick={() => handleNewChat()}
+          className="flex w-full items-center gap-1.5 rounded-[7px] px-2 py-1.5 text-left text-[11px] font-medium text-white/60 transition-colors hover:bg-white/[0.045] hover:text-white"
+        >
+          <Plus className="h-3 w-3 text-[#fb923c]" />
+          <span className="min-w-0 truncate">New Chat</span>
+        </button>
+        {sidebarProjectGroups.map((project) => {
+          const projectCollapseKey = `session-project:${project.key}`
+          const projectExpanded = isExpanded(projectCollapseKey)
+
+          return (
+            <div key={project.key} className="space-y-0.5">
+              <div className="flex items-center rounded-[7px] bg-white/[0.035] text-[11px] font-semibold text-white/70 transition-colors hover:bg-white/[0.055] hover:text-white/85">
+                <button
+                  type="button"
+                  onClick={() => toggleExpanded(projectCollapseKey)}
+                  aria-expanded={projectExpanded}
+                  className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left"
+                >
+                  {projectExpanded ? (
+                    <ChevronDown className="h-3 w-3 shrink-0 text-white/45" />
+                  ) : (
+                    <ChevronRight className="h-3 w-3 shrink-0 text-white/45" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate">{project.label}</span>
+                  <span className="text-[10px] tabular-nums text-white/35">{project.items.length}</span>
+                </button>
+                {project.value && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        type="button"
+                        className="mr-1 flex h-5 w-5 items-center justify-center rounded-[5px] text-white/35 transition-colors hover:bg-white/[0.06] hover:text-white/70"
+                        aria-label={`Project options for ${project.label}`}
+                      >
+                        <MoreHorizontal className="h-3 w-3" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <StyledDropdownMenuContent align="end" className="w-40">
+                      <StyledDropdownMenuItem
+                        onClick={() => setSessionProjectDialog({
+                          kind: 'rename_project',
+                          projectKey: project.key,
+                          projectLabel: project.label,
+                        })}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        <span>Rename</span>
+                      </StyledDropdownMenuItem>
+                      <StyledDropdownMenuItem
+                        onClick={() => setSessionProjectDialog({
+                          kind: 'delete_project',
+                          projectKey: project.key,
+                          projectLabel: project.label,
+                        })}
+                        className="text-destructive focus:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Delete</span>
+                      </StyledDropdownMenuItem>
+                    </StyledDropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+              {projectExpanded && (
+                <div className="space-y-0.5 pl-3">
+                  {project.items.map((item) => {
+                    const active = item.id === session.selected
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleSidebarSessionClick(item.id)}
+                        className={cn(
+                          "block w-full truncate rounded-[7px] px-2.5 py-1.5 text-left text-[12px] leading-5 transition-colors",
+                          active
+                            ? "bg-white/[0.06] text-white"
+                            : "text-white/42 hover:bg-white/[0.035] hover:text-white/70",
+                        )}
+                      >
+                        {getSessionTitle(item)}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }, [handleNewChat, handleSidebarSessionClick, isExpanded, session.selected, sessionsNavExpanded, sidebarProjectGroups, toggleExpanded, workChatActive])
 
   return (
     <AppShellProvider value={appShellContextValue}>
@@ -2698,102 +2789,12 @@ function AppShellContent({
                   getItemProps={getSidebarItemProps}
                   focusedItemId={focusedSidebarItemId}
                   links={primarySidebarLinks}
+                  renderAfterItem={(id) => (
+                    id === 'nav:chat' || id === 'nav:work-chat'
+                      ? sidebarSessionHistory
+                      : null
+                  )}
                 />
-                {sessionsNavExpanded && (
-                  <div className="mt-2 space-y-2 px-3 pb-5">
-                    <button
-                      type="button"
-                      onClick={handleNewProjectClick}
-                      className="flex w-full items-center gap-1.5 rounded-[7px] px-2 py-1.5 text-left text-[11px] font-medium text-white/45 transition-colors hover:bg-white/[0.035] hover:text-white/75"
-                    >
-                      <Plus className="h-3 w-3" />
-                      <span className="min-w-0 truncate">New Project</span>
-                    </button>
-                    {sidebarProjectGroups.map((project) => {
-                      const projectCollapseKey = `session-project:${project.key}`
-                      const projectExpanded = isExpanded(projectCollapseKey)
-
-                      return (
-                        <div key={project.key} className="space-y-0.5">
-                          <div className="flex items-center rounded-[7px] bg-white/[0.035] text-[11px] font-semibold text-white/70 transition-colors hover:bg-white/[0.055] hover:text-white/85">
-                            <button
-                              type="button"
-                              onClick={() => toggleExpanded(projectCollapseKey)}
-                              aria-expanded={projectExpanded}
-                              className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1 text-left"
-                            >
-                              {projectExpanded ? (
-                                <ChevronDown className="h-3 w-3 shrink-0 text-white/45" />
-                              ) : (
-                                <ChevronRight className="h-3 w-3 shrink-0 text-white/45" />
-                              )}
-                              <span className="min-w-0 flex-1 truncate">{project.label}</span>
-                              <span className="text-[10px] tabular-nums text-white/35">{project.items.length}</span>
-                            </button>
-                            {project.value && (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="mr-1 flex h-5 w-5 items-center justify-center rounded-[5px] text-white/35 transition-colors hover:bg-white/[0.06] hover:text-white/70"
-                                    aria-label={`Project options for ${project.label}`}
-                                  >
-                                    <MoreHorizontal className="h-3 w-3" />
-                                  </button>
-                                </DropdownMenuTrigger>
-                                <StyledDropdownMenuContent align="end" className="w-40">
-                                  <StyledDropdownMenuItem
-                                    onClick={() => setSessionProjectDialog({
-                                      kind: 'rename_project',
-                                      projectKey: project.key,
-                                      projectLabel: project.label,
-                                    })}
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                    <span>Rename</span>
-                                  </StyledDropdownMenuItem>
-                                  <StyledDropdownMenuItem
-                                    onClick={() => setSessionProjectDialog({
-                                      kind: 'delete_project',
-                                      projectKey: project.key,
-                                      projectLabel: project.label,
-                                    })}
-                                    className="text-destructive focus:text-destructive"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                    <span>Delete</span>
-                                  </StyledDropdownMenuItem>
-                                </StyledDropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                          </div>
-                          {projectExpanded && (
-                            <div className="space-y-0.5 pl-3">
-                              {project.items.map((item) => {
-                                const active = item.id === session.selected
-                                return (
-                                  <button
-                                    key={item.id}
-                                    type="button"
-                                    onClick={() => navigateToSession(item.id)}
-                                    className={cn(
-                                      "block w-full truncate rounded-[7px] px-2.5 py-1.5 text-left text-[12px] leading-5 transition-colors",
-                                      active
-                                        ? "bg-white/[0.06] text-white"
-                                        : "text-white/42 hover:bg-white/[0.035] hover:text-white/70",
-                                    )}
-                                  >
-                                    {getSessionTitle(item)}
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
                 {/* Agent Tree: Hierarchical list of agents */}
                 {/* Agents section removed */}
                 </div>

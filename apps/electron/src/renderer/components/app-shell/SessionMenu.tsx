@@ -40,7 +40,6 @@ import {
   FolderKanban,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { useSetAtom } from 'jotai'
 import { navigate, routes } from '@/lib/navigate'
 import { useMenuComponents } from '@/components/ui/menu-context'
 import { getStateColor, getStateIcon, type SessionStatusId } from '@/config/session-status-config'
@@ -54,7 +53,6 @@ import { getSessionStatus, hasUnreadMeta, hasMessagesMeta } from '@/utils/sessio
 import { getSessionProjectInfo, setSessionProjectLabel } from '@/utils/session-project'
 import type { SessionProjectOption } from '@/context/SessionListContext'
 import { MessagingSessionMenuItem } from '@/components/messaging/MessagingSessionMenuItem'
-import { sessionProjectDialogAtom } from '@/atoms/session-project-dialog'
 
 export interface SessionMenuProps {
   /** Session data — display state is derived from this */
@@ -105,7 +103,6 @@ export function SessionMenu({
   hasRemoteWorkspaces,
 }: SessionMenuProps) {
   const { t } = useTranslation()
-  const setProjectDialog = useSetAtom(sessionProjectDialogAtom)
 
   // Derive display state from item
   const sessionId = item.id
@@ -183,11 +180,6 @@ export function SessionMenu({
     if (!onLabelsChange) return
     onLabelsChange(setSessionProjectLabel(sessionLabels, projectSlug))
   }, [onLabelsChange, sessionLabels])
-
-  const handleNewProject = React.useCallback(() => {
-    if (!onLabelsChange) return
-    setProjectDialog({ kind: 'new_project', sessionId })
-  }, [onLabelsChange, sessionId, setProjectDialog])
 
   // Get menu components from context (works with both DropdownMenu and ContextMenu)
   const { MenuItem, Separator, Sub, SubTrigger, SubContent } = useMenuComponents()
@@ -279,7 +271,7 @@ export function SessionMenu({
           </SubTrigger>
           <SubContent>
             <MenuItem onSelect={() => handleMoveToProject(undefined)} className={currentProject.value ? '' : 'bg-foreground/5'}>
-              <span className="flex-1">General</span>
+              <span className="flex-1">Past</span>
               {!currentProject.value && <span className="text-[10px] text-muted-foreground">Current</span>}
             </MenuItem>
             {projectOptions.map((project) => (
@@ -292,10 +284,6 @@ export function SessionMenu({
                 {currentProject.value === project.slug && <span className="text-[10px] text-muted-foreground">Current</span>}
               </MenuItem>
             ))}
-            <Separator />
-            <MenuItem onSelect={handleNewProject}>
-              <span className="flex-1">New Project...</span>
-            </MenuItem>
           </SubContent>
         </Sub>
       )}
