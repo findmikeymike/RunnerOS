@@ -519,6 +519,20 @@ describe('loadAllSources', () => {
     expect(found!.config.mcp?.url).toBe('https://mcp.facebook.com/ads');
     expect(found!.config.mcp?.authType).toBe('oauth');
   });
+
+  test('includes media-generation as a project provider-router source', () => {
+    const ws = makeWorkspace();
+    const all = loadAllSources(ws);
+    const found = all.find((s: LoadedSource) => s.config.slug === 'media-generation');
+
+    expect(found).toBeDefined();
+    expect(found!.tier).toBe('project');
+    expect(found!.config.type).toBe('local');
+    expect(found!.config.local?.format).toBe('provider-router');
+    expect(found!.guide?.raw).toContain('FAL_API_KEY');
+    expect(found!.guide?.raw).toContain('REPLICATE_API_TOKEN');
+    expect(found!.guide?.raw).toContain('WAVESPEED_API_KEY');
+  });
 });
 
 describe('getSourcesBySlugs', () => {
@@ -697,6 +711,19 @@ describe('getSourcesBySlugs', () => {
     expect(sources[0]!.config.type).toBe('local');
     expect(sources[0]!.config.local?.format).toBe('cli-tool');
     expect(sources[0]!.guide?.raw).toContain('zero search');
+  });
+
+  test('resolves media-generation by slug without workspace activation', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['media-generation']);
+
+    expect(sources.length).toBe(1);
+    expect(sources[0]!.tier).toBe('project');
+    expect(sources[0]!.config.slug).toBe('media-generation');
+    expect(sources[0]!.config.enabled).toBe(true);
+    expect(sources[0]!.config.type).toBe('local');
+    expect(sources[0]!.config.local?.format).toBe('provider-router');
+    expect(sources[0]!.guide?.raw).toContain('Fal uses');
   });
 
   test('resolves shopify by slug without workspace activation', () => {
