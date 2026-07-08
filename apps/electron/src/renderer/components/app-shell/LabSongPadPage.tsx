@@ -89,7 +89,6 @@ type LyricAgentPayload = {
 }
 
 const INITIAL_SECTIONS: SongSection[] = [
-  { id: 'intro', label: 'Intro', text: '', optional: true },
   {
     id: 'verse-1',
     label: 'V1',

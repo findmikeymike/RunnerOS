@@ -37,7 +37,6 @@ const EVENT_NAME = 'lab-songs-updated'
 export const LAB_PROJECT_COLORS = ['#fb923c', '#a78bfa', '#34d399', '#60a5fa', '#f472b6']
 
 export const LAB_DEFAULT_SECTIONS: LabUiSongSection[] = [
-  { id: 'intro', label: 'Intro', text: '', optional: true },
   { id: 'verse-1', label: 'V1', text: '' },
   { id: 'pre-chorus', label: 'Pre1', text: '', optional: true },
   { id: 'chorus', label: 'Chorus', text: '' },
@@ -82,6 +81,14 @@ function emitUpdate() {
   window.dispatchEvent(new CustomEvent(EVENT_NAME))
 }
 
+function normalizeSections(sections: LabUiSongSection[]): LabUiSongSection[] {
+  return sections.filter((section) => section.id !== 'intro' || section.text.trim())
+}
+
+function normalizeSong(song: LabUiSong): LabUiSong {
+  return { ...song, sections: normalizeSections(song.sections) }
+}
+
 function scopedKey(prefix: string, workspaceId?: string): string {
   return `${prefix}:${workspaceId || 'default'}`
 }
@@ -101,18 +108,25 @@ export function loadLabUiSongs(workspaceId?: string): LabUiSong[] {
   try {
     const raw = window.localStorage.getItem(key)
     if (!raw) {
-      window.localStorage.setItem(key, JSON.stringify(SEED_SONGS))
-      return SEED_SONGS
+      const songs = SEED_SONGS.map(normalizeSong)
+      window.localStorage.setItem(key, JSON.stringify(songs))
+      return songs
     }
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) {
-      window.localStorage.setItem(key, JSON.stringify(SEED_SONGS))
-      return SEED_SONGS
+      const songs = SEED_SONGS.map(normalizeSong)
+      window.localStorage.setItem(key, JSON.stringify(songs))
+      return songs
     }
-    return parsed.filter((song): song is LabUiSong => Boolean(song?.id && song?.title))
+    const songs = parsed
+      .filter((song): song is LabUiSong => Boolean(song?.id && song?.title))
+      .map(normalizeSong)
+    window.localStorage.setItem(key, JSON.stringify(songs))
+    return songs
   } catch {
-    window.localStorage.setItem(key, JSON.stringify(SEED_SONGS))
-    return SEED_SONGS
+    const songs = SEED_SONGS.map(normalizeSong)
+    window.localStorage.setItem(key, JSON.stringify(songs))
+    return songs
   }
 }
 

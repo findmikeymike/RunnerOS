@@ -142,7 +142,6 @@ function uniqueSongId(existing: LabSong[], title: string): string {
 
 function defaultSections(): LabSongSection[] {
   return [
-    { id: 'intro', label: 'Intro', text: '', optional: true },
     { id: 'verse-1', label: 'V1', text: '' },
     { id: 'pre-chorus', label: 'Pre1', text: '', optional: true },
     { id: 'chorus', label: 'Chorus', text: '' },
