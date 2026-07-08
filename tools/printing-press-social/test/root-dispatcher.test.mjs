@@ -977,7 +977,7 @@ test('completed live actions are deduped by idempotency key', () => {
   assert.equal(result.duplicateOf, 'act_first');
 });
 
-test('completed live actions are not deduped by payload alone', () => {
+test('completed live actions are deduped by payload digest when no idempotency key is supplied', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
   const action = {
     actionId: 'act_first',
@@ -995,5 +995,32 @@ test('completed live actions are not deduped by payload alone', () => {
     command: 'post.x',
   });
 
-  assert.equal(findCompletedAction({ action: { ...action, actionId: 'act_second' }, socialHome: home }), null);
+  const duplicate = findCompletedAction({ action: { ...action, actionId: 'act_second' }, socialHome: home });
+  assert.equal(duplicate.actionId, 'act_first');
+  assert.equal(duplicate.idempotencyKey, null);
+  assert.ok(duplicate.payloadDigest);
+});
+
+test('completed live actions are not deduped when no idempotency key is supplied and payload changes', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const action = {
+    actionId: 'act_first',
+    platform: 'x',
+    profile: 'artist01',
+    verb: 'post',
+    payload: { text: 'hello' },
+    options: {},
+  };
+
+  recordCompletedAction({
+    action,
+    socialHome: home,
+    result: { ok: true },
+    command: 'post.x',
+  });
+
+  assert.equal(findCompletedAction({
+    action: { ...action, actionId: 'act_second', payload: { text: 'hello again' } },
+    socialHome: home,
+  }), null);
 });
