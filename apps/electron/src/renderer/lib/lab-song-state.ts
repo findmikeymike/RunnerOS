@@ -82,7 +82,12 @@ function emitUpdate() {
 }
 
 function normalizeSections(sections: LabUiSongSection[]): LabUiSongSection[] {
-  return sections.filter((section) => section.id !== 'intro' || section.text.trim())
+  const kept = sections.filter((section) => section.id !== 'intro' || section.text.trim())
+  const byId = new Map(kept.map((section) => [section.id, section]))
+  const orderedDefaults = LAB_DEFAULT_SECTIONS.map((section) => byId.get(section.id) ?? section)
+  const defaultIds = new Set(LAB_DEFAULT_SECTIONS.map((section) => section.id))
+  const custom = kept.filter((section) => !defaultIds.has(section.id))
+  return [...orderedDefaults, ...custom]
 }
 
 function normalizeSong(song: LabUiSong): LabUiSong {
