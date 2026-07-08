@@ -465,6 +465,9 @@ Commands:
   social profile add tiktok --profile creator01 --json
   social profile add x --profile artist01 --json
   social profile add youtube --profile channel01 --json
+  social profile update x --profile artist01 --handle @artist01 --account-url https://x.com/artist01 --json
+  social profile status x --profile artist01 --live --json
+  social profile delete x --profile artist01 --json
   social post instagram --profile artist01 --text "caption" --media image.jpg --dry-run --json
   social post tiktok --profile creator01 --text "caption" --media video.mp4 --dry-run --json
   social post x --profile artist01 --text "post text" --dry-run --json

@@ -19,6 +19,12 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - Registry: `node src/social.mjs registry --json`
 - Doctor: `node src/social.mjs doctor --json`
 - Live doctor: `node src/social.mjs doctor --live --json`
+- Add profile: `node src/social.mjs profile add <platform> --profile <profile> --handle <handle> --account-url <url> --json`
+- List profiles: `node src/social.mjs profile list --json`
+- Profile status: `node src/social.mjs profile status <platform> --profile <profile> --live --json`
+- Update profile: `node src/social.mjs profile update <platform> --profile <profile> --handle <handle> --account-url <url> --json`
+- Delete profile metadata: `node src/social.mjs profile delete <platform> --profile <profile> --json`
+- With default `runner-cdp`, profile login/status live checks return a delegated browser plan for RunnerOS native browser tools instead of driving the browser inside the CLI process.
 - Instagram dry-run post: `node src/social.mjs post instagram --profile <profile> --text "<caption>" --media <image> --dry-run --json`
 - Instagram dry-run comment: `node src/social.mjs comment instagram --profile <profile> --url "<url>" --text "<comment>" --dry-run --json`
 - Instagram dry-run DM: `node src/social.mjs dm instagram --profile <profile> --to <username> --text "<message>" --dry-run --json`

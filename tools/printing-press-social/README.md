@@ -17,6 +17,18 @@ Recommended next check after install:
 social doctor --json
 ```
 
+Profile JSON commands:
+
+```bash
+social profile add <platform> --profile <profile> --handle <handle> --account-url <url> --json
+social profile list --json
+social profile status <platform> --profile <profile> --live --json
+social profile update <platform> --profile <profile> --handle <handle> --account-url <url> --json
+social profile delete <platform> --profile <profile> --json
+```
+
+With the default `runner-cdp` engine, profile login and live status return a delegated browser plan for RunnerOS native browser tools. They do not drive the browser inside this CLI process.
+
 Approved Runner handoff workflow:
 
 ```bash

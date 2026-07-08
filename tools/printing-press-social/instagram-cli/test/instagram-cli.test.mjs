@@ -61,6 +61,59 @@ test('adds and lists an Instagram profile', () => {
   const listed = JSON.parse(run(['profile', 'list', '--json'], env));
   assert.equal(listed.profiles.length, 1);
   assert.equal(listed.profiles[0].id, 'artist01');
+  assert.equal(listed.profiles[0].profile, 'artist01');
+  assert.equal(listed.profiles[0].accountHandle, '@artist01');
+  assert.equal(listed.profiles[0].sessionRef, path.join('sessions', 'instagram', 'artist01'));
+});
+
+test('updates, statuses, and deletes an Instagram profile with normalized JSON', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-cli-'));
+  const env = { SOCIAL_HOME: home };
+  run(['profile', 'add', 'instagram', '--profile', 'artist01', '--handle', '@artist01', '--json'], env);
+
+  const updated = JSON.parse(run([
+    'profile', 'update', 'instagram',
+    '--profile', 'artist01',
+    '--handle', '@artist-main',
+    '--account-url', 'https://www.instagram.com/artist-main/',
+    '--json',
+  ], env));
+  assert.equal(updated.ok, true);
+  assert.equal(updated.command, 'profile.update');
+  assert.equal(updated.data.accountHandle, '@artist-main');
+  assert.equal(updated.data.accountUrl, 'https://www.instagram.com/artist-main/');
+
+  const status = JSON.parse(run(['profile', 'status', 'instagram', '--profile', 'artist01', '--json'], env));
+  assert.equal(status.ok, true);
+  assert.equal(status.profileId, 'artist01');
+  assert.equal(status.accountHandle, '@artist-main');
+  assert.equal(status.sessionExists, false);
+  assert.equal(status.liveChecked, false);
+  assert.equal(status.loggedIn, null);
+  assert.equal(status.matchesExpected, null);
+  assert.equal(status.data.sessionPath, path.join(home, 'sessions', 'instagram', 'artist01'));
+
+  const liveStatus = JSON.parse(run(['profile', 'status', 'instagram', '--profile', 'artist01', '--live', '--json'], env));
+  assert.equal(liveStatus.ok, true);
+  assert.equal(liveStatus.ready, false);
+  assert.equal(liveStatus.liveChecked, false);
+  assert.equal(liveStatus.loggedIn, null);
+  assert.equal(liveStatus.matchesExpected, null);
+  assert.equal(liveStatus.live.delegated, true);
+  assert.equal(liveStatus.live.code, 'RUNNER_CDP_DELEGATED');
+  assert.equal(liveStatus.live.browserPlan.accountVerification.verificationTargetKnown, true);
+
+  const login = JSON.parse(run(['profile', 'login', 'instagram', '--profile', 'artist01', '--json'], env));
+  assert.equal(login.ok, true);
+  assert.equal(login.status, 'delegated');
+  assert.equal(login.liveChecked, false);
+  assert.equal(login.code, 'RUNNER_CDP_DELEGATED');
+
+  const deleted = JSON.parse(run(['profile', 'delete', 'instagram', '--profile', 'artist01', '--json'], env));
+  assert.equal(deleted.ok, true);
+  assert.equal(deleted.deleted, true);
+  const listed = JSON.parse(run(['profile', 'list', '--json'], env));
+  assert.equal(listed.profiles.length, 0);
 });
 
 test('dry-runs an Instagram comment', () => {

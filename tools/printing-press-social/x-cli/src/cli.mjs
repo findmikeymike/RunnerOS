@@ -7,6 +7,7 @@ import readline from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, resolveBrowserEngine, launchBrowserContextForEngine } from '../../src/browser-engines.mjs';
 import { buildContentContext, resolveMediaList, resolveText } from '../../src/content-assets.mjs';
+import { createProfile, profileJson, profileListJson, profileLoginJson, profileStatusJson, updateProfile } from '../../src/profile-json.mjs';
 import {
   acquireProfileLock,
   assertConfirmPolicy,
@@ -86,23 +87,13 @@ async function handleProfile(command, flags) {
     assertPlatform(platform);
     const profileId = requireFlag(flags, 'profile');
     const store = loadProfileStore();
-    const sessionRef = path.join('sessions', platform, profileId);
-
-    const profile = {
-      id: profileId,
+    const profile = createProfile({
       platform,
-      modePreference: 'browser',
-      adapter: resolveBrowserEngine(flags),
+      profileId,
+      flags,
       browserEngine: resolveBrowserEngine(flags),
-      sessionRef,
-      proxyId: flags['proxy-id'] || null,
-      ratePolicy: flags['rate-policy'] || 'normal',
       confirmPolicy: resolveConfirmPolicy(flags),
-      accountHandle: flags.handle || flags['account-handle'] || null,
-      accountUrl: flags['account-url'] || null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    });
 
     store.profiles[profileKey(platform, profileId)] = profile;
     saveProfileStore(store);
@@ -113,7 +104,56 @@ async function handleProfile(command, flags) {
       command: 'profile.add',
       platform,
       profile: profileId,
-      data: profile,
+      data: profileJson(profile, { sessionPath: sessionDir(profile), sessionExists: fs.existsSync(sessionDir(profile)) }),
+    }, flags.json);
+    return;
+  }
+
+  if (command === 'update') {
+    const platform = flags._[0];
+    assertPlatform(platform);
+    const profileId = requireFlag(flags, 'profile');
+    if (flags['confirm-policy']) assertConfirmPolicy(flags['confirm-policy']);
+
+    const store = loadProfileStore();
+    const key = profileKey(platform, profileId);
+    const profile = store.profiles[key];
+    if (!profile) throw new CliError(`Profile not found: ${platform}/${profileId}`, 'PROFILE_NOT_FOUND');
+    const updated = updateProfile(profile, flags, {
+      browserEngine: flags.engine ? resolveBrowserEngine(flags, profile) : null,
+      confirmPolicy: flags['confirm-policy'] || null,
+    });
+    store.profiles[key] = updated;
+    saveProfileStore(store);
+
+    writeResult({
+      ok: true,
+      status: 'succeeded',
+      command: 'profile.update',
+      platform,
+      profile: profileId,
+      data: profileJson(updated, { sessionPath: sessionDir(updated), sessionExists: fs.existsSync(sessionDir(updated)) }),
+    }, flags.json);
+    return;
+  }
+
+  if (command === 'delete') {
+    const platform = flags._[0];
+    assertPlatform(platform);
+    const profileId = requireFlag(flags, 'profile');
+    const store = loadProfileStore();
+    const key = profileKey(platform, profileId);
+    if (!store.profiles[key]) throw new CliError(`Profile not found: ${platform}/${profileId}`, 'PROFILE_NOT_FOUND');
+    delete store.profiles[key];
+    saveProfileStore(store);
+
+    writeResult({
+      ok: true,
+      status: 'succeeded',
+      command: 'profile.delete',
+      platform,
+      profile: profileId,
+      deleted: true,
     }, flags.json);
     return;
   }
@@ -141,7 +181,7 @@ async function handleProfile(command, flags) {
       platform,
       profile: profileId,
       confirmPolicy,
-      data: profile,
+      data: profileJson(profile, { sessionPath: sessionDir(profile), sessionExists: fs.existsSync(sessionDir(profile)) }),
     }, flags.json);
     return;
   }
@@ -152,7 +192,7 @@ async function handleProfile(command, flags) {
       ok: true,
       status: 'succeeded',
       command: 'profile.list',
-      profiles: Object.values(store.profiles),
+      profiles: profileListJson(Object.values(store.profiles), sessionDir),
     }, flags.json);
     return;
   }
@@ -170,17 +210,15 @@ async function handleProfile(command, flags) {
       live = await checkXSession(profile, flags);
     }
 
-    writeResult({
-      ok: true,
-      status: 'succeeded',
+    writeResult(profileStatusJson({
       command: 'profile.status',
       platform,
-      profile: profileId,
-      ready: live ? live.loggedIn : localReady,
-      localSessionExists: localReady,
+      profileId,
+      profile,
+      sessionPath,
+      sessionExists: localReady,
       live,
-      data: profile,
-    }, flags.json);
+    }), flags.json);
     return;
   }
 
@@ -191,15 +229,13 @@ async function handleProfile(command, flags) {
     const profile = getProfile(platform, profileId);
     const result = await loginX(profile, flags);
 
-    writeResult({
-      ok: result.loggedIn,
-      status: result.loggedIn ? 'succeeded' : 'failed',
-      command: 'profile.login',
+    writeResult(profileLoginJson({
       platform,
-      profile: profileId,
+      profileId,
+      profile,
       sessionPath: sessionDir(profile),
-      ...result,
-    }, flags.json);
+      result,
+    }), flags.json);
     return;
   }
 
@@ -430,6 +466,22 @@ function validateXAction(action) {
 }
 
 async function loginX(profile, flags) {
+  if (resolveBrowserEngine(flags, profile) === 'runner-cdp') {
+    return {
+      delegated: true,
+      code: 'RUNNER_CDP_DELEGATED',
+      loggedIn: null,
+      checked: false,
+      matchesExpected: null,
+      sessionExists: fs.existsSync(sessionDir(profile)),
+      message: 'runner-cdp login is delegated to RunnerOS native browser tools.',
+      browserPlan: buildBrowserPlan({
+        profile,
+        sessionPath: sessionDir(profile),
+        steps: ['open X home', 'let the user log in manually', 'verify visible account matches profile'],
+      }),
+    };
+  }
   const context = await launchBrowserContext(profile, flags, false);
   const page = await context.newPage();
   await page.goto('https://x.com/', { waitUntil: 'domcontentloaded' });
@@ -452,12 +504,28 @@ async function loginX(profile, flags) {
 }
 
 async function checkXSession(profile, flags) {
+  if (resolveBrowserEngine(flags, profile) === 'runner-cdp') {
+    return {
+      checked: false,
+      delegated: true,
+      code: 'RUNNER_CDP_DELEGATED',
+      loggedIn: null,
+      matchesExpected: null,
+      checkedAt: null,
+      message: 'runner-cdp status verification is delegated to RunnerOS native browser tools.',
+      browserPlan: buildBrowserPlan({
+        profile,
+        sessionPath: sessionDir(profile),
+        steps: ['open X home', 'verify visible account matches profile'],
+      }),
+    };
+  }
   const context = await launchBrowserContext(profile, flags, true);
   const page = await context.newPage();
   await page.goto('https://x.com/', { waitUntil: 'domcontentloaded' });
   const loggedIn = await isXLoggedIn(page);
   await context.close();
-  return { loggedIn, checkedAt: new Date().toISOString() };
+  return { checked: true, loggedIn, matchesExpected: null, checkedAt: new Date().toISOString() };
 }
 
 async function postXDirect(profile, action, flags) {
@@ -792,9 +860,11 @@ function printHelp() {
 
 X MVP:
   social profile add x --profile artist01 --handle @artist01 --json
+  social profile update x --profile artist01 --handle @artist-main --account-url https://x.com/artist-main --json
   social profile set-policy x --profile artist01 --confirm-policy require-confirm --json
   social profile login x --profile artist01
   social profile status x --profile artist01 --live --json
+  social profile delete x --profile artist01 --json
   social post x --profile artist01 --text "post text" --dry-run --json
   social post x --profile artist01 --text "post text" --media image.jpg --engine playwright --confirm yes --json
   social comment x --profile artist01 --url "https://x.com/user/status/123" --text "reply" --dry-run --json
