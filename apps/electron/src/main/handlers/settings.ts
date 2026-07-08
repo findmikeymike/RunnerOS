@@ -23,7 +23,7 @@ const SOCIAL_PLATFORMS = new Set(['instagram', 'tiktok', 'x', 'youtube'])
 // GUI-only settings (require Electron-specific APIs)
 // ============================================================
 
-export function registerSettingsGuiHandlers(server: RpcServer, _deps: HandlerDeps): void {
+export function registerSettingsGuiHandlers(server: RpcServer, deps: HandlerDeps): void {
   // Set keep awake while running setting (requires Electron power-manager)
   server.handle(RPC_CHANNELS.power.SET_KEEP_AWAKE, async (_ctx, enabled: boolean) => {
     const { setKeepAwakeWhileRunning } = await import('@craft-agent/shared/config/storage')
@@ -73,7 +73,33 @@ export function registerSettingsGuiHandlers(server: RpcServer, _deps: HandlerDep
 
   server.handle(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_LOGIN, async (_ctx, input: SocialAccountRef) => {
     const ref = assertSocialRef(input)
-    return runSocialJson(['profile', 'login', ref.platform, '--profile', ref.profile, '--json'])
+    const result = await runSocialJson(['profile', 'login', ref.platform, '--profile', ref.profile, '--json']) as SocialAccountCommandResult
+    const sessionPath = typeof result.sessionPath === 'string' ? result.sessionPath : null
+    if (sessionPath) fs.mkdirSync(sessionPath, { recursive: true })
+
+    const browserPaneManager = deps.browserPaneManager
+    if (!browserPaneManager) return result
+
+    const partition = socialBrowserPartition(ref)
+    const instanceId = browserPaneManager.createInstance(socialBrowserInstanceId(ref), {
+      show: true,
+      partition,
+    })
+    browserPaneManager.focus(instanceId)
+    await browserPaneManager.navigate(instanceId, socialLoginUrl(ref.platform))
+
+    return {
+      ...result,
+      browserInstanceId: instanceId,
+      browserPartition: partition,
+      sessionExists: sessionPath ? true : result.sessionExists,
+      localSessionExists: sessionPath ? true : result.localSessionExists,
+      data: {
+        ...(result.data || {}),
+        browserInstanceId: instanceId,
+        browserPartition: partition,
+      },
+    }
   })
 
   server.handle(RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS, async (_ctx, input: SocialAccountStatusInput) => {
@@ -101,6 +127,14 @@ type SocialAccountStatusInput = SocialAccountRef & {
   live?: boolean
 }
 
+type SocialAccountCommandResult = {
+  sessionPath?: unknown
+  sessionExists?: unknown
+  localSessionExists?: unknown
+  data?: Record<string, unknown>
+  [key: string]: unknown
+}
+
 function assertSocialRef(input: SocialAccountRef): { platform: string; profile: string } {
   const platform = String(input?.platform || '')
   const profile = String(input?.profile || '').trim()
@@ -118,6 +152,26 @@ function optionalStringOrClear(name: string, clearName: string, value: unknown):
   if (value === undefined) return []
   const normalized = typeof value === 'string' ? value.trim() : ''
   return normalized ? [name, normalized] : [clearName]
+}
+
+function socialBrowserPartition(ref: { platform: string; profile: string }): string {
+  return `persist:social-${ref.platform}-${socialBrowserSegment(ref.profile)}`
+}
+
+function socialBrowserInstanceId(ref: { platform: string; profile: string }): string {
+  return `social-${ref.platform}-${socialBrowserSegment(ref.profile)}`
+}
+
+function socialBrowserSegment(value: string): string {
+  return value.replace(/[^A-Za-z0-9_-]/g, '-')
+}
+
+function socialLoginUrl(platform: string): string {
+  if (platform === 'instagram') return 'https://www.instagram.com/'
+  if (platform === 'tiktok') return 'https://www.tiktok.com/'
+  if (platform === 'x') return 'https://x.com/'
+  if (platform === 'youtube') return 'https://www.youtube.com/'
+  return 'https://www.google.com/'
 }
 
 function socialToolDir(): string {

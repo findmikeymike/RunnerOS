@@ -2,8 +2,8 @@
  * BrowserPaneManager
  *
  * Owns browser instances as dedicated BrowserWindow objects.
- * Each instance maps 1:1 to a full native window while preserving
- * shared session/cookie partition and CDP automation support.
+ * Each instance maps 1:1 to a full native window with default shared
+ * session state, optional isolated partitions, and CDP automation support.
  */
 
 import { join, parse as parsePath } from 'path'
@@ -131,6 +131,7 @@ interface AgentControlLockState {
 
 interface BrowserInstance {
   id: string
+  partition: string
   window: BrowserWindow
   toolbarView: BrowserView
   pageView: BrowserView
@@ -171,6 +172,7 @@ interface CreateBrowserInstanceOptions {
   show?: boolean
   ownerType?: 'session' | 'manual'
   ownerSessionId?: string
+  partition?: string
 }
 
 export interface BrowserScreenshotOptions {
@@ -354,7 +356,8 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       return instanceId
     }
 
-    const ses = session.fromPartition(SESSION_PARTITION)
+    const partition = options?.partition ?? SESSION_PARTITION
+    const ses = session.fromPartition(partition)
     this.setupSessionPermissions(ses)
     this.setupSessionObservers(ses)
 
@@ -371,7 +374,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       // Fully chromeless — toolbar is rendered in a dedicated BrowserView
       frame: false,
       webPreferences: {
-        partition: SESSION_PARTITION,
+        partition,
         session: ses,
         contextIsolation: true,
         nodeIntegration: false,
@@ -382,7 +385,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     const toolbarView = new BrowserView({
       webPreferences: {
         preload: join(__dirname, 'browser-toolbar-preload.cjs'),
-        partition: SESSION_PARTITION,
+        partition,
         session: ses,
         contextIsolation: true,
         nodeIntegration: false,
@@ -392,7 +395,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const pageView = new BrowserView({
       webPreferences: {
-        partition: SESSION_PARTITION,
+        partition,
         session: ses,
         contextIsolation: true,
         nodeIntegration: false,
@@ -407,7 +410,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const nativeOverlayView = new BrowserView({
       webPreferences: {
-        partition: SESSION_PARTITION,
+        partition,
         session: ses,
         contextIsolation: true,
         nodeIntegration: false,
@@ -427,6 +430,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
     const instance: BrowserInstance = {
       id: instanceId,
+      partition,
       window,
       toolbarView,
       pageView,
@@ -484,7 +488,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     this.instances.set(instanceId, instance)
     this.emitStateChange(instance)
     mainLog.info(`[browser-pane] toolbar version: v4-react-chromeless`)
-    mainLog.info(`[browser-pane] Created instance: ${instanceId} (show=${shouldShow}, ownerType=${ownerType}, ownerSessionId=${ownerSessionId ?? 'none'})`)
+    mainLog.info(`[browser-pane] Created instance: ${instanceId} (show=${shouldShow}, ownerType=${ownerType}, ownerSessionId=${ownerSessionId ?? 'none'}, partition=${partition})`)
 
     void this.loadToolbarPage(instance)
       .finally(() => {
@@ -1699,7 +1703,11 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   private findReusableUnboundInstance(): BrowserInstance | null {
-    const unbound = Array.from(this.instances.values()).filter(i => i.boundSessionId === null && i.ownerType === 'manual')
+    const unbound = Array.from(this.instances.values()).filter(i => (
+      i.boundSessionId === null
+      && i.ownerType === 'manual'
+      && i.partition === SESSION_PARTITION
+    ))
     if (unbound.length === 0) return null
 
     // Prefer visible windows first, then fall back to first available.
@@ -3063,7 +3071,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
           parent: instance.window,
           modal: false,
           webPreferences: {
-            partition: SESSION_PARTITION,
+            partition: instance.partition,
             session: pageWc.session,
             contextIsolation: true,
             nodeIntegration: false,
