@@ -872,17 +872,17 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
           ) : null}
         </div>
       ) : null}
-      <div className="shrink-0 border-b border-white/[0.04] px-6 py-3">
+      <div className="shrink-0 border-b border-white/[0.04] px-4 py-2.5">
         <div className="flex w-full items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <div className="mb-1.5 flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.18em] text-white/38">
-              <FlaskConical className="h-3.5 w-3.5" />
+            <div className="mb-1 flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.17em] text-white/34">
+              <FlaskConical className="h-3 w-3" />
               Song Pad
             </div>
             <input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              className="w-full border-0 bg-transparent text-xl font-semibold tracking-normal text-white/92 outline-none placeholder:text-white/25"
+              className="w-full border-0 bg-transparent text-lg font-medium tracking-normal text-white/88 outline-none placeholder:text-white/25"
               placeholder="Untitled song"
             />
           </div>
@@ -899,23 +899,23 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto px-6 py-4">
-        <div className="grid w-full gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(460px,0.92fr)]">
+      <div className="min-h-0 flex-1 overflow-auto px-3 py-3">
+        <div className="grid w-full gap-3 xl:grid-cols-[minmax(0,1.12fr)_minmax(440px,0.88fr)]">
           <section className="flex min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.04] px-4 py-2.5">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.04] px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="flex shrink-0 items-center gap-2 text-[9px] font-medium uppercase tracking-[0.15em] text-white/55">
-                  <Sparkles className="h-3 w-3 text-white/35" />
+                <div className="flex shrink-0 items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.14em] text-white/50">
+                  <Sparkles className="h-2.5 w-2.5 text-white/32" />
                   Rough Pad
                 </div>
                 <div
                   title="Highlight text and click to send to song section."
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/34"
+                  className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/30"
                 >
-                  <Info className="h-3 w-3" />
+                  <Info className="h-2.5 w-2.5" />
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-1">
                 {SECTION_BUTTONS.map((section) => (
                   <button
                     key={section.id}
@@ -923,7 +923,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     title={section.title}
                     disabled={!selectedText.trim()}
                     onClick={() => sendSelectionToSection(section.id)}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-[10px] font-semibold text-white/55 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-35"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-[9px] font-semibold text-white/55 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-35"
                   >
                     {section.label}
                   </button>
@@ -933,7 +933,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                   title="Send to Remember This"
                   disabled={!selectedText.trim()}
                   onClick={() => sendSelectionToRemember()}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#fb923c]/35 bg-[#fb923c]/10 text-[10px] font-semibold text-[#fbbf24] hover:bg-[#fb923c]/15 disabled:cursor-not-allowed disabled:opacity-35"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#fb923c]/35 bg-[#fb923c]/10 text-[9px] font-semibold text-[#fbbf24] hover:bg-[#fb923c]/15 disabled:cursor-not-allowed disabled:opacity-35"
                 >
                   R
                 </button>
@@ -942,14 +942,14 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                   title="Copy to Chorus"
                   disabled={!selectedText.trim()}
                   onClick={() => sendSelectionToSection('chorus', true)}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/45 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-35"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/45 hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-35"
                 >
-                  <Copy className="h-3 w-3" />
+                  <Copy className="h-2.5 w-2.5" />
                 </button>
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 p-4">
+            <div className="min-h-0 flex-1 p-3">
               <textarea
                 ref={roughRef}
                 value={roughText}
@@ -988,39 +988,39 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
           </section>
 
           <section className="flex min-h-[calc(100vh-176px)] flex-col rounded-xl border border-white/[0.05] bg-[#080808] shadow-minimal">
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/[0.04] px-4 py-2.5">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/[0.04] px-3 py-2">
               <div className="flex min-w-0 items-center gap-2">
-                <div className="flex items-center gap-2 text-[9px] font-medium uppercase tracking-[0.15em] text-white/55">
-                  <Layers className="h-3 w-3 text-white/35" />
+                <div className="flex items-center gap-1.5 text-[8px] font-medium uppercase tracking-[0.14em] text-white/50">
+                  <Layers className="h-2.5 w-2.5 text-white/32" />
                   Song Structure
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   title={showEmptySections ? 'Hide empty sections' : 'Show empty sections'}
                   onClick={() => setShowEmptySections((current) => !current)}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/45 hover:bg-white/[0.05]"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/[0.06] bg-white/[0.025] text-white/45 hover:bg-white/[0.05]"
                 >
-                  {showEmptySections ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  {showEmptySections ? <EyeOff className="h-2.5 w-2.5" /> : <Eye className="h-2.5 w-2.5" />}
                 </button>
                 <button
                   type="button"
                   title="Add section"
                   onClick={addCustomSection}
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-[#fb923c]/35 bg-[#fb923c]/10 text-[#fbbf24] hover:bg-[#fb923c]/15"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-[#fb923c]/35 bg-[#fb923c]/10 text-[#fbbf24] hover:bg-[#fb923c]/15"
                 >
-                  <Plus className="h-3 w-3" />
+                  <Plus className="h-2.5 w-2.5" />
                 </button>
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto px-4 py-2">
+            <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
               {visibleSections.map((section) => (
                 <article
                   key={section.id}
                   className={cn(
-                    'border-b border-white/[0.045] py-3 last:border-b-0',
+                    'border-b border-white/[0.045] py-2.5 last:border-b-0',
                     !section.text.trim() && 'opacity-55',
                   )}
                 >
@@ -1148,7 +1148,7 @@ export function LabSongPadPage({ workspaceId, songId, artistProfileWorkspaceId, 
                     onSelect={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
                     onKeyUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget)}
                     onMouseUp={(event) => captureSectionProsodySelection(section.id, event.currentTarget, { x: event.clientX + 4, y: event.clientY - 34 })}
-                    placeholder={section.optional ? 'Optional' : 'Write lyrics here.'}
+                    placeholder=""
                     className={textareaBase('overflow-hidden text-white/76 placeholder:text-white/14')}
                   />
                 </article>
