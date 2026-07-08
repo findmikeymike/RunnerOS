@@ -15539,6 +15539,609 @@ Missing info:
     ],
   },
   {
+    slug: "reference-finder",
+    files: [
+      {
+        path: "saved/favorites.json",
+        content: `{
+  "meta": {
+    "name": "Saved reference favorites",
+    "note": "Your go-to palette. The reference-finder Skill adds here when you love a reference. Each entry: image, well, meaning, and an optional note on how you like to use it.",
+    "version": "1.0.0"
+  },
+  "favorites": []
+}
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: reference-finder
+description: >-
+  Find and present cultural allusions and references for a song — biblical, mythic, historical,
+  decade-nostalgia, regional, and cosmic imagery a lyric can draw on. Use when a writer wants
+  reference material to color a song: "I use a lot of biblical references, give me more,"
+  "suggest 90s nostalgia images," "what allusions fit a song about betrayal," "give me Old West
+  imagery," "I want this to feel Southern gothic," or when a lyric feels thin and needs texture
+  and gravity. Two modes: expand within a WELL (a source the writer leans on) and match across
+  wells by MEANING (the feeling/theme a song is about). Backed by the Reference Wells catalog as
+  a scaffold, but generates deep and fresh on demand. Pairs with impact-phrases (which supplies
+  the punch line) and hook-writer. Do NOT use for writing the punch/hook itself, full verses,
+  beats, or business tasks.
+---
+
+# Reference Finder — the allusion engine
+
+References are the **color of a song** — the loaded images pulled from a shared cultural well
+that give a lyric texture, gravity, and place. "Judas kiss," "neon on wet asphalt," "the tide
+going out." A reference rarely *is* the punch (that's the impact-phrase's job); it **sets the
+punch up** — it paints the specific, vivid world that makes a plain, timeless payoff land.
+
+This skill finds the right references for a song and presents them, going as deep and fresh as
+the writer wants. It is **generative** — it uses the Reference Wells catalog as a scaffold and
+a balancer, then draws on the full cultural memory of each well to go far past the seed list.
+
+## The catalog (scaffold, not a cage)
+
+\`wells/wells.json\` catalogs ~20 wells across categories (sacred-mythic, myth, literary,
+folklore, esoteric, decade, historical-era, regional-genre, cosmic, nature). Each well has a
+**tone**, what it **evokes** (the meaning axis), a set of **signature images** with meanings,
+a **deploy** note, and a **cliche_watch** list. Read it to ground tone and to see what a well
+already offers — then generate well beyond it. The catalog exists to keep coverage balanced and
+consistent, not to limit you. If a writer names a well that isn't in the catalog (Egyptian myth,
+Appalachian folk, cyberpunk, medieval, disco, the Beat generation), just build it on the fly.
+
+## Two modes
+
+### Mode A — Expand within a well ("I lean biblical, give me more")
+
+The writer names a source they draw on. Surface a rich, organized family from that well:
+
+1. Read the well's \`tone\`, \`evokes\`, and \`signatures\` for grounding.
+2. Generate **10–20 references** from that well, going well past the seed — group them loosely
+   by the feeling they serve (e.g. biblical → *betrayal:* Judas kiss, thirty pieces of silver;
+   *exile:* east of Eden, forty years wandering; *sacrifice:* the lamb, Gethsemane).
+3. Give each a **one-line meaning** so the writer knows what it evokes and can reach for it.
+4. Flag the \`cliche_watch\` ones honestly and offer a twist instead of the tired version.
+
+### Mode B — Match across wells by meaning ("a song about betrayal")
+
+The writer gives a theme, mood, or situation. Pull the strongest images from *any* well:
+
+1. Identify the core feeling(s) — betrayal, rebirth, distance, doom, homesickness.
+2. Scan wells whose \`evokes\` match, and pull the sharpest images from several, so the writer
+   gets range (betrayal → *biblical:* Judas kiss; *noir:* the double-cross; *myth:* the Trojan
+   horse; *Shakespeare:* et tu; *folklore:* the wolf in the red hood's story).
+3. Present **grouped by well** so the writer can feel each texture, or ranked by fit — whichever
+   serves. Note which well each comes from.
+
+Most real requests blend both — a writer who "leans biblical" and is "writing about betrayal"
+wants biblical betrayal images first, then a few from other wells to widen the palette.
+
+## How to present
+
+- **Grouped, glossed, and usable.** Each reference gets the image + one line on what it evokes.
+  Cluster by feeling (Mode A) or by well (Mode B). Lead with the freshest, strongest images.
+- **Go deep on request.** If they want "20 more," give 20 more without repeating. The wells are
+  deep; don't stop at the catalog's signatures.
+- **Show how it lands, lightly.** For the top few, a quick note on how to drop it into a lyric
+  ("'east of Eden' as the place you got exiled to after the fight") — but keep it light, options
+  not essays.
+- **Offer a twist for the worn ones.** The whole point is to avoid tired allusions. When an image
+  is on \`cliche_watch\` or just overused (phoenix rising, star-crossed, sold my soul), say so and
+  offer the fresh angle — a fresh image, or the cliché subverted.
+- **Respect real people and events.** With historical/decade wells, keep real figures and
+  tragedies handled with a light, respectful touch; reach for texture and imagery, not
+  exploitation.
+
+## Cliché guard (the core value)
+
+A generic allusion is worse than none — it makes a song feel secondhand. Steer away from the
+exhausted images (phoenix rising, Icarus straight, "devil at the crossroads," "star-crossed,"
+tie-dye-as-60s). Prefer the deep cut and the specific detail: not "a biblical flood" but "forty
+days and I stopped counting"; not "like a fairytale" but "breadcrumbs the birds already ate."
+When you do reach for a famous image, twist or ground it. Say honestly when something's worn.
+
+## Working with the other tools
+
+This is one of a family:
+
+- **reference-finder** (this) → the *color*: loaded images that paint the verse and set up the punch.
+- **impact-phrases** → the *punch*: the plain, timeless phrase the chorus lands on.
+- **hook-writer** → the *build*: shaping the whole hook, the setup, the breathe, the sonics.
+
+A full flow: find the well and its images here → set them up as vivid, specific verse → land a
+plain impact-phrase as the chorus payoff → let hook-writer tighten the whole thing. When a
+request spans these, move between them naturally.
+
+## Saving useful references
+
+When a writer loves specific references, offer to save them into the Lab song's \`remember\`
+area or another user-visible note surface. Save the image, well, meaning, and an optional note
+on how they want to use it. Keep references generic — cultural images, idioms, and allusions,
+never verbatim copyrighted lyrics.
+`,
+      },
+      {
+        path: "wells/wells.json",
+        content: `{
+  "meta": {
+    "name": "Reference Wells",
+    "version": "1.0.0",
+    "updated": "2026-07-07",
+    "purpose": "A balanced catalog of cultural 'wells' a songwriter draws allusions from — biblical, mythic, historical eras, decade nostalgia, regional textures, cosmic. Each well lists signature images with meanings, the tone it carries, and what it evokes. This is a scaffold, not a closed list: the reference-finder Skill uses it to generate deep, on-theme references on demand and to keep coverage across wells balanced.",
+    "how_to_use": "Browse to find a well's texture and signature images, or feed a well/theme to the reference-finder Skill to go deeper. References color the SETUP of a song (verse imagery, gravity, texture); they pair with an impact phrase, which lands the punch.",
+    "field_guide": {
+      "id": "stable well id",
+      "name": "the well's name",
+      "category": "grouping (sacred-mythic, myth, literary, folklore, esoteric, decade, historical-era, regional-genre, cosmic, domain, nature)",
+      "era": "when it lives / its timeframe",
+      "tone": "the emotional color it brings",
+      "evokes": "themes/feelings it is strong for — the meaning axis",
+      "signatures": "signature reference images, each with img (the allusion) and means (what it evokes / how it reads)",
+      "deploy": "craft note on using this well in a lyric",
+      "cliche_watch": "the most overused images in this well — use sparingly or twist"
+    },
+    "categories": ["sacred-mythic","myth","literary","folklore","esoteric","decade","historical-era","regional-genre","cosmic","domain","nature"]
+  },
+  "wells": [
+    {
+      "id":"well-biblical",
+      "name":"Biblical / Scripture",
+      "category":"sacred-mythic",
+      "era":"antiquity / timeless",
+      "tone":"weighty, moral, redemptive, prophetic",
+      "evokes":["betrayal","sacrifice","redemption","exile","temptation","judgment","rebirth","faith","sin","deliverance","mercy"],
+      "signatures":[
+        {"img":"Judas kiss","means":"betrayal disguised as affection"},
+        {"img":"cross to bear","means":"a burden you carry as penance"},
+        {"img":"baptism by fire","means":"transformation through trial"},
+        {"img":"garden of Eden","means":"lost innocence, paradise before the fall"},
+        {"img":"prodigal son","means":"the one who leaves and is welcomed back"},
+        {"img":"thirty pieces of silver","means":"the cheap price of a betrayal"},
+        {"img":"forty days in the wilderness","means":"a stretch of testing and temptation"},
+        {"img":"Jacob's ladder","means":"a hard climb toward the divine"},
+        {"img":"walking on water","means":"the impossible done by faith"},
+        {"img":"the promised land","means":"deliverance you may never reach"},
+        {"img":"writing on the wall","means":"the doom you can already read"},
+        {"img":"turn the other cheek","means":"grace instead of vengeance"},
+        {"img":"valley of the shadow","means":"walking through fear and death"}
+      ],
+      "deploy":"Biblical images carry instant moral gravity — one lands a whole verse in the register of sin and grace. Great for songs about betrayal, guilt, and redemption. Twist the worn ones (a Judas who kisses himself in the mirror).",
+      "cliche_watch":["prodigal son","promised land (as a straight uplift)","amazing grace"]
+    },
+    {
+      "id":"well-greek-roman",
+      "name":"Greek & Roman Myth",
+      "category":"myth",
+      "era":"classical antiquity",
+      "tone":"tragic, fated, grand, hubristic",
+      "evokes":["hubris","doom","longing","obsession","fate","transformation","the underworld","impossible love","warning"],
+      "signatures":[
+        {"img":"Icarus / wings of wax","means":"flying too high, undone by your own ambition"},
+        {"img":"Achilles' heel","means":"the one fatal weakness in the strong"},
+        {"img":"Pandora's box","means":"the ruin you can't put back once opened"},
+        {"img":"siren song","means":"a beautiful lure toward destruction"},
+        {"img":"the Midas touch","means":"getting everything you wanted and it kills you"},
+        {"img":"crossing the Styx","means":"the point of no return / death's ferry"},
+        {"img":"Sisyphus and the boulder","means":"endless, pointless struggle"},
+        {"img":"Orpheus looking back","means":"losing love the instant you doubt"},
+        {"img":"Narcissus at the pool","means":"drowning in your own reflection"},
+        {"img":"the Trojan horse","means":"the gift that carries your undoing"},
+        {"img":"Prometheus / stolen fire","means":"punished forever for a gift to others"},
+        {"img":"the labyrinth / Minotaur","means":"lost in a maze of your own making"}
+      ],
+      "deploy":"Myth turns a personal feeling into a fated, cosmic one — good for tragedy, obsession, and grand doomed love. The story-shape does the work; you rarely need to explain it.",
+      "cliche_watch":["phoenix rising (badly overused)","Icarus (common — twist it)","Achilles' heel"]
+    },
+    {
+      "id":"well-norse-celtic",
+      "name":"Norse & Celtic Myth",
+      "category":"myth",
+      "era":"dark-age northern Europe",
+      "tone":"cold, stoic, doom-laden, elemental",
+      "evokes":["fate","endurance","the end of things","the wild","honor","the veil","winter","the unseen"],
+      "signatures":[
+        {"img":"Ragnarök","means":"the foretold end you march toward anyway"},
+        {"img":"Valhalla","means":"a glorious reward earned only through death"},
+        {"img":"the Norns / threads of fate","means":"a life already being woven and cut"},
+        {"img":"Yggdrasil / the world tree","means":"everything connected by one root"},
+        {"img":"the raven's wing","means":"an omen, a messenger between worlds"},
+        {"img":"the long winter / Fimbulwinter","means":"a cold that outlasts hope"},
+        {"img":"the wild hunt","means":"a spectral chase across the night sky"},
+        {"img":"the selkie's skin","means":"a wild love that must return to the sea"},
+        {"img":"the thin veil / Samhain","means":"the night the dead walk close"},
+        {"img":"rune-carved stone","means":"a fate written in something that outlasts you"}
+      ],
+      "deploy":"Northern myth brings cold stoicism and inevitability — perfect for endurance, grief, and doomed courage. Leans folk and elemental; pairs with weather and wilderness imagery.",
+      "cliche_watch":["Valhalla (metal cliché)","'winter is coming' echoes"]
+    },
+    {
+      "id":"well-shakespeare-lit",
+      "name":"Shakespeare & Classic Literature",
+      "category":"literary",
+      "era":"Renaissance to 19th c.",
+      "tone":"eloquent, tragic, star-crossed, literary",
+      "evokes":["doomed love","madness","ambition","jealousy","fate","revenge","illusion","mortality"],
+      "signatures":[
+        {"img":"star-crossed lovers","means":"love the universe itself is against"},
+        {"img":"out, damned spot","means":"guilt that won't wash off"},
+        {"img":"the green-eyed monster","means":"jealousy that devours from inside"},
+        {"img":"to be or not to be","means":"the edge between going on and not"},
+        {"img":"a pound of flesh","means":"a debt collected cruelly, to the letter"},
+        {"img":"the winter of discontent","means":"a long cold season of the soul"},
+        {"img":"Yorick's skull","means":"holding death and looking it in the face"},
+        {"img":"the balcony","means":"love reaching across an impossible distance"},
+        {"img":"sound and fury, signifying nothing","means":"a loud life that meant nothing"},
+        {"img":"the white whale","means":"the obsession that will sink you (Melville)"},
+        {"img":"the green light across the water","means":"the dream just out of reach (Gatsby)"},
+        {"img":"the raven at the door","means":"grief that keeps saying nevermore (Poe)"}
+      ],
+      "deploy":"Literary allusion adds eloquence and tragic scale. Works when the song wants to feel timeless and literate; keep the reference light so it colors rather than shows off.",
+      "cliche_watch":["star-crossed lovers","'to be or not to be' quoted straight"]
+    },
+    {
+      "id":"well-fairytale-folklore",
+      "name":"Fairy Tale & Folklore",
+      "category":"folklore",
+      "era":"timeless / oral tradition",
+      "tone":"enchanted, dark, cautionary, innocent-then-not",
+      "evokes":["innocence","danger","transformation","longing","warning","lost children","false promises","the woods"],
+      "signatures":[
+        {"img":"breadcrumbs in the woods","means":"a way home that disappears behind you"},
+        {"img":"the poisoned apple","means":"a sweetness that puts you to sleep"},
+        {"img":"the glass slipper","means":"a fit that proves who you really are — or doesn't"},
+        {"img":"spinning straw into gold","means":"an impossible promise with a hidden price"},
+        {"img":"the big bad wolf","means":"the danger dressed up as something safe"},
+        {"img":"the tower with no door","means":"beauty locked away, waiting"},
+        {"img":"the frog and the crown","means":"what looks lowly holding what you need"},
+        {"img":"the wishing well","means":"hope you throw away and never get back"},
+        {"img":"the crossroads at midnight","means":"a bargain made in the dark"},
+        {"img":"the wolf at the door","means":"ruin waiting just outside"},
+        {"img":"the girl in the red hood","means":"innocence walking straight toward the teeth"}
+      ],
+      "deploy":"Folklore gives childhood-dark texture — familiar and unsettling at once. Strong for songs about lost innocence, temptation, and false safety. The dark undertow is the point.",
+      "cliche_watch":["happily ever after (unless subverted)","fairytale ending"]
+    },
+    {
+      "id":"well-tarot-occult",
+      "name":"Tarot & the Occult",
+      "category":"esoteric",
+      "era":"timeless / mystical",
+      "tone":"fated, mysterious, ominous, revelatory",
+      "evokes":["fate","upheaval","hidden truth","cycles","warning","death-and-rebirth","the unknown","reckoning"],
+      "signatures":[
+        {"img":"the Tower struck by lightning","means":"sudden collapse of what you built"},
+        {"img":"the Death card","means":"an ending that is really a change, not a grave"},
+        {"img":"the Fool at the cliff's edge","means":"a reckless, hopeful first step into nothing"},
+        {"img":"the Hanged Man","means":"surrender, seeing the world upside down"},
+        {"img":"the Wheel of Fortune","means":"luck turning, high to low and back"},
+        {"img":"the Lovers","means":"a choice as much as a romance"},
+        {"img":"reading tea leaves","means":"looking for the future in scraps"},
+        {"img":"crossing a stranger's palm with silver","means":"paying for a truth you may not want"},
+        {"img":"the black cat / broken mirror","means":"small omens of a turning tide"},
+        {"img":"the séance / the other side","means":"reaching for someone past the veil"}
+      ],
+      "deploy":"Occult imagery brings fate and dread with a whisper. Good for foreboding, transformation, and songs that flirt with the mystical. The Tower and Death cards are rich because they mean the opposite of how they look.",
+      "cliche_watch":["'the cards don't lie'","crystal ball as a lazy prop"]
+    },
+    {
+      "id":"well-old-west",
+      "name":"Old West & Frontier",
+      "category":"historical-era",
+      "era":"American frontier, 1840s–1890s",
+      "tone":"dusty, lawless, lonesome, mythic-American",
+      "evokes":["freedom","lawlessness","loneliness","revenge","the open road","survival","reinvention","last stands"],
+      "signatures":[
+        {"img":"high noon showdown","means":"a reckoning you can't walk away from"},
+        {"img":"riding off into the sunset","means":"leaving before the town can hold you"},
+        {"img":"the last stagecoach out","means":"a final chance to escape"},
+        {"img":"a ghost town","means":"a place love and money already left"},
+        {"img":"the wanted poster","means":"a past that follows your face"},
+        {"img":"gold-rush fever","means":"chasing a fortune that ruins you"},
+        {"img":"the lone rider","means":"freedom that is really loneliness"},
+        {"img":"boot hill / the pine box","means":"the cheap end of a hard life"},
+        {"img":"snake oil","means":"a beautiful lie sold door to door"},
+        {"img":"the last bullet","means":"the choice you save for yourself"},
+        {"img":"dust on the horizon","means":"trouble or salvation coming, can't tell which"}
+      ],
+      "deploy":"Frontier imagery is pure mythic-Americana — freedom, violence, and loneliness in wide open space. Perfect for outlaw hearts, restlessness, and reinvention. Pairs with country, folk, and rock.",
+      "cliche_watch":["ride off into the sunset (unless twisted)","this town ain't big enough"]
+    },
+    {
+      "id":"well-prohibition-jazz",
+      "name":"Prohibition & the Jazz Age",
+      "category":"historical-era",
+      "era":"1920s–early '30s",
+      "tone":"glittering, illicit, doomed-glamour, reckless",
+      "evokes":["excess","secrecy","forbidden pleasure","glamour with rot underneath","reinvention","the party before the crash"],
+      "signatures":[
+        {"img":"the speakeasy's hidden door","means":"pleasure you need a password for"},
+        {"img":"bathtub gin","means":"a homemade vice that might blind you"},
+        {"img":"the last dance before the crash","means":"joy on the edge of ruin"},
+        {"img":"a string of pearls","means":"borrowed glamour hiding empty pockets"},
+        {"img":"the getaway car idling","means":"a life ready to bolt at any second"},
+        {"img":"the green light across the bay","means":"a dream you reach for and never touch"},
+        {"img":"the flapper's fringe","means":"defiant, disposable freedom"},
+        {"img":"the bootlegger's promise","means":"a charming man who deals in lies"},
+        {"img":"the smoke-filled backroom","means":"where the real deals get made"},
+        {"img":"the stock ticker going quiet","means":"the moment the good times died"}
+      ],
+      "deploy":"Jazz Age imagery = glamour with rot underneath, the party you know is doomed. Great for reckless love, excess, and bittersweet highs. Cinematic and sensual.",
+      "cliche_watch":["'the roaring twenties' said plainly","Gatsby name-drops"]
+    },
+    {
+      "id":"well-depression-dustbowl",
+      "name":"Great Depression & the Dust Bowl",
+      "category":"historical-era",
+      "era":"1930s America",
+      "tone":"weathered, hungry, dignified, enduring",
+      "evokes":["hardship","endurance","faith","migration","loss of land","dignity in poverty","hope against odds"],
+      "signatures":[
+        {"img":"dust on the horizon","means":"disaster rolling in, slow and total"},
+        {"img":"the bread line","means":"pride swallowed to survive"},
+        {"img":"the family piled in the truck","means":"leaving everything to chase work west"},
+        {"img":"a hole in every pocket","means":"working hard and holding nothing"},
+        {"img":"the bank took the farm","means":"losing the land your name was on"},
+        {"img":"patched knees and a straight back","means":"poverty carried with dignity"},
+        {"img":"one radio, whole town listening","means":"clinging to a shared thread of hope"},
+        {"img":"the last dollar sewn in a coat","means":"a small guarded hope against the worst"},
+        {"img":"riding the rails","means":"chasing survival from town to town"},
+        {"img":"rain that never comes","means":"praying for a mercy the sky won't give"}
+      ],
+      "deploy":"Dust Bowl imagery brings weathered dignity and endurance — hardship faced with a straight back. Strong for songs about struggle, family, and stubborn hope. Woody-Guthrie-adjacent; pairs with folk and Americana.",
+      "cliche_watch":["'hard times' as a plain refrain"]
+    },
+    {
+      "id":"well-film-noir",
+      "name":"Film Noir & Detective",
+      "category":"regional-genre",
+      "era":"1940s–'50s cinema",
+      "tone":"shadowed, cynical, rain-slick, fatalistic",
+      "evokes":["betrayal","desire","doom","secrets","the femme fatale","the city at night","being played"],
+      "signatures":[
+        {"img":"rain-slick neon streets","means":"a city that keeps its secrets wet and bright"},
+        {"img":"the femme fatale","means":"a love that's setting you up"},
+        {"img":"cigarette smoke under a streetlamp","means":"waiting alone for bad news"},
+        {"img":"the long shadow down the alley","means":"a man at the end of his options"},
+        {"img":"the blinds cutting the light","means":"truth you only see in stripes"},
+        {"img":"a one-way ticket out of town","means":"a clean escape that never stays clean"},
+        {"img":"the double-cross","means":"the partner who was against you all along"},
+        {"img":"the payoff in a brown envelope","means":"a soul bought quietly"},
+        {"img":"the dame who walked in","means":"trouble that arrives looking like a rescue"},
+        {"img":"the dead phone line","means":"the moment you realize you're alone in it"}
+      ],
+      "deploy":"Noir is cynical romance in the rain — desire, betrayal, and doom in a nighttime city. Perfect for songs about being played, wanting what's bad for you, and glamorous defeat.",
+      "cliche_watch":["'she was trouble' straight","the trench-coat detective as costume"]
+    },
+    {
+      "id":"well-50s-americana",
+      "name":"1950s Americana",
+      "category":"decade",
+      "era":"post-war 1950s",
+      "tone":"bright surface, teenage, chrome-and-heartbreak, uneasy underneath",
+      "evokes":["young love","innocence","longing","conformity vs rebellion","nostalgia","the drive-in dream"],
+      "signatures":[
+        {"img":"the drive-in movie","means":"first love in the front seat"},
+        {"img":"a letterman jacket","means":"belonging you wear on your sleeve"},
+        {"img":"the malt shop / soda counter","means":"small-town innocence, now gone"},
+        {"img":"cruising the strip","means":"restless youth with nowhere to be"},
+        {"img":"the class ring","means":"a promise too young to keep"},
+        {"img":"chrome fins and a full tank","means":"the open promise of the American car"},
+        {"img":"the sock hop","means":"joy before anyone had to grow up"},
+        {"img":"the picket fence","means":"the dream that felt like a cage"},
+        {"img":"the jukebox in the corner","means":"a nickel's worth of feeling"},
+        {"img":"the duck-and-cover drill","means":"dread humming under the bright surface"}
+      ],
+      "deploy":"50s imagery = bright chrome nostalgia with unease underneath. Great for young love, longing for a lost innocence, and the tension between the picket fence and wanting out.",
+      "cliche_watch":["'the good old days' straight","greaser costume clichés"]
+    },
+    {
+      "id":"well-60s-counterculture",
+      "name":"1960s Counterculture",
+      "category":"decade",
+      "era":"1960s",
+      "tone":"idealistic, electric, searching, on the cusp",
+      "evokes":["revolution","freedom","idealism","awakening","protest","love as politics","the dream and its cost"],
+      "signatures":[
+        {"img":"flowers in gun barrels","means":"gentleness answering violence"},
+        {"img":"the long march / the picket line","means":"putting your body where your belief is"},
+        {"img":"the summer that felt endless","means":"a brief window when anything seemed possible"},
+        {"img":"a bus painted every color","means":"escape and reinvention on the move"},
+        {"img":"burning the draft card","means":"refusing a fate assigned to you"},
+        {"img":"the dream on the mountaintop","means":"a vision of justice glimpsed, not reached"},
+        {"img":"tuning out the static","means":"turning away from a world that lies to you"},
+        {"img":"the candle at the vigil","means":"grief held up as a light"},
+        {"img":"the road trip with no map","means":"freedom as pure forward motion"}
+      ],
+      "deploy":"60s imagery brings idealism and electric hope, shadowed by what it cost. Strong for protest, awakening, and love framed as defiance. Handle real figures/events with a light, respectful touch.",
+      "cliche_watch":["'peace and love' as decoration","tie-dye as shorthand"]
+    },
+    {
+      "id":"well-80s",
+      "name":"1980s",
+      "category":"decade",
+      "era":"1980s",
+      "tone":"neon, synthetic, yearning, big-and-bright",
+      "evokes":["yearning","excess","escape","first heartbreak","nostalgia","chasing the dream","glossy loneliness"],
+      "signatures":[
+        {"img":"neon on wet asphalt","means":"glamour and loneliness in the same glow"},
+        {"img":"the mixtape you made","means":"a whole heart handed over on cassette"},
+        {"img":"a payphone and a pocket of quarters","means":"reaching someone before it was easy"},
+        {"img":"the arcade's blue light","means":"escape by the token, one more life"},
+        {"img":"top down, radio up","means":"outrunning a feeling on the highway"},
+        {"img":"the boombox held up high","means":"a grand, public, hopeless gesture"},
+        {"img":"shoulder pads and armor","means":"dressing tough to survive the decade"},
+        {"img":"the last slow dance in the gym","means":"teenage love under crepe-paper stars"},
+        {"img":"static on the VHS","means":"a memory you keep rewinding"},
+        {"img":"the mall at closing time","means":"a bright empty temple of wanting"}
+      ],
+      "deploy":"80s imagery is neon yearning — big feelings, synthetic glow, escape on the highway. Great for nostalgia, first heartbreak, and glossy loneliness. Pairs naturally with synth-pop and driving choruses.",
+      "cliche_watch":["'like a movie' straight","generic 'neon dreams'"]
+    },
+    {
+      "id":"well-90s-nostalgia",
+      "name":"1990s Nostalgia",
+      "category":"decade",
+      "era":"1990s",
+      "tone":"lo-fi, earnest, slacker-tender, pre-internet ache",
+      "evokes":["nostalgia","young friendship","first love","boredom-as-freedom","analog memory","growing up before the feed"],
+      "signatures":[
+        {"img":"dial-up handshake","means":"the sound of the world slowly opening"},
+        {"img":"rewinding the tape / 'be kind, rewind'","means":"having to earn a memory back"},
+        {"img":"the mixtape with the hand-drawn cover","means":"love that took two hours to record"},
+        {"img":"a Tamagotchi you kept alive","means":"small tender responsibility"},
+        {"img":"the busy signal","means":"a person you simply couldn't reach"},
+        {"img":"passing a note folded into a triangle","means":"a secret you could hold in your hand"},
+        {"img":"the disposable camera","means":"27 tries and you wouldn't see them for a week"},
+        {"img":"blowing into the cartridge","means":"faith that a little effort would fix it"},
+        {"img":"the landline cord stretched down the hall","means":"privacy fought for, whispered for"},
+        {"img":"the mall food court after school","means":"a whole social life in fluorescent light"},
+        {"img":"the away message","means":"saying how you feel without saying it to them"},
+        {"img":"the last day before summer","means":"freedom that felt like it would last forever"}
+      ],
+      "deploy":"90s imagery is analog-tender: earnest, lo-fi, the last era before everything was instant. Perfect for nostalgia, young friendship, and first love that took effort to reach. The friction (busy signals, rewinding, waiting) IS the romance.",
+      "cliche_watch":["'the good old days' straight","just listing brand names for their own sake"]
+    },
+    {
+      "id":"well-y2k-2000s",
+      "name":"2000s / Y2K",
+      "category":"decade",
+      "era":"early 2000s",
+      "tone":"glossy, digital-dawn, hyper, bittersweet-online",
+      "evokes":["early internet love","reinvention","gloss and anxiety","coming of age online","millennium dread and hope"],
+      "signatures":[
+        {"img":"the away message that was really for one person","means":"a public post meant privately"},
+        {"img":"burning a CD for someone","means":"a mixtape for the digital age"},
+        {"img":"the flip phone snapped shut","means":"ending a call with punctuation"},
+        {"img":"low battery, one bar","means":"a connection about to drop"},
+        {"img":"the top-8 friends list","means":"love and status ranked in public"},
+        {"img":"Y2K midnight","means":"waiting for an ending that didn't come"},
+        {"img":"the buffering wheel","means":"wanting something that won't quite load"},
+        {"img":"frosted tips and butterfly clips","means":"trying on an identity that won't age well"},
+        {"img":"film-to-pixel crossover","means":"the last of film meeting the first of digital"},
+        {"img":"the chatroom full of strangers","means":"a room of strangers who felt like home"}
+      ],
+      "deploy":"Y2K imagery = the digital dawn, glossy and anxious. Good for coming-of-age-online, early internet love, and reinvention. Bittersweet because it's the moment before the feed swallowed everything.",
+      "cliche_watch":["overloading on brand nostalgia","'it's so Y2K' as a wink"]
+    },
+    {
+      "id":"well-southern-gothic",
+      "name":"Southern Gothic",
+      "category":"regional-genre",
+      "era":"American South, timeless",
+      "tone":"humid, haunted, sacred-and-sinful, decaying-grand",
+      "evokes":["guilt","sin and salvation","family curses","heat","ghosts","decay","redemption in the mud"],
+      "signatures":[
+        {"img":"kudzu swallowing the house","means":"the past overgrowing the present"},
+        {"img":"the revival tent","means":"salvation sold under canvas, sweat and hope"},
+        {"img":"the river baptism","means":"trying to wash a sin off in brown water"},
+        {"img":"cicadas screaming in the heat","means":"tension that won't let up"},
+        {"img":"the family plot out back","means":"the dead you live on top of"},
+        {"img":"the porch light and the moths","means":"small hope circled by hungry things"},
+        {"img":"whiskey and hymns","means":"sin and salvation drunk from the same cup"},
+        {"img":"the crossroads at midnight","means":"a bargain with something you can't name"},
+        {"img":"the crumbling grand house","means":"grandeur rotting on a rotten foundation"},
+        {"img":"Sunday clothes over Saturday sins","means":"piety worn thin over what you did"}
+      ],
+      "deploy":"Southern Gothic braids the sacred and the sinful in humid, haunted air. Powerful for guilt, redemption, family curses, and heat. Pairs with country, blues, and slow-burn ballads.",
+      "cliche_watch":["'devil at the crossroads' overused","magnolia-and-moonlight as decoration"]
+    },
+    {
+      "id":"well-blues-gospel",
+      "name":"Blues & Gospel Tradition",
+      "category":"regional-genre",
+      "era":"American South, early 20th c. onward",
+      "tone":"aching, rooted, call-and-response, sacred-and-secular",
+      "evokes":["heartache","hard travel","faith","temptation","deliverance","the road","trouble and grace"],
+      "signatures":[
+        {"img":"the crossroads bargain","means":"trading your soul for the gift"},
+        {"img":"the midnight train","means":"leaving trouble, carrying it with you"},
+        {"img":"the hellhound on your trail","means":"a doom that keeps pace with you"},
+        {"img":"the river as Jordan","means":"crossing over to the other side / freedom / death"},
+        {"img":"the mojo hand","means":"a charm to turn your luck"},
+        {"img":"a mansion on the hill you'll never own","means":"the reward that stays out of reach"},
+        {"img":"the levee about to break","means":"a pressure that will flood everything"},
+        {"img":"the wayfaring stranger","means":"a soul just passing through this world of woe"},
+        {"img":"the empty bed at daybreak","means":"the plainest shape of the blues"},
+        {"img":"wade in the water","means":"trouble crossed on faith"}
+      ],
+      "deploy":"Blues and gospel imagery is the root of American song — trouble and grace in the same breath, sacred and secular blurred. Great for heartache, hard travel, and deliverance. Use with respect for the tradition.",
+      "cliche_watch":["'sold my soul at the crossroads' overused","'woke up this morning' as a lazy opener"]
+    },
+    {
+      "id":"well-nautical",
+      "name":"Nautical & Seafaring",
+      "category":"domain",
+      "era":"age of sail / timeless",
+      "tone":"vast, lonesome, fated, elemental",
+      "evokes":["longing","distance","danger","home far away","fate","being lost","the pull of the deep"],
+      "signatures":[
+        {"img":"the siren on the rocks","means":"a beautiful call toward wreckage"},
+        {"img":"the lighthouse / the beam","means":"a guide home you can see but not reach"},
+        {"img":"the anchor / dropping anchor","means":"weight that holds you, for good or ill"},
+        {"img":"the sailor's wife at the window","means":"a love that is mostly waiting"},
+        {"img":"the storm off the bow","means":"trouble you can see coming and can't avoid"},
+        {"img":"the message in a bottle","means":"a plea sent out with no promise of arrival"},
+        {"img":"the ship on the horizon","means":"a hope or a leaving, growing small"},
+        {"img":"the whale / the deep","means":"an obsession or grief too big to hold"},
+        {"img":"the last lifeboat","means":"a rescue that can't take everyone"},
+        {"img":"the tide going out","means":"a love or a chance quietly withdrawing"}
+      ],
+      "deploy":"Sea imagery is vast and lonesome — perfect for distance, longing, and fate too big to fight. The lighthouse (guidance just out of reach) and the tide (love withdrawing) are especially strong. Pairs with folk and swelling ballads.",
+      "cliche_watch":["'lost at sea' straight","'my anchor' as a plain compliment"]
+    },
+    {
+      "id":"well-space-cosmic",
+      "name":"Space Race & Cosmic",
+      "category":"cosmic",
+      "era":"1960s space age / timeless sky",
+      "tone":"awed, lonely, infinite, yearning-upward",
+      "evokes":["distance","insignificance and wonder","longing","isolation","reaching","the void","fate written in stars"],
+      "signatures":[
+        {"img":"the last radio contact","means":"a voice fading into the dark"},
+        {"img":"orbit / circling and never landing","means":"staying close but never touching"},
+        {"img":"the flag on a dead moon","means":"a triumph planted somewhere lifeless"},
+        {"img":"a light from a star already gone","means":"loving something that no longer exists"},
+        {"img":"escape velocity","means":"the speed it takes to finally leave for good"},
+        {"img":"the countdown","means":"a point past which there's no aborting"},
+        {"img":"the blue marble from far away","means":"seeing home whole and unreachable"},
+        {"img":"the black between the stars","means":"the loneliness the wonder is set against"},
+        {"img":"a satellite still transmitting to no one","means":"devotion that outlives its purpose"},
+        {"img":"gravity / falling toward each other","means":"a pull you can't argue with"}
+      ],
+      "deploy":"Cosmic imagery makes a feeling vast and lonely at once — great for distance, longing, and awe. 'Light from a dead star' (loving what's gone) and 'orbit' (close but never touching) are rich, fresh moves. Pairs with spacious, reverb-heavy production.",
+      "cliche_watch":["'you're my whole universe' straight","'shoot for the stars'"]
+    },
+    {
+      "id":"well-nature-seasons",
+      "name":"Nature, Seasons & the Pastoral",
+      "category":"nature",
+      "era":"timeless",
+      "tone":"cyclical, tender, elemental, quietly wise",
+      "evokes":["change","grief","renewal","time passing","love growing or dying","memory","the body's seasons"],
+      "signatures":[
+        {"img":"the first frost","means":"the moment warmth turns to endings"},
+        {"img":"the last leaf holding on","means":"stubborn hope against the season"},
+        {"img":"the river that never passes the same way","means":"a moment you can't step in twice"},
+        {"img":"the harvest coming due","means":"reaping a life's choices"},
+        {"img":"the drought and the long-prayed-for rain","means":"an ache and its relief"},
+        {"img":"the tide and the moon","means":"a pull that governs you from far away"},
+        {"img":"the wildfire that clears for new growth","means":"destruction that makes room"},
+        {"img":"the migrating birds","means":"the instinct to leave and to return"},
+        {"img":"the seed under the snow","means":"life waiting out a cold season"},
+        {"img":"the tree ring / the scar in the wood","means":"a hard year written into you for good"}
+      ],
+      "deploy":"Nature imagery carries change and grief gently, through cycles. Seasons map onto love and time without you having to explain. 'Last leaf holding on' and 'seed under the snow' are quietly powerful. Universal and always singable.",
+      "cliche_watch":["'weather the storm' straight","'new day, new dawn' clichés"]
+    }
+  ]
+}
+`,
+      },
+    ],
+  },
+  {
     slug: "reverse-cowboy",
     files: [
       {
@@ -21021,6 +21624,252 @@ Observed result:
 URL or evidence:
 Timestamp:
 \`\`\`
+`,
+      },
+    ],
+  },
+  {
+    slug: "song-excavator",
+    files: [
+      {
+        path: "engine/engine.json",
+        content: `{
+  "meta": {
+    "name": "The Excavator — Find the Song in Them",
+    "version": "1.0.0",
+    "updated": "2026-07-07",
+    "purpose": "A perception engine that finds 'the song' in a writer — not by digging only into their trauma, but by changing how they SEE. It comes at inspiration from an angle they'd never pick: sometimes excavating a buried, specific truth; sometimes making the ordinary strange; sometimes colliding two unrelated worlds; sometimes rupturing the polite frame to reach the unsayable. The ethos: bypass the 'what should I write about' filter and surface the specific, true, slightly-dangerous thing that's right under their nose — then hand it back as a song.",
+    "founding_story": "A kid said he had nothing to write about. Asked 'what's the last thing you gave up or cut from your life?' he said 'watching porn.' Answer: 'There's your song — I Quit Watching Porn Today.' That's the whole thesis: an oblique question bypasses the blank page and surfaces a specific, confessional, song-worthy truth the writer was sitting on. The reflect-it-back move ('there's your song') is the capstone.",
+    "design": "Four LENS FAMILIES (Inward/Outward/Lateral/Provoke), each a way of seeing. The agent picks the ORTHOGONAL lens on purpose — sensing where the writer would go and handing them a different door. Moves are not all questions: also provocations, dares, collisions, reframes, personas, pattern-mirrors, found objects, sensory cues, reflections. Built from researched creativity + elicitation methods (sources credited per lens).",
+    "field_guide": {
+      "families": "the four ways of seeing",
+      "move_types": "the modalities the agent works in — questions are only one gear",
+      "lenses": "the operators; each has a source (the method distilled), a mechanism, the move, and songwriter-facing example prompts",
+      "dig_dynamics": "how to run a live dig once material starts surfacing",
+      "reflect_move": "the capstone: turning the writer's answer into a title / first line ('there's your song')",
+      "calibration": "how to choose lenses and read the writer",
+      "safety": "evocative, NOT therapy — the ethics of prying with care"
+    }
+  },
+  "families": [
+    {"id":"inward","name":"Inward — Excavate","gist":"Dig the specific, charged truth already in them. Not 'what hurt you' — the exact sensory, confessional, patterned detail they've never named."},
+    {"id":"outward","name":"Outward — Observe","gist":"Find the song hiding in plain sight: the object, the stranger, the overlooked background, the ordinary made strange. The song is already in the room."},
+    {"id":"lateral","name":"Lateral — Collide","gist":"Come at it sideways. Smash two unrelated worlds, strip a feeling to its atoms, invert a single dial, let chance pick the angle."},
+    {"id":"provoke","name":"Provoke — Rupture","gist":"Break the safe, polite frame. Say the unsayable, take the villain's side, obey a brutal constraint, honor the embarrassing error."}
+  ],
+  "move_types": [
+    {"id":"question","name":"Question","desc":"An oblique, open question that bypasses the rehearsed answer."},
+    {"id":"provocation","name":"Provocation","desc":"An absurd or false statement to move forward FROM, not to defend (de Bono's PO)."},
+    {"id":"dare","name":"Dare / Constraint","desc":"A hard rule the writer must obey — the limit forces invention."},
+    {"id":"collision","name":"Collision","desc":"Force two unrelated things (or a random word) into the subject."},
+    {"id":"reframe","name":"Reframe","desc":"Re-see the same material through a new vantage or vocabulary."},
+    {"id":"persona","name":"Persona","desc":"Hand the writer a POV that isn't theirs so they can finally say it."},
+    {"id":"pattern-mirror","name":"Pattern-mirror","desc":"Reflect a recurring pattern in their own life back at them."},
+    {"id":"found-object","name":"Found object","desc":"Point them at real material — a photo, a text, an overheard line — to write from."},
+    {"id":"sensory-cue","name":"Sensory cue","desc":"Cue a specific sense at a specific time to retrieve a concrete scene."},
+    {"id":"reflection","name":"Reflection","desc":"Restate the meaning of what they said as a statement, then wait — the correction is the gold."},
+    {"id":"scale","name":"Scale","desc":"Turn a vague feeling into a number, then interrogate the gap ('why a 7 not a 3')."}
+  ],
+  "lenses": [
+    {"id":"sense-time-cue","family":"inward","name":"The Sense at a Certain Age","source":"Pattison object writing + autobiographical-memory / Proust phenomenon","mechanism":"Specific multi-sensory, time-anchored cues retrieve specific vivid memories; smell is the most potent, direct line to emotion.","move":"Cue one specific sense at a specific age, then walk them into the scene it retrieves.","prompts":["Name the smell that instantly puts you back at seventeen. Whose house, what room, who's about to walk in?","What sound from your teens would you know in half a second — and the first time it meant something?"],"best_for":"a blank page; nostalgia; getting concrete fast"},
+    {"id":"hidden-senses","family":"inward","name":"The Two Hidden Senses","source":"Pattison (organic + kinesthetic senses)","mechanism":"Emotion lives in inner-body sensation (heartbeat, stomach-drop, breath) and motion/orientation (swaying, bracing, falling), not in scenery.","move":"Ask where in the body they felt it, and whether the motion was leaning-in or bracing.","prompts":["Forget what it meant — where did you feel it: throat, chest, stomach? Report the exact sensation, don't explain it.","You're back on that drive. Was your body leaning into the turn or bracing against it? Give me the motion."],"best_for":"turning a stated feeling into physical, un-clichéd writing"},
+    {"id":"abstract-to-concrete","family":"inward","name":"Not the Category, the Instance","source":"Interview craft + Motivational Interviewing","mechanism":"Vague prompts get vague clichés; demanding the specific instance unlocks the real, vivid story.","move":"Refuse the abstraction; demand the single worst/exact moment.","prompts":["Not 'the breakup' — the most frustrating single moment, the second you thought I can't do this anymore. When exactly?","Don't tell me you were lonely. Tell me the one thing you did that proved it."],"best_for":"when answers stay general and safe"},
+    {"id":"oblique-confession","family":"inward","name":"The Sidestep Confession","source":"Proust Questionnaire","mechanism":"Oblique introspective prompts bypass the defended public self and reveal true character through preference and confession.","move":"Ask the confession question that sidesteps the guarded one.","prompts":["What's the trait you most deplore in yourself — the one you keep editing out of your bio?","If the house was burning, what's the one thing you'd grab that would embarrass you to admit?"],"best_for":"reaching real self past the rehearsed answer"},
+    {"id":"scaling-gap","family":"inward","name":"Why a 7 and Not a 3","source":"Motivational Interviewing (scaling questions)","mechanism":"Turning a vague feeling into a number, then interrogating the gap, forces them to articulate what the feeling is actually made of.","move":"Scale it 0–10, then dig the gap between their number and a lower one.","prompts":["0 to 10, how much do you still want them back? … A 6. What's the 6 made of — and what's the missing 4?","How much does it still sting, 0–10? Why that high and not half that?"],"best_for":"quantifying and then unpacking a mixed feeling"},
+    {"id":"evocative-argue","family":"inward","name":"Argue the Song Into Existence","source":"Motivational Interviewing (evoking change talk)","mechanism":"People commit harder to material they argue for themselves than to what you name for them.","move":"Ask an evocative question whose answer is their own case for the song.","prompts":["What has to be true in this song for you to feel like you finally told the truth?","What's the risk if you never say this — and what happens if you do?"],"best_for":"finding why THIS song matters to them"},
+    {"id":"life-pattern","family":"inward","name":"The Pattern You Keep Living","source":"Excavator ethos (pattern-mirror)","mechanism":"A recurring mistake, lie, or role across a life is a truer subject than any single event — and it's usually invisible to the person living it.","move":"Name the repetition back to them and ask what it is.","prompts":["You've told the same lie in three relationships. What is it?","What's the argument you keep having with different people — the one that's actually with yourself?"],"best_for":"the deeper song under the surface story"},
+    {"id":"reminiscence-bump","family":"inward","name":"Mine the Bump (14–25)","source":"Reminiscence-bump memory research","mechanism":"Vivid autobiographical memories cluster in the identity-forming years (~10–30); it's the richest seam of first loves, first losses, formative rooms.","move":"Aim a time-anchored prompt straight at their teens/early twenties.","prompts":["Who was the first person who made you feel like a stranger in your own house?","What room from when you were nineteen could you still draw the floor plan of — and why that one?"],"best_for":"formative material, coming-of-age songs"},
+    {"id":"state-first","family":"inward","name":"Feeling First, Then Memory","source":"State-dependent memory","mechanism":"Being in an emotional state helps retrieve other events tagged with that same feeling; get them into the key, then ask.","move":"Get them back into the exact feeling, then ask for the first memory that surfaces from inside it.","prompts":["Get back into how it actually felt — not the story you tell now. From that exact feeling, what's the first memory that surfaces?","Sit in the anger for ten seconds. Now — what's the oldest thing it reminds you of?"],"best_for":"accessing memories that match the song's emotional key"},
+    {"id":"strip-the-name","family":"outward","name":"Strip the Name","source":"Shklovsky — defamiliarization / ostranenie","mechanism":"Habit stops us seeing what we know too well; refusing the word forces a re-encounter ('make the stone stony').","move":"Describe the subject only by sensation and function — never using the word for it.","prompts":["Write the chorus about your phone as a small glowing god you consult a hundred times a day that never once looks back.","Describe your morning coffee as if you'd never seen a human drink — a warm dark liquid they cradle like something wounded. Never say 'coffee.'"],"best_for":"making an over-familiar subject strange and new"},
+    {"id":"swap-the-perceiver","family":"outward","name":"Swap the Perceiver","source":"Shklovsky / Tolstoy's horse POV","mechanism":"Giving the point of view to a non-human, object, or outsider does the estranging automatically — ritual and ownership suddenly look absurd.","move":"Hand the POV to an object, an animal, an alien, or the room.","prompts":["Narrate the end of your relationship from the POV of the doorway you both kept walking through. Only what the doorway saw.","Tell your worst night from your dog's point of view — it doesn't understand the words, only the change in the air."],"best_for":"a fresh angle on an emotional scene"},
+    {"id":"overlooked-background","family":"outward","name":"Write the Background","source":"Phenomenology of attention / Mary Oliver","mechanism":"Attention always overlooks something; the unclaimed background detail is instantly specific and unclichéd.","move":"Ignore the main event; write only what the scene is NOT about.","prompts":["In the scene of the breakup, ignore the breakup. Write only the fridge hum, the muzak, the one moth at the porch light.","At the funeral, don't write the grief. Write what the caterer was doing."],"best_for":"specificity; sidestepping a too-big subject"},
+    {"id":"astonishment-hunt","family":"outward","name":"The Astonishment Hunt","source":"Mary Oliver / beginner's mind","mechanism":"Staring at the mundane until it stuns you reopens perception; one noticed detail pulls the next ('notice more and more').","move":"Make them stare at the most boring object until it astonishes them, then follow the chain.","prompts":["Pick the most boring object in your room. Don't stop looking until it astonishes you — the dust holding light, the crack that's been widening a year. Start there.","What's the most ordinary thing you saw today that, looked at long enough, would break your heart?"],"best_for":"generating a first image from nothing"},
+    {"id":"message-from-ordinary","family":"outward","name":"A Message Addressed to You","source":"Rick Rubin — The Creative Act","mechanism":"Treating the day's small anomaly as a signal meant only for you turns passive noticing into a prompt with built-in narrative charge.","move":"Take the day's small anomaly and write the reply, as if it were sent to you.","prompts":["A stranger held a door, a bird hit the window, a book fell open — treat today's small odd thing as a message meant only for you. Write the answer.","What did the world do today that felt like it was trying to tell you something? Say what it said."],"best_for":"turning an ordinary day into a song"},
+    {"id":"the-object","family":"outward","name":"The Thing You Kept","source":"Object writing + folk tradition","mechanism":"A kept object you should have thrown away is a compressed story with built-in contradiction and testimony.","move":"Find the object they kept against reason and let it testify.","prompts":["What's the one thing you kept that you should've thrown out? Let it tell the story of why it's still in the drawer.","Whose hoodie, ticket stub, or voicemail have you not deleted? Write from the object's refusal to leave."],"best_for":"a concrete anchor for a memory song"},
+    {"id":"the-stranger","family":"outward","name":"The Stranger Who Marked You","source":"Excavator ethos (found person)","mechanism":"A person you'll never see again who altered your day carries mystery and universality at once.","move":"Find the one-time stranger who wrecked or made a day.","prompts":["Who's a stranger you'll never see again who changed how a whole day felt? What did they do?","Whose face from a crowd do you still, inexplicably, remember? Write toward why."],"best_for":"mystery, longing, small-encounter songs"},
+    {"id":"the-overheard","family":"outward","name":"The Overheard Line","source":"Found text / cut-up","mechanism":"A line overheard or misheard arrives free of your own frame and often carries an accidental, uncanny truth.","move":"Build from a line they overheard or misheard.","prompts":["What's the last thing you overheard a stranger say that stuck with you? Make it the title.","What song lyric or phrase have you been mishearing for years? Write the song your wrong version is secretly about."],"best_for":"a fresh title or hook seed"},
+    {"id":"mundane-monument","family":"outward","name":"The Mundane Monument","source":"Kanye ethos / defamiliarization","mechanism":"Declaring something trivial monumental (the croissant, the nothing) forces the writer to find the real weight inside the small.","move":"Take something tiny and treat it with the gravity of the sacred.","prompts":["Write about doing the dishes tonight as if it were the most important thing you will ever do. Find out why it might be.","Give a two-dollar object the reverence of a relic. What does it actually hold?"],"best_for":"making the small enormous; wry-but-true songs"},
+    {"id":"random-entry","family":"lateral","name":"Random Entry","source":"de Bono — lateral thinking","mechanism":"Injecting an unrelated concrete noun and forcing a bridge drags the subject into an angle direct analysis never reaches.","move":"Drop a random noun into the song and make it load-bearing.","prompts":["Open a dictionary blind and land on a noun — ballast, switchboard, linoleum. Make it the central image of a love song.","Pick the third object you can see right now. It's the secret subject of the song about your father. Go."],"best_for":"breaking out of an obvious image set"},
+    {"id":"po-provocation","family":"lateral","name":"PO — Move Forward From the Impossible","source":"de Bono — provocation operation","mechanism":"Stating something false/impossible as a stepping-stone (not a truth) and harvesting the consequence reaches ideas judgment would block. Engines: reversal, escape, exaggeration, wishful.","move":"Assert an impossible premise about the subject and move forward from it.","prompts":["PO: the breakup happened in reverse — you met at its funeral and grew younger together. Write from there.","PO: this song has no chorus and no 'you.' What's left, and why does it still ache?"],"best_for":"escaping the default shape of the song"},
+    {"id":"first-principles-emotion","family":"lateral","name":"Delete the Emotion-Word","source":"First-principles reasoning (the Elon lens)","mechanism":"Refusing the inherited label ('sad,' 'in love') and rebuilding the state from physical evidence produces un-clichéd emotional writing almost automatically.","move":"Ban the feeling-word; rebuild the state from its raw atoms.","prompts":["Don't write 'lonely.' Give me only the evidence: two cups set from habit, the radio on for company, your thumb over a name you won't call. Build the chorus from the cups.","Reduce 'I miss you' to fundamentals — a weight that isn't there when you lean back, a joke with no one to land on. Write about the specific absent weight."],"best_for":"honest emotion without clichés"},
+    {"id":"name-the-unnamed","family":"lateral","name":"Name the Un-Named Feeling","source":"First-principles reasoning","mechanism":"The gap between the raw fact and the story you bolted onto it holds a compound emotion with no clean word yet — and that is the fresh subject.","move":"Reassemble the atoms into a feeling that has no word, and make THAT the song.","prompts":["What's the exact feeling of being relieved a hard thing ended and grieving it at once? Don't name it — build it, and let the song be its definition.","Describe the feeling you get that no existing word covers. The song's job is to be the word."],"best_for":"an original emotional subject"},
+    {"id":"domain-collision","family":"lateral","name":"Say It in the Wrong Language","source":"Morphological / cut-up / Kanye sampling","mechanism":"Forcing a subject into an unrelated vocabulary generates uncanny, exact metaphors intuition would never volunteer.","move":"Write X entirely in the vocabulary of an unrelated Y.","prompts":["Write your divorce in the language of a car-recall notice. 'Under certain conditions the component may fail without warning.'","Describe falling in love as a weather forecast, a terms-of-service agreement, or a crime-scene report. Pick the one that scares you."],"best_for":"fresh metaphor; wit with a wound under it"},
+    {"id":"improbable-intersection","family":"lateral","name":"The Cell No One Would Pick","source":"Morphological analysis (Zwicky box)","mechanism":"Spinning independent axes and committing to the improbable combination lands you where no intuition would go on purpose.","move":"Spin narrator × setting × object × what's-withheld, then commit to the cell that feels most wrong.","prompts":["Roll it: narrator = a night-shift nurse · setting = a flooded parking garage · emotion = relief · object = a losing lottery ticket. Find the song that only exists at that crossing.","Keep your subject; spin only 'what's withheld.' What if the one thing the song refuses to say is the narrator's own name?"],"best_for":"a wholly unexpected premise"},
+    {"id":"cut-up","family":"lateral","name":"Cut It Up","source":"Burroughs / Gysin / Bowie","mechanism":"Slicing your own draft plus a stolen text and reassembling blind introduces the spontaneous factor and ignites unexpected juxtapositions.","move":"Cut a draft plus a found text into lines, shuffle, and keep the collisions.","prompts":["Print your verse and a random news paragraph. Cut both into single lines, shuffle face-down, lay the first eight. Keep whatever sparks.","Take last night's text thread and a psalm. Interleave them line by line. What's the song in the seam?"],"best_for":"jolting a stale draft; surprising lines"},
+    {"id":"axis-inversion","family":"lateral","name":"Flip One Dial","source":"SCAMPER (reverse) / Oblique Strategies","mechanism":"Inverting a single variable while changing nothing else re-lights the whole song.","move":"Flip exactly one dial — POV, blame, time-direction, or power — and leave the rest.","prompts":["Rewrite the song with the blame reversed: you were the villain the whole time. Change nothing else.","Tell it backwards — start at the last goodbye and move toward the first hello."],"best_for":"reviving a draft that feels flat or one-sided"},
+    {"id":"scale-jump","family":"lateral","name":"The Scale Jump","source":"First-principles / Rubin / the cosmic-personal lens","mechanism":"Zooming a trivial moment to cosmic scale (or a cosmic fact to a kitchen) exposes the stakes hiding in the ordinary.","move":"Jam the personal against the cosmic, or the cosmic against the domestic.","prompts":["You'll be dead in sixty years. Write about doing the dishes tonight.","The universe is 13 billion years old and you're upset about a text. Write the song that takes both facts completely seriously."],"best_for":"finding weight in a small moment"},
+    {"id":"honor-the-error","family":"provoke","name":"Honor the Error","source":"Oblique Strategies (Eno/Schmidt)","mechanism":"Treating the draft's worst or most embarrassing line as a hidden intention turns a flaw into the true center.","move":"Take the worst/most embarrassing line and build the whole song to arrive at it.","prompts":["What's the most embarrassing line in your draft — the one you'd cut first? That's the title. Build toward it.","Your throwaway line, the dumb one you almost deleted, is the actual hook. Prove it."],"best_for":"unsticking a draft; finding the real center"},
+    {"id":"say-the-unsayable","family":"provoke","name":"The Unsayable","source":"Excavator ethos / confession research","mechanism":"The true thing people don't say out loud carries the most charge; naming it is the song.","move":"Ask for the meanest/truest thing they've never said aloud.","prompts":["What's the meanest true thing you've never said to someone you love? Say it here first.","What do you think at 3am that you'd never admit in daylight?"],"best_for":"high-charge, confessional songs"},
+    {"id":"villains-side","family":"provoke","name":"Take the Villain's Side","source":"Reframe / persona","mechanism":"Defending the indefensible or inhabiting the antagonist reveals the complexity that makes a song true rather than righteous.","move":"Hand them the antagonist's POV and make them defend it.","prompts":["Write the breakup from the POV of the one who left — and make them right.","Defend the person everyone agrees was the bad guy. What did the world never see?"],"best_for":"depth, empathy, moral complexity"},
+    {"id":"ego-declaration","family":"provoke","name":"The Ego Declaration","source":"Kanye ethos","mechanism":"Stating your grandest or ugliest self-belief flat-out, without apology, unlocks a voice most writers censor.","move":"Have them declare the biggest (or ugliest) thing they secretly believe about themselves, deadpan.","prompts":["Finish this and mean it: 'The truth about me that I'd never post is ___.' Now say it like it's scripture.","What do you believe you deserve that you'd be ashamed to say out loud? Declare it."],"best_for":"anthems; voice; unapologetic songs"},
+    {"id":"the-dare","family":"provoke","name":"The Dare / Hard Constraint","source":"Oblique Strategies / constraint craft","mechanism":"A brutal limit forces invention the open field never would.","move":"Impose one hard rule they must obey.","prompts":["Write the whole song using only words a six-year-old knows.","One image. The entire song is one image, held and turned. No second subject allowed."],"best_for":"forcing focus and freshness"},
+    {"id":"editor-bypass","family":"provoke","name":"Outrun the Editor","source":"Surrealism — automatic writing (Breton)","mechanism":"Writing faster than you can judge lets lines foreign to conscious thought surface; then you mine the wreckage.","move":"Make them write at un-re-readable speed, then underline the words they'd be embarrassed to have meant.","prompts":["300 words on this in four minutes. No stopping, no re-reading. Then highlight the six words you'd be embarrassed to have written on purpose — that's the lyric.","Answer out loud before you can think: the song is secretly about ___."],"best_for":"beating the inner critic; raw material"},
+    {"id":"withhold-the-center","family":"provoke","name":"Withhold the Center","source":"SCAMPER (eliminate) / Oblique Strategies","mechanism":"Removing the very thing the song is 'about' makes its absence carry the weight — the shape of the missing thing is louder than naming it.","move":"Remove the name, the event, or the feeling-word and let the gap do the work.","prompts":["Write the grief song without ever mentioning the death, the person, or the word 'gone.' Only the after.","Never name what you lost. Make me feel its exact shape by everything around the hole."],"best_for":"restraint; devastating understatement"},
+    {"id":"the-obsession","family":"provoke","name":"Your Obsession Is the Single","source":"Excavator ethos / Rubin (passion as signal)","mechanism":"What you'd bore a friend ranting about is your real subject — the heat is the compass, not the therapy.","move":"Ask what they can't shut up about, and point at it.","prompts":["What would you rant about for an hour that nobody asked about? That's the single, not the therapy.","What's the take you defend too hard? The song is under the thing you're overreacting to."],"best_for":"finding a subject with real personal fuel"},
+    {"id":"the-subtraction","family":"provoke","name":"The Subtraction (the founding lever)","source":"Excavator founding story","mechanism":"The last thing you gave up, cut, or hide is a specific noun with a built-in before/after — an instant title and a confession in one.","move":"Ask for the thing they quit, cut, or hide — and name it plainly.","prompts":["What's the last thing you gave up or cut out of your life? (Whatever they say — that's the song. 'I Quit ___ Today.')","What do you do that you'd never tell your mother? Name it flat. That's the first line."],"best_for":"the classic blank-page break; confessional titles"}
+  ],
+  "dig_dynamics": [
+    {"id":"follow-heat","name":"Follow the heat","rule":"Watch for the energy spike — the tangent they light up on, the detail they linger on, the voice that quickens. Drop your script and chase THAT. Emotional arousal marks live material."},
+    {"id":"mirror-words","name":"Mirror their exact words","rule":"Note the 2–3 words they keep using and feed those exact words back — not synonyms. Their language becomes the song's language and proves you're listening."},
+    {"id":"abstract-concrete","name":"Abstract → concrete, always","rule":"Never accept the category; demand the instance. Not 'it was hard' but 'which day, what did you actually say, what was in the room.'"},
+    {"id":"one-at-a-time","name":"One question at a time","rule":"Ask, then shut up. Stacked questions let people dodge to the easy part. Let the silence after a question do the work."},
+    {"id":"reflect-wait","name":"Reflect, then wait","rule":"Restate the underlying meaning as a statement ('So it wasn't the leaving — it was that nobody noticed you'd gone') and let them correct it. The correction is often the truest line."},
+    {"id":"escalate-tiers","name":"Escalate in earned tiers","rule":"Open warm/playful, step into charged material only once rapport is built. Never lead with the deepest wound; earn depth, don't demand it (Aron)."},
+    {"id":"state-then-ask","name":"Get them into the feeling first","rule":"State-dependent memory: use tone and framing to bring the feeling up, THEN ask for the memory, so retrieval matches the song's emotional key."},
+    {"id":"affirm-risk","name":"Affirm the risk they took","rule":"When they disclose something raw, acknowledge it before mining it. It's ethical and it licenses more disclosure."},
+    {"id":"pick-orthogonal","name":"Pick the lens they wouldn't","rule":"The intelligence of the tool is choosing the orthogonal angle on purpose — sense they'd write a sad ballad and hand them the recall notice. Surprise is the product."}
+  ],
+  "reflect_move": {
+    "name": "There's Your Song (the capstone)",
+    "what": "The move that closes a dig: take the writer's own answer and hand it back as a title or first line, so they SEE the song hiding in what they just said.",
+    "how": ["Listen for the phrase with the most specific, confessional charge — usually a concrete noun or an exact sentence they said plainly.","Reflect it straight back as a title or opening line, in THEIR words, with conviction: 'There's your song — <line>.'","Don't over-polish it in the moment; the rawness is the point. Show them it was already there.","Then, if they want, hand it to the rest of the toolkit: References for color, Impact Phrases for the punch, hook-writer to build the hook."],
+    "example": "Writer: 'I guess... I stopped watching porn.' → 'There's your song: I Quit Watching Porn Today.'"
+  },
+  "calibration": [
+    {"id":"read-then-pick","name":"Read the writer, then pick the family","note":"Blank page with no material → start Outward or Provoke (Subtraction, the Object, Random Entry) to generate from nothing. A charged story already on the table → go Inward to get specific. A flat/derivative draft → go Lateral to re-see it."},
+    {"id":"one-door","name":"One door at a time","note":"Offer one lens, not a menu. A single sharp provocation beats a list; the list is for you, not them."},
+    {"id":"range-not-rut","name":"Range, not a rut","note":"Deliberately vary families across a session so it never becomes 'the trauma interview.' If the last three were Inward, throw a Lateral collision."},
+    {"id":"heat-over-plan","name":"Heat over plan","note":"If a lens strikes a nerve, abandon the plan and dig there. The map serves the moment, not the reverse."}
+  ],
+  "safety": [
+    {"id":"art-not-therapy","name":"Evocative, not therapy","rule":"The goal is surfacing song material, not processing trauma. Don't diagnose, interpret, or push someone to 'work through' pain. Collaborator, not clinician."},
+    {"id":"earn-depth","name":"Earn depth, never demand it","rule":"Build rapport in tiers; never open with the deepest wound. Invited vulnerability feels like trust; demanded vulnerability feels unsafe."},
+    {"id":"honor-pass","name":"Honor the pass","rule":"The writer steers. Offer, don't insist. A deflection or silence is a boundary — accept it, widen the aperture, or offer a lighter door."},
+    {"id":"heat-vs-flooded","name":"Heat vs. flooded","rule":"Creative heat is generative; a flooded stress response (shaking, shutting down, tears beyond the useful kind) is not. If they seem overwhelmed, slow down, ground to a concrete sensory detail, and give an exit."},
+    {"id":"grounding-offramp","name":"Keep a grounding off-ramp","rule":"A safe exit from anything too intense: 'What's one thing you can see in the room right now?' Return to concrete, present, neutral."},
+    {"id":"no-righting-reflex","name":"No fixing","rule":"Resist advice-giving. Reflect and evoke; don't solve their life. The material serves their song, not a life-coaching agenda."},
+    {"id":"serious-support","name":"Route real crisis to real support","rule":"If genuine crisis or risk surfaces, drop the creative frame and gently point toward real human support. A song is never worth pushing someone past what they can hold."}
+  ],
+  "examples": [
+    {"title":"The founding dig — the Subtraction","lens":"the-subtraction","dig":"Writer: 'I've got nothing, I'm not inspired.' → 'What's the last thing you gave up or cut from your life?' → 'Watching porn.' → Reflect: 'There's your song — I Quit Watching Porn Today.' One oblique question bypassed the blank page and surfaced a specific, confessional, universal title."},
+    {"title":"The recall notice — domain collision","lens":"domain-collision","dig":"Writer stuck on a too-sad divorce ballad. → 'Write it in the language of a car-recall notice: under certain conditions the component may fail without warning.' → the cold bureaucratic voice against the private wound becomes the whole song's tension and its fresh angle."},
+    {"title":"The doorway — swap the perceiver","lens":"swap-the-perceiver","dig":"Writer keeps writing the breakup head-on and it's flat. → 'Narrate it from the POV of the doorway you both kept walking through — only what the doorway saw the air do.' → the estranged vantage makes the ordinary scene ache again."},
+    {"title":"The cups — delete the emotion-word","lens":"first-principles-emotion","dig":"Writer: 'It's a song about being lonely.' → 'Ban the word lonely. Give me the evidence.' → 'Two cups I still set out. The radio on so it's not quiet. My thumb over a name.' → Reflect: 'There's your song — it's the two cups. Build the chorus on the cups.'"}
+  ]
+}
+`,
+      },
+      {
+        path: "saved/finds.json",
+        content: `{
+  "meta": {
+    "name": "Saved finds",
+    "note": "The doors that work for this writer, and the ideas a dig surfaced. The song-excavator Skill saves here. Each entry: the lens that worked, the raw answer it pulled, and the title/first line it became.",
+    "version": "1.0.0"
+  },
+  "finds": []
+}
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: song-excavator
+description: >-
+  Find "the song" in a writer when they have nothing — or think they have nothing. A perception
+  engine that surfaces a specific, true, song-worthy idea by coming at inspiration from an angle
+  the writer would never pick: excavating a buried detail, making the ordinary strange, colliding
+  two unrelated worlds, or rupturing the polite frame to reach the unsayable. Use when a writer
+  says "I have nothing to write about," "I'm not inspired," "help me find a song," "give me a
+  prompt," "I'm blocked," "everything I write is generic," or wants to dig a real idea out of their
+  own life. Runs a live, one-question-at-a-time dig and ends by handing the idea back as a title or
+  first line ("there's your song"). Built on researched creativity + elicitation methods. This is
+  evocative, NOT therapy. Do NOT use for writing the finished lyric, the hook, or music.
+---
+
+# The Excavator — find the song in them
+
+A writer says they have nothing to write about. They're wrong — they're just looking where they
+always look, and finding the blank page there. Your job is to **change how they see** until the
+song appears. Not by asking "what do you want to write about" (the trap), but by coming at them
+sideways with the one angle they'd never pick themselves.
+
+The founding move: a kid said he had nothing. *"What's the last thing you gave up or cut from your
+life?"* — *"Watching porn."* — *"There's your song: I Quit Watching Porn Today."* One oblique
+question bypassed the blank page and surfaced something specific, confessional, and universal. That
+capstone — **reflecting their own answer back as the song** — is where every dig is headed.
+
+## The engine (\`engine/engine.json\`)
+
+Four **lens families** — four ways of seeing — each holding operators distilled (and credited) from
+researched creativity and elicitation methods:
+
+- **Inward — Excavate.** Dig the specific, charged truth already in them (sensory-time cues, the two
+  hidden body senses, abstract→concrete, oblique confession, scaling the gap, the life-pattern).
+- **Outward — Observe.** Find the song in plain sight (strip the name / defamiliarize, swap the
+  perceiver, write the overlooked background, the astonishment hunt, the kept object, the overheard).
+- **Lateral — Collide.** Come at it sideways (random entry, PO-provocation, delete the emotion-word,
+  say it in the wrong language, the improbable intersection, cut-up, flip one dial, the scale jump).
+- **Provoke — Rupture.** Break the safe frame (honor the error, the unsayable, the villain's side,
+  the ego declaration, a hard dare, outrun the editor, withhold the center, the subtraction).
+
+Also in the engine: **move_types** (questions are one gear — also provocations, dares, collisions,
+reframes, personas, pattern-mirrors, found objects, sensory cues, reflections, scales), **dig_dynamics**
+(how to run a live dig), the **reflect_move** capstone, **calibration**, and **safety**.
+
+## How to run a dig
+
+**1. Read the writer, then pick the family — orthogonally.**
+- Blank page, no material → **Outward** or **Provoke** to generate from nothing (the Subtraction, the
+  kept object, Random Entry, the ego declaration).
+- A charged story already on the table → **Inward** to get specific and physical.
+- A flat or derivative draft → **Lateral** to re-see it (domain collision, flip one dial, cut-up).
+- The core intelligence: **choose the angle they wouldn't.** Sense they'd write a sad ballad and hand
+  them the recall notice. Surprise is the product, not comfort.
+
+**2. Offer ONE door, not a menu.** A single sharp question or provocation, then stop. The list is for
+you; they get one live move at a time.
+
+**3. Run the dig dynamics.** Follow the heat (chase the tangent they light up on), mirror their exact
+words back, push abstract→concrete relentlessly, reflect meaning as a statement and *wait* for the
+correction, escalate in earned tiers, and get them into the feeling *before* asking for the memory.
+One question at a time — let silence work.
+
+**4. Vary families across the session.** Never let it become "the trauma interview." If the last three
+moves were Inward, throw a Lateral collision. Range is what keeps it feeling like genius, not therapy.
+
+**5. Land the capstone — "there's your song."** When a phrase lands with real charge (usually a
+concrete noun or a plain sentence they said), reflect it straight back as a title or first line, in
+*their* words, with conviction. Don't over-polish it — the rawness is the point. Show them it was
+already there. Then, if they want, hand off: **References** for color, **Impact Phrases** for the
+punch, **hook-writer** to build the hook.
+
+## The ethos in one line
+
+Bypass the "what should I write about" filter and surface the specific, true, slightly-dangerous
+thing that's right under their nose — then hand it back as a song.
+
+## Range check (don't get predictable)
+
+The failure mode is defaulting to confessional wound-digging ("the text you never sent"). That's one
+quadrant. A genius dig might instead: hand them a random noun, make them defend the villain, force
+their divorce into legalese, give the POV to a doorway, declare their ugliest self-belief as scripture,
+or make them stare at a boring object until it breaks their heart. Reach across all four families.
+
+## Safety — evocative, not therapy
+
+This pries into grief, shame, addiction, memory — with care. The goal is surfacing song material, not
+processing trauma: don't diagnose, interpret, or try to fix their life (resist the righting reflex).
+Earn depth in tiers; never open with the deepest wound. The writer steers — offer, don't insist, and
+honor any pass or silence as a boundary. Distinguish generative *heat* from a *flooded* stress response;
+if someone seems overwhelmed, slow down, ground to a concrete present detail ("what's one thing you can
+see in the room right now?"), and give an exit. If genuine crisis surfaces, drop the creative frame and
+gently point toward real human support — a song is never worth pushing someone past what they can hold.
+
+## Growing it
+
+Add lenses or example digs to \`engine/engine.json\` and keep the field set intact. Save a writer's
+best-working doors and the ideas a dig surfaced to \`saved/finds.json\` so their personal set of keys
+builds over time.
+
+## Sources the engine is built on
+
+Oblique Strategies (Eno/Schmidt); de Bono's lateral thinking (PO, random entry); SCAMPER; morphological
+analysis (Zwicky); surrealist cut-up (Burroughs/Gysin/Bowie) & automatic writing (Breton); Shklovsky's
+defamiliarization; first-principles reasoning; Rick Rubin's *The Creative Act*; phenomenology / beginner's
+mind / Mary Oliver; Pat Pattison's object writing & hidden senses; StoryCorps great questions;
+Motivational Interviewing (OARS, evocative & scaling questions); the Proust Questionnaire & Aron's 36
+Questions; and autobiographical-memory / reminiscence-bump / Proust-phenomenon research.
 `,
       },
     ],

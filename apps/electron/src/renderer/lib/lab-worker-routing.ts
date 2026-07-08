@@ -37,9 +37,18 @@ const LAB_WORKER_ROLES: Record<string, LabWorkerRole[]> = {
   'reverse-magic': ['lyrics.generate', 'song.reference', 'song.concept'],
   'legendary-writer': ['lyrics.review', 'lyrics.rewrite', 'lyrics.section.verse', 'lyrics.section.bridge'],
   'record-doctor': ['producer.handoff'],
+  'reference-master': ['research.reference', 'song.reference', 'song.concept'],
+  'the-excavator': ['song.concept'],
   'chorus-writer': ['lyrics.section.chorus', 'lyrics.rewrite'],
   'hook-doctor': ['lyrics.section.chorus', 'song.concept'],
   'bridge-builder': ['lyrics.section.bridge', 'lyrics.rewrite'],
+}
+
+const ROLE_AGENT_PRIORITY: Partial<Record<LabWorkerRole, string[]>> = {
+  'lyrics.generate': ['reverse-magic'],
+  'song.concept': ['the-excavator', 'reverse-magic', 'reference-master'],
+  'song.reference': ['reference-master', 'reverse-magic'],
+  'research.reference': ['reference-master'],
 }
 
 const ROLE_REASONS: Record<LabWorkerRole, string> = {
@@ -70,6 +79,7 @@ export function resolveLabWorkerRoute(
     const candidates = agentsBySlug
       .map((agent) => candidateForRole(agent, role))
       .filter((candidate): candidate is LabWorkerCandidate => Boolean(candidate))
+      .sort((a, b) => compareCandidatesForRole(role, a, b))
 
     if (candidates.length > 0) {
       const [recommended, ...rest] = candidates
@@ -102,6 +112,20 @@ function candidateForRole(agent: AgentDefinitionDTO, role: LabWorkerRole): LabWo
     reason: ROLE_REASONS[role],
     recommended: false,
   }
+}
+
+function compareCandidatesForRole(
+  role: LabWorkerRole,
+  a: LabWorkerCandidate,
+  b: LabWorkerCandidate,
+): number {
+  const priority = ROLE_AGENT_PRIORITY[role]
+  if (!priority) return 0
+  const aIndex = priority.indexOf(a.agent.slug)
+  const bIndex = priority.indexOf(b.agent.slug)
+  const aRank = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex
+  const bRank = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex
+  return aRank - bRank
 }
 
 function dedupeAgentsBySlug(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {

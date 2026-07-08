@@ -190,6 +190,34 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(skill?.files.some(f => f.path === 'references/hook-teardowns.md')).toBe(true);
   });
 
+  it('includes reference-finder for Lab reference wells', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'reference-finder');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('reference-finder');
+    expect(parsed.data.description).toContain('cultural allusions');
+    expect(parsed.content).toContain('Reference Finder');
+    expect(parsed.content).toContain('wells/wells.json');
+    expect(parsed.content).toContain('Lab song');
+    expect(parsed.content).not.toContain('browser/build.py');
+    expect(skill?.files.some(f => f.path === 'wells/wells.json')).toBe(true);
+    expect(skill?.files.some(f => f.path === 'saved/favorites.json')).toBe(true);
+  });
+
+  it('includes song-excavator for Lab song concept digs', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'song-excavator');
+    expect(skill).toBeDefined();
+    const parsed = matter(getSkillMd(skill!));
+    expect(parsed.data.name).toBe('song-excavator');
+    expect(parsed.data.description).toContain('Find "the song"');
+    expect(parsed.content).toContain('The Excavator');
+    expect(parsed.content).toContain('engine/engine.json');
+    expect(parsed.content).toContain('saved/finds.json');
+    expect(parsed.content).not.toContain('browser/build.py');
+    expect(skill?.files.some(f => f.path === 'engine/engine.json')).toBe(true);
+    expect(skill?.files.some(f => f.path === 'saved/finds.json')).toBe(true);
+  });
+
   it('includes magnetic-outreach for cold first-contact draft craft', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'magnetic-outreach');
     expect(skill).toBeDefined();

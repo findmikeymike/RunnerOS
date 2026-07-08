@@ -126,6 +126,7 @@ const SECTION_BUTTONS = [
 
 const LYRIC_AGENT_ACTIONS = [
   { id: 'suggest', label: 'Suggest lines' },
+  { id: 'references', label: 'References' },
   { id: 'review', label: 'Review this' },
   { id: 'stronger', label: 'Make stronger' },
   { id: 'continue', label: 'Continue from here' },
@@ -320,6 +321,9 @@ function buildLyricAgentPrompt(payload: LyricAgentPayload) {
 }
 
 function actionInstruction(action: LyricAgentAction) {
+  if (action === 'references') {
+    return 'Find fresh cultural references, images, and allusions that could color this target section. Group them by well, give one-line meanings, and include brief lyric-use notes. Do not write a full lyric.'
+  }
   if (action === 'review') {
     return 'Review only this target section. Give 3 short bullets: what works, what is weak, and one specific fix.'
   }
@@ -338,6 +342,9 @@ function actionLabel(action: LyricAgentAction): string {
 
 function routeRequestForAction(section: SongSection, action: LyricAgentAction): { role: LabWorkerRole; fallbackRoles: LabWorkerRole[] } {
   const sectionRole = roleForSection(section)
+  if (action === 'references') {
+    return { role: 'research.reference', fallbackRoles: ['song.reference', 'song.concept'] }
+  }
   if (action === 'review') {
     return { role: 'lyrics.review', fallbackRoles: ['lyrics.rewrite'] }
   }

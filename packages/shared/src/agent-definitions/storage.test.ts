@@ -899,6 +899,37 @@ body
     expect(hooker?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted hooks')
   })
 
+  test('starter library includes Reference Master with reference-finder skill', () => {
+    const referenceMaster = STARTER_AGENTS.find((agent) => agent.slug === 'reference-master')
+
+    expect(referenceMaster).toBeDefined()
+    expect(referenceMaster?.metadata.name).toBe('Reference Master')
+    expect(referenceMaster?.metadata.permissionMode).toBe('ask')
+    expect(referenceMaster?.metadata.thinkingLevel).toBe('high')
+    expect(referenceMaster?.metadata.skills).toContain('reference-finder')
+    expect(referenceMaster?.metadata.tags).toContain('references')
+    expect(referenceMaster?.metadata.tags).toContain('allusions')
+    expect(referenceMaster?.systemPrompt).toContain('reference-finder')
+    expect(referenceMaster?.systemPrompt).toContain('cultural reference and allusion specialist')
+    expect(referenceMaster?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted lyrics')
+  })
+
+  test('starter library includes The Excavator with song-excavator skill', () => {
+    const excavator = STARTER_AGENTS.find((agent) => agent.slug === 'the-excavator')
+
+    expect(excavator).toBeDefined()
+    expect(excavator?.metadata.name).toBe('The Excavator')
+    expect(excavator?.metadata.permissionMode).toBe('ask')
+    expect(excavator?.metadata.thinkingLevel).toBe('high')
+    expect(excavator?.metadata.skills).toContain('song-excavator')
+    expect(excavator?.metadata.tags).toContain('creative-block')
+    expect(excavator?.metadata.tags).toContain('songwriting')
+    expect(excavator?.systemPrompt).toContain('song-finding specialist')
+    expect(excavator?.systemPrompt).toContain("there's your song")
+    expect(excavator?.systemPrompt).toContain('evocative, not therapy')
+    expect(excavator?.systemPrompt).toContain('Do not reproduce or closely paraphrase copyrighted lyrics')
+  })
+
   test('starter library includes Art Director with taste-led image generation rules', () => {
     const artDirector = STARTER_AGENTS.find((agent) => agent.slug === 'art-director')
 

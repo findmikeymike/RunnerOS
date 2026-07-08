@@ -2483,7 +2483,7 @@ export class SessionManager implements ISessionManager {
         // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Hypermotion, Lottie Animation,
         // Video Editor, Content Genius, promotion helpers, Shopify, Print Agent,
         // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
-        // Reverse Magic, Legendary Writer, and Update System Agent.
+        // Reverse Magic, Legendary Writer, Reference Master, and Update System Agent.
         const required = STARTER_AGENTS.filter(
           (a) => a.slug === ORCHESTRATOR_SLUG
             || a.slug === CONCIERGE_SLUG
@@ -2511,6 +2511,8 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'reverse-magic'
             || a.slug === 'hooker'
             || a.slug === 'legendary-writer'
+            || a.slug === 'reference-master'
+            || a.slug === 'the-excavator'
             || a.slug === 'update-system-agent',
         )
         const { ensured } = ensureRequiredAgents(required)
@@ -2520,7 +2522,7 @@ export class SessionManager implements ISessionManager {
         try {
           const { getWorkspaces } = await import('@craft-agent/shared/config')
           const { readActivatedAgents, writeActivatedAgents } = await import('@craft-agent/shared/agent-definitions')
-          const labWorkerSlugs = ['reverse-magic', 'hooker', 'legendary-writer', 'record-doctor']
+          const labWorkerSlugs = ['the-excavator', 'reverse-magic', 'hooker', 'legendary-writer', 'reference-master', 'record-doctor']
           let normalizedLabWorkspaces = 0
           for (const ws of getWorkspaces()) {
             if (ws.remoteServer || !isCreativeLabWorkspaceInfo(ws)) continue

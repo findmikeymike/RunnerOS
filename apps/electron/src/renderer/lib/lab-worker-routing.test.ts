@@ -7,6 +7,9 @@ describe('lab worker routing', () => {
     expect(getLabWorkerRoles('reverse-magic')).toContain('lyrics.generate')
     expect(getLabWorkerRoles('legendary-writer')).toContain('lyrics.review')
     expect(getLabWorkerRoles('record-doctor')).toContain('producer.handoff')
+    expect(getLabWorkerRoles('reference-master')).toContain('research.reference')
+    expect(getLabWorkerRoles('the-excavator')).toContain('song.concept')
+    expect(getLabWorkerRoles('the-excavator')).not.toContain('lyrics.generate')
   })
 
   test('routes to the active worker for a role', () => {
@@ -55,6 +58,37 @@ describe('lab worker routing', () => {
 
     expect(route.candidates).toHaveLength(0)
     expect(route.emptyReason).toContain('No active Lab worker')
+  })
+
+  test('routes reference research to Reference Master', () => {
+    const route = resolveLabWorkerRoute([
+      agent('reverse-magic', 'Reverse Magic'),
+      agent('reference-master', 'Reference Master'),
+    ], { role: 'research.reference' })
+
+    expect(route.recommended?.agent.slug).toBe('reference-master')
+    expect(route.candidates).toHaveLength(1)
+  })
+
+  test('routes song concept digs to The Excavator when active', () => {
+    const route = resolveLabWorkerRoute([
+      agent('reference-master', 'Reference Master'),
+      agent('reverse-magic', 'Reverse Magic'),
+      agent('the-excavator', 'The Excavator'),
+    ], { role: 'song.concept' })
+
+    expect(route.recommended?.agent.slug).toBe('the-excavator')
+    expect(route.candidates.map((candidate) => candidate.agent.slug)).toEqual(['the-excavator', 'reverse-magic', 'reference-master'])
+  })
+
+  test('routes lyric generation to Reverse Magic instead of The Excavator', () => {
+    const route = resolveLabWorkerRoute([
+      agent('the-excavator', 'The Excavator'),
+      agent('reverse-magic', 'Reverse Magic'),
+    ], { role: 'lyrics.generate' })
+
+    expect(route.recommended?.agent.slug).toBe('reverse-magic')
+    expect(route.candidates.map((candidate) => candidate.agent.slug)).toEqual(['reverse-magic'])
   })
 })
 
