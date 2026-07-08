@@ -69,21 +69,21 @@ function normalizeVisibleIdentity(identity = {}) {
 }
 
 function resolveMatchesExpected(profile, data, visibleIdentity) {
-  if (data.matchesExpected !== undefined && data.matchesExpected !== null) return Boolean(data.matchesExpected);
-
   const expectedHandle = normalizeHandle(profile.accountHandle);
+  const expectedUrl = normalizeUrl(profile.accountUrl);
+  if (!expectedHandle && !expectedUrl) return false;
+
   const visibleHandle = normalizeHandle(visibleIdentity.handle);
   if (expectedHandle && visibleHandle && expectedHandle === visibleHandle) return true;
 
-  const expectedUrl = normalizeUrl(profile.accountUrl);
   const visibleUrl = normalizeUrl(visibleIdentity.accountUrl || visibleIdentity.url);
   if (expectedUrl && visibleUrl && expectedUrl === visibleUrl) return true;
 
-  const haystack = [visibleIdentity.rawText, visibleIdentity.accountUrl, visibleIdentity.url]
-    .filter(Boolean)
-    .map((value) => String(value).toLowerCase());
-  if (expectedHandle && haystack.some((value) => value.includes(`@${expectedHandle}`) || value.includes(`/${expectedHandle}`))) return true;
-  if (expectedUrl && haystack.some((value) => normalizeUrl(value) === expectedUrl)) return true;
+  if (visibleHandle || visibleUrl) return false;
+
+  const rawText = String(visibleIdentity.rawText || '');
+  if (expectedHandle && rawTextHasHandle(rawText, expectedHandle)) return true;
+  if (expectedUrl && rawTextHasUrl(rawText, expectedUrl)) return true;
 
   return false;
 }
@@ -103,4 +103,20 @@ function normalizeUrl(value) {
   } catch {
     return null;
   }
+}
+
+function rawTextHasHandle(text, handle) {
+  if (!text || !handle) return false;
+  const escaped = escapeRegExp(handle);
+  return new RegExp(`(^|[^a-z0-9_])@${escaped}([^a-z0-9_]|$)`, 'i').test(text);
+}
+
+function rawTextHasUrl(text, normalizedUrl) {
+  if (!text || !normalizedUrl) return false;
+  const escaped = escapeRegExp(normalizedUrl);
+  return new RegExp(`(^|[^a-z0-9.-])${escaped}(/|[^a-z0-9._-]|$)`, 'i').test(text);
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

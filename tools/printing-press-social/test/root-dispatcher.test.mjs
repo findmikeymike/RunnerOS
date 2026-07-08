@@ -145,6 +145,61 @@ test('root dispatcher routes normalized profile lifecycle commands', () => {
   assert.equal(wrongAccount.matchesExpected, false);
   assert.equal(wrongAccount.evidence.visibleIdentity.handle, '@other-account');
 
+  writeFileSync(verificationFile, JSON.stringify({
+    platform: 'x',
+    profile: 'artist01',
+    loggedIn: true,
+    matchesExpected: true,
+    visibleIdentity: { handle: '@other-account' },
+  }));
+  const selfAttestedWrongAccount = JSON.parse(run([
+    'profile', 'status', 'x',
+    '--profile', 'artist01',
+    '--live',
+    '--verification-result', verificationFile,
+    '--json',
+  ], env));
+  assert.equal(selfAttestedWrongAccount.ready, false);
+  assert.equal(selfAttestedWrongAccount.profileStatus, 'wrong_account');
+  assert.equal(selfAttestedWrongAccount.matchesExpected, false);
+
+  writeFileSync(verificationFile, JSON.stringify({
+    platform: 'x',
+    profile: 'artist01',
+    loggedIn: true,
+    visibleIdentity: { rawText: 'Current profile URL https://x.com/artist010' },
+  }));
+  const partialRawTextMatch = JSON.parse(run([
+    'profile', 'status', 'x',
+    '--profile', 'artist01',
+    '--live',
+    '--verification-result', verificationFile,
+    '--json',
+  ], env));
+  assert.equal(partialRawTextMatch.ready, false);
+  assert.equal(partialRawTextMatch.profileStatus, 'wrong_account');
+
+  const missingTargetHome = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  run(['profile', 'add', 'x', '--profile', 'noid', '--json'], { SOCIAL_HOME: missingTargetHome });
+  mkdirSync(path.join(missingTargetHome, 'sessions', 'x', 'noid'), { recursive: true });
+  writeFileSync(path.join(missingTargetHome, 'verification.json'), JSON.stringify({
+    platform: 'x',
+    profile: 'noid',
+    loggedIn: true,
+    matchesExpected: true,
+    visibleIdentity: { handle: '@somebody' },
+  }));
+  const missingTarget = JSON.parse(run([
+    'profile', 'status', 'x',
+    '--profile', 'noid',
+    '--live',
+    '--verification-result', path.join(missingTargetHome, 'verification.json'),
+    '--json',
+  ], { SOCIAL_HOME: missingTargetHome }));
+  assert.equal(missingTarget.ready, false);
+  assert.equal(missingTarget.profileStatus, 'wrong_account');
+  assert.equal(missingTarget.matchesExpected, false);
+
   const deleted = JSON.parse(run(['profile', 'delete', 'x', '--profile', 'artist01', '--json'], env));
   assert.equal(deleted.ok, true);
   assert.equal(deleted.deleted, true);
