@@ -164,6 +164,16 @@ describe('workspace local source paths', () => {
 
     expect(loadSourceConfig(ws, 'local-cli')?.local?.path).toBe(join(ws, 'tools/local-cli'));
   });
+
+  test('getSourcesBySlugs resolves the built-in Squad source', () => {
+    const ws = makeWorkspace();
+    const sources = getSourcesBySlugs(ws, ['squad']);
+    expect(sources).toHaveLength(1);
+    expect(sources[0].config.slug).toBe('squad');
+    expect(sources[0].config.provider).toBe('runneros-squad');
+    expect(sources[0].config.local?.path).toContain(join('tools', 'squad'));
+    expect(sources[0].guide.raw).toContain('provider-mode');
+  });
 });
 
 describe('readGlobalSourcesManifest', () => {

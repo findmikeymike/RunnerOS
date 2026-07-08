@@ -1,0 +1,12 @@
+{
+  "name": "runneros-squad",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "squad": "bin/squad.mjs"
+  },
+  "scripts": {
+    "test": "node --test bin/squad.test.mjs"
+  }
+}

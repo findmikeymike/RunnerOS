@@ -1,0 +1,152 @@
+# Platform specifications for the content pipeline.
+# Edit this file to add new platforms or adjust limits.
+# Changes here propagate to: formatter, aspect ratio lookup, prompt composer.
+#
+# To add a new platform:
+#   1. Add a new entry below following the same structure
+#   2. Add a platform_voice entry in your brand voice YAML
+#   3. Add a template mapping in template_selector.py
+
+tiktok:
+  name: TikTok
+  max_chars: 2200
+  visible_chars: 150
+  aspect_ratios: ["9:16"]
+  hashtag_limit: 5
+  emoji_ok: true
+  cta_required: true
+  thread_capable: false
+  video_max_seconds: 600
+  notes: "Hook in first 2 words. Captions auto-generated. First-person voice."
+
+instagram_feed:
+  name: Instagram Feed
+  max_chars: 2200
+  visible_chars: 125
+  aspect_ratios: ["1:1", "4:5", "16:9"]
+  hashtag_limit: 10
+  emoji_ok: true
+  cta_required: false
+  thread_capable: false
+  video_max_seconds: 90
+  notes: "Caption is secondary to image. Front-load hook before 'more' cutoff."
+
+instagram_story:
+  name: Instagram Story
+  max_chars: 500
+  visible_chars: 500
+  aspect_ratios: ["9:16"]
+  hashtag_limit: 3
+  emoji_ok: true
+  cta_required: false
+  thread_capable: false
+  video_max_seconds: 60
+  notes: "3-5 words per text overlay. Swipe-up or link sticker for CTA."
+
+twitter:
+  name: X / Twitter
+  max_chars: 280
+  visible_chars: 280
+  aspect_ratios: ["16:9", "1:1"]
+  hashtag_limit: 0
+  emoji_ok: false
+  cta_required: false
+  thread_capable: true
+  video_max_seconds: 140
+  notes: "No hashtags in main tweet. Every character earns its place."
+
+x:
+  name: X / Twitter
+  max_chars: 280
+  visible_chars: 280
+  aspect_ratios: ["16:9", "1:1"]
+  hashtag_limit: 0
+  emoji_ok: false
+  cta_required: false
+  thread_capable: true
+  video_max_seconds: 140
+  notes: "No hashtags in main tweet. Every character earns its place."
+
+linkedin:
+  name: LinkedIn
+  max_chars: 3000
+  visible_chars: 210
+  aspect_ratios: ["1:1", "16:9", "9:16"]
+  hashtag_limit: 5
+  emoji_ok: false
+  cta_required: false
+  thread_capable: false
+  video_max_seconds: 600
+  notes: "Personal story angle. First line is the hook. 1300 chars sweet spot."
+
+website:
+  name: Website
+  max_chars: 10000
+  visible_chars: 10000
+  aspect_ratios: ["16:9", "1:1"]
+  hashtag_limit: 0
+  emoji_ok: false
+  cta_required: true
+  thread_capable: false
+  video_max_seconds: 0
+  notes: "Headline 6-10 words. Subhead 15-25 words. One idea per section."
+
+email:
+  name: Email
+  max_chars: 5000
+  visible_chars: 90
+  aspect_ratios: []
+  hashtag_limit: 0
+  emoji_ok: false
+  cta_required: true
+  thread_capable: false
+  video_max_seconds: 0
+  notes: "Subject: 40 chars. 3 short paragraphs max. One CTA per email."
+
+spotify:
+  name: Spotify
+  max_chars: 1500
+  visible_chars: 200
+  aspect_ratios: ["1:1"]
+  hashtag_limit: 0
+  emoji_ok: false
+  cta_required: false
+  thread_capable: false
+  video_max_seconds: 0
+  notes: "Evocative, not descriptive. Sentence fragments. Mood over information."
+
+app_store:
+  name: App Store
+  max_chars: 4000
+  visible_chars: 170
+  aspect_ratios: ["9:16"]
+  hashtag_limit: 0
+  emoji_ok: false
+  cta_required: false
+  thread_capable: false
+  video_max_seconds: 30
+  notes: "Benefits first, features second. First line is the value prop."
+
+youtube:
+  name: YouTube
+  max_chars: 5000
+  visible_chars: 100
+  aspect_ratios: ["16:9"]
+  hashtag_limit: 3
+  emoji_ok: false
+  cta_required: true
+  thread_capable: false
+  video_max_seconds: 43200
+  notes: "Title under 60 chars. First 2 lines of description are critical."
+
+threads:
+  name: Threads
+  max_chars: 500
+  visible_chars: 500
+  aspect_ratios: ["1:1", "4:5"]
+  hashtag_limit: 0
+  emoji_ok: true
+  cta_required: false
+  thread_capable: true
+  video_max_seconds: 300
+  notes: "Conversational tone. No hashtags. Engagement-first content."

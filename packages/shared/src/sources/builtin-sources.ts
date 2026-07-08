@@ -17,6 +17,7 @@ const HYPERMOTION_SLUG = 'hypermotion';
 const LOTTIE_SLUG = 'lottie';
 const VIDEO_STUDIO_SLUG = 'video-studio';
 const RAW_VIDEO_EDITOR_SLUG = 'raw-video-editor';
+const SQUAD_SLUG = 'squad';
 const GOOGLE_ADS_SLUG = 'google-ads';
 const ADS_OPERATOR_SLUG = 'ads-operator';
 const GOOGLE_CALENDAR_SLUG = 'google-calendar';
@@ -189,6 +190,21 @@ function getRawVideoEditorPath(): string {
       join(process.cwd(), 'tools', 'raw-video-editor'),
     ],
     join('tools', 'raw-video-editor')
+  );
+}
+
+function getSquadPath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'squad') : '',
+      join(appRoot, 'tools', 'squad'),
+      join(REPO_ROOT, 'tools', 'squad'),
+      join(process.cwd(), 'tools', 'squad'),
+    ],
+    join('tools', 'squad')
   );
 }
 
@@ -402,6 +418,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getLottieSource(workspaceId, workspaceRootPath),
     getVideoStudioSource(workspaceId, workspaceRootPath),
     getRawVideoEditorSource(workspaceId, workspaceRootPath),
+    getSquadSource(workspaceId, workspaceRootPath),
     getGoogleAdsSource(workspaceId, workspaceRootPath),
     getAdsOperatorSource(workspaceId, workspaceRootPath),
     getGoogleCalendarSource(workspaceId, workspaceRootPath),
@@ -784,6 +801,60 @@ export function getRawVideoEditorSource(workspaceId: string, workspaceRootPath: 
         '6. Review `edit/render-report.json` before claiming the edit is done.',
         '',
         'The tool preserves source media. All generated files live under `<footage-dir>/edit/`.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
+ * Built-in source for the RunnerOS-owned Squad video workflow fork.
+ */
+export function getSquadSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getSquadPath();
+  const config: FolderSourceConfig = {
+    id: 'builtin-squad',
+    name: 'Squad',
+    slug: SQUAD_SLUG,
+    enabled: true,
+    provider: 'runneros-squad',
+    type: 'local',
+    local: {
+      path: toolPath,
+      format: 'cli-tool',
+    },
+    tagline: 'Bundled app-owned fork of Squad storyboarding and modular video production workflows.',
+    icon: '🎥',
+    isAuthenticated: true,
+    connectionStatus: existsSync(toolPath) ? 'connected' : 'failed',
+    connectionError: existsSync(toolPath) ? undefined : 'Bundled Squad tool folder not found',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# Squad',
+        '',
+        'Use this source for no-spend storyboards, recipe recommendations, production preflight, and approval-gated video planning through RunnerOS’s bundled Squad fork.',
+        '',
+        'Core commands:',
+        '1. `node bin/squad.mjs doctor --json` to verify the bundled fork and provider state.',
+        '2. `node bin/squad.mjs recipe --brief-file <brief.json> --json` to pick the best workflow lane.',
+        '3. `node bin/squad.mjs storyboard --brief-file <brief.json> --json` for a no-spend board.',
+        '4. `node bin/squad.mjs preflight --brief-file <brief.json> --provider-mode auto --json` before any production run.',
+        '5. `node bin/squad.mjs run --brief-file <brief.json> --approved --budget-cap-usd 1.00 --provider-mode auto --json` only after explicit approval.',
+        '',
+        'Provider modes:',
+        '- `auto`: use normal Squad/OpenAI director workflows when configured; otherwise route through modular provider planning.',
+        '- `openai`: require the upstream OpenAI director path.',
+        '- `modular`: allow agents to inject shot plans, prompts, generated stills/clips, or selected providers such as WaveSpeed, Fal, Replicate, Zero, HeyGen, MuAPI, or RunPod.',
+        '- `external`: require user/agent supplied assets before final assembly/review.',
+        '',
+        'This fork keeps Squad workflows available without mutating the external `/Users/michaelb.williams/CAS4/Squad` project.',
       ].join('\n'),
     },
     isBuiltin: true,
@@ -1668,6 +1739,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === LOTTIE_SLUG
     || slug === VIDEO_STUDIO_SLUG
     || slug === RAW_VIDEO_EDITOR_SLUG
+    || slug === SQUAD_SLUG
     || slug === GOOGLE_ADS_SLUG
     || slug === ADS_OPERATOR_SLUG
     || slug === GOOGLE_CALENDAR_SLUG
