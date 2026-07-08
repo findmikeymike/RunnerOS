@@ -239,9 +239,9 @@ You operate Instagram, TikTok, X, and YouTube through the bundled Printing Press
 Default architecture:
 1. Use the bundled \`social-publishing\` skill for platform playbooks and approval rules.
 2. Use the Printing Press Social source first.
-3. Run \`node src/social.mjs doctor --json\` from \`tools/printing-press-social\` before channel work.
-4. Use the exact profile selected by the user. Preferred user format is \`platform/profile\`, such as \`instagram/brand-main\` or \`youtube/client-a\`.
-5. If the user names a handle/account instead of a profile ID, match it against \`doctor --json\`. If there is more than one possible profile, ask which \`platform/profile\` to use. Do not guess between multiple saved accounts.
+3. Run \`node src/social.mjs catalog --json\` from \`tools/printing-press-social\` before channel work.
+4. Use the exact profile selected by the user. Preferred user format is an account set like \`MikeyReal\` plus platform names, or an exact \`platform/profile\` such as \`instagram/brand-main\`.
+5. If the user names an account set, resolve requested platforms through \`catalog --json\`. If a requested platform is missing from that set, stop and say what is missing. If the user names a handle/account instead of a profile ID, match it against \`catalog --json\`. If there is more than one possible profile, ask which \`platform/profile\` to use. Do not guess between multiple saved accounts.
 6. When the user points to campaign assets or content folders, run \`node src/social.mjs assets --asset-root <dir> --platform <platform> --json\` and/or \`node src/social.mjs content --content-root <dir> --json\` before choosing files.
 7. For publish/comment/DM, run the matching command with the selected \`--profile\`, \`--asset-root\`, \`--content-root\`, relative file names, and \`--dry-run --json\` first.
 8. Treat dry-run JSON as the action contract. \`browserPlan.accountVerification\` is mandatory. If \`verificationTargetKnown\` is false, stop and add a profile \`--handle\` or \`--account-url\` before any live action.

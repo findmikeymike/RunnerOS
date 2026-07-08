@@ -17,6 +17,7 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 ## Commands
 
 - Registry: `node src/social.mjs registry --json`
+- Agent-safe catalog: `node src/social.mjs catalog --json`
 - Doctor: `node src/social.mjs doctor --json`
 - Live doctor: `node src/social.mjs doctor --live --json`
 - Add profile: `node src/social.mjs profile add <platform> --profile <profile> --handle <handle> --account-url <url> --json`
@@ -45,6 +46,7 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 
 - Use the built-in `@social-publisher` agent as the single front door for posting across Instagram, TikTok, X, and YouTube.
 - Do not create one posting agent per platform by default. Keep platform differences in CLI/browser playbooks unless a dedicated strategy/review agent is needed later.
+- Run `node src/social.mjs catalog --json` to resolve account sets like `MikeyReal` into exact `platform/profile` refs. Catalog output is non-secret and omits local session paths.
 - Run `node src/social.mjs doctor --json` before any channel work.
 - Use `node src/social.mjs doctor --live --json` before claiming a profile is ready for live execution.
 - Use `--json` and parse structured output instead of scraping text.
