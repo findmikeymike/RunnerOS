@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CheckCircle2, Loader2, LogIn, Plus, RefreshCcw, Save, Trash2, XCircle } from 'lucide-react'
+import { CheckCircle2, Copy, Loader2, LogIn, Plus, RefreshCcw, Save, Trash2, XCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -48,6 +48,13 @@ export default function SocialAccountsSettingsPage() {
   const profiles = React.useMemo(
     () => doctor?.platforms.flatMap((platform) => platform.profiles) ?? [],
     [doctor],
+  )
+  const profilesByPlatform = React.useMemo(
+    () => PLATFORMS.map((platform) => ({
+      ...platform,
+      profiles: profiles.filter((profile) => profile.platform === platform.id),
+    })),
+    [profiles],
   )
 
   const load = React.useCallback(async () => {
@@ -134,7 +141,7 @@ export default function SocialAccountsSettingsPage() {
         <div className="space-y-6 p-6">
           <SettingsSection
             title="Social Accounts"
-            description="Save handles once, log in manually, then agents reuse the right browser session."
+            description="Add one named profile per account, then tell @social-publisher which profile to use."
             action={
               <Button type="button" size="sm" variant="secondary" onClick={load} disabled={busy === 'load'}>
                 {busy === 'load' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
@@ -171,7 +178,7 @@ export default function SocialAccountsSettingsPage() {
             </SettingsCard>
           </SettingsSection>
 
-          <SettingsSection title="Profiles" description="Ready profiles can be used by @social-publisher. Writes still require approval.">
+          <SettingsSection title="Profiles" description="Use the platform/profile reference in chat, like instagram/brand-main. Writes still require approval.">
             <div className="space-y-2.5">
               {profiles.length === 0 ? (
                 <SettingsCard>
@@ -179,15 +186,25 @@ export default function SocialAccountsSettingsPage() {
                     <p className="text-sm text-white/46">No social profiles yet.</p>
                   </SettingsCardContent>
                 </SettingsCard>
-              ) : profiles.map((profile) => (
-                <ProfileRow
-                  key={`${profile.platform}:${profile.profile}`}
-                  profile={profile}
-                  busy={busy}
-                  onEdit={() => edit(profile)}
-                  onDelete={() => remove(profile)}
-                  onLogin={() => login(profile)}
-                />
+              ) : profilesByPlatform.map((platform) => platform.profiles.length > 0 && (
+                <div key={platform.id} className="space-y-2">
+                  <div className="flex items-center gap-2 px-1 text-xs font-medium uppercase tracking-[0.14em] text-white/34">
+                    <span>{platform.label}</span>
+                    <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] text-white/42">
+                      {platform.profiles.length}
+                    </span>
+                  </div>
+                  {platform.profiles.map((profile) => (
+                    <ProfileRow
+                      key={`${profile.platform}:${profile.profile}`}
+                      profile={profile}
+                      busy={busy}
+                      onEdit={() => edit(profile)}
+                      onDelete={() => remove(profile)}
+                      onLogin={() => login(profile)}
+                    />
+                  ))}
+                </div>
               ))}
             </div>
           </SettingsSection>
@@ -237,6 +254,15 @@ function ProfileRow({
   onLogin: () => void
 }) {
   const statusBusy = busy?.startsWith(`${profile.platform}:${profile.profile}:`)
+  const agentRef = `${profile.platform}/${profile.profile}`
+  const copyAgentRef = async () => {
+    try {
+      await navigator.clipboard.writeText(agentRef)
+      toast.success('Agent profile reference copied')
+    } catch {
+      toast.error('Could not copy profile reference')
+    }
+  }
   return (
     <SettingsCard>
       <SettingsCardContent>
@@ -250,12 +276,16 @@ function ProfileRow({
               <StatusPill profile={profile} />
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/42">
+              <span className="font-mono text-white/58">{agentRef}</span>
               <span>{profile.accountHandle || 'No handle'}</span>
               <span>{profile.accountUrl || 'No account URL'}</span>
               <span>{profile.message || profile.profileStatus || 'Unknown status'}</span>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" variant="ghost" onClick={copyAgentRef}>
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
             <Button type="button" size="sm" variant="secondary" onClick={onLogin} disabled={statusBusy}>
               {statusBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogIn className="h-3.5 w-3.5" />}
               Prepare Login
