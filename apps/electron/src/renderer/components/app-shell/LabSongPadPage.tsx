@@ -204,28 +204,27 @@ function selectionAnchor(
 
   if (markerRect.width || markerRect.height) {
     return {
-      x: Math.min(rect.right - 8, markerRect.left - node.scrollLeft + 4),
-      y: Math.min(rect.bottom - 18, markerRect.top - node.scrollTop + 2),
+      x: markerRect.left - node.scrollLeft,
+      y: markerRect.bottom - node.scrollTop,
     }
   }
 
   return {
-    x: Math.min(rect.right - 8, rect.left + rect.width * 0.5),
-    y: Math.min(rect.bottom - 18, rect.top + 28),
+    x: rect.left + 24,
+    y: rect.top + 42,
   }
 }
 
 function prosodyPopoverPosition(anchor: { x: number; y: number }) {
   const width = 300
-  const gutter = 6
-  const wouldOverflowRight = typeof window !== 'undefined' && anchor.x + width + gutter > window.innerWidth
-  const preferredLeft = wouldOverflowRight ? anchor.x - width - gutter : anchor.x + gutter
+  const gutter = 8
+  const preferredLeft = anchor.x - 18
   const left = typeof window === 'undefined'
     ? preferredLeft
     : Math.min(Math.max(12, preferredLeft), Math.max(12, window.innerWidth - width - 12))
   const top = typeof window === 'undefined'
     ? anchor.y
-    : Math.min(Math.max(12, anchor.y - 6), Math.max(12, window.innerHeight - 260))
+    : Math.min(Math.max(12, anchor.y + gutter), Math.max(12, window.innerHeight - 260))
   return { left, top }
 }
 
