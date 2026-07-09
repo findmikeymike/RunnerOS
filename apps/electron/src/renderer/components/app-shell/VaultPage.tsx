@@ -5,10 +5,8 @@ import {
   FileText,
   FolderOpen,
   FolderPlus,
-  Grid3X3,
   Image,
   Layers,
-  List,
   Loader2,
   Lock,
   Music2,
@@ -16,7 +14,6 @@ import {
   RefreshCw,
   Search,
   ShieldCheck,
-  SlidersHorizontal,
   Tags,
   Upload,
   Video,
@@ -38,7 +35,6 @@ interface VaultPageProps {
   workspaceName?: string
 }
 
-type ViewMode = 'grid' | 'list'
 type AssetPurpose = 'final' | 'seed'
 type ImportDraft = {
   open: boolean
@@ -127,7 +123,6 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   const [selectedCategory, setSelectedCategory] = React.useState<VaultCategory>('music')
   const [selectedKind, setSelectedKind] = React.useState<VaultAssetKind | 'all'>('all')
   const [selectedAssetId, setSelectedAssetId] = React.useState<string | null>(null)
-  const [viewMode, setViewMode] = React.useState<ViewMode>('grid')
   const [query, setQuery] = React.useState('')
   const [agentFilter, setAgentFilter] = React.useState<'all' | 'usable' | 'private'>('all')
   const [importDraft, setImportDraft] = React.useState<ImportDraft>(emptyImportDraft)
@@ -370,9 +365,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
               </div>
             )}
             <div className="border-b border-white/[0.055] bg-white/[0.012] p-4">
-              <div className="mb-4 flex gap-1.5 overflow-x-auto pb-0.5">
+              <div className="mb-4 flex gap-2 overflow-x-auto pb-0.5">
                 {CATEGORIES.map((category) => {
-                  const count = assets.filter((asset) => asset.category === category.id).length
                   const Icon = category.icon
                   const active = selectedCategory === category.id
                   return (
@@ -391,7 +385,6 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                     >
                       <Icon className={cn('h-3.5 w-3.5', active ? 'text-[#fb923c]' : 'text-white/42')} />
                       {category.label}
-                      <span className="text-white/32">{count}</span>
                     </button>
                   )
                 })}
@@ -399,11 +392,9 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h2 className="text-2xl font-semibold tracking-tight text-white/90">{categoryLabel(selectedCategory)}</h2>
-                  <p className="text-xs text-white/34">{filteredAssets.length} of {categoryAssets.length}</p>
+                  <p className="text-xs text-white/30">{categoryAssets.length ? `${categoryAssets.length} item${categoryAssets.length === 1 ? '' : 's'}` : 'Ready for files'}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <SegmentedButton active={viewMode === 'grid'} onClick={() => setViewMode('grid')} icon={Grid3X3} label="Grid" />
-                  <SegmentedButton active={viewMode === 'list'} onClick={() => setViewMode('list')} icon={List} label="List" />
                   <button
                     type="button"
                     disabled={busy !== null}
@@ -416,43 +407,30 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                 </div>
               </div>
 
-              <div className="grid gap-2 lg:grid-cols-[1fr_auto_auto]">
-                <label className="flex h-9 items-center gap-2 rounded-[10px] border border-white/[0.06] bg-white/[0.025] px-3">
-                  <Search className="h-4 w-4 text-white/34" />
+              <div className="grid gap-2 lg:grid-cols-[minmax(220px,420px)_auto]">
+                <label className="flex h-8 items-center gap-2 rounded-full border border-white/[0.035] bg-black/20 px-3">
+                  <Search className="h-3.5 w-3.5 text-white/26" />
                   <input
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Search labels, paths, notes, tags..."
-                    className="min-w-0 flex-1 bg-transparent text-sm text-white/76 outline-none placeholder:text-white/28"
+                    placeholder="Search"
+                    className="min-w-0 flex-1 bg-transparent text-xs text-white/66 outline-none placeholder:text-white/24"
                   />
                 </label>
-                <select value={agentFilter} onChange={(event) => setAgentFilter(event.target.value as typeof agentFilter)} className="h-9 rounded-[10px] border border-white/[0.06] bg-[#0b0b0b] px-3 text-xs text-white/70 outline-none">
+                <select value={agentFilter} onChange={(event) => setAgentFilter(event.target.value as typeof agentFilter)} className="h-8 rounded-full border border-white/[0.035] bg-black/20 px-3 text-xs text-white/52 outline-none">
                   <option value="all">All visibility</option>
                   <option value="usable">Ready</option>
                   <option value="private">Private</option>
                 </select>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuery('')
-                    setAgentFilter('all')
-                    selectKind('all')
-                  }}
-                  className="inline-flex h-9 items-center gap-1.5 rounded-[10px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs text-white/56 hover:bg-white/[0.045]"
-                >
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                  Reset
-                </button>
               </div>
 
               <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
-                <KindChip active={selectedKind === 'all'} label="All" count={categoryAssets.length} onClick={() => selectKind('all')} />
+                <KindChip active={selectedKind === 'all'} label="All" onClick={() => selectKind('all')} />
                 {CATEGORY_KIND_LABELS[selectedCategory].map((item) => (
                   <KindChip
                     key={item.kind}
                     active={selectedKind === item.kind}
                     label={item.label}
-                    count={categoryAssets.filter((asset) => asset.kind === item.kind).length}
                     onClick={() => selectKind(item.kind)}
                   />
                 ))}
@@ -462,12 +440,6 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
             <div className="h-full min-h-0 overflow-y-auto bg-[#060606] p-4 pb-28">
               {filteredAssets.length === 0 ? (
                 <EmptyState category={selectedCategory} />
-              ) : viewMode === 'grid' ? (
-                <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
-                  {filteredAssets.map((asset) => (
-                    <AssetCard key={asset.id} asset={asset} selected={asset.id === selectedAssetId} onSelect={() => setSelectedAssetId(asset.id)} />
-                  ))}
-                </div>
               ) : (
                 <div className="overflow-hidden rounded-[12px] border border-white/[0.055]">
                   {filteredAssets.map((asset) => (
@@ -770,47 +742,17 @@ function ImportModal({
 
 function ToolbarButton({ icon: Icon, label, active, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { icon: React.ElementType; label: string; active?: boolean }) {
   return (
-    <button {...props} type="button" className="inline-flex h-9 items-center gap-2 rounded-[9px] border border-white/[0.07] bg-white/[0.035] px-3 text-xs font-medium text-white/64 hover:bg-white/[0.06] hover:text-white disabled:cursor-wait disabled:opacity-50">
+    <button {...props} type="button" className="inline-flex h-8 items-center gap-2 rounded-full border border-white/[0.035] bg-white/[0.018] px-3 text-xs font-medium text-white/46 hover:border-white/[0.08] hover:bg-white/[0.04] hover:text-white/76 disabled:cursor-wait disabled:opacity-50">
       {active ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Icon className="h-3.5 w-3.5" />}
       {label}
     </button>
   )
 }
 
-function SegmentedButton({ active, icon: Icon, label, onClick }: { active: boolean; icon: React.ElementType; label: string; onClick: () => void }) {
+function KindChip({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} title={label} className={cn('flex h-8 w-8 items-center justify-center rounded-[8px] border transition-colors', active ? 'border-white/15 bg-white/12 text-white' : 'border-white/[0.06] bg-white/[0.025] text-white/44 hover:text-white/76')}>
-      <Icon className="h-3.5 w-3.5" />
-    </button>
-  )
-}
-
-function KindChip({ active, label, count, onClick }: { active: boolean; label: string; count: number; onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className={cn('shrink-0 rounded-full border px-3 py-1 text-[11px] transition-colors', active ? 'border-[#f97316]/45 bg-[#f97316]/12 text-white/86' : 'border-white/[0.06] bg-white/[0.02] text-white/44 hover:bg-white/[0.045]')}>
-      {label} <span className="ml-1 text-white/32">{count}</span>
-    </button>
-  )
-}
-
-function AssetCard({ asset, selected, onSelect }: { asset: VaultAssetRecord; selected: boolean; onSelect: () => void }) {
-  return (
-    <button type="button" onClick={onSelect} className={cn('min-h-[158px] rounded-[14px] border p-3 text-left transition-colors', selected ? 'border-[#f97316]/45 bg-[#2a1206]/50' : 'border-white/[0.055] bg-[#0d0d0d] hover:border-white/[0.12]')}>
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-white/[0.045]">
-          <AssetIcon asset={asset} className="h-5 w-5 text-white/50" />
-        </div>
-        <VisibilityBadge asset={asset} />
-      </div>
-      <div className="truncate text-sm font-semibold text-white/82">{asset.label}</div>
-      <div className="mt-1 truncate text-[11px] uppercase tracking-[0.12em] text-white/34">{formatKind(asset.kind)}</div>
-      <div className="mt-3 truncate font-mono text-[11px] text-white/32">{asset.relativePath ?? asset.absolutePath ?? 'No file path'}</div>
-      <div className="mt-3 flex flex-wrap gap-1">
-        {asset.category === 'music' && asset.bpm ? <TinyPill icon={Music2} label={`${asset.bpm} BPM`} /> : null}
-        {(asset.genre ?? []).slice(0, 1).map((genre) => <TinyPill key={`genre:${genre}`} icon={Music2} label={genre} />)}
-        {(asset.moods ?? []).slice(0, 2).map((mood) => <TinyPill key={`mood:${mood}`} icon={Tags} label={mood} />)}
-        {(asset.campaigns ?? []).slice(0, 2).map((campaign) => <TinyPill key={campaign} icon={Tags} label={campaign} />)}
-      </div>
+    <button type="button" onClick={onClick} className={cn('shrink-0 rounded-full px-3 py-1 text-[11px] transition-colors', active ? 'bg-white/[0.08] text-white/76' : 'text-white/34 hover:bg-white/[0.035] hover:text-white/60')}>
+      {label}
     </button>
   )
 }
