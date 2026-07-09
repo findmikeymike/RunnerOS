@@ -65,7 +65,18 @@ export interface CampaignScheduledJob {
   attempts: number;
   lastRunAt?: string;
   completedAt?: string;
+  externalActionPreview?: CampaignExternalActionPreview;
   error?: string;
+}
+
+export interface CampaignExternalActionPreview {
+  actionId: string;
+  actionDigest: string;
+  platform: string;
+  profileId: string;
+  preparedAt: string;
+  payloadDigest: string;
+  summary?: string;
 }
 
 export interface CampaignScheduleApproval {
@@ -85,6 +96,8 @@ export interface CampaignScheduleApprovalBinding {
   runAt: string;
   actionType: CampaignScheduledJobActionType;
   payloadDigest: string;
+  externalActionId?: string;
+  externalActionDigest?: string;
   accountSetId?: string;
   socialProfileRefs: SocialProfileRef[];
   assetRefs: CampaignAssetRef[];
@@ -482,7 +495,7 @@ export function applyCampaignCalendarWriteIntent(
 export function selectDueCampaignScheduledJobs(
   calendar: CampaignCalendar,
   now: Date = new Date(),
-  options: { allowLiveExternal?: boolean } = {},
+  options: { allowLiveExternal?: boolean; allowExternalPreparation?: boolean } = {},
 ): DueCampaignScheduledJob[] {
   const nowMs = now.getTime();
   return activeCampaignCalendarItems(calendar.items).flatMap((item) => {
@@ -505,6 +518,11 @@ export function selectDueCampaignScheduledJobs(
       && options.allowLiveExternal === true
       && job.approvalPolicy === 'preapproved-exact-payload'
       && hasApprovedScheduledJobPayload(item, job, now, calendar.campaignId);
+    const canPrepareExternal = liveExternal
+      && options.allowExternalPreparation === true
+      && !job.externalActionPreview
+      && (item.status === 'scheduled' || item.status === 'needs-approval');
+    if (canPrepareExternal) return [{ item, job, dueAt: job.runAt }];
     if ((item.status === 'needs-approval' && !liveExternalApproved)
       || job.approvalPolicy === 'approval-before-run'
       || (liveExternal && !liveExternalApproved)
@@ -624,6 +642,8 @@ function createApprovalBinding(
     runAt: job.runAt,
     actionType: job.actionType,
     payloadDigest: job.payloadDigest,
+    externalActionId: job.externalActionPreview?.actionId,
+    externalActionDigest: job.externalActionPreview?.actionDigest,
     accountSetId: item.accountSetId,
     socialProfileRefs: item.socialProfileRefs ?? [],
     assetRefs: item.assetRefs,
@@ -651,6 +671,8 @@ function approvalMatchesJob(
     && binding.runAt === job.runAt
     && binding.actionType === job.actionType
     && binding.payloadDigest === job.payloadDigest
+    && (binding.externalActionId ?? undefined) === (job.externalActionPreview?.actionId ?? undefined)
+    && (binding.externalActionDigest ?? undefined) === (job.externalActionPreview?.actionDigest ?? undefined)
     && (binding.accountSetId ?? undefined) === (item.accountSetId ?? undefined)
     && stableStringify(binding.socialProfileRefs) === stableStringify(item.socialProfileRefs ?? [])
     && stableStringify(binding.assetRefs) === stableStringify(item.assetRefs)
@@ -705,6 +727,7 @@ function normalizeScheduledJob(value: unknown): CampaignScheduledJob | undefined
     attempts: clampInt(job.attempts, 0, 999, 0),
     lastRunAt: cleanIso(job.lastRunAt),
     completedAt: cleanIso(job.completedAt),
+    externalActionPreview: normalizeExternalActionPreview(job.externalActionPreview),
     error: clean(job.error),
   };
 }
@@ -856,6 +879,8 @@ function normalizeApprovalBinding(value: unknown): CampaignScheduleApprovalBindi
     runAt,
     actionType,
     payloadDigest,
+    externalActionId: clean(binding.externalActionId),
+    externalActionDigest: clean(binding.externalActionDigest),
     accountSetId: clean(binding.accountSetId),
     socialProfileRefs: normalizeSocialProfileRefs(binding.socialProfileRefs) ?? [],
     assetRefs: normalizeAssetRefs(binding.assetRefs),
@@ -907,6 +932,27 @@ function normalizeExternalReceipt(value: unknown): CampaignExternalExecutionRece
     payloadDigest,
     approvalId,
     summary: clean(receipt.summary),
+  };
+}
+
+function normalizeExternalActionPreview(value: unknown): CampaignExternalActionPreview | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const preview = value as Partial<CampaignExternalActionPreview>;
+  const actionId = clean(preview.actionId);
+  const actionDigest = clean(preview.actionDigest);
+  const platform = clean(preview.platform);
+  const profileId = clean(preview.profileId);
+  const preparedAt = cleanIso(preview.preparedAt);
+  const payloadDigest = clean(preview.payloadDigest);
+  if (!actionId || !actionDigest || !platform || !profileId || !preparedAt || !payloadDigest) return undefined;
+  return {
+    actionId,
+    actionDigest,
+    platform,
+    profileId,
+    preparedAt,
+    payloadDigest,
+    summary: clean(preview.summary),
   };
 }
 

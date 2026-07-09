@@ -448,6 +448,7 @@ function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
   const job = item.job
   const latestRun = item.runHistory.at(-1)
   const receipt = latestRun?.externalReceipt
+  const preview = job?.externalActionPreview
   if (!job) return null
   const externalPending = isLiveExternalActionType(job.actionType) && item.status !== 'done'
   return (
@@ -460,6 +461,15 @@ function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
       {externalPending ? (
         <div className="mt-2 rounded-[8px] border border-yellow-300/10 bg-yellow-300/[0.055] px-2 py-1.5 text-[11px] leading-4 text-yellow-100/64">
           Exact approval is required before posting or outreach.
+        </div>
+      ) : null}
+      {preview ? (
+        <div className="mt-2 rounded-[8px] border border-blue-300/10 bg-blue-300/[0.045] p-2 text-[11px] leading-4 text-blue-100/68">
+          <div className="font-medium">Dry run {preview.actionId}</div>
+          <div className="mt-1 text-blue-100/52">
+            {preview.platform} · {preview.profileId} · {formatCompactDateTime(preview.preparedAt)}
+          </div>
+          {preview.summary ? <div className="mt-1 text-blue-100/52">{preview.summary}</div> : null}
         </div>
       ) : null}
       {job.error ? (

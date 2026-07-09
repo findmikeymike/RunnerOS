@@ -11,6 +11,7 @@ import {
   updateCampaignCalendarItem,
   type CampaignCalendar,
   type CampaignCalendarItem,
+  type CampaignExternalActionPreview,
   type CampaignExternalExecutionReceipt,
   type CampaignJobRun,
   type CampaignScheduleApproval,
@@ -36,6 +37,18 @@ export interface CampaignScheduledJobRunnerDeps {
     workflowSlug: string
     triggerInputs: Record<string, unknown>
   }): Promise<{ runId: string }>
+  prepareExternalJob?(input: {
+    workspaceId: string
+    workspaceRootPath: string
+    item: CampaignCalendarItem
+    job: CampaignScheduledJob
+  }): Promise<{
+    actionId: string
+    actionDigest: string
+    platform: string
+    profileId: string
+    summary?: string
+  }>
   executeExternalJob?(input: {
     workspaceId: string
     workspaceRootPath: string
@@ -92,7 +105,10 @@ export class CampaignScheduledJobRunner {
       }
 
       let calendar = parsed.calendar
-      const due = selectDueCampaignScheduledJobs(calendar, now, { allowLiveExternal: Boolean(this.deps.executeExternalJob) })
+      const due = selectDueCampaignScheduledJobs(calendar, now, {
+        allowLiveExternal: Boolean(this.deps.executeExternalJob),
+        allowExternalPreparation: Boolean(this.deps.prepareExternalJob),
+      })
       const result: CampaignScheduledJobRunnerResult = {
         scanned: due.length,
         started: 0,
@@ -169,6 +185,35 @@ export class CampaignScheduledJobRunner {
             markMissed(current, current.job, now, 'Scheduled job missed the 24 hour grace window.'),
           )
           result.missed += 1
+          continue
+        }
+
+        if (isLiveExternalActionType(current.job.actionType) && !current.job.externalActionPreview && this.deps.prepareExternalJob) {
+          try {
+            const prepared = await this.deps.prepareExternalJob({
+              workspaceId,
+              workspaceRootPath,
+              item: current,
+              job: current.job,
+            })
+            const preview = validateExternalActionPreview(current, current.job, prepared, now)
+            calendar = await this.persistItem(
+              workspaceId,
+              workspaceRootPath,
+              calendar,
+              markExternalPrepared(current, current.job, preview),
+            )
+            result.blocked += 1
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error)
+            calendar = await this.persistItem(
+              workspaceId,
+              workspaceRootPath,
+              calendar,
+              markNeedsApproval(current, current.job, `External dry-run failed: ${message}`),
+            )
+            result.failed += 1
+          }
           continue
         }
 
@@ -274,6 +319,48 @@ export class CampaignScheduledJobRunner {
     this.deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
     return nextCalendar
   }
+}
+
+function validateExternalActionPreview(
+  item: CampaignCalendarItem,
+  job: CampaignScheduledJob,
+  prepared: Awaited<ReturnType<NonNullable<CampaignScheduledJobRunnerDeps['prepareExternalJob']>>>,
+  now: Date,
+): CampaignExternalActionPreview {
+  const actionId = prepared.actionId.trim()
+  const actionDigest = prepared.actionDigest.trim()
+  const platform = prepared.platform.trim()
+  const profileId = prepared.profileId.trim()
+  if (!actionId.startsWith('act_')) throw new Error('Social dry-run returned an invalid action id.')
+  if (!actionDigest) throw new Error('Social dry-run returned no action digest.')
+  const matchesProfile = (item.socialProfileRefs ?? []).some((ref) => (
+    ref.platform === platform && ref.profileId === profileId
+  ))
+  if (!matchesProfile) throw new Error(`Social dry-run resolved unexpected profile ${platform}/${profileId}.`)
+  return {
+    actionId,
+    actionDigest,
+    platform,
+    profileId,
+    preparedAt: now.toISOString(),
+    payloadDigest: job.payloadDigest,
+    summary: prepared.summary?.trim() || undefined,
+  }
+}
+
+function markExternalPrepared(
+  item: CampaignCalendarItem,
+  job: CampaignScheduledJob,
+  preview: CampaignExternalActionPreview,
+): CampaignCalendarItem {
+  return updateCampaignCalendarItem(item, {
+    status: 'needs-approval',
+    job: {
+      ...job,
+      externalActionPreview: preview,
+      error: `Dry-run ${preview.actionId} is ready for exact approval.`,
+    },
+  })
 }
 
 function markRunning(item: CampaignCalendarItem, job: CampaignScheduledJob, now: Date): CampaignCalendarItem {

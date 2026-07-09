@@ -10,6 +10,7 @@ import {
   createCampaignScheduledJob,
   approveCampaignCalendarItem,
   parseCampaignCalendarDocResult,
+  selectDueCampaignScheduledJobs,
   serializeCampaignCalendarBody,
   updateCampaignCalendarItem,
   type CampaignCalendarItem,
@@ -157,6 +158,101 @@ describe('CampaignScheduledJobRunner', () => {
     expect(saved.status).toBe('needs-approval')
     expect(saved.job?.attempts).toBe(0)
     expect(saved.runHistory).toHaveLength(0)
+  })
+
+  test('prepares a due external dry-run before requesting exact approval', async () => {
+    const root = makeRoot()
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      accountSetId: 'artist-main',
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'ig-main' }],
+      job: createCampaignScheduledJob({
+        runAt: '2026-07-10T14:00:00.000Z',
+        actionType: 'post-asset',
+        payload: { caption: 'New song Friday.' },
+      }),
+    })
+    writeCalendar(root, [item])
+
+    const prepared: string[] = []
+    const runner = new CampaignScheduledJobRunner({
+      executePromptJob: async () => ({ sessionId: 'session-1' }),
+      startWorkflow: async () => ({ runId: 'run-1' }),
+      prepareExternalJob: async ({ job }) => {
+        prepared.push(job.id)
+        return {
+          actionId: 'act_campaign_1',
+          actionDigest: 'sha256:dry-run-1',
+          platform: 'instagram',
+          profileId: 'ig-main',
+          summary: 'Instagram post ready for approval.',
+        }
+      },
+    })
+
+    const result = await runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:01:00.000Z'))
+    const saved = readCalendar(root).items[0]!
+
+    expect(result.blocked).toBe(1)
+    expect(prepared).toEqual([item.job!.id])
+    expect(saved.status).toBe('needs-approval')
+    expect(saved.job?.attempts).toBe(0)
+    expect(saved.runHistory).toHaveLength(0)
+    expect(saved.job?.externalActionPreview).toEqual({
+      actionId: 'act_campaign_1',
+      actionDigest: 'sha256:dry-run-1',
+      platform: 'instagram',
+      profileId: 'ig-main',
+      preparedAt: '2026-07-10T14:01:00.000Z',
+      payloadDigest: item.job!.payloadDigest,
+      summary: 'Instagram post ready for approval.',
+    })
+  })
+
+  test('invalidates approval when a prepared external action changes', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { caption: 'New song Friday.' },
+    })
+    const preparedJob = {
+      ...job,
+      externalActionPreview: {
+        actionId: 'act_campaign_1',
+        actionDigest: 'sha256:dry-run-1',
+        platform: 'instagram',
+        profileId: 'ig-main',
+        preparedAt: '2026-07-10T13:45:00.000Z',
+        payloadDigest: job.payloadDigest,
+      },
+    }
+    const approved = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      job: preparedJob,
+    }), { campaignId: 'campaign-1', now: '2026-07-10T13:50:00.000Z' })
+    const changed = updateCampaignCalendarItem(approved, {
+      job: {
+        ...preparedJob,
+        externalActionPreview: { ...preparedJob.externalActionPreview, actionId: 'act_campaign_2' },
+      },
+    })
+
+    const due = selectDueCampaignScheduledJobs({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [changed],
+      updatedAt: '2026-07-10T13:50:00.000Z',
+    }, new Date('2026-07-10T14:01:00.000Z'), { allowLiveExternal: true })
+
+    expect(due[0]?.blockedReason).toBe('needs-approval')
   })
 
   test('records a structured receipt for an exact-approved external job', async () => {
