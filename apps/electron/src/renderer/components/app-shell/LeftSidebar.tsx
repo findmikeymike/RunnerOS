@@ -201,7 +201,7 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
             const isBrainSeparator = item.id === 'nav:brain-separator'
             return (
               <div key={item.id} className={cn("py-1 px-2", isBrainSeparator && "pl-[31px] pr-0")} aria-hidden="true">
-                <div className={cn("h-px bg-foreground/5", isBrainSeparator && "w-9 bg-foreground/8")} />
+                <div className={cn("h-px bg-foreground/5", isBrainSeparator && "w-9 bg-white/18")} />
               </div>
             )
           }
