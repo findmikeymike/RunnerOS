@@ -322,14 +322,14 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   return (
     <div className="h-full overflow-hidden bg-[#050505] text-white">
       <div className="flex h-full flex-col px-5 py-4 xl:px-7">
-        <header className="mb-3 shrink-0 rounded-[18px] border border-white/[0.055] bg-[#090909] px-5 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        <header className="mb-4 shrink-0 px-1">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/[0.06] bg-white/[0.025] px-3 py-1">
-                <FolderOpen className="h-3.5 w-3.5 text-white/48" />
-                <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/52">Artist Library</span>
+              <div className="mb-1 inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.18em] text-[#fb923c]/72">
+                <FolderOpen className="h-3.5 w-3.5" />
+                Artist Library
               </div>
-              <h1 className="text-4xl font-medium tracking-tight text-white/92">Vault</h1>
+              <h1 className="text-[42px] font-medium leading-none tracking-tight text-white/94">Vault</h1>
               <p className="mt-1 max-w-2xl text-sm text-white/42">{workspaceName || 'Workspace'} files, references, and private material.</p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -341,7 +341,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
           </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
           <main
             onDragEnter={(event) => {
               event.preventDefault()
@@ -356,8 +356,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
             }}
             onDrop={(event) => void handleDrop(event)}
             className={cn(
-              'relative min-h-0 overflow-hidden rounded-[18px] border border-dashed bg-[#080808] transition-colors',
-              dragActive ? 'border-[#f97316]/55 bg-[#140a04] shadow-[0_0_40px_rgba(249,115,22,0.12)]' : 'border-white/[0.08]',
+              'relative min-h-0 overflow-hidden rounded-[18px] border bg-[#080808] transition-colors',
+              dragActive ? 'border-[#f97316]/55 bg-[#140a04] shadow-[0_0_40px_rgba(249,115,22,0.12)]' : 'border-white/[0.055]',
             )}
           >
             {dragActive && (
@@ -369,8 +369,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                 </div>
               </div>
             )}
-            <div className="border-b border-white/[0.06] p-4">
-              <div className="mb-3 flex gap-1.5 overflow-x-auto pb-0.5">
+            <div className="border-b border-white/[0.055] bg-white/[0.012] p-4">
+              <div className="mb-4 flex gap-1.5 overflow-x-auto pb-0.5">
                 {CATEGORIES.map((category) => {
                   const count = assets.filter((asset) => asset.category === category.id).length
                   const Icon = category.icon
@@ -385,8 +385,8 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                         setSelectedAssetId(assets.find((asset) => asset.category === category.id)?.id ?? null)
                       }}
                       className={cn(
-                        'inline-flex h-8 shrink-0 items-center gap-2 rounded-full border px-3 text-xs font-medium transition-colors',
-                        active ? 'border-[#f97316]/45 bg-[#2a1206]/70 text-white' : 'border-white/[0.06] bg-white/[0.025] text-white/58 hover:border-white/[0.14] hover:text-white/82',
+                        'inline-flex h-9 shrink-0 items-center gap-2 rounded-[10px] border px-3 text-xs font-medium transition-colors',
+                        active ? 'border-[#f97316]/45 bg-[#2a1206]/80 text-white shadow-[0_0_18px_rgba(249,115,22,0.08)]' : 'border-transparent bg-transparent text-white/48 hover:bg-white/[0.035] hover:text-white/82',
                       )}
                     >
                       <Icon className={cn('h-3.5 w-3.5', active ? 'text-[#fb923c]' : 'text-white/42')} />
@@ -398,7 +398,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
               </div>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-white/88">{categoryLabel(selectedCategory)}</h2>
+                  <h2 className="text-2xl font-semibold tracking-tight text-white/90">{categoryLabel(selectedCategory)}</h2>
                   <p className="text-xs text-white/34">{filteredAssets.length} of {categoryAssets.length}</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -459,7 +459,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
               </div>
             </div>
 
-            <div className="h-full min-h-0 overflow-y-auto p-4 pb-28">
+            <div className="h-full min-h-0 overflow-y-auto bg-[#060606] p-4 pb-28">
               {filteredAssets.length === 0 ? (
                 <EmptyState category={selectedCategory} />
               ) : viewMode === 'grid' ? (
@@ -534,13 +534,23 @@ function AssetDetailPanel({
 
   if (!asset) {
     return (
-      <aside className="hidden rounded-[18px] border border-white/[0.055] bg-[#080808] p-5 xl:flex xl:items-center xl:justify-center">
-        <div className="text-center">
-          <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-[14px] border border-white/[0.055] bg-white/[0.025]">
-            <Tags className="h-5 w-5 text-white/24" />
+      <aside className="hidden min-h-0 rounded-[18px] border border-white/[0.055] bg-[#080808] p-4 xl:flex xl:flex-col">
+        <div className="border-b border-white/[0.055] pb-4">
+          <div className="mb-2 inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-[#fb923c]/64">
+            <Tags className="h-3.5 w-3.5" />
+            Inspector
           </div>
-          <div className="text-sm font-medium text-white/58">Tag after import</div>
-          <div className="mt-1 max-w-[220px] text-xs leading-5 text-white/30">Drop files into the library, select one, then mark what it is and whether agents can use it.</div>
+          <h2 className="text-xl font-semibold tracking-tight text-white/84">Quick tagger</h2>
+          <p className="mt-1 text-sm leading-5 text-white/34">Select an asset to preview, tag, and decide whether agents can use it.</p>
+        </div>
+        <div className="flex flex-1 items-center justify-center">
+          <div className="max-w-[260px] text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[18px] border border-white/[0.055] bg-white/[0.025]">
+              <Upload className="h-6 w-6 text-white/24" />
+            </div>
+            <div className="text-sm font-semibold text-white/62">Drop files first</div>
+            <div className="mt-1 text-xs leading-5 text-white/30">Then use quick tags like Master, Press Shot, Stem, or Social Pack.</div>
+          </div>
         </div>
       </aside>
     )
@@ -564,7 +574,12 @@ function AssetDetailPanel({
 
   return (
     <aside className="min-h-0 overflow-y-auto rounded-[18px] border border-white/[0.055] bg-[#080808] p-4">
-      <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="mb-4 border-b border-white/[0.055] pb-4">
+        <div className="mb-3 inline-flex items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-[#fb923c]/64">
+          <Tags className="h-3.5 w-3.5" />
+          Inspector
+        </div>
+        <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-[10px] bg-white/[0.045]">
             <AssetIcon asset={asset} className="h-5 w-5 text-white/54" />
@@ -573,9 +588,10 @@ function AssetDetailPanel({
           <p className="mt-1 text-xs uppercase tracking-[0.12em] text-white/34">{formatKind(asset.kind)}</p>
         </div>
         <VisibilityBadge asset={asset} />
+        </div>
       </div>
 
-      <div className="mb-4 rounded-[12px] border border-white/[0.055] bg-white/[0.02] p-3">
+      <div className="mb-4 rounded-[12px] border border-white/[0.055] bg-black/30 p-3">
         <div className="mb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-white/36">Preview</div>
         <div className="flex h-36 flex-col items-center justify-center rounded-[10px] border border-white/[0.05] bg-[#050505] text-center">
           <AssetIcon asset={asset} className="mb-2 h-8 w-8 text-white/30" />
@@ -820,12 +836,12 @@ function AssetRow({ asset, selected, onSelect }: { asset: VaultAssetRecord; sele
 function EmptyState({ category }: { category: VaultCategory }) {
   const Icon = CATEGORIES.find((item) => item.id === category)?.icon ?? FolderOpen
   return (
-    <div className="flex min-h-[300px] flex-col items-center justify-center rounded-[14px] border border-dashed border-white/[0.06] bg-white/[0.012] text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-[16px] border border-white/[0.05] bg-white/[0.02]">
-        <Icon className="h-5 w-5 text-white/24" />
+    <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[14px] border border-dashed border-[#f97316]/20 bg-[#0b0805] text-center">
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-[#f97316]/16 bg-[#f97316]/8">
+        <Icon className="h-7 w-7 text-[#fb923c]/46" />
       </div>
-      <div className="text-sm font-semibold text-white/64">No {categoryLabel(category).toLowerCase()} assets yet</div>
-      <div className="mt-1 text-xs text-white/30">Drop files here, or use Add above.</div>
+      <div className="text-base font-semibold text-white/72">Drop {categoryLabel(category).toLowerCase()} here</div>
+      <div className="mt-1 max-w-[320px] text-sm leading-5 text-white/34">Files are staged before import so you can confirm where they land.</div>
     </div>
   )
 }
