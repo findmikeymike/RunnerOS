@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-08",
+  "generatedAt": "2026-07-09",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -58,11 +58,11 @@
     "finalsPromotionWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 119,
+    "knownSkillCount": 76,
     "bundledSkillCount": 76,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 119,
-    "knownSourceCount": 24,
+    "userGlobalSkillCount": 0,
+    "knownSourceCount": 25,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
     "missingSources": [],
@@ -1466,7 +1466,9 @@
       "permissionMode": "ask",
       "thinkingLevel": "high",
       "skills": [],
-      "sources": [],
+      "sources": [
+        "trypost"
+      ],
       "optionalSources": [],
       "trustedWorkerTools": [],
       "visualAgent": false,
@@ -1485,7 +1487,8 @@
         "approval-capable",
         "artifact-output-aware",
         "explicit-approval-required",
-        "external-action-boundary"
+        "external-action-boundary",
+        "requires-source-activation"
       ],
       "inputs": "Social post request, platform, account/profile, copy, media paths, schedule target, campaign context, and approval status.",
       "outputs": "TryPost-ready draft, missing-fields checklist, approval packet, and publish/schedule receipt once wired and approved."

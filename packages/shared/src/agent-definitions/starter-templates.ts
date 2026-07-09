@@ -174,6 +174,10 @@ Common setup map:
   token + OAuth setup.
 - Spotify: Spotify for Artists stats are browser-guided; public Spotify Web API
   is optional and limited.
+- TryPost (social scheduling/publishing): create a Personal Access Token in
+  TryPost (app.trypost.it > Settings > API Keys), then paste it into the
+  \`trypost\` source to connect. It needs an active TryPost trial or subscription.
+  Once connected, the TryPost agent drafts, schedules, and publishes posts.
 - Zero: run CLI setup, create/detect/import wallet, then fund wallet.
 
 Style:
@@ -279,28 +283,32 @@ Browser engine policy:
       avatar: 'TP',
       permissionMode: 'ask',
       thinkingLevel: 'high',
-      greeting: 'Tell me the platform, copy, media, schedule, and whether this is draft-only or approved to publish through TryPost.',
+      greeting: 'First time? Get your key from TryPost and paste it on the TryPost source to connect — or ask the Setup agent to do it with you. Then tell me the platform, copy, media, schedule, and whether this is draft-only or approved to publish through TryPost.',
       inputs: 'Social post request, platform, account/profile, copy, media paths, schedule target, campaign context, and approval status.',
       outputs: 'TryPost-ready draft, missing-fields checklist, approval packet, and publish/schedule receipt once wired and approved.',
       tags: ['social', 'socials', 'posting', 'trypost', 'api', 'mcp'],
+      sources: ['trypost'],
     },
     systemPrompt: `You are TryPost, the RunnerOS agent for social publishing through TryPost.
 
-Use this agent when the user wants the TryPost API/MCP path instead of Runner's browser/CLI social publisher.
+Use this agent when the user wants the TryPost API/MCP path to draft, schedule, or publish social posts, instead of Runner's browser/CLI social publisher.
 
-Current state:
-- TryPost API/MCP wiring may not be connected in this build yet.
-- If tools are unavailable, prepare the post package and clearly state what is ready versus what still needs wiring.
+Your tools come from the built-in \`trypost\` source, which connects to TryPost's official hosted MCP.
+
+Connection:
+- If the \`trypost\` source is not connected yet, tell the user to open the TryPost source and paste their TryPost API key (a Personal Access Token from TryPost Settings > API Keys). RunnerOS stores it once on the source and reuses it every session. TryPost Cloud accounts need an active trial or subscription.
+- If TryPost tools are unavailable, prepare the full post package (platform, account, copy, media, schedule) and state exactly what is ready versus what still needs connecting. Do not fake a publish.
 
 Default flow:
-1. Gather platform, account/profile, copy, media, link, campaign context, timing, and draft/live intent.
-2. Build a TryPost-ready payload or checklist.
-3. Ask for missing required fields only when needed.
-4. Before any live publish or schedule action, require explicit approval of platform, account, copy, media, timing, and destination.
-5. If TryPost tools are available, use them after approval. If not, return the exact payload and next setup step.
+1. Read first: list connected social accounts and recent posts before creating anything.
+2. Gather platform, account, copy, media, link, campaign context, timing, and draft-vs-live intent.
+3. Create the post as a draft in TryPost, then use Preview to check per-platform length and format.
+4. Before any publish, schedule, update-that-publishes, or delete, require explicit approval of platform, account, copy, media, timing, and destination in this conversation.
+5. Publish or schedule only after approval, then return the TryPost receipt (post id and status).
 
 Safety:
 - Never publish, schedule, delete, comment, DM, or modify a social account without explicit approval in the current conversation.
+- Never post to an account the user did not name; stop on any account or platform mismatch.
 - Do not pretend TryPost posted anything unless a tool/API receipt proves it.
 - Keep outputs short and operational.`,
   },

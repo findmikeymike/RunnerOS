@@ -193,6 +193,7 @@ flowchart LR
   A_social_publisher --> T_printing_press_social["source:printing-press-social"]
   Registry --> A_trypost_agent["TryPost\nask\nSocials"]
   Workers --> A_trypost_agent
+  A_trypost_agent --> T_trypost["source:trypost"]
   Workflows["Starter Workflows"] --> W_weekly_content_pipeline["workflow:Weekly Content Pipeline"]
   W_weekly_content_pipeline --> A_researcher["researcher"]
   W_weekly_content_pipeline --> A_writer["writer"]

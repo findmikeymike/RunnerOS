@@ -26,6 +26,7 @@ const GOOGLE_CALENDAR_SLUG = 'google-calendar';
 const GMAIL_SLUG = 'gmail';
 const GOOGLE_DRIVE_SLUG = 'google-drive';
 const META_ADS_SLUG = 'meta-ads';
+const TRYPOST_SLUG = 'trypost';
 const NOTEBOOKLM_SLUG = 'notebooklm';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 const OPEN_SLIDE_SLUG = 'open-slide';
@@ -459,6 +460,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getGmailSource(workspaceId, workspaceRootPath),
     getGoogleDriveSource(workspaceId, workspaceRootPath),
     getMetaAdsSource(workspaceId, workspaceRootPath),
+    getTryPostSource(workspaceId, workspaceRootPath),
     getNotebookLmSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
@@ -1307,6 +1309,58 @@ export function getMetaAdsSource(workspaceId: string, workspaceRootPath: string)
 }
 
 /**
+ * Built-in source for TryPost's official hosted social-publishing MCP.
+ */
+export function getTryPostSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-trypost',
+    name: 'TryPost',
+    slug: TRYPOST_SLUG,
+    enabled: true,
+    provider: 'trypost',
+    type: 'mcp',
+    mcp: {
+      transport: 'http',
+      url: 'https://app.trypost.it/mcp/trypost',
+      authType: 'bearer',
+    },
+    tagline: "Draft, schedule, and publish social posts across 14 platform connections through TryPost's official MCP.",
+    icon: '📮',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# TryPost',
+        '',
+        "This source connects RunnerOS to TryPost's official hosted MCP at `https://app.trypost.it/mcp/trypost`.",
+        '',
+        'Auth:',
+        '- Connect the source and paste a TryPost Personal Access Token (create one in TryPost Settings > API Keys). RunnerOS stores it per source and sends it as `Authorization: Bearer`; the same token works for the REST API.',
+        '- Enter the token on the TryPost source connection dialog, not the global Secrets page. RunnerOS keeps it in the source credential store and reuses it across every session — the user connects once.',
+        '- TryPost Cloud accounts need an active trial or subscription (HTTP 402 means no active plan). Self-hosted instances skip this check.',
+        '',
+        'Tools cover: posts (list, get, create, update, publish, delete, attach media from URL or upload, preview, get metrics), platforms (list content types and per-platform limits), signatures, labels, social accounts (list, toggle), workspace, and API keys.',
+        '',
+        'Rules:',
+        '- Start read-only: list connected social accounts and existing posts before creating anything.',
+        '- Build a draft first, then use Preview to check per-platform length and format.',
+        '- Treat create-with-publish, update-that-publishes, publish, and delete as live, externally visible actions that require explicit user approval in the current chat.',
+        '- Never publish or schedule on an account the user did not name. Stop on any account or platform mismatch.',
+        '- Do not claim a post published unless a TryPost tool receipt (post id and status) proves it.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
+/**
  * Built-in source for the local NotebookLM MCP server.
  */
 export function getNotebookLmSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
@@ -1885,6 +1939,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === GMAIL_SLUG
     || slug === GOOGLE_DRIVE_SLUG
     || slug === META_ADS_SLUG
+    || slug === TRYPOST_SLUG
     || slug === NOTEBOOKLM_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
     || slug === OPEN_SLIDE_SLUG

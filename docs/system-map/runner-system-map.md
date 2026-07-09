@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-08
+last_verified: 2026-07-09
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-07-08
+Generated: 2026-07-09
 
 ## Why This Exists
 
@@ -45,8 +45,8 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Outputs -> Finals promotion: wired
 - Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
 - Permission modes: ask 31, safe 7
-- Known skills: 119 (76 bundled, 6 system, 119 user-global on this machine)
-- Known builtin sources: 24
+- Known skills: 76 (76 bundled, 6 system, 0 user-global on this machine)
+- Known builtin sources: 25
 
 ## Reference Health
 
@@ -649,11 +649,11 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
 - Skills: none
-- Sources: none
+- Sources: `trypost`
 - Optional sources: none
 - Trusted tools: none
 - Tags: `social`, `socials`, `posting`, `trypost`, `api`, `mcp`
-- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`
+- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
 - Inputs: Social post request, platform, account/profile, copy, media paths, schedule target, campaign context, and approval status.
 - Outputs: TryPost-ready draft, missing-fields checklist, approval packet, and publish/schedule receipt once wired and approved.
 

@@ -149,14 +149,6 @@ const SECRET_PRESETS: SecretPreset[] = [
   },
   {
     group: 'Promotion',
-    name: 'TRYPOST_API_KEY',
-    label: 'TryPost API key',
-    description: 'Used by the TryPost agent for social publishing through TryPost.',
-    placeholder: 'TryPost API key',
-    storage: 'env',
-  },
-  {
-    group: 'Promotion',
     name: 'POSTIZ_API_KEY',
     label: 'Postiz API key',
     description: 'Used by Postiz-compatible social scheduling and publishing workflows.',
@@ -628,8 +620,8 @@ const SERVICES: SecretService[] = [
     group: 'Promotion',
     title: 'Social Publishing',
     description: 'Optional posting services for agents that publish or schedule content.',
-    presetNames: ['TRYPOST_API_KEY', 'POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
-    optionalPresetNames: ['TRYPOST_API_KEY', 'POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
+    presetNames: ['POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
+    optionalPresetNames: ['POSTIZ_API_KEY', 'POSTIZ_BASE_URL'],
   },
   {
     id: 'shopify',
