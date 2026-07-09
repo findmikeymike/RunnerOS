@@ -9,10 +9,13 @@ import {
   Disc3,
   Eye,
   Megaphone,
+  Pencil,
   Plus,
   Settings2,
   ShieldCheck,
+  Trash2,
   Users,
+  X,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -37,6 +40,7 @@ import {
   parseArtistNetworkDocResult,
   serializeArtistNetworkBody,
   unlinkNetworkPersonFromWorkspace,
+  updateNetworkPerson,
   type ArtistNetwork,
   type ArtistNetworkPerson,
 } from '@/lib/artist-network'
@@ -163,6 +167,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
   }, [docs])
   const [optimisticReleaseBoard, setOptimisticReleaseBoard] = React.useState<ReleaseBoard | null>(null)
   const [teamPickerOpen, setTeamPickerOpen] = React.useState(false)
+  const [editingTeamPerson, setEditingTeamPerson] = React.useState<ArtistNetworkPerson | null>(null)
 
   React.useEffect(() => {
     if (savedMission) setOptimisticMission(null)
@@ -407,6 +412,54 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     }
   }, [artistNetwork.categories, artistNetwork.people, mission.title, saveArtistNetwork, workspaceId])
 
+  const removeCampaignTeamPerson = React.useCallback(async (person: ArtistNetworkPerson) => {
+    try {
+      await saveArtistNetwork({
+        version: 1,
+        categories: artistNetwork.categories,
+        people: artistNetwork.people.map((item) => (
+          item.id === person.id ? unlinkNetworkPersonFromWorkspace(item, workspaceId) : item
+        )),
+        updatedAt: new Date().toISOString(),
+      })
+      toast.success('Removed from release team')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [artistNetwork.categories, artistNetwork.people, saveArtistNetwork, workspaceId])
+
+  const updateCampaignTeamPerson = React.useCallback(async (person: ArtistNetworkPerson, input: { name: string; canHelpWith: string }) => {
+    const name = input.name.replace(/\s+/g, ' ').trim()
+    if (!name) {
+      toast.error('Name is required.')
+      return
+    }
+    try {
+      await saveArtistNetwork({
+        version: 1,
+        categories: artistNetwork.categories,
+        people: artistNetwork.people.map((item) => (
+          item.id === person.id
+            ? updateNetworkPerson(item, {
+                name,
+                category: item.category,
+                role: item.role,
+                contact: item.contact,
+                notes: item.notes,
+                canHelpWith: input.canHelpWith,
+                tags: item.tags.join(', '),
+              })
+            : item
+        )),
+        updatedAt: new Date().toISOString(),
+      })
+      setEditingTeamPerson(null)
+      toast.success('Team member updated')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
+    }
+  }, [artistNetwork.categories, artistNetwork.people, saveArtistNetwork])
+
   const chooseAndImport = React.useCallback(
     async (kindHint: MissionAssetKindHint = 'any') => {
       if (!hasMission) {
@@ -495,6 +548,8 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
             networkPeople={artistNetwork.people}
             disabled={!artistNetworkResult.ok || !inheritedArtistProfileWorkspaceId}
             onOpenPicker={() => setTeamPickerOpen(true)}
+            onEditPerson={setEditingTeamPerson}
+            onRemovePerson={removeCampaignTeamPerson}
           />
 
           <CommandCard>
@@ -567,6 +622,15 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
         disabled={!artistNetworkResult.ok || !inheritedArtistProfileWorkspaceId}
         onOpenChange={setTeamPickerOpen}
         onTogglePerson={toggleCampaignTeamPerson}
+      />
+
+      <TeamPersonEditDialog
+        person={editingTeamPerson}
+        onOpenChange={(open) => {
+          if (!open) setEditingTeamPerson(null)
+        }}
+        onSave={updateCampaignTeamPerson}
+        onRemove={removeCampaignTeamPerson}
       />
     </div>
   )
@@ -758,11 +822,15 @@ function TeamCard({
   networkPeople,
   disabled,
   onOpenPicker,
+  onEditPerson,
+  onRemovePerson,
 }: {
   people: ArtistNetworkPerson[]
   networkPeople: ArtistNetworkPerson[]
   disabled: boolean
   onOpenPicker: () => void
+  onEditPerson: (person: ArtistNetworkPerson) => void
+  onRemovePerson: (person: ArtistNetworkPerson) => void
 }) {
   return (
     <CommandCard>
@@ -787,21 +855,119 @@ function TeamCard({
           detail={networkPeople.length > 0 ? 'Add people from HQ Network who are helping with this release.' : 'Add people in HQ Network, then tag them to this release.'}
         />
       ) : (
-        <div className="space-y-2">
-          {people.slice(0, 4).map((person) => (
-            <div key={person.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.03] bg-white/[0.012] px-3 py-2">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-white/76">{person.name}</p>
-                <p className="mt-0.5 truncate text-[11px] text-white/36">{person.canHelpWith || person.role || person.contact || 'Release helper'}</p>
-              </div>
-            </div>
+        <div className="flex flex-wrap gap-1.5">
+          {people.slice(0, 8).map((person) => (
+            <span
+              key={person.id}
+              className="group inline-flex max-w-full items-center gap-1 rounded-full border border-orange-300/15 bg-orange-500/14 px-2 py-1 text-[11px] font-medium text-orange-100/86"
+              title={person.canHelpWith || person.role || person.contact || 'Release helper'}
+            >
+              <span className="max-w-[150px] truncate">{person.name}</span>
+              <button
+                type="button"
+                onClick={() => onEditPerson(person)}
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-orange-100/45 opacity-70 transition hover:bg-black/20 hover:text-orange-50 group-hover:opacity-100"
+                aria-label={`Edit ${person.name}`}
+              >
+                <Pencil className="h-2.5 w-2.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => onRemovePerson(person)}
+                className="inline-flex h-4 w-4 items-center justify-center rounded-full text-orange-100/35 opacity-70 transition hover:bg-black/20 hover:text-red-200 group-hover:opacity-100"
+                aria-label={`Remove ${person.name} from campaign team`}
+              >
+                <X className="h-2.5 w-2.5" />
+              </button>
+            </span>
           ))}
-          {people.length > 4 ? (
-            <p className="text-[10px] text-white/32">+{people.length - 4} more</p>
+          {people.length > 8 ? (
+            <span className="inline-flex items-center rounded-full bg-white/[0.035] px-2 py-1 text-[11px] font-medium text-white/36">
+              +{people.length - 8}
+            </span>
           ) : null}
         </div>
       )}
     </CommandCard>
+  )
+}
+
+function TeamPersonEditDialog({
+  person,
+  onOpenChange,
+  onSave,
+  onRemove,
+}: {
+  person: ArtistNetworkPerson | null
+  onOpenChange: (open: boolean) => void
+  onSave: (person: ArtistNetworkPerson, input: { name: string; canHelpWith: string }) => void
+  onRemove: (person: ArtistNetworkPerson) => void
+}) {
+  const [name, setName] = React.useState('')
+  const [canHelpWith, setCanHelpWith] = React.useState('')
+
+  React.useEffect(() => {
+    setName(person?.name ?? '')
+    setCanHelpWith(person?.canHelpWith || person?.role || '')
+  }, [person])
+
+  return (
+    <Dialog open={Boolean(person)} onOpenChange={onOpenChange}>
+      <DialogContent className="border-white/[0.08] bg-[#070707] text-white shadow-modal-small sm:max-w-[420px]">
+        {person ? (
+          <>
+            <DialogHeader className="pr-8">
+              <DialogTitle className="text-base font-medium text-white/88">Edit Team Member</DialogTitle>
+              <DialogDescription className="text-xs text-white/38">
+                Updates this person in HQ Network and this campaign team.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-3">
+              <label className="grid gap-1.5">
+                <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/32">Name</span>
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  className="h-9 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white/82 outline-none placeholder:text-white/24 focus:border-orange-300/45"
+                  placeholder="Name"
+                />
+              </label>
+              <label className="grid gap-1.5">
+                <span className="text-[9px] font-medium uppercase tracking-[0.18em] text-white/32">Helps With</span>
+                <input
+                  value={canHelpWith}
+                  onChange={(event) => setCanHelpWith(event.target.value)}
+                  className="h-9 rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 text-sm text-white/82 outline-none placeholder:text-white/24 focus:border-orange-300/45"
+                  placeholder="Song placement, PR, approvals..."
+                />
+              </label>
+            </div>
+
+            <div className="flex items-center justify-between gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  onRemove(person)
+                  onOpenChange(false)
+                }}
+                className="inline-flex h-9 items-center gap-2 rounded-full border border-red-300/15 bg-red-500/8 px-3 text-xs font-medium text-red-200/75 hover:bg-red-500/14"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Remove
+              </button>
+              <button
+                type="button"
+                onClick={() => onSave(person, { name, canHelpWith })}
+                className="inline-flex h-9 items-center rounded-full bg-orange-500 px-4 text-xs font-medium text-black hover:bg-orange-400"
+              >
+                Save
+              </button>
+            </div>
+          </>
+        ) : null}
+      </DialogContent>
+    </Dialog>
   )
 }
 
