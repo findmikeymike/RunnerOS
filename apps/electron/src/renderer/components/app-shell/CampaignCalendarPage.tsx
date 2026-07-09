@@ -1,14 +1,17 @@
 import * as React from 'react'
-import { CalendarDays, Pencil, Trash2, X } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Pencil, RotateCcw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   activeCampaignCalendarItems,
+  approveCampaignCalendarItem,
   campaignCalendarMetadata,
   createCampaignCalendarItem,
+  isLiveExternalActionType,
   parseCampaignCalendarDocResult,
+  requeueCampaignScheduledJob,
   serializeCampaignCalendarBody,
   updateCampaignCalendarItem,
   type CampaignCalendar,
@@ -169,6 +172,32 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
     })
   }, [campaignCalendar.campaignId, campaignCalendar.items, saveCampaignCalendar, workspaceId])
 
+  const patchCampaignCalendarItem = React.useCallback((itemId: string, patcher: (item: CampaignCalendarItem) => CampaignCalendarItem) => {
+    const now = new Date().toISOString()
+    let patchedTitle: string | undefined
+    const nextItems = campaignCalendar.items.map((item) => {
+      if (item.id !== itemId) return item
+      const next = patcher(item)
+      patchedTitle = next.title
+      return next
+    })
+    void saveCampaignCalendar({
+      version: 1,
+      campaignId: campaignCalendar.campaignId || workspaceId || 'workspace',
+      items: nextItems,
+      updatedAt: now,
+    })
+    if (patchedTitle) toast.success(`Updated ${patchedTitle}.`)
+  }, [campaignCalendar.campaignId, campaignCalendar.items, saveCampaignCalendar, workspaceId])
+
+  const approveCampaignCalendarJob = React.useCallback((itemId: string) => {
+    patchCampaignCalendarItem(itemId, (item) => approveCampaignCalendarItem(item, { now: new Date().toISOString() }))
+  }, [patchCampaignCalendarItem])
+
+  const requeueCampaignCalendarJob = React.useCallback((itemId: string) => {
+    patchCampaignCalendarItem(itemId, requeueCampaignScheduledJob)
+  }, [patchCampaignCalendarItem])
+
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
@@ -219,6 +248,8 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
           onCancelEditItem={cancelCampaignCalendarItemEdit}
           onSaveEditItem={saveCampaignCalendarItemEdit}
           onAddItem={addCampaignCalendarItem}
+          onApproveItem={approveCampaignCalendarJob}
+          onRequeueItem={requeueCampaignCalendarJob}
           onDeleteItem={deleteCampaignCalendarItem}
         />
       </div>
@@ -244,6 +275,8 @@ function CampaignCalendarSurface({
   onCancelEditItem,
   onSaveEditItem,
   onAddItem,
+  onApproveItem,
+  onRequeueItem,
   onDeleteItem,
 }: {
   items: CampaignCalendarItem[]
@@ -263,6 +296,8 @@ function CampaignCalendarSurface({
   onCancelEditItem: () => void
   onSaveEditItem: (itemId: string) => void
   onAddItem: () => void
+  onApproveItem: (itemId: string) => void
+  onRequeueItem: (itemId: string) => void
   onDeleteItem: (itemId: string) => void
 }) {
   const dayMetaByDate = React.useMemo(() => {
@@ -326,7 +361,7 @@ function CampaignCalendarSurface({
                   />
                 ) : (
                   <div className="flex items-start justify-between gap-3">
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="text-sm font-semibold text-white/76">{item.title}</div>
                         <span className={cn('rounded-full px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em]', statusBadgeClass(item.status))}>
@@ -337,8 +372,33 @@ function CampaignCalendarSurface({
                         {item.time || 'All day'} · {item.kind.replace(/-/g, ' ')}
                       </div>
                       {item.notes ? <div className="mt-2 text-xs leading-5 text-white/38">{item.notes}</div> : null}
+                      <CampaignCalendarJobDetails item={item} />
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
+                      {item.status === 'needs-approval' ? (
+                        <button
+                          type="button"
+                          onClick={() => onApproveItem(item.id)}
+                          disabled={disabled}
+                          className="rounded-full p-1.5 text-white/28 hover:bg-white/[0.05] hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label="Approve calendar item"
+                          title="Approve"
+                        >
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
+                      {item.job && (item.status === 'failed' || item.status === 'missed' || item.status === 'done') ? (
+                        <button
+                          type="button"
+                          onClick={() => onRequeueItem(item.id)}
+                          disabled={disabled}
+                          className="rounded-full p-1.5 text-white/28 hover:bg-white/[0.05] hover:text-blue-200 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label="Requeue scheduled job"
+                          title="Requeue"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => onEditItem(item)}
@@ -377,6 +437,36 @@ function CampaignCalendarSurface({
         </div>
       </div>
     </section>
+  )
+}
+
+function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
+  const job = item.job
+  const latestRun = item.runHistory.at(-1)
+  if (!job) return null
+  const externalBlocked = isLiveExternalActionType(job.actionType)
+  return (
+    <div className="mt-3 rounded-[10px] border border-white/[0.045] bg-black/24 p-2.5">
+      <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/40">
+        <span>{job.actionType.replace(/-/g, ' ')}</span>
+        <span>Attempts {job.attempts}/{job.maxAttempts}</span>
+        {job.lastRunAt ? <span>Last {formatCompactDateTime(job.lastRunAt)}</span> : null}
+      </div>
+      {externalBlocked ? (
+        <div className="mt-2 rounded-[8px] border border-yellow-300/10 bg-yellow-300/[0.055] px-2 py-1.5 text-[11px] leading-4 text-yellow-100/64">
+          Approval can be recorded here. Live posting/outreach still waits for the external runner.
+        </div>
+      ) : null}
+      {job.error ? (
+        <div className="mt-2 text-[11px] leading-4 text-red-100/65">{job.error}</div>
+      ) : null}
+      {latestRun ? (
+        <div className="mt-2 text-[10px] leading-4 text-white/34">
+          Last run: {latestRun.status} · {formatCompactDateTime(latestRun.endedAt ?? latestRun.startedAt)}
+          {latestRun.resultSummary ? ` · ${latestRun.resultSummary}` : ''}
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -486,4 +576,15 @@ function statusBadgeClass(status: CampaignCalendarItemStatus): string {
   if (status === 'running') return 'bg-blue-400/10 text-blue-100/75'
   if (status === 'canceled') return 'bg-white/[0.035] text-white/38'
   return 'bg-orange-400/10 text-orange-100/75'
+}
+
+function formatCompactDateTime(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }

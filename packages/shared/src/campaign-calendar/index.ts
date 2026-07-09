@@ -318,6 +318,49 @@ export function updateCampaignCalendarItem(
   });
 }
 
+export function approveCampaignCalendarItem(
+  item: CampaignCalendarItem,
+  options: { now?: string; notes?: string } = {},
+): CampaignCalendarItem {
+  const now = cleanIso(options.now) ?? new Date().toISOString();
+  const approval: CampaignScheduleApproval = {
+    id: `campaign-approval-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    status: 'approved',
+    approvedAt: now,
+    payloadDigest: item.job?.payloadDigest,
+    notes: clean(options.notes) ?? (item.job && isLiveExternalActionType(item.job.actionType)
+      ? 'Approved for review. Live external execution is still blocked until the external runner is connected.'
+      : 'Approved from Campaign Calendar.'),
+  };
+  const liveExternal = item.job ? isLiveExternalActionType(item.job.actionType) : false;
+  return updateCampaignCalendarItem(item, {
+    status: liveExternal ? 'needs-approval' : 'scheduled',
+    approvals: [...(item.approvals ?? []), approval],
+    job: item.job
+      ? {
+          ...item.job,
+          approvalPolicy: liveExternal ? 'preapproved-exact-payload' : 'none',
+          error: liveExternal ? 'Approved in calendar; live external execution is not connected yet.' : undefined,
+        }
+      : item.job,
+  });
+}
+
+export function requeueCampaignScheduledJob(item: CampaignCalendarItem): CampaignCalendarItem {
+  if (!item.job) return item;
+  const liveExternal = isLiveExternalActionType(item.job.actionType);
+  return updateCampaignCalendarItem(item, {
+    status: liveExternal ? 'needs-approval' : 'scheduled',
+    job: {
+      ...item.job,
+      attempts: 0,
+      lastRunAt: undefined,
+      completedAt: undefined,
+      error: liveExternal ? 'Live external execution is not connected yet.' : undefined,
+    },
+  });
+}
+
 export function activeCampaignCalendarItems(items: CampaignCalendarItem[]): CampaignCalendarItem[] {
   return items.filter((item) => !item.deletedAt);
 }
@@ -403,6 +446,7 @@ export function applyCampaignCalendarWriteIntent(
 export function selectDueCampaignScheduledJobs(
   calendar: CampaignCalendar,
   now: Date = new Date(),
+  options: { allowLiveExternal?: boolean } = {},
 ): DueCampaignScheduledJob[] {
   const nowMs = now.getTime();
   return activeCampaignCalendarItems(calendar.items).flatMap((item) => {
@@ -420,13 +464,18 @@ export function selectDueCampaignScheduledJobs(
       }
       return [];
     }
-    if (item.status === 'needs-approval'
+    const liveExternal = isLiveExternalActionType(job.actionType);
+    const liveExternalApproved = liveExternal
+      && options.allowLiveExternal === true
+      && job.approvalPolicy === 'preapproved-exact-payload'
+      && hasApprovedScheduledJobPayload(item, job);
+    if ((item.status === 'needs-approval' && !liveExternalApproved)
       || job.approvalPolicy === 'approval-before-run'
-      || isLiveExternalActionType(job.actionType)
+      || (liveExternal && !liveExternalApproved)
       || (job.actionType === 'review' && !hasPromptPayload(job.payload))) {
       return [{ item, job, dueAt: job.runAt, blockedReason: 'needs-approval' }];
     }
-    if (item.status !== 'scheduled') return [];
+    if (item.status !== 'scheduled' && !liveExternalApproved) return [];
     const lastRunMs = Date.parse(job.lastRunAt ?? '');
     if (job.attempts > 0 && !Number.isNaN(lastRunMs) && nowMs - lastRunMs < CAMPAIGN_JOB_RETRY_BACKOFF_MS) return [];
     return [{ item, job, dueAt: job.runAt }];
@@ -440,6 +489,13 @@ export function isLiveExternalActionType(actionType: CampaignScheduledJobActionT
 export function hasCompletedScheduledJob(item: CampaignCalendarItem, job: CampaignScheduledJob): boolean {
   if (job.completedAt) return true;
   return item.runHistory.some((run) => run.jobId === job.id && run.status === 'done');
+}
+
+export function hasApprovedScheduledJobPayload(item: CampaignCalendarItem, job: CampaignScheduledJob): boolean {
+  return (item.approvals ?? []).some((approval) => (
+    approval.status === 'approved'
+    && approval.payloadDigest === job.payloadDigest
+  ));
 }
 
 export function createCampaignJobRun(input: {

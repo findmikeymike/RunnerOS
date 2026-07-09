@@ -33,6 +33,12 @@ export interface CampaignScheduledJobRunnerDeps {
     workflowSlug: string
     triggerInputs: Record<string, unknown>
   }): Promise<{ runId: string }>
+  executeExternalJob?(input: {
+    workspaceId: string
+    workspaceRootPath: string
+    item: CampaignCalendarItem
+    job: CampaignScheduledJob
+  }): Promise<{ receiptId?: string; resultSummary?: string }>
   emitContextChanged?(workspaceId: string, docs: ReturnType<typeof loadAllContextDocs>): void
   now?(): Date
   log?: Pick<Console, 'info' | 'warn' | 'error'>
@@ -75,7 +81,7 @@ export class CampaignScheduledJobRunner {
       }
 
       let calendar = parsed.calendar
-      const due = selectDueCampaignScheduledJobs(calendar, now)
+      const due = selectDueCampaignScheduledJobs(calendar, now, { allowLiveExternal: Boolean(this.deps.executeExternalJob) })
       const result: CampaignScheduledJobRunnerResult = {
         scanned: due.length,
         started: 0,
@@ -187,7 +193,13 @@ export class CampaignScheduledJobRunner {
   ): Promise<CampaignCalendarItem> {
     if (hasCompletedScheduledJob(item, job)) return item
     if (isLiveExternalActionType(job.actionType)) {
-      return markNeedsApproval(item, job, 'Live external action requires exact approval before execution.')
+      if (!this.deps.executeExternalJob) {
+        return markNeedsApproval(item, job, 'Live external action requires exact approval before execution.')
+      }
+      const result = await this.deps.executeExternalJob({ workspaceId, workspaceRootPath, item, job })
+      return markDone(item, job, now, {
+        resultSummary: result.resultSummary ?? (result.receiptId ? `External action receipt ${result.receiptId}.` : 'External action completed.'),
+      })
     }
     if (job.actionType === 'review' && !readPayloadString(job.payload, 'prompt')) {
       return markNeedsApproval(item, job, 'Review job requires manual approval or a prompt payload before execution.')

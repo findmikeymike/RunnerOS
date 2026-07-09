@@ -8,6 +8,7 @@ import {
   createCampaignCalendarItem,
   createCampaignJobRun,
   createCampaignScheduledJob,
+  approveCampaignCalendarItem,
   parseCampaignCalendarDocResult,
   serializeCampaignCalendarBody,
   updateCampaignCalendarItem,
@@ -156,6 +157,45 @@ describe('CampaignScheduledJobRunner', () => {
     expect(saved.status).toBe('needs-approval')
     expect(saved.job?.attempts).toBe(0)
     expect(saved.runHistory).toHaveLength(0)
+  })
+
+  test('runs exact-approved external jobs only when an external executor is configured', async () => {
+    const root = makeRoot()
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { platform: 'instagram' },
+      approvalPolicy: 'approval-before-external-action',
+    })
+    const item = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      job,
+    }), { now: '2026-07-10T13:50:00.000Z' })
+    writeCalendar(root, [item])
+
+    const externalCalls: string[] = []
+    const runner = new CampaignScheduledJobRunner({
+      executePromptJob: async () => ({ sessionId: 'session-1' }),
+      startWorkflow: async () => ({ runId: 'run-1' }),
+      executeExternalJob: async ({ job }) => {
+        externalCalls.push(job.actionType)
+        return { receiptId: 'receipt-1' }
+      },
+    })
+
+    const result = await runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:01:00.000Z'))
+    const saved = readCalendar(root).items[0]!
+
+    expect(result.started).toBe(1)
+    expect(externalCalls).toEqual(['post-asset'])
+    expect(saved.status).toBe('done')
+    expect(saved.job?.attempts).toBe(1)
+    expect(saved.runHistory.at(-1)?.status).toBe('done')
+    expect(saved.runHistory.at(-1)?.resultSummary).toContain('receipt-1')
   })
 
   test('recovers stale running jobs back to scheduled retry state', async () => {

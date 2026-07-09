@@ -4,9 +4,11 @@ import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   activeCampaignCalendarItems,
   applyCampaignCalendarWriteIntent,
+  approveCampaignCalendarItem,
   createCampaignCalendarItem,
   createCampaignScheduledJob,
   parseCampaignCalendarDocResult,
+  requeueCampaignScheduledJob,
   selectDueCampaignScheduledJobs,
   serializeCampaignCalendarBody,
   updateCampaignCalendarItem,
@@ -170,5 +172,124 @@ describe('campaign calendar utilities', () => {
       expect(result.item.kind).toBe('scheduled-job')
       expect(result.item.status).toBe('needs-approval')
     }
+  })
+
+  test('approves local scheduled jobs back into the runnable queue', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'ask-agent',
+      approvalPolicy: 'approval-before-run',
+      payload: { prompt: 'Prepare launch copy.' },
+    })
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Prepare launch copy',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      job,
+    })
+
+    const approved = approveCampaignCalendarItem(item, { now: '2026-07-10T13:50:00.000Z' })
+    const due = selectDueCampaignScheduledJobs({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [approved],
+      updatedAt: '2026-07-10T13:50:00.000Z',
+    }, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(approved.status).toBe('scheduled')
+    expect(approved.job?.approvalPolicy).toBe('none')
+    expect(approved.approvals?.at(-1)?.status).toBe('approved')
+    expect(due).toHaveLength(1)
+    expect(due[0]?.blockedReason).toBeUndefined()
+  })
+
+  test('records external approvals without enabling live execution before the external runner', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      approvalPolicy: 'approval-before-external-action',
+      payload: { platform: 'instagram' },
+    })
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      job,
+    })
+
+    const approved = approveCampaignCalendarItem(item, { now: '2026-07-10T13:50:00.000Z' })
+    const due = selectDueCampaignScheduledJobs({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [approved],
+      updatedAt: '2026-07-10T13:50:00.000Z',
+    }, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(approved.status).toBe('needs-approval')
+    expect(approved.job?.approvalPolicy).toBe('preapproved-exact-payload')
+    expect(approved.approvals?.at(-1)?.status).toBe('approved')
+    expect(approved.job?.error).toContain('not connected')
+    expect(due[0]?.blockedReason).toBe('needs-approval')
+  })
+
+  test('selects exact-approved external jobs only when live external execution is enabled', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      approvalPolicy: 'approval-before-external-action',
+      payload: { platform: 'instagram' },
+    })
+    const item = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      job,
+    }), { now: '2026-07-10T13:50:00.000Z' })
+
+    const due = selectDueCampaignScheduledJobs({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [item],
+      updatedAt: '2026-07-10T13:50:00.000Z',
+    }, new Date('2026-07-10T14:01:00.000Z'), { allowLiveExternal: true })
+
+    expect(due).toHaveLength(1)
+    expect(due[0]?.blockedReason).toBeUndefined()
+  })
+
+  test('requeues terminal local jobs with fresh attempts', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'ask-agent',
+      payload: { prompt: 'Prepare launch copy.' },
+    })
+    const failed = updateCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Prepare launch copy',
+      kind: 'scheduled-job',
+      status: 'failed',
+      job,
+    }), {
+      job: {
+        ...job,
+        attempts: 1,
+        lastRunAt: '2026-07-10T14:01:00.000Z',
+        error: 'Agent failed.',
+      },
+    })
+
+    const requeued = requeueCampaignScheduledJob(failed)
+
+    expect(requeued.status).toBe('scheduled')
+    expect(requeued.job?.attempts).toBe(0)
+    expect(requeued.job?.lastRunAt).toBeUndefined()
+    expect(requeued.job?.error).toBeUndefined()
   })
 })
