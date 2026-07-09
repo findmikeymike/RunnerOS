@@ -105,7 +105,7 @@ export class CampaignScheduledJobRunner {
             workspaceId,
             workspaceRootPath,
             calendar,
-            markFailed(current, current.job, now, 'Invalid runAt timestamp.'),
+            markTerminalFailed(current, current.job, now, 'Invalid runAt timestamp.'),
           )
           result.failed += 1
           continue
@@ -116,7 +116,18 @@ export class CampaignScheduledJobRunner {
             workspaceId,
             workspaceRootPath,
             calendar,
-            markFailed(current, current.job, now, 'Max attempts reached.'),
+            markTerminalFailed(current, current.job, now, 'Max attempts reached.'),
+          )
+          result.failed += 1
+          continue
+        }
+
+        if (dueJob.blockedReason === 'stale-running') {
+          calendar = await this.persistItem(
+            workspaceId,
+            workspaceRootPath,
+            calendar,
+            markRetryableFailure(current, current.job, now, 'Recovered stale running job; retry is scheduled.'),
           )
           result.failed += 1
           continue
@@ -152,7 +163,10 @@ export class CampaignScheduledJobRunner {
           calendar = await this.persistItem(workspaceId, workspaceRootPath, calendar, completed)
           result.started += 1
         } catch (error) {
-          const failed = markFailed(running, running.job!, now, error instanceof Error ? error.message : String(error))
+          const message = error instanceof Error ? error.message : String(error)
+          const failed = running.job!.attempts >= running.job!.maxAttempts
+            ? markTerminalFailed(running, running.job!, now, message)
+            : markRetryableFailure(running, running.job!, now, message)
           calendar = await this.persistItem(workspaceId, workspaceRootPath, calendar, failed)
           result.failed += 1
         }
@@ -174,6 +188,9 @@ export class CampaignScheduledJobRunner {
     if (hasCompletedScheduledJob(item, job)) return item
     if (isLiveExternalActionType(job.actionType)) {
       return markNeedsApproval(item, job, 'Live external action requires exact approval before execution.')
+    }
+    if (job.actionType === 'review' && !readPayloadString(job.payload, 'prompt')) {
+      return markNeedsApproval(item, job, 'Review job requires manual approval or a prompt payload before execution.')
     }
 
     if (job.actionType === 'run-workflow') {
@@ -244,13 +261,6 @@ function markDone(
   output: Pick<CampaignJobRun, 'sessionId' | 'workflowRunId' | 'resultSummary'>,
 ): CampaignCalendarItem {
   const nowIso = now.toISOString()
-  const run = createCampaignJobRun({
-    jobId: job.id,
-    status: 'done',
-    startedAt: job.lastRunAt ?? nowIso,
-    endedAt: nowIso,
-    ...output,
-  })
   return updateCampaignCalendarItem(item, {
     status: 'done',
     job: {
@@ -258,19 +268,25 @@ function markDone(
       completedAt: nowIso,
       error: undefined,
     },
-    runHistory: [...item.runHistory, run],
+    runHistory: finishLatestRun(item.runHistory, job, 'done', nowIso, output),
   })
 }
 
-function markFailed(item: CampaignCalendarItem, job: CampaignScheduledJob, now: Date, error: string): CampaignCalendarItem {
+function markRetryableFailure(item: CampaignCalendarItem, job: CampaignScheduledJob, now: Date, error: string): CampaignCalendarItem {
+  const nowIso = now.toISOString()
+  return updateCampaignCalendarItem(item, {
+    status: 'scheduled',
+    job: { ...job, error },
+    runHistory: finishLatestRun(item.runHistory, job, 'failed', nowIso, { error }),
+  })
+}
+
+function markTerminalFailed(item: CampaignCalendarItem, job: CampaignScheduledJob, now: Date, error: string): CampaignCalendarItem {
   const nowIso = now.toISOString()
   return updateCampaignCalendarItem(item, {
     status: 'failed',
     job: { ...job, error },
-    runHistory: [
-      ...item.runHistory,
-      createCampaignJobRun({ jobId: job.id, status: 'failed', startedAt: job.lastRunAt ?? nowIso, endedAt: nowIso, error }),
-    ],
+    runHistory: finishLatestRun(item.runHistory, job, 'failed', nowIso, { error }),
   })
 }
 
@@ -279,10 +295,7 @@ function markMissed(item: CampaignCalendarItem, job: CampaignScheduledJob, now: 
   return updateCampaignCalendarItem(item, {
     status: 'missed',
     job: { ...job, error },
-    runHistory: [
-      ...item.runHistory,
-      createCampaignJobRun({ jobId: job.id, status: 'skipped', startedAt: nowIso, endedAt: nowIso, error }),
-    ],
+    runHistory: finishLatestRun(item.runHistory, job, 'skipped', nowIso, { error }),
   })
 }
 
@@ -291,7 +304,37 @@ function markNeedsApproval(item: CampaignCalendarItem, job: CampaignScheduledJob
   return updateCampaignCalendarItem(item, {
     status: 'needs-approval',
     job: { ...job, error },
+    runHistory: finishLatestRun(item.runHistory, job, 'skipped', new Date().toISOString(), { error }, false),
   })
+}
+
+function finishLatestRun(
+  runHistory: CampaignJobRun[],
+  job: CampaignScheduledJob,
+  status: CampaignJobRun['status'],
+  endedAt: string,
+  output: Partial<Pick<CampaignJobRun, 'sessionId' | 'workflowRunId' | 'resultSummary' | 'error'>>,
+  appendIfMissing = true,
+): CampaignJobRun[] {
+  for (let index = runHistory.length - 1; index >= 0; index -= 1) {
+    const run = runHistory[index]
+    if (run?.jobId === job.id && run.status === 'running') {
+      return runHistory.map((candidate, candidateIndex) => candidateIndex === index
+        ? { ...candidate, status, endedAt, ...output }
+        : candidate)
+    }
+  }
+  if (!appendIfMissing) return runHistory
+  return [
+    ...runHistory,
+    createCampaignJobRun({
+      jobId: job.id,
+      status,
+      startedAt: job.lastRunAt ?? endedAt,
+      endedAt,
+      ...output,
+    }),
+  ]
 }
 
 function readPayloadString(payload: Record<string, unknown>, key: string): string | undefined {

@@ -43,6 +43,7 @@ export interface CampaignCalendarWriteResult {
 }
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SECRET_PAYLOAD_RE = /token|secret|password|cookie|bearer|2fa|two[-_\s]?factor/i;
 
 export async function handleCampaignCalendarWrite(
   ctx: SessionToolContext,
@@ -70,6 +71,10 @@ export async function handleCampaignCalendarWrite(
       return errorResponse('item.job.runAt must be a valid ISO timestamp.');
     }
     if (!args.item.job.actionType) return errorResponse('item.job.actionType is required.');
+    const unsafePayloadPath = findUnsafePayloadPath(args.item.job.payload ?? {});
+    if (unsafePayloadPath) {
+      return errorResponse(`item.job.payload contains sensitive material at ${unsafePayloadPath}. Store credentials in Settings/Secrets, not Campaign Calendar.`);
+    }
   }
 
   try {
@@ -81,4 +86,25 @@ export async function handleCampaignCalendarWrite(
   } catch (err) {
     return errorResponse(`Failed to write campaign calendar item: ${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+function findUnsafePayloadPath(value: unknown, path = 'payload'): string | undefined {
+  if (typeof value === 'string') {
+    return SECRET_PAYLOAD_RE.test(value) ? path : undefined;
+  }
+  if (!value || typeof value !== 'object') return undefined;
+  if (Array.isArray(value)) {
+    for (let index = 0; index < value.length; index += 1) {
+      const match = findUnsafePayloadPath(value[index], `${path}[${index}]`);
+      if (match) return match;
+    }
+    return undefined;
+  }
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    const childPath = `${path}.${key}`;
+    if (SECRET_PAYLOAD_RE.test(key)) return childPath;
+    const match = findUnsafePayloadPath(child, childPath);
+    if (match) return match;
+  }
+  return undefined;
 }

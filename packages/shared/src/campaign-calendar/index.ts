@@ -149,8 +149,11 @@ export interface DueCampaignScheduledJob {
   item: CampaignCalendarItem;
   job: CampaignScheduledJob;
   dueAt: string;
-  blockedReason?: 'needs-approval' | 'already-completed' | 'max-attempts' | 'invalid-run-at';
+  blockedReason?: 'needs-approval' | 'already-completed' | 'max-attempts' | 'invalid-run-at' | 'stale-running';
 }
+
+export const CAMPAIGN_JOB_RETRY_BACKOFF_MS = 5 * 60 * 1000;
+export const CAMPAIGN_JOB_RUNNING_STALE_MS = 30 * 60 * 1000;
 
 export function campaignCalendarMetadata(): ContextDocMetadata {
   return {
@@ -222,7 +225,7 @@ export function serializeCampaignCalendarBody(calendar: CampaignCalendar): strin
   return [
     'This is campaign-scoped calendar context. It stores local schedule items, deadlines, review points, and one-shot planned work. Do not treat it as global HQ calendar context.',
     '',
-    'Live external actions still require separate exact approval unless a valid exact pre-approval object exists.',
+    'Live external actions are approval-only until Phase 4 live external execution is wired.',
     '',
     '```json',
     JSON.stringify(sorted, null, 2),
@@ -410,10 +413,22 @@ export function selectDueCampaignScheduledJobs(
     if (dueMs > nowMs) return [];
     if (hasCompletedScheduledJob(item, job)) return [];
     if (job.attempts >= job.maxAttempts) return [{ item, job, dueAt: job.runAt, blockedReason: 'max-attempts' }];
-    if (item.status === 'needs-approval' || job.approvalPolicy === 'approval-before-run' || (isLiveExternalActionType(job.actionType) && job.approvalPolicy !== 'preapproved-exact-payload')) {
+    if (item.status === 'running') {
+      const lastRunMs = Date.parse(job.lastRunAt ?? '');
+      if (!Number.isNaN(lastRunMs) && nowMs - lastRunMs >= CAMPAIGN_JOB_RUNNING_STALE_MS) {
+        return [{ item, job, dueAt: job.runAt, blockedReason: 'stale-running' }];
+      }
+      return [];
+    }
+    if (item.status === 'needs-approval'
+      || job.approvalPolicy === 'approval-before-run'
+      || isLiveExternalActionType(job.actionType)
+      || (job.actionType === 'review' && !hasPromptPayload(job.payload))) {
       return [{ item, job, dueAt: job.runAt, blockedReason: 'needs-approval' }];
     }
     if (item.status !== 'scheduled') return [];
+    const lastRunMs = Date.parse(job.lastRunAt ?? '');
+    if (job.attempts > 0 && !Number.isNaN(lastRunMs) && nowMs - lastRunMs < CAMPAIGN_JOB_RETRY_BACKOFF_MS) return [];
     return [{ item, job, dueAt: job.runAt }];
   });
 }
@@ -472,7 +487,13 @@ function replaceCalendarItem(
 function shouldRequireApproval(status: CampaignCalendarItemStatus | undefined, job: CampaignScheduledJob): boolean {
   if (status === 'needs-approval') return true;
   if (job.approvalPolicy === 'approval-before-run' || job.approvalPolicy === 'approval-before-external-action') return true;
-  return isLiveExternalActionType(job.actionType) && job.approvalPolicy !== 'preapproved-exact-payload';
+  if (job.actionType === 'review' && !hasPromptPayload(job.payload)) return true;
+  return isLiveExternalActionType(job.actionType);
+}
+
+function hasPromptPayload(payload: Record<string, unknown>): boolean {
+  const prompt = payload.prompt;
+  return typeof prompt === 'string' && Boolean(prompt.trim());
 }
 
 function normalizeCampaignCalendarItem(item: CampaignCalendarItem): CampaignCalendarItem {
@@ -511,7 +532,7 @@ function normalizeScheduledJob(value: unknown): CampaignScheduledJob | undefined
   const payloadDigest = clean(job.payloadDigest) ?? stablePayloadDigest(payload);
   return {
     id: clean(job.id) ?? `campaign-job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-    runAt: cleanIso(job.runAt) ?? new Date().toISOString(),
+    runAt: clean(job.runAt) ?? new Date().toISOString(),
     timezone: clean(job.timezone) ?? getLocalTimezone(),
     actionType,
     payload,

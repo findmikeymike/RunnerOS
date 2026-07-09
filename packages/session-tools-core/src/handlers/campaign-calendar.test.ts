@@ -91,4 +91,30 @@ describe('handleCampaignCalendarWrite', () => {
     expect(captured?.item.job?.actionType).toBe('post-asset');
     expect((result.content[0] as any).text).toContain('needs-approval');
   });
+
+  it('rejects sensitive scheduled-job payload material before calling backend', async () => {
+    let called = false;
+    const result = await handleCampaignCalendarWrite(makeCtx({
+      campaignCalendarWrite: async () => {
+        called = true;
+        return { ok: true };
+      },
+    }), {
+      operation: 'create',
+      explanation: 'User asked to schedule the teaser post.',
+      item: {
+        date: '2026-07-10',
+        title: 'Post teaser',
+        job: {
+          runAt: '2026-07-10T14:00:00.000Z',
+          actionType: 'post-asset',
+          payload: { platform: 'instagram', accessToken: 'abc123' },
+        },
+      },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(called).toBe(false);
+    expect((result.content[0] as any).text).toContain('sensitive material');
+  });
 });
