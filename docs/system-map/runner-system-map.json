@@ -6,6 +6,7 @@
     "systemSkills": "packages/shared/src/skills/system.ts",
     "starterSkills": "packages/shared/src/skills/starter-templates.ts",
     "workersLaunchpad": "apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx",
+    "workerDefaults": "apps/electron/src/renderer/lib/worker-defaults.ts",
     "runAgent": "apps/electron/src/renderer/lib/run-agent.ts",
     "composeAgentPrompt": "apps/electron/src/renderer/lib/compose-agent-prompt.ts",
     "sessionManager": "packages/server-core/src/sessions/SessionManager.ts",
@@ -22,7 +23,7 @@
     "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts"
   },
   "summary": {
-    "agentCount": 38,
+    "agentCount": 39,
     "domains": {
       "Command": 3,
       "Content Creation": 6,
@@ -30,17 +31,25 @@
       "Merch": 2,
       "Operators": 2,
       "Other Workers": 2,
-      "Outreach": 4,
+      "Outreach": 5,
       "Promotion": 9,
       "Research": 3,
       "Socials": 2
     },
     "permissionModes": {
       "ask": 31,
-      "safe": 7
+      "safe": 8
     },
     "hiddenWorkerHomeCount": 6,
+    "hqDefaultWorkerSlugs": [
+      "branding-agent",
+      "world-builder",
+      "college-radio-agent"
+    ],
     "campaignDefaultWorkerSlugs": [
+      "branding-agent",
+      "world-builder",
+      "college-radio-agent",
       "content-genius",
       "scroll-stopper",
       "art-director",
@@ -58,8 +67,8 @@
     "finalsPromotionWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 119,
-    "bundledSkillCount": 76,
+    "knownSkillCount": 121,
+    "bundledSkillCount": 78,
     "systemSkillCount": 6,
     "userGlobalSkillCount": 119,
     "knownSourceCount": 25,
@@ -128,7 +137,8 @@
   "inferredRuntimeRules": [
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
-    "Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
+    "Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent.",
+    "Campaign default workers are currently branding-agent, world-builder, college-radio-agent, content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
@@ -654,7 +664,9 @@
         "creative-direction"
       ],
       "launchSurfaces": [
-        "workspace-workers-when-active"
+        "workspace-workers-when-active",
+        "hq-workers-default-visible",
+        "campaign-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",
@@ -859,6 +871,42 @@
       ],
       "inputs": "A topic + audience, or an existing draft to revise.",
       "outputs": "A clean draft (or edited version) in a direct, specific voice."
+    },
+    {
+      "slug": "college-radio-agent",
+      "name": "College Radio",
+      "description": "Match releases to college and non-commercial radio stations, verify fit, and prepare rule-aware outreach packets.",
+      "domain": "Outreach",
+      "permissionMode": "safe",
+      "thinkingLevel": "high",
+      "skills": [
+        "college-radio-matcher",
+        "college-radio-outreach"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "radio",
+        "college-radio",
+        "promotion",
+        "outreach",
+        "campaigns",
+        "research"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "hq-workers-default-visible",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "artifact-output-aware",
+        "external-action-boundary",
+        "safe-default"
+      ],
+      "inputs": "Artist HQ and campaign context, song/release, genre and vibe, 2–5 sound-alikes, clean/explicit status, hometown, tour markets, release type, stream/download links, and physical-format availability.",
+      "outputs": "Ranked verified station shortlist, send-first tier, rules watch-list, submission path, personalized pitch drafts, follow-up plan, and Outreach Agent handoff packet."
     },
     {
       "slug": "comms-agent",
@@ -1161,7 +1209,9 @@
         "creative-direction"
       ],
       "launchSurfaces": [
-        "workspace-workers-when-active"
+        "workspace-workers-when-active",
+        "hq-workers-default-visible",
+        "campaign-workers-default-visible"
       ],
       "riskSignals": [
         "approval-capable",

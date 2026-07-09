@@ -90,6 +90,7 @@ flowchart LR
   A_world_builder --> S_world_immersion["skill:world-immersion"]
   A_world_builder --> S_artist_narrative_universe["skill:artist-narrative-universe"]
   A_world_builder --> S_artist_campaign_angle_builder["skill:artist-campaign-angle-builder"]
+  Campaign["Campaign Workspace"] --> A_world_builder
   Registry --> A_print_agent["Print Agent\nask\nMerch"]
   Workers --> A_print_agent
   A_print_agent --> S_printify_commerce["skill:printify-commerce"]
@@ -109,6 +110,11 @@ flowchart LR
   A_open_slide_agent -. hidden .-> Workers
   Registry --> A_writer["Writer\nask\nOther Workers"]
   Workers --> A_writer
+  Registry --> A_college_radio_agent["College Radio\nsafe\nOutreach"]
+  Workers --> A_college_radio_agent
+  A_college_radio_agent --> S_college_radio_matcher["skill:college-radio-matcher"]
+  A_college_radio_agent --> S_college_radio_outreach["skill:college-radio-outreach"]
+  Campaign["Campaign Workspace"] --> A_college_radio_agent
   Registry --> A_comms_agent["Comms Agent\nask\nOutreach"]
   Workers --> A_comms_agent
   A_comms_agent --> S_artist_comms_strategist["skill:artist-comms-strategist"]
@@ -160,6 +166,7 @@ flowchart LR
   A_branding_agent --> S_artist_campaign_angle_builder["skill:artist-campaign-angle-builder"]
   A_branding_agent --> S_artist_visual_world_director["skill:artist-visual-world-director"]
   A_branding_agent --> S_artist_brand_expression_strategist["skill:artist-brand-expression-strategist"]
+  Campaign["Campaign Workspace"] --> A_branding_agent
   Registry --> A_critic["Critic\nsafe\nPromotion"]
   Workers --> A_critic
   Registry --> A_ig_trending_power_up["IG Music Trending\nask\nPromotion"]

@@ -25,6 +25,7 @@ import {
   removeBuiltInAgentSkills,
 } from './storage.ts'
 import { STARTER_AGENTS } from './starter-templates.ts'
+import { DEFAULT_ACTIVATED_AGENT_SLUGS } from './defaults.ts'
 import { SOCIAL_PUBLISHER_SLUG } from './types.ts'
 import { BUNDLED_STARTER_SKILLS, STARTER_SKILLS } from '../skills/index.ts'
 
@@ -670,6 +671,20 @@ body
     expect(youtubeAgent?.metadata.sources).toContain('youtube-research')
     expect(youtubeAgent?.systemPrompt).toContain('node bin/youtube-research.mjs')
     expect(youtubeAgent?.systemPrompt).toContain('You do not publish')
+  })
+
+  test('starter library includes College Radio as a safe campaign and HQ worker', () => {
+    const collegeRadio = STARTER_AGENTS.find((agent) => agent.slug === 'college-radio-agent')
+
+    expect(collegeRadio).toBeDefined()
+    expect(collegeRadio?.metadata.name).toBe('College Radio')
+    expect(collegeRadio?.metadata.permissionMode).toBe('safe')
+    expect(collegeRadio?.metadata.skills).toEqual(['college-radio-matcher', 'college-radio-outreach'])
+    expect(collegeRadio?.metadata.tags).toContain('campaigns')
+    expect(collegeRadio?.systemPrompt).toContain('campaign-worker-context')
+    expect(collegeRadio?.systemPrompt).toContain('You do not email')
+    expect(collegeRadio?.systemPrompt).toContain('explicit current-turn approval')
+    expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('college-radio-agent')
   })
 
   test('starter library includes the Hypermotion Agent with bundled motion source', () => {

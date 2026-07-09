@@ -20,6 +20,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - systemSkills: `packages/shared/src/skills/system.ts`
 - starterSkills: `packages/shared/src/skills/starter-templates.ts`
 - workersLaunchpad: `apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx`
+- workerDefaults: `apps/electron/src/renderer/lib/worker-defaults.ts`
 - runAgent: `apps/electron/src/renderer/lib/run-agent.ts`
 - composeAgentPrompt: `apps/electron/src/renderer/lib/compose-agent-prompt.ts`
 - sessionManager: `packages/server-core/src/sessions/SessionManager.ts`
@@ -37,15 +38,15 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Summary
 
-- Agents mapped: 38
+- Agents mapped: 39
 - Hidden from Workers home: 6
-- Campaign default workers: `content-genius`, `scroll-stopper`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
+- Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `content-genius`, `scroll-stopper`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
-- Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
-- Permission modes: ask 31, safe 7
-- Known skills: 119 (76 bundled, 6 system, 119 user-global on this machine)
+- Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 3, Socials 2
+- Permission modes: ask 31, safe 8
+- Known skills: 121 (78 bundled, 6 system, 119 user-global on this machine)
 - Known builtin sources: 25
 
 ## Reference Health
@@ -56,7 +57,8 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
-- Campaign workspaces can pass defaultVisibleSlugs, currently content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
+- Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent.
+- Campaign default workers are currently branding-agent, world-builder, college-radio-agent, content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -297,7 +299,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Design immersive low-budget release worlds fans can enter, built from the song's actual emotional world instead of generic promo tactics.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`
+- Launch surfaces: `workspace-workers-when-active`, `hq-workers-default-visible`, `campaign-workers-default-visible`
 - Skills: `world-immersion`, `artist-narrative-universe`, `artist-campaign-angle-builder`
 - Sources: none
 - Optional sources: none
@@ -398,6 +400,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Outputs: A clean draft (or edited version) in a direct, specific voice.
 
 ### Outreach
+
+#### College Radio (`college-radio-agent`)
+
+- Description: Match releases to college and non-commercial radio stations, verify fit, and prepare rule-aware outreach packets.
+- Permission: `safe`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `hq-workers-default-visible`, `campaign-workers-default-visible`
+- Skills: `college-radio-matcher`, `college-radio-outreach`
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `radio`, `college-radio`, `promotion`, `outreach`, `campaigns`, `research`
+- Signals: `artifact-output-aware`, `external-action-boundary`, `safe-default`
+- Inputs: Artist HQ and campaign context, song/release, genre and vibe, 2–5 sound-alikes, clean/explicit status, hometown, tour markets, release type, stream/download links, and physical-format availability.
+- Outputs: Ranked verified station shortlist, send-first tier, rules watch-list, submission path, personalized pitch drafts, follow-up plan, and Outreach Agent handoff packet.
 
 #### Comms Agent (`comms-agent`)
 
@@ -503,7 +519,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Build artist brand DNA, mythology, narrative universe, visual world, campaign angles, and subtle public behavior.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `workspace-workers-when-active`
+- Launch surfaces: `workspace-workers-when-active`, `hq-workers-default-visible`, `campaign-workers-default-visible`
 - Skills: `artist-brand-dna-audit`, `artist-narrative-universe`, `artist-belief-system`, `artist-campaign-angle-builder`, `artist-visual-world-director`, `artist-brand-expression-strategist`
 - Sources: none
 - Optional sources: none

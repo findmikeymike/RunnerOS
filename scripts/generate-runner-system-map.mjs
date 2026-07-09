@@ -10,6 +10,7 @@ const AGENT_TYPES_FILE = join(ROOT, 'packages/shared/src/agent-definitions/types
 const SYSTEM_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/system.ts');
 const STARTER_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/starter-templates.ts');
 const LAUNCHPAD_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/AgentsLaunchpad.tsx');
+const WORKER_DEFAULTS_FILE = join(ROOT, 'apps/electron/src/renderer/lib/worker-defaults.ts');
 const RUN_AGENT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/run-agent.ts');
 const COMPOSE_AGENT_PROMPT_FILE = join(ROOT, 'apps/electron/src/renderer/lib/compose-agent-prompt.ts');
 const SESSION_MANAGER_FILE = join(ROOT, 'packages/server-core/src/sessions/SessionManager.ts');
@@ -170,7 +171,7 @@ function classifyDomain(agent) {
   const description = agent.metadata.description ?? '';
   const tags = agent.metadata.tags ?? [];
 
-  if (['industry-hunter', 'comms-agent', 'outreach-agent'].includes(slug)) return 'Outreach';
+  if (['industry-hunter', 'comms-agent', 'outreach-agent', 'college-radio-agent'].includes(slug)) return 'Outreach';
   if (['persona-agent', 'content-genius', 'record-doctor', 'art-director', 'world-builder'].includes(slug)) return 'Creative';
   if (['youtube-research-agent', 'youtube-intelligence-agent', 'spotify-analyst'].includes(slug)) return 'Research';
   if (['ig-trending-power-up', 'influencer-campaign-power-up', 'playlisting-power-up', 'spotify-playlist-creator'].includes(slug)) return 'Promotion';
@@ -214,13 +215,14 @@ function riskSignals(agent) {
   return [...new Set(signals)].sort();
 }
 
-function deriveLaunchSurfaces(agent, systemSlugs, hiddenSlugs, campaignDefaultSlugs) {
+function deriveLaunchSurfaces(agent, systemSlugs, hiddenSlugs, baseDefaultSlugs, campaignDefaultSlugs) {
   const surfaces = [];
   if (agent.slug === 'concierge') surfaces.push('hq-sidebar-chat', 'campaign-sidebar-chat');
   if (systemSlugs.includes(agent.slug)) surfaces.push('system-agent-hidden-from-worker-home');
   if (hiddenSlugs.includes(agent.slug)) surfaces.push('hidden-from-workers-home');
   if (!systemSlugs.includes(agent.slug) && !hiddenSlugs.includes(agent.slug)) surfaces.push('workspace-workers-when-active');
-  if (campaignDefaultSlugs.includes(agent.slug)) surfaces.push('campaign-workers-default-visible');
+  if (baseDefaultSlugs.includes(agent.slug)) surfaces.push('hq-workers-default-visible', 'campaign-workers-default-visible');
+  else if (campaignDefaultSlugs.includes(agent.slug)) surfaces.push('campaign-workers-default-visible');
   return surfaces;
 }
 
@@ -318,7 +320,9 @@ function main() {
   if (!Array.isArray(starterSkills)) throw new Error('STARTER_SKILLS did not parse to an array');
 
   const hiddenSlugs = extractSetLiteral(LAUNCHPAD_FILE, 'HIDDEN_WORKER_HOME_AGENT_SLUGS');
-  const campaignDefaultSlugs = findExportedConst(LAUNCHPAD_FILE, 'CAMPAIGN_DEFAULT_WORKER_SLUGS', constants);
+  const baseDefaultSlugs = findExportedConst(WORKER_DEFAULTS_FILE, 'BASE_DEFAULT_WORKER_SLUGS', constants);
+  const campaignOnlyDefaultSlugs = findExportedConst(WORKER_DEFAULTS_FILE, 'CAMPAIGN_DEFAULT_WORKER_SLUGS', constants);
+  const campaignDefaultSlugs = [...baseDefaultSlugs, ...campaignOnlyDefaultSlugs];
   const systemSlugs = ['concierge', 'orchestrator', 'update-system-agent'];
   const skillScopes = {
     bundled: [
@@ -348,7 +352,7 @@ function main() {
     trustedWorkerTools: agent.metadata?.trustedWorkerTools ?? [],
     visualAgent: Boolean(agent.metadata?.visualAgent),
     tags: agent.metadata?.tags ?? [],
-    launchSurfaces: deriveLaunchSurfaces(agent, systemSlugs, hiddenSlugs, campaignDefaultSlugs),
+    launchSurfaces: deriveLaunchSurfaces(agent, systemSlugs, hiddenSlugs, baseDefaultSlugs, campaignOnlyDefaultSlugs),
     riskSignals: riskSignals(agent),
     inputs: agent.metadata?.inputs ?? '',
     outputs: agent.metadata?.outputs ?? '',
@@ -362,6 +366,7 @@ function main() {
       systemSkills: rel(SYSTEM_SKILLS_FILE),
       starterSkills: rel(STARTER_SKILLS_FILE),
       workersLaunchpad: rel(LAUNCHPAD_FILE),
+      workerDefaults: rel(WORKER_DEFAULTS_FILE),
       runAgent: rel(RUN_AGENT_FILE),
       composeAgentPrompt: rel(COMPOSE_AGENT_PROMPT_FILE),
       sessionManager: rel(SESSION_MANAGER_FILE),
@@ -382,6 +387,7 @@ function main() {
       domains: Object.fromEntries(groupBy(agents, (a) => a.domain).map(([domain, rows]) => [domain, rows.length])),
       permissionModes: Object.fromEntries(groupBy(agents, (a) => a.permissionMode).map(([mode, rows]) => [mode, rows.length])),
       hiddenWorkerHomeCount: hiddenSlugs.length,
+      hqDefaultWorkerSlugs: baseDefaultSlugs,
       campaignDefaultWorkerSlugs: campaignDefaultSlugs,
       workflowCount: Array.isArray(starterWorkflows) ? starterWorkflows.length : 0,
       sharedIntelPromptWired: text(COMPOSE_AGENT_PROMPT_FILE).includes('buildSharedIntelPromptSection')
@@ -396,7 +402,8 @@ function main() {
     inferredRuntimeRules: [
       'Saved agents live in the global library and are activated per workspace.',
       'Workers page shows active agents, except system agents and hidden worker-home slugs.',
-      `Campaign workspaces can pass defaultVisibleSlugs, currently ${campaignDefaultSlugs.join(', ')}.`,
+      `Artist HQ default workers are currently ${baseDefaultSlugs.join(', ')}.`,
+      `Campaign default workers are currently ${campaignDefaultSlugs.join(', ')}.`,
       'run-agent drops missing skills/sources before session creation and includes a launch receipt.',
       'Concierge receives broad workspace context and an active-agent capability catalog for routing.',
       'Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.',

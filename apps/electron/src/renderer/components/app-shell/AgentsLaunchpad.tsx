@@ -32,6 +32,7 @@ import { sourcesAtom } from '@/atoms/sources'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { openAgentSessionComposer } from '@/lib/run-agent'
 import { cn } from '@/lib/utils'
+import { defaultWorkerSlugs } from '@/lib/worker-defaults'
 import { getModelsForProviderType } from '@config/llm-connections'
 import { getModelShortName, type ModelDefinition } from '@config/models'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
@@ -43,9 +44,7 @@ interface AgentsLaunchpadProps {
 }
 
 export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = false }: AgentsLaunchpadProps) {
-  const defaultVisibleSlugs = includeCampaignDefaultWorkers
-    ? [...BASE_DEFAULT_WORKER_SLUGS, ...CAMPAIGN_DEFAULT_WORKER_SLUGS]
-    : BASE_DEFAULT_WORKER_SLUGS
+  const defaultVisibleSlugs = defaultWorkerSlugs(includeCampaignDefaultWorkers)
   const { activeAgents, allAgents, loading } = useAgents(workspaceId, {
     defaultVisibleSlugs,
   })
@@ -1286,7 +1285,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Command'
   }
 
-  if (slug === 'industry-hunter' || slug === 'comms-agent' || slug === 'outreach-agent') {
+  if (slug === 'industry-hunter' || slug === 'comms-agent' || slug === 'outreach-agent' || slug === 'college-radio-agent') {
     return 'Outreach'
   }
 
@@ -1358,25 +1357,6 @@ const HIDDEN_WORKER_HOME_AGENT_SLUGS = new Set([
   'researcher',
   'spotify-playlist-creator',
 ])
-
-const BASE_DEFAULT_WORKER_SLUGS = [
-  'branding-agent',
-  'world-builder',
-] as const
-
-const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
-  'content-genius',
-  'scroll-stopper',
-  'art-director',
-  'ad-creative-agent',
-  'ads-strategist',
-  'ads-agent',
-  'ig-trending-power-up',
-  'influencer-campaign-power-up',
-  'playlisting-power-up',
-  'record-doctor',
-  'industry-hunter',
-] as const
 
 function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
   const bestByKey = new Map<string, AgentDefinitionDTO>()

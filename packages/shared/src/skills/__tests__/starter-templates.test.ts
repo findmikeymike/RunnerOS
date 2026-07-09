@@ -167,6 +167,19 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(parsed.content).toContain('Outreach Agent handoff');
   });
 
+  it('bundles the College Radio matcher, directory, and outreach guidance', () => {
+    const matcher = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'college-radio-matcher');
+    const outreach = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'college-radio-outreach');
+
+    expect(matcher).toBeDefined();
+    expect(outreach).toBeDefined();
+    expect(matcher?.files.some(file => file.path === 'match.py')).toBe(true);
+    expect(matcher?.files.some(file => file.path === 'data/README.md')).toBe(true);
+    expect(matcher?.files.some(file => file.path === 'data/stations.json')).toBe(false);
+    expect(getSkillMd(matcher!)).toContain('labels every result `directory_only`');
+    expect(getSkillMd(outreach!)).toContain('Require explicit current-turn approval');
+  });
+
   it('includes spotify-canvas-video for silent Spotify Canvas loops', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'spotify-canvas-video');
     expect(skill).toBeDefined();

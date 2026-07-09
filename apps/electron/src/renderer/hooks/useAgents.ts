@@ -69,6 +69,7 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   'comms-agent',
   'outreach-agent',
   'industry-hunter',
+  'college-radio-agent',
   'youtube-research-agent',
   'youtube-intelligence-agent',
 ] as const

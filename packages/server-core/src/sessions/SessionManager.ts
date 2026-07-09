@@ -2564,6 +2564,7 @@ export class SessionManager implements ISessionManager {
           CONCIERGE_SLUG,
           SETUP_CONCIERGE_SLUG,
           SOCIAL_PUBLISHER_SLUG,
+          DEFAULT_ACTIVATED_AGENT_SLUGS,
         } = await import('@craft-agent/shared/agent-definitions')
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
@@ -2601,6 +2602,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'comms-agent'
             || a.slug === 'outreach-agent'
             || a.slug === 'industry-hunter'
+            || a.slug === 'college-radio-agent'
             || a.slug === 'art-director'
             || a.slug === 'world-builder'
             || a.slug === 'record-doctor'
@@ -2741,18 +2743,7 @@ export class SessionManager implements ISessionManager {
           } else if (missingArtDirectorSkills.length > 0) {
             sessionLog.warn(`[agent-definitions] Art Director skill bundle incomplete: ${missingArtDirectorSkills.join(', ')}`)
           }
-          const defaultActivatedAgentSlugs = [
-            'ads-strategist',
-            'ad-creative-agent',
-            'ads-agent',
-            'lyric-video-agent',
-            'scroll-stopper',
-            'ig-trending-power-up',
-            'influencer-campaign-power-up',
-            'playlisting-power-up',
-            'record-doctor',
-          ]
-          for (const agentSlug of defaultActivatedAgentSlugs) {
+          for (const agentSlug of DEFAULT_ACTIVATED_AGENT_SLUGS) {
             const agent = STARTER_AGENTS.find(candidate => candidate.slug === agentSlug)
             const skillSlugs = agent?.metadata.skills ?? []
             const missingSkills = skillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
