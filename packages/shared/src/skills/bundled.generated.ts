@@ -3699,16 +3699,21 @@ Models have strong biases and distinct "personalities." Act like a true Art Dire
 
 **Model Routing Matrix:**
 
-1. **The "Anti-Plastic / Raw Photography" Engine (Flux)**
+1. **The "Anti-Plastic / Raw Photography" Engine (Flux 1.1 Pro)**
    - **Vibe:** FADER Mag, 90s film, Fleetwood Mac 70s analog, documentary, high-realism.
-   - **Why:** Flux is the king of raw, unpolished, film-like realism. It naturally resists the glossy, plastic 3D-render look.
-2. **The "Pop-Art / Flat Graphic" Engine (Ideogram / Nano Banana Pro)**
+   - **Why:** Flux 1.1 Pro is the current Midjourney-killer for realism. It is the king of raw, unpolished, film-like photography and naturally resists the glossy, plastic 3D-render look.
+   - **Access:** Available via **Fal.ai** or **Replicate** APIs.
+2. **The "Merch & Graphic Design" Engine (Recraft V3)**
+   - **Vibe:** Merch design, flat vectors, logos, precise screen-print-safe illustrations, cutouts.
+   - **Why:** Built specifically for designers. It understands structural graphic design and gives proper transparent backgrounds better than Midjourney.
+   - **Access:** Available via **Fal.ai**, **Replicate**, or native API.
+3. **The "Pop-Art / Typography" Engine (Ideogram)**
    - **Vibe:** Velvet Underground banana, Bowie mask, Beatles White Album, flat layout, clean typography.
-   - **Why:** Understands composition, layout, and flat vectors. Obey structural graphic design rules without trying to photograph everything.
-3. **The "Surreal / Complex Spatial" Engine (Nano Banana Pro / Gemini Imagen 3)**
+   - **Why:** Understands composition, layout, and text generation better than other models. Obey structural graphic design rules without trying to photograph everything.
+4. **The "Surreal / Complex Spatial" Engine (Gemini Imagen 3)**
    - **Vibe:** Radiohead Amnesiac dread, Pink Floyd precise geometry, complex physical collisions.
    - **Why:** Exceptionally good at spatial reasoning, prompt adherence, and colliding weird concepts without turning them into mush.
-4. **The "Danger Zone" (DALL-E 3)**
+5. **The "Danger Zone" (DALL-E 3)**
    - **Vibe:** Use only as a fallback.
    - **Why:** The primary offender for the "plastic, corporate, 3D-render" aesthetic. If forced to use DALL-E, aggressively enforce negative prompts (\`no 3D render, no octane, no digital art\`) and force analog mediums like \`thick impasto oil paint\`.
 
@@ -3717,7 +3722,7 @@ Models have strong biases and distinct "personalities." Act like a true Art Dire
 **If the user is present (Interactive Chat):**
 Do not generate immediately. First deliver concepts. When the user approves one:
 1. Write the exact generation brief.
-2. **Pitch the model:** "Because we are going for that raw 90s film look, I strongly recommend we route this to Flux instead of DALL-E so it doesn't look plastic. I see we have access to it via your Fal API."
+2. **Pitch the model:** "Because we are going for that raw 90s film look, I strongly recommend we route this to **Flux 1.1 Pro** instead of DALL-E so it doesn't look plastic. I see we have access to it via your **Fal API**."
 3. Ask for explicit approval to run and spend.
 4. If using Zero, inspect the capability first with \`zero search\` and \`zero get\`; do not assume schema. Use a max-pay cap.
 
