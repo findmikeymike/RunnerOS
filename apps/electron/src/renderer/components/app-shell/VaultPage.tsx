@@ -389,25 +389,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                   )
                 })}
               </div>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-2xl font-semibold tracking-tight text-white/90">{categoryLabel(selectedCategory)}</h2>
-                  <p className="text-xs text-white/30">{categoryAssets.length ? `${categoryAssets.length} item${categoryAssets.length === 1 ? '' : 's'}` : 'Ready for files'}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => void startImport(addHintForSelection(selectedCategory, selectedKind))}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-[#f97316]/35 bg-[#f97316]/12 px-3 text-xs font-medium text-white/82 hover:bg-[#f97316]/18 disabled:cursor-wait disabled:opacity-50"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid gap-2 lg:grid-cols-[minmax(220px,420px)_auto]">
+              <div className="flex justify-end gap-2">
                 <label className="flex h-8 items-center gap-2 rounded-full border border-white/[0.035] bg-black/20 px-3">
                   <Search className="h-3.5 w-3.5 text-white/26" />
                   <input
@@ -438,6 +420,17 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
             </div>
 
             <div className="h-full min-h-0 overflow-y-auto bg-[#060606] p-4 pb-28">
+              <div className="mb-3 flex justify-end">
+                <button
+                  type="button"
+                  disabled={busy !== null}
+                  onClick={() => void startImport(addHintForSelection(selectedCategory, selectedKind))}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.035] px-3 text-xs font-medium text-white/68 hover:bg-white/[0.06] hover:text-white disabled:cursor-wait disabled:opacity-50"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </button>
+              </div>
               {filteredAssets.length === 0 ? (
                 <EmptyState category={selectedCategory} />
               ) : (
@@ -776,14 +769,13 @@ function AssetRow({ asset, selected, onSelect }: { asset: VaultAssetRecord; sele
 }
 
 function EmptyState({ category }: { category: VaultCategory }) {
-  const Icon = CATEGORIES.find((item) => item.id === category)?.icon ?? FolderOpen
   return (
-    <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[14px] border border-dashed border-[#f97316]/20 bg-[#0b0805] text-center">
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-[20px] border border-[#f97316]/16 bg-[#f97316]/8">
-        <Icon className="h-7 w-7 text-[#fb923c]/46" />
+    <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[14px] border border-dashed border-white/[0.07] bg-white/[0.01] text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[16px] border border-white/[0.06] bg-white/[0.025]">
+        <Upload className="h-5 w-5 text-white/24" />
       </div>
-      <div className="text-base font-semibold text-white/72">Drop {categoryLabel(category).toLowerCase()} here</div>
-      <div className="mt-1 max-w-[320px] text-sm leading-5 text-white/34">Files are staged before import so you can confirm where they land.</div>
+      <div className="text-sm font-semibold text-white/58">Drop files here</div>
+      <div className="mt-1 max-w-[300px] text-xs leading-5 text-white/28">Files are staged before import.</div>
     </div>
   )
 }
