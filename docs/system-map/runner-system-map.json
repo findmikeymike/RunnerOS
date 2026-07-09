@@ -58,10 +58,10 @@
     "finalsPromotionWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 76,
+    "knownSkillCount": 119,
     "bundledSkillCount": 76,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 0,
+    "userGlobalSkillCount": 119,
     "knownSourceCount": 25,
     "missingSkills": [],
     "machineLocalOnlySkills": [],

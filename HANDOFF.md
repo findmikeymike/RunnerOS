@@ -1,15 +1,21 @@
 # Handoff: Creator Command Center + Social Publisher
 
-Last updated: 2026-07-08 17:55 CDT
+Last updated: 2026-07-09 12:58 CDT
 
 ## Current Priority
 
-Primary ready PR:
+Active app tree:
+
+- Branch: `codex/creator-social-integration`
+- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
+- Status: active working branch for Creator Command / HQ / Campaign work.
+- Remote note: local branch is ahead of `origin/codex/creator-social-integration`; do not assume the latest local upgrades are on remote until pushed.
+
+Prior PR context:
 
 - PR #9: https://github.com/findmikeymike/RunnerOS/pull/9
 - Branch: `codex/creator-social-integration`
-- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
-- Status: ready for review/merge candidate.
+- Status: earlier review/merge candidate, now with additional local commits layered on top.
 
 Hold/draft PR:
 
@@ -24,9 +30,9 @@ Do not merge Creative Lab yet:
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/lab-workspace`
 - Status: clean/pushed, intentionally held.
 
-## What PR #9 Contains
+## What This Tree Contains
 
-PR #9 integrates:
+The base integration includes:
 
 - Creator Command Center campaign/HQ UI cleanup.
 - Chat sidebar/session-history UX cleanup.
@@ -41,23 +47,34 @@ PR #9 integrates:
 - Paperclip app-file picker improvements.
 - Output file naming by manifest title.
 
+New local upgrades on top of the pushed branch:
+
+- Art Director classic album-cover reference library.
+- Art Director image-generation routing matrix.
+- Art Director Midjourney-killer model matrix.
+- Art Director prompt anatomy engine and reframed classic-cover remix guidance.
+- TryPost agent wired to official TryPost MCP source using bearer/PAT auth, with Setup Concierge guidance.
+- HQ nav cleanup: Vault moved under Brain, Brain uses brain icon, and Chat/Brain divider is subtle.
+- `docs/system-map/` regenerated from code.
+
 Important branches preserved:
 
 - `codex/creator-command-center`: pushed and clean.
 - `codex/post-agents`: pushed and clean.
-- `codex/creator-social-integration`: pushed and clean; created from `creator-command-center` plus cherry-picked social/file-picker commits.
+- `codex/creator-social-integration`: active local tree; ahead of origin.
 
 Conflict note:
 
 - Only cherry-pick conflict was in the four social platform CLI files.
 - Resolved by taking the already-tested `codex/post-agents` versions.
 
-## PR #9 Verification
+## Verification
 
 Passed in `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`:
 
 ```bash
 bun run typecheck:electron
+bun run docs:system-map
 ```
 
 Passed in `tools/printing-press-social`:
@@ -123,9 +140,12 @@ Keep these invariants:
 
 ## Current Worktree Triage
 
-Clean/pushed:
+Active:
 
 - `codex/creator-social-integration`
+
+Clean/pushed or preserved:
+
 - `codex/creator-command-center`
 - `codex/post-agents`
 - `codex/team-mode-phase-1`
@@ -141,7 +161,8 @@ Needs future attention:
 
 ## Next Best Move
 
-1. Review/merge PR #9 first.
-2. After PR #9 lands, rebase PR #10 and smoke Team Mode.
-3. Keep Creative Lab held.
-4. Then triage dirty `agent-adds`, `voice-hnic-v1`, and `personal-ops`.
+1. Decide whether to push the current `codex/creator-social-integration` local stack.
+2. If pushing, verify the full ahead-of-origin commit stack is intended.
+3. Keep Creative Lab held unless Michael explicitly asks to merge it.
+4. After this branch is settled, rebase/smoke Team Mode if still needed.
+5. Then triage dirty `agent-adds`, `voice-hnic-v1`, and `personal-ops`.
