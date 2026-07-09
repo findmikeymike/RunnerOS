@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { AlertTriangle, Archive, CheckCircle2, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, Loader2, PanelTopOpen, ReceiptText, Route, Star } from 'lucide-react'
+import { AlertTriangle, Archive, CalendarClock, CheckCircle2, ExternalLink, Eye, FileText, FileVideo, FolderOpen, Link2, Loader2, PanelTopOpen, ReceiptText, Route, Star } from 'lucide-react'
 import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,8 @@ import { useOutputs, type OutputAssetDTO, type OutputManifestDTO } from '@/hooks
 import { openDemoVisualSurfaceAtom, openOutputVisualSurfaceAtom } from '@/atoms/visual-surfaces'
 import { findVideoProjectAsset } from '@/components/outputs/video-project-output'
 import { OutputFinalActionDialog } from '@/components/outputs/OutputFinalActionDialog'
-import { isAdOutput } from '@/lib/output-finals-actions'
+import { campaignCalendarPrefillForOutput, isAdOutput } from '@/lib/output-finals-actions'
+import { setPendingCampaignCalendarPrefill } from '@/lib/campaign-calendar'
 import type { VaultKindHint } from '@craft-agent/shared/artist-vault'
 
 interface Props {
@@ -131,6 +132,10 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <Button size="sm" variant="outline" className="border-blue-400/20 bg-blue-400/10 text-white/82 hover:bg-blue-400/15 hover:text-white" onClick={() => scheduleOutputInCampaignCalendar(manifest, currentCampaignId, navigate)}>
+              <CalendarClock className="mr-1.5 h-3.5 w-3.5" />
+              Schedule
+            </Button>
             <Button size="sm" variant="outline" className="border-emerald-400/20 bg-emerald-400/10 text-white/82 hover:bg-emerald-400/15 hover:text-white" onClick={() => setFinalAction('promote')}>
               <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
               Set as Final
@@ -301,6 +306,15 @@ export default function OutputDetailPage({ workspaceId, outputId, currentCampaig
       </div>
     </div>
   )
+}
+
+function scheduleOutputInCampaignCalendar(
+  manifest: OutputManifestDTO,
+  currentCampaignId: string | undefined,
+  navigate: (route: ReturnType<typeof routes.view.campaign>) => void,
+): void {
+  setPendingCampaignCalendarPrefill(campaignCalendarPrefillForOutput(manifest, currentCampaignId))
+  navigate(routes.view.campaign('calendar'))
 }
 
 function focusOutputSurface(

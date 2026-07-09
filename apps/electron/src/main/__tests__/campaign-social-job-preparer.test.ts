@@ -31,6 +31,7 @@ describe('prepareCampaignSocialJob', () => {
       job,
     }, {
       resolveMediaPath: () => '/workspace/.craft-agent/outputs/output-1/teaser.jpg',
+      fingerprintMediaPath: () => 'sha256:media-one',
       runSocialJson: async (input) => {
         args = input
         return {
@@ -71,6 +72,54 @@ describe('prepareCampaignSocialJob', () => {
       summary: 'Instagram post for ig-main is ready for exact approval.',
     })
     expect(result.actionDigest).toMatch(/^sha256:/)
+  })
+
+  test('changes the approval digest when media bytes change at the same path', async () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { caption: 'New song Friday.' },
+    })
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'ig-main' }],
+      outputRefs: [{ outputId: 'output-1' }],
+      job,
+    })
+    const dryRun = {
+      ok: true,
+      status: 'dry_run',
+      actionId: `act_${job.id}`,
+      platform: 'instagram',
+      profile: 'ig-main',
+      action: {
+        actionId: `act_${job.id}`,
+        verb: 'post',
+        platform: 'instagram',
+        profile: 'ig-main',
+        payload: { text: 'New song Friday.', media: ['/workspace/output.jpg'] },
+        options: { dryRun: true },
+      },
+      browserPlan: { accountVerification: { verificationTargetKnown: true } },
+    }
+    const prepare = (fingerprint: string) => prepareCampaignSocialJob({
+      workspaceId: 'campaign-1',
+      workspaceRootPath: '/workspace',
+      item,
+      job,
+    }, {
+      resolveMediaPath: () => '/workspace/output.jpg',
+      fingerprintMediaPath: () => fingerprint,
+      runSocialJson: async () => dryRun,
+    })
+
+    const first = await prepare('sha256:first-bytes')
+    const second = await prepare('sha256:second-bytes')
+
+    expect(first.actionDigest).not.toBe(second.actionDigest)
   })
 
   test('rejects a dry-run resolved for a different profile', async () => {

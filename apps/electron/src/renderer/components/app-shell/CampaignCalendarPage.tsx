@@ -8,17 +8,21 @@ import {
   activeCampaignCalendarItems,
   approveCampaignCalendarItem,
   campaignCalendarMetadata,
-  createCampaignCalendarItem,
+  createCampaignCalendarDraftItem,
   formatCampaignExternalReceiptLabel,
   isLiveExternalActionType,
   parseCampaignCalendarDocResult,
   requeueCampaignScheduledJob,
   serializeCampaignCalendarBody,
+  takePendingCampaignCalendarPrefill,
   updateCampaignCalendarItem,
   type CampaignCalendar,
   type CampaignCalendarItem,
   type CampaignCalendarItemKind,
   type CampaignCalendarItemStatus,
+  type CampaignFinalRef,
+  type CampaignOutputRef,
+  type CampaignScheduledJobActionType,
 } from '@/lib/campaign-calendar'
 import {
   CalendarMonthGrid,
@@ -34,7 +38,16 @@ type CampaignCalendarDraft = {
   kind: CampaignCalendarItemKind
   status: CampaignCalendarItemStatus
   notes: string
+  actionType: CampaignScheduledJobActionType
+  actionInput: string
+  socialPlatform: string
+  socialProfileId: string
+  accountSetId: string
+  finalRefs: CampaignFinalRef[]
+  outputRefs: CampaignOutputRef[]
 }
+
+type CalendarSocialProfile = { platform: string; profile: string; accountGroup: string | null; ready: boolean }
 
 const todayKey = toDateKey(new Date())
 
@@ -45,6 +58,13 @@ const emptyCampaignCalendarDraft = (date = todayKey): CampaignCalendarDraft => (
   kind: 'manual',
   status: 'scheduled',
   notes: '',
+  actionType: 'ask-agent',
+  actionInput: '',
+  socialPlatform: '',
+  socialProfileId: '',
+  accountSetId: '',
+  finalRefs: [],
+  outputRefs: [],
 })
 
 export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
@@ -64,6 +84,7 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   const [calendarDraft, setCalendarDraft] = React.useState<CampaignCalendarDraft>(() => emptyCampaignCalendarDraft(todayKey))
   const [calendarEditId, setCalendarEditId] = React.useState<string | null>(null)
   const [calendarEditDraft, setCalendarEditDraft] = React.useState<CampaignCalendarDraft>(() => emptyCampaignCalendarDraft(todayKey))
+  const [socialProfiles, setSocialProfiles] = React.useState<CalendarSocialProfile[]>([])
   const selectedDateCalendarItems = React.useMemo(
     () => activeCalendarItems.filter((item) => item.date === selectedCalendarDate),
     [activeCalendarItems, selectedCalendarDate],
@@ -80,6 +101,35 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   React.useEffect(() => {
     if (docs.some((item) => item.slug === CAMPAIGN_CALENDAR_CONTEXT_SLUG)) setOptimisticCampaignCalendar(null)
   }, [docs])
+
+  React.useEffect(() => {
+    const prefill = takePendingCampaignCalendarPrefill()
+    if (!prefill) return
+    setCalendarDraft((current) => ({
+      ...current,
+      title: prefill.title,
+      kind: prefill.kind,
+      actionType: prefill.actionType,
+      finalRefs: prefill.finalRefs ?? [],
+      outputRefs: prefill.outputRefs ?? [],
+    }))
+  }, [])
+
+  React.useEffect(() => {
+    let active = true
+    window.electronAPI.listSocialAccounts().then((doctor) => {
+      if (!active) return
+      setSocialProfiles(doctor.platforms.flatMap((group) => group.profiles.map((profile) => ({
+        platform: profile.platform,
+        profile: profile.profile,
+        accountGroup: profile.accountGroup,
+        ready: profile.ready,
+      }))))
+    }).catch(() => {
+      if (active) setSocialProfiles([])
+    })
+    return () => { active = false }
+  }, [])
 
   const saveCampaignCalendar = React.useCallback(
     async (nextCalendar: CampaignCalendar) => {
@@ -102,7 +152,7 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
       toast.error('Add a title first.')
       return
     }
-    const item = createCampaignCalendarItem({
+    const result = createCampaignCalendarDraftItem({
       campaignId: workspaceId || 'workspace',
       date: calendarDraft.date || selectedCalendarDate,
       time: calendarDraft.time,
@@ -110,7 +160,20 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
       notes: calendarDraft.notes,
       kind: calendarDraft.kind,
       status: calendarDraft.status,
+      actionType: calendarDraft.actionType,
+      actionInput: calendarDraft.actionInput,
+      accountSetId: calendarDraft.accountSetId || undefined,
+      socialProfileRefs: calendarDraft.socialPlatform && calendarDraft.socialProfileId
+        ? [{ platform: calendarDraft.socialPlatform, profileId: calendarDraft.socialProfileId }]
+        : undefined,
+      finalRefs: calendarDraft.finalRefs,
+      outputRefs: calendarDraft.outputRefs,
     })
+    if (!result.ok) {
+      toast.error(result.error)
+      return
+    }
+    const item = result.item
     void saveCampaignCalendar({
       version: 1,
       campaignId: campaignCalendar.campaignId || workspaceId || 'workspace',
@@ -130,6 +193,17 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
       kind: item.kind,
       status: item.status,
       notes: item.notes ?? '',
+      actionType: item.job?.actionType ?? 'ask-agent',
+      actionInput: typeof item.job?.payload.prompt === 'string'
+        ? item.job.payload.prompt
+        : typeof item.job?.payload.caption === 'string'
+          ? item.job.payload.caption
+          : '',
+      socialPlatform: item.socialProfileRefs?.[0]?.platform ?? '',
+      socialProfileId: item.socialProfileRefs?.[0]?.profileId ?? '',
+      accountSetId: item.accountSetId ?? '',
+      finalRefs: item.finalRefs,
+      outputRefs: item.outputRefs,
     })
   }, [])
 
@@ -255,6 +329,7 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
           onApproveItem={approveCampaignCalendarJob}
           onRequeueItem={requeueCampaignCalendarJob}
           onDeleteItem={deleteCampaignCalendarItem}
+          socialProfiles={socialProfiles}
         />
       </div>
     </div>
@@ -282,6 +357,7 @@ function CampaignCalendarSurface({
   onApproveItem,
   onRequeueItem,
   onDeleteItem,
+  socialProfiles,
 }: {
   items: CampaignCalendarItem[]
   selectedDate: string
@@ -303,6 +379,7 @@ function CampaignCalendarSurface({
   onApproveItem: (itemId: string) => void
   onRequeueItem: (itemId: string) => void
   onDeleteItem: (itemId: string) => void
+  socialProfiles: CalendarSocialProfile[]
 }) {
   const dayMetaByDate = React.useMemo(() => {
     const statusesByDate = new Map<string, CampaignCalendarItemStatus[]>()
@@ -362,6 +439,8 @@ function CampaignCalendarSurface({
                     onChange={onChangeEditDraft}
                     onCancel={onCancelEditItem}
                     onSubmit={() => onSaveEditItem(item.id)}
+                    socialProfiles={socialProfiles}
+                    showJobConfig={false}
                   />
                 ) : (
                   <div className="flex items-start justify-between gap-3">
@@ -436,6 +515,7 @@ function CampaignCalendarSurface({
               submitLabel="Add Item"
               onChange={onChangeDraft}
               onSubmit={onAddItem}
+              socialProfiles={socialProfiles}
             />
           </div>
         </div>
@@ -515,6 +595,8 @@ function CampaignCalendarForm({
   onChange,
   onSubmit,
   onCancel,
+  socialProfiles,
+  showJobConfig = true,
 }: {
   draft: CampaignCalendarDraft
   disabled?: boolean
@@ -522,6 +604,8 @@ function CampaignCalendarForm({
   onChange: (draft: CampaignCalendarDraft) => void
   onSubmit: () => void
   onCancel?: () => void
+  socialProfiles: CalendarSocialProfile[]
+  showJobConfig?: boolean
 }) {
   return (
     <div className="grid grid-cols-1 gap-2">
@@ -542,7 +626,7 @@ function CampaignCalendarForm({
           <option value="manual">Manual reminder</option>
           <option value="deadline">Deadline</option>
           <option value="approval">Review / approval</option>
-          <option value="scheduled-job">Scheduled job</option>
+          {(showJobConfig || draft.kind === 'scheduled-job') ? <option value="scheduled-job">Scheduled job</option> : null}
         </select>
         <select
           value={draft.status}
@@ -557,6 +641,55 @@ function CampaignCalendarForm({
           <option value="canceled">Canceled</option>
         </select>
       </div>
+      {draft.kind === 'scheduled-job' && showJobConfig ? (
+        <>
+          <select
+            value={draft.actionType}
+            onChange={(event) => onChange({ ...draft, actionType: event.target.value as CampaignScheduledJobActionType })}
+            className="h-9 rounded-[10px] border border-white/[0.06] bg-black/25 px-3 text-xs text-white/75 outline-none focus:border-white/16"
+          >
+            <option value="ask-agent">Ask agent</option>
+            <option value="generate-content">Generate content</option>
+            <option value="run-workflow">Run workflow</option>
+            <option value="review">Review</option>
+            <option value="custom-prompt">Custom prompt</option>
+            {(draft.finalRefs.length > 0 || draft.outputRefs.length > 0) ? <option value="post-asset">Post asset</option> : null}
+          </select>
+          {draft.actionType === 'post-asset' ? (
+            <select
+              value={draft.socialPlatform && draft.socialProfileId ? `${draft.socialPlatform}/${draft.socialProfileId}` : ''}
+              onChange={(event) => {
+                const selected = socialProfiles.find((profile) => `${profile.platform}/${profile.profile}` === event.target.value)
+                onChange({
+                  ...draft,
+                  socialPlatform: selected?.platform ?? '',
+                  socialProfileId: selected?.profile ?? '',
+                  accountSetId: selected?.accountGroup ?? '',
+                })
+              }}
+              className="h-9 rounded-[10px] border border-white/[0.06] bg-black/25 px-3 text-xs text-white/75 outline-none focus:border-white/16"
+            >
+              <option value="">Choose social profile</option>
+              {socialProfiles.map((profile) => (
+                <option key={`${profile.platform}/${profile.profile}`} value={`${profile.platform}/${profile.profile}`} disabled={!profile.ready}>
+                  {profile.platform} · {profile.profile}{profile.ready ? '' : ' · setup required'}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {(draft.finalRefs.length > 0 || draft.outputRefs.length > 0) ? (
+            <div className="rounded-[8px] border border-blue-300/10 bg-blue-300/[0.04] px-2.5 py-2 text-[11px] text-blue-100/58">
+              Attached: {draft.finalRefs.length > 0 ? 'campaign Final' : 'Output'}
+            </div>
+          ) : null}
+          <textarea
+            value={draft.actionInput}
+            onChange={(event) => onChange({ ...draft, actionInput: event.target.value })}
+            placeholder={draft.actionType === 'post-asset' ? 'Final caption' : draft.actionType === 'run-workflow' ? 'Workflow slug' : 'Job instruction'}
+            className="min-h-[64px] w-full rounded-[10px] border border-white/[0.06] bg-black/25 px-3 py-2 text-xs leading-5 text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
+          />
+        </>
+      ) : null}
       <textarea
         value={draft.notes}
         onChange={(event) => onChange({ ...draft, notes: event.target.value })}

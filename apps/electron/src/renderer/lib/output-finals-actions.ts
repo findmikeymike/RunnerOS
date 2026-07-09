@@ -4,6 +4,7 @@ import type {
   OutputSummaryDTO,
   RemoveOutputFromFinalInputDTO,
 } from '@/hooks/useOutputs'
+import type { CampaignCalendarPrefill } from './campaign-calendar'
 
 type OutputLike = OutputSummaryDTO | OutputManifestDTO
 
@@ -49,6 +50,33 @@ export function defaultFinalSlotForOutput(output: OutputLike): string {
   if (output.kind === 'audio') return 'Master'
   if (output.kind === 'receipt' || output.kind === 'external-action') return 'References'
   return output.context?.scope === 'hq' ? 'Brand Copy' : 'Press Copy'
+}
+
+export function campaignCalendarPrefillForOutput(
+  output: OutputManifestDTO,
+  currentCampaignId?: string,
+): CampaignCalendarPrefill {
+  const campaignId = currentCampaignId ?? output.context?.campaignId
+  const matchingFinals = output.finals?.filter((entry) => (
+    entry.scope === 'campaign' && (!campaignId || entry.campaignId === campaignId)
+  )) ?? []
+  const selectedFinal = matchingFinals.find((entry) => entry.isPrimary) ?? matchingFinals[0]
+
+  return {
+    title: `Schedule ${output.title}`,
+    kind: 'scheduled-job',
+    actionType: 'post-asset',
+    ...(selectedFinal ? {
+      finalRefs: [{
+        outputId: selectedFinal.outputId,
+        assetId: selectedFinal.assetId,
+        slot: selectedFinal.slot,
+        label: output.title,
+      }],
+    } : {
+      outputRefs: [{ outputId: output.id, title: output.title, kind: output.kind }],
+    }),
+  }
 }
 
 export function isAdOutput(output: Pick<OutputLike, 'title' | 'summary' | 'tags'>): boolean {

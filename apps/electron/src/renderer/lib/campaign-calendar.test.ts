@@ -6,6 +6,7 @@ import {
   applyCampaignCalendarWriteIntent,
   approveCampaignCalendarItem,
   createCampaignCalendarItem,
+  createCampaignCalendarDraftItem,
   createCampaignScheduledJob,
   formatCampaignExternalReceiptLabel,
   parseCampaignCalendarDocResult,
@@ -13,6 +14,8 @@ import {
   selectDueCampaignScheduledJobs,
   serializeCampaignCalendarBody,
   updateCampaignCalendarItem,
+  setPendingCampaignCalendarPrefill,
+  takePendingCampaignCalendarPrefill,
 } from './campaign-calendar'
 
 function makeDoc(body: string): ContextDocDTO {
@@ -30,6 +33,44 @@ function makeDoc(body: string): ContextDocDTO {
 }
 
 describe('campaign calendar utilities', () => {
+  test('creates an executable scheduled job from the Calendar composer', () => {
+    const result = createCampaignCalendarDraftItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      time: '09:30',
+      title: 'Prepare launch copy',
+      notes: 'Use the locked campaign voice.',
+      kind: 'scheduled-job',
+      status: 'scheduled',
+      actionType: 'ask-agent',
+      actionInput: 'Prepare the launch caption.',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.item.job?.actionType).toBe('ask-agent')
+      expect(result.item.job?.payload).toEqual({ prompt: 'Prepare the launch caption.' })
+      expect(result.item.job?.runAt).toBe(new Date('2026-07-10T09:30:00').toISOString())
+    }
+  })
+
+  test('carries an exact Final pointer into the Calendar composer', () => {
+    setPendingCampaignCalendarPrefill({
+      title: 'Post teaser image',
+      kind: 'scheduled-job',
+      actionType: 'post-asset',
+      finalRefs: [{ outputId: 'output-1', assetId: 'asset-1', slot: 'social-teaser' }],
+    })
+
+    expect(takePendingCampaignCalendarPrefill()).toEqual({
+      title: 'Post teaser image',
+      kind: 'scheduled-job',
+      actionType: 'post-asset',
+      finalRefs: [{ outputId: 'output-1', assetId: 'asset-1', slot: 'social-teaser' }],
+    })
+    expect(takePendingCampaignCalendarPrefill()).toBeUndefined()
+  })
+
   test('formats external execution receipts for the calendar', () => {
     expect(formatCampaignExternalReceiptLabel({
       id: 'receipt-1',
@@ -395,5 +436,95 @@ describe('campaign calendar utilities', () => {
 
     expect(requeued.status).toBe('done')
     expect(requeued.job?.completedAt).toBe('2026-07-10T14:02:00.000Z')
+  })
+
+  test('never selects canceled external jobs even when exact approval is valid', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { caption: 'New song Friday.' },
+    })
+    const approved = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      job,
+    }), { campaignId: 'campaign-1', now: '2026-07-10T13:50:00.000Z' })
+    const canceled = updateCampaignCalendarItem(approved, { status: 'canceled' })
+
+    const due = selectDueCampaignScheduledJobs({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [canceled],
+      updatedAt: '2026-07-10T13:50:00.000Z',
+    }, new Date('2026-07-10T14:01:00.000Z'), { allowLiveExternal: true })
+
+    expect(due).toEqual([])
+  })
+
+  test('never selects exact-approved external jobs already marked done', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { caption: 'Already posted.' },
+    })
+    const approved = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Already handled',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      job,
+    }), { campaignId: 'campaign-1', now: '2026-07-10T13:50:00.000Z' })
+    const item = updateCampaignCalendarItem(approved, { status: 'done' })
+
+    const due = selectDueCampaignScheduledJobs({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [item],
+      updatedAt: '2026-07-10T14:01:00.000Z',
+    }, new Date('2026-07-10T14:01:00.000Z'), { allowLiveExternal: true })
+
+    expect(due).toEqual([])
+  })
+
+  test('gives late approvals a full approval window from approval time', () => {
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      job: createCampaignScheduledJob({
+        runAt: '2026-07-10T14:00:00.000Z',
+        actionType: 'post-asset',
+        payload: { caption: 'New song Friday.' },
+      }),
+    })
+
+    const approved = approveCampaignCalendarItem(item, {
+      campaignId: 'campaign-1',
+      now: '2026-07-10T14:31:00.000Z',
+    })
+
+    expect(approved.approvals?.at(-1)?.expiresAt).toBe('2026-07-10T15:01:00.000Z')
+  })
+
+  test('generates unique default idempotency keys for distinct jobs', () => {
+    const first = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { caption: 'Same post.' },
+    })
+    const second = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { caption: 'Same post.' },
+    })
+
+    expect(first.idempotencyKey).not.toBe(second.idempotencyKey)
+    expect(first.idempotencyKey).toContain(first.id)
   })
 })

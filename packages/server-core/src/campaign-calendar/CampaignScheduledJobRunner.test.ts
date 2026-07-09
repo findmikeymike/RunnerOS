@@ -314,6 +314,48 @@ describe('CampaignScheduledJobRunner', () => {
     })
   })
 
+  test('runs a materially late external job after an exact late review', async () => {
+    const root = makeRoot()
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { caption: 'New song Friday.' },
+      approvalPolicy: 'approval-before-external-action',
+    })
+    const preparedJob = {
+      ...job,
+      externalActionPreview: {
+        actionId: 'act_campaign_late',
+        actionDigest: 'sha256:late-review',
+        platform: 'instagram',
+        profileId: 'ig-main',
+        preparedAt: '2026-07-10T14:01:00.000Z',
+        payloadDigest: job.payloadDigest,
+      },
+    }
+    const item = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'ig-main' }],
+      job: preparedJob,
+    }), { campaignId: 'campaign-1', now: '2026-07-10T14:31:00.000Z' })
+    writeCalendar(root, [item])
+
+    const runner = new CampaignScheduledJobRunner({
+      executePromptJob: async () => ({ sessionId: 'session-1' }),
+      startWorkflow: async () => ({ runId: 'run-1' }),
+      executeExternalJob: async () => ({ receiptId: 'receipt-late' }),
+    })
+
+    const result = await runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:32:00.000Z'))
+
+    expect(result.started).toBe(1)
+    expect(readCalendar(root).items[0]?.status).toBe('done')
+  })
+
   test('records executor failure without creating an external receipt', async () => {
     const root = makeRoot()
     const job = createCampaignScheduledJob({
@@ -569,5 +611,44 @@ describe('CampaignScheduledJobRunner', () => {
     expect(saved.status).toBe('needs-approval')
     expect(saved.job?.attempts).toBe(0)
     expect(saved.runHistory).toHaveLength(0)
+  })
+
+  test('merges completion into the latest calendar without deleting concurrent writes', async () => {
+    const root = makeRoot()
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Prepare copy',
+      kind: 'scheduled-job',
+      job: createCampaignScheduledJob({
+        runAt: '2026-07-10T14:00:00.000Z',
+        actionType: 'ask-agent',
+        payload: { prompt: 'Prepare copy.' },
+      }),
+    })
+    writeCalendar(root, [item])
+
+    const runner = new CampaignScheduledJobRunner({
+      executePromptJob: async () => {
+        const latest = readCalendar(root)
+        writeCalendar(root, [
+          ...latest.items,
+          createCampaignCalendarItem({
+            campaignId: 'campaign-1',
+            date: '2026-07-11',
+            title: 'Concurrent user item',
+          }),
+        ])
+        return { sessionId: 'session-1' }
+      },
+      startWorkflow: async () => ({ runId: 'run-1' }),
+    })
+
+    await runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(readCalendar(root).items.map((entry) => entry.title)).toEqual([
+      'Prepare copy',
+      'Concurrent user item',
+    ])
   })
 })

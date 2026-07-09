@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import {
   readOutputManifest,
   resolveOutputAssetPath,
@@ -30,6 +31,7 @@ type SocialDryRunResult = {
 type PrepareDeps = {
   runSocialJson(args: string[]): Promise<unknown>
   resolveMediaPath(input: PrepareInput): string | undefined
+  fingerprintMediaPath?(path: string): string
 }
 
 export async function prepareCampaignSocialJob(input: PrepareInput, deps: PrepareDeps) {
@@ -68,9 +70,11 @@ export async function prepareCampaignSocialJob(input: PrepareInput, deps: Prepar
   if (result.browserPlan?.accountVerification?.verificationTargetKnown !== true) {
     throw new Error(`Social profile ${profile.platform}/${profile.profileId} has no known account verification target.`)
   }
+  const mediaDigest = mediaPath ? deps.fingerprintMediaPath?.(mediaPath) : undefined
+  if (mediaPath && !mediaDigest) throw new Error('Social media asset could not be fingerprinted for exact approval.')
 
   const actionDigest = createHash('sha256')
-    .update(stableStringify({ action: result.action, browserPlan: result.browserPlan }))
+    .update(stableStringify({ action: result.action, browserPlan: result.browserPlan, mediaDigest }))
     .digest('hex')
   const platformLabel = profile.platform === 'x'
     ? 'X'
@@ -82,6 +86,10 @@ export async function prepareCampaignSocialJob(input: PrepareInput, deps: Prepar
     profileId: profile.profileId,
     summary: `${platformLabel} post for ${profile.profileId} is ready for exact approval.`,
   }
+}
+
+export function fingerprintCampaignSocialMediaPath(path: string): string {
+  return `sha256:${createHash('sha256').update(readFileSync(path)).digest('hex')}`
 }
 
 export function resolveCampaignSocialMediaPath(input: PrepareInput): string | undefined {

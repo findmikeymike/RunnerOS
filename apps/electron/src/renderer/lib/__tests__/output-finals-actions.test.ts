@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { defaultFinalSlotForOutput, resolveCampaignFinalId } from '../output-finals-actions'
-import type { OutputFinalPointerDTO, OutputSummaryDTO } from '@/hooks/useOutputs'
+import { campaignCalendarPrefillForOutput, defaultFinalSlotForOutput, resolveCampaignFinalId } from '../output-finals-actions'
+import type { OutputFinalPointerDTO, OutputManifestDTO, OutputSummaryDTO } from '@/hooks/useOutputs'
 
 const output = (campaignId?: string): OutputSummaryDTO => ({
   id: 'output-1',
@@ -78,5 +78,53 @@ describe('defaultFinalSlotForOutput', () => {
       kind: 'video',
       tags: ['content'],
     })).toBe('Shortform Clips')
+  })
+})
+
+describe('campaignCalendarPrefillForOutput', () => {
+  test('prefers the campaign Primary Final over another campaign final', () => {
+    const manifest: OutputManifestDTO = {
+      ...output('campaign-1'),
+      summary: 'Cover',
+      origin: { source: 'session', sessionId: 's1' },
+      assets: [],
+      receipts: [],
+      links: [],
+      finals: [
+        { ...final('campaign-1'), id: 'secondary', slot: 'alternate', isPrimary: false },
+        { ...final('campaign-1'), id: 'primary', assetId: 'asset-1' },
+      ],
+    }
+
+    expect(campaignCalendarPrefillForOutput(manifest, 'campaign-1')).toEqual({
+      title: 'Schedule Cover',
+      kind: 'scheduled-job',
+      actionType: 'post-asset',
+      finalRefs: [{
+        outputId: 'output-1',
+        assetId: 'asset-1',
+        slot: 'cover-art',
+        label: 'Cover',
+      }],
+    })
+  })
+
+  test('falls back to the Output when no campaign Final exists', () => {
+    const manifest: OutputManifestDTO = {
+      ...output('campaign-1'),
+      summary: 'Cover',
+      origin: { source: 'session', sessionId: 's1' },
+      assets: [],
+      receipts: [],
+      links: [],
+      finals: [],
+    }
+
+    expect(campaignCalendarPrefillForOutput(manifest, 'campaign-1')).toEqual({
+      title: 'Schedule Cover',
+      kind: 'scheduled-job',
+      actionType: 'post-asset',
+      outputRefs: [{ outputId: 'output-1', title: 'Cover', kind: 'image' }],
+    })
   })
 })

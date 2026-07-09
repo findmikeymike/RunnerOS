@@ -337,14 +337,15 @@ export function createCampaignScheduledJob(input: {
   const actionType = normalizeActionType(input.actionType);
   const approvalPolicy = input.approvalPolicy
     ?? (isLiveExternalActionType(actionType) ? 'approval-before-external-action' : 'none');
+  const id = `campaign-job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   return {
-    id: `campaign-job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    id,
     runAt,
     timezone: clean(input.timezone) ?? getLocalTimezone(),
     actionType,
     payload,
     payloadDigest,
-    idempotencyKey: clean(input.idempotencyKey) ?? `${actionType}:${runAt}:${payloadDigest}`,
+    idempotencyKey: clean(input.idempotencyKey) ?? `${id}:${actionType}:${runAt}:${payloadDigest}`,
     approvalPolicy,
     maxAttempts: clampInt(input.maxAttempts, 1, 5, 1),
     attempts: 0,
@@ -505,6 +506,7 @@ export function selectDueCampaignScheduledJobs(
     if (Number.isNaN(dueMs)) return [{ item, job, dueAt: job.runAt, blockedReason: 'invalid-run-at' }];
     if (dueMs > nowMs) return [];
     if (hasCompletedScheduledJob(item, job)) return [];
+    if (item.status === 'draft' || item.status === 'done' || item.status === 'failed' || item.status === 'missed' || item.status === 'canceled') return [];
     if (job.attempts >= job.maxAttempts) return [{ item, job, dueAt: job.runAt, blockedReason: 'max-attempts' }];
     if (item.status === 'running') {
       const lastRunMs = Date.parse(job.lastRunAt ?? '');
@@ -624,9 +626,10 @@ function hasPromptPayload(payload: Record<string, unknown>): boolean {
 }
 
 function defaultApprovalExpiresAt(job: CampaignScheduledJob | undefined, approvedAt: string): string {
-  const baseMs = Date.parse(job?.runAt ?? approvedAt);
-  const fallbackMs = Date.parse(approvedAt);
-  const expiresMs = (Number.isNaN(baseMs) ? fallbackMs : baseMs) + CAMPAIGN_EXACT_APPROVAL_GRACE_MS;
+  const runAtMs = Date.parse(job?.runAt ?? '');
+  const approvedAtMs = Date.parse(approvedAt);
+  const validRunAtMs = Number.isNaN(runAtMs) ? approvedAtMs : runAtMs;
+  const expiresMs = Math.max(validRunAtMs, approvedAtMs) + CAMPAIGN_EXACT_APPROVAL_GRACE_MS;
   return new Date(expiresMs).toISOString();
 }
 
@@ -714,14 +717,20 @@ function normalizeScheduledJob(value: unknown): CampaignScheduledJob | undefined
   const actionType = normalizeActionType(job.actionType);
   const payload = isRecord(job.payload) ? job.payload : {};
   const payloadDigest = clean(job.payloadDigest) ?? stablePayloadDigest(payload);
+  const id = clean(job.id) ?? `campaign-job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const runAt = clean(job.runAt) ?? new Date().toISOString();
+  const legacyDefaultKey = `${actionType}:${runAt}:${payloadDigest}`;
+  const storedIdempotencyKey = clean(job.idempotencyKey);
   return {
-    id: clean(job.id) ?? `campaign-job-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-    runAt: clean(job.runAt) ?? new Date().toISOString(),
+    id,
+    runAt,
     timezone: clean(job.timezone) ?? getLocalTimezone(),
     actionType,
     payload,
     payloadDigest,
-    idempotencyKey: clean(job.idempotencyKey) ?? `${actionType}:${job.runAt}:${payloadDigest}`,
+    idempotencyKey: !storedIdempotencyKey || storedIdempotencyKey === legacyDefaultKey
+      ? `${id}:${actionType}:${runAt}:${payloadDigest}`
+      : storedIdempotencyKey,
     approvalPolicy: normalizeApprovalPolicy(job.approvalPolicy, actionType),
     maxAttempts: clampInt(job.maxAttempts, 1, 5, 1),
     attempts: clampInt(job.attempts, 0, 999, 0),

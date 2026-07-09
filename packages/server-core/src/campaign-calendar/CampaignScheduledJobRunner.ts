@@ -169,7 +169,14 @@ export class CampaignScheduledJobRunner {
         }
 
         const lateBy = now.getTime() - Date.parse(current.job.runAt)
-        if (isLiveExternalActionType(current.job.actionType) && lateBy > EXTERNAL_REVIEW_GRACE_MS) {
+        const lateReviewApproval = isLiveExternalActionType(current.job.actionType)
+          ? findApprovedScheduledJobApproval(current, current.job, now, workspaceId)
+          : undefined
+        const approvedAfterLateThreshold = Date.parse(lateReviewApproval?.approvedAt ?? '')
+          >= Date.parse(current.job.runAt) + EXTERNAL_REVIEW_GRACE_MS
+        if (isLiveExternalActionType(current.job.actionType)
+          && lateBy > EXTERNAL_REVIEW_GRACE_MS
+          && !approvedAfterLateThreshold) {
           calendar = await this.persistItem(
             workspaceId,
             workspaceRootPath,
@@ -308,9 +315,22 @@ export class CampaignScheduledJobRunner {
     calendar: CampaignCalendar,
     item: CampaignCalendarItem,
   ): Promise<CampaignCalendar> {
+    const latestDoc = loadContextDoc(workspaceRootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG)
+    const latestParsed = parseCampaignCalendarDocResult(latestDoc ?? undefined, calendar.campaignId)
+    if (!latestParsed.ok) throw new Error(latestParsed.error)
+    const latestCalendar = latestParsed.calendar
+    const latestItem = latestCalendar.items.find((candidate) => candidate.id === item.id)
+    if (!latestItem || latestItem.job?.id !== item.job?.id) return latestCalendar
+    const mergedItem: CampaignCalendarItem = {
+      ...latestItem,
+      status: item.status,
+      job: item.job,
+      runHistory: item.runHistory,
+      updatedAt: item.updatedAt,
+    }
     const nextCalendar = {
-      ...calendar,
-      items: calendar.items.map((candidate) => candidate.id === item.id ? item : candidate),
+      ...latestCalendar,
+      items: latestCalendar.items.map((candidate) => candidate.id === item.id ? mergedItem : candidate),
       updatedAt: new Date().toISOString(),
     }
     upsertContextDoc(workspaceRootPath, {

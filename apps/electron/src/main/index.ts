@@ -108,6 +108,7 @@ import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
 import {
   prepareCampaignSocialJob,
+  fingerprintCampaignSocialMediaPath,
   resolveCampaignSocialMediaPath,
 } from './campaign-social-job-preparer'
 import { runSocialJson } from './social-cli'
@@ -660,6 +661,7 @@ app.whenReady().then(async () => {
           sm.setCampaignExternalJobPreparer((input) => prepareCampaignSocialJob(input, {
             runSocialJson,
             resolveMediaPath: resolveCampaignSocialMediaPath,
+            fingerprintMediaPath: fingerprintCampaignSocialMediaPath,
           }))
           sm.setBrowserPaneManager(browserPaneManager!)
           return sm
