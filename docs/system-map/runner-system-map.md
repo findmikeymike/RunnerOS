@@ -45,7 +45,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
 - Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 3, Socials 2
-- Permission modes: ask 31, safe 8
+- Permission modes: ask 32, safe 7
 - Known skills: 121 (78 bundled, 6 system, 119 user-global on this machine)
 - Known builtin sources: 25
 
@@ -404,14 +404,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 #### College Radio (`college-radio-agent`)
 
 - Description: Match releases to college and non-commercial radio stations, verify fit, and prepare rule-aware outreach packets.
-- Permission: `safe`; thinking: `high`
+- Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `hq-workers-default-visible`, `campaign-workers-default-visible`
 - Skills: `college-radio-matcher`, `college-radio-outreach`
 - Sources: none
 - Optional sources: none
-- Trusted tools: none
+- Trusted tools: `create_output`, `message_agent`
 - Tags: `radio`, `college-radio`, `promotion`, `outreach`, `campaigns`, `research`
-- Signals: `artifact-output-aware`, `external-action-boundary`, `safe-default`
+- Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`, `trusted-worker-tools`
 - Inputs: Artist HQ and campaign context, song/release, genre and vibe, 2–5 sound-alikes, clean/explicit status, hometown, tour markets, release type, stream/download links, and physical-format availability.
 - Outputs: Ranked verified station shortlist, send-first tier, rules watch-list, submission path, personalized pitch drafts, follow-up plan, and Outreach Agent handoff packet.
 

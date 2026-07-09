@@ -673,18 +673,33 @@ body
     expect(youtubeAgent?.systemPrompt).toContain('You do not publish')
   })
 
-  test('starter library includes College Radio as a safe campaign and HQ worker', () => {
+  test('starter library includes College Radio as an approval-gated campaign and HQ worker', () => {
     const collegeRadio = STARTER_AGENTS.find((agent) => agent.slug === 'college-radio-agent')
 
     expect(collegeRadio).toBeDefined()
     expect(collegeRadio?.metadata.name).toBe('College Radio')
-    expect(collegeRadio?.metadata.permissionMode).toBe('safe')
+    expect(collegeRadio?.metadata.permissionMode).toBe('ask')
     expect(collegeRadio?.metadata.skills).toEqual(['college-radio-matcher', 'college-radio-outreach'])
+    expect(collegeRadio?.metadata.trustedWorkerTools).toEqual(['create_output', 'message_agent'])
     expect(collegeRadio?.metadata.tags).toContain('campaigns')
+    expect(collegeRadio?.systemPrompt).toContain('Direct user direction for the current run overrides saved defaults')
+    expect(collegeRadio?.systemPrompt).toContain('College Radio Outreach Packet')
+    expect(collegeRadio?.systemPrompt).toContain('`create_output`')
+    expect(collegeRadio?.systemPrompt).toContain('`message_agent`')
+    expect(collegeRadio?.systemPrompt).toContain('agentSlug: `outreach-agent`')
     expect(collegeRadio?.systemPrompt).toContain('campaign-worker-context')
     expect(collegeRadio?.systemPrompt).toContain('You do not email')
     expect(collegeRadio?.systemPrompt).toContain('explicit current-turn approval')
     expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('college-radio-agent')
+  })
+
+  test('Outreach Agent accepts a verified College Radio packet and keeps send approval exact', () => {
+    const outreach = STARTER_AGENTS.find((agent) => agent.slug === 'outreach-agent')
+
+    expect(outreach?.systemPrompt).toContain('College Radio Outreach Packet')
+    expect(outreach?.systemPrompt).toContain('Do not redo verified station research')
+    expect(outreach?.systemPrompt).toContain('verbatim approval')
+    expect(outreach?.systemPrompt).toContain('Gmail draft')
   })
 
   test('starter library includes the Hypermotion Agent with bundled motion source', () => {
@@ -1307,6 +1322,34 @@ body
     expect(replaceBuiltInAgentMetadata('writer', {
       skills: { from: ['artist-industry-hunter'], to: ['artist-industry-hunter', 'zero'] },
     }, { globalAgentsDir }).updated).toBe(false)
+  })
+
+  test('built-in migrations can upgrade College Radio and Outreach without opening arbitrary agents', () => {
+    const collegeRadio = STARTER_AGENTS.find((agent) => agent.slug === 'college-radio-agent')!
+    const outreach = STARTER_AGENTS.find((agent) => agent.slug === 'outreach-agent')!
+    const writer = STARTER_AGENTS.find((agent) => agent.slug === 'writer')!
+    writeGlobalAgent({
+      ...collegeRadio,
+      metadata: { ...collegeRadio.metadata, permissionMode: 'safe', trustedWorkerTools: undefined },
+      systemPrompt: 'old college prompt',
+    }, { globalAgentsDir })
+    writeGlobalAgent({ ...outreach, systemPrompt: 'old outreach line' }, { globalAgentsDir })
+    writeGlobalAgent({ ...writer, systemPrompt: 'old writer line' }, { globalAgentsDir })
+
+    expect(replaceBuiltInAgentMetadata('college-radio-agent', {
+      permissionMode: { from: 'safe', to: 'ask' },
+      trustedWorkerTools: { from: undefined, to: ['create_output', 'message_agent'] },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText('college-radio-agent', 'old college prompt', 'new college prompt', { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText('outreach-agent', 'old outreach line', 'new outreach line', { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText('writer', 'old writer line', 'new writer line', { globalAgentsDir }).updated).toBe(false)
+
+    const upgradedCollege = loadGlobalAgent('college-radio-agent', { globalAgentsDir })!
+    expect(upgradedCollege.metadata.permissionMode).toBe('ask')
+    expect(upgradedCollege.metadata.trustedWorkerTools).toEqual(['create_output', 'message_agent'])
+    expect(upgradedCollege.systemPrompt).toBe('new college prompt')
+    expect(loadGlobalAgent('outreach-agent', { globalAgentsDir })?.systemPrompt).toBe('new outreach line')
+    expect(loadGlobalAgent('writer', { globalAgentsDir })?.systemPrompt).toBe('old writer line')
   })
 
   test('replaceBuiltInAgentMetadata and prompt text can patch Ads Strategist stale Spotify metadata', () => {

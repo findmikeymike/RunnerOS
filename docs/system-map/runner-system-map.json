@@ -37,8 +37,8 @@
       "Socials": 2
     },
     "permissionModes": {
-      "ask": 31,
-      "safe": 8
+      "ask": 32,
+      "safe": 7
     },
     "hiddenWorkerHomeCount": 6,
     "hqDefaultWorkerSlugs": [
@@ -877,7 +877,7 @@
       "name": "College Radio",
       "description": "Match releases to college and non-commercial radio stations, verify fit, and prepare rule-aware outreach packets.",
       "domain": "Outreach",
-      "permissionMode": "safe",
+      "permissionMode": "ask",
       "thinkingLevel": "high",
       "skills": [
         "college-radio-matcher",
@@ -885,7 +885,10 @@
       ],
       "sources": [],
       "optionalSources": [],
-      "trustedWorkerTools": [],
+      "trustedWorkerTools": [
+        "create_output",
+        "message_agent"
+      ],
       "visualAgent": false,
       "tags": [
         "radio",
@@ -901,9 +904,10 @@
         "campaign-workers-default-visible"
       ],
       "riskSignals": [
+        "approval-capable",
         "artifact-output-aware",
         "external-action-boundary",
-        "safe-default"
+        "trusted-worker-tools"
       ],
       "inputs": "Artist HQ and campaign context, song/release, genre and vibe, 2–5 sound-alikes, clean/explicit status, hometown, tour markets, release type, stream/download links, and physical-format availability.",
       "outputs": "Ranked verified station shortlist, send-first tier, rules watch-list, submission path, personalized pitch drafts, follow-up plan, and Outreach Agent handoff packet."

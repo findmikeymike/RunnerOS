@@ -181,6 +181,9 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(matcher?.files.some(file => file.path === 'data/tastemakers.csv')).toBe(true);
     expect(getSkillMd(matcher!)).toContain('labels every result `directory_only`');
     expect(getSkillMd(outreach!)).toContain('Require explicit current-turn approval');
+    expect(getSkillMd(outreach!)).toContain('College Radio Outreach Packet');
+    expect(getSkillMd(outreach!)).toContain('Direct user direction for this run overrides saved defaults');
+    expect(getSkillMd(outreach!)).toContain('Outreach Agent handoff');
   });
 
   it('includes spotify-canvas-video for silent Spotify Canvas loops', () => {

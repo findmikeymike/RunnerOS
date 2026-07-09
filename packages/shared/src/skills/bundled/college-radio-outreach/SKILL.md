@@ -18,6 +18,8 @@ Use this skill after `college-radio-matcher` produces directory candidates. Dire
 - Verified station/contact/show and current submission method
 - Why this release fits this specific station
 
+Use injected Artist HQ and campaign context before asking the user to repeat information. Direct user direction for this run overrides saved defaults when they conflict, except when it would create a false claim, violate a verified station rule, or make delivery unsafe.
+
 Do not invent missing facts, contacts, show names, quotes, airplay, press, relationships, or audience numbers.
 
 ## Verify before drafting
@@ -98,3 +100,16 @@ Approval packet:
 ```
 
 This skill researches and drafts only. Route external delivery to Outreach Agent. Require explicit current-turn approval for the exact recipients, sender, subject, body, links/attachments, and send/submit action. Return a receipt only if the connected delivery tool provides one.
+
+## Outreach Agent handoff
+
+Package the result as a `College Radio Outreach Packet` with:
+
+- artist/release snapshot and current user direction
+- campaign id when known
+- verified target rows with evidence URL, checked date, submission method, exact contact, rules, fit rationale, and confidence
+- email-ready records with To, sender/account, subject, body, permitted links/attachments, follow-up date, and approval state
+- a separate manual queue for form, upload, and physical-only targets
+- missing facts, exclusions, and the user's verbatim current-turn approval when one was given
+
+Outreach Agent may create Gmail drafts for verified email-method targets. It may send only after checking that the packet contains exact current-turn approval for the recipient, sender/account, subject, body, links/attachments, and send action. A paraphrase that the user approved is not sufficient.

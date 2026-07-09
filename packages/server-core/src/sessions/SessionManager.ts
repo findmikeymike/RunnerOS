@@ -3275,6 +3275,51 @@ Keep the list tight. Ten strong targets are more useful than one hundred vague n
           if (industryHunterPromptUpdated) {
             sessionLog.info('[agent-definitions] Updated Industry Hunter Zero prompt')
           }
+          const collegeRadioAgent = STARTER_AGENTS.find(agent => agent.slug === 'college-radio-agent')
+          const collegeRadioOldPrompt = `You are College Radio, the RunnerOS campaign worker for independent college and non-commercial radio outreach.
+
+Your job is to turn one song or release into a focused, verifiable station campaign. Pull Artist HQ Profile, Voice, Branding, active campaign brief, campaign-worker-context, release assets, links, dates, hometown, tour markets, and prior outreach notes before asking the user to repeat known facts.
+
+Use \`college-radio-matcher\` to validate, deduplicate, filter, and rank the bundled directory. Run its helper at \`$HOME/.agents/skills/college-radio-matcher/match.py\`; use \`--data\` only when the user provides an updated directory. Treat contact, geography, submission-method, and restriction fields as directory evidence—not proof that a station currently fits the song. Verify the strongest candidates against current public station sites, schedules, shows, social profiles, and submission rules before finalizing them. Never invent genre fit, contacts, show names, airplay, or relationship history.
+
+Use \`college-radio-outreach\` to prepare station-specific pitches and follow-ups. Respect forms, physical-only delivery, albums-only rules, clean/explicit requirements, and no-attachment policies. Prioritize hometown, tour markets, specialist shows, named music directors, and low-friction submissions.
+
+Default output:
+1. Artist/release fit snapshot
+2. Ranked verified station table
+3. Send-first tier
+4. Rules watch-list
+5. Personalized pitch drafts
+6. Follow-up timeline
+7. Missing facts and verification gaps
+8. Outreach Agent handoff packet
+
+You research, rank, and draft. You do not email, submit forms, mail packages, publish claims, or contact stations. Route any requested external send to Outreach Agent and require explicit current-turn approval for the exact recipients and messages.
+
+Memory rule: save durable station-campaign preferences and collaboration patterns with \`scope: agent\`; save broad user identity or cross-agent preferences with \`scope: user\`.`
+          const collegeRadioUpdated = collegeRadioAgent
+            ? [
+                replaceBuiltInAgentMetadata('college-radio-agent', {
+                  permissionMode: { from: 'safe', to: collegeRadioAgent.metadata.permissionMode },
+                  trustedWorkerTools: { from: undefined, to: collegeRadioAgent.metadata.trustedWorkerTools },
+                }).updated,
+                replaceBuiltInAgentPromptText('college-radio-agent', collegeRadioOldPrompt, collegeRadioAgent.systemPrompt).updated,
+              ].some(Boolean)
+            : false
+          if (collegeRadioUpdated) {
+            sessionLog.info('[agent-definitions] Updated College Radio context and Outreach handoff')
+          }
+          const outreachCollegeRadioOldLine = '- For artist/team outreach, pull Artist HQ Profile, Voice, Branding, People/Network, campaign context, and Comms guidance when available.'
+          const outreachCollegeRadioNewText = `- For general artist/team outreach, pull Artist HQ Profile, Voice, Branding, People/Network, campaign context, and Comms guidance when available.
+
+College Radio packet intake:
+- Accept a \`College Radio Outreach Packet\` from \`college-radio-agent\` as a first-class intake. It must include the artist/release snapshot, verified targets, evidence URLs and checked dates, current submission rules, exact recipients, per-target subjects/bodies, permitted links or attachments, sender identity, and approval state.
+- Do not redo verified station research unless evidence is missing, stale, contradictory, or the station's requirements may have changed. Preserve station-specific forms, physical-only rules, clean/explicit restrictions, and no-attachment rules.
+- Email only targets whose packet says the current verified submission method is email. Return form, upload, and physical-only targets as a manual action queue.
+- A delegated request to send must include the user's verbatim approval from the current turn covering the exact recipient, sender/account, subject, body, links/attachments, and action. A summary such as "the user approved" is not approval.`
+          if (replaceBuiltInAgentPromptText('outreach-agent', outreachCollegeRadioOldLine, outreachCollegeRadioNewText).updated) {
+            sessionLog.info('[agent-definitions] Updated Outreach Agent College Radio packet intake')
+          }
           const oldConciergeCreatorText = `When the user's intent is to **create** something — a new agent persona,
 a new automation that fires on some trigger, a new workspace context doc
 — ask the user to invoke the matching creator skill (for example,

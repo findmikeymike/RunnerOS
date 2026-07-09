@@ -110,7 +110,7 @@ flowchart LR
   A_open_slide_agent -. hidden .-> Workers
   Registry --> A_writer["Writer\nask\nOther Workers"]
   Workers --> A_writer
-  Registry --> A_college_radio_agent["College Radio\nsafe\nOutreach"]
+  Registry --> A_college_radio_agent["College Radio\nask\nOutreach"]
   Workers --> A_college_radio_agent
   A_college_radio_agent --> S_college_radio_matcher["skill:college-radio-matcher"]
   A_college_radio_agent --> S_college_radio_outreach["skill:college-radio-outreach"]
