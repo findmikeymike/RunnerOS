@@ -34,6 +34,57 @@ Ask only for missing specifics: format, song/project, deadline, must-use assets,
 - Use AI image generation for the image base. Do not trust it for final typography unless the user explicitly wants baked-in text.
 - Plan typography, artist name, title, labels, advisory marks, and layout as a separate design layer.
 
+## Prompt Anatomy — The Core Engine
+
+This is the most important part of the skill. Style lanes and classic covers only give you the *idea* — composition, symbol, palette, meaning. The anatomy is how you write the actual generation prompt so the result looks like art shot on real gear or made by a real hand, never like plastic AI slop.
+
+Build every prompt by walking these blocks in order. Drop a block if it does not apply, but never drop **lighting**, **texture + imperfection**, **medium + capture**, or **negatives** — those four are what kill the plastic look.
+
+1. **Subject + micro-pose** — exact posture, hands, gaze, weight, asymmetry. "Kneeling upright, straight back, blade covering the eyes, relaxed fingers, subtle asymmetry in the wrists" beats "a person holding a sword."
+2. **Wardrobe / material** — specific fabric, cut, era, wear.
+3. **Set + props** — only the few objects that carry meaning. No decoration.
+4. **Backdrop / environment** — surface, color field, depth.
+5. **Lighting recipe** — name source + quality + direction + mix. "Single large softbox camera-left with a low warm bounce fill." "Direct on-camera flash over cool ambient." "Amber candlelight, deep falloff." Never just "cinematic lighting."
+6. **Texture + imperfection** (mandatory, the anti-plastic core) — people: visible pores, freckles, oil sheen on the T-zone, fine peach fuzz, stray flyaway hairs, slight facial asymmetry. Objects/scenes: dust, scratches, paper tooth, patina, uneven ink. If this block is missing, the model defaults to waxy and airbrushed.
+7. **Atmosphere** — one or two charged mood words tied to the song. "Wabi-sabi stillness," "dissociative tenderness," "sacred dread."
+8. **Medium + capture** — declare exactly one path:
+   - *Photographic:* camera body + lens + film stock + grain. "Shot on Contax 645, 80mm f/2, Kodak Portra 400, fine grain, soft highlight halation."
+   - *Painted / illustrated:* medium + surface + mark. "Thick gouache on cold-press paper, visible brushstrokes and tooth."
+   - *Flat graphic:* process. "Silk-screen print, flat spot colors, slight registration offset, no gradients."
+9. **Composition directive** — focal weight, scale, negative space. "Small subject, lots of negative space, centered." "Tight crop, subject fills frame."
+10. **Era / editorial anchor** — the cultural coordinate, never parody. "2010s alt-R&B editorial," "1970s soul sleeve."
+11. **No text (default)** — end with "no text" unless the user explicitly wants baked-in imperfect poster text.
+12. **Negatives** — subject-level exclusions (wrong costume, wrong props) plus the default anti-plastic block below.
+
+**Default anti-plastic negative block** — append to almost every prompt:
+
+`plastic skin, waxy skin, airbrushed, beauty-app smoothing, 3D render, octane, CGI, HDR, over-saturated, over-sharpened, digital sheen, symmetrical doll face, stock-photo lighting`
+
+**Lane → capture defaults** (a starting point for block 8; adjust to the song):
+
+| Lane / job | Default medium / capture | Default model (see Routing Matrix) |
+|------------|--------------------------|------------------------------------|
+| FADER Mag | 35mm film, direct flash + grain, or Contax 645 + Portra 400 | Flux 1.1 Pro |
+| 70s Vinyl | warm analog film, soft daylight, Ektachrome/Portra | Flux 1.1 Pro |
+| Tasteful Collage | scanned paper, cut-and-paste tooth, mixed media | Imagen 3 / Nano Banana Pro |
+| Far Out | painted or long-exposure analog, saturated dream color | Imagen 3 / Flux |
+| Merch graphic | silk-screen / flat vector, spot colors | Recraft V3 / Ideogram |
+
+**Phrase the prompt for the routed model:**
+
+- *Flux (realism):* flowing natural-language sentences dense with sensory + gear + texture detail, like the examples below. Flux rewards prose, not tag soup.
+- *Ideogram / Recraft (graphic, merch, typography):* shorter and structural — name the layout, flat process, spot colors; state any text explicitly and keep it short.
+- *Imagen 3 / Nano Banana Pro (surreal-spatial):* state spatial relationships and physical logic first ("X floating above Y, colliding with Z"), then texture and medium.
+- *DALL-E (fallback only):* force an analog medium and hammer the anti-plastic negatives.
+
+**Worked example — photographic (Flux):**
+
+> Intimate editorial album portrait, extreme tight close-up of a young face turned three-quarters, eyes softly closed, lips relaxed and slightly parted, platinum-bleached hair damp at the temples read as a flat graphic shape against a seamless acid-green backdrop, single large softbox camera-left with a low warm bounce fill, shallow depth of field falling off past the cheekbone, dewy realistic skin with visible pores, faint freckles, a sheen of natural oil on the temple, tiny stray flyaway hairs catching the light, tender and dissociative stillness, shot on Contax 645, 80mm f/2, Kodak Portra 400, fine grain, soft highlight halation, 2010s alt-R&B editorial, no text. Negative: plastic skin, waxy CGI smoothing, airbrushed retouch, HDR, 3D render, octane, symmetrical doll face, beauty-app sheen.
+
+**Worked example — painted (Imagen 3 / Flux):**
+
+> Surreal album illustration, a weatherman in a business suit dissolving into fire and flood, painted in thick gouache and grease pencil over rough cold-press paper with visible tooth and bleed, hand-inked anxious linework, toxic sodium-orange against charcoal black, registration slightly off like cheap risograph, smoke and water dragged with a dry brush, warning-sign palette, information-age dread, no text. Negative: clean vector, smooth digital gradient, 3D render, glossy, CGI, photographic realism, cheerful color.
+
 ## Mode Routing
 
 Start by classifying the job into one of two production modes. If unclear, ask: "Is this for cover art or merch?"
@@ -286,17 +337,14 @@ Avoid:
 
 ## Classic Album Cover References
 
-When proposing directions, consult the bundled `references/classic-album-covers.md` for culturally literate visual shorthand. Match the song's mood/era to a reference, then remix its structural DNA — never copy the original literally.
+The bundled `references/classic-album-covers.md` is an **inspiration library, not a prompt library**. Use it only for the *idea* — the composition move, focal choice, palette, symbol, and meaning that made a cover iconic. It does not contain prompts to copy.
 
-Use the reference to define:
-- composition move
-- palette and lighting approach
-- symbolic object or figure
-- a nuanced starting prompt
-- a compact gen prompt
-- a negative-prompt guardrail
+Workflow:
+1. Match the song's mood/era/message to a cover.
+2. Take its "steal" (the compositional/symbolic move) and its "remix" (how to make it the artist's own) — never reproduce the original literally.
+3. Write the actual generation prompt with the **Prompt Anatomy** above. That is where lighting, texture, medium/capture, and negatives come from.
 
-Do not default to AI mush like "cinematic moody aesthetic." Anchor concepts in real visual history.
+Anchor concepts in real visual history. Never default to AI mush like "cinematic moody aesthetic."
 
 ## Concept Output
 
@@ -332,9 +380,11 @@ When the user picks a concept, output:
 Approved direction:
 Generation type:
 Reference images needed:
-Model/tool recommendation:
-Prompt:
-Negative prompt / avoid:
+Model/tool recommendation (+ why this model for this vibe):
+Medium + capture (camera/lens/film OR paint/surface OR print process):
+Texture + imperfection notes:
+Prompt (built from the Prompt Anatomy, phrased for the routed model):
+Negative prompt / avoid (subject-level + default anti-plastic block):
 Typography/layout layer:
 Compositor/export plan:
 Export sizes:
