@@ -172,7 +172,7 @@ flowchart LR
   Workers --> A_playlisting_power_up
   Campaign["Campaign Workspace"] --> A_playlisting_power_up
   Registry --> A_spotify_playlist_creator["Spotify Playlist Creator\nask\nPromotion"]
-  A_spotify_playlist_creator --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
+  A_spotify_playlist_creator --> S_playlist_builder["skill:playlist-builder"]
   A_spotify_playlist_creator --> T_printing_press_social["source:printing-press-social"]
   A_spotify_playlist_creator -. hidden .-> Workers
   Registry --> A_researcher["Researcher\nsafe\nResearch"]

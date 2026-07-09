@@ -644,7 +644,7 @@ body
 
     expect(spotifyPlaylistCreator).toBeDefined()
     expect(spotifyPlaylistCreator?.metadata.name).toBe('Spotify Playlist Creator')
-    expect(spotifyPlaylistCreator?.metadata.skills).toContain('spotify-playlist-curator')
+    expect(spotifyPlaylistCreator?.metadata.skills).toContain('playlist-builder')
     expect(spotifyPlaylistCreator?.metadata.tags).toContain('promotion')
     expect(spotifyPlaylistCreator?.metadata.permissionMode).toBe('ask')
     expect(spotifyPlaylistCreator?.metadata.sources).toContain('printing-press-social')

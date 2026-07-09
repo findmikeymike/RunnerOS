@@ -45,7 +45,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Outputs -> Finals promotion: wired
 - Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
 - Permission modes: ask 31, safe 7
-- Known skills: 119 (76 bundled, 6 system, 119 user-global on this machine)
+- Known skills: 120 (76 bundled, 6 system, 119 user-global on this machine)
 - Known builtin sources: 24
 
 ## Reference Health
@@ -574,7 +574,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Create Spotify playlists that place your songs beside bigger artists.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `hidden-from-workers-home`
-- Skills: `spotify-playlist-curator`
+- Skills: `playlist-builder`
 - Sources: `printing-press-social`
 - Optional sources: none
 - Trusted tools: none

@@ -58,7 +58,7 @@
     "finalsPromotionWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 119,
+    "knownSkillCount": 120,
     "bundledSkillCount": 76,
     "systemSkillCount": 6,
     "userGlobalSkillCount": 119,
@@ -1299,7 +1299,7 @@
       "permissionMode": "ask",
       "thinkingLevel": "high",
       "skills": [
-        "spotify-playlist-curator"
+        "playlist-builder"
       ],
       "sources": [
         "printing-press-social"
