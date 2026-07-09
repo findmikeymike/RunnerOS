@@ -259,6 +259,20 @@ Best for:
 Avoid:
 - lava-lamp mush, random galaxies, cheap fractals, over-saturated AI hallucination
 
+## Classic Album Cover References
+
+When proposing directions, consult the bundled `references/classic-album-covers.md` for culturally literate visual shorthand. Match the song's mood/era to a reference, then remix its structural DNA — never copy the original literally.
+
+Use the reference to define:
+- composition move
+- palette and lighting approach
+- symbolic object or figure
+- a nuanced starting prompt
+- a compact gen prompt
+- a negative-prompt guardrail
+
+Do not default to AI mush like "cinematic moody aesthetic." Anchor concepts in real visual history.
+
 ## Concept Output
 
 Default to three options:
