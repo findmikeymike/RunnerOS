@@ -81,6 +81,7 @@
     "./skills/categories": "./src/skills/categories.ts",
     "./automations": "./src/automations/index.ts",
     "./campaign-calendar": "./src/campaign-calendar/index.ts",
+    "./scheduled-work": "./src/scheduled-work/index.ts",
     "./automations/resolve-config-path": "./src/automations/resolve-config-path.ts",
     "./agent-definitions": "./src/agent-definitions/index.ts",
     "./agent-definitions/canvas-guidance": "./src/agent-definitions/canvas-guidance.ts",

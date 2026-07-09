@@ -155,6 +155,7 @@ export interface CampaignCalendarItem {
   personIds: string[];
   accountSetId?: string;
   socialProfileRefs?: SocialProfileRef[];
+  scheduledWorkId?: string;
   job?: CampaignScheduledJob;
   approvals?: CampaignScheduleApproval[];
   runHistory: CampaignJobRun[];
@@ -293,6 +294,7 @@ export function createCampaignCalendarItem(input: {
   outputRefs?: CampaignOutputRef[];
   socialProfileRefs?: SocialProfileRef[];
   accountSetId?: string;
+  scheduledWorkId?: string;
   job?: CampaignScheduledJob;
   approvals?: CampaignScheduleApproval[];
 }): CampaignCalendarItem {
@@ -313,6 +315,7 @@ export function createCampaignCalendarItem(input: {
     personIds: input.personIds ?? [],
     accountSetId: input.accountSetId,
     socialProfileRefs: input.socialProfileRefs,
+    scheduledWorkId: input.scheduledWorkId,
     job: input.job,
     approvals: input.approvals ?? [],
     runHistory: [],
@@ -354,7 +357,7 @@ export function createCampaignScheduledJob(input: {
 
 export function updateCampaignCalendarItem(
   item: CampaignCalendarItem,
-  patch: Partial<Pick<CampaignCalendarItem, 'date' | 'time' | 'timezone' | 'title' | 'notes' | 'kind' | 'status' | 'personIds' | 'assetRefs' | 'finalRefs' | 'outputRefs' | 'accountSetId' | 'socialProfileRefs' | 'job' | 'approvals' | 'runHistory'>>,
+  patch: Partial<Pick<CampaignCalendarItem, 'date' | 'time' | 'timezone' | 'title' | 'notes' | 'kind' | 'status' | 'personIds' | 'assetRefs' | 'finalRefs' | 'outputRefs' | 'accountSetId' | 'socialProfileRefs' | 'scheduledWorkId' | 'job' | 'approvals' | 'runHistory'>>,
 ): CampaignCalendarItem {
   return normalizeCampaignCalendarItem({
     ...item,
@@ -764,6 +767,7 @@ function normalizeCampaignCalendarItem(item: CampaignCalendarItem): CampaignCale
     personIds: normalizeIds(item.personIds),
     accountSetId: clean(item.accountSetId),
     socialProfileRefs: normalizeSocialProfileRefs(item.socialProfileRefs),
+    scheduledWorkId: clean(item.scheduledWorkId),
     job: normalizeScheduledJob(item.job),
     approvals: normalizeApprovals(item.approvals),
     runHistory: normalizeJobRuns(item.runHistory),

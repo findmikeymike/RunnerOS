@@ -119,6 +119,27 @@ export type { AgentDefinitionMetadataDTO, AgentDefinitionDTO };
 // Workspace context docs — same DTO shape as the shared LoadedContextDoc.
 import type { LoadedContextDoc as ContextDocDTO, ContextDocMetadata, ContextDocRouting } from '@craft-agent/shared/workspace-context/types';
 export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
+import type { CampaignCalendar as CampaignCalendarDTO } from '@craft-agent/shared/campaign-calendar';
+export type { CampaignCalendarDTO };
+import type {
+  ScheduledWorkDocument,
+  ScheduledWorkMutation,
+  ScheduledWorkMutationResult,
+  ScheduledWorkParseResult,
+} from '@craft-agent/shared/scheduled-work';
+export type {
+  ScheduledWorkDocument,
+  ScheduledWorkMutation,
+  ScheduledWorkMutationResult,
+  ScheduledWorkParseResult,
+};
+
+export interface ScheduledWorkMigrationResult {
+  updated: boolean
+  migrated: number
+  work: ScheduledWorkDocument
+  calendar: CampaignCalendarDTO
+}
 
 import type {
   VaultAssetImportCandidate,
@@ -913,6 +934,9 @@ export interface ElectronAPI {
   }): Promise<ContextDocDTO>
   deleteWorkspaceContextDoc(workspaceId: string, slug: string): Promise<boolean>
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
+  getScheduledWork(workspaceId: string): Promise<ScheduledWorkParseResult>
+  mutateScheduledWork(workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult>
+  migrateCampaignScheduledWork(workspaceId: string): Promise<ScheduledWorkMigrationResult>
   shareSessionIntel(input: ShareIntelRequest): Promise<ShareIntelResult>
   getGoogleCalendarStatus(workspaceId: string): Promise<{ ok: boolean; connected: boolean; error?: string }>
   syncGoogleCalendar(workspaceId: string): Promise<{ ok: boolean; synced: number; deleted?: number; failed: number; error?: string }>

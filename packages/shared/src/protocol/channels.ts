@@ -421,6 +421,14 @@ export const RPC_CHANNELS = {
     /** Push event when a workspace's context docs changed. */
     CHANGED: 'workspaceContext:changed',
   },
+  scheduledWork: {
+    /** Read the parsed scheduled-work document for a workspace. */
+    GET: 'scheduledWork:get',
+    /** Atomically apply one scheduled-work mutation server-side. */
+    MUTATE: 'scheduledWork:mutate',
+    /** Migrate embedded campaign jobs into scheduled-work. */
+    MIGRATE_CAMPAIGN: 'scheduledWork:migrateCampaign',
+  },
   sharedIntel: {
     /** Distill the current chat into targeted internal worker context notes. */
     SHARE: 'sharedIntel:share',

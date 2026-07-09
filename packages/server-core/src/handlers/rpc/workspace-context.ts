@@ -26,7 +26,7 @@ import {
  * race the loader. A per-workspace lock matches the agent-definitions style.
  */
 const workspaceMutexes = new Map<string, Promise<void>>()
-function withWorkspaceMutex<T>(workspaceRootPath: string, fn: () => Promise<T>): Promise<T> {
+export function withWorkspaceContextMutex<T>(workspaceRootPath: string, fn: () => Promise<T>): Promise<T> {
   const prev = workspaceMutexes.get(workspaceRootPath) ?? Promise.resolve()
   const next = prev.then(fn, fn)
   workspaceMutexes.set(workspaceRootPath, next.then(() => {}, () => {}))
@@ -90,7 +90,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
 
   server.handle(RPC_CHANNELS.workspaceContext.UPSERT, async (_ctx, workspaceId: string, payload: UpsertContextDocPayload): Promise<LoadedContextDoc> => {
     const rootPath = resolveRootPath(workspaceId)
-    return withWorkspaceMutex(rootPath, async () => {
+    return withWorkspaceContextMutex(rootPath, async () => {
       if (Object.prototype.hasOwnProperty.call(payload, 'expectedBody')) {
         const currentBody = loadContextDoc(rootPath, payload.slug)?.body ?? null
         assertExpectedContextBody(payload.slug, currentBody, payload.expectedBody ?? null)
@@ -110,7 +110,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
 
   server.handle(RPC_CHANNELS.workspaceContext.DELETE, async (_ctx, workspaceId: string, slug: string): Promise<boolean> => {
     const rootPath = resolveRootPath(workspaceId)
-    return withWorkspaceMutex(rootPath, async () => {
+    return withWorkspaceContextMutex(rootPath, async () => {
       const ok = deleteContextDoc(rootPath, slug)
       if (ok) {
         if (shouldRefreshHqStateForContextSlug(slug)) {
