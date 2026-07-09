@@ -9,4 +9,5 @@ export const DEFAULT_ACTIVATED_AGENT_SLUGS = [
   'playlisting-power-up',
   'record-doctor',
   'college-radio-agent',
+  'spotify-playlist-creator',
 ] as const

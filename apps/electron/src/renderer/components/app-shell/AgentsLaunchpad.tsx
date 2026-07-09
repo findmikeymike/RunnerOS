@@ -1355,7 +1355,6 @@ const HIDDEN_WORKER_HOME_AGENT_SLUGS = new Set([
   'lottie-animation-agent',
   'open-slide-agent',
   'researcher',
-  'spotify-playlist-creator',
 ])
 
 function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {

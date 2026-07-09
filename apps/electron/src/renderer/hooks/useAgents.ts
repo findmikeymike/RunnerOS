@@ -61,6 +61,7 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   'ads-agent',
   'trypost-agent',
   'spotify-analyst',
+  'spotify-playlist-creator',
   'shopify-agent',
   'print-agent',
   'gaygent-master',

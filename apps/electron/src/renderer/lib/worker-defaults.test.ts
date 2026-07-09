@@ -6,4 +6,9 @@ describe('worker page defaults', () => {
     expect(defaultWorkerSlugs(false)).toContain('college-radio-agent')
     expect(defaultWorkerSlugs(true)).toContain('college-radio-agent')
   })
+
+  test('Spotify Playlist Creator appears by default in Artist HQ and Campaign workers', () => {
+    expect(defaultWorkerSlugs(false)).toContain('spotify-playlist-creator')
+    expect(defaultWorkerSlugs(true)).toContain('spotify-playlist-creator')
+  })
 })

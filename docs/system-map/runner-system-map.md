@@ -39,8 +39,8 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 ## Summary
 
 - Agents mapped: 39
-- Hidden from Workers home: 6
-- Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `content-genius`, `scroll-stopper`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
+- Hidden from Workers home: 5
+- Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `spotify-playlist-creator`, `content-genius`, `scroll-stopper`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
@@ -57,8 +57,8 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
-- Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent.
-- Campaign default workers are currently branding-agent, world-builder, college-radio-agent, content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
+- Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator.
+- Campaign default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator, content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -589,7 +589,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 - Description: Create Spotify playlists that place your songs beside bigger artists.
 - Permission: `ask`; thinking: `high`
-- Launch surfaces: `hidden-from-workers-home`
+- Launch surfaces: `workspace-workers-when-active`, `hq-workers-default-visible`, `campaign-workers-default-visible`
 - Skills: `spotify-playlist-curator`
 - Sources: none
 - Optional sources: none

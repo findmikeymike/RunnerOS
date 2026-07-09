@@ -2,6 +2,7 @@ export const BASE_DEFAULT_WORKER_SLUGS = [
   'branding-agent',
   'world-builder',
   'college-radio-agent',
+  'spotify-playlist-creator',
 ] as const
 
 export const CAMPAIGN_DEFAULT_WORKER_SLUGS = [

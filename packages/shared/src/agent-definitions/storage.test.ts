@@ -691,6 +691,7 @@ body
     expect(collegeRadio?.systemPrompt).toContain('You do not email')
     expect(collegeRadio?.systemPrompt).toContain('explicit current-turn approval')
     expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('college-radio-agent')
+    expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('spotify-playlist-creator')
   })
 
   test('Outreach Agent accepts a verified College Radio packet and keeps send approval exact', () => {
