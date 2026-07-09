@@ -122,12 +122,24 @@ export type { ContextDocDTO, ContextDocMetadata, ContextDocRouting };
 import type { CampaignCalendar as CampaignCalendarDTO } from '@craft-agent/shared/campaign-calendar';
 export type { CampaignCalendarDTO };
 import type {
+  CancelCampaignWorkInput,
+  CancelCampaignWorkResult,
+  DecideCampaignWorkInput,
+  DecideCampaignWorkResult,
+  ScheduleCampaignWorkInput,
+  ScheduleCampaignWorkResult,
   ScheduledWorkDocument,
   ScheduledWorkMutation,
   ScheduledWorkMutationResult,
   ScheduledWorkParseResult,
 } from '@craft-agent/shared/scheduled-work';
 export type {
+  CancelCampaignWorkInput,
+  CancelCampaignWorkResult,
+  DecideCampaignWorkInput,
+  DecideCampaignWorkResult,
+  ScheduleCampaignWorkInput,
+  ScheduleCampaignWorkResult,
   ScheduledWorkDocument,
   ScheduledWorkMutation,
   ScheduledWorkMutationResult,
@@ -936,6 +948,9 @@ export interface ElectronAPI {
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
   getScheduledWork(workspaceId: string): Promise<ScheduledWorkParseResult>
   mutateScheduledWork(workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult>
+  scheduleCampaignWork(workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult>
+  cancelCampaignWork(workspaceId: string, input: CancelCampaignWorkInput): Promise<CancelCampaignWorkResult>
+  decideCampaignWork(workspaceId: string, input: DecideCampaignWorkInput): Promise<DecideCampaignWorkResult>
   migrateCampaignScheduledWork(workspaceId: string): Promise<ScheduledWorkMigrationResult>
   shareSessionIntel(input: ShareIntelRequest): Promise<ShareIntelResult>
   getGoogleCalendarStatus(workspaceId: string): Promise<{ ok: boolean; connected: boolean; error?: string }>

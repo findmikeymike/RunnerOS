@@ -426,6 +426,12 @@ export const RPC_CHANNELS = {
     GET: 'scheduledWork:get',
     /** Atomically apply one scheduled-work mutation server-side. */
     MUTATE: 'scheduledWork:mutate',
+    /** Atomically create campaign work and its linked calendar shell. */
+    SCHEDULE_CAMPAIGN: 'scheduledWork:scheduleCampaign',
+    /** Cancel campaign work and remove its linked calendar shell. */
+    CANCEL_CAMPAIGN: 'scheduledWork:cancelCampaign',
+    /** Record a decision for campaign work awaiting review. */
+    DECIDE_CAMPAIGN: 'scheduledWork:decideCampaign',
     /** Migrate embedded campaign jobs into scheduled-work. */
     MIGRATE_CAMPAIGN: 'scheduledWork:migrateCampaign',
   },

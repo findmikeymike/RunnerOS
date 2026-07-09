@@ -117,6 +117,9 @@ export interface SessionLaunchReceipt {
     name?: string;
     event?: string;
   };
+  scheduledWork?: {
+    id: string;
+  };
   config: {
     model?: string;
     llmConnection?: string;

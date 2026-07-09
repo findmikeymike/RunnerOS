@@ -15,6 +15,7 @@ import {
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
+import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 import {
   refreshHqStateContextDocBestEffort,
   shouldRefreshHqStateForContextSlug,
@@ -25,13 +26,6 @@ import {
  * is small, but two concurrent upserts to the same workspace could still
  * race the loader. A per-workspace lock matches the agent-definitions style.
  */
-const workspaceMutexes = new Map<string, Promise<void>>()
-export function withWorkspaceContextMutex<T>(workspaceRootPath: string, fn: () => Promise<T>): Promise<T> {
-  const prev = workspaceMutexes.get(workspaceRootPath) ?? Promise.resolve()
-  const next = prev.then(fn, fn)
-  workspaceMutexes.set(workspaceRootPath, next.then(() => {}, () => {}))
-  return next
-}
 
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspaceContext.LIST,
@@ -90,7 +84,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
 
   server.handle(RPC_CHANNELS.workspaceContext.UPSERT, async (_ctx, workspaceId: string, payload: UpsertContextDocPayload): Promise<LoadedContextDoc> => {
     const rootPath = resolveRootPath(workspaceId)
-    return withWorkspaceContextMutex(rootPath, async () => {
+    return withWorkspaceContextLock(rootPath, async () => {
       if (Object.prototype.hasOwnProperty.call(payload, 'expectedBody')) {
         const currentBody = loadContextDoc(rootPath, payload.slug)?.body ?? null
         assertExpectedContextBody(payload.slug, currentBody, payload.expectedBody ?? null)
@@ -110,7 +104,7 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
 
   server.handle(RPC_CHANNELS.workspaceContext.DELETE, async (_ctx, workspaceId: string, slug: string): Promise<boolean> => {
     const rootPath = resolveRootPath(workspaceId)
-    return withWorkspaceContextMutex(rootPath, async () => {
+    return withWorkspaceContextLock(rootPath, async () => {
       const ok = deleteContextDoc(rootPath, slug)
       if (ok) {
         if (shouldRefreshHqStateForContextSlug(slug)) {

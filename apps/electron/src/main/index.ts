@@ -733,6 +733,17 @@ app.whenReady().then(async () => {
             }),
             getWorkflowRunner: () => sm.getWorkflowRunner(),
             getDeepResearchRunner: () => sm.getDeepResearchRunner(),
+            validateSocialProfile: async ({ platform, profileId }) => {
+              const { runSocialJson } = await import('./social-cli')
+              const doctor = await runSocialJson(['doctor', '--json']) as {
+                platforms?: Array<{ profiles?: Array<{ platform?: string; profile?: string; ready?: boolean }> }>
+              }
+              const profile = doctor.platforms?.flatMap((group) => group.profiles ?? [])
+                .find((candidate) => candidate.platform === platform && candidate.profile === profileId)
+              return profile?.ready
+                ? { ready: true }
+                : { ready: false, reason: 'Social profile login or setup is required.' }
+            },
             getNotificationService: () => sm.getNotificationService(),
           }
         },

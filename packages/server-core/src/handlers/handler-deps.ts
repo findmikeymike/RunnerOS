@@ -43,6 +43,7 @@ export interface HandlerDeps<
    */
   getWorkflowRunner?: () => import('../workflows/runner').WorkflowRunner
   getDeepResearchRunner?: () => import('../deep-research/DeepResearchRunner').DeepResearchRunner
+  validateSocialProfile?: (input: { platform: string; profileId: string }) => Promise<{ ready: boolean; reason?: string }>
   /**
    * Resolve the host's `NotificationService`. Lazy-resolved via a getter so
    * the dep bag doesn't have to import the service at construction time.

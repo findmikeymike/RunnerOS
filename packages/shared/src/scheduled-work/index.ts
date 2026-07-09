@@ -25,6 +25,24 @@ export type ScheduledWorkStatus =
   | 'needs-attention'
   | 'canceled'
 
+export type WorkAttentionReason =
+  | 'agent-not-active'
+  | 'workflow-not-active'
+  | 'workflow-changed'
+  | 'profile-login-required'
+  | 'asset-missing'
+  | 'required-output-missing'
+  | 'execution-failed'
+  | 'missed-start-window'
+  | 'approval-expired'
+  | 'approval-invalidated'
+  | 'changes-requested'
+
+export interface ScheduledWorkAttention {
+  reason: WorkAttentionReason
+  message: string
+}
+
 export interface ScheduledWorkOwner {
   scope: ScheduledWorkScope
   workspaceId: string
@@ -39,6 +57,7 @@ export interface ScheduledWorkCalendarLink {
 export type ScheduledWorkInputRef =
   | { kind: 'final'; outputId: string; assetId?: string; slot?: string; label?: string }
   | { kind: 'output'; outputId: string; title?: string; outputKind?: string }
+  | { kind: 'vault'; assetId: string; label?: string; assetKind?: string }
   | { kind: 'produced-output'; stepId: string; selector?: { kind?: OutputKind } }
 
 export interface ExpectedOutputContract {
@@ -84,6 +103,14 @@ export type ScheduledWorkResult =
   | { type: 'social-publish'; receipt: CampaignExternalExecutionReceipt }
   | { type: 'review'; decision: 'approved' | 'changes-requested'; notes?: string }
 
+export interface ScheduledWorkReviewDecision {
+  decision: 'approved' | 'changes-requested'
+  notes?: string
+  decidedAt: string
+  reviewerType: 'person' | 'agent' | 'user'
+  reviewerId?: string
+}
+
 export interface ScheduledWorkOrder {
   version: 1
   id: string
@@ -100,6 +127,8 @@ export interface ScheduledWorkOrder {
   approvals: CampaignScheduleApproval[]
   runs: CampaignJobRun[]
   result?: ScheduledWorkResult
+  reviewDecision?: ScheduledWorkReviewDecision
+  attention?: ScheduledWorkAttention
   executionKey: {
     payloadDigest: string
     idempotencyKey: string
@@ -118,6 +147,47 @@ export interface ScheduledWorkDocument {
   workspaceId: string
   items: ScheduledWorkOrder[]
   updatedAt: string
+}
+
+export interface ScheduleCampaignWorkInput {
+  order: ScheduledWorkOrder
+  calendarItem: CampaignCalendarItem
+}
+
+export interface ScheduleCampaignWorkResult {
+  updated: boolean
+  work: ScheduledWorkDocument
+  order: ScheduledWorkOrder
+  calendar: CampaignCalendar
+  calendarItem: CampaignCalendarItem
+}
+
+export interface CancelCampaignWorkInput {
+  orderId: string
+  calendarItemId: string
+}
+
+export interface CancelCampaignWorkResult {
+  updated: boolean
+  work: ScheduledWorkDocument
+  order: ScheduledWorkOrder
+  calendar: CampaignCalendar
+  calendarItem: CampaignCalendarItem
+}
+
+export interface DecideCampaignWorkInput {
+  orderId: string
+  calendarItemId: string
+  expectedUpdatedAt: string
+  decision: 'approved' | 'changes-requested'
+  notes?: string
+}
+
+export interface DecideCampaignWorkResult {
+  work: ScheduledWorkDocument
+  order: ScheduledWorkOrder
+  calendar: CampaignCalendar
+  calendarItem: CampaignCalendarItem
 }
 
 export type ScheduledWorkParseResult =
@@ -139,6 +209,16 @@ export function scheduledWorkMetadata(): ContextDocMetadata {
     routing: { mode: 'broadcast' },
     enabled: true,
   }
+}
+
+export function scheduledWorkDefinitionDigest(value: unknown): string {
+  const stable = stableStringify(value)
+  let hash = 0x811c9dc5
+  for (let index = 0; index < stable.length; index += 1) {
+    hash ^= stable.charCodeAt(index)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`
 }
 
 export function emptyScheduledWorkDocument(workspaceId: string): ScheduledWorkDocument {
@@ -414,6 +494,8 @@ function isScheduledWorkOrder(value: unknown): value is ScheduledWorkOrder {
     && Array.isArray(order.approvals)
     && Array.isArray(order.runs)
     && (order.result === undefined || isScheduledWorkResult(order.result, order.type))
+    && (order.reviewDecision === undefined || isScheduledWorkReviewDecision(order.reviewDecision))
+    && (order.attention === undefined || isScheduledWorkAttention(order.attention))
     && Boolean(order.executionKey
       && clean(order.executionKey.payloadDigest)
       && clean(order.executionKey.idempotencyKey))
@@ -473,6 +555,7 @@ function isScheduledWorkInputRef(value: unknown): value is ScheduledWorkInputRef
   if (!value || typeof value !== 'object') return false
   const ref = value as Partial<ScheduledWorkInputRef>
   if (ref.kind === 'final' || ref.kind === 'output') return Boolean(clean(ref.outputId))
+  if (ref.kind === 'vault') return Boolean(clean(ref.assetId))
   return ref.kind === 'produced-output' && Boolean(clean(ref.stepId))
 }
 
@@ -484,6 +567,31 @@ function isScheduledWorkResult(value: unknown, type: ScheduledWorkType): value i
   if (result.type === 'workflow-run') return Boolean(clean(result.workflowRunId)) && Array.isArray(result.outputIds)
   if (result.type === 'social-publish') return Boolean(result.receipt && typeof result.receipt === 'object')
   return result.type === 'review' && (result.decision === 'approved' || result.decision === 'changes-requested')
+}
+
+function isScheduledWorkAttention(value: unknown): value is ScheduledWorkAttention {
+  if (!value || typeof value !== 'object') return false
+  const attention = value as Partial<ScheduledWorkAttention>
+  return (attention.reason === 'agent-not-active'
+    || attention.reason === 'workflow-not-active'
+    || attention.reason === 'workflow-changed'
+    || attention.reason === 'profile-login-required'
+    || attention.reason === 'asset-missing'
+    || attention.reason === 'required-output-missing'
+    || attention.reason === 'execution-failed'
+    || attention.reason === 'missed-start-window'
+    || attention.reason === 'approval-expired'
+    || attention.reason === 'approval-invalidated'
+    || attention.reason === 'changes-requested')
+    && Boolean(clean(attention.message))
+}
+
+function isScheduledWorkReviewDecision(value: unknown): value is ScheduledWorkReviewDecision {
+  if (!value || typeof value !== 'object') return false
+  const decision = value as Partial<ScheduledWorkReviewDecision>
+  return (decision.decision === 'approved' || decision.decision === 'changes-requested')
+    && (decision.reviewerType === 'person' || decision.reviewerType === 'agent' || decision.reviewerType === 'user')
+    && Boolean(cleanIso(decision.decidedAt))
 }
 
 function pickPlatformOptions(payload: Record<string, unknown>): Record<string, unknown> | undefined {
@@ -513,6 +621,15 @@ function extractJson(body: string): string | undefined {
   const first = body.indexOf('{')
   const last = body.lastIndexOf('}')
   return first >= 0 && last > first ? body.slice(first, last + 1) : undefined
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
 }
 
 function clean(value: unknown): string | undefined {

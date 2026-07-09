@@ -279,6 +279,7 @@ export function serializeCampaignCalendarBody(calendar: CampaignCalendar): strin
 }
 
 export function createCampaignCalendarItem(input: {
+  id?: string;
   campaignId: string;
   date: string;
   title: string;
@@ -300,7 +301,7 @@ export function createCampaignCalendarItem(input: {
 }): CampaignCalendarItem {
   const now = new Date().toISOString();
   return normalizeCampaignCalendarItem({
-    id: `campaign-item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    id: clean(input.id) ?? `campaign-item-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
     date: input.date,
     title: input.title,
     time: input.time,

@@ -1,12 +1,22 @@
 import * as React from 'react'
-import { CalendarDays, CheckCircle2, ExternalLink, Pencil, ReceiptText, RotateCcw, Trash2, X } from 'lucide-react'
+import { CalendarClock, CalendarDays, CheckCircle2, ExternalLink, Pencil, ReceiptText, RotateCcw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { useNavigation } from '@/contexts/NavigationContext'
+import { routes } from '../../../shared/routes'
+import {
+  SCHEDULED_WORK_CONTEXT_SLUG,
+  parseScheduledWorkDocResult,
+  type ScheduledWorkDocument,
+  type ScheduledWorkOrder,
+  type ScheduledWorkStatus,
+} from '@craft-agent/shared/scheduled-work'
 import { cn } from '@/lib/utils'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   activeCampaignCalendarItems,
   approveCampaignCalendarItem,
+  createCampaignCalendarItem,
   createCampaignCalendarDraftItem,
   formatCampaignExternalReceiptLabel,
   isLiveExternalActionType,
@@ -30,6 +40,14 @@ import {
   toDateKey,
   type CalendarMonthDayMeta,
 } from './CalendarMonthGrid'
+import {
+  ScheduledWorkComposer,
+  type ScheduledWorkComposerEntry,
+} from '@/components/calendar/ScheduledWorkComposer'
+import {
+  buildCampaignScheduleFromComposer,
+  type ScheduledWorkComposerDraft,
+} from '@/lib/scheduled-work-composer'
 
 type CampaignCalendarDraft = {
   title: string
@@ -68,13 +86,25 @@ const emptyCampaignCalendarDraft = (date = todayKey): CampaignCalendarDraft => (
 })
 
 export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
+  const { navigate } = useNavigation()
   const { docs, upsert, refresh } = useWorkspaceContext(workspaceId)
   const savedCampaignCalendarResult = React.useMemo(
     () => parseCampaignCalendarDocResult(docs.find((item) => item.slug === CAMPAIGN_CALENDAR_CONTEXT_SLUG), workspaceId || 'workspace'),
     [docs, workspaceId],
   )
   const [optimisticCampaignCalendar, setOptimisticCampaignCalendar] = React.useState<CampaignCalendar | null>(null)
+  const savedScheduledWorkResult = React.useMemo(
+    () => parseScheduledWorkDocResult(docs.find((item) => item.slug === SCHEDULED_WORK_CONTEXT_SLUG), workspaceId || 'workspace'),
+    [docs, workspaceId],
+  )
+  const [optimisticScheduledWork, setOptimisticScheduledWork] = React.useState<ScheduledWorkDocument | null>(null)
+  const scheduledWork = optimisticScheduledWork ?? savedScheduledWorkResult.work
   const campaignCalendar = optimisticCampaignCalendar ?? savedCampaignCalendarResult.calendar
+  const storageError = !savedCampaignCalendarResult.ok
+    ? savedCampaignCalendarResult.error
+    : !savedScheduledWorkResult.ok
+      ? savedScheduledWorkResult.error
+      : undefined
   const activeCalendarItems = React.useMemo(
     () => activeCampaignCalendarItems(campaignCalendar.items),
     [campaignCalendar.items],
@@ -84,6 +114,8 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   const [calendarDraft, setCalendarDraft] = React.useState<CampaignCalendarDraft>(() => emptyCampaignCalendarDraft(todayKey))
   const [calendarEditId, setCalendarEditId] = React.useState<string | null>(null)
   const [calendarEditDraft, setCalendarEditDraft] = React.useState<CampaignCalendarDraft>(() => emptyCampaignCalendarDraft(todayKey))
+  const [composerOpen, setComposerOpen] = React.useState(false)
+  const [composerPrefill, setComposerPrefill] = React.useState<Pick<ScheduledWorkComposerEntry, 'title' | 'inputRefs' | 'suggestedType'> | null>(null)
   const [socialProfiles, setSocialProfiles] = React.useState<CalendarSocialProfile[]>([])
   const selectedDateCalendarItems = React.useMemo(
     () => activeCalendarItems.filter((item) => item.date === selectedCalendarDate),
@@ -100,20 +132,30 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
 
   React.useEffect(() => {
     if (docs.some((item) => item.slug === CAMPAIGN_CALENDAR_CONTEXT_SLUG)) setOptimisticCampaignCalendar(null)
+    if (docs.some((item) => item.slug === SCHEDULED_WORK_CONTEXT_SLUG)) setOptimisticScheduledWork(null)
   }, [docs])
 
   React.useEffect(() => {
     const prefill = takePendingCampaignCalendarPrefill()
     if (!prefill) return
-    setCalendarDraft((current) => ({
-      ...current,
+    setComposerPrefill({
       title: prefill.title,
-      kind: prefill.kind,
-      actionType: prefill.actionType,
-      finalRefs: prefill.finalRefs ?? [],
-      outputRefs: prefill.outputRefs ?? [],
-    }))
+      suggestedType: prefill.actionType === 'post-asset' ? 'social-publish' : 'agent-task',
+      inputRefs: [
+        ...(prefill.finalRefs ?? []).map((ref) => ({ kind: 'final' as const, ...ref })),
+        ...(prefill.outputRefs ?? []).map((ref) => ({ kind: 'output' as const, outputId: ref.outputId, title: ref.title, outputKind: ref.kind })),
+      ],
+    })
+    setComposerOpen(true)
   }, [])
+
+  const composerEntry = React.useMemo<ScheduledWorkComposerEntry>(() => ({
+    owner: { scope: 'campaign', workspaceId: workspaceId || 'workspace', campaignId: workspaceId || 'workspace' },
+    date: selectedCalendarDate,
+    title: composerPrefill?.title,
+    inputRefs: composerPrefill?.inputRefs,
+    suggestedType: composerPrefill?.suggestedType,
+  }), [composerPrefill, selectedCalendarDate, workspaceId])
 
   React.useEffect(() => {
     let active = true
@@ -193,6 +235,36 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
     setSelectedCalendarDate(item.date)
     setCalendarDraft(emptyCampaignCalendarDraft(item.date))
   }, [calendarDraft, saveCampaignCalendar, selectedCalendarDate, workspaceId])
+
+  const submitScheduledWork = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
+    if (draft.type === 'event') {
+      const item = createCampaignCalendarItem({
+        campaignId: workspaceId || 'workspace',
+        date: draft.date,
+        time: draft.time,
+        timezone: draft.timezone,
+        title: draft.title,
+        notes: draft.notes,
+        kind: 'manual',
+      })
+      const saved = await saveCampaignCalendar((latest) => ({
+        ...latest,
+        items: [...latest.items, item],
+        updatedAt: new Date().toISOString(),
+      }))
+      if (!saved) throw new Error('Calendar event could not be saved.')
+      setSelectedCalendarDate(item.date)
+      toast.success('Event added')
+      return
+    }
+    const input = buildCampaignScheduleFromComposer(draft)
+    const result = await window.electronAPI.scheduleCampaignWork(workspaceId, input)
+    setOptimisticCampaignCalendar(result.calendar)
+    setOptimisticScheduledWork(result.work)
+    setSelectedCalendarDate(result.calendarItem.date)
+    setComposerPrefill(null)
+    toast.success(`${result.order.title} queued`)
+  }, [saveCampaignCalendar, workspaceId])
 
   const openCampaignCalendarItemEdit = React.useCallback((item: CampaignCalendarItem) => {
     setCalendarEditId(item.id)
@@ -276,13 +348,29 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   }, [calendarEditDraft, campaignCalendar.items, cancelCampaignCalendarItemEdit, saveCampaignCalendar])
 
   const deleteCampaignCalendarItem = React.useCallback((itemId: string) => {
+    const linked = campaignCalendar.items.find((item) => item.id === itemId)
+    if (linked?.scheduledWorkId) {
+      void window.electronAPI.cancelCampaignWork(workspaceId, {
+        orderId: linked.scheduledWorkId,
+        calendarItemId: linked.id,
+      }).then((result) => {
+        setOptimisticCampaignCalendar(result.calendar)
+        setOptimisticScheduledWork(result.work)
+        toast.success(`${result.order.title} canceled`)
+      }).catch(async (error) => {
+        setOptimisticCampaignCalendar(null)
+        await refresh()
+        toast.error(error instanceof Error ? error.message : String(error))
+      })
+      return
+    }
     const now = new Date().toISOString()
     void saveCampaignCalendar((latest) => ({
       ...latest,
       items: latest.items.map((item) => item.id === itemId ? { ...item, deletedAt: now, updatedAt: now } : item),
       updatedAt: now,
     }))
-  }, [saveCampaignCalendar])
+  }, [campaignCalendar.items, refresh, saveCampaignCalendar, workspaceId])
 
   const patchCampaignCalendarItem = React.useCallback(async (itemId: string, patcher: (item: CampaignCalendarItem) => CampaignCalendarItem) => {
     const now = new Date().toISOString()
@@ -310,6 +398,30 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   const requeueCampaignCalendarJob = React.useCallback((itemId: string) => {
     void patchCampaignCalendarItem(itemId, requeueCampaignScheduledJob)
   }, [patchCampaignCalendarItem])
+
+  const decideScheduledWork = React.useCallback(async (
+    order: ScheduledWorkOrder,
+    decision: 'approved' | 'changes-requested',
+    notes?: string,
+  ) => {
+    try {
+      const result = await window.electronAPI.decideCampaignWork(workspaceId, {
+        orderId: order.id,
+        calendarItemId: order.calendarLink.itemId,
+        expectedUpdatedAt: order.updatedAt,
+        decision,
+        notes,
+      })
+      setOptimisticCampaignCalendar(result.calendar)
+      setOptimisticScheduledWork(result.work)
+      toast.success(decision === 'approved' ? `${order.title} approved` : `Changes requested for ${order.title}`)
+    } catch (error) {
+      setOptimisticCampaignCalendar(null)
+      setOptimisticScheduledWork(null)
+      await refresh()
+      throw error
+    }
+  }, [refresh, workspaceId])
 
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
@@ -348,8 +460,8 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
           selectedDateItems={selectedDateCalendarItems}
           editingItemId={calendarEditId}
           editDraft={calendarEditDraft}
-          disabled={!savedCampaignCalendarResult.ok}
-          parseError={savedCampaignCalendarResult.ok ? undefined : savedCampaignCalendarResult.error}
+          disabled={Boolean(storageError)}
+          parseError={storageError}
           onSelectDate={(date) => {
             setSelectedCalendarDate(date)
             setCalendarDraft((current) => ({ ...current, date }))
@@ -365,6 +477,22 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
           onRequeueItem={requeueCampaignCalendarJob}
           onDeleteItem={deleteCampaignCalendarItem}
           socialProfiles={socialProfiles}
+          workById={new Map(scheduledWork.items.map((order) => [order.id, order]))}
+          onOpenSession={(sessionId) => window.electronAPI.openSessionInNewWindow(workspaceId, sessionId)}
+          onOpenRun={(runId) => navigate(routes.view.workflowRun(runId))}
+          onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
+          onReviewDecision={decideScheduledWork}
+          onOpenComposer={() => {
+            setComposerPrefill(null)
+            setComposerOpen(true)
+          }}
+        />
+        <ScheduledWorkComposer
+          open={composerOpen}
+          entry={composerEntry}
+          disabled={Boolean(storageError)}
+          onOpenChange={setComposerOpen}
+          onSubmit={submitScheduledWork}
         />
       </div>
     </div>
@@ -393,6 +521,12 @@ function CampaignCalendarSurface({
   onRequeueItem,
   onDeleteItem,
   socialProfiles,
+  workById,
+  onOpenSession,
+  onOpenRun,
+  onOpenOutput,
+  onReviewDecision,
+  onOpenComposer,
 }: {
   items: CampaignCalendarItem[]
   selectedDate: string
@@ -415,11 +549,18 @@ function CampaignCalendarSurface({
   onRequeueItem: (itemId: string) => void
   onDeleteItem: (itemId: string) => void
   socialProfiles: CalendarSocialProfile[]
+  workById: Map<string, ScheduledWorkOrder>
+  onOpenSession: (sessionId: string) => void
+  onOpenRun: (runId: string) => void
+  onOpenOutput: (outputId: string) => void
+  onReviewDecision: (order: ScheduledWorkOrder, decision: 'approved' | 'changes-requested', notes?: string) => Promise<void>
+  onOpenComposer: () => void
 }) {
   const dayMetaByDate = React.useMemo(() => {
     const statusesByDate = new Map<string, CampaignCalendarItemStatus[]>()
     for (const item of items) {
-      statusesByDate.set(item.date, [...(statusesByDate.get(item.date) ?? []), item.status])
+      const work = item.scheduledWorkId ? workById.get(item.scheduledWorkId) : undefined
+      statusesByDate.set(item.date, [...(statusesByDate.get(item.date) ?? []), campaignStatusForWork(work?.status) ?? item.status])
     }
     const metaByDate = new Map<string, CalendarMonthDayMeta>()
     statusesByDate.forEach((statuses, date) => {
@@ -429,7 +570,7 @@ function CampaignCalendarSurface({
       })
     })
     return metaByDate
-  }, [items])
+  }, [items, workById])
   const selectedLabel = parseDateKey(selectedDate).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -464,8 +605,10 @@ function CampaignCalendarSurface({
               <div className="rounded-[12px] border border-white/[0.045] bg-white/[0.016] p-3 text-xs text-white/36">
                 Nothing scheduled.
               </div>
-            ) : selectedDateItems.map((item) => (
-              <div key={item.id} className="rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3">
+            ) : selectedDateItems.map((item) => {
+              const work = item.scheduledWorkId ? workById.get(item.scheduledWorkId) : undefined
+              const displayStatus = work?.status ?? item.status
+              return <div key={item.id} className="rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3">
                 {editingItemId === item.id ? (
                   <CampaignCalendarForm
                     draft={editDraft}
@@ -482,8 +625,8 @@ function CampaignCalendarSurface({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <div className="text-sm font-semibold text-white/76">{item.title}</div>
-                        <span className={cn('rounded-full px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em]', statusBadgeClass(item.status))}>
-                          {item.status.replace(/-/g, ' ')}
+                        <span className={cn('rounded-full px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em]', statusBadgeClass(campaignStatusForWork(work?.status) ?? item.status))}>
+                          {displayStatus.replace(/-/g, ' ')}
                         </span>
                       </div>
                       <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-orange-200/65">
@@ -491,9 +634,10 @@ function CampaignCalendarSurface({
                       </div>
                       {item.notes ? <div className="mt-2 text-xs leading-5 text-white/38">{item.notes}</div> : null}
                       <CampaignCalendarJobDetails item={item} />
+                      {work ? <ScheduledWorkDetails work={work} onOpenSession={onOpenSession} onOpenRun={onOpenRun} onOpenOutput={onOpenOutput} onReviewDecision={onReviewDecision} /> : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      {item.status === 'needs-approval' ? (
+                      {item.status === 'needs-approval' && !item.scheduledWorkId ? (
                         <button
                           type="button"
                           onClick={() => onApproveItem(item.id)}
@@ -517,15 +661,17 @@ function CampaignCalendarSurface({
                           <RotateCcw className="h-3.5 w-3.5" />
                         </button>
                       ) : null}
-                      <button
-                        type="button"
-                        onClick={() => onEditItem(item)}
-                        disabled={disabled}
-                        className="rounded-full p-1.5 text-white/28 hover:bg-white/[0.05] hover:text-white/70 disabled:cursor-not-allowed disabled:opacity-40"
-                        aria-label="Edit calendar item"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
+                      {!item.scheduledWorkId ? (
+                        <button
+                          type="button"
+                          onClick={() => onEditItem(item)}
+                          disabled={disabled}
+                          className="rounded-full p-1.5 text-white/28 hover:bg-white/[0.05] hover:text-white/70 disabled:cursor-not-allowed disabled:opacity-40"
+                          aria-label="Edit calendar item"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => onDeleteItem(item.id)}
@@ -539,11 +685,17 @@ function CampaignCalendarSurface({
                   </div>
                 )}
               </div>
-            ))}
+            })}
           </div>
 
           <div className="mt-4 rounded-[14px] border border-white/[0.05] bg-white/[0.018] p-3">
-            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Schedule</div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Add event</div>
+              <button type="button" onClick={onOpenComposer} disabled={disabled} className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-white/[0.08] px-2.5 text-[11px] font-medium text-white/62 hover:bg-white/[0.04] disabled:opacity-40">
+                <CalendarClock className="h-3.5 w-3.5" />
+                Queue work
+              </button>
+            </div>
             <CampaignCalendarForm
               draft={draft}
               disabled={disabled}
@@ -551,6 +703,7 @@ function CampaignCalendarSurface({
               onChange={onChangeDraft}
               onSubmit={onAddItem}
               socialProfiles={socialProfiles}
+              showJobConfig={false}
             />
           </div>
         </div>
@@ -620,6 +773,90 @@ function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
         </div>
       ) : null}
     </div>
+  )
+}
+
+function ScheduledWorkDetails({ work, onOpenSession, onOpenRun, onOpenOutput, onReviewDecision }: {
+  work: ScheduledWorkOrder
+  onOpenSession: (sessionId: string) => void
+  onOpenRun: (runId: string) => void
+  onOpenOutput: (outputId: string) => void
+  onReviewDecision: (order: ScheduledWorkOrder, decision: 'approved' | 'changes-requested', notes?: string) => Promise<void>
+}) {
+  const latestRun = work.runs.at(-1)
+  const agentResult = work.result?.type === 'agent-task' ? work.result : undefined
+  const workflowResult = work.result?.type === 'workflow-run' ? work.result : undefined
+  const outputIds = work.result && 'outputIds' in work.result ? work.result.outputIds : []
+  const [requestingChanges, setRequestingChanges] = React.useState(false)
+  const [notes, setNotes] = React.useState('')
+  const [busy, setBusy] = React.useState(false)
+  const [decisionError, setDecisionError] = React.useState<string | null>(null)
+  const decide = async (decision: 'approved' | 'changes-requested') => {
+    if (decision === 'changes-requested' && !notes.trim()) {
+      setDecisionError('Explain what needs to change.')
+      return
+    }
+    setBusy(true)
+    setDecisionError(null)
+    try {
+      await onReviewDecision(work, decision, notes.trim() || undefined)
+    } catch (error) {
+      setDecisionError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mt-3 border-t border-white/[0.05] pt-2.5">
+      <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/38">
+        <span>{work.type.replace(/-/g, ' ')}</span>
+        {latestRun ? <span>Last run {latestRun.status}</span> : null}
+      </div>
+      {work.attention ? (
+        <div className="mt-2 rounded-[6px] border border-red-300/10 bg-red-300/[0.045] px-2 py-1.5 text-[11px] leading-4 text-red-100/66">
+          {work.attention.message}
+        </div>
+      ) : null}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {agentResult ? <WorkAction label="Open session" onClick={() => onOpenSession(agentResult.sessionId)} /> : null}
+        {workflowResult ? <WorkAction label="Open run" onClick={() => onOpenRun(workflowResult.workflowRunId)} /> : null}
+        {!work.result && latestRun?.sessionId ? <WorkAction label="Open session" onClick={() => onOpenSession(latestRun.sessionId!)} /> : null}
+        {!work.result && latestRun?.workflowRunId ? <WorkAction label="Open run" onClick={() => onOpenRun(latestRun.workflowRunId!)} /> : null}
+        {outputIds.map((outputId, index) => <WorkAction key={outputId} label={outputIds.length === 1 ? 'Open Output' : `Output ${index + 1}`} onClick={() => onOpenOutput(outputId)} />)}
+      </div>
+      {work.status === 'awaiting-review' ? (
+        <div className="mt-2.5 border-t border-white/[0.05] pt-2.5">
+          {requestingChanges ? (
+            <textarea
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="What needs to change?"
+              className="min-h-16 w-full rounded-[6px] border border-white/[0.08] bg-black/25 px-2.5 py-2 text-xs leading-5 text-white/72 outline-none placeholder:text-white/28 focus:border-white/18"
+            />
+          ) : null}
+          {decisionError ? <div className="mt-1.5 text-[11px] text-red-200/70">{decisionError}</div> : null}
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <button type="button" disabled={busy} onClick={() => void decide('approved')} className="h-7 rounded-[5px] bg-emerald-200/90 px-2.5 text-[10px] font-semibold text-black disabled:opacity-40">Approve</button>
+            <button type="button" disabled={busy} onClick={() => requestingChanges ? void decide('changes-requested') : setRequestingChanges(true)} className="h-7 rounded-[5px] border border-white/[0.08] px-2.5 text-[10px] font-medium text-white/58 disabled:opacity-40">Request changes</button>
+            {requestingChanges ? <button type="button" disabled={busy} onClick={() => { setRequestingChanges(false); setNotes(''); setDecisionError(null) }} className="h-7 px-2 text-[10px] text-white/38">Cancel</button> : null}
+          </div>
+        </div>
+      ) : null}
+      {work.reviewDecision ? (
+        <div className="mt-2 text-[10px] text-white/38">
+          Review {work.reviewDecision.decision.replace(/-/g, ' ')} · {formatCompactDateTime(work.reviewDecision.decidedAt)}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function WorkAction({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-white/[0.07] px-2 text-[10px] font-medium text-white/52 hover:bg-white/[0.04] hover:text-white/72">
+      {label}
+      <ExternalLink className="h-3 w-3" />
+    </button>
   )
 }
 
@@ -782,6 +1019,13 @@ function statusBadgeClass(status: CampaignCalendarItemStatus): string {
   if (status === 'running') return 'bg-blue-400/10 text-blue-100/75'
   if (status === 'canceled') return 'bg-white/[0.035] text-white/38'
   return 'bg-orange-400/10 text-orange-100/75'
+}
+
+function campaignStatusForWork(status: ScheduledWorkStatus | undefined): CampaignCalendarItemStatus | undefined {
+  if (!status) return undefined
+  if (status === 'needs-setup' || status === 'needs-attention') return 'failed'
+  if (status === 'awaiting-review') return 'needs-approval'
+  return status
 }
 
 function formatCompactDateTime(value: string): string {

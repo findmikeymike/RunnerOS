@@ -266,4 +266,6 @@ export interface ExecutePromptAutomationInput {
   /** Override the workspace default thinking level for the spawned session. */
   thinkingLevel?: ThinkingLevel
   automationName?: string
+  workOrderId?: string
+  onSessionCreated?: (sessionId: string) => Promise<void> | void
 }

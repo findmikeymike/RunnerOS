@@ -104,7 +104,8 @@ import { loadAllSkills, loadGlobalSkills, loadSkillBySlug, invalidateSkillsCache
 import { isSystemGlobalSkillSlug } from '@craft-agent/shared/skills/system'
 import { invalidateContextFileCache } from '@craft-agent/shared/prompts/system'
 import { getToolIconsDir, getMiniModel } from '@craft-agent/shared/config'
-import { assertOutputAssetPath, readOutput } from '@craft-agent/shared/outputs'
+import { assertOutputAssetPath, listOutputManifests, readOutput } from '@craft-agent/shared/outputs'
+import { scheduledWorkDefinitionDigest, type ExpectedOutputContract, type ScheduledWorkInputRef } from '@craft-agent/shared/scheduled-work'
 import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
@@ -113,6 +114,8 @@ import {
   CampaignScheduledJobRunner,
   type CampaignExternalJobPreparer,
 } from '../campaign-calendar/CampaignScheduledJobRunner'
+import { ScheduledWorkRunner } from '../scheduled-work/ScheduledWorkRunner'
+import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
 import { DEFAULT_MAX_DEPTH, isPermissionEscalation } from '@craft-agent/shared/agent-messaging'
@@ -170,6 +173,38 @@ import { filterAttachmentsForModelInput } from './runtime-config'
 function isConversationContextMessage(message: Message): boolean {
   return (message.role === 'user' || message.role === 'assistant')
     && message.displayIntent !== 'agent-message-passive'
+}
+
+function buildScheduledWorkAgentPrompt(
+  workOrderId: string,
+  brief: string,
+  expectedOutput: ExpectedOutputContract,
+  inputRefs: ScheduledWorkInputRef[],
+): string {
+  const outputRequirement = expectedOutput.requirement === 'required'
+    ? `Create at least ${Math.max(expectedOutput.minimumCount ?? 1, 1)} RunnerOS Output${expectedOutput.kind ? ` of kind ${expectedOutput.kind}` : ''}${expectedOutput.title ? ` titled "${expectedOutput.title}"` : ''}. This work is not complete until that Output exists.`
+    : expectedOutput.requirement === 'optional'
+      ? `Create a RunnerOS Output when the work produces a durable deliverable${expectedOutput.kind ? `; prefer kind ${expectedOutput.kind}` : ''}.`
+      : 'No Output bundle is required, but create one if the result should be reusable.'
+  const refs = inputRefs.length > 0
+    ? inputRefs.map((ref) => {
+        if (ref.kind === 'final') return `- Campaign Final: output=${ref.outputId}${ref.assetId ? ` asset=${ref.assetId}` : ''}${ref.slot ? ` slot=${ref.slot}` : ''}`
+        if (ref.kind === 'output') return `- Output: ${ref.outputId}${ref.title ? ` (${ref.title})` : ''}`
+        if (ref.kind === 'vault') return `- Vault asset: ${ref.assetId}${ref.label ? ` (${ref.label})` : ''}`
+        return `- Produced Output from step: ${ref.stepId}`
+      }).join('\n')
+    : '- No attached inputs.'
+  return [
+    `Scheduled work order: ${workOrderId}`,
+    '',
+    brief.trim(),
+    '',
+    'Attached inputs:',
+    refs,
+    '',
+    outputRequirement,
+    'Report blockers honestly. Do not claim completion when required evidence or Outputs are missing.',
+  ].join('\n')
 }
 
 function isTransientCodexSseHeaderTimeout(message: string): boolean {
@@ -1562,6 +1597,7 @@ export class SessionManager implements ISessionManager {
   private workflowRunner!: WorkflowRunner
   /** Campaign one-shot job runner — bootstrapped lazily after scheduler setup. */
   private campaignScheduledJobRunner?: CampaignScheduledJobRunner
+  private scheduledWorkRunner?: ScheduledWorkRunner
   private campaignExternalJobPreparer?: CampaignExternalJobPreparer
   /** Deep Research runner — bootstrapped during `initialize()`. */
   private deepResearchRunner!: DeepResearchRunner
@@ -2056,6 +2092,12 @@ export class SessionManager implements ISessionManager {
     automationSystem.eventBus.onAny(async (event) => {
       if (event !== 'SchedulerTick') return
       try {
+        const scheduledWorkResult = await this.getScheduledWorkRunner().scanWorkspace(workspaceId, workspaceRootPath)
+        if (scheduledWorkResult.scanned > 0) {
+          sessionLog.info(
+            `[ScheduledWork] workspace=${workspaceId} scanned=${scheduledWorkResult.scanned} started=${scheduledWorkResult.started} blocked=${scheduledWorkResult.blocked} completed=${scheduledWorkResult.completed} failed=${scheduledWorkResult.failed}`,
+          )
+        }
         const result = await this.getCampaignScheduledJobRunner().scanWorkspace(workspaceId, workspaceRootPath)
         if (result.scanned > 0) {
           sessionLog.info(
@@ -2349,6 +2391,50 @@ export class SessionManager implements ISessionManager {
   /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
   getWorkflowRunner(): WorkflowRunner {
     return this.workflowRunner
+  }
+
+  private getScheduledWorkRunner(): ScheduledWorkRunner {
+    if (!this.scheduledWorkRunner) {
+      this.scheduledWorkRunner = new ScheduledWorkRunner({
+        withLock: withWorkspaceContextLock,
+        executeAgentTask: async (input) => {
+          return this.executePromptAutomation({
+            workspaceId: input.workspace.id,
+            workspaceRootPath: input.workspace.rootPath,
+            prompt: buildScheduledWorkAgentPrompt(input.workOrderId, input.brief, input.expectedOutput, input.inputRefs),
+            labels: ['scheduled-work'],
+            permissionMode: input.permissionMode,
+            agentSlug: input.agentSlug,
+            automationName: `Scheduled work: ${input.workOrderId}`,
+            workOrderId: input.workOrderId,
+            onSessionCreated: input.onStarted,
+          })
+        },
+        startWorkflow: async ({ workOrderId, workspace, workflowSlug, workflowDigest, triggerInputs }) => {
+          if (!readActivatedWorkflows(workspace.rootPath).active.includes(workflowSlug)) {
+            throw new Error(`Workflow "${workflowSlug}" is not active in this workspace.`)
+          }
+          const workflow = loadGlobalWorkflow(workflowSlug)
+          if (!workflow) throw new Error(`Workflow not found: ${workflowSlug}`)
+          const currentDigest = scheduledWorkDefinitionDigest({ metadata: workflow.metadata, body: workflow.body })
+          if (currentDigest !== workflowDigest) throw new Error(`Workflow "${workflowSlug}" changed after scheduling.`)
+          const run = await this.workflowRunner.start({
+            workflow,
+            workspaceId: workspace.id,
+            triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs),
+          })
+          sessionLog.info(`[ScheduledWork] started workflow run=${run.id} workOrder=${workOrderId}`)
+          return { runId: run.id }
+        },
+        readWorkflowRun: readWorkflowRun,
+        listOutputManifests,
+        emitContextChanged: (workspaceId, docs) => {
+          this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
+        },
+        log: sessionLog,
+      })
+    }
+    return this.scheduledWorkRunner
   }
 
   private getCampaignScheduledJobRunner(): CampaignScheduledJobRunner {
@@ -9914,6 +10000,8 @@ user a clickable link to where the thing now lives.`
       model,
       thinkingLevel,
       automationName,
+      workOrderId,
+      onSessionCreated,
     } = input
 
     // Warn if llmConnection was specified but doesn't resolve
@@ -9966,6 +10054,7 @@ user a clickable link to where the thing now lives.`
         automation: {
           name: automationName,
         },
+        scheduledWork: workOrderId ? { id: workOrderId } : undefined,
         config: {},
         injected: {
           ...(agentOptions?.launchReceipt?.injected ?? {}),
@@ -9983,6 +10072,8 @@ user a clickable link to where the thing now lives.`
       managed.triggeredBy = { automationName, timestamp: Date.now() }
       this.persistSession(managed)
     }
+
+    await onSessionCreated?.(session.id)
 
     // Notify renderer to hydrate full session metadata (including title)
     // before streaming events arrive. Without this, the renderer may create
