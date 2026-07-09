@@ -124,7 +124,6 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   const [selectedKind, setSelectedKind] = React.useState<VaultAssetKind | 'all'>('all')
   const [selectedAssetId, setSelectedAssetId] = React.useState<string | null>(null)
   const [query, setQuery] = React.useState('')
-  const [agentFilter, setAgentFilter] = React.useState<'all' | 'usable' | 'private'>('all')
   const [importDraft, setImportDraft] = React.useState<ImportDraft>(emptyImportDraft)
   const [dragActive, setDragActive] = React.useState(false)
 
@@ -159,8 +158,6 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     const needle = query.trim().toLowerCase()
     return categoryAssets.filter((asset) => {
       if (selectedKind !== 'all' && asset.kind !== selectedKind) return false
-      if (agentFilter === 'usable' && !isAgentUsable(asset)) return false
-      if (agentFilter === 'private' && isAgentUsable(asset)) return false
       if (!needle) return true
       const haystack = [
         asset.label,
@@ -177,7 +174,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
       ].join(' ').toLowerCase()
       return haystack.includes(needle)
     })
-  }, [agentFilter, categoryAssets, query, selectedKind])
+  }, [categoryAssets, query, selectedKind])
   const selectKind = React.useCallback((kind: VaultAssetKind | 'all') => {
     setSelectedKind(kind)
     setSelectedAssetId(categoryAssets.find((asset) => kind === 'all' || asset.kind === kind)?.id ?? null)
@@ -390,13 +387,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                 })}
               </div>
               <div className="flex justify-end">
-                <div className="grid w-[240px] gap-1.5">
-                  <select value={agentFilter} onChange={(event) => setAgentFilter(event.target.value as typeof agentFilter)} className="h-8 rounded-full border border-white/[0.035] bg-black/20 px-3 text-xs text-white/52 outline-none">
-                    <option value="all">All visibility</option>
-                    <option value="usable">Ready</option>
-                    <option value="private">Private</option>
-                  </select>
-                  <label className="flex h-8 items-center gap-2 rounded-full border border-white/[0.025] bg-black/12 px-3">
+                <label className="flex h-8 w-[220px] items-center gap-2 rounded-full border border-white/[0.025] bg-black/12 px-3">
                   <Search className="h-3.5 w-3.5 text-white/26" />
                   <input
                     value={query}
@@ -404,8 +395,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                     placeholder="Search"
                     className="min-w-0 flex-1 bg-transparent text-xs text-white/66 outline-none placeholder:text-white/24"
                   />
-                  </label>
-                </div>
+                </label>
               </div>
 
               <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-0.5">
