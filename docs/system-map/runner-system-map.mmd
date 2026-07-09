@@ -172,7 +172,8 @@ flowchart LR
   Workers --> A_playlisting_power_up
   Campaign["Campaign Workspace"] --> A_playlisting_power_up
   Registry --> A_spotify_playlist_creator["Spotify Playlist Creator\nask\nPromotion"]
-  A_spotify_playlist_creator --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
+  A_spotify_playlist_creator --> S_playlist_builder["skill:playlist-builder"]
+  A_spotify_playlist_creator --> T_printing_press_social["source:printing-press-social"]
   A_spotify_playlist_creator -. hidden .-> Workers
   Registry --> A_researcher["Researcher\nsafe\nResearch"]
   A_researcher -. hidden .-> Workers
@@ -181,7 +182,7 @@ flowchart LR
   A_spotify_analyst --> S_spotify_growth_intake["skill:spotify-growth-intake"]
   A_spotify_analyst --> S_spotify_analytics_snapshot["skill:spotify-analytics-snapshot"]
   A_spotify_analyst --> S_spotify_anomaly_watch["skill:spotify-anomaly-watch"]
-  A_spotify_analyst --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
+  A_spotify_analyst --> T_printing_press_social["source:printing-press-social"]
   Registry --> A_youtube_research_agent["YouTube Research Agent\nsafe\nResearch"]
   Workers --> A_youtube_research_agent
   A_youtube_research_agent --> S_youtube_research["skill:youtube-research"]

@@ -17,7 +17,7 @@ export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.settings.SOCIAL_ACCOUNTS_STATUS,
 ] as const
 
-const SOCIAL_PLATFORMS = new Set(['instagram', 'tiktok', 'x', 'youtube'])
+const SOCIAL_PLATFORMS = new Set(['instagram', 'tiktok', 'x', 'youtube', 'spotify'])
 
 // ============================================================
 // GUI-only settings (require Electron-specific APIs)
@@ -210,6 +210,7 @@ function socialLoginUrl(platform: string): string {
   if (platform === 'tiktok') return 'https://www.tiktok.com/'
   if (platform === 'x') return 'https://x.com/'
   if (platform === 'youtube') return 'https://www.youtube.com/'
+  if (platform === 'spotify') return 'https://artists.spotify.com/'
   return 'https://www.google.com/'
 }
 
@@ -287,6 +288,11 @@ function hasLoggedInSignal(platform: string, text: string, urls: string[]): bool
     return urls.some((url) => /youtube\.com\/(feed|account|channel|@|upload|studio)/i.test(url))
       || lower.includes('create') || lower.includes('your channel')
   }
+  if (platform === 'spotify') {
+    return urls.some((url) => /artists\.spotify\.com\/(c|home|music|audience|profile|roster)/i.test(url)
+      || /open\.spotify\.com\/(collection|playlist)/i.test(url))
+      || lower.includes('spotify for artists') || lower.includes('your library') || lower.includes('create playlist')
+  }
   return false
 }
 
@@ -295,6 +301,7 @@ function isSocialPlatformUrl(platform: string, value: string): boolean {
   if (platform === 'tiktok') return /(^|\/\/)(www\.)?tiktok\.com\//i.test(value)
   if (platform === 'x') return /(^|\/\/)(www\.)?(x|twitter)\.com\//i.test(value)
   if (platform === 'youtube') return /(^|\/\/)(www\.)?youtube\.com\//i.test(value)
+  if (platform === 'spotify') return /(^|\/\/)([a-z]+\.)?spotify\.com\//i.test(value)
   return false
 }
 

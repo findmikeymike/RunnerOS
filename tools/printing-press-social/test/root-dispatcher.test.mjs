@@ -28,6 +28,9 @@ test('root registry returns CLI-Anything style command metadata', () => {
   assert.ok(registry.platforms.tiktok);
   assert.ok(registry.platforms.x);
   assert.ok(registry.platforms.youtube);
+  assert.ok(registry.platforms.spotify);
+  assert.ok(registry.commands.some((command) => command.verb === 'snapshot' && command.platform === 'spotify'));
+  assert.ok(registry.commands.some((command) => command.verb === 'playlist' && command.platform === 'spotify'));
   assert.ok(registry.commands.some((command) => command.verb === 'doctor'));
   assert.ok(registry.commands.some((command) => command.verb === 'catalog'));
   assert.ok(registry.commands.some((command) => command.verb === 'execute'));
@@ -42,7 +45,8 @@ test('root doctor reports install and platform health', () => {
   assert.equal(result.model, 'CLI-Anything');
   assert.equal(result.browserEngine, 'runner-cdp');
   assert.equal(result.checks.find((check) => check.name === 'browser-engine')?.mode, 'delegated');
-  assert.equal(result.platforms.length, 4);
+  assert.equal(result.platforms.length, 5);
+  assert.ok(result.platforms.some((platform) => platform.platform === 'spotify'));
   assert.deepEqual(result.summary, {
     totalProfiles: 0,
     readyProfiles: 0,

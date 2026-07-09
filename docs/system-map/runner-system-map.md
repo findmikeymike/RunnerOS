@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-08
+last_verified: 2026-07-09
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-07-08
+Generated: 2026-07-09
 
 ## Why This Exists
 
@@ -45,7 +45,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Outputs -> Finals promotion: wired
 - Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 4, Promotion 9, Research 3, Socials 2
 - Permission modes: ask 31, safe 7
-- Known skills: 119 (76 bundled, 6 system, 119 user-global on this machine)
+- Known skills: 120 (76 bundled, 6 system, 119 user-global on this machine)
 - Known builtin sources: 24
 
 ## Reference Health
@@ -574,14 +574,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Create Spotify playlists that place your songs beside bigger artists.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `hidden-from-workers-home`
-- Skills: `spotify-playlist-curator`
-- Sources: none
+- Skills: `playlist-builder`
+- Sources: `printing-press-social`
 - Optional sources: none
 - Trusted tools: none
 - Tags: `spotify`, `playlist`, `promotion`, `music-marketing`
-- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`
-- Inputs: Playlist theme, comparable artists/tracks, artist Spotify tracks, target length, feature ratio, visibility, and Spotify account/tool readiness.
-- Outputs: A Spotify playlist plan, approval checklist, and creation payload or receipt when approved and Spotify tooling is connected.
+- Signals: `approval-capable`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
+- Inputs: Playlist theme, comparable artists/tracks, artist Spotify tracks, target length, feature ratio, visibility, and a connected Spotify account.
+- Outputs: A playlist plan, approval checklist, and a created playlist URL (receipt) once approved — built on the connected Spotify via browser.
 
 ### Research
 
@@ -604,14 +604,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Pulls Spotify artist data and turns it into useful growth signal.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `spotify-growth-intake`, `spotify-analytics-snapshot`, `spotify-anomaly-watch`, `spotify-playlist-curator`
-- Sources: none
+- Skills: `spotify-growth-intake`, `spotify-analytics-snapshot`, `spotify-anomaly-watch`
+- Sources: `printing-press-social`
 - Optional sources: none
 - Trusted tools: none
 - Tags: `spotify`, `analytics`, `research`, `audience`, `music-marketing`
-- Signals: `approval-capable`, `explicit-approval-required`
-- Inputs: Artist HQ Profile, Spotify client credentials, Spotify artist ID or URL, existing Spotify snapshots, and campaign context.
-- Outputs: Spotify public API snapshots, optional S4A snapshot normalization, delta briefs, anomaly alerts, and growth handoff notes.
+- Signals: `approval-capable`, `context-doc-aware`, `requires-source-activation`
+- Inputs: Artist HQ Profile, a connected Spotify account (Spotify for Artists browser session), existing Spotify snapshots, and campaign context.
+- Outputs: Spotify for Artists snapshots (streams, listeners, followers, cities, sources), delta briefs, anomaly alerts, and growth handoff notes.
 
 #### YouTube Research Agent (`youtube-research-agent`)
 

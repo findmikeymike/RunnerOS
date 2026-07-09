@@ -15294,6 +15294,242 @@ Return paid-ads findings in this order:
     ],
   },
   {
+    slug: "playlist-builder",
+    files: [
+      {
+        path: "playbook/playbook.json",
+        content: `{
+  "meta": {
+    "name": "Spotify Playlist Strategist — playbook",
+    "version": "1.0.0",
+    "updated": "2026-07-08",
+    "purpose": "The strategy an agent uses to build an artist-curated Spotify playlist (the artist's songs mixed with similar artists, posted on their profile) that grows streams honestly. Turns the app's existing artist context — sound/style + a list of similar artists — into a concrete, algorithm-friendly tracklist and a promotable playlist package.",
+    "honest_framing": "An artist-curated playlist is a LEGIT but MODEST lever. Its real value is: (1) manufacturing qualified CO-LISTENING context — your track credibly sequenced next to genuine audience-neighbors; (2) earning ENGAGEMENT (saves, low skips, completion, follows); (3) feeding Spotify's collaborative-filtering 'organizational similarity' and shaping your 'Fans Also Like' neighborhood; (4) growing an owned following you can re-activate. It is NOT a switch that triggers Discover Weekly / Release Radar, and a single artist playlist does not by itself 'train the algorithm.' Frame the value truthfully.",
+    "evidence_key": {
+      "EVIDENCE": "stated by Spotify or well-documented across independent sources",
+      "PLAUSIBLE": "credible practitioner/expert consensus, mechanistically sound, not officially confirmed",
+      "MYTH": "commonly repeated but weak, contradicted, or against Spotify TOS"
+    },
+    "app_context_note": "The app already gives the agent the target artist's sound/style descriptor and a list of similar artists. The playbook's job is to convert that into peer selection, track choice, sequencing, and a package — see the 'pipeline'.",
+    "api_caveat": "Spotify deprecated its audio-features, related-artists, recommendations, and featured-playlists API endpoints for new apps in Nov 2024. Third-party BPM/energy/key values may be approximate or stale — treat as directional and cross-check. [EVIDENCE]"
+  },
+  "principles": [
+    {"id":"co-listening","name":"The goal is qualified co-listening, not raw plays","rule":"Design the playlist so real listeners stream your track IN-SESSION alongside genuine peers and engage. That co-listening + the user playlist-adds it inspires is the signal that feeds similarity models.","tag":"PLAUSIBLE","why":"Spotify's collaborative filtering learns 'two songs are similar if users put them on the same playlist' (trained on ~700M user playlists). Your posted list is a vehicle to generate that real behavior, not the signal itself."},
+    {"id":"engagement-over-volume","name":"Engagement beats volume","rule":"Optimize for saves, library/playlist adds, completion, low skips, follows — not stream count. Every construction choice should protect these.","tag":"EVIDENCE","why":"Explicit signals (saves/adds) and completion are the dominant ranking inputs; a skip before ~30s doesn't even count as a stream and reads negative."},
+    {"id":"relevance-density","name":"Relevance density over star power","rule":"The bulk of the list should be genuine sonic peers your target listener actually chooses; use only a couple of recognizable 'anchors' for trust.","tag":"PLAUSIBLE","why":"'Fans Also Like' rewards the SHARE of an artist's fanbase you overlap with, so you cannot piggyback on a superstar; and mismatched mega-artist crowds skip your track, suppressing you in that cluster."},
+    {"id":"right-audience","name":"Drive the RIGHT audience to it","rule":"Promote to fans of the featured peers, via legitimate channels. Wrong-audience traffic can misclassify your sound.","tag":"PLAUSIBLE","why":"One relevant new listener is worth more than ten random ad streams; mismatched virality can drag your 'neighborhood' the wrong way."},
+    {"id":"supporting-asset","name":"It's a supporting asset, not the engine","rule":"Treat the playlist as one piece around a steady release cadence and real fan engagement — not a growth engine by itself.","tag":"PLAUSIBLE","why":"Algorithmic placement is earned by broad engagement across many real sessions; playlists compound slowly and usually need legit promotion to get discovered at all."}
+  ],
+  "peer_sizing": {
+    "rule": "Choose peers within roughly ONE ORDER OF MAGNITUDE of the target's monthly listeners — not the biggest names in the genre.",
+    "tag": "PLAUSIBLE",
+    "example": "At ~5K monthly listeners, the comparable band is ~1K–50K, not 5M. Re-baseline the window upward every release cycle as the artist grows.",
+    "composition_split": "~70% emerging/peer artists (same tier, many under ~100K listeners) + ~30% recognizable 'anchor' acts for credibility and pull-in.",
+    "weight_engagement": "Within the size filter, prefer artists with high engagement (save rate, followers, repeat plays) over raw listener count: a 5K-listener act with a 15% save rate is a better neighbor than a 50K act at 2%.",
+    "myth_flag": "'X monthly listeners is a magic algorithmic threshold' is overstated — monthly listeners are a reach metric that spikes/crashes with placement, not a loyalty metric. Use listener count as a SIZE filter only. [MYTH]"
+  },
+  "composition": {
+    "length": {"target":"~25–40 tracks (acceptable ~20–50); ~1.5–3 hours","tag":"PLAUSIBLE","note":"Curate — every track earns its spot. Avoid 100+ track lists; they read as spam and dilute the signal."},
+    "own_share": {"rule":"Your own songs = ~10–25% of the list (about 1 of yours per 4–5 others), spaced out, never clustered.","tag":"PLAUSIBLE","note":"On a 30-track list, ~3–6 of your tracks. Keeps it from reading as self-promo and stays algorithmically neutral."},
+    "ordering": [
+      {"id":"slot1-anchor","rule":"Slot 1 = a recognizable, well-matched anchor artist — the hook that makes a stranger follow.","tag":"PLAUSIBLE"},
+      {"id":"slot2-you","rule":"Put your own strongest song in slot 2, not slot 1.","tag":"PLAUSIBLE"},
+      {"id":"popular-up-top","rule":"Front-load the most engaging/recognizable tracks so listeners get hooked and stay for the buried gems.","tag":"PLAUSIBLE"},
+      {"id":"sandwich","rule":"Sandwich each of your tracks BETWEEN two well-matched peer tracks a listener already likes — a classic co-listening/Discover-Weekly trigger.","tag":"PLAUSIBLE"},
+      {"id":"no-repeat-stacking","rule":"Don't stack multiple of your songs (or the same artist) back-to-back.","tag":"PLAUSIBLE"}
+    ],
+    "sequencing": [
+      {"id":"bpm-drift","rule":"Keep adjacent tracks close in tempo; drift gradually ~5–10 BPM rather than jumping.","tag":"PLAUSIBLE"},
+      {"id":"key-adjacent","rule":"Favor Camelot-adjacent keys or relative major/minor swaps for clean transitions; avoid clashing distant keys.","tag":"PLAUSIBLE"},
+      {"id":"energy-arc","rule":"Plan a deliberate energy/valence arc (build or wind-down) and group into consistent mini-sets rather than random swings.","tag":"PLAUSIBLE"},
+      {"id":"cohesion","rule":"Keep the whole list cohesive in genre/tempo/timbre/mood — cohesion IS the data that teaches Spotify where your songs belong.","tag":"PLAUSIBLE"}
+    ]
+  },
+  "overlap_signals": {
+    "note": "How to tell two artists genuinely share an audience. Require 2+ independent signals before trusting an artist as a true neighbor.",
+    "ranked": [
+      {"signal":"Quantified audience-overlap %","strength":"strongest","source":"Chartmetric 'Neighboring Artists'/Artist Similarity, Soundcharts","tag":"EVIDENCE (tools exist); overlap value proprietary"},
+      {"signal":"Co-playlisting","strength":"strong","source":"each artist's 'Discovered On'; Chartmetric playlist data","tag":"PLAUSIBLE","note":"Repeated appearance on the same user/editorial playlists — the same co-occurrence Spotify weighs."},
+      {"signal":"'Fans Also Like' reciprocity","strength":"strong","source":"in-app related-artists panel","tag":"PLAUSIBLE","note":"A appears in B's panel AND vice versa → overlap likely genuine."},
+      {"signal":"Shared genre / micro-genre tags","strength":"moderate","source":"Every Noise at Once, Chosic genre finder","tag":"PLAUSIBLE","note":"Necessary but coarse — same genre ≠ same audience."},
+      {"signal":"Label mates / same scene / distributor","strength":"weak-moderate","source":"credits, label pages","tag":"PLAUSIBLE"},
+      {"signal":"Tour mates / bill-sharing","strength":"weak","source":"press, live listings","tag":"EVIDENCE (feeds FAL 'context')","note":"Real-world overlap; also feeds the 'Fans Also Like' descriptive-context component."}
+    ],
+    "finding_tools": [
+      {"tool":"Spotify in-app 'Fans Also Like' + 'Discovered On'","use":"Ground truth for who shares your audience (public related-artists API deprecated Nov 2024 — in-app only).","tag":"EVIDENCE"},
+      {"tool":"Chartmetric / Soundcharts","use":"Quantify overlap and size-match peers cross-platform.","tag":"PLAUSIBLE"},
+      {"tool":"Chosic / Musicstax / Tunebat","use":"Track-level BPM/key/energy for picking & sequencing (values may be approximate post-API-change).","tag":"PLAUSIBLE"},
+      {"tool":"Every Noise at Once","use":"Micro-genre map to widen the net into adjacent niches.","tag":"PLAUSIBLE"}
+    ]
+  },
+  "track_selection": [
+    {"id":"recent-active","rule":"Favor artists with recent/upcoming releases and tracks still gaining saves/adds — 'warm' tracks strengthen the neighborhood; dead catalog cuts do less.","tag":"PLAUSIBLE"},
+    {"id":"vibe-band","rule":"Score candidate tracks against the artist's vibe descriptor (energy/tempo/mood/key); keep those inside the target's sonic band.","tag":"PLAUSIBLE"},
+    {"id":"known-plus-lesser","rule":"Blend recognizable anchor tracks (draw listeners in) with lesser-known peer tracks (where your song hides in plain sight and the co-listen signal is most useful).","tag":"PLAUSIBLE"},
+    {"id":"clean-seams","rule":"Prefer tracks with short instrumental intros/outros for cleaner transitions; avoid jarring tonal jumps between neighbors.","tag":"PLAUSIBLE"}
+  ],
+  "metadata_seo": {
+    "title": {"rule":"Specific, keyword-forward: mood + genre + activity (+ year). 'Rainy Day Indie Folk 2026' > 'Indie Music'.","tag":"PLAUSIBLE"},
+    "description": {"rule":"Keyword-rich: name peer artists + genre/mood/activity terms; explicitly ask listeners to follow; promise regular updates.","tag":"PLAUSIBLE","note":"Playlist title/description are crawled as text context around your release (real NLP signal)."},
+    "cover": {"rule":"Custom, on-brand cover art improves click-through. Follow Spotify image guidelines.","tag":"PLAUSIBLE","warning":"Do NOT use another artist's photo/likeness without permission; avoid low-effort generic AI art."}
+  },
+  "cadence": [
+    {"id":"refresh","rule":"Swap 2–3 tracks and re-order to spotlight your latest release every ~1–2 weeks (monthly-ish minimum). 'Active' lists are treated as live.","tag":"PLAUSIBLE"},
+    {"id":"seasonal","rule":"Rotate title/description for seasonal search; build release-timed lists on drop day.","tag":"PLAUSIBLE"},
+    {"id":"cadence-over-tinkering","rule":"A consistent release cadence matters more than playlist tinkering — the playlist supports steady releases, it doesn't replace them.","tag":"EVIDENCE-adjacent"}
+  ],
+  "engagement_signals": [
+    {"signal":"Saves / library adds / playlist adds","weight":"strongest","tag":"EVIDENCE","note":"Explicit 'keeper' feedback outweighs passive listening."},
+    {"signal":"Completion / listen-through","weight":"very strong","tag":"EVIDENCE"},
+    {"signal":"Skips (esp. before ~30s)","weight":"strongest negative","tag":"EVIDENCE","note":"A stream under ~30s doesn't count and reads negative — the single biggest red flag; context (lean-back vs skim) changes how much a skip hurts."},
+    {"signal":"Shares, artist/album click-throughs, follows, repeat & downstream plays","weight":"positive","tag":"EVIDENCE"},
+    {"signal":"Vendor benchmark targets (directional only)","weight":"unofficial","tag":"PLAUSIBLE","note":"Single-vendor figures to beat, NOT confirmed thresholds: save rate ~4.5%+ (20%+ = strong), skip <~30% in first 30s, completion >~60%."}
+  ],
+  "guardrails": [
+    {"id":"no-artificial-streams","rule":"Never recommend or use bots, stream/click farms, purchased streams/followers, or repeat-looping your own tracks to inflate counts.","tag":"EVIDENCE","penalty":"Since Apr 1 2024 Spotify charges distributors ~$10 PER TRACK for flagrant artificial streaming; flagged streams earn no royalties, don't count publicly, and don't positively influence the algorithm. Escalates to playlist removal, account suspension, catalog removal — and it makes no difference whether you paid or a farm targeted you."},
+    {"id":"no-paid-placement","rule":"Never recommend pay-for-placement playlists, 'guaranteed streams/followers' services, or paid curator slots — prohibited and counterproductive (junk co-occurrence confuses your similarity profile).","tag":"EVIDENCE"},
+    {"id":"no-follow-swaps","rule":"No sub-for-sub, follow farms, or multi-account/Family-plan looping schemes.","tag":"EVIDENCE"},
+    {"id":"legit-promo-only","rule":"Legitimate promotion only: quality-targeted paid ads (Meta/Spotify Ads/Marquee), genuine sharing, pitching real curators and Spotify editorial (≥7 days pre-release via Spotify for Artists).","tag":"EVIDENCE"},
+    {"id":"no-likeness","rule":"Don't use other artists' photos/likeness on cover art without permission.","tag":"PLAUSIBLE"}
+  ],
+  "myths": [
+    {"claim":"A single artist-curated playlist 'trains the algorithm.'","verdict":"MYTH (overstated)","reality":"Collaborative filtering is trained on millions of independent user playlists; your one posted list is a low-authority data point. It helps INDIRECTLY by generating real co-listening and organizing metadata."},
+    {"claim":"Hit a stream threshold (e.g., 20K) and Discover Weekly unlocks.","verdict":"MYTH","reality":"No evidence of such thresholds; placement is earned by engagement signals across many real sessions."},
+    {"claim":"Just release constantly to stay 'in the algorithm.'","verdict":"MYTH","reality":"Rushed, underperforming releases train the algorithm to DEPRIORITIZE you. Consistency matters, but quality/engagement gates it."},
+    {"claim":"Pair with the biggest artists in your genre to borrow their audience.","verdict":"MYTH","reality":"'Fans Also Like' rewards shared-fan PERCENTAGE, so superstars won't rank you; mismatched crowds skip you and suppress your reach in that cluster."},
+    {"claim":"Buy streams/followers/placements to kickstart it.","verdict":"MYTH / dangerous","reality":"Bannable and self-defeating — no royalties, no algorithmic benefit, corrupts your targeting, and can get your catalog removed."}
+  ],
+  "pipeline": [
+    {"step":1,"name":"Tier-filter the similar-artist list","do":"From the app's similar-artist list, keep artists within ~1 order of magnitude of the target's monthly listeners. Bucket into 'peers' (same tier, the ~70% bulk) and a few 'anchors' (bigger, credible, the ~30%). Drop anyone wildly out of scale."},
+    {"step":2,"name":"Corroborate overlap","do":"Where data is reachable (Chartmetric/Soundcharts or in-app 'Fans Also Like'/'Discovered On'), keep artists with 2+ overlap signals; deprioritize genre-only matches."},
+    {"step":3,"name":"Pull recent/active tracks","do":"For each kept artist, gather recent or still-gaining tracks, biasing to warm releases over dead catalog."},
+    {"step":4,"name":"Score tracks to the vibe","do":"Match candidate tracks to the artist's sound/style band by energy/tempo/mood/key (treat third-party BPM/energy as approximate). Keep those inside the band."},
+    {"step":5,"name":"Sequence for flow","do":"Order by gradual BPM drift (~5–10 steps), Camelot-adjacent keys, and a deliberate energy arc; group into mini-sets; anchor in slot 1."},
+    {"step":6,"name":"Insert the artist's own tracks","do":"Place the artist's songs at ~1-in-4-to-5 (10–25%), spaced out, each sandwiched between two well-matched peer tracks; strongest own song in slot 2."},
+    {"step":7,"name":"Size & finalize the list","do":"Target ~25–40 tracks / ~1.5–3 hrs, ~70% peers + ~30% anchors, mixing known and lesser-known."},
+    {"step":8,"name":"Package it","do":"Write a keyword-forward title and keyword-rich description (name peers, genre, mood, activity; ask-to-follow; promise updates); spec on-brand cover; set a refresh cadence (swap 2–3 / re-order every 1–2 weeks)."},
+    {"step":9,"name":"Recommend legit promotion","do":"Suggest driving fans of the featured peers via quality-targeted ads and genuine sharing; pitch aligned real curators/editorial. Never anything on the guardrails list."}
+  ],
+  "expectations": {
+    "can": ["Put your songs credibly next to relevant peers — useful collaborative-filtering context that nudges your 'Fans Also Like'/Radio neighborhood toward the right artists.","Generate a modest, steady trickle of genre-targeted streams (especially slots 2–5).","Grow an owned following you can re-activate; benefit a circle of artist friends at once."],
+    "cannot": ["Trigger Discover Weekly/Release Radar by itself — that's earned by broad engagement across many real listeners.","Match the engagement of direct-to-artist streams (playlist listeners save/repeat less).","Get organic discovery with no promotion or SEO — new artist playlists usually need legit ads first.","Overcome a weak first 30 seconds, a mismatched audience, or a thin release cadence."]
+  },
+  "sources": [
+    "Music Tomorrow — How Spotify's Recommendation System Works (2025): https://music-tomorrow.com/blog/how-spotify-recommendation-system-works-complete-guide",
+    "Music Tomorrow — How Artists Can Influence the Algorithm: https://www.music-tomorrow.com/blog/towards-recommender-system-optimization-how-can-artists-influence-recommendation-algorithms",
+    "Spotify for Artists — Fans Also Like: https://support.spotify.com/us/artists/article/fans-also-like/",
+    "Spotify for Artists — Artificial Streaming policy: https://artists.spotify.com/artificial-streaming",
+    "Spotify for Developers — Web API changes (Nov 2024): https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api",
+    "Two Story Melody — Building a Spotify Playlist Network (80/20, ordering, length): https://twostorymelody.com/spotify-playlist-network/",
+    "Two Story Melody — How 'Fans Also Like' Works: https://twostorymelody.com/spotify-fans-also-like-explained/",
+    "Ones To Watch — Playlist curating rules for indies (70/30, tiers): https://resources.onestowatch.com/spotify-playlist-curating-rules-indies/",
+    "Chartmetric — Artist Similarity / Neighboring Artists: https://hmc.chartmetric.com/chartmetric-artist-similarity/",
+    "artist.tools — Guide to Playlists on Spotify (signals, mismatch skips): https://www.artist.tools/post/a-guide-to-playlists-on-spotify-and-how-they-grow-your-music",
+    "Chartlex — algorithm benchmarks (single-vendor, directional): https://www.chartlex.com/blog/streaming/how-spotify-algorithm-works-2026-complete-guide"
+  ]
+}
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: playlist-builder
+description: >-
+  Build an artist-curated Spotify playlist (the artist's songs mixed with similar artists, posted on
+  their profile) that grows streams honestly and shapes their recommendation "neighborhood." Use when
+  an artist wants to make a playlist to grow on Spotify, asks which artists or songs to put on it, how
+  to order it, how big it should be, or how to promote it. Trigger on: "build me a Spotify playlist,"
+  "which artists should I add," "make an artist playlist to get plays," "help me grow on Spotify,"
+  "playlist to train the algorithm," "how do I order my playlist." Turns the app's existing artist
+  context (sound/style + similar artists) into a concrete, sequenced tracklist plus a promotable
+  package. Built on researched, evidence-tagged strategy with hard TOS guardrails. Do NOT use for
+  buying streams/followers/placements or any artificial-streaming scheme.
+---
+
+# Playlist Builder — grow on Spotify, honestly
+
+An artist-curated playlist is a **legit but modest** growth lever. Be straight with the artist about
+what it does: its real value is manufacturing **qualified co-listening** (their track credibly
+sequenced next to genuine audience-neighbors) and earning **engagement** (saves, low skips,
+completion, follows), which feeds Spotify's similarity models and shapes their "Fans Also Like"
+neighborhood. It is **not** a switch that triggers Discover Weekly, and one playlist doesn't by itself
+"train the algorithm." Sell the real mechanism, never the myth.
+
+## The playbook (\`playbook/playbook.json\`)
+
+Everything is there, evidence-tagged \`[EVIDENCE]\` / \`[PLAUSIBLE]\` / \`[MYTH]\`: principles, peer sizing,
+composition & ordering, sequencing, overlap signals, track selection, metadata/SEO, cadence,
+engagement signals, guardrails, myths, and the step-by-step pipeline. **When you state a claim to the
+artist, carry its tag** — say what's confirmed vs. practitioner consensus vs. myth. Don't launder
+folklore as fact.
+
+## What the app already gives you
+
+The app supplies the target artist's **sound/style descriptor** and a **list of similar artists**.
+That's your raw material — you don't start cold. Your job is to turn it into peer selection, track
+choice, sequencing, and a package.
+
+## The build pipeline
+
+Run the playbook's \`pipeline\` in order:
+
+1. **Tier-filter the similar-artist list.** Keep artists within ~1 order of magnitude of the target's
+   monthly listeners. Bucket into **~70% peers** (same tier, many <100K) and **~30% anchors**
+   (recognizable, credible). Drop anyone wildly out of scale — pairing a 5K-listener artist with
+   superstars is near-useless (Fans Also Like rewards shared-fan *percentage*).
+2. **Corroborate overlap.** Where data is reachable (in-app "Fans Also Like"/"Discovered On", or
+   Chartmetric/Soundcharts), keep artists with **2+ overlap signals**; deprioritize genre-only matches.
+3. **Pull recent/active tracks** for each kept artist — bias to warm releases still gaining saves over
+   dead catalog.
+4. **Score tracks to the vibe.** Match candidates to the artist's sound band by energy/tempo/mood/key.
+   (Third-party BPM/energy values are approximate post-2024 API changes — treat as directional.)
+5. **Sequence for flow.** Gradual BPM drift (~5–10), Camelot-adjacent keys, a deliberate energy arc,
+   mini-sets. Anchor in **slot 1**.
+6. **Insert the artist's own tracks** at ~1-in-4-to-5 (**10–25%**), spaced out, each **sandwiched
+   between two well-matched peer tracks**; strongest own song in **slot 2** (not slot 1).
+7. **Size it:** ~**25–40 tracks** / ~1.5–3 hrs, ~70% peers + ~30% anchors, known + lesser-known.
+8. **Package it:** keyword-forward **title** (mood + genre + activity + year); keyword-rich
+   **description** (name peers, genre, mood; ask-to-follow; promise updates); on-brand **cover** spec;
+   a **refresh cadence** (swap 2–3 tracks / re-order every 1–2 weeks).
+9. **Recommend legit promotion:** drive fans of the featured peers via quality-targeted ads and real
+   sharing; pitch aligned real curators / Spotify editorial (≥7 days pre-release). Never the guardrails.
+
+## What to hand back
+
+A finished, usable deliverable, not a lecture:
+
+- **The tracklist** — numbered, in final order, marking which are the artist's own (and showing the
+  slot-1 anchor / slot-2 you / sandwich structure). A one-line why for the peer choices (the overlap
+  signal that justifies each).
+- **The package** — title options, a ready description, a cover concept, and the refresh cadence.
+- **The promotion note** — 2–3 legitimate ways to drive the *right* audience.
+- **Honest expectations** — a short, plain line on what this will and won't do (compounding trickle +
+  better neighborhood accuracy; not an overnight Discover Weekly breakout).
+
+Keep tags visible where it matters, but lead with the deliverable — the artist wants the playlist, not
+the research.
+
+## Guardrails (hard lines — non-negotiable)
+
+Never recommend or assist with: bots, stream/click farms, purchased streams or followers, repeat-
+looping the artist's own tracks, pay-for-placement or "guaranteed streams/placement" services, paid
+curator slots, sub-for-sub, or multi-account/Family-plan looping. These are **against Spotify TOS and
+counterproductive** — flagged streams earn no royalties, don't count publicly, don't help the
+algorithm, and since Apr 2024 carry a ~$10-per-track penalty that escalates to account and catalog
+removal (and it doesn't matter whether the artist paid or a farm did it). If asked for any of this,
+decline plainly and redirect to the legitimate levers above. The whole tool only works by generating
+**real listeners genuinely engaging** — protect that.
+
+## Fits the toolkit
+
+This is the distribution end of the suite: **The Excavator** finds the song → **References** /
+**Impact Phrases** / **Prosody** / **hook-writer** make it → **Playlist Builder** helps it find its
+right audience on Spotify. When an artist has a release ready, this is the growth step.
+`,
+      },
+    ],
+  },
+  {
     slug: "pricing-strategy",
     files: [
       {
@@ -22737,280 +22973,6 @@ Timestamp:
     slug: "spotify-analytics-snapshot",
     files: [
       {
-        path: "scripts/api-snapshot.ts",
-        content: `#!/usr/bin/env bun
-import { mkdir, writeFile } from 'node:fs/promises';
-import { basename, isAbsolute, join } from 'node:path';
-import { loadContextDoc, upsertContextDoc } from '../../../../workspace-context/index.ts';
-
-interface CliOptions {
-  artistId: string | null;
-  artistProfile: string | null;
-  workspace: string | null;
-  out: string;
-  market: string;
-  writeContext: boolean;
-}
-
-interface SpotifyArtist {
-  id: string;
-  name: string;
-  genres?: string[];
-  popularity?: number;
-  followers?: { total?: number };
-  external_urls?: { spotify?: string };
-  images?: Array<{ url?: string; width?: number; height?: number }>;
-}
-
-interface SpotifyTrack {
-  id: string;
-  name: string;
-  popularity?: number;
-  external_urls?: { spotify?: string };
-  album?: { name?: string; release_date?: string };
-}
-
-const DEFAULT_OUT_DIR = 'data/spotify/snapshots';
-const SNAPSHOT_CONTEXT_SLUG = 'artist-spotify-snapshot';
-const ARTIST_PROFILE_CONTEXT_SLUG = 'artist-profile';
-
-function usage(): string {
-  return \`Usage:
-  bun packages/shared/src/skills/bundled/spotify-analytics-snapshot/scripts/api-snapshot.ts [options]
-
-Options:
-  --artist-id <id>          Spotify artist ID.
-  --artist-profile <url|id> Spotify artist URL/URI/ID.
-  --workspace <path>        Workspace root. If present, can read artist-profile and write Artist HQ context.
-  --out <dir>               Snapshot directory. Default: \${DEFAULT_OUT_DIR}
-  --market <code>           Market for top tracks. Default: US
-  --no-context              Do not write artist-spotify-snapshot context.
-
-Requires SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.
-\`;
-}
-
-function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = {
-    artistId: null,
-    artistProfile: null,
-    workspace: process.env.CRAFT_WORKSPACE_PATH ?? null,
-    out: DEFAULT_OUT_DIR,
-    market: 'US',
-    writeContext: true,
-  };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    const next = () => {
-      const value = argv[++i];
-      if (value === undefined) throw new Error(\`Missing value for \${arg}\`);
-      return value;
-    };
-
-    if (arg === '--help' || arg === '-h') {
-      console.log(usage());
-      process.exit(0);
-    } else if (arg === '--artist-id') {
-      options.artistId = next();
-    } else if (arg === '--artist-profile') {
-      options.artistProfile = next();
-    } else if (arg === '--workspace') {
-      options.workspace = next();
-    } else if (arg === '--out') {
-      options.out = next();
-    } else if (arg === '--market') {
-      options.market = next().toUpperCase();
-    } else if (arg === '--no-context') {
-      options.writeContext = false;
-    } else {
-      throw new Error(\`Unknown argument: \${arg}\`);
-    }
-  }
-
-  return options;
-}
-
-function extractArtistId(input: string | null | undefined): string | null {
-  const raw = input?.trim();
-  if (!raw) return null;
-  const uriMatch = raw.match(/^spotify:artist:([A-Za-z0-9]+)$/);
-  if (uriMatch?.[1]) return uriMatch[1];
-  const urlMatch = raw.match(/\\/artist\\/([A-Za-z0-9]+)/);
-  if (urlMatch?.[1]) return urlMatch[1];
-  const last = basename(raw).trim();
-  return /^[A-Za-z0-9]{12,}$/.test(last) ? last : null;
-}
-
-function extractJson(body: string): unknown | null {
-  const fenced = body.match(/\`\`\`json\\s*([\\s\\S]*?)\`\`\`/i);
-  const json = fenced?.[1] ?? body.slice(body.indexOf('{'), body.lastIndexOf('}') + 1);
-  if (!json.trim()) return null;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function readArtistProfileId(workspace: string | null): string | null {
-  if (!workspace) return null;
-  const doc = loadContextDoc(workspace, ARTIST_PROFILE_CONTEXT_SLUG);
-  const parsed = extractJson(doc?.body ?? '');
-  if (!parsed || typeof parsed !== 'object') return null;
-  const spotifyProfile = (parsed as { spotifyProfile?: unknown }).spotifyProfile;
-  return typeof spotifyProfile === 'string' ? extractArtistId(spotifyProfile) : null;
-}
-
-async function getAccessToken(clientId: string, clientSecret: string): Promise<string> {
-  const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      Authorization: \`Basic \${Buffer.from(\`\${clientId}:\${clientSecret}\`).toString('base64')}\`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ grant_type: 'client_credentials' }),
-  });
-  if (!response.ok) {
-    throw new Error(\`Spotify token request failed: \${response.status} \${await response.text()}\`);
-  }
-  const json = await response.json() as { access_token?: string };
-  if (!json.access_token) throw new Error('Spotify token response did not include access_token.');
-  return json.access_token;
-}
-
-async function spotifyGet<T>(token: string, path: string): Promise<T> {
-  const response = await fetch(\`https://api.spotify.com/v1\${path}\`, {
-    headers: { Authorization: \`Bearer \${token}\` },
-  });
-  if (!response.ok) {
-    throw new Error(\`Spotify API request failed for \${path}: \${response.status} \${await response.text()}\`);
-  }
-  return await response.json() as T;
-}
-
-async function spotifyGetOptional<T>(token: string, path: string): Promise<{ data: T | null; error: string | null }> {
-  try {
-    return { data: await spotifyGet<T>(token, path), error: null };
-  } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-function bestImage(artist: SpotifyArtist): string | undefined {
-  return artist.images?.find((image) => image.url)?.url;
-}
-
-function buildContextBody(snapshot: unknown): string {
-  return [
-    'This is the latest global Spotify snapshot. Public API snapshots include catalog/audience proxy data, not private Spotify for Artists streams/listeners.',
-    '',
-    '\`\`\`json',
-    JSON.stringify(snapshot, null, 2),
-    '\`\`\`',
-  ].join('\\n');
-}
-
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const clientId = process.env.SPOTIFY_CLIENT_ID?.trim();
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET?.trim();
-  if (!clientId || !clientSecret) {
-    throw new Error('SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are required. Add them in Settings > Secrets > Spotify.');
-  }
-
-  const artistId = options.artistId
-    ?? extractArtistId(options.artistProfile)
-    ?? extractArtistId(process.env.SPOTIFY_ARTIST_ID)
-    ?? readArtistProfileId(options.workspace);
-  if (!artistId) {
-    throw new Error('Spotify artist ID is required. Add Artist Profile > Spotify profile, set SPOTIFY_ARTIST_ID, or pass --artist-id.');
-  }
-
-  const token = await getAccessToken(clientId, clientSecret);
-  const artist = await spotifyGet<SpotifyArtist>(token, \`/artists/\${artistId}\`);
-  const topTracks = await spotifyGetOptional<{ tracks?: SpotifyTrack[] }>(
-    token,
-    \`/artists/\${artistId}/top-tracks?market=\${encodeURIComponent(options.market)}\`,
-  );
-  const snapshotDate = new Date().toISOString().slice(0, 10);
-  const snapshot = {
-    version: 1,
-    dataSource: 'spotify-web-api',
-    snapshotDate,
-    windowDays: 0,
-    artist: {
-      name: artist.name,
-      spotifyArtistId: artist.id,
-      spotifyUrl: artist.external_urls?.spotify,
-      genres: artist.genres ?? [],
-      imageUrl: bestImage(artist),
-    },
-    metrics: {
-      followers: artist.followers?.total ?? 0,
-      popularity: artist.popularity ?? 0,
-    },
-    geo: { topCities: [] },
-    tracks: (topTracks.data?.tracks ?? []).map((track) => ({
-      id: track.id,
-      name: track.name,
-      popularity: track.popularity ?? 0,
-      spotifyUrl: track.external_urls?.spotify,
-      album: track.album?.name,
-      releaseDate: track.album?.release_date,
-    })),
-    playlistsDriving: [],
-    sources: {},
-    partial: Boolean(topTracks.error),
-    errors: topTracks.error
-      ? [\`Top tracks unavailable: \${topTracks.error}\`]
-      : [],
-    updatedAt: new Date().toISOString(),
-  };
-
-  const outDir = options.workspace && !isAbsolute(options.out)
-    ? join(options.workspace, options.out)
-    : options.out;
-  await mkdir(outDir, { recursive: true });
-  const outPath = join(outDir, \`\${snapshotDate}-web-api.json\`);
-  await writeFile(outPath, \`\${JSON.stringify(snapshot, null, 2)}\\n\`, 'utf8');
-
-  let contextPath: string | null = null;
-  if (options.writeContext) {
-    if (!options.workspace) throw new Error('--workspace is required to write Artist HQ context.');
-    const loaded = upsertContextDoc(options.workspace, {
-      slug: SNAPSHOT_CONTEXT_SLUG,
-      metadata: {
-        name: 'Artist Spotify Snapshot',
-        description: 'Latest Spotify snapshot for Artist HQ widgets and workers.',
-        routing: { mode: 'broadcast' },
-        enabled: true,
-      },
-      body: buildContextBody(snapshot),
-    });
-    contextPath = loaded.path;
-  }
-
-  console.log(JSON.stringify({
-    status: 'spotify_public_snapshot_written',
-    dataSource: 'spotify-web-api',
-    path: outPath,
-    contextPath,
-    snapshotDate,
-    artist: artist.name,
-    followers: snapshot.metrics.followers,
-    popularity: snapshot.metrics.popularity,
-    topTrackCount: snapshot.tracks.length,
-  }, null, 2));
-}
-
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
-`,
-      },
-      {
         path: "scripts/delta-brief.ts",
         content: `#!/usr/bin/env npx tsx
 /**
@@ -23638,55 +23600,57 @@ main().catch((error) => {
         path: "SKILL.md",
         content: `---
 name: spotify-analytics-snapshot
-description: Weekly Spotify snapshot into Artist HQ context. Uses Spotify Web API credentials for reliable public artist data now; private Spotify for Artists streams/listeners require a logged-in browser capture lane.
+description: Weekly Spotify snapshot into Artist HQ context, captured from the artist's connected Spotify for Artists browser session. Private streams, listeners, followers, saves, top cities, and source-of-streams come from the logged-in browser — there is no Spotify API path.
 ---
 
 # Spotify Analytics Snapshot
 
-Use this skill on the weekly Spotify heartbeat, or when the user requests a fresh read of the artist's Spotify presence. The reliable automated lane is artist profile, followers, popularity, and genres. Top tracks are best-effort when Spotify returns them.
+Use this skill on the weekly Spotify heartbeat, or when the user wants a fresh read of the artist's Spotify presence. All data comes from **Spotify for Artists** through the artist's connected, logged-in browser session, using RunnerOS browser tools. There is no API lane and no client credentials.
 
-## Inputs
+## Prerequisites
 
-- \`SPOTIFY_CLIENT_ID\` and \`SPOTIFY_CLIENT_SECRET\` in Settings > Secrets > Spotify.
-- Artist HQ Profile \`spotifyProfile\`, \`SPOTIFY_ARTIST_ID\`, or \`--artist-id\`.
-- Optional \`CRAFT_WORKSPACE_PATH\` / \`--workspace\` so the script can write \`artist-spotify-snapshot\`.
+- The Spotify account is connected in Settings → Social Accounts as platform \`spotify\` (one login covers Spotify for Artists and the web player).
+- Run \`social\` commands (\`node src/social.mjs ...\`) from the Printing Press Social source path.
 
 ## Workflow
 
-1. For normal weekly sync, run:
+1. Verify the session first — never guess numbers when it is missing or the account does not match:
 
 \`\`\`bash
-bun "$CRAFT_APP_ROOT/packages/shared/src/skills/bundled/spotify-analytics-snapshot/scripts/api-snapshot.ts" \\
-  --workspace "$CRAFT_WORKSPACE_PATH"
+node src/social.mjs profile status spotify --profile <id> --live --json
 \`\`\`
 
-2. This uses Spotify's public Web API and writes:
-   - \`data/spotify/snapshots/<YYYY-MM-DD>-web-api.json\`
-   - Artist HQ context doc \`artist-spotify-snapshot\`
-3. If the user explicitly needs streams, listeners, saves, skips, top cities, or source-of-streams, explain that those are Spotify for Artists metrics and require a separate logged-in browser capture. Do not fabricate them from public API data.
-4. If a private S4A capture is manually obtained as JSON, use \`snapshot.ts --from-stdin\` or \`--from-fixture\` to normalize and store it.
-5. Run \`delta-brief.ts\` only when there are comparable snapshots of the same data source.
+2. Get the browser plan and the exact fields to capture:
+
+\`\`\`bash
+node src/social.mjs snapshot spotify --profile <id> --json
+\`\`\`
+
+3. Run the returned \`browserPlan\` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams.
+
+4. Normalize and save the captured numbers:
+
+\`\`\`bash
+node src/social.mjs snapshot spotify --profile <id> \\
+  --capture-json '<captured-json>' \\
+  --out data/spotify/snapshots/<YYYY-MM-DD>-s4a.json --json
+\`\`\`
+
+5. Write the returned \`contextPayload\` as the \`artist-spotify-snapshot\` context doc.
+6. Run \`delta-brief.ts\` only when there are two comparable snapshots of the same data source.
 
 ## Output Contract
-
-Public API snapshot:
 
 \`\`\`json
 {
   "version": 1,
-  "dataSource": "spotify-web-api",
-  "snapshotDate": "2026-04-25",
-  "windowDays": 0,
-  "artist": { "name": "...", "spotifyArtistId": "...", "spotifyUrl": "...", "genres": [] },
-  "metrics": {
-    "followers": 0,
-    "popularity": 0
-  },
-  "geo": { "topCities": [] },
-  "tracks": [
-    { "id": "...", "name": "...", "popularity": 0, "spotifyUrl": "..." }
-  ],
-  "playlistsDriving": [],
+  "dataSource": "spotify-for-artists-browser",
+  "snapshotDate": "2026-07-08",
+  "windowDays": 28,
+  "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
+  "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
+  "geo": { "topCities": [], "topCountries": [] },
+  "tracks": [{ "name": "...", "streams": 0, "spotifyUrl": "..." }],
   "sources": {},
   "partial": false,
   "errors": [],
@@ -23694,32 +23658,20 @@ Public API snapshot:
 }
 \`\`\`
 
-\`data/spotify/briefs/<YYYY-MM-DD>.md\` is a short markdown brief with:
-
-- Window comparison (which two snapshots).
-- Real movers: streams, listeners, followers, save rate, skip rate. Each with absolute and percent change.
-- Top track movement (top 3 by stream delta).
-- New playlist features.
-- Removed playlist features.
-- Geo shifts worth noting.
-- Source-of-streams shifts (e.g., dependency on editorial growing).
-- Honest interpretation: signal vs. noise. Below ±10% is generally noise unless it's a sustained two-snapshot trend.
+Any metric not visible on the page is \`null\`, and the snapshot is marked \`partial: true\` with the missing fields listed in \`errors\`.
 
 ## Failure Handling
 
-- Missing Spotify client credentials → stop and point user to Settings > Secrets > Spotify.
-- Missing artist ID/profile → stop and ask for Artist Profile > Spotify profile.
-- Spotify API failure → report the status and do not write fake data.
-- Private S4A login expired → stop, report, do not retry blindly.
-- Whole private scrape fails → write nothing rather than fabricate.
-- No prior snapshot → snapshot still writes. Brief script reports "no prior snapshot, no delta."
+- Session not connected / not logged in / wrong account → stop and point the user to Settings → Social Accounts. Do not fabricate.
+- Spotify for Artists page did not load a value → capture it as \`null\`, mark \`partial\`.
+- Login expired → stop, report, do not retry blindly.
+- No prior snapshot → snapshot still writes; the brief reports "no prior snapshot, no delta."
 
 ## Never
 
-- Never fabricate numbers.
+- Never fabricate streams, listeners, followers, saves, cities, tracks, or source percentages.
 - Never modify a past snapshot.
 - Never bypass approvals — this skill is read-only.
-- Never represent public Spotify API popularity/followers as Spotify for Artists streams/listeners.
 - Never silently drop a tracked playlist feature; surface its disappearance as an anomaly.
 `,
       },
@@ -24307,727 +24259,6 @@ Spotify outputs must be dated and human-readable:
 - why it matters
 - next content/growth move
 - source/window for each metric
-`,
-      },
-    ],
-  },
-  {
-    slug: "spotify-playlist-curator",
-    files: [
-      {
-        path: "scripts/apply-plan.ts",
-        content: `#!/usr/bin/env bun
-/**
- * Spotify Playlist Curator — apply gate.
- *
- * Validates an approved plan file. Refuses to do anything without
- * \`--apply --confirm\`. When confirmed, prints a Spotify apply
- * checklist for the agent to execute step by step.
- *
- * This script does NOT touch Spotify directly. The approved Spotify
- * MCP/API/OAuth tool is the actuator. This script is the gate.
- */
-
-import { promises as fs } from "node:fs";
-import path from "node:path";
-
-type PlanSlot = {
-  position: number;
-  kind: "ours" | "comparable";
-  trackId: string;
-  trackName: string;
-  artistName: string;
-  rationale: string;
-};
-
-type Plan = {
-  generatedAt: string;
-  theme: string;
-  targetLength: number;
-  ourRatio: number;
-  ourArtistName: string;
-  comparableArtists: string[];
-  slots: PlanSlot[];
-  warnings: string[];
-};
-
-type CliOptions = {
-  plan: string;
-  apply: boolean;
-  confirm: boolean;
-  description: string;
-  publicPlaylist: boolean;
-  outRecord: string | null;
-};
-
-function usage() {
-  return \`Usage:
-	  bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/apply-plan.ts --plan <path> [--apply --confirm] [options]
-
-Required:
-  --plan <path>          Path to a plan JSON file produced by build-plan.ts.
-
-Gate (BOTH required to print the apply checklist):
-  --apply                Acknowledge intent to apply.
-  --confirm              Confirm explicit approval to proceed.
-
-Without --apply --confirm, this script prints a dry-run summary only.
-
-Options:
-  --description <text>   Playlist description text. Default: theme + auto-generated.
-  --public               Make the playlist public. Default: private.
-  --out-record <path>    Where to write the playlist record after success.
-                         Default: data/spotify/playlists/<date>-<slug>.md
-  --help
-\`;
-}
-
-function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = {
-    plan: "",
-    apply: false,
-    confirm: false,
-    description: "",
-    publicPlaylist: false,
-    outRecord: null,
-  };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    const next = () => {
-      const value = argv[++i];
-      if (value === undefined) throw new Error(\`Missing value for \${arg}\`);
-      return value;
-    };
-    if (arg === "--help" || arg === "-h") { console.log(usage()); process.exit(0); }
-    else if (arg === "--plan") options.plan = next();
-    else if (arg === "--apply") options.apply = true;
-    else if (arg === "--confirm") options.confirm = true;
-    else if (arg === "--description") options.description = next();
-    else if (arg === "--public") options.publicPlaylist = true;
-    else if (arg === "--out-record") options.outRecord = next();
-    else if (arg === "--") continue;
-    else throw new Error(\`Unknown argument: \${arg}\`);
-  }
-  if (!options.plan) throw new Error("--plan is required");
-  return options;
-}
-
-async function readPlan(filePath: string): Promise<Plan> {
-  const raw = await fs.readFile(filePath, "utf8");
-  const plan = JSON.parse(raw) as Plan;
-  if (!Array.isArray(plan.slots) || plan.slots.length === 0) {
-    throw new Error("Plan has no slots. Refusing to apply an empty plan.");
-  }
-  for (const slot of plan.slots) {
-    if (typeof slot.trackId !== "string" || !slot.trackId) {
-      throw new Error(\`Plan slot at position \${slot.position} has no trackId. Refusing to apply.\`);
-    }
-  }
-  return plan;
-}
-
-function summarize(plan: Plan, options: CliOptions): string {
-  const lines: string[] = [];
-  lines.push(\`Plan: \${options.plan}\`);
-  lines.push(\`Theme: \${plan.theme}\`);
-  lines.push(\`Tracks: \${plan.slots.length}\`);
-  lines.push(\`Featured artist: \${plan.ourArtistName}\`);
-  lines.push(\`Comparable artists in mix: \${plan.comparableArtists.join(", ")}\`);
-  lines.push(\`Visibility: \${options.publicPlaylist ? "public" : "private"}\`);
-  return lines.join("\\n");
-}
-
-function buildApplyChecklist(plan: Plan, options: CliOptions): string {
-  const description = options.description
-    || \`Themed adjacency playlist around: \${plan.theme}. Curated mix of \${plan.comparableArtists.slice(0, 3).join(", ")}\${plan.comparableArtists.length > 3 ? " and more" : ""}.\`;
-
-  const lines: string[] = [];
-  lines.push("# Spotify Apply Checklist");
-  lines.push("");
-  lines.push(summarize(plan, options));
-  lines.push("");
-  lines.push("Execute each step in order through the available Spotify MCP/API/OAuth tool on the artist's approved account.");
-  lines.push("If no Spotify write tool is available, stop and return this checklist as the setup-ready payload.");
-  lines.push("");
-  lines.push(\`## 1. Create the playlist\`);
-  lines.push("");
-  lines.push("- Confirm the Spotify account belongs to the artist/user.");
-  lines.push("- Create a new playlist.");
-  lines.push(\`- Set name: \\\`\${plan.theme}\\\`\`);
-  lines.push(\`- Set description: \\\`\${description}\\\`\`);
-  lines.push(\`- Set visibility: \${options.publicPlaylist ? "public" : "private"}\`);
-  lines.push("- Capture the resulting playlist URL.");
-  lines.push("");
-  lines.push("## 2. Add tracks in order");
-  lines.push("");
-  lines.push("Add each track by Spotify track URI in this exact order:");
-  lines.push("");
-  lines.push("| # | URI | Track | Artist |");
-  lines.push("|---|---|---|---|");
-  for (const slot of plan.slots) {
-    const uri = \`spotify:track:\${slot.trackId}\`;
-    lines.push(\`| \${slot.position} | \\\`\${uri}\\\` | \${slot.trackName.replace(/\\|/g, "\\\\|")} | \${slot.artistName.replace(/\\|/g, "\\\\|")} |\`);
-  }
-  lines.push("");
-  lines.push("## 3. Verify");
-  lines.push("");
-  lines.push("- Confirm track count on the playlist matches the plan.");
-  lines.push("- Confirm at least one of the artist's own tracks is in the playlist.");
-  lines.push("");
-  lines.push("## 4. Record");
-  lines.push("");
-  lines.push(\`Write a record file at: \\\`\${defaultRecordPath(plan, options)}\\\` with playlist URL, track count, creation timestamp, and the plan path.\`);
-  lines.push("");
-  return lines.join("\\n");
-}
-
-function defaultRecordPath(plan: Plan, options: CliOptions): string {
-  if (options.outRecord) return options.outRecord;
-  const date = new Date().toISOString().slice(0, 10);
-  const slug = plan.theme
-    .toLowerCase()
-    .replace(/[^\\w\\s-]/g, "")
-    .replace(/\\s+/g, "-")
-    .slice(0, 40);
-  return \`data/spotify/playlists/\${date}-\${slug}.md\`;
-}
-
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const plan = await readPlan(options.plan);
-
-  if (!options.apply || !options.confirm) {
-    console.log("=== DRY RUN ===");
-    console.log(summarize(plan, options));
-    console.log("");
-    console.log("Gate not satisfied. To apply this plan, re-run with both --apply and --confirm.");
-    console.log("Without those flags, this script prints summary only and never touches Spotify.");
-    process.exit(0);
-  }
-
-  const checklist = buildApplyChecklist(plan, options);
-  const checklistPath = options.plan.replace(/\\.json$/u, ".apply-checklist.md");
-  await fs.writeFile(checklistPath, checklist);
-
-  console.log(JSON.stringify({
-    status: "apply_authorized",
-    checklistPath,
-    recordPathExpected: defaultRecordPath(plan, options),
-    note: "Spotify apply checklist written. Agent now uses available Spotify tooling step by step. Script does not touch Spotify itself.",
-  }, null, 2));
-}
-
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
-`,
-      },
-      {
-        path: "scripts/build-plan.ts",
-        content: `#!/usr/bin/env bun
-/**
- * Spotify Playlist Curator — build a sandwich-pattern playlist plan.
- *
- * Read-only. Takes user-curated comparable-tracks + our-tracks JSON files,
- * outputs a deterministic playlist plan (JSON + readable markdown).
- *
- * No Spotify writes. No fabrication of track IDs.
- */
-
-import { promises as fs } from "node:fs";
-import path from "node:path";
-
-type ComparableTrack = {
-  id: string;
-  name: string;
-  durationMs?: number;
-  popularity?: number;
-};
-
-type ComparableArtist = {
-  spotifyArtistId: string;
-  artistName: string;
-  vibe?: string;
-  tracks: ComparableTrack[];
-};
-
-type OurTrack = {
-  id: string;
-  name: string;
-  durationMs?: number;
-  preferredFeatureWeight?: number;
-};
-
-type ComparableTracksFile = { comparableTracks: ComparableArtist[] };
-type OurTracksFile = { ourTracks: OurTrack[] };
-
-type PlanSlot = {
-  position: number;
-  kind: "ours" | "comparable";
-  trackId: string;
-  trackName: string;
-  artistName: string;
-  rationale: string;
-};
-
-type Plan = {
-  generatedAt: string;
-  theme: string;
-  targetLength: number;
-  ourRatio: number;
-  ourArtistName: string;
-  comparableArtists: string[];
-  slots: PlanSlot[];
-  warnings: string[];
-};
-
-type CliOptions = {
-  comparableTracks: string;
-  ourTracks: string;
-  theme: string;
-  targetLength: number;
-  ourRatio: number;
-  out: string;
-  outMd: string | null;
-  ourArtistName: string;
-  seed: number;
-};
-
-function usage() {
-  return \`Usage:
-	  bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/build-plan.ts --comparable-tracks <path> --our-tracks <path> --theme "<theme>" [options]
-
-Options:
-  --comparable-tracks <path>    JSON file with comparable artists' top tracks.
-  --our-tracks <path>           JSON file with the artist's own tracks.
-  --theme <text>                Playlist theme/title. Themed adjacency only.
-  --target-length <n>           Target playlist length. Default: 28
-  --our-ratio <0.0-0.5>         Fraction of slots filled by our tracks. Default: 0.20
-  --our-artist-name <name>      Artist display name. Default: "Our Artist"
-  --out <path>                  Plan JSON output path. Default: data/spotify/playlist-plans/<date>-<slug>.json
-  --out-md <path>               Optional readable markdown output path. Default: same as --out with .md extension.
-  --seed <n>                    Deterministic shuffle seed. Default: 42
-  --help
-\`;
-}
-
-function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = {
-    comparableTracks: "",
-    ourTracks: "",
-    theme: "",
-    targetLength: 28,
-    ourRatio: 0.20,
-    out: "",
-    outMd: null,
-    ourArtistName: "Our Artist",
-    seed: 42,
-  };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    const next = () => {
-      const value = argv[++i];
-      if (value === undefined) throw new Error(\`Missing value for \${arg}\`);
-      return value;
-    };
-    if (arg === "--help" || arg === "-h") { console.log(usage()); process.exit(0); }
-    else if (arg === "--comparable-tracks") options.comparableTracks = next();
-    else if (arg === "--our-tracks") options.ourTracks = next();
-    else if (arg === "--theme") options.theme = next();
-    else if (arg === "--target-length") options.targetLength = Number(next());
-    else if (arg === "--our-ratio") options.ourRatio = Number(next());
-    else if (arg === "--out") options.out = next();
-    else if (arg === "--out-md") options.outMd = next();
-    else if (arg === "--our-artist-name") options.ourArtistName = next();
-    else if (arg === "--seed") options.seed = Number(next());
-    else if (arg === "--") continue;
-    else throw new Error(\`Unknown argument: \${arg}\`);
-  }
-
-  if (!options.comparableTracks) throw new Error("--comparable-tracks is required");
-  if (!options.ourTracks) throw new Error("--our-tracks is required");
-  if (!options.theme.trim()) throw new Error("--theme is required");
-  if (!Number.isInteger(options.targetLength) || options.targetLength < 8 || options.targetLength > 60) {
-    throw new Error("--target-length must be an integer between 8 and 60");
-  }
-  if (!Number.isFinite(options.ourRatio) || options.ourRatio < 0.05 || options.ourRatio > 0.5) {
-    throw new Error("--our-ratio must be between 0.05 and 0.5 (recommended 0.15-0.25)");
-  }
-
-  // Doctrine: ban naming a playlist after another artist's song
-  const lowerTheme = options.theme.toLowerCase();
-  const bannedPatterns = ["radio", "songs like ", "if you like ", "more like "];
-  for (const pat of bannedPatterns) {
-    if (lowerTheme.includes(pat)) {
-      throw new Error(\`Theme "\${options.theme}" looks like an artist-bait pattern (matched: "\${pat.trim()}"). Doctrine: themed adjacency only — name by mood, scene, or vibe.\`);
-    }
-  }
-
-  if (!options.out) {
-    const date = new Date().toISOString().slice(0, 10);
-    const slug = options.theme
-      .toLowerCase()
-      .replace(/[^\\w\\s-]/g, "")
-      .replace(/\\s+/g, "-")
-      .slice(0, 40);
-    options.out = \`data/spotify/playlist-plans/\${date}-\${slug}.json\`;
-  }
-  if (!options.outMd) {
-    options.outMd = options.out.replace(/\\.json$/u, ".md");
-    if (!options.outMd.endsWith(".md")) options.outMd = \`\${options.out}.md\`;
-  }
-  return options;
-}
-
-async function readJson<T>(filePath: string): Promise<T> {
-  const raw = await fs.readFile(filePath, "utf8");
-  return JSON.parse(raw) as T;
-}
-
-/** Mulberry32 — small deterministic PRNG so plans reproduce given the same seed. */
-function makeRng(seed: number) {
-  let state = seed >>> 0;
-  return () => {
-    state = (state + 0x6D2B79F5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function shuffleInPlace<T>(arr: T[], rng: () => number): T[] {
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rng() * (i + 1));
-    const current = arr[i];
-    const swap = arr[j];
-    if (current === undefined || swap === undefined) continue;
-    arr[i] = swap;
-    arr[j] = current;
-  }
-  return arr;
-}
-
-function pickOurFeaturePositions(targetLength: number, ourCount: number): number[] {
-  // Distribute our-tracks evenly through the playlist with slight jitter
-  // toward the front to ensure listeners discover them before bouncing.
-  if (ourCount === 0) return [];
-  const segment = targetLength / ourCount;
-  const positions: number[] = [];
-  for (let i = 0; i < ourCount; i += 1) {
-    const center = Math.round(segment * i + segment * 0.5);
-    // Slight bias forward (subtract 1 for first half, leave latter half)
-    const adj = i < ourCount / 2 ? Math.max(2, center - 1) : center;
-    positions.push(Math.min(targetLength - 1, adj));
-  }
-  // Ensure unique and sorted
-  return [...new Set(positions)].sort((a, b) => a - b);
-}
-
-function buildPlan(
-  comparable: ComparableArtist[],
-  our: OurTrack[],
-  options: CliOptions,
-): Plan {
-  const warnings: string[] = [];
-
-  if (comparable.length < 3) {
-    throw new Error(\`At least 3 comparable artists with tracks are required. Received \${comparable.length}.\`);
-  }
-  if (our.length === 0) {
-    throw new Error("No our-tracks provided. Cannot build playlist plan with zero of the artist's tracks.");
-  }
-
-  const ourCount = Math.max(1, Math.round(options.targetLength * options.ourRatio));
-  const comparableCount = options.targetLength - ourCount;
-
-  // Sort our tracks by preferredFeatureWeight desc (default 1.0)
-  const ourSorted = [...our].sort(
-    (a, b) => (b.preferredFeatureWeight ?? 1.0) - (a.preferredFeatureWeight ?? 1.0),
-  );
-  const ourPicks: OurTrack[] = [];
-  for (let i = 0; i < ourCount; i += 1) {
-    const pick = ourSorted[i % ourSorted.length];
-    if (!pick) throw new Error("No our-tracks provided. Cannot build playlist plan with zero of the artist's tracks.");
-    ourPicks.push(pick);
-  }
-  if (ourCount > our.length) {
-    warnings.push(\`Requested \${ourCount} our-track slots but only \${our.length} unique tracks supplied — some will repeat.\`);
-  }
-
-  // Build a flat pool of comparable tracks tagged by artist, shuffled deterministically.
-  const rng = makeRng(options.seed);
-  type ComparableEntry = { track: ComparableTrack; artistName: string };
-  const comparablePool: ComparableEntry[] = [];
-  for (const artist of comparable) {
-    for (const track of artist.tracks) {
-      comparablePool.push({ track, artistName: artist.artistName });
-    }
-  }
-  if (comparablePool.length === 0) {
-    throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
-  }
-  if (comparablePool.length < comparableCount) {
-    warnings.push(\`Only \${comparablePool.length} comparable tracks available but \${comparableCount} slots needed — some will repeat.\`);
-  }
-  shuffleInPlace(comparablePool, rng);
-
-  // Take comparableCount tracks but try not to repeat the same artist back-to-back.
-  const comparableSequence: ComparableEntry[] = [];
-  const usedTrackIds = new Set<string>();
-  let cursor = 0;
-  let lastArtist: string | null = null;
-  let attempts = 0;
-  while (comparableSequence.length < comparableCount) {
-    if (attempts > comparablePool.length * 3) {
-      // Fallback: relax the no-repeat-artist constraint
-      const next = comparablePool[cursor % comparablePool.length];
-      if (!next) throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
-      comparableSequence.push(next);
-      cursor += 1;
-      lastArtist = next.artistName;
-      attempts = 0;
-      continue;
-    }
-    const candidate = comparablePool[cursor % comparablePool.length];
-    if (!candidate) throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
-    cursor += 1;
-    attempts += 1;
-    if (candidate.artistName === lastArtist) continue;
-    if (usedTrackIds.has(candidate.track.id) && comparablePool.length > comparableCount) continue;
-    comparableSequence.push(candidate);
-    usedTrackIds.add(candidate.track.id);
-    lastArtist = candidate.artistName;
-    attempts = 0;
-  }
-
-  // Pick our-track feature positions
-  const ourPositions = pickOurFeaturePositions(options.targetLength, ourCount);
-  const ourPositionSet = new Set(ourPositions);
-
-  // Assemble the slots
-  const slots: PlanSlot[] = [];
-  let comparableIdx = 0;
-  let ourIdx = 0;
-  for (let pos = 0; pos < options.targetLength; pos += 1) {
-    if (ourPositionSet.has(pos) && ourIdx < ourPicks.length) {
-      const track = ourPicks[ourIdx];
-      if (!track) throw new Error("Unable to place our-track slot because no selected track exists.");
-      ourIdx += 1;
-      slots.push({
-        position: pos + 1,
-        kind: "ours",
-        trackId: track.id,
-        trackName: track.name,
-        artistName: options.ourArtistName,
-        rationale: \`Feature slot \${ourIdx} of \${ourCount}. Distributed evenly through the playlist for organic discovery.\`,
-      });
-    } else {
-      const entry = comparableSequence[comparableIdx % comparableSequence.length];
-      if (!entry) throw new Error("Unable to place comparable slot because no selected track exists.");
-      comparableIdx += 1;
-      slots.push({
-        position: pos + 1,
-        kind: "comparable",
-        trackId: entry.track.id,
-        trackName: entry.track.name,
-        artistName: entry.artistName,
-        rationale: \`Comparable adjacency. Sets the vibe and gives listeners reason to keep playing.\`,
-      });
-    }
-  }
-
-  return {
-    generatedAt: new Date().toISOString(),
-    theme: options.theme,
-    targetLength: options.targetLength,
-    ourRatio: options.ourRatio,
-    ourArtistName: options.ourArtistName,
-    comparableArtists: comparable.map((a) => a.artistName),
-    slots,
-    warnings,
-  };
-}
-
-function buildMarkdown(plan: Plan): string {
-  const lines: string[] = [];
-  lines.push(\`# Playlist Plan — \${plan.theme}\`);
-  lines.push("");
-  lines.push(\`Generated: \${plan.generatedAt}\`);
-  lines.push(\`Target length: \${plan.targetLength} tracks (\${Math.round(plan.ourRatio * 100)}% feature)\`);
-  lines.push(\`Featured artist: **\${plan.ourArtistName}**\`);
-  lines.push(\`Comparable artists in mix: \${plan.comparableArtists.join(", ") || "(none)"}\`);
-  lines.push("");
-
-  if (plan.warnings.length > 0) {
-    lines.push("## Warnings");
-    lines.push("");
-    for (const w of plan.warnings) lines.push(\`- \${w}\`);
-    lines.push("");
-  }
-
-  lines.push("## Track Order");
-  lines.push("");
-  lines.push("| # | Track | Artist | Slot |");
-  lines.push("|---|---|---|---|");
-  for (const slot of plan.slots) {
-    const slotLabel = slot.kind === "ours" ? "**FEATURE**" : "comparable";
-    lines.push(\`| \${slot.position} | \${slot.trackName.replace(/\\|/g, "\\\\|")} | \${slot.artistName.replace(/\\|/g, "\\\\|")} | \${slotLabel} |\`);
-  }
-  lines.push("");
-
-  lines.push("## Approval");
-  lines.push("");
-  lines.push("Review the order above. If approved, run:");
-  lines.push("");
-  lines.push("\`\`\`sh");
-  lines.push(\`bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/apply-plan.ts --plan <plan.json> --apply --confirm\`);
-  lines.push("\`\`\`");
-  lines.push("");
-
-  return lines.join("\\n");
-}
-
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const comparableFile = await readJson<ComparableTracksFile>(options.comparableTracks);
-  const ourFile = await readJson<OurTracksFile>(options.ourTracks);
-
-  const comparable = (comparableFile.comparableTracks ?? []).filter(
-    (a) => a && Array.isArray(a.tracks) && a.tracks.length > 0,
-  );
-  const our = (ourFile.ourTracks ?? []).filter((t) => t && typeof t.id === "string");
-
-  const plan = buildPlan(comparable, our, options);
-
-  await fs.mkdir(path.dirname(options.out), { recursive: true });
-  await fs.writeFile(options.out, \`\${JSON.stringify(plan, null, 2)}\\n\`);
-
-  if (options.outMd) {
-    await fs.mkdir(path.dirname(options.outMd), { recursive: true });
-    await fs.writeFile(options.outMd, buildMarkdown(plan));
-  }
-
-  console.log(JSON.stringify({
-    status: "plan_written",
-    plan: options.out,
-    markdown: options.outMd,
-    slots: plan.slots.length,
-    ourSlots: plan.slots.filter((s) => s.kind === "ours").length,
-    comparableSlots: plan.slots.filter((s) => s.kind === "comparable").length,
-    warnings: plan.warnings,
-  }, null, 2));
-}
-
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
-`,
-      },
-      {
-        path: "SKILL.md",
-        content: `---
-name: spotify-playlist-curator
-description: Build Spotify adjacency playlists where the artist's tracks sit naturally between bigger comparable artists. Generates a sandwich-pattern plan first, then applies only after explicit approval and only when Spotify MCP/API/OAuth tooling is available.
----
-
-# Spotify Playlist Curator
-
-Use this skill when the artist wants a Spotify playlist that creates tasteful adjacency: bigger comparable artists set the lane, and the artist's songs are placed naturally inside that emotional pocket.
-
-## Core Rule
-
-Plan first. Never create or modify a Spotify playlist until the user approves the exact playlist title, description, visibility, track order, and artist-track placements.
-
-## Inputs
-
-- Comparable big artists and tracks in the same lane.
-- The artist's own Spotify track IDs.
-- A mood/scene title for the playlist.
-- Target length, usually 25-30 tracks.
-- Featured-artist ratio, usually 15-25%.
-
-Expected JSON files:
-
-\`\`\`json
-{
-  "comparableTracks": [
-    {
-      "spotifyArtistId": "artist-id",
-      "artistName": "Comparable Artist",
-      "tracks": [
-        { "id": "track-id", "name": "Track Name", "durationMs": 0, "popularity": 0 }
-      ]
-    }
-  ]
-}
-\`\`\`
-
-\`\`\`json
-{
-  "ourTracks": [
-    { "id": "track-id", "name": "Our Song", "durationMs": 0, "preferredFeatureWeight": 1 }
-  ]
-}
-\`\`\`
-
-## Build A Plan
-
-\`\`\`sh
-bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/build-plan.ts \\
-  --comparable-tracks data/spotify/comparable-tracks.json \\
-  --our-tracks data/spotify/our-tracks.json \\
-  --theme "Drive Home Slow" \\
-  --target-length 28 \\
-  --our-ratio 0.20 \\
-  --our-artist-name "Artist Name" \\
-  --out data/spotify/playlist-plans/drive-home-slow.json
-\`\`\`
-
-The planner:
-
-- Uses only provided Spotify track IDs.
-- Spreads the artist's tracks through the playlist.
-- Avoids same comparable artist back-to-back where possible.
-- Writes JSON plus a readable Markdown review file.
-
-## Apply Gate
-
-After user approval:
-
-\`\`\`sh
-bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/apply-plan.ts \\
-  --plan data/spotify/playlist-plans/drive-home-slow.json \\
-  --apply \\
-  --confirm
-\`\`\`
-
-This writes an apply checklist. If a Spotify MCP/API/OAuth tool is available in the session, use that approved checklist to create the playlist. If no Spotify write tool is available, stop and return the exact payload plus the missing setup requirement.
-
-## Naming Discipline
-
-Allowed:
-
-- Mood: "Drive Home Slow", "Confession Hour"
-- Scene: "Brooklyn Night Walk", "Bedroom Pop Afterparty"
-- Vibe: "Sad and Soft", "Heart Open"
-
-Avoid:
-
-- "Songs Like [Big Artist]"
-- "[Big Artist Song] Radio"
-- Misleading titles that imply another artist owns or endorsed the playlist.
-
-## Never
-
-- Never invent Spotify IDs.
-- Never imply Spotify editorial placement.
-- Never promise streams, followers, algorithmic boosts, or playlisting outcomes.
-- Never create, publish, or edit a playlist without explicit approval in the current conversation.
-- Never hide that the artist's tracks are part of the curation.
 `,
       },
     ],
