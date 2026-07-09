@@ -68,6 +68,8 @@ export interface CampaignScheduledJobRunnerDeps {
   log?: Pick<Console, 'info' | 'warn' | 'error'>
 }
 
+export type CampaignExternalJobPreparer = NonNullable<CampaignScheduledJobRunnerDeps['prepareExternalJob']>
+
 export interface CampaignScheduledJobRunnerResult {
   scanned: number
   started: number

@@ -106,6 +106,11 @@ import { initNotificationService, initBadgeIcon, initInstanceBadge, updateBadgeC
 import { checkForUpdatesOnLaunch, setAutoUpdateEventSink, isUpdating } from './auto-update'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import { validateGitBashPath, checkVCRedistInstalled } from '@craft-agent/server-core/services'
+import {
+  prepareCampaignSocialJob,
+  resolveCampaignSocialMediaPath,
+} from './campaign-social-job-preparer'
+import { runSocialJson } from './social-cli'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -652,6 +657,10 @@ app.whenReady().then(async () => {
         },
         createSessionManager: () => {
           const sm = new SessionManager()
+          sm.setCampaignExternalJobPreparer((input) => prepareCampaignSocialJob(input, {
+            runSocialJson,
+            resolveMediaPath: resolveCampaignSocialMediaPath,
+          }))
           sm.setBrowserPaneManager(browserPaneManager!)
           return sm
         },

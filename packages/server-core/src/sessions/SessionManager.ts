@@ -109,7 +109,10 @@ import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
-import { CampaignScheduledJobRunner } from '../campaign-calendar/CampaignScheduledJobRunner'
+import {
+  CampaignScheduledJobRunner,
+  type CampaignExternalJobPreparer,
+} from '../campaign-calendar/CampaignScheduledJobRunner'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
 import { DEFAULT_MAX_DEPTH, isPermissionEscalation } from '@craft-agent/shared/agent-messaging'
@@ -1559,6 +1562,7 @@ export class SessionManager implements ISessionManager {
   private workflowRunner!: WorkflowRunner
   /** Campaign one-shot job runner — bootstrapped lazily after scheduler setup. */
   private campaignScheduledJobRunner?: CampaignScheduledJobRunner
+  private campaignExternalJobPreparer?: CampaignExternalJobPreparer
   /** Deep Research runner — bootstrapped during `initialize()`. */
   private deepResearchRunner!: DeepResearchRunner
 
@@ -2374,6 +2378,7 @@ export class SessionManager implements ISessionManager {
           })
           return { runId: run.id }
         },
+        prepareExternalJob: this.campaignExternalJobPreparer,
         emitContextChanged: (workspaceId, docs) => {
           this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
         },
@@ -2381,6 +2386,11 @@ export class SessionManager implements ISessionManager {
       })
     }
     return this.campaignScheduledJobRunner
+  }
+
+  setCampaignExternalJobPreparer(preparer: CampaignExternalJobPreparer): void {
+    this.campaignExternalJobPreparer = preparer
+    this.campaignScheduledJobRunner = undefined
   }
 
   private broadcastDeepResearchRunUpdated(event: DeepResearchRunnerEvent): void {
