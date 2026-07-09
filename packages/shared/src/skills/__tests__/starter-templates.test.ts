@@ -175,7 +175,10 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(outreach).toBeDefined();
     expect(matcher?.files.some(file => file.path === 'match.py')).toBe(true);
     expect(matcher?.files.some(file => file.path === 'data/README.md')).toBe(true);
-    expect(matcher?.files.some(file => file.path === 'data/stations.json')).toBe(false);
+    expect(matcher?.files.some(file => file.path === 'data/stations.json')).toBe(true);
+    expect(matcher?.files.some(file => file.path === 'data/stations.csv')).toBe(true);
+    expect(matcher?.files.some(file => file.path === 'data/tastemakers.json')).toBe(true);
+    expect(matcher?.files.some(file => file.path === 'data/tastemakers.csv')).toBe(true);
     expect(getSkillMd(matcher!)).toContain('labels every result `directory_only`');
     expect(getSkillMd(outreach!)).toContain('Require explicit current-turn approval');
   });

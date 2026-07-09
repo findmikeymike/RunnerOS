@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 
 const skillRoot = join(import.meta.dir, '..', 'bundled', 'college-radio-matcher')
@@ -18,12 +18,17 @@ function runMatcher(...args: string[]): Record<string, unknown>[] {
 }
 
 describe('college-radio-matcher bundle', () => {
-  test('requires a user-supplied directory instead of redistributing contacts', () => {
-    const result = Bun.spawnSync(['python3', matcherPath, '--format', 'json'], {
+  test('ships and uses the bundled personal station directory by default', () => {
+    const raw = JSON.parse(readFileSync(join(skillRoot, 'data', 'stations.json'), 'utf8')) as unknown[]
+    expect(raw).toHaveLength(426)
+
+    const result = Bun.spawnSync(['python3', matcherPath, '--limit', '500', '--format', 'json'], {
       env: { ...process.env, COLLEGE_RADIO_DIRECTORY: '' },
     })
-    expect(result.exitCode).not.toBe(0)
-    expect(result.stderr.toString()).toContain('--data')
+    expect(result.exitCode).toBe(0)
+    const matched = JSON.parse(result.stdout.toString()) as Record<string, unknown>[]
+    expect(matched).toHaveLength(424)
+    expect(result.stderr.toString()).toContain('skipped invalid station record')
   })
 
   test('deduplicates canonical station identities and ranks hometown city first', () => {

@@ -5589,24 +5589,13863 @@ If the video's actual problem is that nothing in it is interesting, funny, or re
     files: [
       {
         path: "data/README.md",
-        content: `# Directory import
+        content: `# College Radio directory
 
-RunnerOS does not redistribute the commercial station contact directory.
+The bundled directory contains station data in JSON/CSV plus a bonus tastemaker list.
+\`match.py\` reads \`stations.json\` by default. An updated JSON array can override it with \`--data\`
+or \`COLLEGE_RADIO_DIRECTORY\`.
 
-Provide a licensed or user-owned JSON array with:
+Station fields:
 
 - required: \`id\`, \`station\`, \`country\`, \`state\`, \`city\`
 - recommended: \`school\`, \`emails\`, \`music_director\`, \`website\`, \`phone\`, \`address\`
 - matching: \`genre_hints\`, \`submission_methods\`, \`submission_url\`, \`flags\`, \`station_type\`, \`outreach_ease\`, \`notes_raw\`
 
-Run the matcher with \`--data /path/to/stations.json\` or set \`COLLEGE_RADIO_DIRECTORY\`.
 Directory records are always labeled \`directory_only\` until the agent verifies current public evidence.
 `,
       },
       {
+        path: "data/stations.csv",
+        content: `id,country,state,city,school,station,frequency,emails,music_director,phone,website,address,ig_handles,station_type,genre_hints,submission_methods,flags,outreach_ease,show,notes_raw,source_page
+S001,USA,AL,Auburn,Auburn University,WEGL 91.1,91.1,wegl@auburn.edu,Walker Greene,334-844-4057,weglfm.com,"255 Heisman Drive Suite 1105 Auburn, AL 36849",wegl_au,college,,email,,easy,Schedule,IG @wegl_au,12
+S002,USA,AL,Huntsville,Oakwood University,WJOU 90.1,90.1,wjou@oakwood.edu,-,256-726-7418,wjou.org,"Praise 90.1FM WJOU 7000 Adventist Blvd NW Huntsville, Al 35896",wjoufm,college,,email,,easy,Schedule,IG @wjoufm,12
+S003,USA,AL,Jacksonville,Jacksonville State University,WLJS 91.9,91.9,wljsmusicdirector@gmail.com,-,256-782-5592 256-782-5572,www.jsuchanticle er.com,"JSUchanticleer.com 700 Pelham Road N Jacksonville, AL 36265",wljsjsu,college,,email,,easy,Schedule,IG @wljsjsu,12
+S004,USA,AL,Montgomery,Alabama State University,WVAS-FM HD-2 90.7,90.7,BamaStateRadio@gmail.com,-,-,wvasfm.org,-,,college,,email,,easy,Schedule,has 3 alternate stations online,12
+S005,USA,AL,Normal,Alabama A&M University,WJAB 90.9,90.9,jessica.martin@aamu.edu,-,256-372-4057,wjab.org,"WJAB 90.9 Electronic Media Communications Morrison Building Room 132 4900 Meridian St. Normal, AL 35762",wjab90.9fm,college,,email,,easy,Schedule,IG @wjab90.9fm,12
+S006,USA,AL,Tuscaloosa,University Of Alabama,WVUA 90.7,90.7,music.hiphop@wvuafm.ua.edu,Sarah,-,wvuafm.ua.edu,"Music Director WVUA 90.7 FM Box 870152 Tuscaloosa, AL 35487",wvuafm,college,hip-hop,form; email,,easy,Schedule,IG @wvuafm Submission Policy Link,12
+S007,USA,AK,Anchorage,University of Alaska Anchorage,KRUA 88.1,88.1,krua.programdirector@alaska.edu,James,907-786-6802,kruaradio.org,"KRUA 88.1 FM 3211 PROVIDENCE DRIVE ANCHORAGE, AK, 99508",kruafm,college,,email,,easy,Schedule,IG @kruafm,12
+S008,USA,AK,Fairbanks,University of Alaska Fairbanks,KSUA 91.5,91.5,ksua.music@alaska.edu,Daisy Carter,907-474-5782,ksuaradio.com,UAF Wood Center- Student Media Offices 1731 S. Chandalar Fairbanks AK 99709,ksuaradio,college,,email,,easy,Schedule,IG @ksuaradio,12
+S009,USA,AR,Clarksville,University of the Ozarks,KUOZ 100.5,100.5,sedens@ozarks.edu,-,479-979-1450,Website,-,,college,,email,,easy,-,FB: KUOZ,12
+S010,USA,AR,De Queen/ Nashville,University of Arkansas-Cossatot,KBPU ED 88.7 KTYC ED 88.5,88.7,lhinton@cccua.edu,Loren Hinton,870-584-6176,ed88radio.com,"ED 88 183 College Drive De Queen, Arkansas, 71832",,college,,form; email,,easy,-,Contact Form FB: ED 88,12
+S011,USA,AR,Conway,Hendrix College,KHDX 93.1,93.1,,-,-,khdx.fm,"KHDX Radio 1600 Washington Ave Conway, AR 72032",khdxfm,college,,form,,medium,Schedule,IG @khdxfm khdx.fm/contact submit music at bottom of contact page,12
+S012,USA,AR,Jonesboro,Arkansas State University,KASU 91.9,91.9,mscarbro@astate.edu; kasu@astate.edu,Marty Scarbrough,870-972-2200,kasu.org,"KASU-FM P.O. Box 1930 State University, AR 72467",kasuradio,college,,email,,easy,Schedule,IG @kasuradio,12
+S013,USA,AR,Fayetville,University of Arkansas,KXUA 88.3,88.3,charts@uark.edu,-,479-575-2000,kxua.uark.edu,"Attn: Music Director KXUA Radio A665 Arkansas Union Fayetteville, AR 72701",kxua,college,,physical; email,,easy,Schedule,IG @kxua,12
+S014,USA,AR,Little Rock,University of Arkansas Little Rock,KUAR 89.1,89.1,,-,(501)-916-6400,ualrpublicradio.org,"Little Rock Public Radio 5820 Asher Ave., Suite 400 Little Rock, AR 72204",,college,,,,hard,Schedule,-,12
+S015,USA,AR,Siloam Springs,John Brown University,KLRC 90.9,90.9,,Mark Michaels,1-800-909- KLRC,klrc.com,"90.9 KLRC FM 110 N Broadway Siloam Springs, AR 72761",klrcfm,college,christian,form,positive_content_only,medium,Schedule,IG @klrcfm Positive Music Only Contact Form,12
+S016,USA,AZ,Pheonix,Rio Salado College,KJZZ 91.5,91.5,,-,480-834-5627,kjzz.org,"KJZZ 91.5 FM 2323 W. 14th St. Tempe, AZ 85281",kjzzpheonix,college,,,,hard,Schedule,IG @kjzzpheonix Contact From,12
+S017,USA,AZ,Tucson,University of Arizona,KAMP,,,-,520-621-8002,-,"KAMP Radio, University of Arizona 615 N. Park Ave. #101 Tucson, AZ 85721",kamp_radio,college,,,,hard,-,IG @kamp_radio,12
+S018,USA,AZ,Flagstaff,Northern Arizona University,KJACK 107.1 FM,107.1 FM,see86@nau.edu,Logan,928-523-3036,kjackradio.com,"Atten: Scout Ehrler KJACK Radio PO Box 5619, Flagstaff, AZ 86011",kjacknau,college,,email,,easy,Schedule,IG @kjacknau,12
+S019,USA,AZ,Flagstaff,Northern Arizona University,KNAU 88.7,88.7,,-,928-523-5628,knau.org,"KNAU PO Box 5764 Flagstaff, AZ 86011-5764",,public_npr,,,,hard,Schedule,FB: KNAU Arizona Public Radio,13
+S020,USA,AZ,Yuma,Arizona Western College,Border Radio 94.7,94.7,,-,877-838-5292,borderradioaz.org,"Border Radio PO Box 929 Yuma, Arizona 85366",borderradioAZ,college,,form,,medium,Schedule,IG @borderradioAZ Music Submission Form Contact Form,13
+S021,USA,CA,Arcata,Cal Poly Humboldt University,KHSU 90.5,90.5,khsu-contact@humboldt.edu,-,707-826-4807,khsu.org,-,,college,,email,,easy,Schedule,FB: KHSU,13
+S022,USA,CA,Berkeley,"University of California, Berkeley",KALX 90.7,90.7,music@kalx.berkeley.edu; kalxinterviews@gmail.com,Michael Henning Mia Call Chris Michel,510-642-1111 M 11am-1pm W 9:30-11:30a,kalx.berkeley.edu,"University of California Berkeley KALX-FM 26 Barrows Hall #5650 Berkeley, CA 94720",kalxradio,college,,links_preferred; email,no_email_attachments,easy,Schedule,IG @kalxradio,13
+S023,USA,CA,Chico,California State University Chico,KCSC Radio,,musickcscradio@csuchico.edu,DJs List,-,kcscradio.co,"KCSC 400 W. 1st St. Department of Media Arts, Design, and Technology Chico, CA 95929",kcscradio,college,,form; email,,easy,Schedule,IG @kcscradio Submission Form,13
+S024,USA,CA,Chico,California State University Chico,NSPR,,,-,530-898-6198,mynspr.org,"North State Public Radio 35 Main Street, Suite 101, Chico, CA 95928",nsprnews,college,,,,hard,Schedule,IG @nsprnews,13
+S025,USA,CA,Claremont,Claremont Colleges,KSPC 88.7,88.7,md@kspc.org,-,909-621-8157,KSPC.org,"KSPC, Pomona College Attn: Music Director Thatcher Music Building 340 N. College Ave. Claremont, CA 91711",kspcradio,college,,form; email,,easy,Schedule,IG @kspcradio broadcasts Los Angeles area Submission Guidelines,13
+S026,USA,CA,Davis,University of California Davis,KDVS 90.3,90.3,,Charlie McBrian,(530) 754-5387,kdvs.org FAQ,"KDVS 90.3 FM ATTN: MUSIC DIRECTOR 14 Lower Freeborn Davis, CA 95616",kdvs903fm,college,,physical,,hard,Schedule,IG @kdvs903fm Physical Submissions Only,13
+S027,USA,CA,Fullerton,California State University Fullerton,Titan Radio,,music@fullerton.edu,DJs Page,657-278-5505,titanradio.org lintr.ee/titanradio,"PLS – 51 800 N. State College Blvd. Fullerton, CA 92831",titanradio,college,,email,,easy,Schedule,IG @titanradio,13
+S028,USA,CA,Fresno,Fresno Free College Foundation,KFCF 88.1,88.1,mattd@kfcf.org,Richard Withers,(559) 233-2221,kfcf.org,"KFCF 88.1 FM PO Box 4364 Fresno, CA 93744",kfcf88,college,,email,,easy,Schedule,IG @kfcf88,13
+S029,USA,CA,Fresno,California State University Fresno,KFSR 90.7,90.7,90.7kfsr@gmail.com,Julie Logan Staff List,559-278-9070,kfsr.org,"KFSR Radio 5201 N. Maple Ave. M/S SA #119 Fresno, CA 93740",,college,,email,,easy,Schedule,FB 90.7 KSFR,13
+S030,USA,CA,Hayward,Chabot College,KCRH 89.9,89.9,,-,510-952-7411,kcrhradio.com,"KCRH Radio 25555 Hesperian Boulevard Hayward, CA 94545",kcrh899fm,college,,,,hard,-,IG @kcrh899fm,13
+S031,USA,CA,Irvine,"University of California, Irvine",KUCI 88.9,88.9,,-,949-824-6868,kuci.org,"KUCI 88.9 FM PO Box 4362 Irvine, CA 92616",kucifm,college,,physical; form,,medium,Schedule,IG @kucifm Submission Guidelines,13
+S032,USA,CA,La Jolla,University of California San Diego,KSDT Triton Radio,,music@ksdt.org; submissions@ksdt.org,-,(858) 534-KSDT,ksdt.ucsd.edu,"KSDT Radio University of California, San Diego 9500 Gilman Dr. #0077 La Jolla, CA 92093-0315",ksdtradio,college,,email,,easy,Schedule,IG @ksdtradio,13
+S033,USA,CA,Long Beach,"California State University, Long Beach",KBEACH 88.1 Jazz 88.1,88.1,info881@kkjz.org,-,562-985-1624 310-478-5540,22westmedia.com kkjz.org,"1212 N. Bellflower Blvd Suite 108 Long Beach, CA 90815",22westlb; kjazz881,college,jazz,email,,easy,Schedule Jazz Schedule,IG @22westlb @kjazz881 Jazz Music,13
+S034,USA,CA,Los Angeles,-,KJazz 88.1,88.1,,Dan Seeff,-,kkjz.org,-,excursionsradio,college,jazz,,,hard,Schedule,IG @excursionsradio Thursdays 10pm-12am,13
+S035,USA,CA,Los Altos,Foothill College,KFJC 89.7,89.7,,David Houchins,650 941 2500,kfjc.org,"KFJC Music Director 12345 El Monte Road Los Altos Hills, CA 94022",kfjc897fm; KFJC,college,,physical,,hard,Schedule,IG @kfjc897fm FB @KFJC,13
+S036,USA,CA,Los Angeles,"University of California, Los Angeles",UCLA RADIO,,radio.music@media.ucla.ed,-,-,uclaradio.com,-,uclaradio,college,,email,,easy,Schedule,IG @uclaradio,13
+S037,USA,CA,Los Angeles,University of Southern California,KXSC,,music@kxsc.org; musicwriting@kxsc.org; pd@kxsc.org,-,312-971-0767,kxsc.org,"KXSC Radio USC 3607 Trousdale Pkwy TCC B3 Los Angeles, Ca",kxscradio,college,,email,,easy,Schedule,IG @kxscradio,13
+S038,USA,CA,Los Angeles,Loyola Marymount University,KXLU 88.9,88.9,samueltakanokxlu@gmail.com,Sam Takano,310-258-4622,kxlu.com,"KXLU 88.9fm Attn: Music Director One LMU Drive Los Angeles, CA 90045",KXLU,college,,email,,easy,Schedule,IG @KXLU,13
+S039,USA,CA,Los Angeles,-,KPFK 90.7,90.7,expmind@yahoo.com; seanmosborn@gmail.com; groverzealous@yahoo.com; djbenthere@gmail.com; daniellemamath@gmail.com,-,818-985-2711,kpfk.org,"KPFK 90.7 3729 Cahuenga Blvd West North Hollywood, CA 91604",kpfk,college,,email,,easy,Schedule,IG @kpfk studio rental avlbl,14
+S040,USA,CA,Monterey,California State University Monterey Bay,KAZU 90.3,90.3,programming@kazu.org,Mik Benedek,831-582-5298,kazu.org,"90.3 KAZU CSU Monterey Bay 100 Campus Center, Bldg. 201 Seaside, California 93955",nprmontereybay,public_npr,news_talk,email,,easy,Schedule,IG @nprmontereybay,14
+S041,USA,CA,Moraga,Saint Mary’s College of California,KSMC 89.5,89.5,ksmc@stmarys-ca.edu,-,-,-,-,ksmc895fm,college,,email,,easy,-,IG @ksmc895fm,14
+S042,USA,CA,Northridge,Saddleback College + California State University Northridge,SoCal 88.5,88.5,feedback@885fm.org,Andy Charley,818-677-7160,thesocalsound.org,"88.5 FM Radio ATTN: Music Director 18111 Nordhoff Street Northridge, CA 91330-8312",theSoCalSound,college,,email,,easy,Schedule,IG @theSoCalSound FB theSoCalSound,14
+S043,USA,CA,Oakland,Peralta Community College,KGPC 96.9,96.9,kgpc969@gmail.com,Felicia Bridges,510-466-5351,kgpc969.org,"Peralta Community Radio / KGPC-LP 96.9fm 333 East 8th Street Oakland, Calif. 94606",kgpc_radio,college,,email,,easy,Schedule,"IG @kgpc_radio FB KGPC, Peralta Community College Radio",14
+S044,USA,CA,Oakland,-,All In Radio,,thepowerhour2020@gmail.com,Gary Archer,510-695-4942,-,"960 Arlington Ave Oakland, CA 94609",legendgary; ALLiN_Radio,college,,email,,easy,-,IG @legendgary archer @ALLiN_Radio,14
+S045,USA,CA,Pasadena,Pasadena City College,KPCC 89.3,89.3,,-,626-583-5100,kpcc.org,"Southern California Public Radio, PO Box 511489, Los Angeles, CA 90051-8044",KPCC,college,,,,hard,Schedule,IG @KPCC FB @KPCC,14
+S046,USA,CA,Riverside,University of California Riverside,KUCR 88.3,88.3,kucrmusic@gmail.com,-,951-827-5827,kucr.org,"KUCR Radio University of California Riverside, CA 92521",kucr883fm; KUCR,college,,email,,easy,Schedule,IG @kucr883fm FB @KUCR,14
+S047,USA,CA,Rancho Palos Verdes,Marymount California University,KMCU,,,-,-,-,-,honorflowprod,college,,,,hard,-,IG @honorflowprod uctions,14
+S048,USA,CA,Sacramento,Sacramento State,KSSU,,music@kssu.com,-,916-278-3666,www.kssu.com,"KSSU Radio c/o Associated Students, Inc. 6000 J Street Sacramento, CA 95819-6011",kssusparky,college,,email,,easy,Schedule,IG @kssusparky,14
+S049,USA,CA,Sacramento,California State University Sacramento,KXJZ 90.9,90.9,,-,916-278-8900,capradio.org,"Capital Public Radio 7055 Folsom Boulevard Sacramento, CA 95826-2625",CapRadio,college,,form,,medium,Schedule,IG @CapRadio Submission Form,14
+S050,USA,CA,San Bernardino,California State University San Bernardino,Coyote Radio,,coyoteradio@gmail.com,-,909-537-5617,csusb.edu/ coyote-radio,-,coyote.radio,college,,email,,easy,-,IG @coyote.radio,14
+S051,USA,CA,San Bernardino,San Bernardino Community College,KVCR 91.1,91.1,,-,909-384-4444,kvcrnews.org,"KVCR 701 S Mt Vernon Ave San Bernardino, CA 92410",kvcrpublicmedia,college,,form,,medium,Schedule Shows,IG @kvcrpublicmedia FB: KVCR Contact Form,14
+S052,USA,CA,San Jose,San Jose State University,KSJS 90.5,90.5,alexdpfilmz@gmail.com; djcoffin805@gmail.com,Alex Pena,(408)924-5757,ksjs.org Contacts,"San Jose State University Hugh Gillis Hall Room 132 San Jose, CA 95192-0094",ksjsfm; ksjs.hiphop; radioaztlan90.5; san.josueeee; djcoffin_,college,hip-hop,email,,easy,Schedule,IG @ksjsfm @ksjs.hiphop @radioaztlan90.5 @san.josueeee @djcoffin_,14
+S053,USA,CA,Salinas,-,KHDC 90.9,90.9,inbox@eme7.com,M7 aka EME7,(831)757-8039,radiobilingue.org,-,eme7,college,,email,,easy,Schedule,IG @eme7,14
+S054,USA,CA,Santa Cruz,University of California Santa Cruz,KZSC 88.1,88.1,hiphop@kzsc.org,Michael Melaku,(831)-459-4036,kzsc.org,"KZSC Radio UC Santa Cruz 1156 High St. Santa Cruz,Ca 95060",kzsc,college,hip-hop,email,,easy,Schedule,IG @kzsc,14
+S055,USA,CA,Santa Cruz,-,KPCR 101.9,101.9,info@kpcr.org; mneronava@gmail.com,M. Nero Nava,831-200-3391,kpcr.org,-,kpcrfm; m.neronava,college,,email,,easy,-,@kpcrfm @m.neronava,14
+S056,USA,CA,Stanford,Stanford University,KZSU 90.1,90.1,music@kzsu.stanford.edu,"Brandon Rupp, Juan Luna-Avin, Bill Cuevas",(650)-725-4868,kzsu.stanford.edu Submission Guidelines,"KZSU Music P.O. Box 20510 Stanford, Ca 94301",kzsu,college,,form; email,,easy,Schedule,IG @kzsu,14
+S057,USA,CA,San Diego,San Diego State University,KCR Radio,,kcr@sdsu.edu,student-ran,619-594-6982,kcr.sdsu.edu Submission Guidelines,-,kcrcollege,college,,form; email,,easy,Schedule,IG @kcrcollege radio,14
+S058,USA,CA,San Diego,San Diego State University,KBPS 89.5 97.7 in Calexico,89.5,,-,619-594-1515,kbps.org Contact Form,"KPBS Public Media 5200 Campanile Drive San Diego, CA 92182",kbps,college,,form,,medium,Schedule,IG @kbps,14
+S059,USA,CA,San Marcos,Palomar College,KKSM 1320,1320,info@palomarcollegeradio.com,-,760-736-8375,palomar.edu/ kksm/ Contact Form,"KKSM 1140 W. Mission Rd. San Marcos, CA 92069",kksmradio,college,,form; email,,easy,Schedule,IG @kksmradio FB KKSM Palomar College,15
+S060,USA,CA,San Mateo,San Mateo Community College,KCSM 91.9,91.9,kcsmjazz@kcsm.net,-,650-524-6927,-,"1700 W Hillsdale Blvd, San Mateo, CA 94402",kcsmjazz91,college,jazz,email,,easy,-,Jazz IG @kcsmjazz91 FB KCSM Jazz 91.9,15
+S061,USA,CA,Santa Barbara,University of California Santa Barbara,KCSB 91.9,91.9,dmc@kcsb.org; int.md@kcsb.org; ext.md@kcsb.org,-,805-893-2424,kcsb.org,"ATTN: Music Director KCSB-FM PO Box 13401 Santa Barbara, CA 93107-3401",kcsbfm,college,,email,,easy,Schedule,studio booking available IG @kcsbfm,15
+S062,USA,CA,Santa Clara,Santa Clara University,KSCU 103.3,103.3,music@kscu.org,Abby Grimm,408-554-5728,kscu.org,-,kscuradio,college,,email,,easy,Schedule,IG @kscuradio,15
+S063,USA,CA,Santa Clarita,California Institute of the Arts,KCIA Radio,,kcia@alum.calarts.edu,-,-,kcia.calarts.edu,,kciaradio,college,,email,,easy,Schedule,IG @kciaradio,15
+S064,USA,CA,Santa Monica,Santa Monica College,KCRW 89.9,89.9,,-,424-538-8500,kcrw.com,"1900 Pico Blvd. Santa Monica, CA 90405",kcrwmusic; kcrw,college,,,,hard,Schedule Syndication List Contact Form,IG @kcrwmusic @kcrw Heavy syndication on many other stations,15
+S065,USA,CA,San Francisco,University of San Francisco,KUSF,,kusfmusic@gmail.com,"Sade, Teresa",415-386-5873,kusf.org,"KUSF Music Dept. 2130 Fulton St. San Francisco, Ca 94117",kusforg,college,,physical; email,,easy,Schedule,IG @kusforg,15
+S066,USA,CA,San Francisco,San Francisco State University,KSFS,,ksfs@sfsu.edu,-,415-338-2428,becamedia.net/ home/ksfsradio Submission Form,-,ksfsradio,college,,links_preferred; form; email,,easy,Schedule,IG @ksfsradio Links preferred,15
+S067,USA,CA,San Francisco,City College of San Francisco,KCSF 90.9,90.9,kcsf@ccsf.edu,-,-,ccsf.edu,-,,college,,email,,easy,-,,15
+S068,USA,CA,San Francisco,-,KPOO 89.5,89.5,,JJ & Dezz,415-346-5373,kpoo.com,"KPOO 89.5 FM 1329 Divisadero San Francisco, CA 94115",dezzdmh,college,,,,hard,Schedule,IG @dezzdmh,15
+S069,USA,CA,San Luis Obispo,California Polytechnic State University,KCPR 91.3,91.3,music@kcpr.org,Ian,805-756-2965,kcpr.org,"KCPR Building 26, Room 301 California Polytechnic State University 1 Grand Ave. San Luis Obispo, CA 93407",kcpr913,college,,email,,easy,Schedule,IG @kcpr913,15
+S070,USA,CA,Thousand Oaks,California Lutheran University,KCLU 88.3,88.3,molson@kclu.org,Mary Olson,805-493-3900,kclu.org,"60 W. Olsen Rd #4400 Thousand Oaks, CA 91360",kcluradio,college,,email,,easy,Schedule,IG @kcluradio,15
+S071,USA,CA,Turlock,California State University Turlock,KCSS 91.9,91.9,kcssmd@gmail.com,Roberto Herrera,209-667-3378,kcss.net,-,kcss91.9,college,,email,,easy,Schedule,IG @kcss91.9 They also have a podcast,15
+S072,USA,CA,Walnut,Mt. San Antonio College,Mt Rock 90.1,90.1,jshiff@mtsac.edu,Jason Shiff,909-274-4619,mtsac.edu/radio/ mtrock,"Radio Program Mt. San Antonio College 1100 N. Grand Ave Walnut, CA 91789",mtrock90.1,college,,email,,easy,-,IG @mtrock90.1,15
+S073,USA,CO,Boulder,University of Colorado Boulder,KVCU 1190,1190,music@1190.radio; localshakedown@1190.radio,Bella Mahlerbe Luke Crumplar,303-492-1190,radio1190.net,"Campus Box 207 University of Colorado Boulder Boulder, CO 80309-0207",radio1190,college,,email,albums_only,easy,Schedule Shows,"IG @radio1190 No singles, Full albums only",15
+S074,USA,CO,Colorado Springs,United States Air Force Academy,KAFA 97.7,97.7,KAFA.FM@afacademy.af.edu,-,719-333-5232,usafa.edu/radio,-,,college,,email,,easy,-,-,15
+S075,USA,CO,Denver,Metropolitan State University of Denver,MET RADIO,,,-,303-615-0155,mymetmedia.com,"MSU Denver Met Media Campus Box 57, P.O. Box 173362 Denver, CO 80217-3362",,college,,,,hard,Schedule,-,15
+S076,USA,CO,Denver,Regis University,KRCX 1530,1530,krcxmd@regis.edu,-,303-625-1261,krcx.org,"KRCX Regis University Radio 3333 Regis Blvd. Denver, CO 80221",kcrx,college,,email,,easy,Schedule,IG @kcrx,15
+S077,USA,CO,Durango,Fort Lewis College,KDUR 91.9,91.9,kdur_st1@fortlewis.edu; kdur@fortlewis.edu,Douglas Dupont,970-247-7262,kdur.org,"KDUR - 91.9/93.9 FM Fort Lewis College Community Radio 1000 Rim Drive Durango, Colorado 81301",kdurradio,college,,email,,easy,Schedule,IG @kdurradio,15
+S078,USA,CO,Fort Collins,Colorado State University,KCSU 90.5,90.5,music@kcsufm.com,-,970-491-1695,kcsufm.com,"KCSU Music ATTN: Brighid Bandel Room 118, Lory Student Center Colorado State University Fort Collins, CO 80523",kcsufm,college,,email,,easy,Schedule,IG @kcsufm best bet by mailing album,15
+S079,USA,CO,Grand Junction,Colorado Mesa University,KMSA 91.3,91.3,jgrichardson@mavs.coloradome,-,-,coloradomesa.presen ce.io/organization/ kmsa-91-3-fm,-,kmsa913fm,college,,email,,easy,-,IG @kmsa913fm,15
+S080,USA,CO,Gunnison,Western State College of Colorado,KWSB 91.1,91.1,,-,970-943-3222,kwsb.org,-,kwsb91.1,college,,,,hard,-,IG @kwsb91.1,15
+S081,USA,CT,Danbury,Western Connecticut State University,WXCI 91.7,91.7,carlonep@wcsu.edu,-,203-837-9924,wxci.wcsu.edu/,"Western Connecticut State University ATTN: RADIO STATION WXCI 181 White Street Danbury, CT USA 06810",wxci_91.7,college,,email,,easy,Schedule,IG @wxci_91.7,15
+S082,USA,CT,Fairfield,Fairfield University,WVOF 88.5,88.5,,-,-,wvof.org Contact Form,"1073 North Benson Rd Fairfield University Fairfield, CT",wvofradio,college,,form,,medium,Schedule,IG @wvofradio,16
+S083,USA,CT,Fairfield,Sacred Heart University,WSHU 91.1,91.1,,-,203-365-6604,wshu.org,"5151 Park Avenue Fairfield, CT 06825",wshupublicradio,college,,,,hard,Schedule,IG @wshupublicradio,16
+S084,USA,CT,Hamden,Quinnipiac University,WQAQ 98.1,98.1,wqaqradio@gmail.com,-,203-582-5555,wqaq.com,"275 Mt Carmel Ave Hamden, CT 06518, USA",wqaqradio,college,,email,,easy,-,IG @wqaqradio,16
+S085,USA,CT,Hartford,Trinity College,WRTC 89.3,89.3,crabla@aol.com; marcushrtfrd@hotmail.com; flmcnutt@yahoo.com; lornadiane@myyahoo.com; steveraf@aol.com; henryhbee@aol.com,-,860-297-2450,wrtcfm.com,"WRTC Radio Attn: [position name] 300 Summit St. Hartford, CT 06106-3100",wrtcfm,college,jazz; latin; christian,email,,easy,Schedule,IG @wrtcfm,16
+S086,USA,CT,Middletown,Wesleyan University,WESU 88.1,88.1,,-,860-685-7703,wesufm.org,"WESU 88.1 45 Broad St, 2nd Floor Middletown, Connecticut",wesufm,college,,,,hard,Schedule,IG @wesufm,16
+S087,USA,CT,New Britain,Central Connecticut State University,WFCS 107.7,107.7,pr@wfcsradio.com,-,860-832-1883,wfcsradio.com,"WFCS 107.7 fm 105 Ella Grasso Blvd, New Britain, Connecticut",wfcsradio,college,,email,,easy,Schedule,IG @wfcsradio,16
+S088,USA,CT,New Haven,University of New Haven,WNHU 88.7,88.7,wnhu@newhaven.edu,-,203-444-3953,wnhu.org,-,88.7wnhu,college,,email,,easy,Schedule,IG @88.7wnhu,16
+S089,USA,CT,New Haven,Southern Connecticut State University,WSIN 1590,1590,wsinradio@gmail.com,-,203-392-6930,wsinradio.org,-,wsinradio,college,,email,,easy,-,IG @wsinradio,16
+S090,USA,CT,New London,Connecticut College,WCNI 90.9,90.9,wcnimusdir@gmail.com,-,860-439-2850,wcniradio.org,WCNI Connecticut College 270 Mohegan Avenue New London CT 06320,wcniradio,college,,email,,easy,Schedule,IG @wcniradio,16
+S091,USA,CT,Storrs,University of Connecticut,WHUS 91.7,91.7,musicdirector@whus.org,-,860-486-9487,whus.org,-,,college,,email,,easy,Schedule,"Sat 10-12, Tues 11-12, Thurs 10-11",16
+S092,USA,CT,West Hartford,University of Hartford,WWUH 91.3,91.3,wwuh@hartford.edu,-,860-768-4701,wwuh.org Contacts Page,"WWUH Radio University of Hartford 200 Bloomfield Ave. West Hartford, CT 06117",,college,,email,,easy,Schedule,For specific genres check Contacts Page ->,16
+S093,USA,CT,West Hartford,University of Hartford,WSAM Radio,,wsammusicdir@gmail.com,-,203-598-6069,-,"WSAM 200 Bloomfield Ave, University Commons, West Hartford, CT 06117",wsamradio,college,,email,,easy,-,IG @wsamradio,16
+S094,USA,CT,Willimantic,Eastern Connecticut State University,WECS 90.1,90.1,,-,860-465-5354 call before submitting,wecsfm.com,-,wecsfm,college,,,,hard,Schedule,IG @wecsfm,16
+S095,USA,DE,Newark,University of Delaware,WVUD 91.3,91.3,wvudmusic@gmail.com; teamnitty@gmail.com,Franco,-,wvud.org,"WVUD Perkins Student Center 325 Academy Street Newark, DE 1971",wvudradio,college,,email,,easy,Schedule,IG @wvudradio,16
+S096,USA,DC,Washington,American University,WAMU 88.5,88.5,,-,202-885-1200,wamu.org Contact Form,"WAMU 88.5 FM American University PO Box 98101 Washington, DC 20090",wamu885,college,,form,,medium,Schedule,IG @wamu885,16
+S097,USA,DC,Washington,Georgetown University,WGTB,,music@georgetownradio.co; media@georgetownradio.com,Tony Lioon,-,georgetownradio. com,"432 Leavey Center Georgetown University Washington, DC 20057",georgetownra,college,,email,,easy,Schedule,IG @georgetownra dio,16
+S098,USA,DC,Washington,Howard University,WHUR 96.3,96.3,programming@whur.com,Traci LaTrelle,202-806-3500,whur.com,"529 Bryant Street NW Washington, DC 20059",whurfm,college,,email,,easy,Schedule,IG @whurfm,16
+S099,USA,DC,Washington,Howard University,WHBC 96.3,96.3,gm.whbc@gmail.com,-,-,whbc963hd3.com,-,whbc_howardu,college,,email,,easy,-,IG @whbc_howardu,16
+S100,USA,DC,Washington,George Washington University,WRGW District Radio,,music@gwradio.com,Carolina,-,gwradio.com,-,wrgwlive; wrgwmusic,college,,email,,easy,Schedule,IG @wrgwlive @wrgwmusic in-studio performances available,16
+S101,USA,FL,Daytona Beach,Embry-Riddle Aeronautical University,WIKD 102.5,102.5,music.director@wikd1025.com,Carter Bitz,386-226-7056,wikd1025.com,"The WIKD 102.5 F M 1 Aerospace Blvd, Daytona Beach, FL 32693",wikd1025,college,,form; email,,easy,Schedule,IG @wikd1025 Submission Form,16
+S102,USA,FL,Melbourne,Florida Tech,WFIT 89.5,89.5,syasko@fit.edu; wfit@fit.edu,Steve Yasko,321-674-8950 321-674-8949,wfit.org,"WFIT 89.5 FM Florida Institute of Technology 150 W. University Blvd. Melbourne, FL 32901",wfit895fm,college,,email,,easy,Schedule,IG @wfit895fm,16
+S103,USA,FL,Miami,University of Miami,WVUM 90.5,90.5,md@wvum.org,Steffi Rangel,786-309-8861,wvum.org,"PO Box 248191 Coral Gables, FL 33124",wvum905,college,,email,,easy,Schedule,IG @wvum905,16
+S104,USA,FL,Miami,-,Blaze 88.7fm,88.7,radiopushers@gmail.com,,310-870-3300,-,-,dablazefm; 88.7fm,college,,email,,easy,-,IG @dablazefm @88.7fm,16
+S105,USA,FL,Miami,Florida International University,WRGP The Roar Radio,,theroar.miami.fiu@gmail.com,-,305-348-3575,panthernow.com/ theroar,"11200 SW 8th St. Modesto Maidique Campus, GC-210 Miami, FL 33199",theroarfiu,college,,email,,easy,Schedule,IG @theroarfiu,16
+S106,USA,FL,Orlando,University of Central Florida,WUCF 89.9,89.9,,Kayonne Riley,407-823-0899,wucf.org,"Attn: Music Director 12461 Research Parkway, Suite 550 Orlando, FL 32826",wucf.fm,college,,,,hard,Schedule,IG @wucf.fm,17
+S107,USA,FL,Panama City,Gulf Coast State College,WKGC 90.7,90.7,derskine@gulfcoast.edu,-,850-873-3500,wkgc.org Contact Form,"WKGC Public Radio / Gulf Coast State College Advanced Technology Center – ATC 314 5230 West U.S. Highway 98 Panama City, FL 32401",alternationhd3,college,,links_preferred; form; email,,easy,Schedule,IG @alternationhd3 3 different streams,17
+S108,USA,FL,St. Augustine,Flagler College,WFCF 88.5,88.5,wfcf@flagler.edu,Daniel McCook,904-819-6450,flagler.edu/campus- community/wfcf- flagler-college- radio/,"Flagler College - WFCF 74 King St., St. Augustine, FL 32085",flaglercollegeradio,college,,email,,easy,Schedule at bottom of page,IG @flaglercollegeradio,17
+S109,USA,FL,Sunrise,Nova Southeastern University,WKPX 88.5,88.5,makoremotes@nova.edu; nsumusic@nova.edu,Weston Clark,-,makomedia.nova. edu/mako-radio/,"Mako Media Network Department of Communication, Media, and the Arts Nova Southeastern University 3300 S. University Dr., Fort Lauderdale, FL 33328",nsu_makoradio,college,,email,,easy,-,IG @nsu_makoradio,17
+S110,USA,FL,Tallahassee,Florida State University,WVFS 89.7,89.7,music@wvfs.fsu.edu,-,-,wvfs.fsu.edu Submission Guidelines,"WVFS Tallahassee, c/o Music Director, 420 Diffenbaugh, Tallahassee, FL 32306-1550",wvfs,college,,form; email,,easy,Schedule,"CD, vinyl, and digital. priority to cd’s so they don't have to burn to play IG @wvfs",17
+S111,USA,FL,Tallahassee,Florida A&M University,WANM 90.5,90.5,wanm@famu.edu,-,850-599-3083,wanm.org,"510 Orr Drive Suite 3056 Florida A&M University Tallahassee, FL 32307",905theflava,college,,email,,easy,-,IG @905theflava,17
+S112,USA,FL,Tampa,University of Tampa,WUTT 1080am & RadioFX,1080,,-,-,wutt.ut.edu,"401 W Kennedy Blvd Tampa, FL",wuttspartanra,college,,,,hard,-,IG @wuttspartanra dio,17
+S113,USA,FL,Winter Park,Rollins College,WPRK 91.5,91.5,wprkfm@rollins.edu,-,407-646-2915,wprk.onuniverse. com,"Kathleen W. Rollins Hall 1000 Holt Ave. Winter Park, FL",wprk,college,,email,,easy,Schedule,IG @wprk,17
+S114,USA,GA,Albany,Albany State University,WASU 92.7,92.7,,,-,asurams.edu/ academic-affairs/ college-of-arts- sciences/broadcast- center/wasufm.php,-,hipho.seafood,college,,,,hard,,IG @hipho.seafood,17
+S115,USA,GA,Athens,University of Georgia,WUOG 90.5,90.5,tempugamd@gmail.com; wuoglocal@gmail.com,Elizabeth Kim Mal Holmes,"LOCALS: ATTN: Local Music Director (Rissa Rogus + Joseph Mazzola) WUOG 90.5 FM 102 Tate Student Center Athens, GA 30602",wuog.org Contact Form,"ATTN: Music Directors (Damario Walden + Kennon Conner) WUOG 90.5 FM 102 Tate Student Center Athens, GA 30602",wuog,college,,form; email,,easy,Schedule,IG @wuog,17
+S116,USA,GA,Atlanta,-,WRFG 89.3,89.3,djpowerlord@gmail.com; jprezidente@yahoo.com; theaftersetradioshow@gmail.com,-,404-523-3471,wrfg.org,"WRFG 89.3 FM 1083 Austin Avenue, NE Atlanta, GA 30307-1940",wrfgatlanta; jprezidente; theaftersetradio,college,,email,,easy,Schedule,IG @wrfgatlanta @jprezidente @theaftersetradio show,17
+S117,USA,GA,Atlanta,Georgia Tech,WREK 91.1,91.1,music.director@wrek.org,-,404-894-2468,wrek.org Submission Info,"WREK 91.1 FM 350 Ferst Drive Georgia Tech John Lewis Student Center Suite 2140 Atlanta, GA 30332",wrekatlanta,college,,email,,easy,Schedule,IG @wrekatlanta,17
+S118,USA,GA,Atlanta,Georgia State University,WRAS 88.5,88.5,wrasmd@gmail.com,-,404-413-9727,wras.org,,album88atlanta,college,,email,,easy,Schedule,IG @album88atlanta,17
+S119,USA,GA,Columbus,Columbus State University,WCUG 88.5,88.5,wcugcougarradio@columbusstate.edu,-,706-507-8617,-,-,wcugcougarra,college,,email,,easy,-,IG @wcugcougarra dio,17
+S120,USA,GA,Milledgeville,Georgia College & State University,WGUR 95.3,95.3,wgur.music@gcsu.edu,Halle Rosten,404-680-2342,gcsuradio.com Contact Form,-,wgur953,college,,form; email,,easy,Schedule,IG @wgur953 Submit at bottom of website home page,17
+S121,USA,GA,Savannah,Savannah State University,WHCJ 90.3,90.3,whcj@savannahstate.edu,Grace Curry,912-358-4236,savannahstate.edu/ whcj,"WHCJ FM P.O. Box 20484 Savannah, GA 31404",whcj_90.3fm,college,,email,,easy,Schedule,IG @whcj_90.3fm,17
+S122,USA,GA,Toccoa Falls,-,WTXR 89.7,89.7,,-,-,hisradiopraise.com Syndication List,-,hisradio,college,,,positive_content_only,hard,Schedule,"IG @hisradio Uplifting music Syndicated in South Carolina, North Carolina, & Georgia",17
+S123,USA,HI,Hilo,University of Hawaii Hilo,KUHH 101.1,101.1,urh@hawaii.edu; urhpc@hawaii.edu,-,808-932-7376,hilo.hawaii.edu/ campuscenter/ radio/,-,uhhilocampus,college,,email,,easy,Schedule,IG @uhhilocampus FB: UH Hilo,17
+S124,USA,HI,Honolulu,University of Hawaii at Manoa,KTUH 90.1,90.1,md@ktuh.org; aloha@slappradio.com,-,808-956-7261 Text Slapp Radio at 808-800-7793,slappradio.com,-,ktuhfm; slappradio,college,,email,,easy,Schedule,IG @ktuhfm @slappradio,17
+S125,USA,ID,Boise,Boise State University,KBSU 90.3,90.3,boisestatepublicradio@boisestate.edu,-,208-426-3663,boisestatepublic radio.org,"1910 University Dr., Boise, ID 83725-1916",boisestatepublic,public_npr,,email,,easy,Schedule,IG @boisestatepublic radio Studio rental available,17
+S126,USA,ID,Moscow,University of Idaho,KUOI 89.3,89.3,kuoi@uidaho.edu; connorra@uidaho.edu,Connor Anderson,208-885-7825,kuoi.org,"Bruce M. Pitman Center 709 Deakin Ave. Moscow, ID, 83844-4271",kuoi_89.3,college,,email,,easy,Schedule,IG @kuoi_89.3,17
+S127,USA,IL,Bloomington,Illinois Wesleyan University,WESN 88.1,88.1,dbohlman@iwu.edu,Derek Bohlman,309-556-2638,iwu.edu/wesn,Derek Bohlman WESN 88.1 FM PO Box 2900 Bloomington IL 61702,wesn_titanradio,college,,email,,easy,-,IG @wesn_titanradio,18
+S128,USA,IL,Champaign,Parkland College,WPCD 88.7,88.7,WPCDRadio@parkland.edu,Deane Geiken,217-373-3790,parkland.edu/ wpcd,-,,college,,email,,easy,-,FB 88.7 WPCD,18
+S129,USA,IL,Charleston,Eastern Illinois University,WEIU 88.9,88.9,hitmix@weiu.net,-,217-581-6116,weiu.net/hitmix,-,hitmix889,college,,email,,easy,Schedule,IG @hitmix889 FB Hit-Mix 88.9 WEIU,18
+S130,USA,IL,Chicago,DePaul University,Radio DePaul,,radiodepaulmusic@gmail.com,Jonah Elbaum,-,radiodepaul.com,"Radio DePaul Attn: Music Director (optional) 2250 N. Sheffield Ave. Suite 317 Chicago, IL 60614",radiodepaul,college,,email,,easy,Schedule,IG @radiodepaul,18
+S131,USA,IL,Chicago,University of Illinois at Chicago,UIC Radio,,uicradio@uic.edu,-,312-413-5085,uicradio.org,"750 S Halsted St #386 Chicago, IL 60607",uicradio,college,,email,,easy,-,IG @uicradio,18
+S132,USA,IL,Chicago,Northeastern Illinois University,WZRD 88.3,88.3,musicdirector@wzrdchicago.org,Eddie Pedvin,773-442-4586,wzrdchicago.org,"WZRD Radio Station 5500 N. St. Louis Ave Chicago, IL 60625-4699 ATTN: Music Director",wzrdchicago,college,,email,,easy,Schedule,"prefers CD, WAV files IG @wzrdchicago",18
+S133,USA,IL,Chicago,University of Chicago,WHPK 88.5,88.5,md@whpk.org,Eli Winters Ara Hanissian,773-702-8289,whpk.org,"WHPK Reynolds Club 5706 S. University Ave. Chicago, IL 60637",whpk_88.5fm,college,,email,,easy,Schedule,IG @whpk_88.5fm,18
+S134,USA,IL,Chicago,Illinois Institute of Technology,WIIT 88.9,88.9,radio@illanoize.co; tguidroz@hawk.iit.edu; fbshow2003@gmail.com,Brian,312-567-3088,web.iit.edu,"WIIT 88.9FM A. Sidney Katz Studio 3201 South State Street Chicago, IL 60616",wiitchicago; fusionradio08; illanoizeradio; illanoize_,college,,email,,easy,-,IG @wiitchicago @fusionradio08 @illanoizeradio @illanoize_,18
+S135,USA,IL,Chicago,St. Xavier University,WXAV 88.3,88.3,wxavmusic@gmail.com,Sean Anderson,773-298-3376,sxustudentmedia. com,"ATTN:WXAV 88.3FM 3700 West 103rd St. Chicago, IL 60655",wxavchicago,college,,email,,easy,Schedule,IG @wxavchicago send .wav files,18
+S136,USA,IL,Chicago,City Colleges of Chicago,WKKC 89.3,89.3,wkkc@ccc.edu,Marcella Jones,773-488-9552,wkkc.fm,"WKKC Radio Kenndey-King College Building U Chicago, Illinois 60621",marcellajones1,college,,email,,easy,Schedule,IG @marcellajones1,18
+S137,USA,IL,Chicago,Columbia College Chicago,WCRX Underground,,wcrxdj@colum.edu,Matt Cunningham,312-663 3512,wcrx.colum.edu,"WCRX-FM Studios 33 E. Ida B. Wells Drive Chicago, IL 60605",wcrxfm,college,,email,,easy,-,IG @wcrxfm FB Chicago’s Underground Spotify WCRX FM,18
+S138,USA,IL,Decatur,Millikin University,WJMU 89.5,89.5,aclee@millikin.edu,Samuel Laro,217-424-6377,millikin.edu/wjmu,"ATTN: Aidan Lee 1184 W. Main St., Decatur, Illinois, 62522",wjmu89.5,college,,email,,easy,-,IG @wjmu89.5,18
+S139,USA,IL,Dekalb,Northern Illinois University,WNIJ 89.5 WNIU 90.5,89.5,npr@niu.edu,-,815-753-9645,northernpublicradio. org,"801 N. First St., DeKalb, IL 60115",wnij; sessionswnij,public_npr,news_talk,email,,easy,-,IG @wnij @sessionswnij,18
+S140,USA,IL,Elmhurst,Elmhurst College,WRSE 88.7,88.7,wrse.radio@elmhurst.edu,-,-,linktr.ee/wrse887,-,wrse887fm,college,,email,,easy,-,IG @wrse887fm,18
+S141,USA,IL,Evanston,Northwestern University,WNUR 89.3,89.3,GM@wnur.org,Abigail Everding/ Students,847-866-9687,wnur.org,"Attn: Streetbeat WNUR 89.3 FM, 1877 Campus Drive, Evanston, IL 60208",wnur89.3,college,,email,,easy,Schedule,IG @wnur89.3,18
+S142,USA,IL,Galesburg,Knox College,WVKC 90.7,90.7,90.7wvkc@gmail.com,Porter,-,thewvkc.com,"WVKC, Knox College 2 E South St, Galesburg, IL 61401",thewvkc,college,,email,,easy,Schedule,IG @thewvkc,18
+S143,USA,IL,Galesburg,Western Illinois University,WIUS 88.3,88.3,WIUS.THEDOG@GMAIL.COM,-,309-298-3218,883thedog.com theproxyreport.com /883thedog,"88.3 The Dog, Third Floor, Sallee Hall, Western Illinois University, Macomb, IL 61455",883thedog,college,,email,,easy,Schedule,IG @883thedog,18
+S144,USA,IL,Glen Ellyn,College of DuPage,WDCB 90.9,90.9,,-,630-942-4300,wdcb.org Contact Form,"WDCB Public Radio College of DuPage 425 Fawell Blvd Glen Ellyn, IL 60137",909wdcb,college,jazz,form,,medium,Schedule,IG @909wdcb Jazz,18
+S145,USA,IL,Godfrey,Lewis and Clark Community College,WLCA 89.9,89.9,wlcamusicdirector@yahoo.com; wlca899md@gmail.com,Chris Riddle,618-468-4940,wlcafm.com Submit Here,"WLCA 5800 Godfrey Rd. Godfrey, IL 62035",899wlca,college,,form; email,,easy,Schedule,IG @899wlca New music Thursdays 6-8p,18
+S146,USA,IL,Greenville,Greenville College,WGRN 89.5,89.5,895wgrn@gmail.com,-,618-267-5436,wgrn.net,-,wgrn89.5,college,,email,,easy,-,IG @wgrn89.5 FB WGRN 89.5,18
+S147,USA,IL,Joliet,University of St. Francis,WCSF 88.7,88.7,musicdirectorwcsf@stfrancis.edu,Bryan Ennis,815-740-3214,wcsfradio.com Livestream,"500 wilcox street, Joliet, IL, United States",wcsf887; wcsfradio; bkmorningblitz,college,,links_preferred; email,,easy,Schedule,IG @wcsf887 @wcsfradio @bkmorningblitz FB WCSF Radio,18
+S148,USA,IL,Kankakee,Olivet Nazarene University,Shine FM 89.7,89.7,shine@olivet.edu,-,815-939-5330,shine.fm,"One University Ave Bourbonnais, IL 60914",shinefmnetwork,college,,email,,easy,-,Faith based IG @shinefmnetwork,18
+S149,USA,IL,Lake Forest,Lake Forest University,WMXM 88.9,88.9,hiphop@wmxm.org; md@wmxm.org,-,847-735-6038,wmxm.org Contacts,"WMXM 555 N Sheridan Rd Lake Forest, IL 60045",wmxm88.9,college,hip-hop,email,,easy,Schedule,"prefer CD, vinyl. CMJ tracking (College Media Journal) IG @wmxm88.9",18
+S150,USA,IL,Mattoon,Lake Land College,WLKL 89.9,89.9,899themax@lakelandcollege.edu; gpowers@lakelandcollege.edu,Greg Powers,217-234-5373,lakelandcollege.e du/student-life/ themax/,"Greg Powers 5001 Lake Land Blvd. Mattoon, IL 61938",899themax,college,,email,,easy,-,IG @899themax,18
+S151,USA,IL,Mount Carmel,Illinois Eastern Community Colleges,WVJC 89.1,89.1,peachk@iecc.edu,-,618-262-8989,bashradio.com DJ List,"2200 College Drive Mount Carmel, IL 62863",bashradio89,college,,email,,easy,-,IG @bashradio89,19
+S152,USA,IL,Naperville,North Central College,WONC 89.1,89.1,feedback@wonc.org,-,630-637-8989,WONC.org Contact Page,"WONC-FM 30 N. Brainard St. P.O. Box 3063 Naperville, IL 60540",wonc891,college,,email,,easy,-,IG @wonc891,19
+S153,USA,IL,Normal,Illinois State University,WGLT 89.1,89.1,wglt@illinoisstate.edu; news@wglt.org,-,309-438-2255,WGLT.org,"WGLT 8910 Illinois State University Normal, IL 61790-8910",wgltnews,college,,email,,easy,Schedule,IG @wgltnews,19
+S154,USA,IL,Normal,Illinois State University,WZND 103.3,103.3,md@wznd.com; pd@wznd.com,-,309-438-5491,WZND.com Submission Form,"007 Fell Hall Normal, IL 61790",wznd,college,,form; email,,easy,Schedule,IG @wznd,19
+S155,USA,IL,Palatine,Harper College,WHCM 88.3,88.3,,-,847-925-6237,harperradio.com,"1200 W Algonquin Rd. Palatine, IL",harperradiofm,college,,,,hard,Schedule,IG @harperradiofm,19
+S156,USA,IL,Peoria,Bradley University,WCBU 89.9,89.9,rmdenha@wcbu.org,Dylan,309-438-5426,WCBU.org,"WCBU 1501 W. Bradley Ave. Peoria, IL 61625",wcburadio,college,,email,,easy,-,IG @wcburadio,19
+S157,USA,IL,Rock Island,Augustana College,WVIK 90.3,90.3,info@wvik.org,Mindy,(309) 794-7500,WVIK.org,"815 38th Street Rock Island, IL 61201",wvikqc,college,,email,,easy,Schedule,IG @wvikqc,19
+S158,USA,IL,Rivergrove,Triton College,WRRG,,wrrg@hotmail.com,-,708-583-3110,Live Stream,-,,college,,links_preferred; email,,easy,-,FB WRRG,19
+S159,USA,IL,Romeoville,Lewis University,WLRA 88.1,88.1,wlrathestart@gmail.com; ashleynbihun@lewisu.edu,Ashley Bihun,815-836-5000,wlraradio.com,"1 University Pkwy Romeoville, Illinois",wlraradio,college,,email,,easy,Schedule,IG @wlraradio,19
+S160,USA,IL,Urbana,-,WRFU 104.5,104.5,104.5fm.wrfu@gmail.com; djbjclark@gmail.com,DJ BJ Clark Will you make this month’s Top10?,217-344-2536 815-324-2587,wrfu.net,"202 South Broadway Suite #112 Urbana, IL 61801",104.5fm_wrfu; djbjclark,college,,email,,easy,Schedule ask for interviews as well —>,IG @104.5fm_wrfu @djbjclark,19
+S161,USA,IL,Urbana,Illini Media Company,WPGU 107.1,107.1,jskahn2@illinimedia.com,Jordan Khan,-,WPGU.com Submission Guidelines,"WPGU Music Director 1001 S. Wright Street Champaign, IL 61820",WPGuillini,college,,form; email,,easy,Schedule,IG @WPGuillini,19
+S162,USA,IN,Angola,Tri-State University,WEAX 88.3,88.3,,-,-,star883.com,"STAR 88.3 8 Martin Luther Drive Fort Wayne, IN 46825",star883radio,college,christian,,positive_content_only,hard,-,"CD, FCC friendly / monitored Christian Music IG @star883radio",19
+S163,USA,IN,Bloomington,Indiana State University,WFIU 103.7,103.7,wfiu@indiana.edu,-,-,indianapublicmed ia.org/radio/ Contact Form,-,wfiuofficial,college,,form; email,,easy,Schedule,IG @wfiuofficial,19
+S164,USA,IN,Bloomington,Indiana University Bloomington,WIUX,,music@wiux.org,Justin Mazany Wiley Jettpace,812-855-7862,wiux.org,"WIUX 99.1FM 717 E. 8th St. Bloomington, IN 47408-3842",wiuxfm,college,,email,,easy,Schedule,IG @wiuxfm,19
+S165,USA,IN,Goshen,Goshen College,WGCS 91.1,91.1,globe@goshen.edu,-,574-535-7488,globeradio.org,"1700 South Main Street Goshen, IN 46526",911theglobe,college,,email,,easy,-,IG @911theglobe FB 91.1 The Globe,19
+S166,USA,IN,Greencastle,DePauw University,WGRE 91.5,91.5,wgremusic@gmail.com; fionasipple_2025@depauw.edu; ngandinh_2026@depauw.edu,Erica Bean,765-658-4641,wgre.org,"WGRE DePauw University 609 S. Locust Street Greencastle, IN 46135 765-658-4475",wgreradio,college,,email,,easy,Schedule,IG @wgreradio,19
+S167,USA,IN,Huntington,Huntington University,WQHU 105.5,105.5,awidener@huntington.edu,-,260-442-4732,foresterdigital.net/ radio,-,foresterdigital,college,,email,,easy,-,IG @foresterdigital,19
+S168,USA,IN,Huntington,University of Southern Indiana,WSWI 95.7,95.7,jmmorris@usi.edu; localmusic@957thespin.com; alternative@957thespin.com,-,812-465-1665,957thespin.com,"8600 University Blvd, Evansville, Indiana 47712",957thespin,college,,email,,easy,-,IG @957thespin FB 95.7 The Spin,19
+S169,USA,IN,Indianapolis,University of Indianapolis,WICR 88.7,88.7,pensish@uindy.edu,-,317-788-3314,uindyradio.wixsite .com/wicrfm,-,wicronline,college,,email,,easy,Schedule Schedule,IG @wicronline,19
+S170,USA,IN,Muncie,Ball State University,WCRD 91.3,91.3,WCRD@bsu.edu,-,765-285-1467,wcrd.net/contact,"WCRD LB 200 Ball State University Muncie, IN 47306",wcrd913,college,,email,,easy,-,IG @wcrd913,19
+S171,USA,IN,Richmond,Earlham College,WECI 91.5,91.5,station.manager.weci@gmail.com,"Jason Elliot, Maya Panicker",-,weciradio.org,"Runyon Center WECI 91.5 , Campus of Earlham College 801 National Road West 47374",weciradio,college,,email,,easy,Schedule,IG @weciradio,19
+S172,USA,IN,Terre Haute,Indiana State University,WZIS 90.7,90.7,wzismusic@isustudentmedia.com,-,812-237-8970,isustudentmedia. com,"230-B Dreiser Hall 221 N. 6th St. Indiana State University Terre Haute, IN 47809",wzisfm,college,,email,,easy,Schedule,IG @wzisfm,19
+S173,USA,IN,Terre Haute,Rose-Hulman Institute of Tech,WMHD,,wmhdradio@gmail.com,Audrey,-,wmhdradio.org,-,wmhdonlideradio,college,,email,,easy,-,IG @wmhdonlideradio,19
+S174,USA,IN,Valparaiso,Valparaiso University,WVUR The Source 95.1,95.1,thesource95@gmail.com,-,219-464-5383,wvurthesource.com Contact Form,"WVUR The Source 95.1 1809 Chapel Drive Valparaiso, Indiana 46383",thesource95,college,,form; email,,easy,Schedule,IG @thesource95,19
+S175,USA,IN,Vincennes,Vincennes University,WVUB 91.1,91.1,wvub@vinu.edu,Kevin Watson,812-888-4347,wvub.org,"WVUB 1200 North Second St Vincennes, IN 47591",wvub,college,,email,,easy,-,IG @wvub,20
+S176,USA,IA,Ames,Iowa State University,KURE 88.5,88.5,music@kure885.org,Karina Abbott Nicci Tait,515-294-4332,kure.stuorg.iastat e.edu,"1199 Friley Hall 212 Beyer Ct Ames, IA 50012",kure885,college,,email,,easy,Schedule,IG @kure885,20
+S177,USA,IA,Decorah,Luther College,KWLC,,,-,563-387-1240,kwlc.luther.edu,"KWLC Dahl Centennial Union 8 700 College Drive Decorah, Iowa 52101",kwlc1240,college,,,,hard,-,IG @kwlc1240,20
+S178,USA,IA,Iowa City,University of Iowa,KRUI 89.7,89.7,krui.music@gmail.com,-,319-335-7215,krui.fm/about/ music/,"KRUI-FM Music Director 379 IMU Iowa City, IA 52242",,college,,email,,easy,-,include track list with cd or vinyl to stand out + a little bio / info,20
+S179,USA,KS,Lawrence,University of Kansas,KJHK 90.7,90.7,submitmusic@kjhk.org,-,-,kjhk.org,"KJHK 90.7 FM 1301 Jayhawk Boulevard Suite 370 Lawrence, KS 66045",kjhk90_7,college,,email,,easy,Schedule,send links not actual files + CD & vinyl IG @kjhk90_7,20
+S180,USA,KS,Manhattan,Kansas State University,KSDB 91.9,91.9,,Sara Wallace,785-532-2330,ksdbfm.org Submit Here,"ATTN: Music Director 234 Nicholas Hall 702 Mid-Campus Drive South Manhattan, KSD 66506-1501",wildcat919fm,college,,form,,medium,Schedule,IG @wildcat919fm,20
+S181,USA,KY,Lexington,University of Kentucky,WRFL 88.1,88.1,music@wrfl.fm,Aryana Misaghi,-,wrfl.fm,"WRFL Lexington, University Station Box 777, University of Kentucky, Lexington, KY 40506",wrfl881,college,,email,,easy,Schedule,IG @wrfl881,20
+S182,USA,LA,Baton Rouge,Louisiana State University,KLSU 91.1,91.1,musicdirector@lsu.edu,-,225-578-5579,lsureveille.com/ klsu,-,klsufm,college,,email,,easy,Schedule,@klsufm,20
+S183,USA,LA,Baton Rouge,-,WHYR 96.9,96.9,info@whyr.org,-,225-343-9927 225-800-2727,whyr.org,"1623 Main St. Baton Rouge, LA 70802",whyr969,college,,email,,easy,Schedule,@whyr969,20
+S184,USA,LA,New Orleans,Tulane University,WTUL 91.5,91.5,wtul.music@gmail.com,-,504-865-5885,wtulneworleans.c om,"WTUL Tulane University #1527 6823 St. Charles Ave New Orleans, LA 70118",wtul,college,,email,,easy,-,IG @wtul,20
+S185,USA,LA,New Orleans,-,WHIV 102.3,102.3,info@whivfm.org,-,-,-,-,whivfm; moose_harris,college,,email,,easy,-,IG @whivfm @moose_harris,20
+S186,USA,LA,Natchitoches,Northwestern State University,KNWD 91.7,91.7,knwdradio@gmail.com,-,318-357-5693,-,"109 Kyser Hall PO Box 3038 Natchitoches, LA 71497",knwdradio,college,,email,,easy,-,@knwdradio,20
+S187,USA,ME,Brunswick,Bowdoin College,WBOR 91.1,91.1,wbor.brunswick@gmail.com,-,(207) 725-3250,wbor.org,"WBOR Music Directors Hip Hop Smith Union Bowdoin College Brunswick, ME 04011",wbor911,college,,email,,easy,Schedule,IG @wbor911,20
+S188,USA,ME,Lewiston,Bates College,WRBC 91.5,91.5,,-,207-777-7532,wrbcradio.com,"WRBC Attn: Music Director , 31 Frye Street , Lewiston, Maine, USA 04240",wrbc915fm,college,,,,hard,Schedule,IG @wrbc915fm,20
+S189,USA,ME,Orone,University of Maine,WMEB 91.9,91.9,web.submissions@gmail.com,Michael Murphey,207-815-2334,umaine.edu/ wmeb,,wmeb919,college,,email,,easy,Schedule,IG @wmeb919,20
+S190,USA,ME,Presque Isle,University of Maine at Presque Isle,WUPI 92.1,92.1,umpiwupi92.1@gmail.com,-,207-768-9565,wp.umpi.edu/ wupi,-,,college,,email,,easy,-,send email ok,20
+S191,USA,ME,Waterville,Colby College,WMHB 89.7,89.7,,-,-,wmhb.org,"Music Director WMHB 89.7 FM 4000 Mayflower Hill Waterville, Maine 04901",,college,,,,hard,-,also submit form at website,20
+S192,USA,MD,College Park,"University of Maryland, College Park",WMUC 88.1,88.1,wmucmusicdir@gmail.com,-,301-314-8800,wmuc.umd.edu,"Music Director WMUC Radio 3130 Campus Dining Hall College Park, MD 20742-8431",wmucradio,college,,email,,easy,Schedule,IG @wmucradio,20
+S193,USA,MD,Baltimore,Loyola University Maryland,WLOY,,wloymd@loyola.edu,-,410-617-1620,wloy.org,"WLOY Radio 4501 N Charles St. Baltimore, Maryland",wloy_radio,college,,email,,easy,Schedule,IG @wloy_radio,20
+S194,USA,MD,Baltimore,Notre Dame of Maryland University,NDMU Radio,,ndmumedia@gmail.com,-,-,-,-,ndmu_media,college,,email,,easy,-,IG @ndmu_media,20
+S195,USA,MD,Salisbury,Salisbury University,WXSU 96.3,96.3,wxsu963fm@gmail.com,-,410-548-4760,orgs.salisbury.ed u,"Salisbury University Campus Box 3151 Salisbury, MD 21801",wxsu963,college,,email,,easy,-,please submit to email IG @wxsu963,20
+S196,USA,MA,Newton,Lasell College,WLAS 102.9,102.9,rsaber@lasell.edu,Ryan Saber,cell: 781-363-2371,radio.lasell.edu,-,,college,,email,,easy,Schedule,-,20
+S197,USA,MA,Amherst,University of Massachusetts Amherst,WMUA 91.1,91.1,wmuamusic@umass.edu,Gil Cuevas,413-545-2876,wmua.org,Bacherman Broadcast Center 201 Student Union 41 Campus Center Way University of Massachusetts Amherst MA 01003,wmua,college,,email,,easy,Schedule,IG @wmua,20
+S198,USA,MA,Beverly,Endicott College Radio,-,,,-,503-254-5508,-,"376 Hale St. Beverly, Massachusetts",endicott_r,college,,,,hard,-,IG @endicott_r adio,20
+S199,USA,MA,Boston,Berklee College of Music,BIRN,,,-,-,thebirn.com,"The BIRN Berklee College of Music MS-150 , 1140 Boylston Street , Boston, MA 02215",,college,,physical,,hard,Schedule,-,21
+S200,USA,MA,Boston,Emerson College,WERS 88.9,88.9,,-,dont follow up just submit,wers.org,"WERS 88.9 180 Tremont St, Boston, MA",wers889,college,,,,hard,Schedule,IG @wers889,21
+S201,USA,MA,Boston,Emerson College,WECB The Underground Sound,,submissions@wecb.fm; music@wecb.fm,Lily Hartenstein,617-824-8372,wecb.fm,"WECB Radio Emerson College 120 Boylston St. Boston, MA 02216",wecb.fm,college,,email,,easy,-,IG @wecb.fm,21
+S202,USA,MA,Boston,Northeastern University,WRBB 104.9,104.9,music@wrbbradio.org,Brooke Baumgartner,617-373-4339,wrbbradio.org,WRBB 104.9 FM 360 Huntington Avenue #174 Curry Student Center,wrbbradio,college,,email,,easy,Schedule,IG @wrbbradio,21
+S203,USA,MA,Boston,Boston University,WTBU 89.3,89.3,music@wtburadio.org,"Derrick Monteiro, Elina Kent",-,sites.bu.edu,-,wtburadio,college,,email,,easy,-,contact MD for interest in sending album IG @wtburadio,21
+S204,USA,MA,Chestnut Hill,Boston College,WZBC 90.3,90.3,wzbcpd@gmail.com,-,617-552-3511,wzbc.org,"WZBC 90.3fm Boston College McElroy Commons 107, Chestnut Hill, MA 02467",wzbc,college,,email,,easy,Schedule,IG @wzbc,21
+S205,USA,MA,Cambridge,Harvard College,WHRB 95.3,95.3,pd@whrb.org,"Andy Kim, Luca Schroeder",617-495-4818,whrb.org,"WHRB-FM 389 Harvard St. Cambridge, MA 02138-3900",whrb95.3,college,,email,,easy,Schedule,request submission IG @whrb95.3,21
+S206,USA,MA,Cambridge,Massachusetts Institute of Technology,WMBR 88.1,88.1,,-,-,wmbr.org,"Attn: Music Director WMBR Radio 3 Ames Street Cambridge, MA 02142",wmbrfm,college,,physical,,hard,Schedule,IG @wmbrfm,21
+S207,USA,MA,Great Barrington,-,WBCR 97.7,97.7,,-,-,berkshireradio.or g,-,wbcr977fm,college,,,,hard,Schedule,IG @wbcr977fm,21
+S208,USA,MA,Lowell,University of Massachusetts Lowell,WUML 91.5,91.5,wuml_gm@uml.edu,-,978-934-4975,wuml.org,"WUML 1 University Ave, Lowell, MA 01854",wumlradio,college,,email,,easy,Schedule,IG @wumlradio,21
+S209,USA,MA,Medford,Tufts University,WMFO 91.5,91.5,md@wmfo.org,"Nick Golin, Avi Block",855-915-9636,wmfo.org,-,wmforadio,college,,email,,easy,Schedule,IG @wmforadio,21
+S210,USA,MA,Salem,Salem State College,WMWM 91.7,91.7,wmwmsalem@gmail.com,Carissa Myre,978-219-9170,wmwmsalem.com,"WMWM Salem 352 Lafayette St. Salem, MA 01970 USA",wmwmsalem,college,,email,,easy,-,send music to addresses email + physical IG @wmwmsalem,21
+S211,USA,MA,Waltham,Brandeis University,WBRS 100.1,100.1,,-,781-736-4786,wbrs.org,WBRS 100.1FM HIP- Hop/Urban Brandeis University Shapiro Campus Center 415 South Street,brandeiswbr,college,,,,hard,Schedule,IG @brandeiswbr s,21
+S212,USA,MA,Wellesley,Wellesley College,WZLY 91.5,91.5,,-,781-283-2690,wzly.org,-,wzly,college,,,,hard,Schedule,(Women’s College) IG @wzly,21
+S213,USA,MA,Williamstown,Williams College,WCFM 91.9,91.9,drm7@williams.edu; hmm3@williams.edu,Dahlia Miller Hugh Murphy,413-597-2197,williams.edu.wcf m,"WCFM Williamstown 91.9 FM Hip-Hop/Rap Paresky Ctr. Williamstown, MA 01267",wcfmradio,college,,email,,easy,Schedule,DJ Schedule on website IG @wcfmradio,21
+S214,USA,MI,Ann Arbor,University of Michigan,WCBN 88.3,88.3,radio@wcbn.org; music@wcbn.org,-,734-763-3500,wcbn.org,"WCBN-FM 515 E Jefferson St Ann Arbor, Michigan 48109",wcbn_fm,college,,email,,easy,Schedule,IG @wcbn_fm,21
+S215,USA,MI,Detroit,Wayne State University,WDET 101.9,101.9,feedback@wdet.org,-,313-577-4146,wdet.org Contact Form,"4600 Cass Avenue Detroit, MI 48201",wdetdetroit,college,,form; email,,easy,Schedule,IG @wdetdetroit,21
+S216,USA,MI,Lansing,Michigan State University,WDBM 88.9,88.9,manager@impact89fm.org; pd@impact89fm.org,-,517-884-8900 517-884-8989,impact89fm.org,"234 Wilson Road, Suite G-4 East Lansing, MI 48825",impact89fm,college,,email,,easy,Schedule,IG @impact89fm,21
+S217,USA,MI,Marquette,Northern Michigan University,WUPX 91.5 Radio X,91.5,wupx@nmu.edu,-,(906) 227-2348,nmu.edu/wupx,-,wupxradiox,college,,email,,easy,Schedule,IG @wupxradiox,21
+S218,USA,MN,Duluth,University of Minnesota Duluth,kumd 103.3,103.3,,-,218-726-7181,kumd.org,"KUMD Attn: Michael Mayou 130 Humanities 1201 Ordean Ct. Duluth, MN 55812",,college,,,,hard,-,-,21
+S219,USA,MN,Minneapolis,University of Minnesota,100.7 104.5,100.7,music@radiok.org,-,612-625-3500,radiok.org,"Radio K - KUOM University of Minnesota 610 Rarig Center 330 21st Ave. S Minneapolis, MN 55455-4405",,college,,email,,easy,Schedule,-,22
+S220,USA,MN,Moorhead,Minnesota State University Moorhead,Dragon Radio 1500am +online,1500,kmscdirector@gmail.com,-,218-477-2115,dragonradio.org,"kmsc 1500am Owens Hall Box 138 Moorhead, MN 56563",kmscdragonradi,college,,email,,easy,Schedule,IG @kmscdragonradi o,22
+S221,USA,MN,Northfield,Carleton College,KRLX 88.1,88.1,music@krlx.org,-,507-222-4127,krlx.org,-,krlxfm,college,,email,,easy,Schedule,IG @krlxfm,22
+S222,USA,MN,Northfield,St. Olaf College,KSTO 93.1,93.1,ksto-exec@stolaf.edu,-,507-786-3602,kstoradio.org,-,kstoradio,college,,email,,easy,Schedule,IG @kstoradio,22
+S223,USA,MN,St. Cloud,St. Cloud State University,kvsc 88.1,88.1,music@kvsc.org,-,320-308-5872,kvsc.org Submission Info,"KVSC 88.1 FM 720 Fourth Avenue South 27 Stewart Hall, SCSU Saint Cloud, MN 56301-4498",kvsc881fm,college,,email,,easy,Schedule,IG @kvsc881fm,22
+S224,USA,MN,Saint Paul,University of St. Thomas,KUST Campus Radio,,kust@stthomas.edu,-,(949) 872-7881,-,"2115 Summit Avenue OEC Lower Level 14 St. Paul, MN 55105",kustradio,college,,email,,easy,-,IG @kustradio,22
+S225,USA,MO,Columbia,University of Missouri,KCOU 88.1,88.1,md@kcou.fm,-,573-882-8262,KCOU.FM,"Program Director C/o kcou 88.1 Fm 2500 MU Student Center Columbia, MO 65211",,college,,email,,easy,-,-,22
+S226,USA,MO,Springfield,Drury University,KDRU 98.1,98.1,,Maddie,-,kdruradio.com,-,funkyfresh_fm; kdruradio,college,,,,hard,Schedule,IG @funkyfresh_fm @kdruradio,22
+S227,USA,MO,Parkville,Park University,KGSP 90.5,90.5,ristin.shaw@park.edu,-,816-741-2000,kgsp.park.edu,"Park University Copley Hall 206 8700 NW River Park Dr. Parkville, MO 64152",,college,,email,,easy,-,-,22
+S228,USA,MO,Rolla,Missouri University Of Science and Tech.,KMNR 89.7,89.7,stationmanager@kmnr.org; music@kmnr.org,-,504-656-6735 573-34 1-4273,kmnr.org,"KMNR 218 Havener Center 1346 N. Bishop Ave Rolla, MO 65409-1440",,college,,email,,easy,-,I G @ k m nr89.7,22
+S229,USA,MN,Winona,Winona State University,KQAL 89.5 Fm,89.5,kqalfm@winona.edu,-,507-457-2222,kqal.org,"KQAL FM 89.5 Winona State University P.O. Box 5838 Winona, MN 55987",kqal895,college,,email,,easy,Schedule,IG @kqal895,22
+S230,USA,MS,Oxford,University of Mississippi,WVMS 92.1,92.1,,-,662-915-6692,myrebelradio.com,"Rebel Radio P.O Box 1848 SMC/201 Bishop Hall University, MS 38677",,college,,,,hard,Schedule,Submit online,22
+S231,USA,MS,Starkville,Mississippi State University,WMSV 91.5,91.5,wmsv@msstate.edu,-,662-325-8481,WMSV.msstate.e du,"WMSV Radio P.O Box 6210 Student Media Center. Mississippi State, MS 39762",msuradio_wm,college,,email,,easy,Schedule,IG @msuradio_wm sv,22
+S232,USA,NE,Lincoln,University of Nebraska-Lincoln,KRNU 90.3,90.3,,Rich Bennett,402-472-8277,nebraskanews service.net/ 90_3_krnu/,"90.3 KRNU Attn: Music Director 147 Andersen Hall University of Nebraska- Lincoln Lincoln, NE 68588",90.3krnu,college,,,,hard,Schedule,IG @90.3krnu,22
+S233,USA,NV,Reno,"University of Nevada, Reno",Wolfpack Radio,,wolfpackradiomanager@unr.edu,-,775-784-6589,wolfpackradio.org,-,thesnakesnest; wolfpackradio,college,,email,,easy,Schedule,IG @thesnakesnest @wolfpackradio,22
+S234,USA,NV,Las Vegas,"University of Nevada, Las Vegas",KUNV 91.5 The Rebel HD2,91.5,,-,702-895-3915,kunv.org Live Stream Here,"Main Campus 4505 S. Maryland Pkwy. Greenspun Hall Box 2010 Las Vegas, NV 89154",therebelhd2; 915kunv,college,,links_preferred,,easy,Schedule,IG: @therebelhd2 @915kunv,22
+S235,USA,NH,Durham,University of New Hampshire,WUNH 91.3,91.3,,-,603-862-2222,unh.edu,"WUNH Music Director University Of New Hampshire 83 Main st. Durham, NH 03824",wunh_913,college,,,,hard,Schedule,IG @wunh_913,22
+S236,USA,NH,Plymouth,Plymouth State University,WPCR 91.7,91.7,cwr1018@plymouth.edu,-,-,plymouth.edu/ wpcr,-,91.7wpcr,college,,email,,easy,Schedule,IG @91.7wpcr,23
+S237,USA,NJ,Madison,Fairleigh Dickinson University,WFDU 89.1,89.1,kenob1@fdu.edu,-,201-692-2012,wftu.fm,-,wfduradio,college,,email,,easy,Schedule,IG @wfduradio,23
+S238,USA,NJ,New Brunswick,Rutgers University,WSRU 88.7,88.7,hiphop@radio.rutgers.edu,Seyi Aladejobi,732-932-7800,radio.rutgers.edu,"WSRU-FM Hip Hop 126 College Ave New Brunswick, NJ 08901",wrsurutgersra,college,hip-hop,email,,easy,Schedule,IG @wrsurutgersra dio,23
+S239,USA,NJ,Piscataway,Rutgers University Livingston campus,WVPH 90.3 The Core,90.3,generalmanager@thecore.fm,-,732-445-9300,thecorefm.carrd.co,-,thecorefm,college,,email,,easy,Schedule,IG @thecorefm,23
+S240,USA,NJ,Pomona,Stockton University,WLFR 91.7,91.7,,-,609-652-4781,stockton.edu,"WLFR-FM Stockton University 101 Vera King Farris Dr. Galloway, NJ 08205",wlfr91.7,college,,,,hard,Schedule,IG @wlfr91.7,23
+S241,USA,NJ,Princeton,Princeton University,WPRB 103.3,103.3,,-,-,wprb.com,"Music Director 30 Bloomberg Hall Princeton, NJ 08544",wprb,college,,physical,,hard,Schedule,CDs + Vinyls only IG @wprb,23
+S242,USA,NJ,West Long Branch,Monmouth University,WMCX 88.9,88.9,wmcxmusic@monmouth.edu,-,732-571-3493,wmcx.com,-,wmcx889,college,,email,,easy,Schedule,IG @wmcx889,23
+S243,USA,NJ,Trenton,The College of New Jersey,WTSR 91.3,91.3,music@wtsr.org,Brian Marino,609-771-2420,wtsr.org,"WTSR ℅ Kendal Hall The College of New Jersey PO Box 7718 Ewing, NJ 08628",wtsr913fm,college,,email,,easy,Schedule,IG @wtsr913fm,23
+S244,USA,NJ,Union,Kean University,WKNJ 90.3,90.3,batistfa@kean.edu,Fabiel,-,wknj903.com,-,,college,,email,,easy,Schedule,IG: wknj903,23
+S245,USA,NJ,Wayne,William Paterson University,WPSC 88.7,88.7,wpscmusic@wpunj.edu; wpscprogramming@wpunj.edu,Robert Taylor,973-720-3333 973-720-2738,gobrave.org,"Brave New Radio William Paterson University 300 Pompton Road Wayne, NJ 07470",,college,,email,,easy,Schedule,IG: BraveNewRadio,23
+S246,USA,NM,Las Cruces,New Mexico State University,KRUX 91.5,91.5,kruxfmmusic@gmail.com,-,575-646-9150,kruxradio.com,"Music Director 91.5 fm New Mexico State University Box 30001/Corbett Center Las Cruces, NM 88003",KruxFM,college,,email,,easy,Schedule,IG: @KruxFM,23
+S247,USA,NY,Albany,University Of Albany,WCDB 90.9,90.9,urban@wcdbfm.com,-,518-442-5262,wcdbfm.com Complete Contacts list,"WCDB 90.9 University of Albany Campus Center 316 1400 Washington Ave Albany, NY 12222",wcdb_albany,college,,email,,easy,Schedule,IG @wcdb_albany,23
+S248,USA,NY,Auburn,Cayuga Community College,WDWN 89.1,89.1,wdwn@hotmail.com,-,315-255-1743 ext.2284,wdwn.fm,"197 Franklin St. Auburn, New York 12021",win89fm,college,,email,,easy,-,IG @win89fm,23
+S249,USA,NY,Buffalo,Buffalo State College,WBNY 91.3,91.3,music@wbny.org,-,716-878-3080,wbny.edu,"wbny-fm 1300 Elmwood Ave Campbell Room 220 Buffalo, NY 14222",91.3fm_wbny,college,,email,,easy,Schedule,IG @91.3fm_wbny,23
+S250,USA,NY,Garden City,Nassau Community College,WHPC 90.3,90.3,whpc@ncc.edu; gina90.3whpc@gmail.co,Shawn Novatt Kim Nadler Gina,516-572-7438,whpcradio.ncc.edu,"ATTN: WHPC 1 Hospital Rd. Garden City, NY 11530",903whpc; 1andonlygina,college,,email,,easy,Schedule Hidden Gemz,IG @903whpc @1andonlygina TikTok @1andonlygina,23
+S251,USA,NY,Geneva,Hobart & William Smith Colleges,WHWS 105.7,105.7,corren@hws.edu,-,-,whwsblog.wpcom staging.com,"300 Pulteney St. Geneva, NY 14456",whws.fm,college,,email,,easy,Schedule,IG @whws.fm,23
+S252,USA,NY,Hamilton,Colgate University,WRCU 90.1,90.1,wrcumusicdirector@colgate.edu,-,315-228-7109,wrcufm.org,-,wrcu90.1,college,,email,,easy,Schedule,IG @wrcu90.1,24
+S253,USA,NY,Harlem,City College of New York,WHCR 90.3,90.3,,-,212-650-7481,whcr.org,"WHCR 90.3 160 Convent Avenue, NAC 1/513 New York, NY 10031",whcr903,college,,,,hard,Schedule,Submission Instructions Here IG @whcr903,24
+S254,USA,NY,Ithaca,Ithaca College,WICB 91.7,91.7,,-,607-274-3217,wicb.org Contact List,"WICB Ithaca College Communications 953 Danby Road Ithaca, NY 14850",wicb,college,,,,hard,Schedule,IG @wicb,24
+S255,USA,NY,Bushwick,-,Bushwick Radio,,bushwickradio@yahoo.com,DJ Primetime,347-449-3808,-,-,bushwickradio,college,,email,,easy,-,@bushwickradio,24
+S256,USA,NY,Brooklyn,Brooklyn College,WBCR,,teatakesradio@gmail.com,Tea,718-951-4444,wbcr.net Livestream Here,"Whitehead Hall Room 306A Brooklyn College —————————— 2900 Bedford Ave Brooklyn, NY 11210",wbcr_cuny; teatakesradio,college,,links_preferred; email,,easy,-,IG @wbcr_cuny @teatakesradio,24
+S257,USA,NY,Brooklyn,Kingsborough Community College,WKRB 90.3,90.3,kilgraveradio@gmail.com,-,-,wkrb.org,-,kilgravemedia; wkrb_radio,college,,email,,easy,-,IG @kilgravemedia @wkrb_radio,24
+S258,USA,NY,New York City,New York University,WNYU 89.1,89.1,music@wnyu.org,-,212-998-1660,wnyu.org,"wnyu Radio 5-11 University Pl. New York, NY 10003",wnyu,college,,email,,easy,Schedule,IG @wnyu,24
+S259,USA,NY,New York City,Fordham University,WFUV 90.7,90.7,musicdept@wfuv.org,-,718-817-4550,wfuv.org Contact Form,"WFUV, Fordham University, 441 E. Fordham Rd., Bronx, NY 10458-9993",wfuv,college,,form; email,,easy,Schedule,IG @wfuv,24
+S260,USA,NY,NY,-,WCCR 590am,590,wccr640am@gmail.com,-,212-650-5027,-,"160 Convent Ave NAC 1/108 New York, New York",wccr590am,college,,email,,easy,-,IG @wccr590am,24
+S261,USA,NY,Old Westbury,State University of New York at Old Westbury,OWWRNY Web Radio,,radio@oldwestbury.edu,Dj Sandra Dee,516-876-7502,owwrny.org,"OWWR, Old Westbury Web Radio, SUNY College at Old Westbury PO Box 210 Old Westbury, NY 11568",owwrny; djsandradee,college,,email,,easy,Schedule,IG @owwrny @djsandradee,24
+S262,USA,NY,Oneonta,State University of New York at Oneonta,WONY 90.9,90.9,wonyhiphop1@gmail.com,Mark,607-436-2712,wonyfm.com,-,wonyfm,college,hip-hop,email,,easy,Schedule,IG @wonyfm,24
+S263,USA,NY,Oswego,State University of New York at Oswego,WNYO 88.9,88.9,hiphopwnyo@gmail.com; hiphop@wnyo889.org; music@wnyo889.org; alt@wnyo889.org,-,-,wnyo889.org,-,wnyo889fm,college,hip-hop,email,,easy,Schedule,IG @wnyo889fm,24
+S264,USA,NY,Potsdam,Clarkson University,The Source 91.1,91.1,,-,315-268-7658,,"WTSC 91.1 The Source Clarkson University 10 Clarkson Ave Po Box 8743 Potsdam, NY 13699",wtscthesource,college,,,,hard,Schedule,IG @wtscthesource,24
+S265,USA,NY,Poughkeepsie,Vassar College,WVKR 91.3,91.3,hiphop@wvkr.org,Braiden Morris Bill Skillz IG: billskillz,845-437-5476,wvkr.org,"Hip Hop Director ℅ 124 Raymond Ave Box 726 Poughkeepsie, NY 12604",wvkr_fm,college,hip-hop,physical; email,,easy,Schedule,send CD IG @wvkr_fm,24
+S266,USA,NY,Queens,St. John’s University,WSJU,,wsju.gm@gmail.com; wsjusubmissions@gmail.co,-,-,wsjuradio.com,"424E Marillac Hall 8000 Utopia Pkwy Jaimaica, NY 11439",wsjuradio,college,,email,,easy,Schedule,IG @wsjuradio,24
+S267,USA,NY,Riverhead,Five Towns College,WFTU 1570 AM,1570 AM,wfturadio@ftc.edu,-,631-656-2110,WFTUradio.com,-,wfturadio,college,,email,,easy,Schedule,IG @wfturadio,25
+S268,USA,NY,Rochester,Rochester Institute of Tech,WITR 89.7,89.7,music@witr.rit.edu,Liam Lynch,585-475-2000,-,"WITR Radio 32 Lomb Memorial Dr. Rochester, NY 14623",witr897,college,,email,,easy,-,IG @witr897,25
+S269,USA,NY,Stony Brook,Stony Brook University,WUSB 90.1 & 107.3,90.1,md.wusbradio@gmail.com,-,631-632-6500,wusb.fm,"WUSB Radio Attn: Music Director 2nd Floor West Side Dining Stony Brook, NY 11794",stonybrookwu,college,,email,,easy,Schedule,IG @stonybrookwu sb,25
+S270,USA,NY,ST. Bonaventure,St. Bonaventure University,WSBU 88.3,88.3,musicwsbu@yahoo.com; stutzsa20@bonaventure.edu,Steven Stutz,716-375-2332,wsbu.org,"WSBU-FM P.O BOX Drawer O St. Bonaventure, NY 14778",wsbuthebuzz,college,,email,,easy,Schedule,IG @wsbuthebuzz,25
+S271,USA,NY,Syracuse,Syracuse University,WERW Internet Radio,,werw.programming@gmail.com,-,-,WERWradio.com,-,werwradio; werwmedia,college,,email,,easy,-,IG @werwradio @werwmedia,25
+S272,USA,NY,Troy,Rensselaer Polytechnic Institute,WRPI 91.5,91.5,wrpitroy.md@gmail.com,Staff List,518-276-6248,wrpi.org,-,wrpitroy,college,,email,,easy,Schedule,IG @wrpitroy,25
+S273,USA,NY,Utica,Utica College,WPNR 90.7,90.7,wpnr@utica.edu,MD: Jovina Taylor DJs: DJ Candi DJ Tiff Dollaz,-,pioneerradio.org,"WPNR-FM Strebel Student Center 201 1600 Burrstone Rd. Utica, NY 13501",wpnr907,college,,email,,easy,-,IG @wpnr907,25
+S274,USA,NY,Westchester,Westchester Community College,WARY Power 88.1,88.1,radomes.ocasio@sunywcc.edu; wary881@sunywcc.edu; YoPlayMySht@gmail.com,Fuge Edwards (HipHop/R&B),914-751-4696,-,"Wary Power 88.1fm Westchester Community College 75 Grasslands Rd. Valhalla, NY 10595",doodooboyfug,college,hip-hop,email,,easy,-,@doodooboyfug e_,25
+S275,USA,NC,Boone,Appalachian State University,WASU 90.5,90.5,music.wasu@gmail.com,-,828-264-4905,wasuradio.com,"WASU Radio 920 Rivers St. Boone, NC 28609",90.5wasufm,college,,email,,easy,Schedule,IG @90.5wasufm,25
+S276,USA,NC,Durham,Duke University,WXDU 88.7,88.7,music@wxdu.org,-,919-684-2957,wxdu.org,"WXDU 88.7 FM PO Box 90689 Duke Station Durham, NC 27708",wxdu,college,,email,,easy,Schedule,@wxdu,25
+S277,USA,NC,Chapel Hill,University of North Carolina at Chapel Hill,WXYC 89.3,89.3,info@wxyc.org,-,919-962-8989 919-800-7812,wxyc.org,"WXYC Music Department CB #5210, Carolina Union Chapel Hill, NC 27599",wxyc893,college,,email,,easy,Schedule,IG @wxyc893,25
+S278,USA,NC,Greensboro,North Carolina A&T State University,WNAA 90.1,90.1,wnaafm@ncat.edu,-,-,ncat.edu,"NC A&T State University WNAA FM D. Cherie Lofton, MD 302 Crosby Hall Greensboro, NC 27411-1135",ncat_wnaa,college,,email,,easy,-,include 1pg. Bio IG @ncat_wnaa,25
+S279,USA,NC,Greensboro,Guilford College,WQFS 90.9,90.9,wqfsmusic@guilford.edu,Lexi McGraw,336-316-2444,wqfs.org,"5800 W. Friendly Ave Greensboro, NC 27410",wqfs,college,,email,,easy,Schedule,IG @wqfs,25
+S280,USA,NC,Raleigh,North Carolina State University,WKNC 88.1,88.1,wknc-underground@ncsu.edu,Mere Howell,919-515-2401,wknc.org,-,wknc881; altrap_pipeline,college,hip-hop,email,,easy,Schedule 1 Schedule 2,studio rental for recording available IG @wknc881 @altrap_pipeline,25
+S281,USA,NC,Salisbury,Livingston College,WLJZ 107.1,107.1,wljz1071.request@gmail.com; mzgoodnewz7@gmail.com,Genia Woods,text Radio to: 980-324-3636,wljz1071.com,-,wljz107.1; mzgoodnewz,college,,email,,easy,Schedule,IG @wljz107.1 @mzgoodnewz,25
+S282,USA,OH,Alliance,University of Mount Union,WRMU 91.1,91.1,raiderradio911@gmail.com,-,330-823-3777,-,"WRMU 91.1 FM 1972 Clark Ave, Alliance, OH 44601",raiderstudent,college,,email,,easy,-,IG @raiderstudent media,25
+S283,USA,OH,Ashland,Ashland University,WRDL 88.9,88.9,news@wrdlfm.com,-,419-207-4889,wrdlfm.com,"401 College Ave Ashland, OH 44805",889_wrdl,college,,email,,easy,Schedule,IG @889_wrdl,26
+S284,USA,OH,Bowling Green,Bowling Green State University,WBGU 88.1,88.1,bgfalconmedia@gmail.com; wbgufm88.1@gmail.com,-,419-372-8810,bgfalconmedia.co m,"101 Kuhlin Center Bowling Green, OH 43403",wbgufm,college,,email,,easy,-,IG @wbgufm,26
+S285,USA,OH,Cincinnati,University of Cincinnati,Bearcast Radio,,,-,-,bearcastmedia.co m,-,bearcastmedia,college,,,,hard,Schedule,submit online website IG @bearcastmedia,26
+S286,USA,OH,Cleveland,Baldwin-Wallace College,WBWC 88.3,88.3,musicwbwc@yahoo.com; programming@wbwc.com,Kevin,440-826-2145,wbwc.com,"WBWC ATTN: Music Director 275 Eastland Road BEREA, OH 44017",,college,,email,,easy,Schedule,-,26
+S287,USA,OH,Cleveland,Cleveland State University,WCSB 89.3,89.3,mdirector.wcsb@gmail.com; theillnation@gmail.com,Jacob Clark Omar Idris Docta ILL,216-687-3515,wcsb.org,"WCSB 3100 Chester Ave. 4th Floor Cleveland, OH 44115",theILLnation,college,,email,,easy,Schedule,IG @theILLnation “I Love Life Nation”,26
+S288,USA,OH,Cleveland,John Carroll University,WJCU 88.7,88.7,zach@808mixtape.com; wjcumusic@gmail.com; wjcu.info@gmail.com; music@808Mixtape.com; interview@808Mixtape.com,Zach,216-397-4437 216-397-4937,wjcu.org,"Music Director WJCU Radio 1 John Carroll Blvd, University Heights, OH 44118",808mixtape; wjcu887,college,,email,,easy,Schedule,IG @808mixtape @wjcu887,26
+S289,USA,OH,Columbus,Capital University,WXCU Radio,,,-,614-236-6336,wxcuradio.com,"WXCU Radio Capital University 1 College and Main Columbus, OH 43209",wxcuradio,college,,physical,,hard,-,send cd or usb IG @wxcuradio,26
+S290,USA,OH,Dayton,University of Dayton,WUDR 99.5,99.5,wudrmusic@gmail.com,student operated,937-229-3058,-,-,wudr99.5,college,,email,,easy,-,IG @wudr99.5,26
+S291,USA,OH,Dayton,Wright State University,WWSU 106.9,106.9,music@wwsu1069.org,Akya Robinson,937-775-5554,wright.edu/wwsu,-,wwsu1069,college,,email,,easy,Schedule,IG @wwsu1069,26
+S292,USA,OH,Findlay,University of Findlay,WLFC 88.3,88.3,wlfcmusic@gmail.com,-,419-434-4747,-,"1000 N. Main St. Findlay, OH",wlfc883,college,,email,,easy,-,IG @wlfc883,26
+S293,USA,OH,Gambier,Kenyon College,WKCO 91.9,91.9,wkco@kenyon.edu,-,740-427-5412,wkco919.org,"WKCO 101 E Brooklyn St. Gambier, OH 43022",wkco91.9,college,,email,,easy,-,IG @wkco91.9,26
+S294,USA,OH,Youngstown,Youngstown State University,Rookery Radio,,rookerydj@ysu.edu; ysurookerydj@gmail.com,Jack Leeper,-,rookeryradio.com,-,jckleepr,college,,email,,easy,HipHop/House Thurs. 1pm,IG @jckleepr,26
+S295,USA,OR,Corvallis,Oregon State University,KBVR 88.7,88.7,fm.music@oregonstate.edu,Thomas Mahler,541-737-2589,kbvr.com,-,kbvrfm,college,,email,,easy,Schedule,IG @kbvrfm,26
+S296,USA,OR,Eugene,University of Oregon,KWVA 88.1,88.1,music@kwvaradio.org; musicblog@kwvaradio.org,Miguel Perez,541-346-4091,kwva.uoregon.ed u,-,kwva881,college,,email,,easy,-,IG @kwva881,26
+S297,USA,OR,Portland,Portland State University,KPSU,,music@kpsu.org,Sophie,503-725-5669,kpsu.org,"KPSU P.O. Box 751-KPSU/ VG Portland, OR 97207",kpsu_radio,college,,email,,easy,Schedule,IG @kpsu_radio,26
+S298,USA,OR,Salem,-,KMUZ 100.7 & 88.5,100.7,,-,503-990-6091,kmuz.org,"KMUZ FM PO Box 12038 Salem, OR 97309",kmuzfm,college,,,,hard,Schedule,IG @kmuzfm,26
+S299,USA,PA,Blue Bell,Montgomery Community College,MONTCO Radio,,sadfacevalentinebusiness@gmail.com,Ricky aka Sad Face,215-619-7366,montcoradio.wixsite .com/montcoradio,"340 Dekalb Pike Blue Bell, PA 19422",sad_face_vale,college,,email,,easy,Schedule,IG @sad_face_vale ntine,27
+S300,USA,PA,Easton,Lafayette College,WJRH 104.9,104.9,wjrh@lafayette.edu,-,610-330-5316,wjrh.org,"Attn: Music Director WJRH Box 9473 111 Quad Drive Easton, PA 18042",wjrh_radio,college,,email,,easy,Schedule,IG @wjrh_radio,27
+S301,USA,IN,PA,Indiana University of Pennsylvania,WIUP 90.1,90.1,wiupfm@gmail.com,Ali Appleman Music Director,724-357-3219,wiupfm.org,"121 Stouffer Hall Indiana, PA 15705",wiupfm,college,,email,,easy,Schedule,IG @wiupfm,27
+S302,USA,PA,Mansfield,Mansfield University,WNTE 89.5,89.5,wnte@mansfield.edu,-,570-662-4650,-,-,wnte895_mu,college,,email,,easy,-,IG @wnte895_mu,27
+S303,USA,PA,Millersville,Millersville University,WIXQ 91.7,91.7,musicdirector@917theville.com,Sam Bailey,-,917theville.com,"WIXQ-FM Music Director Student Memorial Center Millersville University Millersville, PA 17551",wixq,college,,email,,easy,Schedule,IG @wixq,27
+S304,USA,PA,Philadelphia,Drexel University,WKDU 91.7,91.7,,-,215-895-2082,wkdu.org/contact,"WKDU 91.7FM 3210 Chestnut St Philadelphia, PA 19104",wkdu,college,,,,hard,Schedule,Submit online website IG @wkdu,27
+S305,USA,PA,Philadelphia,University of Pennsylvania,WQHS Radio,,wqhsradio@gmail.com,Nour,215-898-3500,https:// wqhs.upenn.edu/,"WQHS Radio Hollenback Center, 3000 South Street Philadelphia, PA 19104",wqhsradio,college,,email,,easy,Schedule,IG @wqhsradio,27
+S306,USA,PA,NW Philadelphia,-,WGGT 92.9,92.9,music@gtownradio.com,-,215-609-4301,gtownradio.com,"G-Town Radio 24 Maplewood Mall Philadelphia, PA 19144",gtownradio,college,,email,,easy,Schedule,IG @gtownradio,27
+S307,USA,PA,Pittsburgh,University of Pittsburgh,WPTS 92.1,92.1,wpts@pitt.edu,-,412-648-7990,wptsradio.org,"411 William Pitt Union 3959 Fifth Avenue Pittsburgh, PA 15260",wptsradio,college,,email,,easy,Schedule,IG @wptsradio,27
+S308,USA,PA,Pittsburgh,Carnegie Mellon University,WRCT 88.3,88.3,,-,412-621-0728,wrct.org,"1 WRCT Plaza 5000 Forbes Avenue Pittsburgh, PA 15213",wrct88.3,college,,,,hard,Schedule,IG @wrct88.3,27
+S309,USA,PA,Lancaster,Franklin and Marshall College,WFNM 89.1,89.1,89.1wfnm@gmail.com,-,717-358-4096,wfnm.org,-,wfnm89.1,college,,email,,easy,-,IG @wfnm89.1,27
+S310,USA,PA,Villanova,Villanova University,WXVU 89.1,89.1,,-,610-519-7202,wxvu.org,"Dougherty Hall Suite 212 800 Lancaster Ave, Villanova, PA",wxvuradio,college,,,,hard,Schedule,IG @wxvuradio,27
+S311,USA,PA,West Chester,West Chester University,WCUR 91.7,91.7,wcursocmed@gmail.com,-,610-436-2478,-,-,wcur917thecu,college,,email,,easy,-,IG @wcur917thecu rve,27
+S312,USA,RI,Bristol,Bryant University,WJMF 88.7,88.7,dbryce@bryant.edu,David Bryce,401-232-6044,wjmf.bryant.edu,"WJMF Radio Station 1150 Douglas Pike Smithfield, RI 02917",wjmfradio,college,,email,,easy,-,IG @wjmfradio,27
+S313,USA,RI,Bristol,Roger Williams University,WQRI 88.3,88.3,,-,401-254-3800,wqri883fm.com Submission Form,"Roger Williams University Attn: WQRI 88.3 FM 1 Old Ferry Rd. Bristol, RI 02809",wqri883,college,,form,,medium,Schedule,IG @wqri883,27
+S314,USA,RI,Kingston,University of Rhode Island,WRIU 90.3,90.3,hiphopsubmissions@wriu.org,DJs List,401-792-9030,wriu.org,"WRIU 326 Memorial Union Kingston, RI 02881",wriuradio,college,hip-hop,email,,easy,Schedule,IG @wriuradio,27
+S315,USA,RI,Providence,Brown University,WBRU 101.1,101.1,heydj@wbru.com,-,-,wbru.com,"WBRU PD/MD 88 Benevolent St. Providence, RI 02906",,college,,email,,easy,Schedule,-,28
+S316,USA,RI,Providence,Rhode Island College,WXIN 90.7,90.7,urban@ricradio.org,Carmo,401-456-8541,RICRadio.com,"Carmo Barbosa Ducey Media Center Suite 228 600 Mount Pleasant Ave. Providence, RI 02908",ricradio,college,,physical; email,,easy,-,send CD IG @ricradio,28
+S317,USA,SC,Clemson,Clemson University,WSBF 88.1,88.1,music@wsbf.net,-,864-656-4011,wsbf.net,-,wsbf_fm,college,,email,,easy,Schedule,IG @wsbf_fm,28
+S318,USA,SC,Columbia,University of South Carolina,WUSC 90.5,90.5,,"Nick Gerace, Koleman Werner",-,wusc.sc.edu,"WUSC RHUU Rm 343 1400 Greene St. Columbia, SC 29208",wuscfm,college,,,,hard,Schedule,submit online website IG @wuscfm,28
+S319,USA,TN,Murfreesboro,Middle Tennessee State University,WMTS 88.3,88.3,music@wmts.org,Andrew Felts,615-898-2636,wmts.org,"WMTS 88.3 FM 1301 E Main St MTSU box 36 Murfreesboro, TN 37132-0002",mtsuwmtsradi,college,,email,,easy,Schedule,IG @mtsuwmtsradi o,28
+S320,USA,TN,Knoxville,University of Tennessee at Knoxville,WUTK 90.3,90.3,wutkmusic@gmail.com; goldstandardhiphopshow@gmail.com,IllaNova YoungFreeman 2PairTate,865-974-2535 865-974-2229,wutkradio.com,"WUTK P105 Andy Holt Tower, Knoxville, TN 37996-0333",edutainment_90; wutktherock; youngfreeman,college,hip-hop,email,,easy,Schedule The Gold Standard Hip-Hop Show Sundays 10pm,IG @edutainment_90 .3fmwutk @wutktherock @youngfreeman,28
+S321,USA,TN,Memphis,University of Memphis,WYXR 91.7,91.7,submissions@wyxr.org,-,901-460-3031,wyxr.org,"WYXR 91.7 1350 Concourse Ave, Suite 160 Memphis, TN 38104",wyxr_memphi,college,,email,,easy,Schedule,IG @wyxr_memphi s,28
+S322,USA,TN,Nashville,Vanderbilt University,WRVU,,wrvumd@gmail.com; wrvuevents@gmail.com; wrvuoutreach@gmail.com,Evan,615-322-3691,wrvu.org,"WRVU Box 9100 Station B Nashville, TN 37235",wrvunashville,college,,email,,easy,Schedule,IG @wrvunashville,28
+S323,USA,TX,Amarillo,Amarillo College,KACV 90,90,kacvfm90@actx.edu,-,806-371-5228,kacvfm.org,"Gilvin Broadcast Center P.O. Box 447 2408 S. Jackson St. Amarillo, TX 79109",kacv90fm,college,,email,,easy,-,IG @kacv90fm,28
+S324,USA,TX,Austin,University of Texas at Austin,KVRX 91.7,91.7,music@kvrx.org,-,512-471-5106,kvrx.org,"KVRX Student Radio P.O. Box D Austin, TX 78713",kvrxaustin,college,,email,,easy,Schedule,IG @kvrxaustin,28
+S325,USA,TX,College Station,Texas A&M University,KANM Radio,,md@kanm.org,"Sebastian Ortiz, Diego Cerda, Lindsey Seale",979-862-5266,kanm.org Submission Form,"KANM Student Radio Memorial Student Center #L433 2011 TAMU College Station, TX 77843-2011",kanmradio,college,,form; email,,easy,-,offers studio rental for recording IG @kanmradio,28
+S326,USA,TX,Fort Worth,Texas Christian University,KTCU 88.7,88.7,ktcu@tcu.edu,Janice McCall,817-257-7631,ktcu.tcu.edu,"KTCU 2805 S University Dr. Fort Worth, TX 76193",ktcu_88.7,college,,email,,easy,Schedule,IG @ktcu_88.7,28
+S327,USA,TX,Houston,University of Houston,Coog Radio,,contact@coogradio.com,-,-,coogradio.com,"4800 Calhoun Rd Room N221 University Center Houston, TX",coogradio,college,,email,,easy,Schedule,"IG @coogradio Intervies, Performances Open Mic sign ups on website",28
+S328,USA,TX,Houston,Texas Southern University,KTSU 90.9,90.9,,-,713-313-7591,-,"3100 Cleburne St Houston, TX",ktsu90.9fm; thevibeho,college,,,,hard,-,@ktsu90.9fm @thevibeho uston,28
+S329,USA,TX,Lubbock,Texas Tech University,KTXT 88.1 The Raider,88.1,TheRaider881@gmail.com,Miette Esteb,-,ktxtfm.org,"KTXT-FM 3003 15th Street Box 43082 Lubbock, TX 79409",theraider881; theskyguy_88.,college,,email,,easy,-,IG @theraider881 @theskyguy_88. 1,28
+S330,USA,TX,San Antonio,San Antonio College,KSYM 90.1,90.1,musicdirectorksym@gmail.com; DMajor73@gmail.com,-,210-486-1373,ksym.org,"KSYM 1819 N. Main Ave, San Antonio, TX 78212",ksymradio; UrbanSuiteSA,college,,email,,easy,Schedule,IG @ksymradio @UrbanSuiteSA,28
+S331,USA,TX,San Antonio,Trinity University,KRTU 91.7,91.7,krtualt@trinity.edu,,210-999-8313,krtuindie.org,"KRTU Indie Overnight 91.7 FM One Trinity Place San Antonio, TX 78212",krtu917fm,college,,email,,easy,Schedule,IG @krtu917fm,28
+S332,USA,TX,San Antonio,-,Street Ligion Nation Radio,,streetligionnationradio@gmail.com,-,210-485-3642,-,"1400 West Avenue San Antonio, TX",streetligionnati,college,,email,,easy,-,IG @streetligionnati onradio,28
+S333,USA,TX,San Marcos,Southwest Texas State University,KTSW,,ktswmusic@txstate.edu,Christian Villarreal,512-245-5879,ktsw.txst.edu,"KTSW Music Director 601 University Drive Trinity Building San Marcos, TX 78666",ktsw899,college,,email,,easy,Schedule,IG @ktsw899,29
+S334,USA,UT,Logan,Utah State University,KUSU 91.5,91.5,tom.williams@usu.edu,,435-797-3138,upr.org Contact Form,"Utah Public Radio 8505 Old Main Hill Logan, Utah 84322-8505",utahpublicradio,college,,form; email,,easy,Schedule,IG @utahpublicradio,29
+S335,USA,UT,Salt Lake City,University of Utah,KUTE Radio,,music@kuteradio.org,-,801-581-6397,kuteradio.org,"K-UTE Radio 200 S Central Campus Dr. Room 321 Salt Lake City, UT 84112",kuterad; kute_radio,college,,email,,easy,-,on campus concerts “Lunchbox Concerts” promotions@kuterad io.org IG @kute_radio,29
+S336,USA,UT,Salt Lake City,-,KRCL 90.9,90.9,krclkeith@gmail.com,-,801-359-9191 800-359-9191,krcl.org,"Music Department KRCL 535 W 300 N Suite A Salt Lake City, Utah 84116",fridaynightfall; krclradio,college,,physical; email,,easy,Schedule,IG @fridaynightfall out @krclradio,29
+S337,USA,UT,Provo,Brigham Young University,KBYU 89.1,89.1,byuradio@byu.edu,-,-,byuradio.org,-,byuradio,college,,email,,easy,Schedule,IG @byuradio,29
+S338,USA,VT,Burlington,University of Vermont,WRUV 90.1,90.1,hiphop@wruv.org,-,802-656-0796,wruv.org,"WRUV Davis Student Center, UVM Burlington, VT 05405",wruvfm,college,hip-hop,email,,easy,Schedule,IG @wruvfm,29
+S339,USA,VT,Colchester,Saint Michael’s College,WWPV 92.5,92.5,lstumpf@mail.smcvt.edu; wwpvjazz@hotmail.com; wwpv925@gmail.com,-,802-654-2334,wwpv.smcvt.edu,"WWPV 92.5 FM Saint Michael’s College One Winooski Park Colchester, VT 05439",wwpvfm,college,jazz,email,,easy,Schedule,IG @wwpvfm,29
+S340,USA,VT,Middlebury,Middlebury College,WRMC 91.1,91.1,wrmc911@gmail.com,"Maddie, Elle","802-443-6324 Office Hours: 9am-11am Mon, 4:30-6:30pm Thurs.",wrmc.middlebury. edu,"WRMC 91.1 FM Middlebury College Middlebury, VT 05753",wrmc911,college,,email,,easy,Schedule,In studio performances “Library Sessions” IG @wrmc911,29
+S341,USA,VT,Randolph,Vermont Technical College,WVTC 90.7,90.7,wvtc90.7@gmail.com,-,802-728-1515,wvtc.net,"WVTC Vermont Technical College 1 Main St. Randolph Ctr, VT 05061",,college,,email,,easy,-,-,29
+S342,USA,VA,Blacksburg,Virginia Polytechnic Institute and State University,WUVT 90.7,90.7,,Rachel,540-231-9880,wuvt.vt.edu,"WUVT-FM (0546) Squires Student Center, Rm 350, Virginia Tech 290 College Avenue Blacksburg, VA 24061-0546",wuvt,college,,,,hard,-,IG @wuvt,29
+S343,USA,VA,Charlottesville,University of Virginia,WTJU 91.1,91.1,wtju@virginia.edu; wxtjdirectors@gmail.com,Music Director List,434-924-3959,wtju.net,"WTJU 91.1 FM PO Box 400811 University of Virginia Charlottesville, VA 22904",wtjuradio,college,,email,,easy,Schedule,IG @wtjuradio,29
+S344,USA,VA,Fairfax,George Mason University,WGMU Radio,,wgmu@gmu.edu,-,703-993-2940,wgmuradio.com,"4400 University Dr. MS 2C5 Fairfax, VA",wgmuradio,college,,email,,easy,Schedule,IG @wgmuradio,29
+S345,USA,VA,Farmville,Longwood University,WMLU 91.3,91.3,wmlu@live.longwood.edu,Staff List,434-395-2792,wmlu.org,"WMLU 91.3 FM 201 High Street Farmville, VA 23901",wmluradio,college,,email,,easy,Schedule,IG @wmluradio,29
+S346,USA,VA,Fredericksburg,University of Mary Washington,WMWC,,wmwccampusradio@gmail.com,Davy Washington,-,wmwc.umwsites. net,"University of Mary Washington 1701 College Ave UMW Box 1116 Fredericksburg, VA 22401",wmwcradio,college,,email,,easy,,IG @wmwcradio,29
+S347,USA,VA,Harrisonburg,James Madison University,WXJM 88.7,88.7,wxjmgm@gmail.com,-,540-568-3425,wxjm.org Contact Form,"983 Reservoir St, Harrisonburg VA, 22801",wxjm.radio,college,,form; email,,easy,Schedule,IG @wxjm.radio,29
+S348,USA,VA,Lexington,Washington and Lee University,WLUR 91.5,91.5,wlur915@wlu.edu,-,540-458-4365,wlu.edu,"Washington and Lee University WLUR/John W. Elrod University Commons 204 W. Washington St. Lexington, Virginia 24450",wlur915fm,college,,email,,easy,Schedule,Show More Skin W. 8-9p Lyrics & Limericks Th. 8-9p IG @wlur915fm,29
+S349,USA,VA,Richmond,University of Richmond,WDCE 90.1,90.1,wdcemd@gmail.com; blackliqradio@gmail.com,"Conner Evans, Black Liquid",804-289-8790,wdce.net,"Box 85 410 Westhampton Way University of Richmond, VA 23173",wdceradio; blackliq,college,,email,,easy,Schedule,IG @wdceradio @blackliq,29
+S350,USA,VA,Richmond,-,WRIR 97.3,97.3,info@wrir.org,-,804-622-9747,wrir.org,"WRIR Richmond Independent Radio PO Box 4787 Richmond, VA 23220",wrir973; blackliq,college,,email,,easy,Schedule,IG @wrir973 @blackliq also DJ’s at this station,30
+S351,USA,VA,Richmond,Virginia Commonwealth University,WVCW,,music@wvcw.org; hello@wvcw.org; localmusic@wvcw.org,Staff List,804-828-1055,wvcw.org,"817 W BROAD STREET RICHMOND, VA 23284",wvcw,college,,email,,easy,Schedule,IG @wvcw FB WVCW Radio,30
+S352,USA,VA,Williamsburg,College of William & Mary,WCWM 90.9,90.9,wcwm.wm@gmail.com,David,757-221-3288,wcwm.wm.edu,"HipHop Director WCWM 90.9 FM College of W&M Campus Center P.O. Box 8793 Williamsburg, VA 23186",wcwm90.9fm,college,,email,,easy,Schedule,follow up online IG @wcwm90.9fm,30
+S353,USA,WA,Bellingham,Western Washington University,KUGS 89.3,89.3,kugs.musicdirector@wwu.edu,Tristan,360-650-2936,kugs.org,-,kugs.fm,college,,email,,easy,Schedule,IG @kugs.fm,30
+S354,USA,WA,Ellensburg,Central Washington University,88.1 The ‘Burg,88.1,,-,509-963-2311,881theburg.com,"KCWU 88.1 The 'Burg 400 E University Way, Room 120 Ellensburg, WA 98926",881theburg,college,,,,hard,Schedule,IG @881theburg,30
+S355,USA,WA,Olympia,Evergreen State College,KAOS 89.3,89.3,kaosmusicdirector@gmail.com,-,360-867-6888,kaosradio.org,"KAOS Community Radio The Evergreen State College-CAB 101 2700 Evergreen Parkway NW Olympia, WA 98505",,college,,email,albums_only,easy,Schedule,"no singles, preferes physical CDs include 1 sheet highlighting artist/ album",30
+S356,USA,WA,Pullman,Washington State University,KZUU 90.7,90.7,kzuu90.7fm@gmail.com,-,509-335-2208,kzuu.org,"KZUU PO Box 647204 Washington State University Pullman, WA 99164-7204",kzuu90.7fm,college,,email,,easy,Schedule,sending cd is fastest way IG @kzuu90.7fm,30
+S357,USA,WA,Seattle,University of Washington,KEXP 90.3,90.3,md@kexp.org,Chris Sanley,206-520-5833,kexp.org,"KEXP 90.3FM 472 1st Ave N Seattle, WA 98109",kexp,college,,email,,easy,Schedule,be patient IG @kexp,30
+S358,USA,WA,Seattle,Seattle University,KXSU 102.1,102.1,onair@kxsu.org,-,-,kxsu.org Contact Form,"901 12th Ave. PO Box 222000 Seattle, WA 98122",kxsuseattle,college,,form; email,,easy,Schedule,IG @kxsuseattle,30
+S359,USA,WA,Bellevue,-,KBCS 91.3,91.3,iaan@kbcs.fm,Iaan Hughes,425-564-2418,kbcs.fm,"91.3 KBCS 3000 Landerholm Cr. SE Bellevue, WA 98007",kbcs,college,,email,,easy,Schedule,IG @kbcs,30
+S360,USA,WV,Charleston,Community Radio,WTSQ 88.1,88.1,info@wtsq.org,Mya Ross,304-345-5126,wtsq.org,"WTSQ 179 Summers St. Suite 712 Charleston, WV 25301",wtsq881,college,,email,,easy,Schedule,IG @wtsq881,30
+S361,USA,WV,Morgantown,West Virginia University,WWVU 91.7,91.7,wwvumusic@gmail.com,Joseph Bellamy,304-293-4045,u92themoose.co m,"WWVU-FM Mountainlair West Virginia University P.O. Box 6446 Morgantown, WV 26506",U92_FM,college,,email,,easy,Schedule,IG @U92_FM,30
+S362,USA,WI,Beloit,Beloit College,WBCR 90.3,90.3,wbcrmanager@beloit.edu,-,-,wbcr903.com,"WBCR Box 1779 c/o Beloit College 700 College Street Beloit, WI 53511",wbcr903,college,,email,,easy,Schedule,IG @wbcr903,30
+S363,USA,WI,Madison,Wisconsin Public Radio,WERN 88.7,88.7,listener@wpr.org,-,-,wpr.org Contact Form,-,wisconsinpublic,public_npr,,form; email,,easy,Schedule,IG @wisconsinpublic radio,30
+S364,USA,WI,Madison,University of Wisconsin Madison,WSUM 91.7,91.7,music@wsum.wisc.edu,Ben Farrell,608-261-9786,wsum.org,"WSUM Attn: Music Director P.O. Box 260020 Madison, WI 53726",wsum91.7,college,,email,,easy,Schedule,IG @wsum91.7,30
+S365,USA,WI,Madison,-,WORT 89.9,89.9,musicdirector@wortfm.org,-,608-256-2001,wortfm.org,"118 S Bedford St. Madison, WI",wortfm,college,,email,,easy,Schedule,IG @wortfm,31
+S366,USA,WI,Milwaukee,Marquette University,Marquette Radio,,sam.baughn@marquette.edu,-,-,marquettewire.or g/category/radio,-,mu_radio,college,,email,,easy,Schedule,IG @mu_radio,31
+S367,USA,WI,Milwaukee,Milwaukee School of Engineering,WMSE 91.7,91.7,crawford@msoe.edu,Tom Crawford,-,wmse.org,"WMSE Radio c/o Erin Wolf /Music Department 1025 N Broadway Milwaukee, WI 53202",wmsemke,college,,email,,easy,Schedule,IG @wmsemke,31
+S368,USA,WI,Milwaukee,University of Wisconsin,WUWM 89.7,89.7,wuwm@uwm.edu,-,414-227-3355,wuwm.com,"111 East Wisconsin Avenue, Suite 700 Milwaukee, WI 53202",wuwmradio,college,,email,,easy,Schedule,IG @wuwmradio,31
+S369,USA,WI,Oshkosh,University of Wisconsin Oshkosh,WRST 90.3,90.3,wrstfm@uwosh.edu,-,920-424-3113,wrst.org,"926 Woodland Ave Oshkosh, WI 54901",wrstfmoshkosh,college,,email,,easy,Schedule,IG @wrstfmoshkosh,31
+S370,USA,WI,Platteville,The University of Wisconsin Platteville,WSUP 90.5,90.5,wsup@uwplatt.edu,-,608-342-1165,wsup.us,"1 University Plaza 042 Pioneer Tower, Platteville, WI 53818",wsupradio,college,,email,,easy,-,IG @wsupradio,31
+S371,USA,WI,Stevens Point,University of Wisconsin Stevens Point,WWSP 89.9,89.9,WWSP.Music.Director@uwsp.edu,Keegan,715-346-3755,90fm.org,"WWSP 90fm 1101 Reserve Street (CAC 105) Stevens Point, WI 54481",wwsp90fm,college,,email,,easy,Schedule,IG @wwsp90fm,31
+S372,USA,WI,Waukesha,Carroll University,WCCX 104.5,104.5,,-,262-524-7355,-,"Carroll University WCCX ATTN: (HipHop) 100 N. East Ave. Waukesha, WI 53186",wccx104.5fm,college,,,,hard,-,IG @wccx104.5fm,31
+S373,USA,WI,Whitewater,University of Wisconsin Whitewater,WSUW 91.7,91.7,station@wsuw.org,-,262-472-1312,,"WSUW 800 W. Main St. 1201 Andersen Library Whitewater, WI 53190",917theedge,college,,email,,easy,Schedule,IG @917theedge,31
+S374,USA,WY,Dubois,Central Wyoming College,KCWC 88.1,88.1,radio@cwc.edu,-,307-855-2266,cwc.edu/radio,"2660 Peck Ave, Riverton, WY, United States",,college,,email,,easy,-,FB Central Wyoming College Rustler Radio 88.1 KCWC,31
+S375,USA,WY,Laramie,The University of Wyoming,KUWL 90.1,90.1,onair@uwyo.edu,-,307-766-4255,wyomingpublic media.org,"Wyoming Public Media Dept. 3984 1000 E. University Ave Laramie, WY 82071",wyomingpublic,public_npr,,email,,easy,Schedule,IG @wyomingpublic radio,31
+S376,Canada,NS,Halifax,Halifax Colleges,CKDU 88.1,88.1,ckdufm@gmail.com; music@ckdu.ca,-,+1-902-494-2487,-,"CKDU 88.1FM 6136 University Ave Halifax, NS Canada B3H 4J2",ckdu881fm,college,,email,,easy,-,IG @ckdu881fm,31
+S377,Canada,AB,Calgary,University of Calgary,CJSW 90.9 FM,90.9 FM,music@cjsw.com,,403-220-3991,cjsw.com,"CJSW Radio Room 312 MacEwan Student Center 2500 University Drive NW Calgary, AB T2N 1N4",cjsw,college,,email,albums_only,easy,Schedule,"IG @cjsw No singles, minimum 3 tracks. MP3s only",34
+S378,Canada,AB,Edmonton,University of Alberta,CJSR 88.5 FM,88.5 FM,music@cjsr.com,,780-492-CJSR ext. 1,cjsr.com,"Attn: Music Department CJSR World Domination Headquarters Room 0-09 SUB University of Alberta Edmonton, AB T6G 2J7 Canada",cjsr_fm,college,,email,albums_only,easy,Schedule,"IG: @cjsr_fm No Singles, Albums & EP’s Only More Submission Info Here",34
+S379,Canada,AB,Lethbridge,University of Lethbridge,CKXU 88.3 FM,88.3 FM,,,403-329-5189,ckxu.com,"Attn: Music Director CKXU 88.3 FM 4401 University Dr W Lethbridge, AB T1K 3M4",ckxu_radio,college,,links_preferred,albums_only,easy,Schedule,"IG: @ckxu_radio No Singles, MP3 ONLY. No streaming links",34
+S380,Canada,BC,Abbotsford,University of the Fraser Valley,CIVL 101.7 FM,101.7 FM,music@civl.ca,,604-851-6307,civl.ca,"CIVL Radio 33844 King Road Abbotsford, BC V2S 7M8 (604) 851-6306",civl_radio,college,,form; email,,easy,Schedule,IG @civl_radio Also Submit Here on Get In Touch Form,34
+S381,Canada,BC,Burnaby,British Colombia Institute of Technology,107.9,107.9,,,-,commons.bcit.ca /evolution1079/,-,evolutionstorytelling,college,,form,,medium,-,IG @evolutionstorytelling Contact Form Here,34
+S382,Canada,BC,Burnaby,Simon Fraser University,CJSF 90.1 FM,90.1 FM,cjsfmusic@sfu.ca,,(778) 782-CJSF (2573),cjsf.ca,"CJSF Radio TC 216 Simon Fraser University Burnaby, B.C. V5A 1S6",cjsfradio,college,,email,,easy,Schedule,IG @cjsfradio,34
+S383,Canada,BC,Kamloops,Thompson Rivers University,CFBX 92.5 FM,92.5 FM,music@theX.ca,,250-377-3988,theX.ca,"CFBX 92.5 FM Thompson Rivers University, 805 TRU Way, House 8 Kamloops, BC, Canada V2C 0C8",cfbxradio,college,,email,albums_only,easy,Schedule,IG @cfbxradio Prefers CD’s No Singles,34
+S384,Canada,BC,Nanaimo,Vancouver Island University,CHLY 101.7 FM,101.7 FM,submissions@chly.ca,,250-716-3410,chly.ca,"“Hey you hose heads” at CHLY 101.7FM #2, 34 Victoria Cres Nanaimo BC V9R 5B8 Canada",chly1017fm,college,,form; email,,easy,Schedule,IG @chly1017fm Submission Form Here,34
+S385,Canada,BC,Prince George,University of Northern British Columbia,CFUR 88.7 FM,88.7 FM,music@cfur.ca,,778-693-2387 ext. 2,cfur.ca,"CFURadio 3333 University Way Prince George, BC V2N 4Z9",cfuradiofm; cfur_music,college,,email,albums_only,easy,Schedule,IG @cfuradiofm Twitter @cfur_music MP3’s No Singles,34
+S386,Canada,BC,Vancouver,University of British Columbia,CITR 101.9 FM,101.9 FM,music@citr.ca,,604-822-2487,citr.ca,"Music Dept. CiTR Radio LL500 – 6133 University Blvd. Vancouver, BC V6T 1Z1",citranddiscorder,college,,email,,easy,Schedule,IG @citranddiscorder Interview Form Here They have a magazine Discorder Magazine,34
+S387,Canada,BC,Victoria,University of Victoria,CFUV 101.9 FM,101.9 FM,music@cfuv.ca,,250-721-8700,cfuv.uvic.ca,"CFUV 101.9 FM C/O Music Director PO Box 3035 University of Victoria Victoria, BC V8W 3P3, Canada",cfuv,college,,email,,easy,Schedule,IG @cfuv Submissions Guidelines,34
+S388,Canada,MB,Brandon,Assiniboine Community College,CJ 106.5 FM,106.5 FM,,,-,assiniboine.net/,-,cj106fm,college,,,,hard,Schedule,IG @cj106fm,34
+S389,Canada,MB,Winnipeg,University of Manitoba,UMFM 101.5 FM,101.5 FM,michael@umfm.com; livesession@umfm.com,,204-269-8636,umfm.com,"UMFM 101.5 310 University Centre University of Manitoba Winnipeg, MB, R3T 2N2",umfm1015,college,,email,,easy,Schedule,IG @umfm1015,34
+S390,Canada,MB,Winnipeg,University of Winnipeg,CKUW 95.9 FM,95.9 FM,,,204-774-6877,ckuw.ca,"Room 4CM11, University of Winnipeg, 515 Portage Avenue, Winnipeg, MB, Canada, R3B 2E9",ckuw_959fm,college,,physical,,hard,Schedule,IG @ckuw_959fm,34
+S391,Canada,NB,Fredericton,University of New Brunswick,CHSR 97.9 FM,97.9 FM,musicdirector@chsrfm.ca,,506-453-4979,chsrfm.ca,CHSR 97.9FM PO Box 4400 21 Pacey Drive Fredericton NB E3B 5A3 CANADA,chsr979,college,,email,,easy,Schedule,IG @chsr979,34
+S392,Canada,NB,Sackville,Mount Allison University,CHMA 106.9 FM,106.9 FM,musicsubmissions@chmafm.com,,506-364-2222,chmafm.com,"CHMA 62 York Street Sackville, New Brunswick E4L 1E2",chmafm,college,,email,,easy,Schedule,IG @chmafm,35
+S393,Canada,NB,Saint John,University of New Brunswick - Saint John,CFMH 107..3 FM,107,,,-,linktr.ee/localfm,-,local107.3fm,college,,,,hard,-,IG @local107.3fm,35
+S394,Canada,NL,St. John’s,Memorial University of Newfoundland,CHMR 93.5 FM,93.5 FM,chmrmusicdirector@gmail.com,,709 864-7935,chmr.ca,"CHMR-FM Box A-119 Memorial University of Newfoundland St. John's, NL A1C 5S7 Attn: Music Director",chmrfm,college,,email,,easy,Schedule,IG @chmrfm,35
+S395,Canada,NS,Antigonish,St. Francis Xavier University,CFXU 93.3 FM,93.3 FM,cfxu.md@stfx.ca,,-,radiocfxu.ca,"PO Box 948 StFX University, Antigonish, NS, B2G 2W5",radiostfx; cfxuthefox,college,,email,,easy,Schedule,IG @radiostfx TikTok @cfxuthefox,35
+S396,Canada,NS,Halifax,Dalhousie University,CKDU 88.1 FM,88.1 FM,music@ckdu.ca,,902-494-2487,ckdu.ca,"CKDU 88.1FM. 6136 University Ave, Halifax, Ns , B3H 4J2",ckdu881fm,college,,email,,easy,Schedule,IG @ckdu881fm (Must be 3 songs),35
+S397,Canada,NS,Sydney,Cape Breton University,CJBU 107.3 FM,107.3 FM,music@cjbu.ca,,902-563-1475,cjbu.ca,CJBU-FM Cape Breton University PO 5300 1250 Grand Lake Rd Sydney NS,cjbu1073,college,,email,,easy,Schedule,IG @cjbu1073,35
+S398,Canada,ON,Belleville,Loyalist College,CJLX 91.3 FM,91.3 FM,music@91x.fm,,613-966-2559,91x.fm,"91X P.O. Box 4200 Belleville, Ontario K8N 5B9",,college,,email,,easy,Schedule,FB facebook.com/ 91Xfm,35
+S399,Canada,ON,Guelph,University of Guelph,CFRU 93.3 FM,93.3 FM,music@cfru.ca,,519-837-CFRU,cfru.ca,"U.C. Level 2, University of Guelph Guelph, Ontario N1G2W1",cfru93.3,college,,email,,easy,Schedule,IG @cfru93.3 (Must be 3 songs),35
+S400,Canada,ON,Hamilton,McMaster University,CFMU 93.3 FM,93.3 FM,cfmumusic@msu.mcmaster.ca,,905-528-9888,cfmu.ca,-,933cfmu,college,,email,,easy,Schedule,IG @933cfmu Submission Requirements,35
+S401,Canada,ON,Hamilton,Mohawk College,CIOI 101.5 FM,101.5 FM,INDI1015FM@gmail.co,,905-575-2175,www.indi1015. ca,"F111 - 135 Fennel Ave West Hamilton, ON L9C 0E5",indi1015fm,college,,email,,easy,Schedule,IG @indi1015fm FB indi1015fm,35
+S402,Canada,ON,Kitchener,Conestoga College,CJIQ 88.3 FM,88.3 FM,,,519-748-3533,cjiqfm.com Contact Page,299 Doon Valley Drive Kitchener ON.,cjiq883,college,,,,hard,-,IG @cjiq883,35
+S403,Canada,ON,Kingston,Queen’s University,CFRC 101.9 FM,101.9 FM,music@cfrc.ca,,613-533-2121,cfrc.ca Submission Form + Submission Policy,"Attn: Music Department CFRC 101.9 FM 62 Fifth Field Company Lane Carruthers Hall, Queen's University Kingston, Ontario, K7L 3N6",cfrcradio,college,,form; email,,easy,Schedule,IG @cfrcradio,35
+S404,Canada,ON,London,University of Western Ontario,CHRW 94.9 FM,94.9 FM,music@radiowestern.ca,,(519) 661-3600,radiowestern.c a Submission Guidelines,"Radio Western 94.9 FM Room 250, University Community Centre Western University London, Ontario, Canada N6A 3K7",radiowestern,college,,form; email,,easy,Schedule,IG @radiowestern Additional Posts Page,35
+S405,Canada,ON,Ottawa,Algonquin College,CKDJ 107.9 FM,107.9 FM,ckdjmusicac@gmail.co,,613-750-2535,ckdj.net Additional Submission Form,"Radio Broadcasting Building N, Room N101 CKDJ 107.9 FM 1385 Woodroffe Avenue Ottawa, Ontario K2G 1V8",ckdj1079fm,college,,form; email,,easy,-,IG @ckdj1079fm FB CKDJ 107.9,35
+S406,Canada,ON,Mississauga,University of Toronto Mississauga,CFRE 91.9 FM/ CKC455,91.9 FM,music@cfreradio.ca,,905-828-2088,cfreradio.ca Contact Page Live Stream Link,-,cfreradio,college,,links_preferred; email,,easy,-,IG @cfreradio FB: CFRE Minimum 3 songs + Submit direct download links,35
+S407,Canada,ON,Ottowa,Carleton University,CKCU 93.1 FM,93.1 FM,,,613-903-8389,ckcufm.com,"CKCU FM Room 517 Nideyinàn 1125 Colonel By Drive, Ottawa, Ontario CANADA K1S 5B6",ckcufm,college,,,,hard,Schedule,IG @ckcufm Contact individual DJs from the schedule page >,36
+S408,Canada,ON,Ottawa,University of Ottawa,CHUO 89.1 FM,89.1 FM,music@chuo.fm,,613-562-5967,chuo.fm Live Stream Link,-,chuo891fm,college,,links_preferred; email,,easy,Schedule Shows,IG @chuo891fm FB: CHUO 89.1 FM Submission Guidlines,36
+S409,Canada,ON,Petersborough,Trent University,CFFF 92.7 FM,92.7 FM,,,(705) 748 4761,trentradio.ca Submission Guidelines FB: Trent Radio,"715 George St. N Peterborough, ON K9H 3T2",trent_radio,college,,form,,medium,Schedule,IG @trent_radio Local Music Submission Not Local? Find show in Schedule Page and submit,36
+S410,Canada,ON,St. Catherines,Brock University,CFBU 103.7 FM,103.7 FM,,,(905) 346-2644,cfbu.ca Twitter link,"CFBU 103.7 FM c/o 1812 Sir Isaac Brock Way St. Catharines, Ontario CANADA L2S 3A1",,college,,,,hard,Schedule,Emails can be found in Show descriptions Check Schedule >,36
+S411,Canada,ON,Sudbury,Laurentian University,CKLU 96.7 FM,96.7 FM,pd@cklu.ca,,(705) 673-6538 x 1,cklu.ca,"935 Ramsey Lake Road Sudbury, Ontario P3E 2C6 Canada",cklu967fm,college,,email,,easy,Schedule,IG @cklu967fm FB: CKLU Radio 96.7,36
+S412,Canada,ON,Thunder Bay,Lakehead University,CILU 102.7 FM,102.7 FM,musicdirector@luradio.ca,,807-343-8881,luradio.ca Additional Contact page FB: CILU 102.7,"955 Oliver Rd. Thunder Bay, ON P7B 5E1",cilu102.7,college,,email,,easy,Schedule,IG @cilu102.7 Contact links also available in show descriptions on Schedule page >,36
+S413,Canada,ON,Toronto,Toronto Metropolitan University,CJRU 1280/ MET Radio,1280,music@cjru.ca,,416-904-6889,metradio.ca Music Submission FAQ,"55 Gould Street - Suite 201 Toronto, ON M5B 1E9",metradio1280,college,,form; email,albums_only,easy,Schedule,IG @metradio1280 Albums & EPs only No Singles!,36
+S414,Canada,ON,Toronto,Humber College,CKHC 96.9 FM,96.9 FM,noah.scanga@humber.ca; n@humber.ca,,-,radio.humber.c a,"Radio Humber 96.9fm Attn: Noah Scanga, Programming Assistant 205 Humber College Blvd., K107 Toronto, ON Canada M9W 5L7",radiohumber,college,,email,,easy,-,IG @radiohumber FB: 96.9 Radio Humber,36
+S415,Canada,ON,Toronto,University of Toronto,CIUT 89.5 FM,89.5 FM,,,(416) 978-0909 x 201,ciut.fm,"89.5 Tower Road, 3rd Floor, Toronto, Ontario, M5S 0A2",ciut895fm,college,,,,hard,Schedule,IG @ciut895fm FB: CIUT 89.5,36
+S416,Canada,ON,Toronto,York University,CHRY 105.5 FM,105.5 FM,chryMD@york.ca,,416-736-5293,chry.fm Contact Form FB: facebook.com/ chryradio,"CHRY 105.5 FM 4700 Keele Street, Rm 413 Student Centre Toronto, Ontario M3J 1P3",,college,,form; email,,easy,Schedule,Listening Parties! No EPK or photos necessary. Just a short artist bio and contact info,36
+S417,Canada,ON,Waterloo,University of Waterloo,CKMS 102.7 FM,102.7 FM,office@radiowaterloo.ca,,+1‑519‑884‑2567,radiowaterloo.c a Contact Page,"Unit 114B – 283 Duke Street West Kitchener, Ontario, Canada N2H 3X7",ckms102.7fm,college,,form; email,,easy,Schedule,IG @ckms102.7fm Submission Guidelines,36
+S418,Canada,ON,Welland,Niagara College,CRNC 90.1 FM,90.1 FM,,,+1 905-735-2211 extension 7151,crnc.ca,-,crnctheheat,college,,,,hard,-,IG @crnctheheat,36
+S419,Canada,ON,Windsor,University of Windsor,CJAM 99.1 FM,99.1 FM,cjammd@gmail.com,,519-253-3000 ext. 2527,cjam.ca Submission Guidelines,-,cjamfm,college,,form; email,,easy,Schedule,IG @cjamfm DO NOT SEND SPOTIFY LINKS,36
+S420,Canada,QC,Montreal,Concordia University,CJLO 1690,1690,music@cjlo.com; md-hiphop@cjlo.com; md-metal@cjlo.com; md-world@cjlo.com; md-rpm@cjlo.com,,514-848-7471,cjlo.com FB: CJLO 1690am,"CJLO 1690AM 7141 Sherbrooke Street West Suite CC-430 Montréal, Québec, Canada H4B 1R6",cjlo1690am,college,hip-hop; metal,email,,easy,Schedule,IG @cjlo1690am They also have a Magazine!,37
+S421,Canada,QC,Montreal,McGill University,CKUT 90.3 FM,90.3 FM,music@ckut.ca,,514-448-4013 514-448-4041 ext. 4975,ckut.ca Music Submission Info,"CKUT 90.3FM Music Department 3647 University St. Montreal, Quebec H3A 2B3",ckutmtl,college,,form; email,,easy,Schedule,IG @ckutmtl Hard copy CDs get priority,37
+S422,Canada,QC,Montreal,Universite de Montreal,CISM 89.3 FM,89.3 FM,bpoirier@cism893.ca,,514-343-CISM,cism893.ca,"CISM 89,3 FM Att. Benoit Poirier 2332 Édouard-Montpetit Local C-1509, Pavillon J-A DeSève Université de Montréal C.P. 6128 succursale Centre-Ville H3T 1J4",cism893,college,,email,,easy,Schedule,"IG @cism893 WeTransfer, DropBox, or Google Drive links only",37
+S423,Canada,QC,Quebec City,Universite Laval,CHYZ 94.3 FM,94.3 FM,musique@chyz.ca,,418-656-2215,chyz.ca,"2305, rue de I’Universite, Local 0236 Pavillion Maurice Pollack, Quebec, QC G1V OA6 Canada",chyz943,college,,email,,easy,Schedule,IG @chyz943 FB: CHYZ 94.3,37
+S424,Canada,QC,Sherbrooke,Bishop’s University,CJMQ 88.9 FM,88.9 FM,,,819-822-1838,cjmq.fm,"CJMQ 3355 College Sherbrooke, QC J1M 0B8",,college,,,,hard,-,-,37
+S425,Canada,QC,Sherbrooke,Universite de Sherbrooke,CFAK 88.3 FM,88.3 FM,info.cfak883@usherbrooke.ca; musique.cfak883@usherbrooke.ca,,+1 819-821-8000,cfak.ca,"2500 boul. Université, E1-1010 Sherbrooke J1K 2R1",,college,,email,,easy,Schedule,"FB: CFAK 88,3 FM",37
+S426,Canada,QC,Trois-Rivieres,Universite du Quebec a Trois- Rivieres,CFOU 89.1 FM,89.1 FM,progcfou@uqtr.ca,,819-376-5183,cfou.ca Live Stream Link,"CFOU 89,1 FM 3351, boul. des Forges Trois-Rivieres (Quebec) G9A 5H7",cfoufm,college,,links_preferred; form; email,,easy,Schedule,IG @cfoufm Music Submission Form,37
+`,
+      },
+      {
+        path: "data/stations.json",
+        content: `[
+  {
+    "id": "S001",
+    "country": "USA",
+    "state": "AL",
+    "city": "Auburn",
+    "school": "Auburn University",
+    "station": "WEGL 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "wegl@auburn.edu"
+    ],
+    "music_director": "Walker Greene",
+    "website": "weglfm.com",
+    "phone": "334-844-4057",
+    "address": "255 Heisman Drive Suite 1105 Auburn, AL 36849",
+    "ig_handles": [
+      "wegl_au"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wegl_au",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S002",
+    "country": "USA",
+    "state": "AL",
+    "city": "Huntsville",
+    "school": "Oakwood University",
+    "station": "WJOU 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "wjou@oakwood.edu"
+    ],
+    "music_director": "-",
+    "website": "wjou.org",
+    "phone": "256-726-7418",
+    "address": "Praise 90.1FM WJOU 7000 Adventist Blvd NW Huntsville, Al 35896",
+    "ig_handles": [
+      "wjoufm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wjoufm",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S003",
+    "country": "USA",
+    "state": "AL",
+    "city": "Jacksonville",
+    "school": "Jacksonville State University",
+    "station": "WLJS 91.9",
+    "frequency": "91.9",
+    "emails": [
+      "wljsmusicdirector@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "www.jsuchanticle er.com",
+    "phone": "256-782-5592 256-782-5572",
+    "address": "JSUchanticleer.com 700 Pelham Road N Jacksonville, AL 36265",
+    "ig_handles": [
+      "wljsjsu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wljsjsu",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S004",
+    "country": "USA",
+    "state": "AL",
+    "city": "Montgomery",
+    "school": "Alabama State University",
+    "station": "WVAS-FM HD-2 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "BamaStateRadio@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wvasfm.org",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "has 3 alternate stations online",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S005",
+    "country": "USA",
+    "state": "AL",
+    "city": "Normal",
+    "school": "Alabama A&M University",
+    "station": "WJAB 90.9",
+    "frequency": "90.9",
+    "emails": [
+      "jessica.martin@aamu.edu"
+    ],
+    "music_director": "-",
+    "website": "wjab.org",
+    "phone": "256-372-4057",
+    "address": "WJAB 90.9 Electronic Media Communications Morrison Building Room 132 4900 Meridian St. Normal, AL 35762",
+    "ig_handles": [
+      "wjab90.9fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wjab90.9fm",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S006",
+    "country": "USA",
+    "state": "AL",
+    "city": "Tuscaloosa",
+    "school": "University Of Alabama",
+    "station": "WVUA 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "music.hiphop@wvuafm.ua.edu"
+    ],
+    "music_director": "Sarah",
+    "website": "wvuafm.ua.edu",
+    "phone": "-",
+    "address": "Music Director WVUA 90.7 FM Box 870152 Tuscaloosa, AL 35487",
+    "ig_handles": [
+      "wvuafm"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission policy"
+    ],
+    "notes_raw": "IG @wvuafm Submission Policy Link",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S007",
+    "country": "USA",
+    "state": "AK",
+    "city": "Anchorage",
+    "school": "University of Alaska Anchorage",
+    "station": "KRUA 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "krua.programdirector@alaska.edu"
+    ],
+    "music_director": "James",
+    "website": "kruaradio.org",
+    "phone": "907-786-6802",
+    "address": "KRUA 88.1 FM 3211 PROVIDENCE DRIVE ANCHORAGE, AK, 99508",
+    "ig_handles": [
+      "kruafm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kruafm",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S008",
+    "country": "USA",
+    "state": "AK",
+    "city": "Fairbanks",
+    "school": "University of Alaska Fairbanks",
+    "station": "KSUA 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "ksua.music@alaska.edu"
+    ],
+    "music_director": "Daisy Carter",
+    "website": "ksuaradio.com",
+    "phone": "907-474-5782",
+    "address": "UAF Wood Center- Student Media Offices 1731 S. Chandalar Fairbanks AK 99709",
+    "ig_handles": [
+      "ksuaradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ksuaradio",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S009",
+    "country": "USA",
+    "state": "AR",
+    "city": "Clarksville",
+    "school": "University of the Ozarks",
+    "station": "KUOZ 100.5",
+    "frequency": "100.5",
+    "emails": [
+      "sedens@ozarks.edu"
+    ],
+    "music_director": "-",
+    "website": "Website",
+    "phone": "479-979-1450",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "FB: KUOZ",
+    "show": "-",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S010",
+    "country": "USA",
+    "state": "AR",
+    "city": "De Queen/ Nashville",
+    "school": "University of Arkansas-Cossatot",
+    "station": "KBPU ED 88.7 KTYC ED 88.5",
+    "frequency": "88.7",
+    "emails": [
+      "lhinton@cccua.edu"
+    ],
+    "music_director": "Loren Hinton",
+    "website": "ed88radio.com",
+    "phone": "870-584-6176",
+    "address": "ED 88 183 College Drive De Queen, Arkansas, 71832",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "Contact Form FB: ED 88",
+    "show": "-",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S011",
+    "country": "USA",
+    "state": "AR",
+    "city": "Conway",
+    "school": "Hendrix College",
+    "station": "KHDX 93.1",
+    "frequency": "93.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "khdx.fm",
+    "phone": "-",
+    "address": "KHDX Radio 1600 Washington Ave Conway, AR 72032",
+    "ig_handles": [
+      "khdxfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @khdxfm khdx.fm/contact submit music at bottom of contact page",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S012",
+    "country": "USA",
+    "state": "AR",
+    "city": "Jonesboro",
+    "school": "Arkansas State University",
+    "station": "KASU 91.9",
+    "frequency": "91.9",
+    "emails": [
+      "mscarbro@astate.edu",
+      "kasu@astate.edu"
+    ],
+    "music_director": "Marty Scarbrough",
+    "website": "kasu.org",
+    "phone": "870-972-2200",
+    "address": "KASU-FM P.O. Box 1930 State University, AR 72467",
+    "ig_handles": [
+      "kasuradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kasuradio",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S013",
+    "country": "USA",
+    "state": "AR",
+    "city": "Fayetville",
+    "school": "University of Arkansas",
+    "station": "KXUA 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "charts@uark.edu"
+    ],
+    "music_director": "-",
+    "website": "kxua.uark.edu",
+    "phone": "479-575-2000",
+    "address": "Attn: Music Director KXUA Radio A665 Arkansas Union Fayetteville, AR 72701",
+    "ig_handles": [
+      "kxua"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kxua",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S014",
+    "country": "USA",
+    "state": "AR",
+    "city": "Little Rock",
+    "school": "University of Arkansas Little Rock",
+    "station": "KUAR 89.1",
+    "frequency": "89.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "ualrpublicradio.org",
+    "phone": "(501)-916-6400",
+    "address": "Little Rock Public Radio 5820 Asher Ave., Suite 400 Little Rock, AR 72204",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S015",
+    "country": "USA",
+    "state": "AR",
+    "city": "Siloam Springs",
+    "school": "John Brown University",
+    "station": "KLRC 90.9",
+    "frequency": "90.9",
+    "emails": [],
+    "music_director": "Mark Michaels",
+    "website": "klrc.com",
+    "phone": "1-800-909- KLRC",
+    "address": "90.9 KLRC FM 110 N Broadway Siloam Springs, AR 72761",
+    "ig_handles": [
+      "klrcfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "christian"
+    ],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [
+      "positive_content_only"
+    ],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @klrcfm Positive Music Only Contact Form",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S016",
+    "country": "USA",
+    "state": "AZ",
+    "city": "Pheonix",
+    "school": "Rio Salado College",
+    "station": "KJZZ 91.5",
+    "frequency": "91.5",
+    "emails": [],
+    "music_director": "-",
+    "website": "kjzz.org",
+    "phone": "480-834-5627",
+    "address": "KJZZ 91.5 FM 2323 W. 14th St. Tempe, AZ 85281",
+    "ig_handles": [
+      "kjzzpheonix"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kjzzpheonix Contact From",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S017",
+    "country": "USA",
+    "state": "AZ",
+    "city": "Tucson",
+    "school": "University of Arizona",
+    "station": "KAMP",
+    "frequency": "",
+    "emails": [],
+    "music_director": "-",
+    "website": "-",
+    "phone": "520-621-8002",
+    "address": "KAMP Radio, University of Arizona 615 N. Park Ave. #101 Tucson, AZ 85721",
+    "ig_handles": [
+      "kamp_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kamp_radio",
+    "show": "-",
+    "source_page": 12,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S018",
+    "country": "USA",
+    "state": "AZ",
+    "city": "Flagstaff",
+    "school": "Northern Arizona University",
+    "station": "KJACK 107.1 FM",
+    "frequency": "107.1 FM",
+    "emails": [
+      "see86@nau.edu"
+    ],
+    "music_director": "Logan",
+    "website": "kjackradio.com",
+    "phone": "928-523-3036",
+    "address": "Atten: Scout Ehrler KJACK Radio PO Box 5619, Flagstaff, AZ 86011",
+    "ig_handles": [
+      "kjacknau"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @kjacknau",
+    "show": "Schedule",
+    "source_page": 12,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S019",
+    "country": "USA",
+    "state": "AZ",
+    "city": "Flagstaff",
+    "school": "Northern Arizona University",
+    "station": "KNAU 88.7",
+    "frequency": "88.7",
+    "emails": [],
+    "music_director": "-",
+    "website": "knau.org",
+    "phone": "928-523-5628",
+    "address": "KNAU PO Box 5764 Flagstaff, AZ 86011-5764",
+    "ig_handles": [],
+    "station_type": "public_npr",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "FB: KNAU Arizona Public Radio",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S020",
+    "country": "USA",
+    "state": "AZ",
+    "city": "Yuma",
+    "school": "Arizona Western College",
+    "station": "Border Radio 94.7",
+    "frequency": "94.7",
+    "emails": [],
+    "music_director": "-",
+    "website": "borderradioaz.org",
+    "phone": "877-838-5292",
+    "address": "Border Radio PO Box 929 Yuma, Arizona 85366",
+    "ig_handles": [
+      "borderradioAZ"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form",
+      "contact form",
+      "music submission form"
+    ],
+    "notes_raw": "IG @borderradioAZ Music Submission Form Contact Form",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S021",
+    "country": "USA",
+    "state": "CA",
+    "city": "Arcata",
+    "school": "Cal Poly Humboldt University",
+    "station": "KHSU 90.5",
+    "frequency": "90.5",
+    "emails": [
+      "khsu-contact@humboldt.edu"
+    ],
+    "music_director": "-",
+    "website": "khsu.org",
+    "phone": "707-826-4807",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "FB: KHSU",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S022",
+    "country": "USA",
+    "state": "CA",
+    "city": "Berkeley",
+    "school": "University of California, Berkeley",
+    "station": "KALX 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "music@kalx.berkeley.edu",
+      "kalxinterviews@gmail.com"
+    ],
+    "music_director": "Michael Henning Mia Call Chris Michel",
+    "website": "kalx.berkeley.edu",
+    "phone": "510-642-1111 M 11am-1pm W 9:30-11:30a",
+    "address": "University of California Berkeley KALX-FM 26 Barrows Hall #5650 Berkeley, CA 94720",
+    "ig_handles": [
+      "kalxradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred",
+      "email"
+    ],
+    "flags": [
+      "no_email_attachments"
+    ],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kalxradio",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S023",
+    "country": "USA",
+    "state": "CA",
+    "city": "Chico",
+    "school": "California State University Chico",
+    "station": "KCSC Radio",
+    "frequency": "",
+    "emails": [
+      "musickcscradio@csuchico.edu"
+    ],
+    "music_director": "DJs List",
+    "website": "kcscradio.co",
+    "phone": "-",
+    "address": "KCSC 400 W. 1st St. Department of Media Arts, Design, and Technology Chico, CA 95929",
+    "ig_handles": [
+      "kcscradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @kcscradio Submission Form",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S024",
+    "country": "USA",
+    "state": "CA",
+    "city": "Chico",
+    "school": "California State University Chico",
+    "station": "NSPR",
+    "frequency": "",
+    "emails": [],
+    "music_director": "-",
+    "website": "mynspr.org",
+    "phone": "530-898-6198",
+    "address": "North State Public Radio 35 Main Street, Suite 101, Chico, CA 95928",
+    "ig_handles": [
+      "nsprnews"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @nsprnews",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S025",
+    "country": "USA",
+    "state": "CA",
+    "city": "Claremont",
+    "school": "Claremont Colleges",
+    "station": "KSPC 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "md@kspc.org"
+    ],
+    "music_director": "-",
+    "website": "KSPC.org",
+    "phone": "909-621-8157",
+    "address": "KSPC, Pomona College Attn: Music Director Thatcher Music Building 340 N. College Ave. Claremont, CA 91711",
+    "ig_handles": [
+      "kspcradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "IG @kspcradio broadcasts Los Angeles area Submission Guidelines",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S026",
+    "country": "USA",
+    "state": "CA",
+    "city": "Davis",
+    "school": "University of California Davis",
+    "station": "KDVS 90.3",
+    "frequency": "90.3",
+    "emails": [],
+    "music_director": "Charlie McBrian",
+    "website": "kdvs.org FAQ",
+    "phone": "(530) 754-5387",
+    "address": "KDVS 90.3 FM ATTN: MUSIC DIRECTOR 14 Lower Freeborn Davis, CA 95616",
+    "ig_handles": [
+      "kdvs903fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kdvs903fm Physical Submissions Only",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S027",
+    "country": "USA",
+    "state": "CA",
+    "city": "Fullerton",
+    "school": "California State University Fullerton",
+    "station": "Titan Radio",
+    "frequency": "",
+    "emails": [
+      "music@fullerton.edu"
+    ],
+    "music_director": "DJs Page",
+    "website": "titanradio.org lintr.ee/titanradio",
+    "phone": "657-278-5505",
+    "address": "PLS \\u2013 51 800 N. State College Blvd. Fullerton, CA 92831",
+    "ig_handles": [
+      "titanradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @titanradio",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S028",
+    "country": "USA",
+    "state": "CA",
+    "city": "Fresno",
+    "school": "Fresno Free College Foundation",
+    "station": "KFCF 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "mattd@kfcf.org"
+    ],
+    "music_director": "Richard Withers",
+    "website": "kfcf.org",
+    "phone": "(559) 233-2221",
+    "address": "KFCF 88.1 FM PO Box 4364 Fresno, CA 93744",
+    "ig_handles": [
+      "kfcf88"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kfcf88",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S029",
+    "country": "USA",
+    "state": "CA",
+    "city": "Fresno",
+    "school": "California State University Fresno",
+    "station": "KFSR 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "90.7kfsr@gmail.com"
+    ],
+    "music_director": "Julie Logan Staff List",
+    "website": "kfsr.org",
+    "phone": "559-278-9070",
+    "address": "KFSR Radio 5201 N. Maple Ave. M/S SA #119 Fresno, CA 93740",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "FB 90.7 KSFR",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S030",
+    "country": "USA",
+    "state": "CA",
+    "city": "Hayward",
+    "school": "Chabot College",
+    "station": "KCRH 89.9",
+    "frequency": "89.9",
+    "emails": [],
+    "music_director": "-",
+    "website": "kcrhradio.com",
+    "phone": "510-952-7411",
+    "address": "KCRH Radio 25555 Hesperian Boulevard Hayward, CA 94545",
+    "ig_handles": [
+      "kcrh899fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kcrh899fm",
+    "show": "-",
+    "source_page": 13,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S031",
+    "country": "USA",
+    "state": "CA",
+    "city": "Irvine",
+    "school": "University of California, Irvine",
+    "station": "KUCI 88.9",
+    "frequency": "88.9",
+    "emails": [],
+    "music_director": "-",
+    "website": "kuci.org",
+    "phone": "949-824-6868",
+    "address": "KUCI 88.9 FM PO Box 4362 Irvine, CA 92616",
+    "ig_handles": [
+      "kucifm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical",
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "IG @kucifm Submission Guidelines",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S032",
+    "country": "USA",
+    "state": "CA",
+    "city": "La Jolla",
+    "school": "University of California San Diego",
+    "station": "KSDT Triton Radio",
+    "frequency": "",
+    "emails": [
+      "music@ksdt.org",
+      "submissions@ksdt.org"
+    ],
+    "music_director": "-",
+    "website": "ksdt.ucsd.edu",
+    "phone": "(858) 534-KSDT",
+    "address": "KSDT Radio University of California, San Diego 9500 Gilman Dr. #0077 La Jolla, CA 92093-0315",
+    "ig_handles": [
+      "ksdtradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ksdtradio",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S033",
+    "country": "USA",
+    "state": "CA",
+    "city": "Long Beach",
+    "school": "California State University, Long Beach",
+    "station": "KBEACH 88.1 Jazz 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "info881@kkjz.org"
+    ],
+    "music_director": "-",
+    "website": "22westmedia.com kkjz.org",
+    "phone": "562-985-1624 310-478-5540",
+    "address": "1212 N. Bellflower Blvd Suite 108 Long Beach, CA 90815",
+    "ig_handles": [
+      "22westlb",
+      "kjazz881"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "jazz"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @22westlb @kjazz881 Jazz Music",
+    "show": "Schedule Jazz Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S034",
+    "country": "USA",
+    "state": "CA",
+    "city": "Los Angeles",
+    "school": "-",
+    "station": "KJazz 88.1",
+    "frequency": "88.1",
+    "emails": [],
+    "music_director": "Dan Seeff",
+    "website": "kkjz.org",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "excursionsradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "jazz"
+    ],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @excursionsradio Thursdays 10pm-12am",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S035",
+    "country": "USA",
+    "state": "CA",
+    "city": "Los Altos",
+    "school": "Foothill College",
+    "station": "KFJC 89.7",
+    "frequency": "89.7",
+    "emails": [],
+    "music_director": "David Houchins",
+    "website": "kfjc.org",
+    "phone": "650 941 2500",
+    "address": "KFJC Music Director 12345 El Monte Road Los Altos Hills, CA 94022",
+    "ig_handles": [
+      "kfjc897fm",
+      "KFJC"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kfjc897fm FB @KFJC",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S036",
+    "country": "USA",
+    "state": "CA",
+    "city": "Los Angeles",
+    "school": "University of California, Los Angeles",
+    "station": "UCLA RADIO",
+    "frequency": "",
+    "emails": [
+      "radio.music@media.ucla.ed"
+    ],
+    "music_director": "-",
+    "website": "uclaradio.com",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "uclaradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @uclaradio",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S037",
+    "country": "USA",
+    "state": "CA",
+    "city": "Los Angeles",
+    "school": "University of Southern California",
+    "station": "KXSC",
+    "frequency": "",
+    "emails": [
+      "music@kxsc.org",
+      "musicwriting@kxsc.org",
+      "pd@kxsc.org"
+    ],
+    "music_director": "-",
+    "website": "kxsc.org",
+    "phone": "312-971-0767",
+    "address": "KXSC Radio USC 3607 Trousdale Pkwy TCC B3 Los Angeles, Ca",
+    "ig_handles": [
+      "kxscradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kxscradio",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S038",
+    "country": "USA",
+    "state": "CA",
+    "city": "Los Angeles",
+    "school": "Loyola Marymount University",
+    "station": "KXLU 88.9",
+    "frequency": "88.9",
+    "emails": [
+      "samueltakanokxlu@gmail.com"
+    ],
+    "music_director": "Sam Takano",
+    "website": "kxlu.com",
+    "phone": "310-258-4622",
+    "address": "KXLU 88.9fm Attn: Music Director One LMU Drive Los Angeles, CA 90045",
+    "ig_handles": [
+      "KXLU"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @KXLU",
+    "show": "Schedule",
+    "source_page": 13,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S039",
+    "country": "USA",
+    "state": "CA",
+    "city": "Los Angeles",
+    "school": "-",
+    "station": "KPFK 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "expmind@yahoo.com",
+      "seanmosborn@gmail.com",
+      "groverzealous@yahoo.com",
+      "djbenthere@gmail.com",
+      "daniellemamath@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "kpfk.org",
+    "phone": "818-985-2711",
+    "address": "KPFK 90.7 3729 Cahuenga Blvd West North Hollywood, CA 91604",
+    "ig_handles": [
+      "kpfk"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kpfk studio rental avlbl",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S040",
+    "country": "USA",
+    "state": "CA",
+    "city": "Monterey",
+    "school": "California State University Monterey Bay",
+    "station": "KAZU 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "programming@kazu.org"
+    ],
+    "music_director": "Mik Benedek",
+    "website": "kazu.org",
+    "phone": "831-582-5298",
+    "address": "90.3 KAZU CSU Monterey Bay 100 Campus Center, Bldg. 201 Seaside, California 93955",
+    "ig_handles": [
+      "nprmontereybay"
+    ],
+    "station_type": "public_npr",
+    "genre_hints": [
+      "news_talk"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @nprmontereybay",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S041",
+    "country": "USA",
+    "state": "CA",
+    "city": "Moraga",
+    "school": "Saint Mary\\u2019s College of California",
+    "station": "KSMC 89.5",
+    "frequency": "89.5",
+    "emails": [
+      "ksmc@stmarys-ca.edu"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "ksmc895fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ksmc895fm",
+    "show": "-",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S042",
+    "country": "USA",
+    "state": "CA",
+    "city": "Northridge",
+    "school": "Saddleback College + California State University Northridge",
+    "station": "SoCal 88.5",
+    "frequency": "88.5",
+    "emails": [
+      "feedback@885fm.org"
+    ],
+    "music_director": "Andy Charley",
+    "website": "thesocalsound.org",
+    "phone": "818-677-7160",
+    "address": "88.5 FM Radio ATTN: Music Director 18111 Nordhoff Street Northridge, CA 91330-8312",
+    "ig_handles": [
+      "theSoCalSound"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @theSoCalSound FB theSoCalSound",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S043",
+    "country": "USA",
+    "state": "CA",
+    "city": "Oakland",
+    "school": "Peralta Community College",
+    "station": "KGPC 96.9",
+    "frequency": "96.9",
+    "emails": [
+      "kgpc969@gmail.com"
+    ],
+    "music_director": "Felicia Bridges",
+    "website": "kgpc969.org",
+    "phone": "510-466-5351",
+    "address": "Peralta Community Radio / KGPC-LP 96.9fm 333 East 8th Street Oakland, Calif. 94606",
+    "ig_handles": [
+      "kgpc_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kgpc_radio FB KGPC, Peralta Community College Radio",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S044",
+    "country": "USA",
+    "state": "CA",
+    "city": "Oakland",
+    "school": "-",
+    "station": "All In Radio",
+    "frequency": "",
+    "emails": [
+      "thepowerhour2020@gmail.com"
+    ],
+    "music_director": "Gary Archer",
+    "website": "-",
+    "phone": "510-695-4942",
+    "address": "960 Arlington Ave Oakland, CA 94609",
+    "ig_handles": [
+      "legendgary",
+      "ALLiN_Radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @legendgary archer @ALLiN_Radio",
+    "show": "-",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S045",
+    "country": "USA",
+    "state": "CA",
+    "city": "Pasadena",
+    "school": "Pasadena City College",
+    "station": "KPCC 89.3",
+    "frequency": "89.3",
+    "emails": [],
+    "music_director": "-",
+    "website": "kpcc.org",
+    "phone": "626-583-5100",
+    "address": "Southern California Public Radio, PO Box 511489, Los Angeles, CA 90051-8044",
+    "ig_handles": [
+      "KPCC"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @KPCC FB @KPCC",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S046",
+    "country": "USA",
+    "state": "CA",
+    "city": "Riverside",
+    "school": "University of California Riverside",
+    "station": "KUCR 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "kucrmusic@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "kucr.org",
+    "phone": "951-827-5827",
+    "address": "KUCR Radio University of California Riverside, CA 92521",
+    "ig_handles": [
+      "kucr883fm",
+      "KUCR"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kucr883fm FB @KUCR",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S047",
+    "country": "USA",
+    "state": "CA",
+    "city": "Rancho Palos Verdes",
+    "school": "Marymount California University",
+    "station": "KMCU",
+    "frequency": "",
+    "emails": [],
+    "music_director": "-",
+    "website": "-",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "honorflowprod"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @honorflowprod uctions",
+    "show": "-",
+    "source_page": 14,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S048",
+    "country": "USA",
+    "state": "CA",
+    "city": "Sacramento",
+    "school": "Sacramento State",
+    "station": "KSSU",
+    "frequency": "",
+    "emails": [
+      "music@kssu.com"
+    ],
+    "music_director": "-",
+    "website": "www.kssu.com",
+    "phone": "916-278-3666",
+    "address": "KSSU Radio c/o Associated Students, Inc. 6000 J Street Sacramento, CA 95819-6011",
+    "ig_handles": [
+      "kssusparky"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kssusparky",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S049",
+    "country": "USA",
+    "state": "CA",
+    "city": "Sacramento",
+    "school": "California State University Sacramento",
+    "station": "KXJZ 90.9",
+    "frequency": "90.9",
+    "emails": [],
+    "music_director": "-",
+    "website": "capradio.org",
+    "phone": "916-278-8900",
+    "address": "Capital Public Radio 7055 Folsom Boulevard Sacramento, CA 95826-2625",
+    "ig_handles": [
+      "CapRadio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @CapRadio Submission Form",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S050",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Bernardino",
+    "school": "California State University San Bernardino",
+    "station": "Coyote Radio",
+    "frequency": "",
+    "emails": [
+      "coyoteradio@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "csusb.edu/ coyote-radio",
+    "phone": "909-537-5617",
+    "address": "-",
+    "ig_handles": [
+      "coyote.radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @coyote.radio",
+    "show": "-",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S051",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Bernardino",
+    "school": "San Bernardino Community College",
+    "station": "KVCR 91.1",
+    "frequency": "91.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "kvcrnews.org",
+    "phone": "909-384-4444",
+    "address": "KVCR 701 S Mt Vernon Ave San Bernardino, CA 92410",
+    "ig_handles": [
+      "kvcrpublicmedia"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @kvcrpublicmedia FB: KVCR Contact Form",
+    "show": "Schedule Shows",
+    "source_page": 14,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S052",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Jose",
+    "school": "San Jose State University",
+    "station": "KSJS 90.5",
+    "frequency": "90.5",
+    "emails": [
+      "alexdpfilmz@gmail.com",
+      "djcoffin805@gmail.com"
+    ],
+    "music_director": "Alex Pena",
+    "website": "ksjs.org Contacts",
+    "phone": "(408)924-5757",
+    "address": "San Jose State University Hugh Gillis Hall Room 132 San Jose, CA 95192-0094",
+    "ig_handles": [
+      "ksjsfm",
+      "ksjs.hiphop",
+      "radioaztlan90.5",
+      "san.josueeee",
+      "djcoffin_"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @ksjsfm @ksjs.hiphop @radioaztlan90.5 @san.josueeee @djcoffin_",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S053",
+    "country": "USA",
+    "state": "CA",
+    "city": "Salinas",
+    "school": "-",
+    "station": "KHDC 90.9",
+    "frequency": "90.9",
+    "emails": [
+      "inbox@eme7.com"
+    ],
+    "music_director": "M7 aka EME7",
+    "website": "radiobilingue.org",
+    "phone": "(831)757-8039",
+    "address": "-",
+    "ig_handles": [
+      "eme7"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @eme7",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S054",
+    "country": "USA",
+    "state": "CA",
+    "city": "Santa Cruz",
+    "school": "University of California Santa Cruz",
+    "station": "KZSC 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "hiphop@kzsc.org"
+    ],
+    "music_director": "Michael Melaku",
+    "website": "kzsc.org",
+    "phone": "(831)-459-4036",
+    "address": "KZSC Radio UC Santa Cruz 1156 High St. Santa Cruz,Ca 95060",
+    "ig_handles": [
+      "kzsc"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kzsc",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S055",
+    "country": "USA",
+    "state": "CA",
+    "city": "Santa Cruz",
+    "school": "-",
+    "station": "KPCR 101.9",
+    "frequency": "101.9",
+    "emails": [
+      "info@kpcr.org",
+      "mneronava@gmail.com"
+    ],
+    "music_director": "M. Nero Nava",
+    "website": "kpcr.org",
+    "phone": "831-200-3391",
+    "address": "-",
+    "ig_handles": [
+      "kpcrfm",
+      "m.neronava"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "@kpcrfm @m.neronava",
+    "show": "-",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S056",
+    "country": "USA",
+    "state": "CA",
+    "city": "Stanford",
+    "school": "Stanford University",
+    "station": "KZSU 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "music@kzsu.stanford.edu"
+    ],
+    "music_director": "Brandon Rupp, Juan Luna-Avin, Bill Cuevas",
+    "website": "kzsu.stanford.edu Submission Guidelines",
+    "phone": "(650)-725-4868",
+    "address": "KZSU Music P.O. Box 20510 Stanford, Ca 94301",
+    "ig_handles": [
+      "kzsu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "IG @kzsu",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S057",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Diego",
+    "school": "San Diego State University",
+    "station": "KCR Radio",
+    "frequency": "",
+    "emails": [
+      "kcr@sdsu.edu"
+    ],
+    "music_director": "student-ran",
+    "website": "kcr.sdsu.edu Submission Guidelines",
+    "phone": "619-594-6982",
+    "address": "-",
+    "ig_handles": [
+      "kcrcollege"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "IG @kcrcollege radio",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S058",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Diego",
+    "school": "San Diego State University",
+    "station": "KBPS 89.5 97.7 in Calexico",
+    "frequency": "89.5",
+    "emails": [],
+    "music_director": "-",
+    "website": "kbps.org Contact Form",
+    "phone": "619-594-1515",
+    "address": "KPBS Public Media 5200 Campanile Drive San Diego, CA 92182",
+    "ig_handles": [
+      "kbps"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @kbps",
+    "show": "Schedule",
+    "source_page": 14,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S059",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Marcos",
+    "school": "Palomar College",
+    "station": "KKSM 1320",
+    "frequency": "1320",
+    "emails": [
+      "info@palomarcollegeradio.com"
+    ],
+    "music_director": "-",
+    "website": "palomar.edu/ kksm/ Contact Form",
+    "phone": "760-736-8375",
+    "address": "KKSM 1140 W. Mission Rd. San Marcos, CA 92069",
+    "ig_handles": [
+      "kksmradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @kksmradio FB KKSM Palomar College",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S060",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Mateo",
+    "school": "San Mateo Community College",
+    "station": "KCSM 91.9",
+    "frequency": "91.9",
+    "emails": [
+      "kcsmjazz@kcsm.net"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "650-524-6927",
+    "address": "1700 W Hillsdale Blvd, San Mateo, CA 94402",
+    "ig_handles": [
+      "kcsmjazz91"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "jazz"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "Jazz IG @kcsmjazz91 FB KCSM Jazz 91.9",
+    "show": "-",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S061",
+    "country": "USA",
+    "state": "CA",
+    "city": "Santa Barbara",
+    "school": "University of California Santa Barbara",
+    "station": "KCSB 91.9",
+    "frequency": "91.9",
+    "emails": [
+      "dmc@kcsb.org",
+      "int.md@kcsb.org",
+      "ext.md@kcsb.org"
+    ],
+    "music_director": "-",
+    "website": "kcsb.org",
+    "phone": "805-893-2424",
+    "address": "ATTN: Music Director KCSB-FM PO Box 13401 Santa Barbara, CA 93107-3401",
+    "ig_handles": [
+      "kcsbfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "studio booking available IG @kcsbfm",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S062",
+    "country": "USA",
+    "state": "CA",
+    "city": "Santa Clara",
+    "school": "Santa Clara University",
+    "station": "KSCU 103.3",
+    "frequency": "103.3",
+    "emails": [
+      "music@kscu.org"
+    ],
+    "music_director": "Abby Grimm",
+    "website": "kscu.org",
+    "phone": "408-554-5728",
+    "address": "-",
+    "ig_handles": [
+      "kscuradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kscuradio",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S063",
+    "country": "USA",
+    "state": "CA",
+    "city": "Santa Clarita",
+    "school": "California Institute of the Arts",
+    "station": "KCIA Radio",
+    "frequency": "",
+    "emails": [
+      "kcia@alum.calarts.edu"
+    ],
+    "music_director": "-",
+    "website": "kcia.calarts.edu",
+    "phone": "-",
+    "address": "",
+    "ig_handles": [
+      "kciaradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kciaradio",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S064",
+    "country": "USA",
+    "state": "CA",
+    "city": "Santa Monica",
+    "school": "Santa Monica College",
+    "station": "KCRW 89.9",
+    "frequency": "89.9",
+    "emails": [],
+    "music_director": "-",
+    "website": "kcrw.com",
+    "phone": "424-538-8500",
+    "address": "1900 Pico Blvd. Santa Monica, CA 90405",
+    "ig_handles": [
+      "kcrwmusic",
+      "kcrw"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kcrwmusic @kcrw Heavy syndication on many other stations",
+    "show": "Schedule Syndication List Contact Form",
+    "source_page": 15,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S065",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Francisco",
+    "school": "University of San Francisco",
+    "station": "KUSF",
+    "frequency": "",
+    "emails": [
+      "kusfmusic@gmail.com"
+    ],
+    "music_director": "Sade, Teresa",
+    "website": "kusf.org",
+    "phone": "415-386-5873",
+    "address": "KUSF Music Dept. 2130 Fulton St. San Francisco, Ca 94117",
+    "ig_handles": [
+      "kusforg"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kusforg",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S066",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Francisco",
+    "school": "San Francisco State University",
+    "station": "KSFS",
+    "frequency": "",
+    "emails": [
+      "ksfs@sfsu.edu"
+    ],
+    "music_director": "-",
+    "website": "becamedia.net/ home/ksfsradio Submission Form",
+    "phone": "415-338-2428",
+    "address": "-",
+    "ig_handles": [
+      "ksfsradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred",
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @ksfsradio Links preferred",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S067",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Francisco",
+    "school": "City College of San Francisco",
+    "station": "KCSF 90.9",
+    "frequency": "90.9",
+    "emails": [
+      "kcsf@ccsf.edu"
+    ],
+    "music_director": "-",
+    "website": "ccsf.edu",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "",
+    "show": "-",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S068",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Francisco",
+    "school": "-",
+    "station": "KPOO 89.5",
+    "frequency": "89.5",
+    "emails": [],
+    "music_director": "JJ & Dezz",
+    "website": "kpoo.com",
+    "phone": "415-346-5373",
+    "address": "KPOO 89.5 FM 1329 Divisadero San Francisco, CA 94115",
+    "ig_handles": [
+      "dezzdmh"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @dezzdmh",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S069",
+    "country": "USA",
+    "state": "CA",
+    "city": "San Luis Obispo",
+    "school": "California Polytechnic State University",
+    "station": "KCPR 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "music@kcpr.org"
+    ],
+    "music_director": "Ian",
+    "website": "kcpr.org",
+    "phone": "805-756-2965",
+    "address": "KCPR Building 26, Room 301 California Polytechnic State University 1 Grand Ave. San Luis Obispo, CA 93407",
+    "ig_handles": [
+      "kcpr913"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kcpr913",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S070",
+    "country": "USA",
+    "state": "CA",
+    "city": "Thousand Oaks",
+    "school": "California Lutheran University",
+    "station": "KCLU 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "molson@kclu.org"
+    ],
+    "music_director": "Mary Olson",
+    "website": "kclu.org",
+    "phone": "805-493-3900",
+    "address": "60 W. Olsen Rd #4400 Thousand Oaks, CA 91360",
+    "ig_handles": [
+      "kcluradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kcluradio",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S071",
+    "country": "USA",
+    "state": "CA",
+    "city": "Turlock",
+    "school": "California State University Turlock",
+    "station": "KCSS 91.9",
+    "frequency": "91.9",
+    "emails": [
+      "kcssmd@gmail.com"
+    ],
+    "music_director": "Roberto Herrera",
+    "website": "kcss.net",
+    "phone": "209-667-3378",
+    "address": "-",
+    "ig_handles": [
+      "kcss91.9"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kcss91.9 They also have a podcast",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S072",
+    "country": "USA",
+    "state": "CA",
+    "city": "Walnut",
+    "school": "Mt. San Antonio College",
+    "station": "Mt Rock 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "jshiff@mtsac.edu"
+    ],
+    "music_director": "Jason Shiff",
+    "website": "mtsac.edu/radio/ mtrock",
+    "phone": "909-274-4619",
+    "address": "Radio Program Mt. San Antonio College 1100 N. Grand Ave Walnut, CA 91789",
+    "ig_handles": [
+      "mtrock90.1"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @mtrock90.1",
+    "show": "-",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S073",
+    "country": "USA",
+    "state": "CO",
+    "city": "Boulder",
+    "school": "University of Colorado Boulder",
+    "station": "KVCU 1190",
+    "frequency": "1190",
+    "emails": [
+      "music@1190.radio",
+      "localshakedown@1190.radio"
+    ],
+    "music_director": "Bella Mahlerbe Luke Crumplar",
+    "website": "radio1190.net",
+    "phone": "303-492-1190",
+    "address": "Campus Box 207 University of Colorado Boulder Boulder, CO 80309-0207",
+    "ig_handles": [
+      "radio1190"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [
+      "albums_only"
+    ],
+    "submission_form_signals": [],
+    "notes_raw": "IG @radio1190 No singles, Full albums only",
+    "show": "Schedule Shows",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S074",
+    "country": "USA",
+    "state": "CO",
+    "city": "Colorado Springs",
+    "school": "United States Air Force Academy",
+    "station": "KAFA 97.7",
+    "frequency": "97.7",
+    "emails": [
+      "KAFA.FM@afacademy.af.edu"
+    ],
+    "music_director": "-",
+    "website": "usafa.edu/radio",
+    "phone": "719-333-5232",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "-",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S075",
+    "country": "USA",
+    "state": "CO",
+    "city": "Denver",
+    "school": "Metropolitan State University of Denver",
+    "station": "MET RADIO",
+    "frequency": "",
+    "emails": [],
+    "music_director": "-",
+    "website": "mymetmedia.com",
+    "phone": "303-615-0155",
+    "address": "MSU Denver Met Media Campus Box 57, P.O. Box 173362 Denver, CO 80217-3362",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S076",
+    "country": "USA",
+    "state": "CO",
+    "city": "Denver",
+    "school": "Regis University",
+    "station": "KRCX 1530",
+    "frequency": "1530",
+    "emails": [
+      "krcxmd@regis.edu"
+    ],
+    "music_director": "-",
+    "website": "krcx.org",
+    "phone": "303-625-1261",
+    "address": "KRCX Regis University Radio 3333 Regis Blvd. Denver, CO 80221",
+    "ig_handles": [
+      "kcrx"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kcrx",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S077",
+    "country": "USA",
+    "state": "CO",
+    "city": "Durango",
+    "school": "Fort Lewis College",
+    "station": "KDUR 91.9",
+    "frequency": "91.9",
+    "emails": [
+      "kdur_st1@fortlewis.edu",
+      "kdur@fortlewis.edu"
+    ],
+    "music_director": "Douglas Dupont",
+    "website": "kdur.org",
+    "phone": "970-247-7262",
+    "address": "KDUR - 91.9/93.9 FM Fort Lewis College Community Radio 1000 Rim Drive Durango, Colorado 81301",
+    "ig_handles": [
+      "kdurradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kdurradio",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S078",
+    "country": "USA",
+    "state": "CO",
+    "city": "Fort Collins",
+    "school": "Colorado State University",
+    "station": "KCSU 90.5",
+    "frequency": "90.5",
+    "emails": [
+      "music@kcsufm.com"
+    ],
+    "music_director": "-",
+    "website": "kcsufm.com",
+    "phone": "970-491-1695",
+    "address": "KCSU Music ATTN: Brighid Bandel Room 118, Lory Student Center Colorado State University Fort Collins, CO 80523",
+    "ig_handles": [
+      "kcsufm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kcsufm best bet by mailing album",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S079",
+    "country": "USA",
+    "state": "CO",
+    "city": "Grand Junction",
+    "school": "Colorado Mesa University",
+    "station": "KMSA 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "jgrichardson@mavs.coloradome"
+    ],
+    "music_director": "-",
+    "website": "coloradomesa.presen ce.io/organization/ kmsa-91-3-fm",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "kmsa913fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kmsa913fm",
+    "show": "-",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S080",
+    "country": "USA",
+    "state": "CO",
+    "city": "Gunnison",
+    "school": "Western State College of Colorado",
+    "station": "KWSB 91.1",
+    "frequency": "91.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "kwsb.org",
+    "phone": "970-943-3222",
+    "address": "-",
+    "ig_handles": [
+      "kwsb91.1"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kwsb91.1",
+    "show": "-",
+    "source_page": 15,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S081",
+    "country": "USA",
+    "state": "CT",
+    "city": "Danbury",
+    "school": "Western Connecticut State University",
+    "station": "WXCI 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "carlonep@wcsu.edu"
+    ],
+    "music_director": "-",
+    "website": "wxci.wcsu.edu/",
+    "phone": "203-837-9924",
+    "address": "Western Connecticut State University ATTN: RADIO STATION WXCI 181 White Street Danbury, CT USA 06810",
+    "ig_handles": [
+      "wxci_91.7"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wxci_91.7",
+    "show": "Schedule",
+    "source_page": 15,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S082",
+    "country": "USA",
+    "state": "CT",
+    "city": "Fairfield",
+    "school": "Fairfield University",
+    "station": "WVOF 88.5",
+    "frequency": "88.5",
+    "emails": [],
+    "music_director": "-",
+    "website": "wvof.org Contact Form",
+    "phone": "-",
+    "address": "1073 North Benson Rd Fairfield University Fairfield, CT",
+    "ig_handles": [
+      "wvofradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @wvofradio",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S083",
+    "country": "USA",
+    "state": "CT",
+    "city": "Fairfield",
+    "school": "Sacred Heart University",
+    "station": "WSHU 91.1",
+    "frequency": "91.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "wshu.org",
+    "phone": "203-365-6604",
+    "address": "5151 Park Avenue Fairfield, CT 06825",
+    "ig_handles": [
+      "wshupublicradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wshupublicradio",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S084",
+    "country": "USA",
+    "state": "CT",
+    "city": "Hamden",
+    "school": "Quinnipiac University",
+    "station": "WQAQ 98.1",
+    "frequency": "98.1",
+    "emails": [
+      "wqaqradio@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wqaq.com",
+    "phone": "203-582-5555",
+    "address": "275 Mt Carmel Ave Hamden, CT 06518, USA",
+    "ig_handles": [
+      "wqaqradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wqaqradio",
+    "show": "-",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S085",
+    "country": "USA",
+    "state": "CT",
+    "city": "Hartford",
+    "school": "Trinity College",
+    "station": "WRTC 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "crabla@aol.com",
+      "marcushrtfrd@hotmail.com",
+      "flmcnutt@yahoo.com",
+      "lornadiane@myyahoo.com",
+      "steveraf@aol.com",
+      "henryhbee@aol.com"
+    ],
+    "music_director": "-",
+    "website": "wrtcfm.com",
+    "phone": "860-297-2450",
+    "address": "WRTC Radio Attn: [position name] 300 Summit St. Hartford, CT 06106-3100",
+    "ig_handles": [
+      "wrtcfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "jazz",
+      "latin",
+      "christian"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrtcfm",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S086",
+    "country": "USA",
+    "state": "CT",
+    "city": "Middletown",
+    "school": "Wesleyan University",
+    "station": "WESU 88.1",
+    "frequency": "88.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "wesufm.org",
+    "phone": "860-685-7703",
+    "address": "WESU 88.1 45 Broad St, 2nd Floor Middletown, Connecticut",
+    "ig_handles": [
+      "wesufm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wesufm",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S087",
+    "country": "USA",
+    "state": "CT",
+    "city": "New Britain",
+    "school": "Central Connecticut State University",
+    "station": "WFCS 107.7",
+    "frequency": "107.7",
+    "emails": [
+      "pr@wfcsradio.com"
+    ],
+    "music_director": "-",
+    "website": "wfcsradio.com",
+    "phone": "860-832-1883",
+    "address": "WFCS 107.7 fm 105 Ella Grasso Blvd, New Britain, Connecticut",
+    "ig_handles": [
+      "wfcsradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wfcsradio",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S088",
+    "country": "USA",
+    "state": "CT",
+    "city": "New Haven",
+    "school": "University of New Haven",
+    "station": "WNHU 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "wnhu@newhaven.edu"
+    ],
+    "music_director": "-",
+    "website": "wnhu.org",
+    "phone": "203-444-3953",
+    "address": "-",
+    "ig_handles": [
+      "88.7wnhu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @88.7wnhu",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S089",
+    "country": "USA",
+    "state": "CT",
+    "city": "New Haven",
+    "school": "Southern Connecticut State University",
+    "station": "WSIN 1590",
+    "frequency": "1590",
+    "emails": [
+      "wsinradio@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wsinradio.org",
+    "phone": "203-392-6930",
+    "address": "-",
+    "ig_handles": [
+      "wsinradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wsinradio",
+    "show": "-",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S090",
+    "country": "USA",
+    "state": "CT",
+    "city": "New London",
+    "school": "Connecticut College",
+    "station": "WCNI 90.9",
+    "frequency": "90.9",
+    "emails": [
+      "wcnimusdir@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wcniradio.org",
+    "phone": "860-439-2850",
+    "address": "WCNI Connecticut College 270 Mohegan Avenue New London CT 06320",
+    "ig_handles": [
+      "wcniradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wcniradio",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S091",
+    "country": "USA",
+    "state": "CT",
+    "city": "Storrs",
+    "school": "University of Connecticut",
+    "station": "WHUS 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "musicdirector@whus.org"
+    ],
+    "music_director": "-",
+    "website": "whus.org",
+    "phone": "860-486-9487",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "Sat 10-12, Tues 11-12, Thurs 10-11",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S092",
+    "country": "USA",
+    "state": "CT",
+    "city": "West Hartford",
+    "school": "University of Hartford",
+    "station": "WWUH 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "wwuh@hartford.edu"
+    ],
+    "music_director": "-",
+    "website": "wwuh.org Contacts Page",
+    "phone": "860-768-4701",
+    "address": "WWUH Radio University of Hartford 200 Bloomfield Ave. West Hartford, CT 06117",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "For specific genres check Contacts Page ->",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S093",
+    "country": "USA",
+    "state": "CT",
+    "city": "West Hartford",
+    "school": "University of Hartford",
+    "station": "WSAM Radio",
+    "frequency": "",
+    "emails": [
+      "wsammusicdir@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "203-598-6069",
+    "address": "WSAM 200 Bloomfield Ave, University Commons, West Hartford, CT 06117",
+    "ig_handles": [
+      "wsamradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wsamradio",
+    "show": "-",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S094",
+    "country": "USA",
+    "state": "CT",
+    "city": "Willimantic",
+    "school": "Eastern Connecticut State University",
+    "station": "WECS 90.1",
+    "frequency": "90.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "wecsfm.com",
+    "phone": "860-465-5354 call before submitting",
+    "address": "-",
+    "ig_handles": [
+      "wecsfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wecsfm",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S095",
+    "country": "USA",
+    "state": "DE",
+    "city": "Newark",
+    "school": "University of Delaware",
+    "station": "WVUD 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "wvudmusic@gmail.com",
+      "teamnitty@gmail.com"
+    ],
+    "music_director": "Franco",
+    "website": "wvud.org",
+    "phone": "-",
+    "address": "WVUD Perkins Student Center 325 Academy Street Newark, DE 1971",
+    "ig_handles": [
+      "wvudradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wvudradio",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S096",
+    "country": "USA",
+    "state": "DC",
+    "city": "Washington",
+    "school": "American University",
+    "station": "WAMU 88.5",
+    "frequency": "88.5",
+    "emails": [],
+    "music_director": "-",
+    "website": "wamu.org Contact Form",
+    "phone": "202-885-1200",
+    "address": "WAMU 88.5 FM American University PO Box 98101 Washington, DC 20090",
+    "ig_handles": [
+      "wamu885"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @wamu885",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S097",
+    "country": "USA",
+    "state": "DC",
+    "city": "Washington",
+    "school": "Georgetown University",
+    "station": "WGTB",
+    "frequency": "",
+    "emails": [
+      "music@georgetownradio.co",
+      "media@georgetownradio.com"
+    ],
+    "music_director": "Tony Lioon",
+    "website": "georgetownradio. com",
+    "phone": "-",
+    "address": "432 Leavey Center Georgetown University Washington, DC 20057",
+    "ig_handles": [
+      "georgetownra"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @georgetownra dio",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S098",
+    "country": "USA",
+    "state": "DC",
+    "city": "Washington",
+    "school": "Howard University",
+    "station": "WHUR 96.3",
+    "frequency": "96.3",
+    "emails": [
+      "programming@whur.com"
+    ],
+    "music_director": "Traci LaTrelle",
+    "website": "whur.com",
+    "phone": "202-806-3500",
+    "address": "529 Bryant Street NW Washington, DC 20059",
+    "ig_handles": [
+      "whurfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @whurfm",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S099",
+    "country": "USA",
+    "state": "DC",
+    "city": "Washington",
+    "school": "Howard University",
+    "station": "WHBC 96.3",
+    "frequency": "96.3",
+    "emails": [
+      "gm.whbc@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "whbc963hd3.com",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "whbc_howardu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @whbc_howardu",
+    "show": "-",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S100",
+    "country": "USA",
+    "state": "DC",
+    "city": "Washington",
+    "school": "George Washington University",
+    "station": "WRGW District Radio",
+    "frequency": "",
+    "emails": [
+      "music@gwradio.com"
+    ],
+    "music_director": "Carolina",
+    "website": "gwradio.com",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "wrgwlive",
+      "wrgwmusic"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrgwlive @wrgwmusic in-studio performances available",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S101",
+    "country": "USA",
+    "state": "FL",
+    "city": "Daytona Beach",
+    "school": "Embry-Riddle Aeronautical University",
+    "station": "WIKD 102.5",
+    "frequency": "102.5",
+    "emails": [
+      "music.director@wikd1025.com"
+    ],
+    "music_director": "Carter Bitz",
+    "website": "wikd1025.com",
+    "phone": "386-226-7056",
+    "address": "The WIKD 102.5 F M 1 Aerospace Blvd, Daytona Beach, FL 32693",
+    "ig_handles": [
+      "wikd1025"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @wikd1025 Submission Form",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S102",
+    "country": "USA",
+    "state": "FL",
+    "city": "Melbourne",
+    "school": "Florida Tech",
+    "station": "WFIT 89.5",
+    "frequency": "89.5",
+    "emails": [
+      "syasko@fit.edu",
+      "wfit@fit.edu"
+    ],
+    "music_director": "Steve Yasko",
+    "website": "wfit.org",
+    "phone": "321-674-8950 321-674-8949",
+    "address": "WFIT 89.5 FM Florida Institute of Technology 150 W. University Blvd. Melbourne, FL 32901",
+    "ig_handles": [
+      "wfit895fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wfit895fm",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S103",
+    "country": "USA",
+    "state": "FL",
+    "city": "Miami",
+    "school": "University of Miami",
+    "station": "WVUM 90.5",
+    "frequency": "90.5",
+    "emails": [
+      "md@wvum.org"
+    ],
+    "music_director": "Steffi Rangel",
+    "website": "wvum.org",
+    "phone": "786-309-8861",
+    "address": "PO Box 248191 Coral Gables, FL 33124",
+    "ig_handles": [
+      "wvum905"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wvum905",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S104",
+    "country": "USA",
+    "state": "FL",
+    "city": "Miami",
+    "school": "-",
+    "station": "Blaze 88.7fm",
+    "frequency": "88.7",
+    "emails": [
+      "radiopushers@gmail.com"
+    ],
+    "music_director": "",
+    "website": "-",
+    "phone": "310-870-3300",
+    "address": "-",
+    "ig_handles": [
+      "dablazefm",
+      "88.7fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @dablazefm @88.7fm",
+    "show": "-",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S105",
+    "country": "USA",
+    "state": "FL",
+    "city": "Miami",
+    "school": "Florida International University",
+    "station": "WRGP The Roar Radio",
+    "frequency": "",
+    "emails": [
+      "theroar.miami.fiu@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "panthernow.com/ theroar",
+    "phone": "305-348-3575",
+    "address": "11200 SW 8th St. Modesto Maidique Campus, GC-210 Miami, FL 33199",
+    "ig_handles": [
+      "theroarfiu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @theroarfiu",
+    "show": "Schedule",
+    "source_page": 16,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S106",
+    "country": "USA",
+    "state": "FL",
+    "city": "Orlando",
+    "school": "University of Central Florida",
+    "station": "WUCF 89.9",
+    "frequency": "89.9",
+    "emails": [],
+    "music_director": "Kayonne Riley",
+    "website": "wucf.org",
+    "phone": "407-823-0899",
+    "address": "Attn: Music Director 12461 Research Parkway, Suite 550 Orlando, FL 32826",
+    "ig_handles": [
+      "wucf.fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wucf.fm",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S107",
+    "country": "USA",
+    "state": "FL",
+    "city": "Panama City",
+    "school": "Gulf Coast State College",
+    "station": "WKGC 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "derskine@gulfcoast.edu"
+    ],
+    "music_director": "-",
+    "website": "wkgc.org Contact Form",
+    "phone": "850-873-3500",
+    "address": "WKGC Public Radio / Gulf Coast State College Advanced Technology Center \\u2013 ATC 314 5230 West U.S. Highway 98 Panama City, FL 32401",
+    "ig_handles": [
+      "alternationhd3"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred",
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @alternationhd3 3 different streams",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S108",
+    "country": "USA",
+    "state": "FL",
+    "city": "St. Augustine",
+    "school": "Flagler College",
+    "station": "WFCF 88.5",
+    "frequency": "88.5",
+    "emails": [
+      "wfcf@flagler.edu"
+    ],
+    "music_director": "Daniel McCook",
+    "website": "flagler.edu/campus- community/wfcf- flagler-college- radio/",
+    "phone": "904-819-6450",
+    "address": "Flagler College - WFCF 74 King St., St. Augustine, FL 32085",
+    "ig_handles": [
+      "flaglercollegeradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @flaglercollegeradio",
+    "show": "Schedule at bottom of page",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S109",
+    "country": "USA",
+    "state": "FL",
+    "city": "Sunrise",
+    "school": "Nova Southeastern University",
+    "station": "WKPX 88.5",
+    "frequency": "88.5",
+    "emails": [
+      "makoremotes@nova.edu",
+      "nsumusic@nova.edu"
+    ],
+    "music_director": "Weston Clark",
+    "website": "makomedia.nova. edu/mako-radio/",
+    "phone": "-",
+    "address": "Mako Media Network Department of Communication, Media, and the Arts Nova Southeastern University 3300 S. University Dr., Fort Lauderdale, FL 33328",
+    "ig_handles": [
+      "nsu_makoradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @nsu_makoradio",
+    "show": "-",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S110",
+    "country": "USA",
+    "state": "FL",
+    "city": "Tallahassee",
+    "school": "Florida State University",
+    "station": "WVFS 89.7",
+    "frequency": "89.7",
+    "emails": [
+      "music@wvfs.fsu.edu"
+    ],
+    "music_director": "-",
+    "website": "wvfs.fsu.edu Submission Guidelines",
+    "phone": "-",
+    "address": "WVFS Tallahassee, c/o Music Director, 420 Diffenbaugh, Tallahassee, FL 32306-1550",
+    "ig_handles": [
+      "wvfs"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "CD, vinyl, and digital. priority to cd\\u2019s so they don't have to burn to play IG @wvfs",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S111",
+    "country": "USA",
+    "state": "FL",
+    "city": "Tallahassee",
+    "school": "Florida A&M University",
+    "station": "WANM 90.5",
+    "frequency": "90.5",
+    "emails": [
+      "wanm@famu.edu"
+    ],
+    "music_director": "-",
+    "website": "wanm.org",
+    "phone": "850-599-3083",
+    "address": "510 Orr Drive Suite 3056 Florida A&M University Tallahassee, FL 32307",
+    "ig_handles": [
+      "905theflava"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @905theflava",
+    "show": "-",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S112",
+    "country": "USA",
+    "state": "FL",
+    "city": "Tampa",
+    "school": "University of Tampa",
+    "station": "WUTT 1080am & RadioFX",
+    "frequency": "1080",
+    "emails": [],
+    "music_director": "-",
+    "website": "wutt.ut.edu",
+    "phone": "-",
+    "address": "401 W Kennedy Blvd Tampa, FL",
+    "ig_handles": [
+      "wuttspartanra"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wuttspartanra dio",
+    "show": "-",
+    "source_page": 17,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S113",
+    "country": "USA",
+    "state": "FL",
+    "city": "Winter Park",
+    "school": "Rollins College",
+    "station": "WPRK 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "wprkfm@rollins.edu"
+    ],
+    "music_director": "-",
+    "website": "wprk.onuniverse. com",
+    "phone": "407-646-2915",
+    "address": "Kathleen W. Rollins Hall 1000 Holt Ave. Winter Park, FL",
+    "ig_handles": [
+      "wprk"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wprk",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S114",
+    "country": "USA",
+    "state": "GA",
+    "city": "Albany",
+    "school": "Albany State University",
+    "station": "WASU 92.7",
+    "frequency": "92.7",
+    "emails": [],
+    "music_director": "",
+    "website": "asurams.edu/ academic-affairs/ college-of-arts- sciences/broadcast- center/wasufm.php",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "hipho.seafood"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @hipho.seafood",
+    "show": "",
+    "source_page": 17,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S115",
+    "country": "USA",
+    "state": "GA",
+    "city": "Athens",
+    "school": "University of Georgia",
+    "station": "WUOG 90.5",
+    "frequency": "90.5",
+    "emails": [
+      "tempugamd@gmail.com",
+      "wuoglocal@gmail.com"
+    ],
+    "music_director": "Elizabeth Kim Mal Holmes",
+    "website": "wuog.org Contact Form",
+    "phone": "LOCALS: ATTN: Local Music Director (Rissa Rogus + Joseph Mazzola) WUOG 90.5 FM 102 Tate Student Center Athens, GA 30602",
+    "address": "ATTN: Music Directors (Damario Walden + Kennon Conner) WUOG 90.5 FM 102 Tate Student Center Athens, GA 30602",
+    "ig_handles": [
+      "wuog"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @wuog",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S116",
+    "country": "USA",
+    "state": "GA",
+    "city": "Atlanta",
+    "school": "-",
+    "station": "WRFG 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "djpowerlord@gmail.com",
+      "jprezidente@yahoo.com",
+      "theaftersetradioshow@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wrfg.org",
+    "phone": "404-523-3471",
+    "address": "WRFG 89.3 FM 1083 Austin Avenue, NE Atlanta, GA 30307-1940",
+    "ig_handles": [
+      "wrfgatlanta",
+      "jprezidente",
+      "theaftersetradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrfgatlanta @jprezidente @theaftersetradio show",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S117",
+    "country": "USA",
+    "state": "GA",
+    "city": "Atlanta",
+    "school": "Georgia Tech",
+    "station": "WREK 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "music.director@wrek.org"
+    ],
+    "music_director": "-",
+    "website": "wrek.org Submission Info",
+    "phone": "404-894-2468",
+    "address": "WREK 91.1 FM 350 Ferst Drive Georgia Tech John Lewis Student Center Suite 2140 Atlanta, GA 30332",
+    "ig_handles": [
+      "wrekatlanta"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrekatlanta",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S118",
+    "country": "USA",
+    "state": "GA",
+    "city": "Atlanta",
+    "school": "Georgia State University",
+    "station": "WRAS 88.5",
+    "frequency": "88.5",
+    "emails": [
+      "wrasmd@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wras.org",
+    "phone": "404-413-9727",
+    "address": "",
+    "ig_handles": [
+      "album88atlanta"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @album88atlanta",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S119",
+    "country": "USA",
+    "state": "GA",
+    "city": "Columbus",
+    "school": "Columbus State University",
+    "station": "WCUG 88.5",
+    "frequency": "88.5",
+    "emails": [
+      "wcugcougarradio@columbusstate.edu"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "706-507-8617",
+    "address": "-",
+    "ig_handles": [
+      "wcugcougarra"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wcugcougarra dio",
+    "show": "-",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S120",
+    "country": "USA",
+    "state": "GA",
+    "city": "Milledgeville",
+    "school": "Georgia College & State University",
+    "station": "WGUR 95.3",
+    "frequency": "95.3",
+    "emails": [
+      "wgur.music@gcsu.edu"
+    ],
+    "music_director": "Halle Rosten",
+    "website": "gcsuradio.com Contact Form",
+    "phone": "404-680-2342",
+    "address": "-",
+    "ig_handles": [
+      "wgur953"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @wgur953 Submit at bottom of website home page",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S121",
+    "country": "USA",
+    "state": "GA",
+    "city": "Savannah",
+    "school": "Savannah State University",
+    "station": "WHCJ 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "whcj@savannahstate.edu"
+    ],
+    "music_director": "Grace Curry",
+    "website": "savannahstate.edu/ whcj",
+    "phone": "912-358-4236",
+    "address": "WHCJ FM P.O. Box 20484 Savannah, GA 31404",
+    "ig_handles": [
+      "whcj_90.3fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @whcj_90.3fm",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S122",
+    "country": "USA",
+    "state": "GA",
+    "city": "Toccoa Falls",
+    "school": "-",
+    "station": "WTXR 89.7",
+    "frequency": "89.7",
+    "emails": [],
+    "music_director": "-",
+    "website": "hisradiopraise.com Syndication List",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "hisradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [
+      "positive_content_only"
+    ],
+    "submission_form_signals": [],
+    "notes_raw": "IG @hisradio Uplifting music Syndicated in South Carolina, North Carolina, & Georgia",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S123",
+    "country": "USA",
+    "state": "HI",
+    "city": "Hilo",
+    "school": "University of Hawaii Hilo",
+    "station": "KUHH 101.1",
+    "frequency": "101.1",
+    "emails": [
+      "urh@hawaii.edu",
+      "urhpc@hawaii.edu"
+    ],
+    "music_director": "-",
+    "website": "hilo.hawaii.edu/ campuscenter/ radio/",
+    "phone": "808-932-7376",
+    "address": "-",
+    "ig_handles": [
+      "uhhilocampus"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @uhhilocampus FB: UH Hilo",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S124",
+    "country": "USA",
+    "state": "HI",
+    "city": "Honolulu",
+    "school": "University of Hawaii at Manoa",
+    "station": "KTUH 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "md@ktuh.org",
+      "aloha@slappradio.com"
+    ],
+    "music_director": "-",
+    "website": "slappradio.com",
+    "phone": "808-956-7261 Text Slapp Radio at 808-800-7793",
+    "address": "-",
+    "ig_handles": [
+      "ktuhfm",
+      "slappradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ktuhfm @slappradio",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S125",
+    "country": "USA",
+    "state": "ID",
+    "city": "Boise",
+    "school": "Boise State University",
+    "station": "KBSU 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "boisestatepublicradio@boisestate.edu"
+    ],
+    "music_director": "-",
+    "website": "boisestatepublic radio.org",
+    "phone": "208-426-3663",
+    "address": "1910 University Dr., Boise, ID 83725-1916",
+    "ig_handles": [
+      "boisestatepublic"
+    ],
+    "station_type": "public_npr",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @boisestatepublic radio Studio rental available",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S126",
+    "country": "USA",
+    "state": "ID",
+    "city": "Moscow",
+    "school": "University of Idaho",
+    "station": "KUOI 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "kuoi@uidaho.edu",
+      "connorra@uidaho.edu"
+    ],
+    "music_director": "Connor Anderson",
+    "website": "kuoi.org",
+    "phone": "208-885-7825",
+    "address": "Bruce M. Pitman Center 709 Deakin Ave. Moscow, ID, 83844-4271",
+    "ig_handles": [
+      "kuoi_89.3"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kuoi_89.3",
+    "show": "Schedule",
+    "source_page": 17,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S127",
+    "country": "USA",
+    "state": "IL",
+    "city": "Bloomington",
+    "school": "Illinois Wesleyan University",
+    "station": "WESN 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "dbohlman@iwu.edu"
+    ],
+    "music_director": "Derek Bohlman",
+    "website": "iwu.edu/wesn",
+    "phone": "309-556-2638",
+    "address": "Derek Bohlman WESN 88.1 FM PO Box 2900 Bloomington IL 61702",
+    "ig_handles": [
+      "wesn_titanradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wesn_titanradio",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S128",
+    "country": "USA",
+    "state": "IL",
+    "city": "Champaign",
+    "school": "Parkland College",
+    "station": "WPCD 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "WPCDRadio@parkland.edu"
+    ],
+    "music_director": "Deane Geiken",
+    "website": "parkland.edu/ wpcd",
+    "phone": "217-373-3790",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "FB 88.7 WPCD",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S129",
+    "country": "USA",
+    "state": "IL",
+    "city": "Charleston",
+    "school": "Eastern Illinois University",
+    "station": "WEIU 88.9",
+    "frequency": "88.9",
+    "emails": [
+      "hitmix@weiu.net"
+    ],
+    "music_director": "-",
+    "website": "weiu.net/hitmix",
+    "phone": "217-581-6116",
+    "address": "-",
+    "ig_handles": [
+      "hitmix889"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @hitmix889 FB Hit-Mix 88.9 WEIU",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S130",
+    "country": "USA",
+    "state": "IL",
+    "city": "Chicago",
+    "school": "DePaul University",
+    "station": "Radio DePaul",
+    "frequency": "",
+    "emails": [
+      "radiodepaulmusic@gmail.com"
+    ],
+    "music_director": "Jonah Elbaum",
+    "website": "radiodepaul.com",
+    "phone": "-",
+    "address": "Radio DePaul Attn: Music Director (optional) 2250 N. Sheffield Ave. Suite 317 Chicago, IL 60614",
+    "ig_handles": [
+      "radiodepaul"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @radiodepaul",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S131",
+    "country": "USA",
+    "state": "IL",
+    "city": "Chicago",
+    "school": "University of Illinois at Chicago",
+    "station": "UIC Radio",
+    "frequency": "",
+    "emails": [
+      "uicradio@uic.edu"
+    ],
+    "music_director": "-",
+    "website": "uicradio.org",
+    "phone": "312-413-5085",
+    "address": "750 S Halsted St #386 Chicago, IL 60607",
+    "ig_handles": [
+      "uicradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @uicradio",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S132",
+    "country": "USA",
+    "state": "IL",
+    "city": "Chicago",
+    "school": "Northeastern Illinois University",
+    "station": "WZRD 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "musicdirector@wzrdchicago.org"
+    ],
+    "music_director": "Eddie Pedvin",
+    "website": "wzrdchicago.org",
+    "phone": "773-442-4586",
+    "address": "WZRD Radio Station 5500 N. St. Louis Ave Chicago, IL 60625-4699 ATTN: Music Director",
+    "ig_handles": [
+      "wzrdchicago"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "prefers CD, WAV files IG @wzrdchicago",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S133",
+    "country": "USA",
+    "state": "IL",
+    "city": "Chicago",
+    "school": "University of Chicago",
+    "station": "WHPK 88.5",
+    "frequency": "88.5",
+    "emails": [
+      "md@whpk.org"
+    ],
+    "music_director": "Eli Winters Ara Hanissian",
+    "website": "whpk.org",
+    "phone": "773-702-8289",
+    "address": "WHPK Reynolds Club 5706 S. University Ave. Chicago, IL 60637",
+    "ig_handles": [
+      "whpk_88.5fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @whpk_88.5fm",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S134",
+    "country": "USA",
+    "state": "IL",
+    "city": "Chicago",
+    "school": "Illinois Institute of Technology",
+    "station": "WIIT 88.9",
+    "frequency": "88.9",
+    "emails": [
+      "radio@illanoize.co",
+      "tguidroz@hawk.iit.edu",
+      "fbshow2003@gmail.com"
+    ],
+    "music_director": "Brian",
+    "website": "web.iit.edu",
+    "phone": "312-567-3088",
+    "address": "WIIT 88.9FM A. Sidney Katz Studio 3201 South State Street Chicago, IL 60616",
+    "ig_handles": [
+      "wiitchicago",
+      "fusionradio08",
+      "illanoizeradio",
+      "illanoize_"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wiitchicago @fusionradio08 @illanoizeradio @illanoize_",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S135",
+    "country": "USA",
+    "state": "IL",
+    "city": "Chicago",
+    "school": "St. Xavier University",
+    "station": "WXAV 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "wxavmusic@gmail.com"
+    ],
+    "music_director": "Sean Anderson",
+    "website": "sxustudentmedia. com",
+    "phone": "773-298-3376",
+    "address": "ATTN:WXAV 88.3FM 3700 West 103rd St. Chicago, IL 60655",
+    "ig_handles": [
+      "wxavchicago"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wxavchicago send .wav files",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S136",
+    "country": "USA",
+    "state": "IL",
+    "city": "Chicago",
+    "school": "City Colleges of Chicago",
+    "station": "WKKC 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "wkkc@ccc.edu"
+    ],
+    "music_director": "Marcella Jones",
+    "website": "wkkc.fm",
+    "phone": "773-488-9552",
+    "address": "WKKC Radio Kenndey-King College Building U Chicago, Illinois 60621",
+    "ig_handles": [
+      "marcellajones1"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @marcellajones1",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S137",
+    "country": "USA",
+    "state": "IL",
+    "city": "Chicago",
+    "school": "Columbia College Chicago",
+    "station": "WCRX Underground",
+    "frequency": "",
+    "emails": [
+      "wcrxdj@colum.edu"
+    ],
+    "music_director": "Matt Cunningham",
+    "website": "wcrx.colum.edu",
+    "phone": "312-663 3512",
+    "address": "WCRX-FM Studios 33 E. Ida B. Wells Drive Chicago, IL 60605",
+    "ig_handles": [
+      "wcrxfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wcrxfm FB Chicago\\u2019s Underground Spotify WCRX FM",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S138",
+    "country": "USA",
+    "state": "IL",
+    "city": "Decatur",
+    "school": "Millikin University",
+    "station": "WJMU 89.5",
+    "frequency": "89.5",
+    "emails": [
+      "aclee@millikin.edu"
+    ],
+    "music_director": "Samuel Laro",
+    "website": "millikin.edu/wjmu",
+    "phone": "217-424-6377",
+    "address": "ATTN: Aidan Lee 1184 W. Main St., Decatur, Illinois, 62522",
+    "ig_handles": [
+      "wjmu89.5"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wjmu89.5",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S139",
+    "country": "USA",
+    "state": "IL",
+    "city": "Dekalb",
+    "school": "Northern Illinois University",
+    "station": "WNIJ 89.5 WNIU 90.5",
+    "frequency": "89.5",
+    "emails": [
+      "npr@niu.edu"
+    ],
+    "music_director": "-",
+    "website": "northernpublicradio. org",
+    "phone": "815-753-9645",
+    "address": "801 N. First St., DeKalb, IL 60115",
+    "ig_handles": [
+      "wnij",
+      "sessionswnij"
+    ],
+    "station_type": "public_npr",
+    "genre_hints": [
+      "news_talk"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wnij @sessionswnij",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S140",
+    "country": "USA",
+    "state": "IL",
+    "city": "Elmhurst",
+    "school": "Elmhurst College",
+    "station": "WRSE 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "wrse.radio@elmhurst.edu"
+    ],
+    "music_director": "-",
+    "website": "linktr.ee/wrse887",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "wrse887fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrse887fm",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S141",
+    "country": "USA",
+    "state": "IL",
+    "city": "Evanston",
+    "school": "Northwestern University",
+    "station": "WNUR 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "GM@wnur.org"
+    ],
+    "music_director": "Abigail Everding/ Students",
+    "website": "wnur.org",
+    "phone": "847-866-9687",
+    "address": "Attn: Streetbeat WNUR 89.3 FM, 1877 Campus Drive, Evanston, IL 60208",
+    "ig_handles": [
+      "wnur89.3"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wnur89.3",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S142",
+    "country": "USA",
+    "state": "IL",
+    "city": "Galesburg",
+    "school": "Knox College",
+    "station": "WVKC 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "90.7wvkc@gmail.com"
+    ],
+    "music_director": "Porter",
+    "website": "thewvkc.com",
+    "phone": "-",
+    "address": "WVKC, Knox College 2 E South St, Galesburg, IL 61401",
+    "ig_handles": [
+      "thewvkc"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @thewvkc",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S143",
+    "country": "USA",
+    "state": "IL",
+    "city": "Galesburg",
+    "school": "Western Illinois University",
+    "station": "WIUS 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "WIUS.THEDOG@GMAIL.COM"
+    ],
+    "music_director": "-",
+    "website": "883thedog.com theproxyreport.com /883thedog",
+    "phone": "309-298-3218",
+    "address": "88.3 The Dog, Third Floor, Sallee Hall, Western Illinois University, Macomb, IL 61455",
+    "ig_handles": [
+      "883thedog"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @883thedog",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S144",
+    "country": "USA",
+    "state": "IL",
+    "city": "Glen Ellyn",
+    "school": "College of DuPage",
+    "station": "WDCB 90.9",
+    "frequency": "90.9",
+    "emails": [],
+    "music_director": "-",
+    "website": "wdcb.org Contact Form",
+    "phone": "630-942-4300",
+    "address": "WDCB Public Radio College of DuPage 425 Fawell Blvd Glen Ellyn, IL 60137",
+    "ig_handles": [
+      "909wdcb"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "jazz"
+    ],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @909wdcb Jazz",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S145",
+    "country": "USA",
+    "state": "IL",
+    "city": "Godfrey",
+    "school": "Lewis and Clark Community College",
+    "station": "WLCA 89.9",
+    "frequency": "89.9",
+    "emails": [
+      "wlcamusicdirector@yahoo.com",
+      "wlca899md@gmail.com"
+    ],
+    "music_director": "Chris Riddle",
+    "website": "wlcafm.com Submit Here",
+    "phone": "618-468-4940",
+    "address": "WLCA 5800 Godfrey Rd. Godfrey, IL 62035",
+    "ig_handles": [
+      "899wlca"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submit here"
+    ],
+    "notes_raw": "IG @899wlca New music Thursdays 6-8p",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S146",
+    "country": "USA",
+    "state": "IL",
+    "city": "Greenville",
+    "school": "Greenville College",
+    "station": "WGRN 89.5",
+    "frequency": "89.5",
+    "emails": [
+      "895wgrn@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wgrn.net",
+    "phone": "618-267-5436",
+    "address": "-",
+    "ig_handles": [
+      "wgrn89.5"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wgrn89.5 FB WGRN 89.5",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S147",
+    "country": "USA",
+    "state": "IL",
+    "city": "Joliet",
+    "school": "University of St. Francis",
+    "station": "WCSF 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "musicdirectorwcsf@stfrancis.edu"
+    ],
+    "music_director": "Bryan Ennis",
+    "website": "wcsfradio.com Livestream",
+    "phone": "815-740-3214",
+    "address": "500 wilcox street, Joliet, IL, United States",
+    "ig_handles": [
+      "wcsf887",
+      "wcsfradio",
+      "bkmorningblitz"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wcsf887 @wcsfradio @bkmorningblitz FB WCSF Radio",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S148",
+    "country": "USA",
+    "state": "IL",
+    "city": "Kankakee",
+    "school": "Olivet Nazarene University",
+    "station": "Shine FM 89.7",
+    "frequency": "89.7",
+    "emails": [
+      "shine@olivet.edu"
+    ],
+    "music_director": "-",
+    "website": "shine.fm",
+    "phone": "815-939-5330",
+    "address": "One University Ave Bourbonnais, IL 60914",
+    "ig_handles": [
+      "shinefmnetwork"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "Faith based IG @shinefmnetwork",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S149",
+    "country": "USA",
+    "state": "IL",
+    "city": "Lake Forest",
+    "school": "Lake Forest University",
+    "station": "WMXM 88.9",
+    "frequency": "88.9",
+    "emails": [
+      "hiphop@wmxm.org",
+      "md@wmxm.org"
+    ],
+    "music_director": "-",
+    "website": "wmxm.org Contacts",
+    "phone": "847-735-6038",
+    "address": "WMXM 555 N Sheridan Rd Lake Forest, IL 60045",
+    "ig_handles": [
+      "wmxm88.9"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "prefer CD, vinyl. CMJ tracking (College Media Journal) IG @wmxm88.9",
+    "show": "Schedule",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S150",
+    "country": "USA",
+    "state": "IL",
+    "city": "Mattoon",
+    "school": "Lake Land College",
+    "station": "WLKL 89.9",
+    "frequency": "89.9",
+    "emails": [
+      "899themax@lakelandcollege.edu",
+      "gpowers@lakelandcollege.edu"
+    ],
+    "music_director": "Greg Powers",
+    "website": "lakelandcollege.e du/student-life/ themax/",
+    "phone": "217-234-5373",
+    "address": "Greg Powers 5001 Lake Land Blvd. Mattoon, IL 61938",
+    "ig_handles": [
+      "899themax"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @899themax",
+    "show": "-",
+    "source_page": 18,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S151",
+    "country": "USA",
+    "state": "IL",
+    "city": "Mount Carmel",
+    "school": "Illinois Eastern Community Colleges",
+    "station": "WVJC 89.1",
+    "frequency": "89.1",
+    "emails": [
+      "peachk@iecc.edu"
+    ],
+    "music_director": "-",
+    "website": "bashradio.com DJ List",
+    "phone": "618-262-8989",
+    "address": "2200 College Drive Mount Carmel, IL 62863",
+    "ig_handles": [
+      "bashradio89"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @bashradio89",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S152",
+    "country": "USA",
+    "state": "IL",
+    "city": "Naperville",
+    "school": "North Central College",
+    "station": "WONC 89.1",
+    "frequency": "89.1",
+    "emails": [
+      "feedback@wonc.org"
+    ],
+    "music_director": "-",
+    "website": "WONC.org Contact Page",
+    "phone": "630-637-8989",
+    "address": "WONC-FM 30 N. Brainard St. P.O. Box 3063 Naperville, IL 60540",
+    "ig_handles": [
+      "wonc891"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wonc891",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S153",
+    "country": "USA",
+    "state": "IL",
+    "city": "Normal",
+    "school": "Illinois State University",
+    "station": "WGLT 89.1",
+    "frequency": "89.1",
+    "emails": [
+      "wglt@illinoisstate.edu",
+      "news@wglt.org"
+    ],
+    "music_director": "-",
+    "website": "WGLT.org",
+    "phone": "309-438-2255",
+    "address": "WGLT 8910 Illinois State University Normal, IL 61790-8910",
+    "ig_handles": [
+      "wgltnews"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wgltnews",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S154",
+    "country": "USA",
+    "state": "IL",
+    "city": "Normal",
+    "school": "Illinois State University",
+    "station": "WZND 103.3",
+    "frequency": "103.3",
+    "emails": [
+      "md@wznd.com",
+      "pd@wznd.com"
+    ],
+    "music_director": "-",
+    "website": "WZND.com Submission Form",
+    "phone": "309-438-5491",
+    "address": "007 Fell Hall Normal, IL 61790",
+    "ig_handles": [
+      "wznd"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @wznd",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S155",
+    "country": "USA",
+    "state": "IL",
+    "city": "Palatine",
+    "school": "Harper College",
+    "station": "WHCM 88.3",
+    "frequency": "88.3",
+    "emails": [],
+    "music_director": "-",
+    "website": "harperradio.com",
+    "phone": "847-925-6237",
+    "address": "1200 W Algonquin Rd. Palatine, IL",
+    "ig_handles": [
+      "harperradiofm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @harperradiofm",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S156",
+    "country": "USA",
+    "state": "IL",
+    "city": "Peoria",
+    "school": "Bradley University",
+    "station": "WCBU 89.9",
+    "frequency": "89.9",
+    "emails": [
+      "rmdenha@wcbu.org"
+    ],
+    "music_director": "Dylan",
+    "website": "WCBU.org",
+    "phone": "309-438-5426",
+    "address": "WCBU 1501 W. Bradley Ave. Peoria, IL 61625",
+    "ig_handles": [
+      "wcburadio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wcburadio",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S157",
+    "country": "USA",
+    "state": "IL",
+    "city": "Rock Island",
+    "school": "Augustana College",
+    "station": "WVIK 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "info@wvik.org"
+    ],
+    "music_director": "Mindy",
+    "website": "WVIK.org",
+    "phone": "(309) 794-7500",
+    "address": "815 38th Street Rock Island, IL 61201",
+    "ig_handles": [
+      "wvikqc"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wvikqc",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S158",
+    "country": "USA",
+    "state": "IL",
+    "city": "Rivergrove",
+    "school": "Triton College",
+    "station": "WRRG",
+    "frequency": "",
+    "emails": [
+      "wrrg@hotmail.com"
+    ],
+    "music_director": "-",
+    "website": "Live Stream",
+    "phone": "708-583-3110",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "FB WRRG",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S159",
+    "country": "USA",
+    "state": "IL",
+    "city": "Romeoville",
+    "school": "Lewis University",
+    "station": "WLRA 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "wlrathestart@gmail.com",
+      "ashleynbihun@lewisu.edu"
+    ],
+    "music_director": "Ashley Bihun",
+    "website": "wlraradio.com",
+    "phone": "815-836-5000",
+    "address": "1 University Pkwy Romeoville, Illinois",
+    "ig_handles": [
+      "wlraradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wlraradio",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S160",
+    "country": "USA",
+    "state": "IL",
+    "city": "Urbana",
+    "school": "-",
+    "station": "WRFU 104.5",
+    "frequency": "104.5",
+    "emails": [
+      "104.5fm.wrfu@gmail.com",
+      "djbjclark@gmail.com"
+    ],
+    "music_director": "DJ BJ Clark Will you make this month\\u2019s Top10?",
+    "website": "wrfu.net",
+    "phone": "217-344-2536 815-324-2587",
+    "address": "202 South Broadway Suite #112 Urbana, IL 61801",
+    "ig_handles": [
+      "104.5fm_wrfu",
+      "djbjclark"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @104.5fm_wrfu @djbjclark",
+    "show": "Schedule ask for interviews as well \\u2014>",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S161",
+    "country": "USA",
+    "state": "IL",
+    "city": "Urbana",
+    "school": "Illini Media Company",
+    "station": "WPGU 107.1",
+    "frequency": "107.1",
+    "emails": [
+      "jskahn2@illinimedia.com"
+    ],
+    "music_director": "Jordan Khan",
+    "website": "WPGU.com Submission Guidelines",
+    "phone": "-",
+    "address": "WPGU Music Director 1001 S. Wright Street Champaign, IL 61820",
+    "ig_handles": [
+      "WPGuillini"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "IG @WPGuillini",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S162",
+    "country": "USA",
+    "state": "IN",
+    "city": "Angola",
+    "school": "Tri-State University",
+    "station": "WEAX 88.3",
+    "frequency": "88.3",
+    "emails": [],
+    "music_director": "-",
+    "website": "star883.com",
+    "phone": "-",
+    "address": "STAR 88.3 8 Martin Luther Drive Fort Wayne, IN 46825",
+    "ig_handles": [
+      "star883radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "christian"
+    ],
+    "submission_methods": [],
+    "flags": [
+      "positive_content_only"
+    ],
+    "submission_form_signals": [],
+    "notes_raw": "CD, FCC friendly / monitored Christian Music IG @star883radio",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S163",
+    "country": "USA",
+    "state": "IN",
+    "city": "Bloomington",
+    "school": "Indiana State University",
+    "station": "WFIU 103.7",
+    "frequency": "103.7",
+    "emails": [
+      "wfiu@indiana.edu"
+    ],
+    "music_director": "-",
+    "website": "indianapublicmed ia.org/radio/ Contact Form",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "wfiuofficial"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @wfiuofficial",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S164",
+    "country": "USA",
+    "state": "IN",
+    "city": "Bloomington",
+    "school": "Indiana University Bloomington",
+    "station": "WIUX",
+    "frequency": "",
+    "emails": [
+      "music@wiux.org"
+    ],
+    "music_director": "Justin Mazany Wiley Jettpace",
+    "website": "wiux.org",
+    "phone": "812-855-7862",
+    "address": "WIUX 99.1FM 717 E. 8th St. Bloomington, IN 47408-3842",
+    "ig_handles": [
+      "wiuxfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wiuxfm",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S165",
+    "country": "USA",
+    "state": "IN",
+    "city": "Goshen",
+    "school": "Goshen College",
+    "station": "WGCS 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "globe@goshen.edu"
+    ],
+    "music_director": "-",
+    "website": "globeradio.org",
+    "phone": "574-535-7488",
+    "address": "1700 South Main Street Goshen, IN 46526",
+    "ig_handles": [
+      "911theglobe"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @911theglobe FB 91.1 The Globe",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S166",
+    "country": "USA",
+    "state": "IN",
+    "city": "Greencastle",
+    "school": "DePauw University",
+    "station": "WGRE 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "wgremusic@gmail.com",
+      "fionasipple_2025@depauw.edu",
+      "ngandinh_2026@depauw.edu"
+    ],
+    "music_director": "Erica Bean",
+    "website": "wgre.org",
+    "phone": "765-658-4641",
+    "address": "WGRE DePauw University 609 S. Locust Street Greencastle, IN 46135 765-658-4475",
+    "ig_handles": [
+      "wgreradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wgreradio",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S167",
+    "country": "USA",
+    "state": "IN",
+    "city": "Huntington",
+    "school": "Huntington University",
+    "station": "WQHU 105.5",
+    "frequency": "105.5",
+    "emails": [
+      "awidener@huntington.edu"
+    ],
+    "music_director": "-",
+    "website": "foresterdigital.net/ radio",
+    "phone": "260-442-4732",
+    "address": "-",
+    "ig_handles": [
+      "foresterdigital"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @foresterdigital",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S168",
+    "country": "USA",
+    "state": "IN",
+    "city": "Huntington",
+    "school": "University of Southern Indiana",
+    "station": "WSWI 95.7",
+    "frequency": "95.7",
+    "emails": [
+      "jmmorris@usi.edu",
+      "localmusic@957thespin.com",
+      "alternative@957thespin.com"
+    ],
+    "music_director": "-",
+    "website": "957thespin.com",
+    "phone": "812-465-1665",
+    "address": "8600 University Blvd, Evansville, Indiana 47712",
+    "ig_handles": [
+      "957thespin"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @957thespin FB 95.7 The Spin",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S169",
+    "country": "USA",
+    "state": "IN",
+    "city": "Indianapolis",
+    "school": "University of Indianapolis",
+    "station": "WICR 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "pensish@uindy.edu"
+    ],
+    "music_director": "-",
+    "website": "uindyradio.wixsite .com/wicrfm",
+    "phone": "317-788-3314",
+    "address": "-",
+    "ig_handles": [
+      "wicronline"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wicronline",
+    "show": "Schedule Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S170",
+    "country": "USA",
+    "state": "IN",
+    "city": "Muncie",
+    "school": "Ball State University",
+    "station": "WCRD 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "WCRD@bsu.edu"
+    ],
+    "music_director": "-",
+    "website": "wcrd.net/contact",
+    "phone": "765-285-1467",
+    "address": "WCRD LB 200 Ball State University Muncie, IN 47306",
+    "ig_handles": [
+      "wcrd913"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wcrd913",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S171",
+    "country": "USA",
+    "state": "IN",
+    "city": "Richmond",
+    "school": "Earlham College",
+    "station": "WECI 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "station.manager.weci@gmail.com"
+    ],
+    "music_director": "Jason Elliot, Maya Panicker",
+    "website": "weciradio.org",
+    "phone": "-",
+    "address": "Runyon Center WECI 91.5 , Campus of Earlham College 801 National Road West 47374",
+    "ig_handles": [
+      "weciradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @weciradio",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S172",
+    "country": "USA",
+    "state": "IN",
+    "city": "Terre Haute",
+    "school": "Indiana State University",
+    "station": "WZIS 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "wzismusic@isustudentmedia.com"
+    ],
+    "music_director": "-",
+    "website": "isustudentmedia. com",
+    "phone": "812-237-8970",
+    "address": "230-B Dreiser Hall 221 N. 6th St. Indiana State University Terre Haute, IN 47809",
+    "ig_handles": [
+      "wzisfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wzisfm",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S173",
+    "country": "USA",
+    "state": "IN",
+    "city": "Terre Haute",
+    "school": "Rose-Hulman Institute of Tech",
+    "station": "WMHD",
+    "frequency": "",
+    "emails": [
+      "wmhdradio@gmail.com"
+    ],
+    "music_director": "Audrey",
+    "website": "wmhdradio.org",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "wmhdonlideradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmhdonlideradio",
+    "show": "-",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S174",
+    "country": "USA",
+    "state": "IN",
+    "city": "Valparaiso",
+    "school": "Valparaiso University",
+    "station": "WVUR The Source 95.1",
+    "frequency": "95.1",
+    "emails": [
+      "thesource95@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wvurthesource.com Contact Form",
+    "phone": "219-464-5383",
+    "address": "WVUR The Source 95.1 1809 Chapel Drive Valparaiso, Indiana 46383",
+    "ig_handles": [
+      "thesource95"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @thesource95",
+    "show": "Schedule",
+    "source_page": 19,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S175",
+    "country": "USA",
+    "state": "IN",
+    "city": "Vincennes",
+    "school": "Vincennes University",
+    "station": "WVUB 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "wvub@vinu.edu"
+    ],
+    "music_director": "Kevin Watson",
+    "website": "wvub.org",
+    "phone": "812-888-4347",
+    "address": "WVUB 1200 North Second St Vincennes, IN 47591",
+    "ig_handles": [
+      "wvub"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wvub",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S176",
+    "country": "USA",
+    "state": "IA",
+    "city": "Ames",
+    "school": "Iowa State University",
+    "station": "KURE 88.5",
+    "frequency": "88.5",
+    "emails": [
+      "music@kure885.org"
+    ],
+    "music_director": "Karina Abbott Nicci Tait",
+    "website": "kure.stuorg.iastat e.edu",
+    "phone": "515-294-4332",
+    "address": "1199 Friley Hall 212 Beyer Ct Ames, IA 50012",
+    "ig_handles": [
+      "kure885"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kure885",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S177",
+    "country": "USA",
+    "state": "IA",
+    "city": "Decorah",
+    "school": "Luther College",
+    "station": "KWLC",
+    "frequency": "",
+    "emails": [],
+    "music_director": "-",
+    "website": "kwlc.luther.edu",
+    "phone": "563-387-1240",
+    "address": "KWLC Dahl Centennial Union 8 700 College Drive Decorah, Iowa 52101",
+    "ig_handles": [
+      "kwlc1240"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kwlc1240",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S178",
+    "country": "USA",
+    "state": "IA",
+    "city": "Iowa City",
+    "school": "University of Iowa",
+    "station": "KRUI 89.7",
+    "frequency": "89.7",
+    "emails": [
+      "krui.music@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "krui.fm/about/ music/",
+    "phone": "319-335-7215",
+    "address": "KRUI-FM Music Director 379 IMU Iowa City, IA 52242",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "include track list with cd or vinyl to stand out + a little bio / info",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S179",
+    "country": "USA",
+    "state": "KS",
+    "city": "Lawrence",
+    "school": "University of Kansas",
+    "station": "KJHK 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "submitmusic@kjhk.org"
+    ],
+    "music_director": "-",
+    "website": "kjhk.org",
+    "phone": "-",
+    "address": "KJHK 90.7 FM 1301 Jayhawk Boulevard Suite 370 Lawrence, KS 66045",
+    "ig_handles": [
+      "kjhk90_7"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "send links not actual files + CD & vinyl IG @kjhk90_7",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S180",
+    "country": "USA",
+    "state": "KS",
+    "city": "Manhattan",
+    "school": "Kansas State University",
+    "station": "KSDB 91.9",
+    "frequency": "91.9",
+    "emails": [],
+    "music_director": "Sara Wallace",
+    "website": "ksdbfm.org Submit Here",
+    "phone": "785-532-2330",
+    "address": "ATTN: Music Director 234 Nicholas Hall 702 Mid-Campus Drive South Manhattan, KSD 66506-1501",
+    "ig_handles": [
+      "wildcat919fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submit here"
+    ],
+    "notes_raw": "IG @wildcat919fm",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S181",
+    "country": "USA",
+    "state": "KY",
+    "city": "Lexington",
+    "school": "University of Kentucky",
+    "station": "WRFL 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "music@wrfl.fm"
+    ],
+    "music_director": "Aryana Misaghi",
+    "website": "wrfl.fm",
+    "phone": "-",
+    "address": "WRFL Lexington, University Station Box 777, University of Kentucky, Lexington, KY 40506",
+    "ig_handles": [
+      "wrfl881"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrfl881",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S182",
+    "country": "USA",
+    "state": "LA",
+    "city": "Baton Rouge",
+    "school": "Louisiana State University",
+    "station": "KLSU 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "musicdirector@lsu.edu"
+    ],
+    "music_director": "-",
+    "website": "lsureveille.com/ klsu",
+    "phone": "225-578-5579",
+    "address": "-",
+    "ig_handles": [
+      "klsufm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "@klsufm",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S183",
+    "country": "USA",
+    "state": "LA",
+    "city": "Baton Rouge",
+    "school": "-",
+    "station": "WHYR 96.9",
+    "frequency": "96.9",
+    "emails": [
+      "info@whyr.org"
+    ],
+    "music_director": "-",
+    "website": "whyr.org",
+    "phone": "225-343-9927 225-800-2727",
+    "address": "1623 Main St. Baton Rouge, LA 70802",
+    "ig_handles": [
+      "whyr969"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "@whyr969",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S184",
+    "country": "USA",
+    "state": "LA",
+    "city": "New Orleans",
+    "school": "Tulane University",
+    "station": "WTUL 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "wtul.music@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wtulneworleans.c om",
+    "phone": "504-865-5885",
+    "address": "WTUL Tulane University #1527 6823 St. Charles Ave New Orleans, LA 70118",
+    "ig_handles": [
+      "wtul"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wtul",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S185",
+    "country": "USA",
+    "state": "LA",
+    "city": "New Orleans",
+    "school": "-",
+    "station": "WHIV 102.3",
+    "frequency": "102.3",
+    "emails": [
+      "info@whivfm.org"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "whivfm",
+      "moose_harris"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @whivfm @moose_harris",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S186",
+    "country": "USA",
+    "state": "LA",
+    "city": "Natchitoches",
+    "school": "Northwestern State University",
+    "station": "KNWD 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "knwdradio@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "318-357-5693",
+    "address": "109 Kyser Hall PO Box 3038 Natchitoches, LA 71497",
+    "ig_handles": [
+      "knwdradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "@knwdradio",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S187",
+    "country": "USA",
+    "state": "ME",
+    "city": "Brunswick",
+    "school": "Bowdoin College",
+    "station": "WBOR 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "wbor.brunswick@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wbor.org",
+    "phone": "(207) 725-3250",
+    "address": "WBOR Music Directors Hip Hop Smith Union Bowdoin College Brunswick, ME 04011",
+    "ig_handles": [
+      "wbor911"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wbor911",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S188",
+    "country": "USA",
+    "state": "ME",
+    "city": "Lewiston",
+    "school": "Bates College",
+    "station": "WRBC 91.5",
+    "frequency": "91.5",
+    "emails": [],
+    "music_director": "-",
+    "website": "wrbcradio.com",
+    "phone": "207-777-7532",
+    "address": "WRBC Attn: Music Director , 31 Frye Street , Lewiston, Maine, USA 04240",
+    "ig_handles": [
+      "wrbc915fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrbc915fm",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S189",
+    "country": "USA",
+    "state": "ME",
+    "city": "Orone",
+    "school": "University of Maine",
+    "station": "WMEB 91.9",
+    "frequency": "91.9",
+    "emails": [
+      "web.submissions@gmail.com"
+    ],
+    "music_director": "Michael Murphey",
+    "website": "umaine.edu/ wmeb",
+    "phone": "207-815-2334",
+    "address": "",
+    "ig_handles": [
+      "wmeb919"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmeb919",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S190",
+    "country": "USA",
+    "state": "ME",
+    "city": "Presque Isle",
+    "school": "University of Maine at Presque Isle",
+    "station": "WUPI 92.1",
+    "frequency": "92.1",
+    "emails": [
+      "umpiwupi92.1@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wp.umpi.edu/ wupi",
+    "phone": "207-768-9565",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "send email ok",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S191",
+    "country": "USA",
+    "state": "ME",
+    "city": "Waterville",
+    "school": "Colby College",
+    "station": "WMHB 89.7",
+    "frequency": "89.7",
+    "emails": [],
+    "music_director": "-",
+    "website": "wmhb.org",
+    "phone": "-",
+    "address": "Music Director WMHB 89.7 FM 4000 Mayflower Hill Waterville, Maine 04901",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "also submit form at website",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S192",
+    "country": "USA",
+    "state": "MD",
+    "city": "College Park",
+    "school": "University of Maryland, College Park",
+    "station": "WMUC 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "wmucmusicdir@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wmuc.umd.edu",
+    "phone": "301-314-8800",
+    "address": "Music Director WMUC Radio 3130 Campus Dining Hall College Park, MD 20742-8431",
+    "ig_handles": [
+      "wmucradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmucradio",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S193",
+    "country": "USA",
+    "state": "MD",
+    "city": "Baltimore",
+    "school": "Loyola University Maryland",
+    "station": "WLOY",
+    "frequency": "",
+    "emails": [
+      "wloymd@loyola.edu"
+    ],
+    "music_director": "-",
+    "website": "wloy.org",
+    "phone": "410-617-1620",
+    "address": "WLOY Radio 4501 N Charles St. Baltimore, Maryland",
+    "ig_handles": [
+      "wloy_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wloy_radio",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S194",
+    "country": "USA",
+    "state": "MD",
+    "city": "Baltimore",
+    "school": "Notre Dame of Maryland University",
+    "station": "NDMU Radio",
+    "frequency": "",
+    "emails": [
+      "ndmumedia@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "ndmu_media"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ndmu_media",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S195",
+    "country": "USA",
+    "state": "MD",
+    "city": "Salisbury",
+    "school": "Salisbury University",
+    "station": "WXSU 96.3",
+    "frequency": "96.3",
+    "emails": [
+      "wxsu963fm@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "orgs.salisbury.ed u",
+    "phone": "410-548-4760",
+    "address": "Salisbury University Campus Box 3151 Salisbury, MD 21801",
+    "ig_handles": [
+      "wxsu963"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "please submit to email IG @wxsu963",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S196",
+    "country": "USA",
+    "state": "MA",
+    "city": "Newton",
+    "school": "Lasell College",
+    "station": "WLAS 102.9",
+    "frequency": "102.9",
+    "emails": [
+      "rsaber@lasell.edu"
+    ],
+    "music_director": "Ryan Saber",
+    "website": "radio.lasell.edu",
+    "phone": "cell: 781-363-2371",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S197",
+    "country": "USA",
+    "state": "MA",
+    "city": "Amherst",
+    "school": "University of Massachusetts Amherst",
+    "station": "WMUA 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "wmuamusic@umass.edu"
+    ],
+    "music_director": "Gil Cuevas",
+    "website": "wmua.org",
+    "phone": "413-545-2876",
+    "address": "Bacherman Broadcast Center 201 Student Union 41 Campus Center Way University of Massachusetts Amherst MA 01003",
+    "ig_handles": [
+      "wmua"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmua",
+    "show": "Schedule",
+    "source_page": 20,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S198",
+    "country": "USA",
+    "state": "MA",
+    "city": "Beverly",
+    "school": "Endicott College Radio",
+    "station": "-",
+    "frequency": "",
+    "emails": [],
+    "music_director": "-",
+    "website": "-",
+    "phone": "503-254-5508",
+    "address": "376 Hale St. Beverly, Massachusetts",
+    "ig_handles": [
+      "endicott_r"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @endicott_r adio",
+    "show": "-",
+    "source_page": 20,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S199",
+    "country": "USA",
+    "state": "MA",
+    "city": "Boston",
+    "school": "Berklee College of Music",
+    "station": "BIRN",
+    "frequency": "",
+    "emails": [],
+    "music_director": "-",
+    "website": "thebirn.com",
+    "phone": "-",
+    "address": "The BIRN Berklee College of Music MS-150 , 1140 Boylston Street , Boston, MA 02215",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "-",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S200",
+    "country": "USA",
+    "state": "MA",
+    "city": "Boston",
+    "school": "Emerson College",
+    "station": "WERS 88.9",
+    "frequency": "88.9",
+    "emails": [],
+    "music_director": "-",
+    "website": "wers.org",
+    "phone": "dont follow up just submit",
+    "address": "WERS 88.9 180 Tremont St, Boston, MA",
+    "ig_handles": [
+      "wers889"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wers889",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S201",
+    "country": "USA",
+    "state": "MA",
+    "city": "Boston",
+    "school": "Emerson College",
+    "station": "WECB The Underground Sound",
+    "frequency": "",
+    "emails": [
+      "submissions@wecb.fm",
+      "music@wecb.fm"
+    ],
+    "music_director": "Lily Hartenstein",
+    "website": "wecb.fm",
+    "phone": "617-824-8372",
+    "address": "WECB Radio Emerson College 120 Boylston St. Boston, MA 02216",
+    "ig_handles": [
+      "wecb.fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wecb.fm",
+    "show": "-",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S202",
+    "country": "USA",
+    "state": "MA",
+    "city": "Boston",
+    "school": "Northeastern University",
+    "station": "WRBB 104.9",
+    "frequency": "104.9",
+    "emails": [
+      "music@wrbbradio.org"
+    ],
+    "music_director": "Brooke Baumgartner",
+    "website": "wrbbradio.org",
+    "phone": "617-373-4339",
+    "address": "WRBB 104.9 FM 360 Huntington Avenue #174 Curry Student Center",
+    "ig_handles": [
+      "wrbbradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrbbradio",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S203",
+    "country": "USA",
+    "state": "MA",
+    "city": "Boston",
+    "school": "Boston University",
+    "station": "WTBU 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "music@wtburadio.org"
+    ],
+    "music_director": "Derrick Monteiro, Elina Kent",
+    "website": "sites.bu.edu",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "wtburadio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "contact MD for interest in sending album IG @wtburadio",
+    "show": "-",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S204",
+    "country": "USA",
+    "state": "MA",
+    "city": "Chestnut Hill",
+    "school": "Boston College",
+    "station": "WZBC 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "wzbcpd@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wzbc.org",
+    "phone": "617-552-3511",
+    "address": "WZBC 90.3fm Boston College McElroy Commons 107, Chestnut Hill, MA 02467",
+    "ig_handles": [
+      "wzbc"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wzbc",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S205",
+    "country": "USA",
+    "state": "MA",
+    "city": "Cambridge",
+    "school": "Harvard College",
+    "station": "WHRB 95.3",
+    "frequency": "95.3",
+    "emails": [
+      "pd@whrb.org"
+    ],
+    "music_director": "Andy Kim, Luca Schroeder",
+    "website": "whrb.org",
+    "phone": "617-495-4818",
+    "address": "WHRB-FM 389 Harvard St. Cambridge, MA 02138-3900",
+    "ig_handles": [
+      "whrb95.3"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "request submission IG @whrb95.3",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S206",
+    "country": "USA",
+    "state": "MA",
+    "city": "Cambridge",
+    "school": "Massachusetts Institute of Technology",
+    "station": "WMBR 88.1",
+    "frequency": "88.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "wmbr.org",
+    "phone": "-",
+    "address": "Attn: Music Director WMBR Radio 3 Ames Street Cambridge, MA 02142",
+    "ig_handles": [
+      "wmbrfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmbrfm",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S207",
+    "country": "USA",
+    "state": "MA",
+    "city": "Great Barrington",
+    "school": "-",
+    "station": "WBCR 97.7",
+    "frequency": "97.7",
+    "emails": [],
+    "music_director": "-",
+    "website": "berkshireradio.or g",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "wbcr977fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wbcr977fm",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S208",
+    "country": "USA",
+    "state": "MA",
+    "city": "Lowell",
+    "school": "University of Massachusetts Lowell",
+    "station": "WUML 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "wuml_gm@uml.edu"
+    ],
+    "music_director": "-",
+    "website": "wuml.org",
+    "phone": "978-934-4975",
+    "address": "WUML 1 University Ave, Lowell, MA 01854",
+    "ig_handles": [
+      "wumlradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wumlradio",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S209",
+    "country": "USA",
+    "state": "MA",
+    "city": "Medford",
+    "school": "Tufts University",
+    "station": "WMFO 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "md@wmfo.org"
+    ],
+    "music_director": "Nick Golin, Avi Block",
+    "website": "wmfo.org",
+    "phone": "855-915-9636",
+    "address": "-",
+    "ig_handles": [
+      "wmforadio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmforadio",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S210",
+    "country": "USA",
+    "state": "MA",
+    "city": "Salem",
+    "school": "Salem State College",
+    "station": "WMWM 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "wmwmsalem@gmail.com"
+    ],
+    "music_director": "Carissa Myre",
+    "website": "wmwmsalem.com",
+    "phone": "978-219-9170",
+    "address": "WMWM Salem 352 Lafayette St. Salem, MA 01970 USA",
+    "ig_handles": [
+      "wmwmsalem"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "send music to addresses email + physical IG @wmwmsalem",
+    "show": "-",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S211",
+    "country": "USA",
+    "state": "MA",
+    "city": "Waltham",
+    "school": "Brandeis University",
+    "station": "WBRS 100.1",
+    "frequency": "100.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "wbrs.org",
+    "phone": "781-736-4786",
+    "address": "WBRS 100.1FM HIP- Hop/Urban Brandeis University Shapiro Campus Center 415 South Street",
+    "ig_handles": [
+      "brandeiswbr"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @brandeiswbr s",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S212",
+    "country": "USA",
+    "state": "MA",
+    "city": "Wellesley",
+    "school": "Wellesley College",
+    "station": "WZLY 91.5",
+    "frequency": "91.5",
+    "emails": [],
+    "music_director": "-",
+    "website": "wzly.org",
+    "phone": "781-283-2690",
+    "address": "-",
+    "ig_handles": [
+      "wzly"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "(Women\\u2019s College) IG @wzly",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S213",
+    "country": "USA",
+    "state": "MA",
+    "city": "Williamstown",
+    "school": "Williams College",
+    "station": "WCFM 91.9",
+    "frequency": "91.9",
+    "emails": [
+      "drm7@williams.edu",
+      "hmm3@williams.edu"
+    ],
+    "music_director": "Dahlia Miller Hugh Murphy",
+    "website": "williams.edu.wcf m",
+    "phone": "413-597-2197",
+    "address": "WCFM Williamstown 91.9 FM Hip-Hop/Rap Paresky Ctr. Williamstown, MA 01267",
+    "ig_handles": [
+      "wcfmradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "DJ Schedule on website IG @wcfmradio",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S214",
+    "country": "USA",
+    "state": "MI",
+    "city": "Ann Arbor",
+    "school": "University of Michigan",
+    "station": "WCBN 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "radio@wcbn.org",
+      "music@wcbn.org"
+    ],
+    "music_director": "-",
+    "website": "wcbn.org",
+    "phone": "734-763-3500",
+    "address": "WCBN-FM 515 E Jefferson St Ann Arbor, Michigan 48109",
+    "ig_handles": [
+      "wcbn_fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wcbn_fm",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S215",
+    "country": "USA",
+    "state": "MI",
+    "city": "Detroit",
+    "school": "Wayne State University",
+    "station": "WDET 101.9",
+    "frequency": "101.9",
+    "emails": [
+      "feedback@wdet.org"
+    ],
+    "music_director": "-",
+    "website": "wdet.org Contact Form",
+    "phone": "313-577-4146",
+    "address": "4600 Cass Avenue Detroit, MI 48201",
+    "ig_handles": [
+      "wdetdetroit"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @wdetdetroit",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S216",
+    "country": "USA",
+    "state": "MI",
+    "city": "Lansing",
+    "school": "Michigan State University",
+    "station": "WDBM 88.9",
+    "frequency": "88.9",
+    "emails": [
+      "manager@impact89fm.org",
+      "pd@impact89fm.org"
+    ],
+    "music_director": "-",
+    "website": "impact89fm.org",
+    "phone": "517-884-8900 517-884-8989",
+    "address": "234 Wilson Road, Suite G-4 East Lansing, MI 48825",
+    "ig_handles": [
+      "impact89fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @impact89fm",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S217",
+    "country": "USA",
+    "state": "MI",
+    "city": "Marquette",
+    "school": "Northern Michigan University",
+    "station": "WUPX 91.5 Radio X",
+    "frequency": "91.5",
+    "emails": [
+      "wupx@nmu.edu"
+    ],
+    "music_director": "-",
+    "website": "nmu.edu/wupx",
+    "phone": "(906) 227-2348",
+    "address": "-",
+    "ig_handles": [
+      "wupxradiox"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wupxradiox",
+    "show": "Schedule",
+    "source_page": 21,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S218",
+    "country": "USA",
+    "state": "MN",
+    "city": "Duluth",
+    "school": "University of Minnesota Duluth",
+    "station": "kumd 103.3",
+    "frequency": "103.3",
+    "emails": [],
+    "music_director": "-",
+    "website": "kumd.org",
+    "phone": "218-726-7181",
+    "address": "KUMD Attn: Michael Mayou 130 Humanities 1201 Ordean Ct. Duluth, MN 55812",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "-",
+    "source_page": 21,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S219",
+    "country": "USA",
+    "state": "MN",
+    "city": "Minneapolis",
+    "school": "University of Minnesota",
+    "station": "100.7 104.5",
+    "frequency": "100.7",
+    "emails": [
+      "music@radiok.org"
+    ],
+    "music_director": "-",
+    "website": "radiok.org",
+    "phone": "612-625-3500",
+    "address": "Radio K - KUOM University of Minnesota 610 Rarig Center 330 21st Ave. S Minneapolis, MN 55455-4405",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S220",
+    "country": "USA",
+    "state": "MN",
+    "city": "Moorhead",
+    "school": "Minnesota State University Moorhead",
+    "station": "Dragon Radio 1500am +online",
+    "frequency": "1500",
+    "emails": [
+      "kmscdirector@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "dragonradio.org",
+    "phone": "218-477-2115",
+    "address": "kmsc 1500am Owens Hall Box 138 Moorhead, MN 56563",
+    "ig_handles": [
+      "kmscdragonradi"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kmscdragonradi o",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S221",
+    "country": "USA",
+    "state": "MN",
+    "city": "Northfield",
+    "school": "Carleton College",
+    "station": "KRLX 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "music@krlx.org"
+    ],
+    "music_director": "-",
+    "website": "krlx.org",
+    "phone": "507-222-4127",
+    "address": "-",
+    "ig_handles": [
+      "krlxfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @krlxfm",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S222",
+    "country": "USA",
+    "state": "MN",
+    "city": "Northfield",
+    "school": "St. Olaf College",
+    "station": "KSTO 93.1",
+    "frequency": "93.1",
+    "emails": [
+      "ksto-exec@stolaf.edu"
+    ],
+    "music_director": "-",
+    "website": "kstoradio.org",
+    "phone": "507-786-3602",
+    "address": "-",
+    "ig_handles": [
+      "kstoradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kstoradio",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S223",
+    "country": "USA",
+    "state": "MN",
+    "city": "St. Cloud",
+    "school": "St. Cloud State University",
+    "station": "kvsc 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "music@kvsc.org"
+    ],
+    "music_director": "-",
+    "website": "kvsc.org Submission Info",
+    "phone": "320-308-5872",
+    "address": "KVSC 88.1 FM 720 Fourth Avenue South 27 Stewart Hall, SCSU Saint Cloud, MN 56301-4498",
+    "ig_handles": [
+      "kvsc881fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kvsc881fm",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S224",
+    "country": "USA",
+    "state": "MN",
+    "city": "Saint Paul",
+    "school": "University of St. Thomas",
+    "station": "KUST Campus Radio",
+    "frequency": "",
+    "emails": [
+      "kust@stthomas.edu"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "(949) 872-7881",
+    "address": "2115 Summit Avenue OEC Lower Level 14 St. Paul, MN 55105",
+    "ig_handles": [
+      "kustradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kustradio",
+    "show": "-",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S225",
+    "country": "USA",
+    "state": "MO",
+    "city": "Columbia",
+    "school": "University of Missouri",
+    "station": "KCOU 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "md@kcou.fm"
+    ],
+    "music_director": "-",
+    "website": "KCOU.FM",
+    "phone": "573-882-8262",
+    "address": "Program Director C/o kcou 88.1 Fm 2500 MU Student Center Columbia, MO 65211",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "-",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S226",
+    "country": "USA",
+    "state": "MO",
+    "city": "Springfield",
+    "school": "Drury University",
+    "station": "KDRU 98.1",
+    "frequency": "98.1",
+    "emails": [],
+    "music_director": "Maddie",
+    "website": "kdruradio.com",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "funkyfresh_fm",
+      "kdruradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @funkyfresh_fm @kdruradio",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S227",
+    "country": "USA",
+    "state": "MO",
+    "city": "Parkville",
+    "school": "Park University",
+    "station": "KGSP 90.5",
+    "frequency": "90.5",
+    "emails": [
+      "ristin.shaw@park.edu"
+    ],
+    "music_director": "-",
+    "website": "kgsp.park.edu",
+    "phone": "816-741-2000",
+    "address": "Park University Copley Hall 206 8700 NW River Park Dr. Parkville, MO 64152",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "-",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S228",
+    "country": "USA",
+    "state": "MO",
+    "city": "Rolla",
+    "school": "Missouri University Of Science and Tech.",
+    "station": "KMNR 89.7",
+    "frequency": "89.7",
+    "emails": [
+      "stationmanager@kmnr.org",
+      "music@kmnr.org"
+    ],
+    "music_director": "-",
+    "website": "kmnr.org",
+    "phone": "504-656-6735 573-34 1-4273",
+    "address": "KMNR 218 Havener Center 1346 N. Bishop Ave Rolla, MO 65409-1440",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "I G @ k m nr89.7",
+    "show": "-",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S229",
+    "country": "USA",
+    "state": "MN",
+    "city": "Winona",
+    "school": "Winona State University",
+    "station": "KQAL 89.5 Fm",
+    "frequency": "89.5",
+    "emails": [
+      "kqalfm@winona.edu"
+    ],
+    "music_director": "-",
+    "website": "kqal.org",
+    "phone": "507-457-2222",
+    "address": "KQAL FM 89.5 Winona State University P.O. Box 5838 Winona, MN 55987",
+    "ig_handles": [
+      "kqal895"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kqal895",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S230",
+    "country": "USA",
+    "state": "MS",
+    "city": "Oxford",
+    "school": "University of Mississippi",
+    "station": "WVMS 92.1",
+    "frequency": "92.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "myrebelradio.com",
+    "phone": "662-915-6692",
+    "address": "Rebel Radio P.O Box 1848 SMC/201 Bishop Hall University, MS 38677",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "Submit online",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S231",
+    "country": "USA",
+    "state": "MS",
+    "city": "Starkville",
+    "school": "Mississippi State University",
+    "station": "WMSV 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "wmsv@msstate.edu"
+    ],
+    "music_director": "-",
+    "website": "WMSV.msstate.e du",
+    "phone": "662-325-8481",
+    "address": "WMSV Radio P.O Box 6210 Student Media Center. Mississippi State, MS 39762",
+    "ig_handles": [
+      "msuradio_wm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @msuradio_wm sv",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S232",
+    "country": "USA",
+    "state": "NE",
+    "city": "Lincoln",
+    "school": "University of Nebraska-Lincoln",
+    "station": "KRNU 90.3",
+    "frequency": "90.3",
+    "emails": [],
+    "music_director": "Rich Bennett",
+    "website": "nebraskanews service.net/ 90_3_krnu/",
+    "phone": "402-472-8277",
+    "address": "90.3 KRNU Attn: Music Director 147 Andersen Hall University of Nebraska- Lincoln Lincoln, NE 68588",
+    "ig_handles": [
+      "90.3krnu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [
+      "submit here"
+    ],
+    "notes_raw": "IG @90.3krnu",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S233",
+    "country": "USA",
+    "state": "NV",
+    "city": "Reno",
+    "school": "University of Nevada, Reno",
+    "station": "Wolfpack Radio",
+    "frequency": "",
+    "emails": [
+      "wolfpackradiomanager@unr.edu"
+    ],
+    "music_director": "-",
+    "website": "wolfpackradio.org",
+    "phone": "775-784-6589",
+    "address": "-",
+    "ig_handles": [
+      "thesnakesnest",
+      "wolfpackradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @thesnakesnest @wolfpackradio",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S234",
+    "country": "USA",
+    "state": "NV",
+    "city": "Las Vegas",
+    "school": "University of Nevada, Las Vegas",
+    "station": "KUNV 91.5 The Rebel HD2",
+    "frequency": "91.5",
+    "emails": [],
+    "music_director": "-",
+    "website": "kunv.org Live Stream Here",
+    "phone": "702-895-3915",
+    "address": "Main Campus 4505 S. Maryland Pkwy. Greenspun Hall Box 2010 Las Vegas, NV 89154",
+    "ig_handles": [
+      "therebelhd2",
+      "915kunv"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG: @therebelhd2 @915kunv",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S235",
+    "country": "USA",
+    "state": "NH",
+    "city": "Durham",
+    "school": "University of New Hampshire",
+    "station": "WUNH 91.3",
+    "frequency": "91.3",
+    "emails": [],
+    "music_director": "-",
+    "website": "unh.edu",
+    "phone": "603-862-2222",
+    "address": "WUNH Music Director University Of New Hampshire 83 Main st. Durham, NH 03824",
+    "ig_handles": [
+      "wunh_913"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wunh_913",
+    "show": "Schedule",
+    "source_page": 22,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S236",
+    "country": "USA",
+    "state": "NH",
+    "city": "Plymouth",
+    "school": "Plymouth State University",
+    "station": "WPCR 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "cwr1018@plymouth.edu"
+    ],
+    "music_director": "-",
+    "website": "plymouth.edu/ wpcr",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "91.7wpcr"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @91.7wpcr",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S237",
+    "country": "USA",
+    "state": "NJ",
+    "city": "Madison",
+    "school": "Fairleigh Dickinson University",
+    "station": "WFDU 89.1",
+    "frequency": "89.1",
+    "emails": [
+      "kenob1@fdu.edu"
+    ],
+    "music_director": "-",
+    "website": "wftu.fm",
+    "phone": "201-692-2012",
+    "address": "-",
+    "ig_handles": [
+      "wfduradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wfduradio",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S238",
+    "country": "USA",
+    "state": "NJ",
+    "city": "New Brunswick",
+    "school": "Rutgers University",
+    "station": "WSRU 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "hiphop@radio.rutgers.edu"
+    ],
+    "music_director": "Seyi Aladejobi",
+    "website": "radio.rutgers.edu",
+    "phone": "732-932-7800",
+    "address": "WSRU-FM Hip Hop 126 College Ave New Brunswick, NJ 08901",
+    "ig_handles": [
+      "wrsurutgersra"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrsurutgersra dio",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S239",
+    "country": "USA",
+    "state": "NJ",
+    "city": "Piscataway",
+    "school": "Rutgers University Livingston campus",
+    "station": "WVPH 90.3 The Core",
+    "frequency": "90.3",
+    "emails": [
+      "generalmanager@thecore.fm"
+    ],
+    "music_director": "-",
+    "website": "thecorefm.carrd.co",
+    "phone": "732-445-9300",
+    "address": "-",
+    "ig_handles": [
+      "thecorefm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @thecorefm",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S240",
+    "country": "USA",
+    "state": "NJ",
+    "city": "Pomona",
+    "school": "Stockton University",
+    "station": "WLFR 91.7",
+    "frequency": "91.7",
+    "emails": [],
+    "music_director": "-",
+    "website": "stockton.edu",
+    "phone": "609-652-4781",
+    "address": "WLFR-FM Stockton University 101 Vera King Farris Dr. Galloway, NJ 08205",
+    "ig_handles": [
+      "wlfr91.7"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wlfr91.7",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S241",
+    "country": "USA",
+    "state": "NJ",
+    "city": "Princeton",
+    "school": "Princeton University",
+    "station": "WPRB 103.3",
+    "frequency": "103.3",
+    "emails": [],
+    "music_director": "-",
+    "website": "wprb.com",
+    "phone": "-",
+    "address": "Music Director 30 Bloomberg Hall Princeton, NJ 08544",
+    "ig_handles": [
+      "wprb"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "CDs + Vinyls only IG @wprb",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S242",
+    "country": "USA",
+    "state": "NJ",
+    "city": "West Long Branch",
+    "school": "Monmouth University",
+    "station": "WMCX 88.9",
+    "frequency": "88.9",
+    "emails": [
+      "wmcxmusic@monmouth.edu"
+    ],
+    "music_director": "-",
+    "website": "wmcx.com",
+    "phone": "732-571-3493",
+    "address": "-",
+    "ig_handles": [
+      "wmcx889"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmcx889",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S243",
+    "country": "USA",
+    "state": "NJ",
+    "city": "Trenton",
+    "school": "The College of New Jersey",
+    "station": "WTSR 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "music@wtsr.org"
+    ],
+    "music_director": "Brian Marino",
+    "website": "wtsr.org",
+    "phone": "609-771-2420",
+    "address": "WTSR \\u2105 Kendal Hall The College of New Jersey PO Box 7718 Ewing, NJ 08628",
+    "ig_handles": [
+      "wtsr913fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wtsr913fm",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S244",
+    "country": "USA",
+    "state": "NJ",
+    "city": "Union",
+    "school": "Kean University",
+    "station": "WKNJ 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "batistfa@kean.edu"
+    ],
+    "music_director": "Fabiel",
+    "website": "wknj903.com",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG: wknj903",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S245",
+    "country": "USA",
+    "state": "NJ",
+    "city": "Wayne",
+    "school": "William Paterson University",
+    "station": "WPSC 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "wpscmusic@wpunj.edu",
+      "wpscprogramming@wpunj.edu"
+    ],
+    "music_director": "Robert Taylor",
+    "website": "gobrave.org",
+    "phone": "973-720-3333 973-720-2738",
+    "address": "Brave New Radio William Paterson University 300 Pompton Road Wayne, NJ 07470",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG: BraveNewRadio",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S246",
+    "country": "USA",
+    "state": "NM",
+    "city": "Las Cruces",
+    "school": "New Mexico State University",
+    "station": "KRUX 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "kruxfmmusic@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "kruxradio.com",
+    "phone": "575-646-9150",
+    "address": "Music Director 91.5 fm New Mexico State University Box 30001/Corbett Center Las Cruces, NM 88003",
+    "ig_handles": [
+      "KruxFM"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG: @KruxFM",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S247",
+    "country": "USA",
+    "state": "NY",
+    "city": "Albany",
+    "school": "University Of Albany",
+    "station": "WCDB 90.9",
+    "frequency": "90.9",
+    "emails": [
+      "urban@wcdbfm.com"
+    ],
+    "music_director": "-",
+    "website": "wcdbfm.com Complete Contacts list",
+    "phone": "518-442-5262",
+    "address": "WCDB 90.9 University of Albany Campus Center 316 1400 Washington Ave Albany, NY 12222",
+    "ig_handles": [
+      "wcdb_albany"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wcdb_albany",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S248",
+    "country": "USA",
+    "state": "NY",
+    "city": "Auburn",
+    "school": "Cayuga Community College",
+    "station": "WDWN 89.1",
+    "frequency": "89.1",
+    "emails": [
+      "wdwn@hotmail.com"
+    ],
+    "music_director": "-",
+    "website": "wdwn.fm",
+    "phone": "315-255-1743 ext.2284",
+    "address": "197 Franklin St. Auburn, New York 12021",
+    "ig_handles": [
+      "win89fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @win89fm",
+    "show": "-",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S249",
+    "country": "USA",
+    "state": "NY",
+    "city": "Buffalo",
+    "school": "Buffalo State College",
+    "station": "WBNY 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "music@wbny.org"
+    ],
+    "music_director": "-",
+    "website": "wbny.edu",
+    "phone": "716-878-3080",
+    "address": "wbny-fm 1300 Elmwood Ave Campbell Room 220 Buffalo, NY 14222",
+    "ig_handles": [
+      "91.3fm_wbny"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @91.3fm_wbny",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S250",
+    "country": "USA",
+    "state": "NY",
+    "city": "Garden City",
+    "school": "Nassau Community College",
+    "station": "WHPC 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "whpc@ncc.edu",
+      "gina90.3whpc@gmail.co"
+    ],
+    "music_director": "Shawn Novatt Kim Nadler Gina",
+    "website": "whpcradio.ncc.edu",
+    "phone": "516-572-7438",
+    "address": "ATTN: WHPC 1 Hospital Rd. Garden City, NY 11530",
+    "ig_handles": [
+      "903whpc",
+      "1andonlygina"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @903whpc @1andonlygina TikTok @1andonlygina",
+    "show": "Schedule Hidden Gemz",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S251",
+    "country": "USA",
+    "state": "NY",
+    "city": "Geneva",
+    "school": "Hobart & William Smith Colleges",
+    "station": "WHWS 105.7",
+    "frequency": "105.7",
+    "emails": [
+      "corren@hws.edu"
+    ],
+    "music_director": "-",
+    "website": "whwsblog.wpcom staging.com",
+    "phone": "-",
+    "address": "300 Pulteney St. Geneva, NY 14456",
+    "ig_handles": [
+      "whws.fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @whws.fm",
+    "show": "Schedule",
+    "source_page": 23,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S252",
+    "country": "USA",
+    "state": "NY",
+    "city": "Hamilton",
+    "school": "Colgate University",
+    "station": "WRCU 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "wrcumusicdirector@colgate.edu"
+    ],
+    "music_director": "-",
+    "website": "wrcufm.org",
+    "phone": "315-228-7109",
+    "address": "-",
+    "ig_handles": [
+      "wrcu90.1"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrcu90.1",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S253",
+    "country": "USA",
+    "state": "NY",
+    "city": "Harlem",
+    "school": "City College of New York",
+    "station": "WHCR 90.3",
+    "frequency": "90.3",
+    "emails": [],
+    "music_director": "-",
+    "website": "whcr.org",
+    "phone": "212-650-7481",
+    "address": "WHCR 90.3 160 Convent Avenue, NAC 1/513 New York, NY 10031",
+    "ig_handles": [
+      "whcr903"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "Submission Instructions Here IG @whcr903",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S254",
+    "country": "USA",
+    "state": "NY",
+    "city": "Ithaca",
+    "school": "Ithaca College",
+    "station": "WICB 91.7",
+    "frequency": "91.7",
+    "emails": [],
+    "music_director": "-",
+    "website": "wicb.org Contact List",
+    "phone": "607-274-3217",
+    "address": "WICB Ithaca College Communications 953 Danby Road Ithaca, NY 14850",
+    "ig_handles": [
+      "wicb"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @wicb",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S255",
+    "country": "USA",
+    "state": "NY",
+    "city": "Bushwick",
+    "school": "-",
+    "station": "Bushwick Radio",
+    "frequency": "",
+    "emails": [
+      "bushwickradio@yahoo.com"
+    ],
+    "music_director": "DJ Primetime",
+    "website": "-",
+    "phone": "347-449-3808",
+    "address": "-",
+    "ig_handles": [
+      "bushwickradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "@bushwickradio",
+    "show": "-",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S256",
+    "country": "USA",
+    "state": "NY",
+    "city": "Brooklyn",
+    "school": "Brooklyn College",
+    "station": "WBCR",
+    "frequency": "",
+    "emails": [
+      "teatakesradio@gmail.com"
+    ],
+    "music_director": "Tea",
+    "website": "wbcr.net Livestream Here",
+    "phone": "718-951-4444",
+    "address": "Whitehead Hall Room 306A Brooklyn College \\u2014\\u2014\\u2014\\u2014\\u2014\\u2014\\u2014\\u2014\\u2014\\u2014 2900 Bedford Ave Brooklyn, NY 11210",
+    "ig_handles": [
+      "wbcr_cuny",
+      "teatakesradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wbcr_cuny @teatakesradio",
+    "show": "-",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S257",
+    "country": "USA",
+    "state": "NY",
+    "city": "Brooklyn",
+    "school": "Kingsborough Community College",
+    "station": "WKRB 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "kilgraveradio@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wkrb.org",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "kilgravemedia",
+      "wkrb_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kilgravemedia @wkrb_radio",
+    "show": "-",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S258",
+    "country": "USA",
+    "state": "NY",
+    "city": "New York City",
+    "school": "New York University",
+    "station": "WNYU 89.1",
+    "frequency": "89.1",
+    "emails": [
+      "music@wnyu.org"
+    ],
+    "music_director": "-",
+    "website": "wnyu.org",
+    "phone": "212-998-1660",
+    "address": "wnyu Radio 5-11 University Pl. New York, NY 10003",
+    "ig_handles": [
+      "wnyu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wnyu",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S259",
+    "country": "USA",
+    "state": "NY",
+    "city": "New York City",
+    "school": "Fordham University",
+    "station": "WFUV 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "musicdept@wfuv.org"
+    ],
+    "music_director": "-",
+    "website": "wfuv.org Contact Form",
+    "phone": "718-817-4550",
+    "address": "WFUV, Fordham University, 441 E. Fordham Rd., Bronx, NY 10458-9993",
+    "ig_handles": [
+      "wfuv"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @wfuv",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S260",
+    "country": "USA",
+    "state": "NY",
+    "city": "NY",
+    "school": "-",
+    "station": "WCCR 590am",
+    "frequency": "590",
+    "emails": [
+      "wccr640am@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "212-650-5027",
+    "address": "160 Convent Ave NAC 1/108 New York, New York",
+    "ig_handles": [
+      "wccr590am"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wccr590am",
+    "show": "-",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S261",
+    "country": "USA",
+    "state": "NY",
+    "city": "Old Westbury",
+    "school": "State University of New York at Old Westbury",
+    "station": "OWWRNY Web Radio",
+    "frequency": "",
+    "emails": [
+      "radio@oldwestbury.edu"
+    ],
+    "music_director": "Dj Sandra Dee",
+    "website": "owwrny.org",
+    "phone": "516-876-7502",
+    "address": "OWWR, Old Westbury Web Radio, SUNY College at Old Westbury PO Box 210 Old Westbury, NY 11568",
+    "ig_handles": [
+      "owwrny",
+      "djsandradee"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @owwrny @djsandradee",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S262",
+    "country": "USA",
+    "state": "NY",
+    "city": "Oneonta",
+    "school": "State University of New York at Oneonta",
+    "station": "WONY 90.9",
+    "frequency": "90.9",
+    "emails": [
+      "wonyhiphop1@gmail.com"
+    ],
+    "music_director": "Mark",
+    "website": "wonyfm.com",
+    "phone": "607-436-2712",
+    "address": "-",
+    "ig_handles": [
+      "wonyfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wonyfm",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S263",
+    "country": "USA",
+    "state": "NY",
+    "city": "Oswego",
+    "school": "State University of New York at Oswego",
+    "station": "WNYO 88.9",
+    "frequency": "88.9",
+    "emails": [
+      "hiphopwnyo@gmail.com",
+      "hiphop@wnyo889.org",
+      "music@wnyo889.org",
+      "alt@wnyo889.org"
+    ],
+    "music_director": "-",
+    "website": "wnyo889.org",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "wnyo889fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wnyo889fm",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S264",
+    "country": "USA",
+    "state": "NY",
+    "city": "Potsdam",
+    "school": "Clarkson University",
+    "station": "The Source 91.1",
+    "frequency": "91.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "",
+    "phone": "315-268-7658",
+    "address": "WTSC 91.1 The Source Clarkson University 10 Clarkson Ave Po Box 8743 Potsdam, NY 13699",
+    "ig_handles": [
+      "wtscthesource"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wtscthesource",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S265",
+    "country": "USA",
+    "state": "NY",
+    "city": "Poughkeepsie",
+    "school": "Vassar College",
+    "station": "WVKR 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "hiphop@wvkr.org"
+    ],
+    "music_director": "Braiden Morris Bill Skillz IG: billskillz",
+    "website": "wvkr.org",
+    "phone": "845-437-5476",
+    "address": "Hip Hop Director \\u2105 124 Raymond Ave Box 726 Poughkeepsie, NY 12604",
+    "ig_handles": [
+      "wvkr_fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "physical",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "send CD IG @wvkr_fm",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S266",
+    "country": "USA",
+    "state": "NY",
+    "city": "Queens",
+    "school": "St. John\\u2019s University",
+    "station": "WSJU",
+    "frequency": "",
+    "emails": [
+      "wsju.gm@gmail.com",
+      "wsjusubmissions@gmail.co"
+    ],
+    "music_director": "-",
+    "website": "wsjuradio.com",
+    "phone": "-",
+    "address": "424E Marillac Hall 8000 Utopia Pkwy Jaimaica, NY 11439",
+    "ig_handles": [
+      "wsjuradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wsjuradio",
+    "show": "Schedule",
+    "source_page": 24,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S267",
+    "country": "USA",
+    "state": "NY",
+    "city": "Riverhead",
+    "school": "Five Towns College",
+    "station": "WFTU 1570 AM",
+    "frequency": "1570 AM",
+    "emails": [
+      "wfturadio@ftc.edu"
+    ],
+    "music_director": "-",
+    "website": "WFTUradio.com",
+    "phone": "631-656-2110",
+    "address": "-",
+    "ig_handles": [
+      "wfturadio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wfturadio",
+    "show": "Schedule",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S268",
+    "country": "USA",
+    "state": "NY",
+    "city": "Rochester",
+    "school": "Rochester Institute of Tech",
+    "station": "WITR 89.7",
+    "frequency": "89.7",
+    "emails": [
+      "music@witr.rit.edu"
+    ],
+    "music_director": "Liam Lynch",
+    "website": "-",
+    "phone": "585-475-2000",
+    "address": "WITR Radio 32 Lomb Memorial Dr. Rochester, NY 14623",
+    "ig_handles": [
+      "witr897"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @witr897",
+    "show": "-",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S269",
+    "country": "USA",
+    "state": "NY",
+    "city": "Stony Brook",
+    "school": "Stony Brook University",
+    "station": "WUSB 90.1 & 107.3",
+    "frequency": "90.1",
+    "emails": [
+      "md.wusbradio@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wusb.fm",
+    "phone": "631-632-6500",
+    "address": "WUSB Radio Attn: Music Director 2nd Floor West Side Dining Stony Brook, NY 11794",
+    "ig_handles": [
+      "stonybrookwu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @stonybrookwu sb",
+    "show": "Schedule",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S270",
+    "country": "USA",
+    "state": "NY",
+    "city": "ST. Bonaventure",
+    "school": "St. Bonaventure University",
+    "station": "WSBU 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "musicwsbu@yahoo.com",
+      "stutzsa20@bonaventure.edu"
+    ],
+    "music_director": "Steven Stutz",
+    "website": "wsbu.org",
+    "phone": "716-375-2332",
+    "address": "WSBU-FM P.O BOX Drawer O St. Bonaventure, NY 14778",
+    "ig_handles": [
+      "wsbuthebuzz"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wsbuthebuzz",
+    "show": "Schedule",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S271",
+    "country": "USA",
+    "state": "NY",
+    "city": "Syracuse",
+    "school": "Syracuse University",
+    "station": "WERW Internet Radio",
+    "frequency": "",
+    "emails": [
+      "werw.programming@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "WERWradio.com",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "werwradio",
+      "werwmedia"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @werwradio @werwmedia",
+    "show": "-",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S272",
+    "country": "USA",
+    "state": "NY",
+    "city": "Troy",
+    "school": "Rensselaer Polytechnic Institute",
+    "station": "WRPI 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "wrpitroy.md@gmail.com"
+    ],
+    "music_director": "Staff List",
+    "website": "wrpi.org",
+    "phone": "518-276-6248",
+    "address": "-",
+    "ig_handles": [
+      "wrpitroy"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrpitroy",
+    "show": "Schedule",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S273",
+    "country": "USA",
+    "state": "NY",
+    "city": "Utica",
+    "school": "Utica College",
+    "station": "WPNR 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "wpnr@utica.edu"
+    ],
+    "music_director": "MD: Jovina Taylor DJs: DJ Candi DJ Tiff Dollaz",
+    "website": "pioneerradio.org",
+    "phone": "-",
+    "address": "WPNR-FM Strebel Student Center 201 1600 Burrstone Rd. Utica, NY 13501",
+    "ig_handles": [
+      "wpnr907"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wpnr907",
+    "show": "-",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S274",
+    "country": "USA",
+    "state": "NY",
+    "city": "Westchester",
+    "school": "Westchester Community College",
+    "station": "WARY Power 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "radomes.ocasio@sunywcc.edu",
+      "wary881@sunywcc.edu",
+      "YoPlayMySht@gmail.com"
+    ],
+    "music_director": "Fuge Edwards (HipHop/R&B)",
+    "website": "-",
+    "phone": "914-751-4696",
+    "address": "Wary Power 88.1fm Westchester Community College 75 Grasslands Rd. Valhalla, NY 10595",
+    "ig_handles": [
+      "doodooboyfug"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "@doodooboyfug e_",
+    "show": "-",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S275",
+    "country": "USA",
+    "state": "NC",
+    "city": "Boone",
+    "school": "Appalachian State University",
+    "station": "WASU 90.5",
+    "frequency": "90.5",
+    "emails": [
+      "music.wasu@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wasuradio.com",
+    "phone": "828-264-4905",
+    "address": "WASU Radio 920 Rivers St. Boone, NC 28609",
+    "ig_handles": [
+      "90.5wasufm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @90.5wasufm",
+    "show": "Schedule",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S276",
+    "country": "USA",
+    "state": "NC",
+    "city": "Durham",
+    "school": "Duke University",
+    "station": "WXDU 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "music@wxdu.org"
+    ],
+    "music_director": "-",
+    "website": "wxdu.org",
+    "phone": "919-684-2957",
+    "address": "WXDU 88.7 FM PO Box 90689 Duke Station Durham, NC 27708",
+    "ig_handles": [
+      "wxdu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "@wxdu",
+    "show": "Schedule",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S277",
+    "country": "USA",
+    "state": "NC",
+    "city": "Chapel Hill",
+    "school": "University of North Carolina at Chapel Hill",
+    "station": "WXYC 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "info@wxyc.org"
+    ],
+    "music_director": "-",
+    "website": "wxyc.org",
+    "phone": "919-962-8989 919-800-7812",
+    "address": "WXYC Music Department CB #5210, Carolina Union Chapel Hill, NC 27599",
+    "ig_handles": [
+      "wxyc893"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wxyc893",
+    "show": "Schedule",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S278",
+    "country": "USA",
+    "state": "NC",
+    "city": "Greensboro",
+    "school": "North Carolina A&T State University",
+    "station": "WNAA 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "wnaafm@ncat.edu"
+    ],
+    "music_director": "-",
+    "website": "ncat.edu",
+    "phone": "-",
+    "address": "NC A&T State University WNAA FM D. Cherie Lofton, MD 302 Crosby Hall Greensboro, NC 27411-1135",
+    "ig_handles": [
+      "ncat_wnaa"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "include 1pg. Bio IG @ncat_wnaa",
+    "show": "-",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S279",
+    "country": "USA",
+    "state": "NC",
+    "city": "Greensboro",
+    "school": "Guilford College",
+    "station": "WQFS 90.9",
+    "frequency": "90.9",
+    "emails": [
+      "wqfsmusic@guilford.edu"
+    ],
+    "music_director": "Lexi McGraw",
+    "website": "wqfs.org",
+    "phone": "336-316-2444",
+    "address": "5800 W. Friendly Ave Greensboro, NC 27410",
+    "ig_handles": [
+      "wqfs"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wqfs",
+    "show": "Schedule",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S280",
+    "country": "USA",
+    "state": "NC",
+    "city": "Raleigh",
+    "school": "North Carolina State University",
+    "station": "WKNC 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "wknc-underground@ncsu.edu"
+    ],
+    "music_director": "Mere Howell",
+    "website": "wknc.org",
+    "phone": "919-515-2401",
+    "address": "-",
+    "ig_handles": [
+      "wknc881",
+      "altrap_pipeline"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "studio rental for recording available IG @wknc881 @altrap_pipeline",
+    "show": "Schedule 1 Schedule 2",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S281",
+    "country": "USA",
+    "state": "NC",
+    "city": "Salisbury",
+    "school": "Livingston College",
+    "station": "WLJZ 107.1",
+    "frequency": "107.1",
+    "emails": [
+      "wljz1071.request@gmail.com",
+      "mzgoodnewz7@gmail.com"
+    ],
+    "music_director": "Genia Woods",
+    "website": "wljz1071.com",
+    "phone": "text Radio to: 980-324-3636",
+    "address": "-",
+    "ig_handles": [
+      "wljz107.1",
+      "mzgoodnewz"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wljz107.1 @mzgoodnewz",
+    "show": "Schedule",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S282",
+    "country": "USA",
+    "state": "OH",
+    "city": "Alliance",
+    "school": "University of Mount Union",
+    "station": "WRMU 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "raiderradio911@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "330-823-3777",
+    "address": "WRMU 91.1 FM 1972 Clark Ave, Alliance, OH 44601",
+    "ig_handles": [
+      "raiderstudent"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @raiderstudent media",
+    "show": "-",
+    "source_page": 25,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S283",
+    "country": "USA",
+    "state": "OH",
+    "city": "Ashland",
+    "school": "Ashland University",
+    "station": "WRDL 88.9",
+    "frequency": "88.9",
+    "emails": [
+      "news@wrdlfm.com"
+    ],
+    "music_director": "-",
+    "website": "wrdlfm.com",
+    "phone": "419-207-4889",
+    "address": "401 College Ave Ashland, OH 44805",
+    "ig_handles": [
+      "889_wrdl"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @889_wrdl",
+    "show": "Schedule",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S284",
+    "country": "USA",
+    "state": "OH",
+    "city": "Bowling Green",
+    "school": "Bowling Green State University",
+    "station": "WBGU 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "bgfalconmedia@gmail.com",
+      "wbgufm88.1@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "bgfalconmedia.co m",
+    "phone": "419-372-8810",
+    "address": "101 Kuhlin Center Bowling Green, OH 43403",
+    "ig_handles": [
+      "wbgufm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wbgufm",
+    "show": "-",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S285",
+    "country": "USA",
+    "state": "OH",
+    "city": "Cincinnati",
+    "school": "University of Cincinnati",
+    "station": "Bearcast Radio",
+    "frequency": "",
+    "emails": [],
+    "music_director": "-",
+    "website": "bearcastmedia.co m",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "bearcastmedia"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "submit online website IG @bearcastmedia",
+    "show": "Schedule",
+    "source_page": 26,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S286",
+    "country": "USA",
+    "state": "OH",
+    "city": "Cleveland",
+    "school": "Baldwin-Wallace College",
+    "station": "WBWC 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "musicwbwc@yahoo.com",
+      "programming@wbwc.com"
+    ],
+    "music_director": "Kevin",
+    "website": "wbwc.com",
+    "phone": "440-826-2145",
+    "address": "WBWC ATTN: Music Director 275 Eastland Road BEREA, OH 44017",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "Schedule",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S287",
+    "country": "USA",
+    "state": "OH",
+    "city": "Cleveland",
+    "school": "Cleveland State University",
+    "station": "WCSB 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "mdirector.wcsb@gmail.com",
+      "theillnation@gmail.com"
+    ],
+    "music_director": "Jacob Clark Omar Idris Docta ILL",
+    "website": "wcsb.org",
+    "phone": "216-687-3515",
+    "address": "WCSB 3100 Chester Ave. 4th Floor Cleveland, OH 44115",
+    "ig_handles": [
+      "theILLnation"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @theILLnation \\u201cI Love Life Nation\\u201d",
+    "show": "Schedule",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S288",
+    "country": "USA",
+    "state": "OH",
+    "city": "Cleveland",
+    "school": "John Carroll University",
+    "station": "WJCU 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "zach@808mixtape.com",
+      "wjcumusic@gmail.com",
+      "wjcu.info@gmail.com",
+      "music@808Mixtape.com",
+      "interview@808Mixtape.com"
+    ],
+    "music_director": "Zach",
+    "website": "wjcu.org",
+    "phone": "216-397-4437 216-397-4937",
+    "address": "Music Director WJCU Radio 1 John Carroll Blvd, University Heights, OH 44118",
+    "ig_handles": [
+      "808mixtape",
+      "wjcu887"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @808mixtape @wjcu887",
+    "show": "Schedule",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S289",
+    "country": "USA",
+    "state": "OH",
+    "city": "Columbus",
+    "school": "Capital University",
+    "station": "WXCU Radio",
+    "frequency": "",
+    "emails": [],
+    "music_director": "-",
+    "website": "wxcuradio.com",
+    "phone": "614-236-6336",
+    "address": "WXCU Radio Capital University 1 College and Main Columbus, OH 43209",
+    "ig_handles": [
+      "wxcuradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "send cd or usb IG @wxcuradio",
+    "show": "-",
+    "source_page": 26,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S290",
+    "country": "USA",
+    "state": "OH",
+    "city": "Dayton",
+    "school": "University of Dayton",
+    "station": "WUDR 99.5",
+    "frequency": "99.5",
+    "emails": [
+      "wudrmusic@gmail.com"
+    ],
+    "music_director": "student operated",
+    "website": "-",
+    "phone": "937-229-3058",
+    "address": "-",
+    "ig_handles": [
+      "wudr99.5"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wudr99.5",
+    "show": "-",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S291",
+    "country": "USA",
+    "state": "OH",
+    "city": "Dayton",
+    "school": "Wright State University",
+    "station": "WWSU 106.9",
+    "frequency": "106.9",
+    "emails": [
+      "music@wwsu1069.org"
+    ],
+    "music_director": "Akya Robinson",
+    "website": "wright.edu/wwsu",
+    "phone": "937-775-5554",
+    "address": "-",
+    "ig_handles": [
+      "wwsu1069"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wwsu1069",
+    "show": "Schedule",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S292",
+    "country": "USA",
+    "state": "OH",
+    "city": "Findlay",
+    "school": "University of Findlay",
+    "station": "WLFC 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "wlfcmusic@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "419-434-4747",
+    "address": "1000 N. Main St. Findlay, OH",
+    "ig_handles": [
+      "wlfc883"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wlfc883",
+    "show": "-",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S293",
+    "country": "USA",
+    "state": "OH",
+    "city": "Gambier",
+    "school": "Kenyon College",
+    "station": "WKCO 91.9",
+    "frequency": "91.9",
+    "emails": [
+      "wkco@kenyon.edu"
+    ],
+    "music_director": "-",
+    "website": "wkco919.org",
+    "phone": "740-427-5412",
+    "address": "WKCO 101 E Brooklyn St. Gambier, OH 43022",
+    "ig_handles": [
+      "wkco91.9"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wkco91.9",
+    "show": "-",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S294",
+    "country": "USA",
+    "state": "OH",
+    "city": "Youngstown",
+    "school": "Youngstown State University",
+    "station": "Rookery Radio",
+    "frequency": "",
+    "emails": [
+      "rookerydj@ysu.edu",
+      "ysurookerydj@gmail.com"
+    ],
+    "music_director": "Jack Leeper",
+    "website": "rookeryradio.com",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "jckleepr"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @jckleepr",
+    "show": "HipHop/House Thurs. 1pm",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S295",
+    "country": "USA",
+    "state": "OR",
+    "city": "Corvallis",
+    "school": "Oregon State University",
+    "station": "KBVR 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "fm.music@oregonstate.edu"
+    ],
+    "music_director": "Thomas Mahler",
+    "website": "kbvr.com",
+    "phone": "541-737-2589",
+    "address": "-",
+    "ig_handles": [
+      "kbvrfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kbvrfm",
+    "show": "Schedule",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S296",
+    "country": "USA",
+    "state": "OR",
+    "city": "Eugene",
+    "school": "University of Oregon",
+    "station": "KWVA 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "music@kwvaradio.org",
+      "musicblog@kwvaradio.org"
+    ],
+    "music_director": "Miguel Perez",
+    "website": "kwva.uoregon.ed u",
+    "phone": "541-346-4091",
+    "address": "-",
+    "ig_handles": [
+      "kwva881"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kwva881",
+    "show": "-",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S297",
+    "country": "USA",
+    "state": "OR",
+    "city": "Portland",
+    "school": "Portland State University",
+    "station": "KPSU",
+    "frequency": "",
+    "emails": [
+      "music@kpsu.org"
+    ],
+    "music_director": "Sophie",
+    "website": "kpsu.org",
+    "phone": "503-725-5669",
+    "address": "KPSU P.O. Box 751-KPSU/ VG Portland, OR 97207",
+    "ig_handles": [
+      "kpsu_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kpsu_radio",
+    "show": "Schedule",
+    "source_page": 26,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S298",
+    "country": "USA",
+    "state": "OR",
+    "city": "Salem",
+    "school": "-",
+    "station": "KMUZ 100.7 & 88.5",
+    "frequency": "100.7",
+    "emails": [],
+    "music_director": "-",
+    "website": "kmuz.org",
+    "phone": "503-990-6091",
+    "address": "KMUZ FM PO Box 12038 Salem, OR 97309",
+    "ig_handles": [
+      "kmuzfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kmuzfm",
+    "show": "Schedule",
+    "source_page": 26,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S299",
+    "country": "USA",
+    "state": "PA",
+    "city": "Blue Bell",
+    "school": "Montgomery Community College",
+    "station": "MONTCO Radio",
+    "frequency": "",
+    "emails": [
+      "sadfacevalentinebusiness@gmail.com"
+    ],
+    "music_director": "Ricky aka Sad Face",
+    "website": "montcoradio.wixsite .com/montcoradio",
+    "phone": "215-619-7366",
+    "address": "340 Dekalb Pike Blue Bell, PA 19422",
+    "ig_handles": [
+      "sad_face_vale"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @sad_face_vale ntine",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S300",
+    "country": "USA",
+    "state": "PA",
+    "city": "Easton",
+    "school": "Lafayette College",
+    "station": "WJRH 104.9",
+    "frequency": "104.9",
+    "emails": [
+      "wjrh@lafayette.edu"
+    ],
+    "music_director": "-",
+    "website": "wjrh.org",
+    "phone": "610-330-5316",
+    "address": "Attn: Music Director WJRH Box 9473 111 Quad Drive Easton, PA 18042",
+    "ig_handles": [
+      "wjrh_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wjrh_radio",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S301",
+    "country": "USA",
+    "state": "IN",
+    "city": "PA",
+    "school": "Indiana University of Pennsylvania",
+    "station": "WIUP 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "wiupfm@gmail.com"
+    ],
+    "music_director": "Ali Appleman Music Director",
+    "website": "wiupfm.org",
+    "phone": "724-357-3219",
+    "address": "121 Stouffer Hall Indiana, PA 15705",
+    "ig_handles": [
+      "wiupfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wiupfm",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S302",
+    "country": "USA",
+    "state": "PA",
+    "city": "Mansfield",
+    "school": "Mansfield University",
+    "station": "WNTE 89.5",
+    "frequency": "89.5",
+    "emails": [
+      "wnte@mansfield.edu"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "570-662-4650",
+    "address": "-",
+    "ig_handles": [
+      "wnte895_mu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wnte895_mu",
+    "show": "-",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S303",
+    "country": "USA",
+    "state": "PA",
+    "city": "Millersville",
+    "school": "Millersville University",
+    "station": "WIXQ 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "musicdirector@917theville.com"
+    ],
+    "music_director": "Sam Bailey",
+    "website": "917theville.com",
+    "phone": "-",
+    "address": "WIXQ-FM Music Director Student Memorial Center Millersville University Millersville, PA 17551",
+    "ig_handles": [
+      "wixq"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wixq",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S304",
+    "country": "USA",
+    "state": "PA",
+    "city": "Philadelphia",
+    "school": "Drexel University",
+    "station": "WKDU 91.7",
+    "frequency": "91.7",
+    "emails": [],
+    "music_director": "-",
+    "website": "wkdu.org/contact",
+    "phone": "215-895-2082",
+    "address": "WKDU 91.7FM 3210 Chestnut St Philadelphia, PA 19104",
+    "ig_handles": [
+      "wkdu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "Submit online website IG @wkdu",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S305",
+    "country": "USA",
+    "state": "PA",
+    "city": "Philadelphia",
+    "school": "University of Pennsylvania",
+    "station": "WQHS Radio",
+    "frequency": "",
+    "emails": [
+      "wqhsradio@gmail.com"
+    ],
+    "music_director": "Nour",
+    "website": "https:// wqhs.upenn.edu/",
+    "phone": "215-898-3500",
+    "address": "WQHS Radio Hollenback Center, 3000 South Street Philadelphia, PA 19104",
+    "ig_handles": [
+      "wqhsradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wqhsradio",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S306",
+    "country": "USA",
+    "state": "PA",
+    "city": "NW Philadelphia",
+    "school": "-",
+    "station": "WGGT 92.9",
+    "frequency": "92.9",
+    "emails": [
+      "music@gtownradio.com"
+    ],
+    "music_director": "-",
+    "website": "gtownradio.com",
+    "phone": "215-609-4301",
+    "address": "G-Town Radio 24 Maplewood Mall Philadelphia, PA 19144",
+    "ig_handles": [
+      "gtownradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @gtownradio",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S307",
+    "country": "USA",
+    "state": "PA",
+    "city": "Pittsburgh",
+    "school": "University of Pittsburgh",
+    "station": "WPTS 92.1",
+    "frequency": "92.1",
+    "emails": [
+      "wpts@pitt.edu"
+    ],
+    "music_director": "-",
+    "website": "wptsradio.org",
+    "phone": "412-648-7990",
+    "address": "411 William Pitt Union 3959 Fifth Avenue Pittsburgh, PA 15260",
+    "ig_handles": [
+      "wptsradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wptsradio",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S308",
+    "country": "USA",
+    "state": "PA",
+    "city": "Pittsburgh",
+    "school": "Carnegie Mellon University",
+    "station": "WRCT 88.3",
+    "frequency": "88.3",
+    "emails": [],
+    "music_director": "-",
+    "website": "wrct.org",
+    "phone": "412-621-0728",
+    "address": "1 WRCT Plaza 5000 Forbes Avenue Pittsburgh, PA 15213",
+    "ig_handles": [
+      "wrct88.3"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrct88.3",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S309",
+    "country": "USA",
+    "state": "PA",
+    "city": "Lancaster",
+    "school": "Franklin and Marshall College",
+    "station": "WFNM 89.1",
+    "frequency": "89.1",
+    "emails": [
+      "89.1wfnm@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wfnm.org",
+    "phone": "717-358-4096",
+    "address": "-",
+    "ig_handles": [
+      "wfnm89.1"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wfnm89.1",
+    "show": "-",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S310",
+    "country": "USA",
+    "state": "PA",
+    "city": "Villanova",
+    "school": "Villanova University",
+    "station": "WXVU 89.1",
+    "frequency": "89.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "wxvu.org",
+    "phone": "610-519-7202",
+    "address": "Dougherty Hall Suite 212 800 Lancaster Ave, Villanova, PA",
+    "ig_handles": [
+      "wxvuradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [
+      "submit here"
+    ],
+    "notes_raw": "IG @wxvuradio",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S311",
+    "country": "USA",
+    "state": "PA",
+    "city": "West Chester",
+    "school": "West Chester University",
+    "station": "WCUR 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "wcursocmed@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "610-436-2478",
+    "address": "-",
+    "ig_handles": [
+      "wcur917thecu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wcur917thecu rve",
+    "show": "-",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S312",
+    "country": "USA",
+    "state": "RI",
+    "city": "Bristol",
+    "school": "Bryant University",
+    "station": "WJMF 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "dbryce@bryant.edu"
+    ],
+    "music_director": "David Bryce",
+    "website": "wjmf.bryant.edu",
+    "phone": "401-232-6044",
+    "address": "WJMF Radio Station 1150 Douglas Pike Smithfield, RI 02917",
+    "ig_handles": [
+      "wjmfradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wjmfradio",
+    "show": "-",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S313",
+    "country": "USA",
+    "state": "RI",
+    "city": "Bristol",
+    "school": "Roger Williams University",
+    "station": "WQRI 88.3",
+    "frequency": "88.3",
+    "emails": [],
+    "music_director": "-",
+    "website": "wqri883fm.com Submission Form",
+    "phone": "401-254-3800",
+    "address": "Roger Williams University Attn: WQRI 88.3 FM 1 Old Ferry Rd. Bristol, RI 02809",
+    "ig_handles": [
+      "wqri883"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @wqri883",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S314",
+    "country": "USA",
+    "state": "RI",
+    "city": "Kingston",
+    "school": "University of Rhode Island",
+    "station": "WRIU 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "hiphopsubmissions@wriu.org"
+    ],
+    "music_director": "DJs List",
+    "website": "wriu.org",
+    "phone": "401-792-9030",
+    "address": "WRIU 326 Memorial Union Kingston, RI 02881",
+    "ig_handles": [
+      "wriuradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wriuradio",
+    "show": "Schedule",
+    "source_page": 27,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S315",
+    "country": "USA",
+    "state": "RI",
+    "city": "Providence",
+    "school": "Brown University",
+    "station": "WBRU 101.1",
+    "frequency": "101.1",
+    "emails": [
+      "heydj@wbru.com"
+    ],
+    "music_director": "-",
+    "website": "wbru.com",
+    "phone": "-",
+    "address": "WBRU PD/MD 88 Benevolent St. Providence, RI 02906",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S316",
+    "country": "USA",
+    "state": "RI",
+    "city": "Providence",
+    "school": "Rhode Island College",
+    "station": "WXIN 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "urban@ricradio.org"
+    ],
+    "music_director": "Carmo",
+    "website": "RICRadio.com",
+    "phone": "401-456-8541",
+    "address": "Carmo Barbosa Ducey Media Center Suite 228 600 Mount Pleasant Ave. Providence, RI 02908",
+    "ig_handles": [
+      "ricradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "send CD IG @ricradio",
+    "show": "-",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S317",
+    "country": "USA",
+    "state": "SC",
+    "city": "Clemson",
+    "school": "Clemson University",
+    "station": "WSBF 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "music@wsbf.net"
+    ],
+    "music_director": "-",
+    "website": "wsbf.net",
+    "phone": "864-656-4011",
+    "address": "-",
+    "ig_handles": [
+      "wsbf_fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wsbf_fm",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S318",
+    "country": "USA",
+    "state": "SC",
+    "city": "Columbia",
+    "school": "University of South Carolina",
+    "station": "WUSC 90.5",
+    "frequency": "90.5",
+    "emails": [],
+    "music_director": "Nick Gerace, Koleman Werner",
+    "website": "wusc.sc.edu",
+    "phone": "-",
+    "address": "WUSC RHUU Rm 343 1400 Greene St. Columbia, SC 29208",
+    "ig_handles": [
+      "wuscfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "submit online website IG @wuscfm",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S319",
+    "country": "USA",
+    "state": "TN",
+    "city": "Murfreesboro",
+    "school": "Middle Tennessee State University",
+    "station": "WMTS 88.3",
+    "frequency": "88.3",
+    "emails": [
+      "music@wmts.org"
+    ],
+    "music_director": "Andrew Felts",
+    "website": "wmts.org",
+    "phone": "615-898-2636",
+    "address": "WMTS 88.3 FM 1301 E Main St MTSU box 36 Murfreesboro, TN 37132-0002",
+    "ig_handles": [
+      "mtsuwmtsradi"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @mtsuwmtsradi o",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S320",
+    "country": "USA",
+    "state": "TN",
+    "city": "Knoxville",
+    "school": "University of Tennessee at Knoxville",
+    "station": "WUTK 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "wutkmusic@gmail.com",
+      "goldstandardhiphopshow@gmail.com"
+    ],
+    "music_director": "IllaNova YoungFreeman 2PairTate",
+    "website": "wutkradio.com",
+    "phone": "865-974-2535 865-974-2229",
+    "address": "WUTK P105 Andy Holt Tower, Knoxville, TN 37996-0333",
+    "ig_handles": [
+      "edutainment_90",
+      "wutktherock",
+      "youngfreeman"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @edutainment_90 .3fmwutk @wutktherock @youngfreeman",
+    "show": "Schedule The Gold Standard Hip-Hop Show Sundays 10pm",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S321",
+    "country": "USA",
+    "state": "TN",
+    "city": "Memphis",
+    "school": "University of Memphis",
+    "station": "WYXR 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "submissions@wyxr.org"
+    ],
+    "music_director": "-",
+    "website": "wyxr.org",
+    "phone": "901-460-3031",
+    "address": "WYXR 91.7 1350 Concourse Ave, Suite 160 Memphis, TN 38104",
+    "ig_handles": [
+      "wyxr_memphi"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wyxr_memphi s",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S322",
+    "country": "USA",
+    "state": "TN",
+    "city": "Nashville",
+    "school": "Vanderbilt University",
+    "station": "WRVU",
+    "frequency": "",
+    "emails": [
+      "wrvumd@gmail.com",
+      "wrvuevents@gmail.com",
+      "wrvuoutreach@gmail.com"
+    ],
+    "music_director": "Evan",
+    "website": "wrvu.org",
+    "phone": "615-322-3691",
+    "address": "WRVU Box 9100 Station B Nashville, TN 37235",
+    "ig_handles": [
+      "wrvunashville"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrvunashville",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S323",
+    "country": "USA",
+    "state": "TX",
+    "city": "Amarillo",
+    "school": "Amarillo College",
+    "station": "KACV 90",
+    "frequency": "90",
+    "emails": [
+      "kacvfm90@actx.edu"
+    ],
+    "music_director": "-",
+    "website": "kacvfm.org",
+    "phone": "806-371-5228",
+    "address": "Gilvin Broadcast Center P.O. Box 447 2408 S. Jackson St. Amarillo, TX 79109",
+    "ig_handles": [
+      "kacv90fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kacv90fm",
+    "show": "-",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S324",
+    "country": "USA",
+    "state": "TX",
+    "city": "Austin",
+    "school": "University of Texas at Austin",
+    "station": "KVRX 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "music@kvrx.org"
+    ],
+    "music_director": "-",
+    "website": "kvrx.org",
+    "phone": "512-471-5106",
+    "address": "KVRX Student Radio P.O. Box D Austin, TX 78713",
+    "ig_handles": [
+      "kvrxaustin"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kvrxaustin",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S325",
+    "country": "USA",
+    "state": "TX",
+    "city": "College Station",
+    "school": "Texas A&M University",
+    "station": "KANM Radio",
+    "frequency": "",
+    "emails": [
+      "md@kanm.org"
+    ],
+    "music_director": "Sebastian Ortiz, Diego Cerda, Lindsey Seale",
+    "website": "kanm.org Submission Form",
+    "phone": "979-862-5266",
+    "address": "KANM Student Radio Memorial Student Center #L433 2011 TAMU College Station, TX 77843-2011",
+    "ig_handles": [
+      "kanmradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "offers studio rental for recording IG @kanmradio",
+    "show": "-",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S326",
+    "country": "USA",
+    "state": "TX",
+    "city": "Fort Worth",
+    "school": "Texas Christian University",
+    "station": "KTCU 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "ktcu@tcu.edu"
+    ],
+    "music_director": "Janice McCall",
+    "website": "ktcu.tcu.edu",
+    "phone": "817-257-7631",
+    "address": "KTCU 2805 S University Dr. Fort Worth, TX 76193",
+    "ig_handles": [
+      "ktcu_88.7"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ktcu_88.7",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S327",
+    "country": "USA",
+    "state": "TX",
+    "city": "Houston",
+    "school": "University of Houston",
+    "station": "Coog Radio",
+    "frequency": "",
+    "emails": [
+      "contact@coogradio.com"
+    ],
+    "music_director": "-",
+    "website": "coogradio.com",
+    "phone": "-",
+    "address": "4800 Calhoun Rd Room N221 University Center Houston, TX",
+    "ig_handles": [
+      "coogradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @coogradio Intervies, Performances Open Mic sign ups on website",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S328",
+    "country": "USA",
+    "state": "TX",
+    "city": "Houston",
+    "school": "Texas Southern University",
+    "station": "KTSU 90.9",
+    "frequency": "90.9",
+    "emails": [],
+    "music_director": "-",
+    "website": "-",
+    "phone": "713-313-7591",
+    "address": "3100 Cleburne St Houston, TX",
+    "ig_handles": [
+      "ktsu90.9fm",
+      "thevibeho"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "@ktsu90.9fm @thevibeho uston",
+    "show": "-",
+    "source_page": 28,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S329",
+    "country": "USA",
+    "state": "TX",
+    "city": "Lubbock",
+    "school": "Texas Tech University",
+    "station": "KTXT 88.1 The Raider",
+    "frequency": "88.1",
+    "emails": [
+      "TheRaider881@gmail.com"
+    ],
+    "music_director": "Miette Esteb",
+    "website": "ktxtfm.org",
+    "phone": "-",
+    "address": "KTXT-FM 3003 15th Street Box 43082 Lubbock, TX 79409",
+    "ig_handles": [
+      "theraider881",
+      "theskyguy_88."
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @theraider881 @theskyguy_88. 1",
+    "show": "-",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S330",
+    "country": "USA",
+    "state": "TX",
+    "city": "San Antonio",
+    "school": "San Antonio College",
+    "station": "KSYM 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "musicdirectorksym@gmail.com",
+      "DMajor73@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "ksym.org",
+    "phone": "210-486-1373",
+    "address": "KSYM 1819 N. Main Ave, San Antonio, TX 78212",
+    "ig_handles": [
+      "ksymradio",
+      "UrbanSuiteSA"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ksymradio @UrbanSuiteSA",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S331",
+    "country": "USA",
+    "state": "TX",
+    "city": "San Antonio",
+    "school": "Trinity University",
+    "station": "KRTU 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "krtualt@trinity.edu"
+    ],
+    "music_director": "",
+    "website": "krtuindie.org",
+    "phone": "210-999-8313",
+    "address": "KRTU Indie Overnight 91.7 FM One Trinity Place San Antonio, TX 78212",
+    "ig_handles": [
+      "krtu917fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @krtu917fm",
+    "show": "Schedule",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S332",
+    "country": "USA",
+    "state": "TX",
+    "city": "San Antonio",
+    "school": "-",
+    "station": "Street Ligion Nation Radio",
+    "frequency": "",
+    "emails": [
+      "streetligionnationradio@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "210-485-3642",
+    "address": "1400 West Avenue San Antonio, TX",
+    "ig_handles": [
+      "streetligionnati"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @streetligionnati onradio",
+    "show": "-",
+    "source_page": 28,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S333",
+    "country": "USA",
+    "state": "TX",
+    "city": "San Marcos",
+    "school": "Southwest Texas State University",
+    "station": "KTSW",
+    "frequency": "",
+    "emails": [
+      "ktswmusic@txstate.edu"
+    ],
+    "music_director": "Christian Villarreal",
+    "website": "ktsw.txst.edu",
+    "phone": "512-245-5879",
+    "address": "KTSW Music Director 601 University Drive Trinity Building San Marcos, TX 78666",
+    "ig_handles": [
+      "ktsw899"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ktsw899",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S334",
+    "country": "USA",
+    "state": "UT",
+    "city": "Logan",
+    "school": "Utah State University",
+    "station": "KUSU 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "tom.williams@usu.edu"
+    ],
+    "music_director": "",
+    "website": "upr.org Contact Form",
+    "phone": "435-797-3138",
+    "address": "Utah Public Radio 8505 Old Main Hill Logan, Utah 84322-8505",
+    "ig_handles": [
+      "utahpublicradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @utahpublicradio",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S335",
+    "country": "USA",
+    "state": "UT",
+    "city": "Salt Lake City",
+    "school": "University of Utah",
+    "station": "KUTE Radio",
+    "frequency": "",
+    "emails": [
+      "music@kuteradio.org"
+    ],
+    "music_director": "-",
+    "website": "kuteradio.org",
+    "phone": "801-581-6397",
+    "address": "K-UTE Radio 200 S Central Campus Dr. Room 321 Salt Lake City, UT 84112",
+    "ig_handles": [
+      "kuterad",
+      "kute_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "on campus concerts \\u201cLunchbox Concerts\\u201d promotions@kuterad io.org IG @kute_radio",
+    "show": "-",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S336",
+    "country": "USA",
+    "state": "UT",
+    "city": "Salt Lake City",
+    "school": "-",
+    "station": "KRCL 90.9",
+    "frequency": "90.9",
+    "emails": [
+      "krclkeith@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "krcl.org",
+    "phone": "801-359-9191 800-359-9191",
+    "address": "Music Department KRCL 535 W 300 N Suite A Salt Lake City, Utah 84116",
+    "ig_handles": [
+      "fridaynightfall",
+      "krclradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @fridaynightfall out @krclradio",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S337",
+    "country": "USA",
+    "state": "UT",
+    "city": "Provo",
+    "school": "Brigham Young University",
+    "station": "KBYU 89.1",
+    "frequency": "89.1",
+    "emails": [
+      "byuradio@byu.edu"
+    ],
+    "music_director": "-",
+    "website": "byuradio.org",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "byuradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @byuradio",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S338",
+    "country": "USA",
+    "state": "VT",
+    "city": "Burlington",
+    "school": "University of Vermont",
+    "station": "WRUV 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "hiphop@wruv.org"
+    ],
+    "music_director": "-",
+    "website": "wruv.org",
+    "phone": "802-656-0796",
+    "address": "WRUV Davis Student Center, UVM Burlington, VT 05405",
+    "ig_handles": [
+      "wruvfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wruvfm",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S339",
+    "country": "USA",
+    "state": "VT",
+    "city": "Colchester",
+    "school": "Saint Michael\\u2019s College",
+    "station": "WWPV 92.5",
+    "frequency": "92.5",
+    "emails": [
+      "lstumpf@mail.smcvt.edu",
+      "wwpvjazz@hotmail.com",
+      "wwpv925@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wwpv.smcvt.edu",
+    "phone": "802-654-2334",
+    "address": "WWPV 92.5 FM Saint Michael\\u2019s College One Winooski Park Colchester, VT 05439",
+    "ig_handles": [
+      "wwpvfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "jazz"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wwpvfm",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S340",
+    "country": "USA",
+    "state": "VT",
+    "city": "Middlebury",
+    "school": "Middlebury College",
+    "station": "WRMC 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "wrmc911@gmail.com"
+    ],
+    "music_director": "Maddie, Elle",
+    "website": "wrmc.middlebury. edu",
+    "phone": "802-443-6324 Office Hours: 9am-11am Mon, 4:30-6:30pm Thurs.",
+    "address": "WRMC 91.1 FM Middlebury College Middlebury, VT 05753",
+    "ig_handles": [
+      "wrmc911"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "In studio performances \\u201cLibrary Sessions\\u201d IG @wrmc911",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S341",
+    "country": "USA",
+    "state": "VT",
+    "city": "Randolph",
+    "school": "Vermont Technical College",
+    "station": "WVTC 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "wvtc90.7@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wvtc.net",
+    "phone": "802-728-1515",
+    "address": "WVTC Vermont Technical College 1 Main St. Randolph Ctr, VT 05061",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "-",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S342",
+    "country": "USA",
+    "state": "VA",
+    "city": "Blacksburg",
+    "school": "Virginia Polytechnic Institute and State University",
+    "station": "WUVT 90.7",
+    "frequency": "90.7",
+    "emails": [],
+    "music_director": "Rachel",
+    "website": "wuvt.vt.edu",
+    "phone": "540-231-9880",
+    "address": "WUVT-FM (0546) Squires Student Center, Rm 350, Virginia Tech 290 College Avenue Blacksburg, VA 24061-0546",
+    "ig_handles": [
+      "wuvt"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wuvt",
+    "show": "-",
+    "source_page": 29,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S343",
+    "country": "USA",
+    "state": "VA",
+    "city": "Charlottesville",
+    "school": "University of Virginia",
+    "station": "WTJU 91.1",
+    "frequency": "91.1",
+    "emails": [
+      "wtju@virginia.edu",
+      "wxtjdirectors@gmail.com"
+    ],
+    "music_director": "Music Director List",
+    "website": "wtju.net",
+    "phone": "434-924-3959",
+    "address": "WTJU 91.1 FM PO Box 400811 University of Virginia Charlottesville, VA 22904",
+    "ig_handles": [
+      "wtjuradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wtjuradio",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S344",
+    "country": "USA",
+    "state": "VA",
+    "city": "Fairfax",
+    "school": "George Mason University",
+    "station": "WGMU Radio",
+    "frequency": "",
+    "emails": [
+      "wgmu@gmu.edu"
+    ],
+    "music_director": "-",
+    "website": "wgmuradio.com",
+    "phone": "703-993-2940",
+    "address": "4400 University Dr. MS 2C5 Fairfax, VA",
+    "ig_handles": [
+      "wgmuradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wgmuradio",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S345",
+    "country": "USA",
+    "state": "VA",
+    "city": "Farmville",
+    "school": "Longwood University",
+    "station": "WMLU 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "wmlu@live.longwood.edu"
+    ],
+    "music_director": "Staff List",
+    "website": "wmlu.org",
+    "phone": "434-395-2792",
+    "address": "WMLU 91.3 FM 201 High Street Farmville, VA 23901",
+    "ig_handles": [
+      "wmluradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmluradio",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S346",
+    "country": "USA",
+    "state": "VA",
+    "city": "Fredericksburg",
+    "school": "University of Mary Washington",
+    "station": "WMWC",
+    "frequency": "",
+    "emails": [
+      "wmwccampusradio@gmail.com"
+    ],
+    "music_director": "Davy Washington",
+    "website": "wmwc.umwsites. net",
+    "phone": "-",
+    "address": "University of Mary Washington 1701 College Ave UMW Box 1116 Fredericksburg, VA 22401",
+    "ig_handles": [
+      "wmwcradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmwcradio",
+    "show": "",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S347",
+    "country": "USA",
+    "state": "VA",
+    "city": "Harrisonburg",
+    "school": "James Madison University",
+    "station": "WXJM 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "wxjmgm@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "wxjm.org Contact Form",
+    "phone": "540-568-3425",
+    "address": "983 Reservoir St, Harrisonburg VA, 22801",
+    "ig_handles": [
+      "wxjm.radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @wxjm.radio",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S348",
+    "country": "USA",
+    "state": "VA",
+    "city": "Lexington",
+    "school": "Washington and Lee University",
+    "station": "WLUR 91.5",
+    "frequency": "91.5",
+    "emails": [
+      "wlur915@wlu.edu"
+    ],
+    "music_director": "-",
+    "website": "wlu.edu",
+    "phone": "540-458-4365",
+    "address": "Washington and Lee University WLUR/John W. Elrod University Commons 204 W. Washington St. Lexington, Virginia 24450",
+    "ig_handles": [
+      "wlur915fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "Show More Skin W. 8-9p Lyrics & Limericks Th. 8-9p IG @wlur915fm",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S349",
+    "country": "USA",
+    "state": "VA",
+    "city": "Richmond",
+    "school": "University of Richmond",
+    "station": "WDCE 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "wdcemd@gmail.com",
+      "blackliqradio@gmail.com"
+    ],
+    "music_director": "Conner Evans, Black Liquid",
+    "website": "wdce.net",
+    "phone": "804-289-8790",
+    "address": "Box 85 410 Westhampton Way University of Richmond, VA 23173",
+    "ig_handles": [
+      "wdceradio",
+      "blackliq"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wdceradio @blackliq",
+    "show": "Schedule",
+    "source_page": 29,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S350",
+    "country": "USA",
+    "state": "VA",
+    "city": "Richmond",
+    "school": "-",
+    "station": "WRIR 97.3",
+    "frequency": "97.3",
+    "emails": [
+      "info@wrir.org"
+    ],
+    "music_director": "-",
+    "website": "wrir.org",
+    "phone": "804-622-9747",
+    "address": "WRIR Richmond Independent Radio PO Box 4787 Richmond, VA 23220",
+    "ig_handles": [
+      "wrir973",
+      "blackliq"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrir973 @blackliq also DJ\\u2019s at this station",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S351",
+    "country": "USA",
+    "state": "VA",
+    "city": "Richmond",
+    "school": "Virginia Commonwealth University",
+    "station": "WVCW",
+    "frequency": "",
+    "emails": [
+      "music@wvcw.org",
+      "hello@wvcw.org",
+      "localmusic@wvcw.org"
+    ],
+    "music_director": "Staff List",
+    "website": "wvcw.org",
+    "phone": "804-828-1055",
+    "address": "817 W BROAD STREET RICHMOND, VA 23284",
+    "ig_handles": [
+      "wvcw"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wvcw FB WVCW Radio",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S352",
+    "country": "USA",
+    "state": "VA",
+    "city": "Williamsburg",
+    "school": "College of William & Mary",
+    "station": "WCWM 90.9",
+    "frequency": "90.9",
+    "emails": [
+      "wcwm.wm@gmail.com"
+    ],
+    "music_director": "David",
+    "website": "wcwm.wm.edu",
+    "phone": "757-221-3288",
+    "address": "HipHop Director WCWM 90.9 FM College of W&M Campus Center P.O. Box 8793 Williamsburg, VA 23186",
+    "ig_handles": [
+      "wcwm90.9fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "follow up online IG @wcwm90.9fm",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S353",
+    "country": "USA",
+    "state": "WA",
+    "city": "Bellingham",
+    "school": "Western Washington University",
+    "station": "KUGS 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "kugs.musicdirector@wwu.edu"
+    ],
+    "music_director": "Tristan",
+    "website": "kugs.org",
+    "phone": "360-650-2936",
+    "address": "-",
+    "ig_handles": [
+      "kugs.fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kugs.fm",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S354",
+    "country": "USA",
+    "state": "WA",
+    "city": "Ellensburg",
+    "school": "Central Washington University",
+    "station": "88.1 The \\u2018Burg",
+    "frequency": "88.1",
+    "emails": [],
+    "music_director": "-",
+    "website": "881theburg.com",
+    "phone": "509-963-2311",
+    "address": "KCWU 88.1 The 'Burg 400 E University Way, Room 120 Ellensburg, WA 98926",
+    "ig_handles": [
+      "881theburg"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @881theburg",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S355",
+    "country": "USA",
+    "state": "WA",
+    "city": "Olympia",
+    "school": "Evergreen State College",
+    "station": "KAOS 89.3",
+    "frequency": "89.3",
+    "emails": [
+      "kaosmusicdirector@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "kaosradio.org",
+    "phone": "360-867-6888",
+    "address": "KAOS Community Radio The Evergreen State College-CAB 101 2700 Evergreen Parkway NW Olympia, WA 98505",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [
+      "albums_only"
+    ],
+    "submission_form_signals": [],
+    "notes_raw": "no singles, preferes physical CDs include 1 sheet highlighting artist/ album",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S356",
+    "country": "USA",
+    "state": "WA",
+    "city": "Pullman",
+    "school": "Washington State University",
+    "station": "KZUU 90.7",
+    "frequency": "90.7",
+    "emails": [
+      "kzuu90.7fm@gmail.com"
+    ],
+    "music_director": "-",
+    "website": "kzuu.org",
+    "phone": "509-335-2208",
+    "address": "KZUU PO Box 647204 Washington State University Pullman, WA 99164-7204",
+    "ig_handles": [
+      "kzuu90.7fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "sending cd is fastest way IG @kzuu90.7fm",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S357",
+    "country": "USA",
+    "state": "WA",
+    "city": "Seattle",
+    "school": "University of Washington",
+    "station": "KEXP 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "md@kexp.org"
+    ],
+    "music_director": "Chris Sanley",
+    "website": "kexp.org",
+    "phone": "206-520-5833",
+    "address": "KEXP 90.3FM 472 1st Ave N Seattle, WA 98109",
+    "ig_handles": [
+      "kexp"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "be patient IG @kexp",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S358",
+    "country": "USA",
+    "state": "WA",
+    "city": "Seattle",
+    "school": "Seattle University",
+    "station": "KXSU 102.1",
+    "frequency": "102.1",
+    "emails": [
+      "onair@kxsu.org"
+    ],
+    "music_director": "-",
+    "website": "kxsu.org Contact Form",
+    "phone": "-",
+    "address": "901 12th Ave. PO Box 222000 Seattle, WA 98122",
+    "ig_handles": [
+      "kxsuseattle"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @kxsuseattle",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S359",
+    "country": "USA",
+    "state": "WA",
+    "city": "Bellevue",
+    "school": "-",
+    "station": "KBCS 91.3",
+    "frequency": "91.3",
+    "emails": [
+      "iaan@kbcs.fm"
+    ],
+    "music_director": "Iaan Hughes",
+    "website": "kbcs.fm",
+    "phone": "425-564-2418",
+    "address": "91.3 KBCS 3000 Landerholm Cr. SE Bellevue, WA 98007",
+    "ig_handles": [
+      "kbcs"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @kbcs",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S360",
+    "country": "USA",
+    "state": "WV",
+    "city": "Charleston",
+    "school": "Community Radio",
+    "station": "WTSQ 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "info@wtsq.org"
+    ],
+    "music_director": "Mya Ross",
+    "website": "wtsq.org",
+    "phone": "304-345-5126",
+    "address": "WTSQ 179 Summers St. Suite 712 Charleston, WV 25301",
+    "ig_handles": [
+      "wtsq881"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wtsq881",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S361",
+    "country": "USA",
+    "state": "WV",
+    "city": "Morgantown",
+    "school": "West Virginia University",
+    "station": "WWVU 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "wwvumusic@gmail.com"
+    ],
+    "music_director": "Joseph Bellamy",
+    "website": "u92themoose.co m",
+    "phone": "304-293-4045",
+    "address": "WWVU-FM Mountainlair West Virginia University P.O. Box 6446 Morgantown, WV 26506",
+    "ig_handles": [
+      "U92_FM"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @U92_FM",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S362",
+    "country": "USA",
+    "state": "WI",
+    "city": "Beloit",
+    "school": "Beloit College",
+    "station": "WBCR 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "wbcrmanager@beloit.edu"
+    ],
+    "music_director": "-",
+    "website": "wbcr903.com",
+    "phone": "-",
+    "address": "WBCR Box 1779 c/o Beloit College 700 College Street Beloit, WI 53511",
+    "ig_handles": [
+      "wbcr903"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wbcr903",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S363",
+    "country": "USA",
+    "state": "WI",
+    "city": "Madison",
+    "school": "Wisconsin Public Radio",
+    "station": "WERN 88.7",
+    "frequency": "88.7",
+    "emails": [
+      "listener@wpr.org"
+    ],
+    "music_director": "-",
+    "website": "wpr.org Contact Form",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "wisconsinpublic"
+    ],
+    "station_type": "public_npr",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @wisconsinpublic radio",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S364",
+    "country": "USA",
+    "state": "WI",
+    "city": "Madison",
+    "school": "University of Wisconsin Madison",
+    "station": "WSUM 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "music@wsum.wisc.edu"
+    ],
+    "music_director": "Ben Farrell",
+    "website": "wsum.org",
+    "phone": "608-261-9786",
+    "address": "WSUM Attn: Music Director P.O. Box 260020 Madison, WI 53726",
+    "ig_handles": [
+      "wsum91.7"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wsum91.7",
+    "show": "Schedule",
+    "source_page": 30,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S365",
+    "country": "USA",
+    "state": "WI",
+    "city": "Madison",
+    "school": "-",
+    "station": "WORT 89.9",
+    "frequency": "89.9",
+    "emails": [
+      "musicdirector@wortfm.org"
+    ],
+    "music_director": "-",
+    "website": "wortfm.org",
+    "phone": "608-256-2001",
+    "address": "118 S Bedford St. Madison, WI",
+    "ig_handles": [
+      "wortfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wortfm",
+    "show": "Schedule",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S366",
+    "country": "USA",
+    "state": "WI",
+    "city": "Milwaukee",
+    "school": "Marquette University",
+    "station": "Marquette Radio",
+    "frequency": "",
+    "emails": [
+      "sam.baughn@marquette.edu"
+    ],
+    "music_director": "-",
+    "website": "marquettewire.or g/category/radio",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "mu_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @mu_radio",
+    "show": "Schedule",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S367",
+    "country": "USA",
+    "state": "WI",
+    "city": "Milwaukee",
+    "school": "Milwaukee School of Engineering",
+    "station": "WMSE 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "crawford@msoe.edu"
+    ],
+    "music_director": "Tom Crawford",
+    "website": "wmse.org",
+    "phone": "-",
+    "address": "WMSE Radio c/o Erin Wolf /Music Department 1025 N Broadway Milwaukee, WI 53202",
+    "ig_handles": [
+      "wmsemke"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wmsemke",
+    "show": "Schedule",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S368",
+    "country": "USA",
+    "state": "WI",
+    "city": "Milwaukee",
+    "school": "University of Wisconsin",
+    "station": "WUWM 89.7",
+    "frequency": "89.7",
+    "emails": [
+      "wuwm@uwm.edu"
+    ],
+    "music_director": "-",
+    "website": "wuwm.com",
+    "phone": "414-227-3355",
+    "address": "111 East Wisconsin Avenue, Suite 700 Milwaukee, WI 53202",
+    "ig_handles": [
+      "wuwmradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wuwmradio",
+    "show": "Schedule",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S369",
+    "country": "USA",
+    "state": "WI",
+    "city": "Oshkosh",
+    "school": "University of Wisconsin Oshkosh",
+    "station": "WRST 90.3",
+    "frequency": "90.3",
+    "emails": [
+      "wrstfm@uwosh.edu"
+    ],
+    "music_director": "-",
+    "website": "wrst.org",
+    "phone": "920-424-3113",
+    "address": "926 Woodland Ave Oshkosh, WI 54901",
+    "ig_handles": [
+      "wrstfmoshkosh"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wrstfmoshkosh",
+    "show": "Schedule",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S370",
+    "country": "USA",
+    "state": "WI",
+    "city": "Platteville",
+    "school": "The University of Wisconsin Platteville",
+    "station": "WSUP 90.5",
+    "frequency": "90.5",
+    "emails": [
+      "wsup@uwplatt.edu"
+    ],
+    "music_director": "-",
+    "website": "wsup.us",
+    "phone": "608-342-1165",
+    "address": "1 University Plaza 042 Pioneer Tower, Platteville, WI 53818",
+    "ig_handles": [
+      "wsupradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wsupradio",
+    "show": "-",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S371",
+    "country": "USA",
+    "state": "WI",
+    "city": "Stevens Point",
+    "school": "University of Wisconsin Stevens Point",
+    "station": "WWSP 89.9",
+    "frequency": "89.9",
+    "emails": [
+      "WWSP.Music.Director@uwsp.edu"
+    ],
+    "music_director": "Keegan",
+    "website": "90fm.org",
+    "phone": "715-346-3755",
+    "address": "WWSP 90fm 1101 Reserve Street (CAC 105) Stevens Point, WI 54481",
+    "ig_handles": [
+      "wwsp90fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wwsp90fm",
+    "show": "Schedule",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S372",
+    "country": "USA",
+    "state": "WI",
+    "city": "Waukesha",
+    "school": "Carroll University",
+    "station": "WCCX 104.5",
+    "frequency": "104.5",
+    "emails": [],
+    "music_director": "-",
+    "website": "-",
+    "phone": "262-524-7355",
+    "address": "Carroll University WCCX ATTN: (HipHop) 100 N. East Ave. Waukesha, WI 53186",
+    "ig_handles": [
+      "wccx104.5fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wccx104.5fm",
+    "show": "-",
+    "source_page": 31,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S373",
+    "country": "USA",
+    "state": "WI",
+    "city": "Whitewater",
+    "school": "University of Wisconsin Whitewater",
+    "station": "WSUW 91.7",
+    "frequency": "91.7",
+    "emails": [
+      "station@wsuw.org"
+    ],
+    "music_director": "-",
+    "website": "",
+    "phone": "262-472-1312",
+    "address": "WSUW 800 W. Main St. 1201 Andersen Library Whitewater, WI 53190",
+    "ig_handles": [
+      "917theedge"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @917theedge",
+    "show": "Schedule",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S374",
+    "country": "USA",
+    "state": "WY",
+    "city": "Dubois",
+    "school": "Central Wyoming College",
+    "station": "KCWC 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "radio@cwc.edu"
+    ],
+    "music_director": "-",
+    "website": "cwc.edu/radio",
+    "phone": "307-855-2266",
+    "address": "2660 Peck Ave, Riverton, WY, United States",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "FB Central Wyoming College Rustler Radio 88.1 KCWC",
+    "show": "-",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S375",
+    "country": "USA",
+    "state": "WY",
+    "city": "Laramie",
+    "school": "The University of Wyoming",
+    "station": "KUWL 90.1",
+    "frequency": "90.1",
+    "emails": [
+      "onair@uwyo.edu"
+    ],
+    "music_director": "-",
+    "website": "wyomingpublic media.org",
+    "phone": "307-766-4255",
+    "address": "Wyoming Public Media Dept. 3984 1000 E. University Ave Laramie, WY 82071",
+    "ig_handles": [
+      "wyomingpublic"
+    ],
+    "station_type": "public_npr",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @wyomingpublic radio",
+    "show": "Schedule",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S376",
+    "country": "Canada",
+    "state": "NS",
+    "city": "Halifax",
+    "school": "Halifax Colleges",
+    "station": "CKDU 88.1",
+    "frequency": "88.1",
+    "emails": [
+      "ckdufm@gmail.com",
+      "music@ckdu.ca"
+    ],
+    "music_director": "-",
+    "website": "-",
+    "phone": "+1-902-494-2487",
+    "address": "CKDU 88.1FM 6136 University Ave Halifax, NS Canada B3H 4J2",
+    "ig_handles": [
+      "ckdu881fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ckdu881fm",
+    "show": "-",
+    "source_page": 31,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S377",
+    "country": "Canada",
+    "state": "AB",
+    "city": "Calgary",
+    "school": "University of Calgary",
+    "station": "CJSW 90.9 FM",
+    "frequency": "90.9 FM",
+    "emails": [
+      "music@cjsw.com"
+    ],
+    "music_director": "",
+    "website": "cjsw.com",
+    "phone": "403-220-3991",
+    "address": "CJSW Radio Room 312 MacEwan Student Center 2500 University Drive NW Calgary, AB T2N 1N4",
+    "ig_handles": [
+      "cjsw"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [
+      "albums_only"
+    ],
+    "submission_form_signals": [
+      "submit here"
+    ],
+    "notes_raw": "IG @cjsw No singles, minimum 3 tracks. MP3s only",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S378",
+    "country": "Canada",
+    "state": "AB",
+    "city": "Edmonton",
+    "school": "University of Alberta",
+    "station": "CJSR 88.5 FM",
+    "frequency": "88.5 FM",
+    "emails": [
+      "music@cjsr.com"
+    ],
+    "music_director": "",
+    "website": "cjsr.com",
+    "phone": "780-492-CJSR ext. 1",
+    "address": "Attn: Music Department CJSR World Domination Headquarters Room 0-09 SUB University of Alberta Edmonton, AB T6G 2J7 Canada",
+    "ig_handles": [
+      "cjsr_fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [
+      "albums_only"
+    ],
+    "submission_form_signals": [],
+    "notes_raw": "IG: @cjsr_fm No Singles, Albums & EP\\u2019s Only More Submission Info Here",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S379",
+    "country": "Canada",
+    "state": "AB",
+    "city": "Lethbridge",
+    "school": "University of Lethbridge",
+    "station": "CKXU 88.3 FM",
+    "frequency": "88.3 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "ckxu.com",
+    "phone": "403-329-5189",
+    "address": "Attn: Music Director CKXU 88.3 FM 4401 University Dr W Lethbridge, AB T1K 3M4",
+    "ig_handles": [
+      "ckxu_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred"
+    ],
+    "flags": [
+      "albums_only"
+    ],
+    "submission_form_signals": [
+      "submit here"
+    ],
+    "notes_raw": "IG: @ckxu_radio No Singles, MP3 ONLY. No streaming links",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S380",
+    "country": "Canada",
+    "state": "BC",
+    "city": "Abbotsford",
+    "school": "University of the Fraser Valley",
+    "station": "CIVL 101.7 FM",
+    "frequency": "101.7 FM",
+    "emails": [
+      "music@civl.ca"
+    ],
+    "music_director": "",
+    "website": "civl.ca",
+    "phone": "604-851-6307",
+    "address": "CIVL Radio 33844 King Road Abbotsford, BC V2S 7M8 (604) 851-6306",
+    "ig_handles": [
+      "civl_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submit here"
+    ],
+    "notes_raw": "IG @civl_radio Also Submit Here on Get In Touch Form",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S381",
+    "country": "Canada",
+    "state": "BC",
+    "city": "Burnaby",
+    "school": "British Colombia Institute of Technology",
+    "station": "107.9",
+    "frequency": "107.9",
+    "emails": [],
+    "music_director": "",
+    "website": "commons.bcit.ca /evolution1079/",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "evolutionstorytelling"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "IG @evolutionstorytelling Contact Form Here",
+    "show": "-",
+    "source_page": 34,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S382",
+    "country": "Canada",
+    "state": "BC",
+    "city": "Burnaby",
+    "school": "Simon Fraser University",
+    "station": "CJSF 90.1 FM",
+    "frequency": "90.1 FM",
+    "emails": [
+      "cjsfmusic@sfu.ca"
+    ],
+    "music_director": "",
+    "website": "cjsf.ca",
+    "phone": "(778) 782-CJSF (2573)",
+    "address": "CJSF Radio TC 216 Simon Fraser University Burnaby, B.C. V5A 1S6",
+    "ig_handles": [
+      "cjsfradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cjsfradio",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S383",
+    "country": "Canada",
+    "state": "BC",
+    "city": "Kamloops",
+    "school": "Thompson Rivers University",
+    "station": "CFBX 92.5 FM",
+    "frequency": "92.5 FM",
+    "emails": [
+      "music@theX.ca"
+    ],
+    "music_director": "",
+    "website": "theX.ca",
+    "phone": "250-377-3988",
+    "address": "CFBX 92.5 FM Thompson Rivers University, 805 TRU Way, House 8 Kamloops, BC, Canada V2C 0C8",
+    "ig_handles": [
+      "cfbxradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [
+      "albums_only"
+    ],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cfbxradio Prefers CD\\u2019s No Singles",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S384",
+    "country": "Canada",
+    "state": "BC",
+    "city": "Nanaimo",
+    "school": "Vancouver Island University",
+    "station": "CHLY 101.7 FM",
+    "frequency": "101.7 FM",
+    "emails": [
+      "submissions@chly.ca"
+    ],
+    "music_director": "",
+    "website": "chly.ca",
+    "phone": "250-716-3410",
+    "address": "\\u201cHey you hose heads\\u201d at CHLY 101.7FM #2, 34 Victoria Cres Nanaimo BC V9R 5B8 Canada",
+    "ig_handles": [
+      "chly1017fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @chly1017fm Submission Form Here",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S385",
+    "country": "Canada",
+    "state": "BC",
+    "city": "Prince George",
+    "school": "University of Northern British Columbia",
+    "station": "CFUR 88.7 FM",
+    "frequency": "88.7 FM",
+    "emails": [
+      "music@cfur.ca"
+    ],
+    "music_director": "",
+    "website": "cfur.ca",
+    "phone": "778-693-2387 ext. 2",
+    "address": "CFURadio 3333 University Way Prince George, BC V2N 4Z9",
+    "ig_handles": [
+      "cfuradiofm",
+      "cfur_music"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [
+      "albums_only"
+    ],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cfuradiofm Twitter @cfur_music MP3\\u2019s No Singles",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S386",
+    "country": "Canada",
+    "state": "BC",
+    "city": "Vancouver",
+    "school": "University of British Columbia",
+    "station": "CITR 101.9 FM",
+    "frequency": "101.9 FM",
+    "emails": [
+      "music@citr.ca"
+    ],
+    "music_director": "",
+    "website": "citr.ca",
+    "phone": "604-822-2487",
+    "address": "Music Dept. CiTR Radio LL500 \\u2013 6133 University Blvd. Vancouver, BC V6T 1Z1",
+    "ig_handles": [
+      "citranddiscorder"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @citranddiscorder Interview Form Here They have a magazine Discorder Magazine",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S387",
+    "country": "Canada",
+    "state": "BC",
+    "city": "Victoria",
+    "school": "University of Victoria",
+    "station": "CFUV 101.9 FM",
+    "frequency": "101.9 FM",
+    "emails": [
+      "music@cfuv.ca"
+    ],
+    "music_director": "",
+    "website": "cfuv.uvic.ca",
+    "phone": "250-721-8700",
+    "address": "CFUV 101.9 FM C/O Music Director PO Box 3035 University of Victoria Victoria, BC V8W 3P3, Canada",
+    "ig_handles": [
+      "cfuv"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cfuv Submissions Guidelines",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S388",
+    "country": "Canada",
+    "state": "MB",
+    "city": "Brandon",
+    "school": "Assiniboine Community College",
+    "station": "CJ 106.5 FM",
+    "frequency": "106.5 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "assiniboine.net/",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "cj106fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cj106fm",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S389",
+    "country": "Canada",
+    "state": "MB",
+    "city": "Winnipeg",
+    "school": "University of Manitoba",
+    "station": "UMFM 101.5 FM",
+    "frequency": "101.5 FM",
+    "emails": [
+      "michael@umfm.com",
+      "livesession@umfm.com"
+    ],
+    "music_director": "",
+    "website": "umfm.com",
+    "phone": "204-269-8636",
+    "address": "UMFM 101.5 310 University Centre University of Manitoba Winnipeg, MB, R3T 2N2",
+    "ig_handles": [
+      "umfm1015"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @umfm1015",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S390",
+    "country": "Canada",
+    "state": "MB",
+    "city": "Winnipeg",
+    "school": "University of Winnipeg",
+    "station": "CKUW 95.9 FM",
+    "frequency": "95.9 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "ckuw.ca",
+    "phone": "204-774-6877",
+    "address": "Room 4CM11, University of Winnipeg, 515 Portage Avenue, Winnipeg, MB, Canada, R3B 2E9",
+    "ig_handles": [
+      "ckuw_959fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "physical"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ckuw_959fm",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S391",
+    "country": "Canada",
+    "state": "NB",
+    "city": "Fredericton",
+    "school": "University of New Brunswick",
+    "station": "CHSR 97.9 FM",
+    "frequency": "97.9 FM",
+    "emails": [
+      "musicdirector@chsrfm.ca"
+    ],
+    "music_director": "",
+    "website": "chsrfm.ca",
+    "phone": "506-453-4979",
+    "address": "CHSR 97.9FM PO Box 4400 21 Pacey Drive Fredericton NB E3B 5A3 CANADA",
+    "ig_handles": [
+      "chsr979"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @chsr979",
+    "show": "Schedule",
+    "source_page": 34,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S392",
+    "country": "Canada",
+    "state": "NB",
+    "city": "Sackville",
+    "school": "Mount Allison University",
+    "station": "CHMA 106.9 FM",
+    "frequency": "106.9 FM",
+    "emails": [
+      "musicsubmissions@chmafm.com"
+    ],
+    "music_director": "",
+    "website": "chmafm.com",
+    "phone": "506-364-2222",
+    "address": "CHMA 62 York Street Sackville, New Brunswick E4L 1E2",
+    "ig_handles": [
+      "chmafm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @chmafm",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S393",
+    "country": "Canada",
+    "state": "NB",
+    "city": "Saint John",
+    "school": "University of New Brunswick - Saint John",
+    "station": "CFMH 107..3 FM",
+    "frequency": "107",
+    "emails": [],
+    "music_director": "",
+    "website": "linktr.ee/localfm",
+    "phone": "-",
+    "address": "-",
+    "ig_handles": [
+      "local107.3fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @local107.3fm",
+    "show": "-",
+    "source_page": 35,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S394",
+    "country": "Canada",
+    "state": "NL",
+    "city": "St. John\\u2019s",
+    "school": "Memorial University of Newfoundland",
+    "station": "CHMR 93.5 FM",
+    "frequency": "93.5 FM",
+    "emails": [
+      "chmrmusicdirector@gmail.com"
+    ],
+    "music_director": "",
+    "website": "chmr.ca",
+    "phone": "709 864-7935",
+    "address": "CHMR-FM Box A-119 Memorial University of Newfoundland St. John's, NL A1C 5S7 Attn: Music Director",
+    "ig_handles": [
+      "chmrfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @chmrfm",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S395",
+    "country": "Canada",
+    "state": "NS",
+    "city": "Antigonish",
+    "school": "St. Francis Xavier University",
+    "station": "CFXU 93.3 FM",
+    "frequency": "93.3 FM",
+    "emails": [
+      "cfxu.md@stfx.ca"
+    ],
+    "music_director": "",
+    "website": "radiocfxu.ca",
+    "phone": "-",
+    "address": "PO Box 948 StFX University, Antigonish, NS, B2G 2W5",
+    "ig_handles": [
+      "radiostfx",
+      "cfxuthefox"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @radiostfx TikTok @cfxuthefox",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S396",
+    "country": "Canada",
+    "state": "NS",
+    "city": "Halifax",
+    "school": "Dalhousie University",
+    "station": "CKDU 88.1 FM",
+    "frequency": "88.1 FM",
+    "emails": [
+      "music@ckdu.ca"
+    ],
+    "music_director": "",
+    "website": "ckdu.ca",
+    "phone": "902-494-2487",
+    "address": "CKDU 88.1FM. 6136 University Ave, Halifax, Ns , B3H 4J2",
+    "ig_handles": [
+      "ckdu881fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ckdu881fm (Must be 3 songs)",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S397",
+    "country": "Canada",
+    "state": "NS",
+    "city": "Sydney",
+    "school": "Cape Breton University",
+    "station": "CJBU 107.3 FM",
+    "frequency": "107.3 FM",
+    "emails": [
+      "music@cjbu.ca"
+    ],
+    "music_director": "",
+    "website": "cjbu.ca",
+    "phone": "902-563-1475",
+    "address": "CJBU-FM Cape Breton University PO 5300 1250 Grand Lake Rd Sydney NS",
+    "ig_handles": [
+      "cjbu1073"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cjbu1073",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S398",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Belleville",
+    "school": "Loyalist College",
+    "station": "CJLX 91.3 FM",
+    "frequency": "91.3 FM",
+    "emails": [
+      "music@91x.fm"
+    ],
+    "music_director": "",
+    "website": "91x.fm",
+    "phone": "613-966-2559",
+    "address": "91X P.O. Box 4200 Belleville, Ontario K8N 5B9",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "FB facebook.com/ 91Xfm",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S399",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Guelph",
+    "school": "University of Guelph",
+    "station": "CFRU 93.3 FM",
+    "frequency": "93.3 FM",
+    "emails": [
+      "music@cfru.ca"
+    ],
+    "music_director": "",
+    "website": "cfru.ca",
+    "phone": "519-837-CFRU",
+    "address": "U.C. Level 2, University of Guelph Guelph, Ontario N1G2W1",
+    "ig_handles": [
+      "cfru93.3"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cfru93.3 (Must be 3 songs)",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S400",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Hamilton",
+    "school": "McMaster University",
+    "station": "CFMU 93.3 FM",
+    "frequency": "93.3 FM",
+    "emails": [
+      "cfmumusic@msu.mcmaster.ca"
+    ],
+    "music_director": "",
+    "website": "cfmu.ca",
+    "phone": "905-528-9888",
+    "address": "-",
+    "ig_handles": [
+      "933cfmu"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @933cfmu Submission Requirements",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S401",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Hamilton",
+    "school": "Mohawk College",
+    "station": "CIOI 101.5 FM",
+    "frequency": "101.5 FM",
+    "emails": [
+      "INDI1015FM@gmail.co"
+    ],
+    "music_director": "",
+    "website": "www.indi1015. ca",
+    "phone": "905-575-2175",
+    "address": "F111 - 135 Fennel Ave West Hamilton, ON L9C 0E5",
+    "ig_handles": [
+      "indi1015fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @indi1015fm FB indi1015fm",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S402",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Kitchener",
+    "school": "Conestoga College",
+    "station": "CJIQ 88.3 FM",
+    "frequency": "88.3 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "cjiqfm.com Contact Page",
+    "phone": "519-748-3533",
+    "address": "299 Doon Valley Drive Kitchener ON.",
+    "ig_handles": [
+      "cjiq883"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cjiq883",
+    "show": "-",
+    "source_page": 35,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S403",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Kingston",
+    "school": "Queen\\u2019s University",
+    "station": "CFRC 101.9 FM",
+    "frequency": "101.9 FM",
+    "emails": [
+      "music@cfrc.ca"
+    ],
+    "music_director": "",
+    "website": "cfrc.ca Submission Form + Submission Policy",
+    "phone": "613-533-2121",
+    "address": "Attn: Music Department CFRC 101.9 FM 62 Fifth Field Company Lane Carruthers Hall, Queen's University Kingston, Ontario, K7L 3N6",
+    "ig_handles": [
+      "cfrcradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form",
+      "submission policy"
+    ],
+    "notes_raw": "IG @cfrcradio",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S404",
+    "country": "Canada",
+    "state": "ON",
+    "city": "London",
+    "school": "University of Western Ontario",
+    "station": "CHRW 94.9 FM",
+    "frequency": "94.9 FM",
+    "emails": [
+      "music@radiowestern.ca"
+    ],
+    "music_director": "",
+    "website": "radiowestern.c a Submission Guidelines",
+    "phone": "(519) 661-3600",
+    "address": "Radio Western 94.9 FM Room 250, University Community Centre Western University London, Ontario, Canada N6A 3K7",
+    "ig_handles": [
+      "radiowestern"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "IG @radiowestern Additional Posts Page",
+    "show": "Schedule",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S405",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Ottawa",
+    "school": "Algonquin College",
+    "station": "CKDJ 107.9 FM",
+    "frequency": "107.9 FM",
+    "emails": [
+      "ckdjmusicac@gmail.co"
+    ],
+    "music_director": "",
+    "website": "ckdj.net Additional Submission Form",
+    "phone": "613-750-2535",
+    "address": "Radio Broadcasting Building N, Room N101 CKDJ 107.9 FM 1385 Woodroffe Avenue Ottawa, Ontario K2G 1V8",
+    "ig_handles": [
+      "ckdj1079fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form"
+    ],
+    "notes_raw": "IG @ckdj1079fm FB CKDJ 107.9",
+    "show": "-",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S406",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Mississauga",
+    "school": "University of Toronto Mississauga",
+    "station": "CFRE 91.9 FM/ CKC455",
+    "frequency": "91.9 FM",
+    "emails": [
+      "music@cfreradio.ca"
+    ],
+    "music_director": "",
+    "website": "cfreradio.ca Contact Page Live Stream Link",
+    "phone": "905-828-2088",
+    "address": "-",
+    "ig_handles": [
+      "cfreradio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cfreradio FB: CFRE Minimum 3 songs + Submit direct download links",
+    "show": "-",
+    "source_page": 35,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S407",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Ottowa",
+    "school": "Carleton University",
+    "station": "CKCU 93.1 FM",
+    "frequency": "93.1 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "ckcufm.com",
+    "phone": "613-903-8389",
+    "address": "CKCU FM Room 517 Nideyin\\u00e0n 1125 Colonel By Drive, Ottawa, Ontario CANADA K1S 5B6",
+    "ig_handles": [
+      "ckcufm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ckcufm Contact individual DJs from the schedule page >",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S408",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Ottawa",
+    "school": "University of Ottawa",
+    "station": "CHUO 89.1 FM",
+    "frequency": "89.1 FM",
+    "emails": [
+      "music@chuo.fm"
+    ],
+    "music_director": "",
+    "website": "chuo.fm Live Stream Link",
+    "phone": "613-562-5967",
+    "address": "-",
+    "ig_handles": [
+      "chuo891fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @chuo891fm FB: CHUO 89.1 FM Submission Guidlines",
+    "show": "Schedule Shows",
+    "source_page": 36,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S409",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Petersborough",
+    "school": "Trent University",
+    "station": "CFFF 92.7 FM",
+    "frequency": "92.7 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "trentradio.ca Submission Guidelines FB: Trent Radio",
+    "phone": "(705) 748 4761",
+    "address": "715 George St. N Peterborough, ON K9H 3T2",
+    "ig_handles": [
+      "trent_radio"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "IG @trent_radio Local Music Submission Not Local? Find show in Schedule Page and submit",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "medium"
+  },
+  {
+    "id": "S410",
+    "country": "Canada",
+    "state": "ON",
+    "city": "St. Catherines",
+    "school": "Brock University",
+    "station": "CFBU 103.7 FM",
+    "frequency": "103.7 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "cfbu.ca Twitter link",
+    "phone": "(905) 346-2644",
+    "address": "CFBU 103.7 FM c/o 1812 Sir Isaac Brock Way St. Catharines, Ontario CANADA L2S 3A1",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "Emails can be found in Show descriptions Check Schedule >",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S411",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Sudbury",
+    "school": "Laurentian University",
+    "station": "CKLU 96.7 FM",
+    "frequency": "96.7 FM",
+    "emails": [
+      "pd@cklu.ca"
+    ],
+    "music_director": "",
+    "website": "cklu.ca",
+    "phone": "(705) 673-6538 x 1",
+    "address": "935 Ramsey Lake Road Sudbury, Ontario P3E 2C6 Canada",
+    "ig_handles": [
+      "cklu967fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cklu967fm FB: CKLU Radio 96.7",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S412",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Thunder Bay",
+    "school": "Lakehead University",
+    "station": "CILU 102.7 FM",
+    "frequency": "102.7 FM",
+    "emails": [
+      "musicdirector@luradio.ca"
+    ],
+    "music_director": "",
+    "website": "luradio.ca Additional Contact page FB: CILU 102.7",
+    "phone": "807-343-8881",
+    "address": "955 Oliver Rd. Thunder Bay, ON P7B 5E1",
+    "ig_handles": [
+      "cilu102.7"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cilu102.7 Contact links also available in show descriptions on Schedule page >",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S413",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Toronto",
+    "school": "Toronto Metropolitan University",
+    "station": "CJRU 1280/ MET Radio",
+    "frequency": "1280",
+    "emails": [
+      "music@cjru.ca"
+    ],
+    "music_director": "",
+    "website": "metradio.ca Music Submission FAQ",
+    "phone": "416-904-6889",
+    "address": "55 Gould Street - Suite 201 Toronto, ON M5B 1E9",
+    "ig_handles": [
+      "metradio1280"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [
+      "albums_only"
+    ],
+    "submission_form_signals": [],
+    "notes_raw": "IG @metradio1280 Albums & EPs only No Singles!",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S414",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Toronto",
+    "school": "Humber College",
+    "station": "CKHC 96.9 FM",
+    "frequency": "96.9 FM",
+    "emails": [
+      "noah.scanga@humber.ca",
+      "n@humber.ca"
+    ],
+    "music_director": "",
+    "website": "radio.humber.c a",
+    "phone": "-",
+    "address": "Radio Humber 96.9fm Attn: Noah Scanga, Programming Assistant 205 Humber College Blvd., K107 Toronto, ON Canada M9W 5L7",
+    "ig_handles": [
+      "radiohumber"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @radiohumber FB: 96.9 Radio Humber",
+    "show": "-",
+    "source_page": 36,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S415",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Toronto",
+    "school": "University of Toronto",
+    "station": "CIUT 89.5 FM",
+    "frequency": "89.5 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "ciut.fm",
+    "phone": "(416) 978-0909 x 201",
+    "address": "89.5 Tower Road, 3rd Floor, Toronto, Ontario, M5S 0A2",
+    "ig_handles": [
+      "ciut895fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ciut895fm FB: CIUT 89.5",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S416",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Toronto",
+    "school": "York University",
+    "station": "CHRY 105.5 FM",
+    "frequency": "105.5 FM",
+    "emails": [
+      "chryMD@york.ca"
+    ],
+    "music_director": "",
+    "website": "chry.fm Contact Form FB: facebook.com/ chryradio",
+    "phone": "416-736-5293",
+    "address": "CHRY 105.5 FM 4700 Keele Street, Rm 413 Student Centre Toronto, Ontario M3J 1P3",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "contact form"
+    ],
+    "notes_raw": "Listening Parties! No EPK or photos necessary. Just a short artist bio and contact info",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S417",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Waterloo",
+    "school": "University of Waterloo",
+    "station": "CKMS 102.7 FM",
+    "frequency": "102.7 FM",
+    "emails": [
+      "office@radiowaterloo.ca"
+    ],
+    "music_director": "",
+    "website": "radiowaterloo.c a Contact Page",
+    "phone": "+1\\u2011519\\u2011884\\u20112567",
+    "address": "Unit 114B \\u2013 283 Duke Street West Kitchener, Ontario, Canada N2H 3X7",
+    "ig_handles": [
+      "ckms102.7fm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "IG @ckms102.7fm Submission Guidelines",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S418",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Welland",
+    "school": "Niagara College",
+    "station": "CRNC 90.1 FM",
+    "frequency": "90.1 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "crnc.ca",
+    "phone": "+1 905-735-2211 extension 7151",
+    "address": "-",
+    "ig_handles": [
+      "crnctheheat"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @crnctheheat",
+    "show": "-",
+    "source_page": 36,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S419",
+    "country": "Canada",
+    "state": "ON",
+    "city": "Windsor",
+    "school": "University of Windsor",
+    "station": "CJAM 99.1 FM",
+    "frequency": "99.1 FM",
+    "emails": [
+      "cjammd@gmail.com"
+    ],
+    "music_director": "",
+    "website": "cjam.ca Submission Guidelines",
+    "phone": "519-253-3000 ext. 2527",
+    "address": "-",
+    "ig_handles": [
+      "cjamfm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission guidelines"
+    ],
+    "notes_raw": "IG @cjamfm DO NOT SEND SPOTIFY LINKS",
+    "show": "Schedule",
+    "source_page": 36,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S420",
+    "country": "Canada",
+    "state": "QC",
+    "city": "Montreal",
+    "school": "Concordia University",
+    "station": "CJLO 1690",
+    "frequency": "1690",
+    "emails": [
+      "music@cjlo.com",
+      "md-hiphop@cjlo.com",
+      "md-metal@cjlo.com",
+      "md-world@cjlo.com",
+      "md-rpm@cjlo.com"
+    ],
+    "music_director": "",
+    "website": "cjlo.com FB: CJLO 1690am",
+    "phone": "514-848-7471",
+    "address": "CJLO 1690AM 7141 Sherbrooke Street West Suite CC-430 Montr\\u00e9al, Qu\\u00e9bec, Canada H4B 1R6",
+    "ig_handles": [
+      "cjlo1690am"
+    ],
+    "station_type": "college",
+    "genre_hints": [
+      "hip-hop",
+      "metal"
+    ],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cjlo1690am They also have a Magazine!",
+    "show": "Schedule",
+    "source_page": 37,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S421",
+    "country": "Canada",
+    "state": "QC",
+    "city": "Montreal",
+    "school": "McGill University",
+    "station": "CKUT 90.3 FM",
+    "frequency": "90.3 FM",
+    "emails": [
+      "music@ckut.ca"
+    ],
+    "music_director": "",
+    "website": "ckut.ca Music Submission Info",
+    "phone": "514-448-4013 514-448-4041 ext. 4975",
+    "address": "CKUT 90.3FM Music Department 3647 University St. Montreal, Quebec H3A 2B3",
+    "ig_handles": [
+      "ckutmtl"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @ckutmtl Hard copy CDs get priority",
+    "show": "Schedule",
+    "source_page": 37,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S422",
+    "country": "Canada",
+    "state": "QC",
+    "city": "Montreal",
+    "school": "Universite de Montreal",
+    "station": "CISM 89.3 FM",
+    "frequency": "89.3 FM",
+    "emails": [
+      "bpoirier@cism893.ca"
+    ],
+    "music_director": "",
+    "website": "cism893.ca",
+    "phone": "514-343-CISM",
+    "address": "CISM 89,3 FM Att. Benoit Poirier 2332 \\u00c9douard-Montpetit Local C-1509, Pavillon J-A DeS\\u00e8ve Universit\\u00e9 de Montr\\u00e9al C.P. 6128 succursale Centre-Ville H3T 1J4",
+    "ig_handles": [
+      "cism893"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @cism893 WeTransfer, DropBox, or Google Drive links only",
+    "show": "Schedule",
+    "source_page": 37,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S423",
+    "country": "Canada",
+    "state": "QC",
+    "city": "Quebec City",
+    "school": "Universite Laval",
+    "station": "CHYZ 94.3 FM",
+    "frequency": "94.3 FM",
+    "emails": [
+      "musique@chyz.ca"
+    ],
+    "music_director": "",
+    "website": "chyz.ca",
+    "phone": "418-656-2215",
+    "address": "2305, rue de I\\u2019Universite, Local 0236 Pavillion Maurice Pollack, Quebec, QC G1V OA6 Canada",
+    "ig_handles": [
+      "chyz943"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "IG @chyz943 FB: CHYZ 94.3",
+    "show": "Schedule",
+    "source_page": 37,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S424",
+    "country": "Canada",
+    "state": "QC",
+    "city": "Sherbrooke",
+    "school": "Bishop\\u2019s University",
+    "station": "CJMQ 88.9 FM",
+    "frequency": "88.9 FM",
+    "emails": [],
+    "music_director": "",
+    "website": "cjmq.fm",
+    "phone": "819-822-1838",
+    "address": "CJMQ 3355 College Sherbrooke, QC J1M 0B8",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "-",
+    "show": "-",
+    "source_page": 37,
+    "outreach_ease": "hard"
+  },
+  {
+    "id": "S425",
+    "country": "Canada",
+    "state": "QC",
+    "city": "Sherbrooke",
+    "school": "Universite de Sherbrooke",
+    "station": "CFAK 88.3 FM",
+    "frequency": "88.3 FM",
+    "emails": [
+      "info.cfak883@usherbrooke.ca",
+      "musique.cfak883@usherbrooke.ca"
+    ],
+    "music_director": "",
+    "website": "cfak.ca",
+    "phone": "+1 819-821-8000",
+    "address": "2500 boul. Universit\\u00e9, E1-1010 Sherbrooke J1K 2R1",
+    "ig_handles": [],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [],
+    "notes_raw": "FB: CFAK 88,3 FM",
+    "show": "Schedule",
+    "source_page": 37,
+    "outreach_ease": "easy"
+  },
+  {
+    "id": "S426",
+    "country": "Canada",
+    "state": "QC",
+    "city": "Trois-Rivieres",
+    "school": "Universite du Quebec a Trois- Rivieres",
+    "station": "CFOU 89.1 FM",
+    "frequency": "89.1 FM",
+    "emails": [
+      "progcfou@uqtr.ca"
+    ],
+    "music_director": "",
+    "website": "cfou.ca Live Stream Link",
+    "phone": "819-376-5183",
+    "address": "CFOU 89,1 FM 3351, boul. des Forges Trois-Rivieres (Quebec) G9A 5H7",
+    "ig_handles": [
+      "cfoufm"
+    ],
+    "station_type": "college",
+    "genre_hints": [],
+    "submission_methods": [
+      "links_preferred",
+      "form",
+      "email"
+    ],
+    "flags": [],
+    "submission_form_signals": [
+      "submission form",
+      "music submission form"
+    ],
+    "notes_raw": "IG @cfoufm Music Submission Form",
+    "show": "Schedule",
+    "source_page": 37,
+    "outreach_ease": "easy"
+  }
+]`,
+      },
+      {
+        path: "data/tastemakers.csv",
+        content: `name,platform,topics,schedule,social,contact,website_other,location,source_page
+StayOnBeat,YouTube,Music Reviews & Collaborations,Mon. & Wed. @10pm EST,IG @StayOnBeat,StayOnBeatLive@gmail.com,www.stayonbeat.com,"Miami, FL",40
+The Cheat Code,YouTube,Music Business Artist Advice,Wednesdays,IG @gethecheatcode,-,linktr.ee/ getthecheatcode,"Atlanta, GA",40
+Hollywood Beats,Instagram Live,Music Reviews,Tuesdays 7pm PST,IG: @hollywoodgotbeats,Submit Your Music Here,HollywoodGotBeats.com,"Los Angeles, CA",40
+Americas Realest Podcast,YouTube & LiveHipHopDaily,Interviews & Culture Talk,Wednesdays 6-8pm EST,IG: @ americasrealest @americasrealesteverything,americasrealestmusic.com/ submit,americasrealestmusic. com/podcast,"Atlanta, GA",40
+The Independent Living Podcast,YouTube,Successful Independent Creators,Varies,IG: @independentlivingpod cast,-,@dame.mec,Not Available,40
+The Record Shepherd,YouTube,Music Business Artist Advice,Varies,IG: @timtimw_ @therecordshepherds,-,linktr.ee/ therecordshepherds,"New York City, NY",40
+Entrepreneur Talk Live,Instagram Live,Entrepreneurship,Sundays & Mondays,IG: @romeyafavoriterapper,267-544-9069,linkr.bio/ romeyafavoriterapper,"Philadelphia, PA",40
+Pensado’s Place,Website & YouTube,Studio Recording & Music Business,Varies,IG: @PensadosPlace Twitter: pensadosplace,-,www.pensadosplace.tv,Not Available,40
+The Loft TV,YouTube,Artists Interviews,Weekly,IG: @TheLoftTV,-,linktr.ee/Theloftv,Not Available,40
+i hate rappers… but i love artists,,Artists Interviews,Not Specified,IG: @i.hate.rappers,ContactiHateRappers@gmail.com,-,"Cleveland, OH",40
+808’s and Mixtapes,Spotify,Music,Not Specified,IG: @808mixtape,zach@808mixtape.com,-,"Cleveland, OH",40
+Moment of Clarity,YouTube,Artists Interviews,Not Specified,IG : @kingace_thecreator,momentofclaritypod1@gmail.com,-,Not Available,40
+Dis N Dat Radio,Website,Artists Showcase,Not Specified,IG: @disndatradio,info@disndatradio.com,-,Not Available,40
+Do What We Wanna Do Podcast,YouTube,Artists Showcase,Not Specified,IG: @dowhatwewannado podcast,Contact at the bottom of home page innervisionent.com/,innervisionent.com/,"Orlando, FL",40
+Richhouse Reviews,Instagram & YouTube,Music Reviews,Daily,IG: @richhousereviews,Comment section on Instagram,Any genre is welcome,Not Available,40
+NoCap | NXTUP,Instagram & YouTube,Artists Showcase,Not Specified,IG: @nocapshows,nocapshows.com,-,Not Available,40
+The Hustle Podcast,YouTube,Talent Showcase,Weekly,IG: @maxmupesse,-,linktr.ee/maxmupesse,,40
+The Skinny,YouTube,Artists Interviews Artist Showcase,Weekly,IG: @theskinnyshowatl,DM on IG or on website,skinandbonzprojectstudio.com,"Atlanta, GA",40
+Makin’ It Magazine,YouTube & Twitch,Music Business Music Reviews & Artist Interviews,Weekly,IG: @makinit4indies,Contact and submit on website ->,MakinItMag.com Artists Grants & Win $,"Atlanta, GA",40
+Million Dollaz Worth of Game,Spotify YouTube Apple,Artists Interviews Music Business,Weekly,IG: @mworthofgame,MDWOGBIZ@gmail.com,linktr.ee/ mworthofgame,Not Available,40
+RoastNReview,YouTube & Twitch,Music Reviews & Artist Competitions $,Weekly,IG: @roastnreview,roastnreview@gmail.com text music to (732) 612-9966,www.roastnreview.com,Not Available,40
+EMLN Exclusive (Early Morning Late Nights),YouTube & iTunes,Artist Interviews & Culture,Weekly,IG: @EMLNExclusive,Emlnexclusiveinfo@gmail.com,Linktr.ee/emlnexclusive,"San Jose, CA",40
+David Sanya Podcast,YouTube & Spotify,Music Business,Varies,IG: @davidsanyabeats,-,davidsanyabeats.com,Not Available,40
+No Labels Necessary,YouTube,Music Business & Artist Advice,Daily,IG: @nolabelsnecessary,Contrabrand.agency,BrandmanNetwork.com,Not Available,40
+Music Is My Business Podcast,YouTube & iTunes,"Music Business for Artists, Producers, and Songwriters",Weekly,IG: @musicismybusiness podcast,-,IG: @clintmusic,Not Available,40
+DIY Music Biz,Instagram,"How to Get Your Music on TV, Film, and Video Games",Not Specified,IG: @diymusicbiz,Contact Form,DIYmusicbiz.com,Not Available,40
+No Label the Podcast,YouTube iTunes Spotify,Artist Interviews,Not Specified,IG @nolabelthepod,nolabelbuffalo@gmail.com,-,"Buffalo, NY",40
+Super Duty Tough Work Podcast,YouTube iTunes Spotify,Music Business & Artist Advice,Not Specified,IG @superduty_toughwork,-,Linktree,Not Available,40
+Free Music Empire,YouTube iTunes Spotify,Music Discussion & Debate,Weekly,IG @freemusicempire,-,Linktree freemusicempire.com,Not Available,40
+Feelin Good Podcast,Youtube iTunes Spotify Instagram,"Interviews, New Music Promo & Showcase",Daily,IG @feelingoodpodcast,-,Linktree,Not Available,40
+DOD45 Drawing Over Discussions,YouTube,Music Discussion & Music Business,Weekly,IG @dod45w,tai@dod45.com,-,Not Available,40
+Bars Or None Show (UrbanCity Podcast),YouTube,Artist Showcase & Freestyles,Weekly,@barsornoneshow,Instagram DM,-,"Jackson, Mississippi",40
+The One Way Show,YouTube & Instagram,Hip-Hop Culture,Weekly,@theonewayshow_1,Instagram DM,-,"Jackson, Mississippi",41
+Chi-Native Radio,YouTube,Chicago Music scene,Tuesday Nights,@chinativeradio,idealraps.com/contact-us,idealraps.com/home,"Chicago, IL",41
+History of The Bay Podcast,YouTube,Bay Area Culture & Artist Interviews,Not Specified,IG: @historyofthebay,-,@dregsOne,"San Francisco, CA",41
+A Trip to the Corner Store,YouTube & Instagram,Artist Showcase,Daily/Weekly,@thecornerstorela,thecornerstoreisopen@gmail .com,TheCornerStore.LA,"Los Angeles, CA",41
+Numainstream Radio,Website,Radio,Daily,@numainstream_radio,JustinTanks@numainstream. com,Numainstream.com,Not Available,41
+DIY Musician Podcast,Website,Music Business Artist Advice,Not Specified,@kbreuner,-,Website,Not Available,41
+The Unemployable Podcast,YouTube,"Artists, Creatives, and Entrepreneurs",-,@theunemployablepod,-,-,"Orlando, FL",41
+Epic Tv,"YouTube , Website , Facebook",Artist Interviews,Fridays 8:30,@epictvmed_worldwide,EpicTVmedia22@gmail.com 480-702-4881 Don Stubbs,EpicTVmedia.com,Arizona,41
+The Producer Lounge,YouTube,Producers & Beats for Arrists,7pm Thursdays,@the_producer_loun ge,,the-producer- lounge.com,Not Available,41
+Urban Zone Radio,"Youtube, Instagram, Facebook,","Music, Artists Interviews, Music Business",Daily,@urbanzoneradio,contactus@urbanzoneradio. com,urbanzoneradio.com/ on-air,Not Available,41
+Midtown Misfits,YouTube iTunes Spotify,Education,Every Sunday,@midtownmisfits_po dcast,midtown.misfits@gmail.com,"Notice: Music must not have any profanity Or degrading woman, drugs , murder, promoting sexual exploitation.",Not Available,41
+MJMG Presents,"Roku, Fire stick, Apple TV, Facebook, Youtube, Twitch","Entertainment Industry, Live Interviews for Artists, Producers, Actors etc.",Monday Nights 7:30 PST,@Mz_Jackson_Media _Group,mjmgmusic1@gmail.com,Bringing you a worldwide platform streaming from Epic TV Media Worldwide. We bring an array of host that are excited to promote you through this platform.,"Bay Area, CA",41
+One More Time Podcast,YouTube & Instagram,"Music Industry, Interviews & Services",Not Specified,@onemoretimecast,onemoretimecast@gmail.com,solo.to/ onemoretimecast,"Atlanta, GA",41
+The Pre-Game Part Mix Podcast,"Apple Podcasts, Youtube, Spotify",Music Business,Weekly,IG @_djChase__,djchaseradio@gmail.com,www.djchase.net,"New York City, NY",41
+The A&R Desk,Instagram (soon on all platforms),"Music Business, A&R consulting, Artist Advice, Label Opportunities & cash reward contests",Wednesdays 9:30 EST,IG @SpudBrooklyn,thedesk@spudbrooklyn.com,www.spudbrooklyn.com,"Brooklyn, NY",41
+DJ Squirt Radio Show,"Youtube, Instagram, Facebook, Twitch","New music, Artist interviews, REAL TALK",Sundays 3-5pm EST,IG: @iamdjsquirt all platforms @thedjsquirtradioshow,iamdjsquirt@gmail.com,www.iamdjsquirt.com,"Cleveland, OH",41
+Soul on Soul with Phinesse,podbean.com,Artist Interviews & Music,Sundays 10pm,IG @souonsoulwithphinesse X @SoulOnP,soulonsoulwithphinesse@g mail.com,www.mysoulradio.com,DMV,41
+`,
+      },
+      {
+        path: "data/tastemakers.json",
+        content: `[
+  {
+    "name": "StayOnBeat",
+    "platform": "YouTube",
+    "topics": "Music Reviews & Collaborations",
+    "schedule": "Mon. & Wed. @10pm EST",
+    "social": "IG @StayOnBeat",
+    "contact": "StayOnBeatLive@gmail.com",
+    "website_other": "www.stayonbeat.com",
+    "location": "Miami, FL",
+    "source_page": 40
+  },
+  {
+    "name": "The Cheat Code",
+    "platform": "YouTube",
+    "topics": "Music Business Artist Advice",
+    "schedule": "Wednesdays",
+    "social": "IG @gethecheatcode",
+    "contact": "-",
+    "website_other": "linktr.ee/ getthecheatcode",
+    "location": "Atlanta, GA",
+    "source_page": 40
+  },
+  {
+    "name": "Hollywood Beats",
+    "platform": "Instagram Live",
+    "topics": "Music Reviews",
+    "schedule": "Tuesdays 7pm PST",
+    "social": "IG: @hollywoodgotbeats",
+    "contact": "Submit Your Music Here",
+    "website_other": "HollywoodGotBeats.com",
+    "location": "Los Angeles, CA",
+    "source_page": 40
+  },
+  {
+    "name": "Americas Realest Podcast",
+    "platform": "YouTube & LiveHipHopDaily",
+    "topics": "Interviews & Culture Talk",
+    "schedule": "Wednesdays 6-8pm EST",
+    "social": "IG: @ americasrealest @americasrealesteverything",
+    "contact": "americasrealestmusic.com/ submit",
+    "website_other": "americasrealestmusic. com/podcast",
+    "location": "Atlanta, GA",
+    "source_page": 40
+  },
+  {
+    "name": "The Independent Living Podcast",
+    "platform": "YouTube",
+    "topics": "Successful Independent Creators",
+    "schedule": "Varies",
+    "social": "IG: @independentlivingpod cast",
+    "contact": "-",
+    "website_other": "@dame.mec",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "The Record Shepherd",
+    "platform": "YouTube",
+    "topics": "Music Business Artist Advice",
+    "schedule": "Varies",
+    "social": "IG: @timtimw_ @therecordshepherds",
+    "contact": "-",
+    "website_other": "linktr.ee/ therecordshepherds",
+    "location": "New York City, NY",
+    "source_page": 40
+  },
+  {
+    "name": "Entrepreneur Talk Live",
+    "platform": "Instagram Live",
+    "topics": "Entrepreneurship",
+    "schedule": "Sundays & Mondays",
+    "social": "IG: @romeyafavoriterapper",
+    "contact": "267-544-9069",
+    "website_other": "linkr.bio/ romeyafavoriterapper",
+    "location": "Philadelphia, PA",
+    "source_page": 40
+  },
+  {
+    "name": "Pensado\\u2019s Place",
+    "platform": "Website & YouTube",
+    "topics": "Studio Recording & Music Business",
+    "schedule": "Varies",
+    "social": "IG: @PensadosPlace Twitter: pensadosplace",
+    "contact": "-",
+    "website_other": "www.pensadosplace.tv",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "The Loft TV",
+    "platform": "YouTube",
+    "topics": "Artists Interviews",
+    "schedule": "Weekly",
+    "social": "IG: @TheLoftTV",
+    "contact": "-",
+    "website_other": "linktr.ee/Theloftv",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "i hate rappers\\u2026 but i love artists",
+    "platform": "",
+    "topics": "Artists Interviews",
+    "schedule": "Not Specified",
+    "social": "IG: @i.hate.rappers",
+    "contact": "ContactiHateRappers@gmail.com",
+    "website_other": "-",
+    "location": "Cleveland, OH",
+    "source_page": 40
+  },
+  {
+    "name": "808\\u2019s and Mixtapes",
+    "platform": "Spotify",
+    "topics": "Music",
+    "schedule": "Not Specified",
+    "social": "IG: @808mixtape",
+    "contact": "zach@808mixtape.com",
+    "website_other": "-",
+    "location": "Cleveland, OH",
+    "source_page": 40
+  },
+  {
+    "name": "Moment of Clarity",
+    "platform": "YouTube",
+    "topics": "Artists Interviews",
+    "schedule": "Not Specified",
+    "social": "IG : @kingace_thecreator",
+    "contact": "momentofclaritypod1@gmail.com",
+    "website_other": "-",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "Dis N Dat Radio",
+    "platform": "Website",
+    "topics": "Artists Showcase",
+    "schedule": "Not Specified",
+    "social": "IG: @disndatradio",
+    "contact": "info@disndatradio.com",
+    "website_other": "-",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "Do What We Wanna Do Podcast",
+    "platform": "YouTube",
+    "topics": "Artists Showcase",
+    "schedule": "Not Specified",
+    "social": "IG: @dowhatwewannado podcast",
+    "contact": "Contact at the bottom of home page innervisionent.com/",
+    "website_other": "innervisionent.com/",
+    "location": "Orlando, FL",
+    "source_page": 40
+  },
+  {
+    "name": "Richhouse Reviews",
+    "platform": "Instagram & YouTube",
+    "topics": "Music Reviews",
+    "schedule": "Daily",
+    "social": "IG: @richhousereviews",
+    "contact": "Comment section on Instagram",
+    "website_other": "Any genre is welcome",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "NoCap | NXTUP",
+    "platform": "Instagram & YouTube",
+    "topics": "Artists Showcase",
+    "schedule": "Not Specified",
+    "social": "IG: @nocapshows",
+    "contact": "nocapshows.com",
+    "website_other": "-",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "The Hustle Podcast",
+    "platform": "YouTube",
+    "topics": "Talent Showcase",
+    "schedule": "Weekly",
+    "social": "IG: @maxmupesse",
+    "contact": "-",
+    "website_other": "linktr.ee/maxmupesse",
+    "location": "",
+    "source_page": 40
+  },
+  {
+    "name": "The Skinny",
+    "platform": "YouTube",
+    "topics": "Artists Interviews Artist Showcase",
+    "schedule": "Weekly",
+    "social": "IG: @theskinnyshowatl",
+    "contact": "DM on IG or on website",
+    "website_other": "skinandbonzprojectstudio.com",
+    "location": "Atlanta, GA",
+    "source_page": 40
+  },
+  {
+    "name": "Makin\\u2019 It Magazine",
+    "platform": "YouTube & Twitch",
+    "topics": "Music Business Music Reviews & Artist Interviews",
+    "schedule": "Weekly",
+    "social": "IG: @makinit4indies",
+    "contact": "Contact and submit on website ->",
+    "website_other": "MakinItMag.com Artists Grants & Win $",
+    "location": "Atlanta, GA",
+    "source_page": 40
+  },
+  {
+    "name": "Million Dollaz Worth of Game",
+    "platform": "Spotify YouTube Apple",
+    "topics": "Artists Interviews Music Business",
+    "schedule": "Weekly",
+    "social": "IG: @mworthofgame",
+    "contact": "MDWOGBIZ@gmail.com",
+    "website_other": "linktr.ee/ mworthofgame",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "RoastNReview",
+    "platform": "YouTube & Twitch",
+    "topics": "Music Reviews & Artist Competitions $",
+    "schedule": "Weekly",
+    "social": "IG: @roastnreview",
+    "contact": "roastnreview@gmail.com text music to (732) 612-9966",
+    "website_other": "www.roastnreview.com",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "EMLN Exclusive (Early Morning Late Nights)",
+    "platform": "YouTube & iTunes",
+    "topics": "Artist Interviews & Culture",
+    "schedule": "Weekly",
+    "social": "IG: @EMLNExclusive",
+    "contact": "Emlnexclusiveinfo@gmail.com",
+    "website_other": "Linktr.ee/emlnexclusive",
+    "location": "San Jose, CA",
+    "source_page": 40
+  },
+  {
+    "name": "David Sanya Podcast",
+    "platform": "YouTube & Spotify",
+    "topics": "Music Business",
+    "schedule": "Varies",
+    "social": "IG: @davidsanyabeats",
+    "contact": "-",
+    "website_other": "davidsanyabeats.com",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "No Labels Necessary",
+    "platform": "YouTube",
+    "topics": "Music Business & Artist Advice",
+    "schedule": "Daily",
+    "social": "IG: @nolabelsnecessary",
+    "contact": "Contrabrand.agency",
+    "website_other": "BrandmanNetwork.com",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "Music Is My Business Podcast",
+    "platform": "YouTube & iTunes",
+    "topics": "Music Business for Artists, Producers, and Songwriters",
+    "schedule": "Weekly",
+    "social": "IG: @musicismybusiness podcast",
+    "contact": "-",
+    "website_other": "IG: @clintmusic",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "DIY Music Biz",
+    "platform": "Instagram",
+    "topics": "How to Get Your Music on TV, Film, and Video Games",
+    "schedule": "Not Specified",
+    "social": "IG: @diymusicbiz",
+    "contact": "Contact Form",
+    "website_other": "DIYmusicbiz.com",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "No Label the Podcast",
+    "platform": "YouTube iTunes Spotify",
+    "topics": "Artist Interviews",
+    "schedule": "Not Specified",
+    "social": "IG @nolabelthepod",
+    "contact": "nolabelbuffalo@gmail.com",
+    "website_other": "-",
+    "location": "Buffalo, NY",
+    "source_page": 40
+  },
+  {
+    "name": "Super Duty Tough Work Podcast",
+    "platform": "YouTube iTunes Spotify",
+    "topics": "Music Business & Artist Advice",
+    "schedule": "Not Specified",
+    "social": "IG @superduty_toughwork",
+    "contact": "-",
+    "website_other": "Linktree",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "Free Music Empire",
+    "platform": "YouTube iTunes Spotify",
+    "topics": "Music Discussion & Debate",
+    "schedule": "Weekly",
+    "social": "IG @freemusicempire",
+    "contact": "-",
+    "website_other": "Linktree freemusicempire.com",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "Feelin Good Podcast",
+    "platform": "Youtube iTunes Spotify Instagram",
+    "topics": "Interviews, New Music Promo & Showcase",
+    "schedule": "Daily",
+    "social": "IG @feelingoodpodcast",
+    "contact": "-",
+    "website_other": "Linktree",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "DOD45 Drawing Over Discussions",
+    "platform": "YouTube",
+    "topics": "Music Discussion & Music Business",
+    "schedule": "Weekly",
+    "social": "IG @dod45w",
+    "contact": "tai@dod45.com",
+    "website_other": "-",
+    "location": "Not Available",
+    "source_page": 40
+  },
+  {
+    "name": "Bars Or None Show (UrbanCity Podcast)",
+    "platform": "YouTube",
+    "topics": "Artist Showcase & Freestyles",
+    "schedule": "Weekly",
+    "social": "@barsornoneshow",
+    "contact": "Instagram DM",
+    "website_other": "-",
+    "location": "Jackson, Mississippi",
+    "source_page": 40
+  },
+  {
+    "name": "The One Way Show",
+    "platform": "YouTube & Instagram",
+    "topics": "Hip-Hop Culture",
+    "schedule": "Weekly",
+    "social": "@theonewayshow_1",
+    "contact": "Instagram DM",
+    "website_other": "-",
+    "location": "Jackson, Mississippi",
+    "source_page": 41
+  },
+  {
+    "name": "Chi-Native Radio",
+    "platform": "YouTube",
+    "topics": "Chicago Music scene",
+    "schedule": "Tuesday Nights",
+    "social": "@chinativeradio",
+    "contact": "idealraps.com/contact-us",
+    "website_other": "idealraps.com/home",
+    "location": "Chicago, IL",
+    "source_page": 41
+  },
+  {
+    "name": "History of The Bay Podcast",
+    "platform": "YouTube",
+    "topics": "Bay Area Culture & Artist Interviews",
+    "schedule": "Not Specified",
+    "social": "IG: @historyofthebay",
+    "contact": "-",
+    "website_other": "@dregsOne",
+    "location": "San Francisco, CA",
+    "source_page": 41
+  },
+  {
+    "name": "A Trip to the Corner Store",
+    "platform": "YouTube & Instagram",
+    "topics": "Artist Showcase",
+    "schedule": "Daily/Weekly",
+    "social": "@thecornerstorela",
+    "contact": "thecornerstoreisopen@gmail .com",
+    "website_other": "TheCornerStore.LA",
+    "location": "Los Angeles, CA",
+    "source_page": 41
+  },
+  {
+    "name": "Numainstream Radio",
+    "platform": "Website",
+    "topics": "Radio",
+    "schedule": "Daily",
+    "social": "@numainstream_radio",
+    "contact": "JustinTanks@numainstream. com",
+    "website_other": "Numainstream.com",
+    "location": "Not Available",
+    "source_page": 41
+  },
+  {
+    "name": "DIY Musician Podcast",
+    "platform": "Website",
+    "topics": "Music Business Artist Advice",
+    "schedule": "Not Specified",
+    "social": "@kbreuner",
+    "contact": "-",
+    "website_other": "Website",
+    "location": "Not Available",
+    "source_page": 41
+  },
+  {
+    "name": "The Unemployable Podcast",
+    "platform": "YouTube",
+    "topics": "Artists, Creatives, and Entrepreneurs",
+    "schedule": "-",
+    "social": "@theunemployablepod",
+    "contact": "-",
+    "website_other": "-",
+    "location": "Orlando, FL",
+    "source_page": 41
+  },
+  {
+    "name": "Epic Tv",
+    "platform": "YouTube , Website , Facebook",
+    "topics": "Artist Interviews",
+    "schedule": "Fridays 8:30",
+    "social": "@epictvmed_worldwide",
+    "contact": "EpicTVmedia22@gmail.com 480-702-4881 Don Stubbs",
+    "website_other": "EpicTVmedia.com",
+    "location": "Arizona",
+    "source_page": 41
+  },
+  {
+    "name": "The Producer Lounge",
+    "platform": "YouTube",
+    "topics": "Producers & Beats for Arrists",
+    "schedule": "7pm Thursdays",
+    "social": "@the_producer_loun ge",
+    "contact": "",
+    "website_other": "the-producer- lounge.com",
+    "location": "Not Available",
+    "source_page": 41
+  },
+  {
+    "name": "Urban Zone Radio",
+    "platform": "Youtube, Instagram, Facebook,",
+    "topics": "Music, Artists Interviews, Music Business",
+    "schedule": "Daily",
+    "social": "@urbanzoneradio",
+    "contact": "contactus@urbanzoneradio. com",
+    "website_other": "urbanzoneradio.com/ on-air",
+    "location": "Not Available",
+    "source_page": 41
+  },
+  {
+    "name": "Midtown Misfits",
+    "platform": "YouTube iTunes Spotify",
+    "topics": "Education",
+    "schedule": "Every Sunday",
+    "social": "@midtownmisfits_po dcast",
+    "contact": "midtown.misfits@gmail.com",
+    "website_other": "Notice: Music must not have any profanity Or degrading woman, drugs , murder, promoting sexual exploitation.",
+    "location": "Not Available",
+    "source_page": 41
+  },
+  {
+    "name": "MJMG Presents",
+    "platform": "Roku, Fire stick, Apple TV, Facebook, Youtube, Twitch",
+    "topics": "Entertainment Industry, Live Interviews for Artists, Producers, Actors etc.",
+    "schedule": "Monday Nights 7:30 PST",
+    "social": "@Mz_Jackson_Media _Group",
+    "contact": "mjmgmusic1@gmail.com",
+    "website_other": "Bringing you a worldwide platform streaming from Epic TV Media Worldwide. We bring an array of host that are excited to promote you through this platform.",
+    "location": "Bay Area, CA",
+    "source_page": 41
+  },
+  {
+    "name": "One More Time Podcast",
+    "platform": "YouTube & Instagram",
+    "topics": "Music Industry, Interviews & Services",
+    "schedule": "Not Specified",
+    "social": "@onemoretimecast",
+    "contact": "onemoretimecast@gmail.com",
+    "website_other": "solo.to/ onemoretimecast",
+    "location": "Atlanta, GA",
+    "source_page": 41
+  },
+  {
+    "name": "The Pre-Game Part Mix Podcast",
+    "platform": "Apple Podcasts, Youtube, Spotify",
+    "topics": "Music Business",
+    "schedule": "Weekly",
+    "social": "IG @_djChase__",
+    "contact": "djchaseradio@gmail.com",
+    "website_other": "www.djchase.net",
+    "location": "New York City, NY",
+    "source_page": 41
+  },
+  {
+    "name": "The A&R Desk",
+    "platform": "Instagram (soon on all platforms)",
+    "topics": "Music Business, A&R consulting, Artist Advice, Label Opportunities & cash reward contests",
+    "schedule": "Wednesdays 9:30 EST",
+    "social": "IG @SpudBrooklyn",
+    "contact": "thedesk@spudbrooklyn.com",
+    "website_other": "www.spudbrooklyn.com",
+    "location": "Brooklyn, NY",
+    "source_page": 41
+  },
+  {
+    "name": "DJ Squirt Radio Show",
+    "platform": "Youtube, Instagram, Facebook, Twitch",
+    "topics": "New music, Artist interviews, REAL TALK",
+    "schedule": "Sundays 3-5pm EST",
+    "social": "IG: @iamdjsquirt all platforms @thedjsquirtradioshow",
+    "contact": "iamdjsquirt@gmail.com",
+    "website_other": "www.iamdjsquirt.com",
+    "location": "Cleveland, OH",
+    "source_page": 41
+  },
+  {
+    "name": "Soul on Soul with Phinesse",
+    "platform": "podbean.com",
+    "topics": "Artist Interviews & Music",
+    "schedule": "Sundays 10pm",
+    "social": "IG @souonsoulwithphinesse X @SoulOnP",
+    "contact": "soulonsoulwithphinesse@g mail.com",
+    "website_other": "www.mysoulradio.com",
+    "location": "DMV",
+    "source_page": 41
+  }
+]`,
+      },
+      {
         path: "match.py",
         content: `#!/usr/bin/env python3
-"""Validate, filter, and rank a user-supplied college-radio station directory."""
+"""Validate, filter, and rank a college-radio station directory."""
 
 import argparse
 import json
@@ -5669,7 +19508,7 @@ def resolve_data_path(value):
         if os.path.exists(bundled):
             candidate = bundled
     if not candidate:
-        raise ValueError("Pass --data <stations.json> or set COLLEGE_RADIO_DIRECTORY. The contact directory is not redistributed with RunnerOS.")
+        raise ValueError("No station directory found. Pass --data <stations.json> or set COLLEGE_RADIO_DIRECTORY.")
     return os.path.abspath(os.path.expanduser(candidate))
 
 
@@ -5711,8 +19550,9 @@ def validate_record_types(station, index):
 def canonical_station_key(station):
     station_name = str(station.get("station") or "").upper()
     call_sign = re.sub(r"[^A-Z0-9]", "", station_name.split()[0])
-    frequency_match = re.search(r"\\b\\d{2,3}(?:\\.\\d+)?\\b", station_name)
-    frequency = str(station.get("frequency") or (frequency_match.group(0) if frequency_match else "")).strip()
+    frequency_raw = str(station.get("frequency") or station_name)
+    frequency_match = re.search(r"\\b\\d{2,3}(?:\\.\\d+)?\\b", frequency_raw)
+    frequency = frequency_match.group(0) if frequency_match else ""
     channel_match = re.search(r"\\bHD\\d+\\b", station_name)
     channel = channel_match.group(0) if channel_match else ""
     city = re.sub(r"\\s+", " ", str(station.get("city") or "").strip().lower())
@@ -5822,7 +19662,7 @@ def score(station, args, home_state, market_states, home_city, market_cities, ge
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", help="Path to a licensed/user-supplied stations.json")
+    parser.add_argument("--data", help="Optional path to an updated stations.json")
     parser.add_argument("--home", "--home-state", dest="home_state", type=region_code, help="Hometown state/province code")
     parser.add_argument("--home-city", default="", help="Hometown city for the strongest local boost")
     parser.add_argument("--markets", "--market-states", dest="market_states", type=region_codes, default="", help="Comma-separated tour-market state/province codes")
@@ -5929,14 +19769,14 @@ if __name__ == "__main__":
         path: "SKILL.md",
         content: `---
 name: college-radio-matcher
-description: Build a focused college and non-commercial radio candidate list for a specific release using a licensed or user-supplied directory, then verify current fit and submission rules before outreach. Works across genres and pairs with college-radio-outreach.
+description: Build a focused college and non-commercial radio candidate list for a specific release using the bundled directory, then verify current fit and submission rules before outreach. Works across genres and pairs with college-radio-outreach.
 ---
 
 # College Radio Matcher
 
 Turn one song or release into a ranked station candidate list, then verify every send-first target against current public evidence.
 
-RunnerOS does not redistribute the commercial contact directory. Pass a licensed/user-owned JSON file with \`--data\`, or set \`COLLEGE_RADIO_DIRECTORY\`. See \`data/README.md\` for the import contract.
+The personal station and tastemaker directory is bundled in \`data/\`. Use \`--data\` or \`COLLEGE_RADIO_DIRECTORY\` only to override it with an updated JSON directory. See \`data/README.md\` for the data contract.
 
 ## Intake
 
@@ -5954,7 +19794,6 @@ Use known Artist HQ and campaign context first. Collect only what is missing:
 
 \`\`\`bash
 python3 "$HOME/.agents/skills/college-radio-matcher/match.py" \\
-  --data /path/to/stations.json \\
   --home-state CA \\
   --home-city "Los Angeles" \\
   --market-states OR,WA \\
@@ -6007,6 +19846,8 @@ Then include:
 - exact handoff fields for \`college-radio-outreach\`
 
 The matcher selects and verifies candidates. It does not contact stations.
+
+> Personal use only. If this agent is packaged for distribution, the bundled directory must be handled separately before shipping.
 `,
       },
     ],

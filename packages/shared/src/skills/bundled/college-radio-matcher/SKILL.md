@@ -1,13 +1,13 @@
 ---
 name: college-radio-matcher
-description: Build a focused college and non-commercial radio candidate list for a specific release using a licensed or user-supplied directory, then verify current fit and submission rules before outreach. Works across genres and pairs with college-radio-outreach.
+description: Build a focused college and non-commercial radio candidate list for a specific release using the bundled directory, then verify current fit and submission rules before outreach. Works across genres and pairs with college-radio-outreach.
 ---
 
 # College Radio Matcher
 
 Turn one song or release into a ranked station candidate list, then verify every send-first target against current public evidence.
 
-RunnerOS does not redistribute the commercial contact directory. Pass a licensed/user-owned JSON file with `--data`, or set `COLLEGE_RADIO_DIRECTORY`. See `data/README.md` for the import contract.
+The personal station and tastemaker directory is bundled in `data/`. Use `--data` or `COLLEGE_RADIO_DIRECTORY` only to override it with an updated JSON directory. See `data/README.md` for the data contract.
 
 ## Intake
 
@@ -25,7 +25,6 @@ Use known Artist HQ and campaign context first. Collect only what is missing:
 
 ```bash
 python3 "$HOME/.agents/skills/college-radio-matcher/match.py" \
-  --data /path/to/stations.json \
   --home-state CA \
   --home-city "Los Angeles" \
   --market-states OR,WA \
@@ -78,3 +77,5 @@ Then include:
 - exact handoff fields for `college-radio-outreach`
 
 The matcher selects and verifies candidates. It does not contact stations.
+
+> Personal use only. If this agent is packaged for distribution, the bundled directory must be handled separately before shipping.

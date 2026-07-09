@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate, filter, and rank a user-supplied college-radio station directory."""
+"""Validate, filter, and rank a college-radio station directory."""
 
 import argparse
 import json
@@ -62,7 +62,7 @@ def resolve_data_path(value):
         if os.path.exists(bundled):
             candidate = bundled
     if not candidate:
-        raise ValueError("Pass --data <stations.json> or set COLLEGE_RADIO_DIRECTORY. The contact directory is not redistributed with RunnerOS.")
+        raise ValueError("No station directory found. Pass --data <stations.json> or set COLLEGE_RADIO_DIRECTORY.")
     return os.path.abspath(os.path.expanduser(candidate))
 
 
@@ -104,8 +104,9 @@ def validate_record_types(station, index):
 def canonical_station_key(station):
     station_name = str(station.get("station") or "").upper()
     call_sign = re.sub(r"[^A-Z0-9]", "", station_name.split()[0])
-    frequency_match = re.search(r"\b\d{2,3}(?:\.\d+)?\b", station_name)
-    frequency = str(station.get("frequency") or (frequency_match.group(0) if frequency_match else "")).strip()
+    frequency_raw = str(station.get("frequency") or station_name)
+    frequency_match = re.search(r"\b\d{2,3}(?:\.\d+)?\b", frequency_raw)
+    frequency = frequency_match.group(0) if frequency_match else ""
     channel_match = re.search(r"\bHD\d+\b", station_name)
     channel = channel_match.group(0) if channel_match else ""
     city = re.sub(r"\s+", " ", str(station.get("city") or "").strip().lower())
@@ -215,7 +216,7 @@ def score(station, args, home_state, market_states, home_city, market_cities, ge
 
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", help="Path to a licensed/user-supplied stations.json")
+    parser.add_argument("--data", help="Optional path to an updated stations.json")
     parser.add_argument("--home", "--home-state", dest="home_state", type=region_code, help="Hometown state/province code")
     parser.add_argument("--home-city", default="", help="Hometown city for the strongest local boost")
     parser.add_argument("--markets", "--market-states", dest="market_states", type=region_codes, default="", help="Comma-separated tour-market state/province codes")
