@@ -198,9 +198,10 @@ export function LeftSidebar({ links, isCollapsed, getItemProps, focusedItemId, i
         {links.map((item) => {
           // Handle separator items
           if (isSeparatorItem(item)) {
+            const isBrainSeparator = item.id === 'nav:brain-separator'
             return (
-              <div key={item.id} className="py-1 px-2" aria-hidden="true">
-                <div className="h-px bg-foreground/5" />
+              <div key={item.id} className={cn("py-1 px-2", isBrainSeparator && "pl-[31px] pr-0")} aria-hidden="true">
+                <div className={cn("h-px bg-foreground/5", isBrainSeparator && "w-9 bg-foreground/8")} />
               </div>
             )
           }
