@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-08
+last_verified: 2026-07-09
 source_of_truth: true
 ---
 
@@ -13,8 +13,8 @@ Start here when you need project context without reading the whole repo.
 
 1. [CURRENT.md](./CURRENT.md) - live branch/status notes.
 2. [../HANDOFF.md](../HANDOFF.md) - zero-context takeover brief for the current build.
-3. [backlog/paid-ads-execution-prep.md](./backlog/paid-ads-execution-prep.md) - paid-ads agent/tooling prep and current implementation map.
-4. [system-map](./system-map/) - generated map of workers, skills, sources, launch surfaces, and approval boundaries.
+3. [creator-command-center/13-scheduled-work-composer-execution-spec.md](./creator-command-center/13-scheduled-work-composer-execution-spec.md) - current Scheduled Work product/runtime contract.
+4. [system-map](./system-map/) - generated map of workers, skills, sources, Scheduled Work, launch surfaces, and approval boundaries.
 5. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
 6. [user](./user/) - concise user-facing guides for surfaces, advanced abilities, and service keys.
 7. [backlog/tool-licensing-packaging-audit.md](./backlog/tool-licensing-packaging-audit.md) - release gate for bundled/downloaded local runtimes.
@@ -22,6 +22,9 @@ Start here when you need project context without reading the whole repo.
 
 Current active work:
 
+- Campaign Scheduled Work is implemented for Event, Agent Task, Workflow Run, Social Publish, and Review / Approval, with backend-owned writes and durable completion tracking.
+- College Radio and Spotify Playlist Creator are default-visible in both Artist HQ and Campaign workers.
+- College Radio produces verified Outreach packets; Outreach Agent owns approval-gated Gmail delivery.
 - Paid-ads worker chain is active: Ad Creative (`ad-creative-agent`) -> Ad Strategy (`ads-strategist`) -> Ad Runner (`ads-agent`).
 - Ad Creative owns public ad-library scouting, hooks, copy, creative angles, and format tests.
 - Ad Strategy owns budget, audience, territory, platform, and test planning.
@@ -30,7 +33,7 @@ Current active work:
 - `tools/genesis-lyric` is the local single-song lyric-video renderer/storyboard helper.
 - `tools/lyrics-transcriber` is the local Whisper/FFmpeg wrapper for Vault song transcription and timed lyric review.
 - Mac arm64 transcription has bundled app-owned binaries; Windows/Linux runtime parity is tracked in backlog and intentionally blocked until verified.
-- Older active specs remain relevant: [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md), [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md), and [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md).
+- Active Creator Command specs: [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md), [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md), [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md), [Campaign Calendar And Scheduled Jobs](./creator-command-center/12-campaign-calendar-scheduled-jobs-spec.md), and [Scheduled Work Composer And Execution](./creator-command-center/13-scheduled-work-composer-execution-spec.md).
 
 ## Main Areas
 

@@ -20,7 +20,12 @@
     "outputFinalActionDialog": "apps/electron/src/renderer/components/outputs/OutputFinalActionDialog.tsx",
     "bundledSkills": "packages/shared/src/skills/bundled.generated.ts",
     "builtinSources": "packages/shared/src/sources/builtin-sources.ts",
-    "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts"
+    "starterWorkflows": "packages/shared/src/workflows/starter-templates.ts",
+    "scheduledWorkModel": "packages/shared/src/scheduled-work/index.ts",
+    "scheduledWorkHandler": "packages/server-core/src/handlers/rpc/scheduled-work.ts",
+    "scheduledWorkRunner": "packages/server-core/src/scheduled-work/ScheduledWorkRunner.ts",
+    "scheduledWorkComposer": "apps/electron/src/renderer/components/calendar/ScheduledWorkComposer.tsx",
+    "campaignCalendarPage": "apps/electron/src/renderer/components/app-shell/CampaignCalendarPage.tsx"
   },
   "summary": {
     "agentCount": 39,
@@ -66,7 +71,8 @@
     ],
     "workflowCount": 2,
     "sharedIntelPromptWired": true,
-    "finalsPromotionWired": true
+    "finalsPromotionWired": true,
+    "scheduledWorkWired": true
   },
   "referenceHealth": {
     "knownSkillCount": 121,
@@ -136,6 +142,20 @@
       ]
     }
   ],
+  "scheduledWork": {
+    "queueTypes": [
+      "event",
+      "agent-task",
+      "workflow-run",
+      "social-publish",
+      "review"
+    ],
+    "composerWired": true,
+    "backendMutationsWired": true,
+    "runnerWired": true,
+    "workspaceLockWired": true,
+    "socialApprovalBlocked": true
+  },
   "inferredRuntimeRules": [
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
@@ -147,6 +167,9 @@
     "Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.",
     "Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.",
     "Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.",
+    "Campaign Scheduled Work separates calendar shells from executable work orders and uses backend-owned schedule/cancel/review mutations.",
+    "Agent/workflow scheduled work completes only after terminal child state; required Outputs, missed windows, stale runs, and failures become visible attention states.",
+    "Scheduled social work remains blocked at needs-approval until a verified live executor path runs the exact approved action.",
     "message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.",
     "trustedWorkerTools are for bounded internal work only, not sends/posts/publishing."
   ],

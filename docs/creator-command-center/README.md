@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-06
+last_verified: 2026-07-09
 source_of_truth: true
 ---
 
@@ -23,6 +23,10 @@ Core Artist HQ and campaign workspace specs live here.
 - [12 Campaign Calendar And Scheduled Jobs](./12-campaign-calendar-scheduled-jobs-spec.md)
 - [13 Scheduled Work Composer And Execution](./13-scheduled-work-composer-execution-spec.md)
 
-Current V1 implementation note: Outputs -> Finals is wired through UI list/detail actions and the `promote_output_to_final` session tool. Finals are pointers stored in workspace context; campaign promotion should use the active campaign workspace id automatically.
+Current V1 implementation notes:
+
+- Outputs -> Finals is wired through UI list/detail actions and the `promote_output_to_final` session tool. Finals are pointers stored in workspace context; campaign promotion uses the active campaign workspace id.
+- Campaign Scheduled Work now has a guided composer, backend-owned atomic mutations, durable agent/workflow completion polling, review decisions, attention states, and approval-blocked social work.
+- College Radio and Spotify Playlist Creator are default HQ/Campaign workers; College Radio hands verified email work to Outreach Agent.
 
 Add new Creator Command Center specs here unless they clearly belong in another feature folder.

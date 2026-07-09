@@ -25,6 +25,11 @@ const OUTPUT_FINAL_ACTION_DIALOG_FILE = join(ROOT, 'apps/electron/src/renderer/c
 const BUNDLED_SKILLS_FILE = join(ROOT, 'packages/shared/src/skills/bundled.generated.ts');
 const BUILTIN_SOURCES_FILE = join(ROOT, 'packages/shared/src/sources/builtin-sources.ts');
 const STARTER_WORKFLOWS_FILE = join(ROOT, 'packages/shared/src/workflows/starter-templates.ts');
+const SCHEDULED_WORK_MODEL_FILE = join(ROOT, 'packages/shared/src/scheduled-work/index.ts');
+const SCHEDULED_WORK_HANDLER_FILE = join(ROOT, 'packages/server-core/src/handlers/rpc/scheduled-work.ts');
+const SCHEDULED_WORK_RUNNER_FILE = join(ROOT, 'packages/server-core/src/scheduled-work/ScheduledWorkRunner.ts');
+const SCHEDULED_WORK_COMPOSER_FILE = join(ROOT, 'apps/electron/src/renderer/components/calendar/ScheduledWorkComposer.tsx');
+const CAMPAIGN_CALENDAR_PAGE_FILE = join(ROOT, 'apps/electron/src/renderer/components/app-shell/CampaignCalendarPage.tsx');
 const USER_GLOBAL_SKILLS_DIR = '/Users/michaelb.williams/.agents/skills';
 
 const GENERATED_AT = process.env.SYSTEM_MAP_GENERATED_AT ?? new Date().toISOString().slice(0, 10);
@@ -338,6 +343,20 @@ function main() {
   ].filter((slug, index, arr) => arr.indexOf(slug) === index).sort();
   const workflowConstants = collectTopLevelConstants(STARTER_WORKFLOWS_FILE, constants);
   const starterWorkflows = findExportedConst(STARTER_WORKFLOWS_FILE, 'STARTER_WORKFLOWS', workflowConstants);
+  const scheduledWorkWiring = {
+    queueTypes: ['event', 'agent-task', 'workflow-run', 'social-publish', 'review'],
+    composerWired: text(SCHEDULED_WORK_COMPOSER_FILE).includes('ScheduledWorkComposer')
+      && text(CAMPAIGN_CALENDAR_PAGE_FILE).includes('scheduleCampaignWork'),
+    backendMutationsWired: text(SCHEDULED_WORK_HANDLER_FILE).includes('SCHEDULE_CAMPAIGN')
+      && text(SCHEDULED_WORK_HANDLER_FILE).includes('CANCEL_CAMPAIGN')
+      && text(SCHEDULED_WORK_HANDLER_FILE).includes('DECIDE_CAMPAIGN'),
+    runnerWired: text(SCHEDULED_WORK_RUNNER_FILE).includes('class ScheduledWorkRunner')
+      && text(SCHEDULED_WORK_RUNNER_FILE).includes('required-output-missing')
+      && text(SCHEDULED_WORK_RUNNER_FILE).includes('missed-start-window'),
+    workspaceLockWired: text(SCHEDULED_WORK_HANDLER_FILE).includes('withWorkspaceContextLock'),
+    socialApprovalBlocked: text(SCHEDULED_WORK_RUNNER_FILE).includes("execution.type === 'social-publish'")
+      && text(SCHEDULED_WORK_RUNNER_FILE).includes("'needs-approval'"),
+  };
 
   const agents = starterAgents.map((agent) => ({
     slug: agent.slug,
@@ -381,6 +400,11 @@ function main() {
       bundledSkills: rel(BUNDLED_SKILLS_FILE),
       builtinSources: rel(BUILTIN_SOURCES_FILE),
       starterWorkflows: rel(STARTER_WORKFLOWS_FILE),
+      scheduledWorkModel: rel(SCHEDULED_WORK_MODEL_FILE),
+      scheduledWorkHandler: rel(SCHEDULED_WORK_HANDLER_FILE),
+      scheduledWorkRunner: rel(SCHEDULED_WORK_RUNNER_FILE),
+      scheduledWorkComposer: rel(SCHEDULED_WORK_COMPOSER_FILE),
+      campaignCalendarPage: rel(CAMPAIGN_CALENDAR_PAGE_FILE),
     },
     summary: {
       agentCount: agents.length,
@@ -396,9 +420,13 @@ function main() {
         && text(OUTPUT_SERVICE_FILE).includes('promoteToFinal')
         && text(OUTPUT_FINALS_FILE).includes('withOutputFinalsRegistryLock')
         && text(OUTPUT_FINAL_ACTION_DIALOG_FILE).includes('Set as Final'),
+      scheduledWorkWired: Object.entries(scheduledWorkWiring)
+        .filter(([key]) => key !== 'queueTypes')
+        .every(([, value]) => value === true),
     },
     referenceHealth: referenceHealth(agents, skillScopes, knownSources),
     workflows: Array.isArray(starterWorkflows) ? workflowHealth(starterWorkflows, agents) : [],
+    scheduledWork: scheduledWorkWiring,
     inferredRuntimeRules: [
       'Saved agents live in the global library and are activated per workspace.',
       'Workers page shows active agents, except system agents and hidden worker-home slugs.',
@@ -410,6 +438,9 @@ function main() {
       'Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.',
       'Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.',
       'Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.',
+      'Campaign Scheduled Work separates calendar shells from executable work orders and uses backend-owned schedule/cancel/review mutations.',
+      'Agent/workflow scheduled work completes only after terminal child state; required Outputs, missed windows, stale runs, and failures become visible attention states.',
+      'Scheduled social work remains blocked at needs-approval until a verified live executor path runs the exact approved action.',
       'message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.',
       'trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.',
     ],
@@ -428,7 +459,7 @@ function rel(filePath) {
 }
 
 function renderReadme() {
-  return `---\nstatus: current\nowner: agent\nlast_verified: ${GENERATED_AT}\nsource_of_truth: true\n---\n\n# Runner System Map\n\nGenerated map of Runner-specific wiring that generic code graphs miss.\n\nFiles:\n\n- [runner-system-map.md](./runner-system-map.md) - human-readable worker/system wiring.\n- [runner-system-map.json](./runner-system-map.json) - machine-readable source for agents.\n- [runner-system-map.mmd](./runner-system-map.mmd) - Mermaid graph for quick visual scans.\n\nRegenerate after changing starter agents, worker visibility, launch routing, or permission/tool rules:\n\n\`\`\`bash\nnode scripts/generate-runner-system-map.mjs\n\`\`\`\n\nThis map is derived from code. If it disagrees with the running app, inspect the source files listed in the generated JSON before editing docs by hand.\n`;
+  return `---\nstatus: current\nowner: agent\nlast_verified: ${GENERATED_AT}\nsource_of_truth: true\n---\n\n# Runner System Map\n\nGenerated map of Runner-specific worker, context, Output/Final, and Scheduled Work wiring that generic code graphs miss.\n\nFiles:\n\n- [runner-system-map.md](./runner-system-map.md) - human-readable worker/system wiring.\n- [runner-system-map.json](./runner-system-map.json) - machine-readable source for agents.\n- [runner-system-map.mmd](./runner-system-map.mmd) - Mermaid graph for quick visual scans.\n\nRegenerate after changing starter agents, worker visibility, launch routing, Scheduled Work, Outputs/Finals, or permission/tool rules:\n\n\`\`\`bash\nnode scripts/generate-runner-system-map.mjs\n\`\`\`\n\nThis map is derived from code. If it disagrees with the running app, inspect the source files listed in the generated JSON before editing docs by hand.\n`;
 }
 
 function renderMarkdown(map) {
@@ -446,7 +477,7 @@ function renderMarkdown(map) {
   lines.push('');
   lines.push('## Why This Exists');
   lines.push('');
-  lines.push('This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, and launch surfaces.');
+  lines.push('This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, Outputs/Finals, Scheduled Work, and launch surfaces.');
   lines.push('');
   lines.push('## Source Files');
   lines.push('');
@@ -460,6 +491,7 @@ function renderMarkdown(map) {
   lines.push(`- Starter workflows mapped: ${map.summary.workflowCount}`);
   lines.push(`- Shared Intel prompt injection: ${map.summary.sharedIntelPromptWired ? 'wired' : 'not detected'}`);
   lines.push(`- Outputs -> Finals promotion: ${map.summary.finalsPromotionWired ? 'wired' : 'not detected'}`);
+  lines.push(`- Scheduled Work execution: ${map.summary.scheduledWorkWired ? 'wired' : 'incomplete'}`);
   lines.push(`- Domains: ${Object.entries(map.summary.domains).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`- Permission modes: ${Object.entries(map.summary.permissionModes).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   lines.push(`- Known skills: ${map.referenceHealth.knownSkillCount} (${map.referenceHealth.bundledSkillCount} bundled, ${map.referenceHealth.systemSkillCount} system, ${map.referenceHealth.userGlobalSkillCount} user-global on this machine)`);
@@ -503,6 +535,18 @@ function renderMarkdown(map) {
   lines.push('- Storage: Finals live as JSON pointers in `context/finals/CONTEXT.md`; the Output bundle remains canonical.');
   lines.push('- Safety: writes use `context/.locks/output-finals.lock`, corrupt registry data fails closed, campaign Finals require `campaignId`, and source Output deletion is blocked while referenced.');
   lines.push('- Surfacing: HQ and campaign command-center widgets read Outputs with attached Final pointers; campaign widgets fail closed without a campaign id.');
+  lines.push('');
+  lines.push('## Campaign Scheduled Work');
+  lines.push('');
+  lines.push(`- Queue types: ${formatList(map.scheduledWork.queueTypes)}`);
+  lines.push(`- Composer + Campaign Calendar entry: ${map.scheduledWork.composerWired ? 'wired' : 'not detected'}`);
+  lines.push(`- Backend-owned schedule/cancel/review mutations: ${map.scheduledWork.backendMutationsWired ? 'wired' : 'not detected'}`);
+  lines.push(`- Terminal-state runner + attention handling: ${map.scheduledWork.runnerWired ? 'wired' : 'not detected'}`);
+  lines.push(`- Workspace-context write lock: ${map.scheduledWork.workspaceLockWired ? 'wired' : 'not detected'}`);
+  lines.push(`- Social approval stop: ${map.scheduledWork.socialApprovalBlocked ? 'wired' : 'not detected'}`);
+  lines.push('- Calendar items are visible shells; executable state, runs, results, review decisions, and attention reasons live in the Scheduled Work context document.');
+  lines.push('- Agent and workflow starts are non-terminal. The runner polls child state and enforces required-Output contracts before marking work done.');
+  lines.push('- Social Publish intentionally stops at approval in the current runner; do not document it as live autopublish.');
   lines.push('');
   lines.push('## Starter Workflows');
   lines.push('');
@@ -573,6 +617,14 @@ function renderMermaid(map) {
   lines.push('  FinalsService --> FinalsRegistry["context/finals/CONTEXT.md"]');
   lines.push('  FinalsService --> FinalsLock["context/.locks/output-finals.lock"]');
   lines.push('  FinalsRegistry --> HQFinals["HQ / Campaign Finals Widgets"]');
+  lines.push('  CampaignCalendar["Campaign Calendar"] --> WorkComposer["Scheduled Work Composer"]');
+  lines.push('  WorkComposer --> WorkRpc["Schedule / Cancel / Review RPC"]');
+  lines.push('  WorkRpc --> WorkContext["scheduled-work context doc"]');
+  lines.push('  WorkContext --> WorkRunner["ScheduledWorkRunner"]');
+  lines.push('  WorkRunner --> AgentSessions["Agent Sessions"]');
+  lines.push('  WorkRunner --> WorkflowRuns["Workflow Runs"]');
+  lines.push('  WorkRunner --> Attention["Done / Review / Needs Attention"]');
+  lines.push('  WorkRunner -. approval gate .-> SocialExecution["Social Publish"]');
   for (const agent of map.agents) {
     const id = `A_${mermaidId(agent.slug)}`;
     const label = `${agent.name}\\n${agent.permissionMode}\\n${agent.domain}`;

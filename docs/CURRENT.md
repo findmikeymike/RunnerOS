@@ -12,46 +12,54 @@ source_of_truth: true
 - Date: 2026-07-09
 - Active worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
 - Branch: `codex/creator-social-integration`
-- State: active app tree for Creator Command / HQ / Campaign work.
-- Remote state: local branch is ahead of `origin/codex/creator-social-integration`; do not assume origin has every local upgrade until pushed.
+- State: active running app tree for Artist HQ, Campaigns, workers, social integration, and scheduled campaign execution.
+- Remote: local branch is ahead of origin and has not been pushed in this pass.
 
 ## Recently Completed
 
-- Added Art Director classic album-cover reference library.
-- Expanded Art Director with image-generation routing, Midjourney-killer model matrix, prompt anatomy, and stronger cover-reference remix guidance.
-- Added official TryPost MCP source wiring and Setup Concierge guidance.
-- Moved HQ `Vault` out of the top-level sidebar and into `Brain`.
-- Swapped HQ `Brain` nav icon to the actual brain icon.
-- Added and tuned the subtle divider between HQ `Chat` and `Brain`.
-- Regenerated `docs/system-map/`.
+- Shipped the Campaign Scheduled Work composer and backend-owned schedule/cancel/review RPC flow.
+- Added the durable Scheduled Work runner for real agent/workflow completion, Output contracts, missed windows, retries, and visible attention states.
+- Added Campaign Calendar status/receipt/review controls and Output/Final/Vault input selection.
+- Added College Radio as a default HQ/Campaign worker with a personal station/tastemaker directory, live-verification rules, and durable Outreach packets.
+- Wired College Radio to Outreach Agent for approval-gated Gmail drafts/sends.
+- Made Spotify Playlist Creator default-visible and activated its curator skill bundle.
+- Regenerated the Runner system map from current code.
 
-## Current HQ Nav Shape
+## Current Product Boundaries
 
-- Top-level HQ nav keeps the main work surfaces.
-- `Brain` contains:
-  - `Profile`
-  - `Voice`
-  - `Intel Docs`
-  - `Branding`
-  - `Vault`
-- Vault remains the file/asset store for images, audio, docs, demos, moodboards, and references.
+- Scheduled Social Publish remains blocked at approval until a verified live executor completes it.
+- HQ Calendar does not yet expose Campaign’s executable work composer.
+- College Radio contacts are not assumed current; send-first targets require live evidence and timestamps.
+- Gmail is Outreach Agent’s current delivery path. Resend remains Community-only and is not yet a general agent source.
 
 ## Verification State
 
 Passed:
 
 ```bash
-/Users/michaelb.williams/.bun/bin/bun run typecheck:electron
-/Users/michaelb.williams/.bun/bin/bun run docs:system-map
+bun test packages/server-core/src/handlers/rpc/scheduled-work.test.ts packages/server-core/src/scheduled-work/ScheduledWorkRunner.test.ts apps/electron/src/renderer/lib/scheduled-work-composer.test.ts apps/electron/src/shared/__tests__/ipc-channels.test.ts
+# 36 pass, 0 fail
+
+bun test apps/electron/src/renderer/lib/worker-defaults.test.ts packages/shared/src/agent-definitions/storage.test.ts
+# 79 pass, 0 fail
+
+bun run typecheck:all
+bun run docs:system-map
+git diff --check
 ```
+
+Runtime startup also confirmed College Radio and Spotify Playlist Creator were activated in all three local workspaces.
+
+## Next Actions
+
+1. Smoke all five Campaign Scheduled Work types in the running app.
+2. Smoke agent/workflow terminal polling and missing-required-Output behavior.
+3. Smoke College Radio through Outreach Gmail draft/send approval and receipt.
+4. Decide on Resend only after Gmail and durable outreach history are proven.
+5. Review and push the full local integration stack when ready.
 
 ## Notes For Next Agent
 
-- Work in `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`.
-- Preserve the local commit stack unless Michael asks to squash/rebase.
-- Push only when it is okay to publish all local commits ahead of origin.
-- Art Director upgrades live in `packages/shared/src/skills/bundled/artist-art-direction/`.
-- HQ nav wiring lives in:
-  - `apps/electron/src/renderer/components/app-shell/AppShell.tsx`
-  - `apps/electron/src/renderer/components/app-shell/LeftSidebar.tsx`
-- Regenerate `docs/system-map/` after starter-agent, source, skill, or launch-surface changes.
+- Start with `../HANDOFF.md`, then `creator-command-center/13-scheduled-work-composer-execution-spec.md`, then `system-map/runner-system-map.md`.
+- Preserve the local commit stack; do not squash, rebase, push, or merge held branches without Michael’s direction.
+- Regenerate `docs/system-map/` after changing starter agents, worker defaults, session routing, Scheduled Work, Finals, or approval boundaries.

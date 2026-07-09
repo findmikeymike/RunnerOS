@@ -7,6 +7,8 @@ source_of_truth: false
 
 # Campaign Calendar And Scheduled Jobs
 
+> Implementation status, 2026-07-09: Phases 1-4 now have substantial shipped code. The current composer, work-order, completion, review, and safety contract lives in [13 Scheduled Work Composer And Execution](./13-scheduled-work-composer-execution-spec.md). External calendar sync remains deferred.
+
 > Implementation note: use
 > [`13-scheduled-work-composer-execution-spec.md`](./13-scheduled-work-composer-execution-spec.md)
 > as the source of truth for the progressive composer, HQ routing, typed queue

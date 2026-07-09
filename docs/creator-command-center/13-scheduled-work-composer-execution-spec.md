@@ -1,5 +1,5 @@
 ---
-status: implementation-ready
+status: current
 owner: agent
 last_verified: 2026-07-09
 source_of_truth: true
@@ -13,8 +13,8 @@ extends: ./12-campaign-calendar-scheduled-jobs-spec.md
 Define the product and engineering contract for scheduling events, agent tasks,
 workflow runs, reviews, and social publishing from the HQ and Campaign calendars.
 
-This spec replaces the current raw campaign scheduling form with a compact,
-progressively disclosed composer. It also defines what each queued action means,
+This spec defines the shipped compact, progressively disclosed campaign composer.
+It also defines what each queued action means,
 how it completes, where it is stored, and which safety rules cannot be bypassed.
 
 The experience must be simple for a reminder and powerful enough for this chain:
@@ -50,28 +50,27 @@ If the specs conflict on composer behavior or completion semantics, this spec wi
 
 ## Current State
 
-Verified implementation already exists for:
+Verified implementation now includes:
 
 - Campaign Calendar as its own campaign navigation page
-- campaign calendar parsing, CRUD, and conflict-safe persistence
-- one-shot due-job scanning on startup and scheduler ticks
-- local prompt-session and workflow launch paths
-- run history, retries, missed jobs, cancellation, and recovery
+- a guided composer for Event, Agent Task, Workflow Run, Social Publish, and Review / Approval
+- active agent/workflow selection plus Output, Final, Primary Final, and eligible Vault references
+- backend-owned schedule, cancel, migrate, and review-decision mutations with workspace-context locking
+- one-shot due scanning on startup and scheduler ticks
+- durable agent/workflow launch receipts and terminal-state polling
+- required-Output contract enforcement for agent work
+- run history, missed-window handling, cancellation, recovery, and explicit attention reasons
 - Output/Final Schedule prefill
 - Settings-backed social profile selection
-- social dry-run preparation and exact approval binding
-- approval invalidation when time, payload, profile, or asset changes
-- media-byte fingerprinting for social approval
+- social dry-run preparation, exact approval binding, approval invalidation, and media-byte fingerprinting
+- durable review decisions with approve and changes-requested states
 
-Important current gaps:
+Remaining gaps:
 
-- the campaign form exposes backend-shaped fields instead of a guided composer
-- agent and workflow targets are entered indirectly instead of selected
-- there is no full Final/Output/Vault picker in Calendar
-- agent jobs are currently considered done when their session starts
-- workflow jobs are currently considered done when their run starts
-- live social execution is not registered after approval
-- HQ Calendar can create events but cannot route executable work
+- live social execution after approval still needs a verified executor path
+- HQ Calendar can create events but does not yet expose the executable composer
+- follow-up chains remain deferred beyond the current one-order composer
+- the shipped UI and runner still need full real-app smoke across every queue type
 
 ## Product Decisions
 

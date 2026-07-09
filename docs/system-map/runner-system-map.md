@@ -11,7 +11,7 @@ Generated: 2026-07-09
 
 ## Why This Exists
 
-This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, and launch surfaces.
+This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, Outputs/Finals, Scheduled Work, and launch surfaces.
 
 ## Source Files
 
@@ -35,6 +35,11 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - bundledSkills: `packages/shared/src/skills/bundled.generated.ts`
 - builtinSources: `packages/shared/src/sources/builtin-sources.ts`
 - starterWorkflows: `packages/shared/src/workflows/starter-templates.ts`
+- scheduledWorkModel: `packages/shared/src/scheduled-work/index.ts`
+- scheduledWorkHandler: `packages/server-core/src/handlers/rpc/scheduled-work.ts`
+- scheduledWorkRunner: `packages/server-core/src/scheduled-work/ScheduledWorkRunner.ts`
+- scheduledWorkComposer: `apps/electron/src/renderer/components/calendar/ScheduledWorkComposer.tsx`
+- campaignCalendarPage: `apps/electron/src/renderer/components/app-shell/CampaignCalendarPage.tsx`
 
 ## Summary
 
@@ -44,6 +49,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
+- Scheduled Work execution: wired
 - Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 3, Socials 2
 - Permission modes: ask 32, safe 7
 - Known skills: 121 (78 bundled, 6 system, 121 user-global on this machine)
@@ -65,6 +71,9 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Specialist agents do not need individual prompt edits for Shared Intel; they see only the routed docs selected for their slug. Concierge/HNIC can see all enabled context docs through its existing override.
 - Outputs become Finals through UI actions or the promote_output_to_final session tool; Finals are pointers to existing Output bundles, not copied assets.
 - Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.
+- Campaign Scheduled Work separates calendar shells from executable work orders and uses backend-owned schedule/cancel/review mutations.
+- Agent/workflow scheduled work completes only after terminal child state; required Outputs, missed windows, stale runs, and failures become visible attention states.
+- Scheduled social work remains blocked at needs-approval until a verified live executor path runs the exact approved action.
 - message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.
 - trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.
 
@@ -85,6 +94,18 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Storage: Finals live as JSON pointers in `context/finals/CONTEXT.md`; the Output bundle remains canonical.
 - Safety: writes use `context/.locks/output-finals.lock`, corrupt registry data fails closed, campaign Finals require `campaignId`, and source Output deletion is blocked while referenced.
 - Surfacing: HQ and campaign command-center widgets read Outputs with attached Final pointers; campaign widgets fail closed without a campaign id.
+
+## Campaign Scheduled Work
+
+- Queue types: `event`, `agent-task`, `workflow-run`, `social-publish`, `review`
+- Composer + Campaign Calendar entry: wired
+- Backend-owned schedule/cancel/review mutations: wired
+- Terminal-state runner + attention handling: wired
+- Workspace-context write lock: wired
+- Social approval stop: wired
+- Calendar items are visible shells; executable state, runs, results, review decisions, and attention reasons live in the Scheduled Work context document.
+- Agent and workflow starts are non-terminal. The runner polls child state and enforces required-Output contracts before marking work done.
+- Social Publish intentionally stops at approval in the current runner; do not document it as live autopublish.
 
 ## Starter Workflows
 

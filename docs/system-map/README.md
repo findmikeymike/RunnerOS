@@ -7,7 +7,7 @@ source_of_truth: true
 
 # Runner System Map
 
-Generated map of Runner-specific wiring that generic code graphs miss.
+Generated map of Runner-specific worker, context, Output/Final, and Scheduled Work wiring that generic code graphs miss.
 
 Files:
 
@@ -15,7 +15,7 @@ Files:
 - [runner-system-map.json](./runner-system-map.json) - machine-readable source for agents.
 - [runner-system-map.mmd](./runner-system-map.mmd) - Mermaid graph for quick visual scans.
 
-Regenerate after changing starter agents, worker visibility, launch routing, or permission/tool rules:
+Regenerate after changing starter agents, worker visibility, launch routing, Scheduled Work, Outputs/Finals, or permission/tool rules:
 
 ```bash
 node scripts/generate-runner-system-map.mjs

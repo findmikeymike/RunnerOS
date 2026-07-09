@@ -5,9 +5,14 @@
 
 ## Current Creator Command Center Build
 
-Active worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/creator-command-center`
+Active worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
 
-Current focus: Artist OS paid-ads workers plus single-song video and lyrics-transcription helpers for upcoming releases.
+Current focus: Artist HQ and Campaign execution, including scheduled work, social publishing, and release-promotion workers.
+
+- Scheduled Work: Campaign Calendar can create typed Event, Agent Task, Workflow Run, Social Publish, and Review work; the runner tracks real completion, required Outputs, missed windows, attention states, approvals, and receipts.
+- College Radio (`college-radio-agent`): uses Artist HQ/campaign context plus a bundled personal directory to build verified station targets and an Outreach-ready campaign packet.
+- Spotify Playlist Creator (`spotify-playlist-creator`): default-visible in both Artist HQ and Campaigns, distinct from the separate Playlisting service handoff.
+- Outreach Agent (`outreach-agent`): accepts verified College Radio packets and owns approval-gated Gmail drafts/sends.
 
 - Ad Creative (`ad-creative-agent`): researches public high-performing music ad patterns, then builds hooks, copy, creative angles, format tests, and asset needs.
 - Ad Strategy (`ads-strategist`): turns artist/campaign context, including Spotify for Artists intel when available, into budget, audience, territory, platform, and test strategy.
