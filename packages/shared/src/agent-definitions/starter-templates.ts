@@ -1576,9 +1576,10 @@ Setup and identity:
 Snapshot flow (two steps — the browser reads the page, the CLI normalizes):
 1. Get the plan and the exact fields to capture:
    \`node src/social.mjs snapshot spotify --profile <id> --json\`
-2. Run the returned browserPlan against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Then normalize and save:
-   \`node src/social.mjs snapshot spotify --profile <id> --capture-json <json> --out data/spotify/snapshots/<date>-s4a.json --json\`
-3. Write the returned contextPayload as the artist-spotify-snapshot context doc.
+2. Run \`browser_tool --help\` before first browser use if needed, then open the exact partition in the returned browserPlan. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Save those observed values as a JSON capture file inside the active workspace.
+3. Normalize that capture into a new append-only workspace snapshot:
+   \`node src/social.mjs snapshot spotify --profile <id> --capture-file "$CRAFT_WORKSPACE_PATH/data/spotify/captures/<date>.json" --out "$CRAFT_WORKSPACE_PATH/data/spotify/snapshots/<date>-s4a.json" --json\`
+4. Write the returned contextPayload as the artist-spotify-snapshot context doc.
 
 Anomaly + handoff:
 - Use spotify-anomaly-watch to compare snapshots for real drops, playlist removals, city shifts, and source-of-streams changes.
@@ -1618,13 +1619,16 @@ Phase 2 — Create (operative, browser):
 - The Spotify account is connected in Settings → Social Accounts as platform \`spotify\`. Verify it first: \`node src/social.mjs profile status spotify --profile <id> --live --json\`.
 - Dry-run to produce the plan and browser steps:
   \`node src/social.mjs playlist spotify create --profile <id> --name "<name>" --tracks "<uri,uri,...>" --visibility public|private --dry-run --json\`
-- After explicit approval of name, description, visibility, and track order, execute:
-  \`node src/social.mjs playlist spotify create --profile <id> --name "<name>" --tracks "<...>" --confirm yes --json\`
-- Live create is delegated to RunnerOS browser tools: open the browser session named in browserPlan.browserSession, verify the visible account matches the profile before creating anything, run the steps, then record the resulting playlist URL as the receipt.
+- Save that complete dry-run JSON as the immutable action contract. After explicit approval of its exact name, description, visibility, track order, profile, and action id, run:
+  \`node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --confirm yes --json\`
+- Treat the returned \`RUNNER_CDP_DELEGATED\` result as the guarded handoff. Run \`browser_tool --help\` before first browser use if needed, open the exact browserPlan partition, verify the visible account matches before changing anything, and execute only the approved steps. A delegated plan is not proof of completion.
+- After Spotify visibly returns the new playlist URL, save fresh non-secret account-verification evidence and finalize the durable receipt:
+  \`node src/social.mjs playlist spotify receipt --profile <id> --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --playlist-url <observed-url> --verification-result <verification.json> --json\`
+- Only that successful receipt is completion. It records idempotency so a retry returns duplicate instead of creating the playlist twice.
 
 Safety:
 - Never invent track IDs, artist IDs, stream projections, or playlist outcomes.
-- Never create, edit, or delete anything on Spotify without explicit approval in the current conversation. The tool refuses live writes without --confirm yes and without a verified matching account.
+- Never create, edit, or delete anything on Spotify without explicit approval in the current conversation. Never bypass the saved dry-run + matching action-id execute handoff. Browser submission still requires visible-account and payload verification.
 - Featuring the playlist on the artist profile (Spotify for Artists) is a later step, not part of create.`,
   },
   {

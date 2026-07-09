@@ -151,6 +151,7 @@ export function buildIdentityProbe(profile = {}) {
     instagram: 'https://www.instagram.com/',
     tiktok: 'https://www.tiktok.com/',
     x: 'https://x.com/',
+    spotify: 'https://artists.spotify.com/',
   };
   return {
     ...common,
@@ -247,6 +248,7 @@ export function recordCompletedAction({ action, socialHome, result, command }) {
     verb: action.verb,
     idempotencyKey: action.options?.idempotencyKey || null,
     payloadDigest: payloadDigest(action),
+    receipt: result.receipt || null,
     completedAt: new Date().toISOString(),
   };
   writeLedger(socialHome, ledger);
@@ -264,6 +266,7 @@ export function duplicateActionResult(action, record, command) {
     duplicateOf: record.actionId,
     completedAt: record.completedAt,
     idempotencyKey: record.idempotencyKey,
+    receipt: record.receipt || null,
   };
 }
 

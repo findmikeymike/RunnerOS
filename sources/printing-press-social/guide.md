@@ -8,7 +8,7 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - RunnerOS exposes this source through source context plus Bash permissions. Use the Bash tool for documented `social` commands; do not expect an `mcp__printing-press-social__...` tool.
 - Primary command from the repo: `node src/social.mjs`
 - Preferred working directory: `tools/printing-press-social`
-- Supported platforms: `instagram`, `tiktok`, `x`, `youtube`
+- Supported platforms: `instagram`, `tiktok`, `x`, `youtube`, `spotify`
 - Default browser engine inside RunnerOS: `runner-cdp`
 - Optional engines: `chrome-devtools`, `stagehand`, `cloakbrowser`, `playwright`
 - Browser sessions live under `~/.config/printing-press-clis/<platform>/`.
@@ -40,7 +40,14 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - YouTube dry-run video: `node src/social.mjs post youtube --profile <profile> --post-type video --text "<title>" --media <video> --visibility public --dry-run --json`
 - YouTube dry-run Short: `node src/social.mjs post youtube --profile <profile> --post-type short --text "<title>" --media <video> --visibility public --dry-run --json`
 - YouTube dry-run comment: `node src/social.mjs comment youtube --profile <profile> --url "<url>" --text "<comment>" --dry-run --json`
-- Approved handoff: `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`
+- Spotify profile status: `node src/social.mjs profile status spotify --profile <profile> --live --json`
+- Apply observed non-secret Spotify identity: `node src/social.mjs profile status spotify --profile <profile> --live --verification-result <verification.json> --json`
+- Spotify for Artists snapshot plan: `node src/social.mjs snapshot spotify --profile <profile> --json`
+- Spotify snapshot normalization: `node src/social.mjs snapshot spotify --profile <profile> --capture-file <capture.json> --out <snapshot.json> --json`
+- Spotify playlist dry-run: `node src/social.mjs playlist spotify create --profile <profile> --name "<mood/scene name>" --tracks "<spotify:track:...,...>" --visibility public --dry-run --json`
+- Approved Spotify handoff: `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --confirm yes --json`
+- Durable Spotify receipt: `node src/social.mjs playlist spotify receipt --profile <profile> --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --playlist-url <observed-url> --verification-result <verification.json> --json`
+- Approved standard social handoff: `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`
 
 ## Guidelines
 
@@ -50,7 +57,8 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - Run `node src/social.mjs doctor --json` before any channel work.
 - Use `node src/social.mjs doctor --live --json` before claiming a profile is ready for live execution.
 - Use `--json` and parse structured output instead of scraping text.
-- Dry-run every post, comment, or DM before live execution.
+- Dry-run every post, comment, DM, or Spotify playlist creation before live execution.
+- Spotify playlist creation must also start with a dry-run. Never run `playlist spotify create ... --confirm` directly; save the dry-run JSON and use its exact action id and approval digest in guarded `social execute`. After the browser visibly creates the playlist, finalize the observed URL through the guarded receipt command before claiming completion.
 - With `runner-cdp`, treat CLI output as the action contract/plan. After approval, run `social execute` on the saved dry-run result to re-check provenance and account-verification readiness, then execute the returned handoff through Runner's native browser tools. Do not ask for a second approval in the browser when the visible account and draft match the approved dry-run; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
 - Verification result files must contain only non-secret evidence, for example `{ "loggedIn": true, "visibleIdentity": { "handle": "@artist" } }`. Never write cookies, tokens, passwords, or 2FA codes.
 - Do not run a live post, comment, or DM unless the user has explicitly approved the exact platform, profile, payload, and target URL/recipient.

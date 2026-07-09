@@ -1,7 +1,7 @@
 ---
-status: proposed
+status: implemented
 owner: agent
-last_verified: 2026-07-08
+last_verified: 2026-07-09
 source_of_truth: false
 ---
 
@@ -24,16 +24,16 @@ One Spotify account = one profile with its own persistent Electron partition (`p
 
 ## Grounded architecture (how the post-agent model actually works)
 
-- **CLI = planner/gatekeeper, RunnerOS browser tools = actuator.** Under the default `runner-cdp` engine, an action's dry-run emits a full result: `{ action, browserPlan }`, where `browserPlan` carries `sessionPath`, `browserSession` (partition/instanceId), `accountVerification` (expected handle/url + identity probe + evidence requirements), and ordered `steps`. `social execute --action-file <dry-run.json> --expected-action-id <id> --confirm yes` re-validates the dry-run shape, checks the browserPlan session/partition/verification still match the current profile, then (runner-cdp) returns a **delegated** instruction telling the agent's native browser tools to open the partition, verify the visible account, and run the steps. Evidence: `tools/printing-press-social/src/social.mjs:392-535`.
+- **CLI = planner/gatekeeper, RunnerOS browser tools = actuator.** Under the default `runner-cdp` engine, an action's dry-run emits `{ action, browserPlan, approvalDigest }`. `browserPlan` carries the partition, account-verification contract, and ordered steps. Spotify execute requires the exact action id and digest, revalidates the current profile/session contract, then returns a **delegated** instruction for Runner's native browser tools. Delegation is not completion; completion is recorded only after fresh identity evidence and the observed playlist URL pass `playlist spotify receipt`.
 - **Account verification is mandatory before any live submit** (`action-safety.mjs:assertLiveReady` + `buildBrowserPlan.accountVerification`). Prevents posting to the wrong logged-in account — critical for multi-account.
 - **Settings connector** (`SocialAccountsSettingsPage.tsx` + `settings.ts`) stores accounts, opens/reuses a per-profile browser partition (`socialBrowserPartition`), and drives login/verification. This is the "socials connectors in app settings" surface.
 
 ## Spotify verbs (`spotify-cli`)
 
 - `profile add|list|status|update|delete|login` — reuse profile-json/verification verbatim (handle = artist name / profile URL for identity match).
-- `snapshot` (read) — analyst: emit a browserPlan that navigates the S4A session and captures private stats; normalize the captured JSON into a snapshot doc. Public Web API stays an *optional* light supplement (followers/popularity) only if `SPOTIFY_CLIENT_ID/SECRET` present.
+- `snapshot` (read) — analyst: emit a browserPlan that navigates the S4A session and captures private stats; normalize a workspace capture file into an immutable snapshot doc. The v1 agent uses no Spotify API credentials.
 - `playlist create` (write) — plan → dry-run browserPlan for `open.spotify.com` (create playlist, set name/description/visibility, add track URIs in order) → approval → execute (delegated) → verify → receipt.
-- `playlist feature` (write) — plan → dry-run browserPlan for `artists.spotify.com` (feature/Artist Pick the created playlist on the artist profile) → approval → execute → receipt.
+- `playlist feature` is deferred. V1 stops after creating the playlist and returning its observed Spotify URL.
 
 ## Integration touch-list (what must change)
 
@@ -42,13 +42,13 @@ New:
 
 Edit (shared — covered by the post-agent's 63 tests, so re-run them):
 - `registry.json` — add `spotify` platform + verbs (`profile`, `snapshot`, `playlist`).
-- `src/social.mjs` — extend `resolvePlatform`, `assertActionShape` (platform allowlist + verb allowlist for `snapshot`/`playlist`), and the `execute` replay (`buildLiveReplayArgs`) for the new verbs.
-- `apps/electron/src/main/handlers/settings.ts` — add `spotify` to `SOCIAL_PLATFORMS`, `socialLoginUrl` (open.spotify.com), login-detection + account-url regexes (spotify.com / artists.spotify.com).
+- `src/social.mjs` — extend routing and the guarded `execute` action contract for `spotify` + `playlist-create`; exact dry-run action id, content digest, profile identity, browser partition, and payload remain bound through approval.
+- `apps/electron/src/main/handlers/settings.ts` — add `spotify` to `SOCIAL_PLATFORMS`, open Spotify for Artists for login, and use conservative authenticated-surface/account-url detection across spotify.com.
 - `apps/electron/src/renderer/pages/settings/SocialAccountsSettingsPage.tsx` — add `spotify` to `PLATFORMS` + `SocialPlatform` type + hint copy.
 
 Agents + skills:
 - Rewrite `spotify-analyst` and `spotify-playlist-creator` prompts (`packages/shared/src/agent-definitions/starter-templates.ts`) to browser-session workflows using `spotify-cli`; drop the dev-only `$CRAFT_APP_ROOT/...api-snapshot.ts` invocation.
-- Replace/rewrite skills: `spotify-analytics-snapshot` (browser S4A capture, not the API script) and `spotify-playlist-curator` (browser create + feature). Fixes the two `spotify-fix.md` backlog blockers (dev-only path + cross-package import) by removing the standalone-script approach.
+- Replace/rewrite skills: `spotify-analytics-snapshot` (browser S4A capture, not the API script) and `playlist-builder` (evidence-tagged playlist strategy). Fixes the two `spotify-fix.md` backlog blockers by removing the dev-only API snapshot path.
 - Regenerate `packages/shared/src/skills/bundled.generated.ts` and the system map.
 
 Bundling: `electron-builder.yml` already ships `tools/printing-press-social/**`, so `spotify-cli` ships automatically. No new binary.
@@ -57,17 +57,24 @@ Bundling: `electron-builder.yml` already ships `tools/printing-press-social/**`,
 
 - **Layer A** — `spotify-cli` profile mgmt + registry + dispatcher/settings platform wiring + `doctor`/`catalog` show Spotify. (Connector works; login + verify a Spotify account.)
 - **Layer B** — `snapshot` (S4A browser capture → normalized snapshot + Artist HQ context). Retires the broken API script.
-- **Layer C** — `playlist create` (open.spotify) then `playlist feature` (S4A), both dry-run → approval → delegated execute → receipt.
+- **Layer C** — `playlist create` (open.spotify) through dry-run → exact action approval → guarded delegated execute → observed URL receipt. Artist-profile featuring remains deferred.
 
-## Open decisions (confirm before build)
+## Decisions
 
-1. **Spotify as a new platform in printing-press-social** (this doc) vs a standalone tool that only borrows `action-safety`. Recommended: new platform (reuses connector UI + account-sets + verification for free).
-2. **Feature-on-artist-page (Layer C `playlist feature`)** in v1, or ship create-only first and add feature next? (S4A feature UI is the least-documented selector surface.)
-3. **Public Web API supplement** kept as optional (followers/popularity when client creds exist) or dropped entirely for a pure-browser analyst?
+1. Spotify is a platform in Printing Press Social so it shares account sets, verification, permissions, and browser partitions.
+2. V1 ships playlist creation only; feature-on-artist-page is deferred.
+3. V1 is pure browser capture; the retired public API script is not part of the workflow.
 
 ## Acceptance
 
 - A Spotify account connects/logs-in/verifies through the same Social Accounts settings surface and appears in `social catalog` account-sets.
 - Analyst produces a snapshot from the S4A session with no dev-only path and no cross-package import; runs in a packaged build.
-- Playlist Creator creates a playlist end to end (browser), approval-gated, with a receipt; optional feature step surfaces it on the artist page.
-- Post-agent's existing 63 tests still pass after the shared-dispatcher/settings edits.
+- Playlist Creator binds approval to the exact dry-run action id + content digest, delegates only after guarded execute, and records completion only through a durable observed-URL receipt with fresh account verification.
+- Source permissions allow read/status/dry-run commands but refuse direct playlist confirmation.
+- Snapshot output stays inside the workspace, validates captured shapes, and refuses overwrite.
+- Printing Press Social packaging, source/catalog, Spotify CLI, root execute, HQ parser/sync, delta, and Electron checks pass before integration.
+
+## Live Validation Boundary
+
+- Automated contract, packaging, typecheck, and simulated browser-evidence tests are implemented.
+- A real logged-in Spotify for Artists + web-player smoke is still required before calling the browser selectors production-validated. No Spotify profile/session is available in this worktree's local test state.

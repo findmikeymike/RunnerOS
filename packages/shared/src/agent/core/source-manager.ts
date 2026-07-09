@@ -22,7 +22,7 @@ import type { SourceManagerConfig } from './types.ts';
 /** Slugs exempt from guide.md prerequisite (internal sources) */
 const GUIDE_EXEMPT_SLUGS = new Set(['session', 'runner-docs']);
 const SOCIAL_SOURCE_SLUG = 'printing-press-social';
-const SOCIAL_PLATFORMS = ['instagram', 'tiktok', 'x', 'youtube'] as const;
+const SOCIAL_PLATFORMS = ['instagram', 'tiktok', 'x', 'youtube', 'spotify'] as const;
 
 /**
  * SourceManager provides centralized source state tracking for agent backends.

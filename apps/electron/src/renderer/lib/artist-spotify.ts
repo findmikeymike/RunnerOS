@@ -4,9 +4,9 @@ export const ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG = 'artist-spotify-snapshot'
 
 export interface ArtistSpotifySnapshot {
   version: 1
-  dataSource?: 'spotify-web-api' | 'spotify-for-artists' | 'manual'
+  dataSource?: 'spotify-web-api' | 'spotify-for-artists' | 'spotify-for-artists-browser' | 'manual'
   snapshotDate: string
-  windowDays: number
+  windowDays?: number
   artist: {
     name?: string
     spotifyArtistId?: string
@@ -66,7 +66,7 @@ export function parseArtistSpotifySnapshotDocResult(doc: ContextDocDTO | undefin
       snapshot: {
         version: 1,
         snapshotDate,
-        windowDays: toNumber(parsed.windowDays) ?? 28,
+        windowDays: toNumber(parsed.windowDays),
         artist: {
           name: clean(parsed.artist?.name),
           spotifyArtistId: clean(parsed.artist?.spotifyArtistId),
@@ -133,7 +133,10 @@ function toNumber(value: unknown): number | undefined {
 }
 
 function normalizeDataSource(value: unknown): ArtistSpotifySnapshot['dataSource'] {
-  return value === 'spotify-web-api' || value === 'spotify-for-artists' || value === 'manual'
+  return value === 'spotify-web-api'
+    || value === 'spotify-for-artists'
+    || value === 'spotify-for-artists-browser'
+    || value === 'manual'
     ? value
     : undefined
 }

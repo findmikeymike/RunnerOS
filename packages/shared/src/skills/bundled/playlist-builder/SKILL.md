@@ -80,9 +80,9 @@ the research.
 Never recommend or assist with: bots, stream/click farms, purchased streams or followers, repeat-
 looping the artist's own tracks, pay-for-placement or "guaranteed streams/placement" services, paid
 curator slots, sub-for-sub, or multi-account/Family-plan looping. These are **against Spotify TOS and
-counterproductive** — flagged streams earn no royalties, don't count publicly, don't help the
-algorithm, and since Apr 2024 carry a ~$10-per-track penalty that escalates to account and catalog
-removal (and it doesn't matter whether the artist paid or a farm did it). If asked for any of this,
+counterproductive** — Spotify can withhold royalties, adjust public counts, remove tracks from
+playlists, and charge labels/distributors per track when flagrant artificial streaming is detected.
+Distributors may add their own fees or account/catalog consequences. If asked for any of this,
 decline plainly and redirect to the legitimate levers above. The whole tool only works by generating
 **real listeners genuinely engaging** — protect that.
 

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, resolveBrowserEngine } from '../../src/browser-engines.mjs';
 import { createProfile, profileJson, profileListJson, profileLoginJson, profileStatusJson, updateProfile } from '../../src/profile-json.mjs';
 import { readProfileVerificationResult } from '../../src/profile-verification.mjs';
+import { computeApprovalDigest } from '../../src/approval-contract.mjs';
 import {
   acquireProfileLock,
   assertConfirmPolicy,
@@ -21,6 +22,8 @@ import {
 } from '../../src/action-safety.mjs';
 
 const PLATFORM = 'spotify';
+const RECEIPT_VERIFICATION_MAX_AGE_MS = 10 * 60 * 1000;
+const RECEIPT_VERIFICATION_FUTURE_SKEW_MS = 60 * 1000;
 const SUPPORTED_PLATFORMS = new Set([PLATFORM]);
 const VISIBILITIES = new Set(['public', 'private']);
 const OPEN_SPOTIFY_HOME = 'https://open.spotify.com/';
@@ -307,7 +310,7 @@ async function handleSnapshot(flags) {
       next: [
         'Run the browserPlan through RunnerOS browser tools against the verified Spotify for Artists session.',
         'Collect the numbers into the capture contract shape.',
-        'Re-run: social snapshot spotify --profile <id> --capture-json <json> --out data/spotify/snapshots/<date>.json --json',
+        'Save the observed JSON in the workspace, then re-run with --capture-file <capture.json> --out <new-snapshot.json> --json.',
       ],
     }, flags.json);
     return;
@@ -316,8 +319,12 @@ async function handleSnapshot(flags) {
   const snapshot = normalizeSnapshot(captured, { profile, flags });
   const outPath = resolveSnapshotOutPath(flags, snapshot.snapshotDate);
   if (outPath) {
+    if (fs.existsSync(outPath)) {
+      throw new CliError(`Refusing to overwrite existing snapshot: ${outPath}`, 'SNAPSHOT_EXISTS');
+    }
     ensureDir(path.dirname(outPath));
-    fs.writeFileSync(outPath, `${JSON.stringify(snapshot, null, 2)}\n`, 'utf8');
+    assertPathInsideWorkspace(resolveWorkspace(flags), path.dirname(outPath), 'Snapshot output directory');
+    fs.writeFileSync(outPath, `${JSON.stringify(snapshot, null, 2)}\n`, { encoding: 'utf8', flag: 'wx' });
   }
 
   writeResult({
@@ -357,26 +364,41 @@ function snapshotCaptureContract(flags) {
 }
 
 function normalizeSnapshot(captured, { profile }) {
-  const snapshotDate = typeof captured.snapshotDate === 'string' && captured.snapshotDate.trim()
-    ? captured.snapshotDate.trim()
+  if (!isPlainObject(captured)) {
+    throw new CliError('Snapshot capture must be a JSON object.', 'INVALID_CAPTURE');
+  }
+  const errors = Array.isArray(captured.errors)
+    ? captured.errors.filter((value) => typeof value === 'string' && value.trim()).map((value) => value.trim())
+    : [];
+  const rawSnapshotDate = typeof captured.snapshotDate === 'string' ? captured.snapshotDate.trim() : '';
+  const snapshotDate = isIsoDate(rawSnapshotDate)
+    ? rawSnapshotDate
     : new Date().toISOString().slice(0, 10);
-  const errors = Array.isArray(captured.errors) ? captured.errors.slice() : [];
-  const num = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  if (!rawSnapshotDate) errors.push(`Snapshot date not captured; defaulted to ${snapshotDate}.`);
+  else if (!isIsoDate(rawSnapshotDate)) errors.push(`Invalid snapshot date "${rawSnapshotDate}"; defaulted to ${snapshotDate}.`);
+
+  const windowDays = nonnegativeIntegerOrNull(captured.windowDays, { positive: true });
+  if (windowDays === null) errors.push('Reporting window not captured as a positive whole number.');
 
   const metrics = {
-    streams: num(captured.streams),
-    listeners: num(captured.listeners),
-    followers: num(captured.followers),
-    saves: num(captured.saves),
+    streams: captureMetric(captured, 'streams', errors),
+    listeners: captureMetric(captured, 'listeners', errors),
+    followers: captureMetric(captured, 'followers', errors),
+    saves: captureMetric(captured, 'saves', errors),
   };
   const missing = Object.entries(metrics).filter(([, value]) => value === null).map(([key]) => key);
-  if (missing.length) errors.push(`Missing metrics not captured: ${missing.join(', ')}`);
+  if (missing.length) errors.push(`Missing metrics: ${missing.join(', ')}.`);
+
+  const topCities = normalizeCityList(captured.topCities, errors);
+  const topCountries = normalizeCountryList(captured.topCountries, errors);
+  const tracks = normalizeTrackList(captured.topTracks, errors);
+  const sources = normalizeSources(captured.sources, errors);
 
   return {
     version: 1,
     dataSource: 'spotify-for-artists-browser',
     snapshotDate,
-    windowDays: num(captured.windowDays) ?? 0,
+    windowDays,
     artist: {
       name: profile.accountHandle || null,
       spotifyUrl: profile.accountUrl || null,
@@ -384,42 +406,125 @@ function normalizeSnapshot(captured, { profile }) {
     },
     metrics,
     geo: {
-      topCities: normalizeCityList(captured.topCities),
-      topCountries: Array.isArray(captured.topCountries) ? captured.topCountries : [],
+      topCities,
+      topCountries,
     },
-    tracks: normalizeTrackList(captured.topTracks),
-    sources: (captured.sources && typeof captured.sources === 'object') ? captured.sources : {},
-    partial: missing.length > 0,
-    errors,
+    tracks,
+    sources,
+    partial: errors.length > 0,
+    errors: [...new Set(errors)],
     capturedAt: typeof captured.capturedAt === 'string' ? captured.capturedAt : null,
     updatedAt: new Date().toISOString(),
   };
 }
 
-function normalizeCityList(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item) => item && (item.city || typeof item === 'string'))
-    .map((item) => (typeof item === 'string'
-      ? { city: item }
-      : { city: item.city, country: item.country ?? null, listeners: numOrNull(item.listeners) }));
+function normalizeCityList(value, errors) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    errors.push('Top cities capture was not an array and was ignored.');
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (typeof item === 'string' && cleanString(item)) return [{ city: item.trim() }];
+    if (!isPlainObject(item) || !cleanString(item.city)) {
+      errors.push(`Invalid topCities[${index}] entry was ignored.`);
+      return [];
+    }
+    const listeners = nonnegativeIntegerOrNull(item.listeners);
+    if (item.listeners != null && listeners === null) errors.push(`Invalid topCities[${index}].listeners was set to null.`);
+    return [{ city: item.city.trim(), country: cleanString(item.country), listeners }];
+  });
 }
 
-function normalizeTrackList(value) {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((item) => item && (item.name || typeof item === 'string'))
-    .map((item) => (typeof item === 'string'
-      ? { name: item }
-      : { name: item.name, streams: numOrNull(item.streams), spotifyUrl: item.spotifyUrl ?? null }));
+function normalizeCountryList(value, errors) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    errors.push('Top countries capture was not an array and was ignored.');
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (typeof item === 'string' && cleanString(item)) return [{ country: item.trim() }];
+    if (!isPlainObject(item) || !cleanString(item.country)) {
+      errors.push(`Invalid topCountries[${index}] entry was ignored.`);
+      return [];
+    }
+    const listeners = nonnegativeIntegerOrNull(item.listeners);
+    if (item.listeners != null && listeners === null) errors.push(`Invalid topCountries[${index}].listeners was set to null.`);
+    return [{ country: item.country.trim(), listeners }];
+  });
 }
 
-function numOrNull(value) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+function normalizeTrackList(value, errors) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    errors.push('Top tracks capture was not an array and was ignored.');
+    return [];
+  }
+  return value.flatMap((item, index) => {
+    if (typeof item === 'string' && cleanString(item)) return [{ name: item.trim() }];
+    if (!isPlainObject(item) || !cleanString(item.name)) {
+      errors.push(`Invalid topTracks[${index}] entry was ignored.`);
+      return [];
+    }
+    const streams = nonnegativeIntegerOrNull(item.streams);
+    if (item.streams != null && streams === null) errors.push(`Invalid topTracks[${index}].streams was set to null.`);
+    return [{ name: item.name.trim(), streams, spotifyUrl: cleanString(item.spotifyUrl) }];
+  });
+}
+
+function normalizeSources(value, errors) {
+  if (value == null) return {};
+  if (!isPlainObject(value)) {
+    errors.push('Sources capture was not an object and was ignored.');
+    return {};
+  }
+  const sources = Object.create(null);
+  for (const [key, raw] of Object.entries(value)) {
+    const name = cleanString(key);
+    if (!name || name === '__proto__' || name === 'constructor' || name === 'prototype'
+      || typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0) {
+      errors.push(`Invalid source value ignored: ${key || '(empty)'}.`);
+      continue;
+    }
+    sources[name] = raw;
+  }
+  return sources;
+}
+
+function captureMetric(captured, key, errors) {
+  const value = captured[key];
+  if (value == null) return null;
+  const normalized = nonnegativeIntegerOrNull(value);
+  if (normalized === null) errors.push(`Invalid ${key} metric ignored; expected a nonnegative whole number or null.`);
+  return normalized;
+}
+
+function nonnegativeIntegerOrNull(value, options = {}) {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return null;
+  if (options.positive && value === 0) return null;
+  return value;
+}
+
+function cleanString(value) {
+  if (typeof value !== 'string') return null;
+  const clean = value.trim();
+  return clean || null;
+}
+
+function isPlainObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function isIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 function readCaptureInput(flags) {
-  const raw = flags['capture-json'] || readMaybeFile(flags['capture-file']);
+  const raw = flags['capture-json'] || readCaptureFile(flags);
   if (!raw || raw === true) return null;
   try {
     return typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -428,16 +533,60 @@ function readCaptureInput(flags) {
   }
 }
 
-function readMaybeFile(filePath) {
+function readCaptureFile(flags) {
+  const filePath = flags['capture-file'];
   if (!filePath || filePath === true) return null;
-  return fs.readFileSync(String(filePath), 'utf8');
+  const workspace = resolveWorkspace(flags);
+  const resolved = path.isAbsolute(String(filePath))
+    ? path.normalize(String(filePath))
+    : path.resolve(workspace, String(filePath));
+  assertPathInsideWorkspace(workspace, resolved, 'Capture file');
+  return fs.readFileSync(resolved, 'utf8');
 }
 
 function resolveSnapshotOutPath(flags, snapshotDate) {
   const out = flags.out;
-  if (out && out !== true) return path.resolve(String(out));
   if (flags['no-out']) return null;
-  return path.resolve(process.cwd(), 'data', 'spotify', 'snapshots', `${snapshotDate}-s4a.json`);
+  const workspace = resolveWorkspace(flags);
+  const resolved = out && out !== true
+    ? (path.isAbsolute(String(out)) ? path.normalize(String(out)) : path.resolve(workspace, String(out)))
+    : path.join(workspace, 'data', 'spotify', 'snapshots', `${snapshotDate}-s4a.json`);
+  assertPathInsideWorkspace(workspace, resolved, 'Snapshot output');
+  return resolved;
+}
+
+function resolveWorkspace(flags) {
+  const workspace = flags.workspace && flags.workspace !== true
+    ? path.resolve(String(flags.workspace))
+    : (process.env.CRAFT_WORKSPACE_PATH ? path.resolve(process.env.CRAFT_WORKSPACE_PATH) : null);
+  if (!workspace) {
+    throw new CliError('This operation needs --workspace or CRAFT_WORKSPACE_PATH.', 'WORKSPACE_REQUIRED');
+  }
+  return workspace;
+}
+
+function assertPathInsideWorkspace(workspace, resolved, label) {
+  const relative = path.relative(workspace, resolved);
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new CliError(`${label} must stay inside the workspace.`, 'OUTPUT_OUTSIDE_WORKSPACE');
+  }
+  let existing = fs.existsSync(resolved) ? resolved : path.dirname(resolved);
+  while (!fs.existsSync(existing)) {
+    const parent = path.dirname(existing);
+    if (parent === existing) break;
+    existing = parent;
+  }
+  try {
+    const realWorkspace = fs.realpathSync(workspace);
+    const realExisting = fs.realpathSync(existing);
+    const realRelative = path.relative(realWorkspace, realExisting);
+    if (realRelative === '..' || realRelative.startsWith(`..${path.sep}`) || path.isAbsolute(realRelative)) {
+      throw new CliError(`${label} resolves outside the workspace.`, 'OUTPUT_OUTSIDE_WORKSPACE');
+    }
+  } catch (error) {
+    if (error instanceof CliError) throw error;
+    throw new CliError(`Could not validate ${label.toLowerCase()}: ${error.message}`, 'INVALID_WORKSPACE_PATH');
+  }
 }
 
 // ============================================================
@@ -446,8 +595,12 @@ function resolveSnapshotOutPath(flags, snapshotDate) {
 
 async function handlePlaylist(flags) {
   const sub = flags._[0];
+  if (sub === 'receipt') {
+    handlePlaylistReceipt(flags);
+    return;
+  }
   if (sub !== 'create') {
-    throw new CliError(`Unknown playlist subcommand: ${sub || '(missing)'} (supported: create)`, 'UNKNOWN_PLAYLIST_COMMAND');
+    throw new CliError(`Unknown playlist subcommand: ${sub || '(missing)'} (supported: create, receipt)`, 'UNKNOWN_PLAYLIST_COMMAND');
   }
 
   const profileId = requireFlag(flags, 'profile');
@@ -468,53 +621,141 @@ async function handlePlaylist(flags) {
   ];
 
   if (flags['dry-run']) {
+    const browserPlan = buildBrowserPlan({ profile, sessionPath: sessionDir(profile), steps });
     writeResult({
       ok: true,
       status: 'dry_run',
-      command: 'playlist.create.spotify',
-      platform: PLATFORM,
-      profile: profileId,
-      mode: 'browser',
-      action,
-      browserPlan: buildBrowserPlan({ profile, sessionPath: sessionDir(profile), steps }),
-    }, flags.json);
-    return;
-  }
-
-  assertLiveReady(profile, flags, 'live Spotify playlist create');
-  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
-  if (duplicate) {
-    writeResult(duplicateActionResult(action, duplicate, 'playlist.create.spotify'), flags.json);
-    return;
-  }
-
-  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
-  try {
-    // Under runner-cdp (the default and only bundled engine) live execution is
-    // delegated: RunnerOS browser tools run the verified browserPlan. No direct
-    // headless automation ships in the app.
-    const result = {
-      ok: true,
-      status: 'delegated',
       command: 'playlist.create.spotify',
       actionId: action.actionId,
       platform: PLATFORM,
       profile: profileId,
       mode: 'browser',
       action,
-      browserPlan: buildBrowserPlan({ profile, sessionPath: sessionDir(profile), steps }),
-      code: 'RUNNER_CDP_DELEGATED',
-      message: 'Playlist create is delegated to RunnerOS native browser tools after account verification and approval.',
-      next: [
-        'Open the browser session named in browserPlan.browserSession.',
-        'Verify the visible account matches browserPlan.accountVerification before creating anything.',
-        'Execute the browserPlan steps, then record the resulting playlist URL as the receipt.',
-      ],
+      browserPlan,
+      approvalDigest: computeApprovalDigest(action, browserPlan),
+    }, flags.json);
+    return;
+  }
+
+  if (!flags['approved-handoff']) {
+    throw new CliError(
+      'Refusing direct Spotify playlist execution. Save the dry-run JSON and use social execute with its exact action id.',
+      'GUARDED_EXECUTE_REQUIRED'
+    );
+  }
+  assertLiveReady(profile, flags, 'live Spotify playlist create');
+  // The CLI is a planner/gatekeeper. Runner's browser tools perform the external
+  // mutation and own the observed receipt. A delegated plan is never recorded as
+  // completed because no playlist exists until the browser confirms it.
+  writeResult({
+    ok: true,
+    status: 'delegated',
+    command: 'playlist.create.spotify',
+    actionId: action.actionId,
+    platform: PLATFORM,
+    profile: profileId,
+    mode: 'browser',
+    action,
+    browserPlan: buildBrowserPlan({ profile, sessionPath: sessionDir(profile), steps }),
+    code: 'RUNNER_CDP_DELEGATED',
+    message: 'Playlist create is delegated to RunnerOS native browser tools after guarded dry-run approval.',
+    next: [
+      'Open the browser session named in browserPlan.browserSession.',
+      'Verify the visible account matches browserPlan.accountVerification before creating anything.',
+      'Execute the approved browserPlan steps and return the observed playlist URL as the receipt.',
+    ],
+  }, flags.json);
+}
+
+function handlePlaylistReceipt(flags) {
+  const profileId = requireFlag(flags, 'profile');
+  const profile = getProfile(PLATFORM, profileId);
+  const actionFile = requireFlag(flags, 'action-file');
+  const expectedActionId = requireFlag(flags, 'expected-action-id');
+  const expectedDigest = requireFlag(flags, 'expected-action-digest');
+  const playlistUrl = normalizePlaylistUrl(requireFlag(flags, 'playlist-url'));
+  const verification = readProfileVerificationResult(profile, flags);
+  if (!verification?.loggedIn || verification.matchesExpected !== true) {
+    throw new CliError('Receipt finalization needs fresh matching Spotify account verification evidence.', 'ACCOUNT_VERIFICATION_REQUIRED');
+  }
+  assertFreshReceiptVerification(verification);
+
+  let dryRun;
+  try {
+    dryRun = JSON.parse(fs.readFileSync(path.resolve(actionFile), 'utf8'));
+  } catch (error) {
+    throw new CliError(`Could not read approved action file: ${error.message}`, 'INVALID_ACTION_FILE');
+  }
+  const action = dryRun?.action;
+  const browserPlan = dryRun?.browserPlan;
+  if (dryRun?.status !== 'dry_run' || dryRun?.ok !== true || !action || !browserPlan) {
+    throw new CliError('Receipt needs the complete successful dry-run result.', 'INVALID_ACTION_FILE');
+  }
+  if (action.platform !== PLATFORM || action.verb !== 'playlist-create' || action.profile !== profileId) {
+    throw new CliError('Receipt action does not match the Spotify playlist profile.', 'INVALID_ACTION_FILE');
+  }
+  if (dryRun.actionId !== action.actionId || expectedActionId !== action.actionId) {
+    throw new CliError('Receipt action id does not match the approved action.', 'ACTION_ID_MISMATCH');
+  }
+  const approvalDigest = computeApprovalDigest(action, browserPlan);
+  if (dryRun.approvalDigest !== approvalDigest || expectedDigest !== approvalDigest) {
+    throw new CliError('Receipt action digest does not match the approved action contract.', 'ACTION_DIGEST_MISMATCH');
+  }
+
+  const duplicate = findCompletedAction({ action, socialHome: socialHome() });
+  if (duplicate) {
+    writeResult(duplicateActionResult(action, duplicate, 'playlist.receipt.spotify'), flags.json);
+    return;
+  }
+  const releaseLock = acquireProfileLock({ action, socialHome: socialHome() });
+  try {
+    const result = {
+      ok: true,
+      status: 'succeeded',
+      command: 'playlist.receipt.spotify',
+      actionId: action.actionId,
+      approvalDigest,
+      platform: PLATFORM,
+      profile: profileId,
+      receipt: {
+        playlistUrl,
+        verifiedAt: verification.checkedAt,
+        visibleIdentity: {
+          handle: verification.visibleIdentity.handle,
+          accountUrl: verification.visibleIdentity.accountUrl,
+          displayName: verification.visibleIdentity.displayName,
+          url: verification.visibleIdentity.url,
+        },
+      },
     };
-    recordCompletedAction({ action, socialHome: socialHome(), result, command: 'playlist.create.spotify' });
+    recordCompletedAction({ action, socialHome: socialHome(), result, command: result.command });
     writeResult(result, flags.json);
   } finally {
     releaseLock();
+  }
+}
+
+function assertFreshReceiptVerification(verification) {
+  const checkedAt = Date.parse(verification.checkedAt || '');
+  const ageMs = Date.now() - checkedAt;
+  if (!verification.checkedAtProvided || !Number.isFinite(checkedAt)) {
+    throw new CliError('Receipt verification evidence needs an explicit valid checkedAt timestamp.', 'STALE_VERIFICATION_RESULT');
+  }
+  if (ageMs > RECEIPT_VERIFICATION_MAX_AGE_MS || ageMs < -RECEIPT_VERIFICATION_FUTURE_SKEW_MS) {
+    throw new CliError('Receipt verification evidence is stale or too far in the future; verify the Spotify account again.', 'STALE_VERIFICATION_RESULT');
+  }
+}
+
+function normalizePlaylistUrl(value) {
+  try {
+    const url = new URL(value);
+    const match = url.hostname === 'open.spotify.com'
+      ? url.pathname.match(/^\/playlist\/([A-Za-z0-9]{22})\/?$/)
+      : null;
+    if (!match) throw new Error('invalid');
+    return `https://open.spotify.com/playlist/${match[1]}`;
+  } catch {
+    throw new CliError('Receipt needs a valid open.spotify.com/playlist/<22-character-id> URL.', 'INVALID_PLAYLIST_URL');
   }
 }
 
@@ -550,7 +791,7 @@ function validatePlaylistCreateAction(action) {
   if (!VISIBILITIES.has(visibility)) errors.push('--visibility must be public or private');
   if (tracks.length === 0) errors.push('Playlist create needs at least one --tracks entry');
   if (tracks.length > 500) errors.push('Playlist create MVP accepts up to 500 tracks');
-  const bad = tracks.filter((uri) => !/^spotify:track:[A-Za-z0-9]+$/.test(uri));
+  const bad = tracks.filter((uri) => !/^spotify:track:[A-Za-z0-9]{22}$/.test(uri));
   if (bad.length) errors.push(`Invalid track URIs (expected spotify:track:<id>): ${bad.slice(0, 3).join(', ')}`);
   // Doctrine guard mirrored from the curator skill: no artist-bait names.
   const lowered = name.toLowerCase();
@@ -572,9 +813,14 @@ function normalizeTrackUris(value) {
 
 function normalizeTrackUri(value) {
   if (!value) return null;
-  if (/^spotify:track:[A-Za-z0-9]+$/.test(value)) return value;
-  const urlMatch = value.match(/open\.spotify\.com\/track\/([A-Za-z0-9]+)/);
-  if (urlMatch?.[1]) return `spotify:track:${urlMatch[1]}`;
+  if (/^spotify:track:[A-Za-z0-9]{22}$/.test(value)) return value;
+  try {
+    const url = new URL(value);
+    const match = url.hostname === 'open.spotify.com'
+      ? url.pathname.match(/^\/track\/([A-Za-z0-9]{22})\/?$/)
+      : null;
+    if (match?.[1]) return `spotify:track:${match[1]}`;
+  } catch {}
   if (/^[A-Za-z0-9]{22}$/.test(value)) return `spotify:track:${value}`;
   return value; // left as-is so validation reports it
 }
@@ -695,14 +941,16 @@ Profiles (one Spotify login covers open.spotify.com and artists.spotify.com):
 
 Analyst snapshot (Spotify for Artists, browser capture):
   social snapshot spotify --profile artist01 --json                      # returns the browserPlan + capture contract
-  social snapshot spotify --profile artist01 --capture-json <json> --out data/spotify/snapshots/2026-07-08.json --json
+  social snapshot spotify --profile artist01 --capture-file <capture.json> --out <new-snapshot.json> --json
 
 Playlist create (Spotify web player, approval-gated):
   social playlist spotify create --profile artist01 --name "Late Night Drive" --tracks "spotify:track:...,spotify:track:..." --visibility public --dry-run --json
-  social playlist spotify create --profile artist01 --name "Late Night Drive" --tracks "..." --confirm yes --json
+  social execute --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --confirm yes --json
+  social playlist spotify receipt --profile artist01 --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --playlist-url <url> --verification-result <json-file> --json
 
 Global env:
   SOCIAL_HOME Override local store
+  CRAFT_WORKSPACE_PATH Workspace root for relative/default snapshot output (or pass --workspace)
   SOCIAL_CONFIRM_POLICY autorun|require-confirm (default: require-confirm; autorun writes require SOCIAL_ALLOW_AUTORUN_WRITES=1)
   SOCIAL_BROWSER_ENGINE runner-cdp (default; execution delegated to RunnerOS browser tools)
 `);

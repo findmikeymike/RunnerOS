@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -95,6 +95,7 @@ test('snapshot normalizes captured numbers and never fabricates missing ones', (
 
 test('snapshot writes a snapshot file when --out is given', () => {
   const env = home();
+  env.CRAFT_WORKSPACE_PATH = env.SOCIAL_HOME;
   addProfile(env);
   const out = path.join(env.SOCIAL_HOME, 'snap.json');
   const capture = JSON.stringify({ snapshotDate: '2026-07-08', streams: 1, listeners: 1, followers: 1, saves: 1 });
@@ -102,6 +103,94 @@ test('snapshot writes a snapshot file when --out is given', () => {
   assert.equal(result.outPath, out);
   assert.equal(existsSync(out), true);
   assert.equal(JSON.parse(readFileSync(out, 'utf8')).snapshot === undefined, true);
+});
+
+test('snapshot resolves default and relative output inside the workspace', () => {
+  const env = home();
+  const workspace = mkdtempSync(path.join(tmpdir(), 'spotify-workspace-'));
+  addProfile(env);
+  const capture = JSON.stringify({ snapshotDate: '2026-07-08', windowDays: 28, streams: 1, listeners: 1, followers: 1, saves: 1 });
+
+  const defaultResult = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', capture, '--workspace', workspace, '--json'], env));
+  assert.equal(defaultResult.outPath, path.join(workspace, 'data/spotify/snapshots/2026-07-08-s4a.json'));
+
+  const relativeResult = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', JSON.stringify({ ...JSON.parse(capture), snapshotDate: '2026-07-09' }), '--out', 'captures/latest.json', '--json'], { ...env, CRAFT_WORKSPACE_PATH: workspace }));
+  assert.equal(relativeResult.outPath, path.join(workspace, 'captures/latest.json'));
+});
+
+test('snapshot marks missing date/window and malformed optional shapes as partial', () => {
+  const env = home();
+  addProfile(env);
+  const result = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--no-out', '--capture-json', JSON.stringify({
+    streams: -1,
+    listeners: 10,
+    followers: 5,
+    saves: 2,
+    topCities: 'not-an-array',
+    topCountries: [{ country: 'US', listeners: -2 }, {}],
+    topTracks: [{ name: 'Track', streams: 1.5 }, { streams: 10 }],
+    sources: ['not-an-object'],
+  }), '--json'], env));
+  assert.equal(result.snapshot.windowDays, null);
+  assert.equal(result.snapshot.metrics.streams, null);
+  assert.equal(result.snapshot.partial, true);
+  assert.match(result.snapshot.errors.join(' '), /Snapshot date not captured/);
+  assert.match(result.snapshot.errors.join(' '), /Reporting window not captured/);
+  assert.match(result.snapshot.errors.join(' '), /Top cities capture was not an array/);
+  assert.match(result.snapshot.errors.join(' '), /topCountries\[0\]\.listeners/);
+  assert.match(result.snapshot.errors.join(' '), /topCountries\[1\] entry/);
+  assert.match(result.snapshot.errors.join(' '), /topTracks\[0\]\.streams/);
+  assert.match(result.snapshot.errors.join(' '), /topTracks\[1\] entry/);
+});
+
+test('snapshot refuses to overwrite an existing file', () => {
+  const env = home();
+  env.CRAFT_WORKSPACE_PATH = env.SOCIAL_HOME;
+  addProfile(env);
+  const out = path.join(env.SOCIAL_HOME, 'existing.json');
+  writeFileSync(out, '{"keep":true}\n');
+  const result = runFailure(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', JSON.stringify({ snapshotDate: '2026-07-08' }), '--out', out, '--json'], env);
+  assert.equal(result.code, 'SNAPSHOT_EXISTS');
+  assert.deepEqual(JSON.parse(readFileSync(out, 'utf8')), { keep: true });
+});
+
+test('snapshot refuses a relative output that escapes the workspace', () => {
+  const env = home();
+  const workspace = mkdtempSync(path.join(tmpdir(), 'spotify-workspace-'));
+  addProfile(env);
+  const result = runFailure(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', JSON.stringify({ snapshotDate: '2026-07-08' }), '--workspace', workspace, '--out', '../escape.json', '--json'], env);
+  assert.equal(result.code, 'OUTPUT_OUTSIDE_WORKSPACE');
+});
+
+test('snapshot refuses absolute capture and output paths outside the workspace', () => {
+  const env = home();
+  const workspace = mkdtempSync(path.join(tmpdir(), 'spotify-workspace-'));
+  const outside = mkdtempSync(path.join(tmpdir(), 'spotify-outside-'));
+  addProfile(env);
+  const captureFile = path.join(outside, 'capture.json');
+  writeFileSync(captureFile, JSON.stringify({ snapshotDate: '2026-07-08' }));
+
+  const captureResult = runFailure(['snapshot', 'spotify', '--profile', 'artist01', '--capture-file', captureFile, '--workspace', workspace, '--no-out', '--json'], env);
+  assert.equal(captureResult.code, 'OUTPUT_OUTSIDE_WORKSPACE');
+
+  const outputResult = runFailure(['snapshot', 'spotify', '--profile', 'artist01', '--capture-json', JSON.stringify({ snapshotDate: '2026-07-08' }), '--workspace', workspace, '--out', path.join(outside, 'snapshot.json'), '--json'], env);
+  assert.equal(outputResult.code, 'OUTPUT_OUTSIDE_WORKSPACE');
+});
+
+test('snapshot refuses workspace paths that escape through a symlink', () => {
+  const env = home();
+  const workspace = mkdtempSync(path.join(tmpdir(), 'spotify-workspace-'));
+  const outside = mkdtempSync(path.join(tmpdir(), 'spotify-outside-'));
+  addProfile(env);
+  symlinkSync(outside, path.join(workspace, 'linked-outside'));
+
+  const result = runFailure([
+    'snapshot', 'spotify', '--profile', 'artist01',
+    '--capture-json', JSON.stringify({ snapshotDate: '2026-07-08' }),
+    '--workspace', workspace, '--out', 'linked-outside/snapshot.json', '--json',
+  ], env);
+  assert.equal(result.code, 'OUTPUT_OUTSIDE_WORKSPACE');
+  assert.equal(existsSync(path.join(outside, 'snapshot.json')), false);
 });
 
 test('playlist create dry-run normalizes URLs to URIs and keeps order', () => {
@@ -132,7 +221,82 @@ test('playlist create refuses live execution without --confirm yes', () => {
     '--json',
   ], env);
   assert.equal(result.ok, false);
-  assert.equal(result.code, 'CONFIRM_REQUIRED');
+  assert.equal(result.code, 'GUARDED_EXECUTE_REQUIRED');
+});
+
+test('playlist create refuses direct live execution even with confirmation', () => {
+  const env = home();
+  addProfile(env);
+  const result = runFailure([
+    'playlist', 'spotify', 'create',
+    '--profile', 'artist01',
+    '--name', 'Late Night Drive',
+    '--tracks', 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh',
+    '--confirm', 'yes',
+    '--json',
+  ], env);
+  assert.equal(result.code, 'GUARDED_EXECUTE_REQUIRED');
+});
+
+test('playlist receipt records observed completion and dedupes only after success', () => {
+  const env = home();
+  addProfile(env);
+  const dryRun = JSON.parse(run([
+    'playlist', 'spotify', 'create', '--profile', 'artist01', '--name', 'Late Night Drive',
+    '--tracks', 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh', '--dry-run', '--json',
+  ], env));
+  const actionFile = path.join(env.SOCIAL_HOME, 'approved.json');
+  const verificationFile = path.join(env.SOCIAL_HOME, 'verification.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+  writeFileSync(verificationFile, JSON.stringify({
+    platform: 'spotify', profile: 'artist01', loggedIn: true,
+    checkedAt: new Date().toISOString(),
+    visibleIdentity: { handle: 'Luna Vale' },
+  }));
+  const args = [
+    'playlist', 'spotify', 'receipt', '--profile', 'artist01', '--action-file', actionFile,
+    '--expected-action-id', dryRun.actionId, '--expected-action-digest', dryRun.approvalDigest,
+    '--playlist-url', 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M',
+    '--verification-result', verificationFile, '--json',
+  ];
+
+  const receipt = JSON.parse(run(args, env));
+  assert.equal(receipt.status, 'succeeded');
+  assert.equal(receipt.receipt.playlistUrl, 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M');
+
+  const duplicate = JSON.parse(run(args, env));
+  assert.equal(duplicate.status, 'duplicate');
+  assert.equal(duplicate.duplicateOf, dryRun.actionId);
+  assert.equal(duplicate.receipt.playlistUrl, receipt.receipt.playlistUrl);
+});
+
+test('playlist receipt rejects stale and future account verification evidence', () => {
+  const env = home();
+  addProfile(env);
+  const dryRun = JSON.parse(run([
+    'playlist', 'spotify', 'create', '--profile', 'artist01', '--name', 'Late Night Drive',
+    '--tracks', 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh', '--dry-run', '--json',
+  ], env));
+  const actionFile = path.join(env.SOCIAL_HOME, 'approved.json');
+  const verificationFile = path.join(env.SOCIAL_HOME, 'verification.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+  const args = [
+    'playlist', 'spotify', 'receipt', '--profile', 'artist01', '--action-file', actionFile,
+    '--expected-action-id', dryRun.actionId, '--expected-action-digest', dryRun.approvalDigest,
+    '--playlist-url', 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M',
+    '--verification-result', verificationFile, '--json',
+  ];
+
+  for (const checkedAt of [
+    new Date(Date.now() - 11 * 60 * 1000).toISOString(),
+    new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+  ]) {
+    writeFileSync(verificationFile, JSON.stringify({
+      platform: 'spotify', profile: 'artist01', loggedIn: true, checkedAt,
+      visibleIdentity: { handle: 'Luna Vale' },
+    }));
+    assert.equal(runFailure(args, env).code, 'STALE_VERIFICATION_RESULT');
+  }
 });
 
 test('playlist create rejects invalid track URIs', () => {
@@ -146,6 +310,19 @@ test('playlist create rejects invalid track URIs', () => {
     '--dry-run', '--json',
   ], env);
   assert.equal(result.ok, false);
+  assert.equal(result.code, 'INVALID_ACTION');
+});
+
+test('playlist create rejects malformed short Spotify track ids', () => {
+  const env = home();
+  addProfile(env);
+  const result = runFailure([
+    'playlist', 'spotify', 'create',
+    '--profile', 'artist01',
+    '--name', 'Mood',
+    '--tracks', 'spotify:track:abc',
+    '--dry-run', '--json',
+  ], env);
   assert.equal(result.code, 'INVALID_ACTION');
 });
 

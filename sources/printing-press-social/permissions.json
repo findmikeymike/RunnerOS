@@ -69,6 +69,70 @@
       "comment": "Dry-run social DM commands only from the tool directory"
     },
     {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+profile\\s+status\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+(?:\\s+--live)?\\s+--json$",
+      "comment": "Read Spotify profile readiness without changing the account"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+profile\\s+status\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+(?:\\s+--live)?\\s+--json$",
+      "comment": "Read Spotify profile readiness from the tool directory"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+profile\\s+status\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--live\\s+--verification-result\\s+.+?\\s+--json$",
+      "comment": "Apply non-secret observed Spotify browser identity to a readiness check"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+profile\\s+status\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--live\\s+--verification-result\\s+.+?\\s+--json$",
+      "comment": "Apply non-secret observed Spotify browser identity from the tool directory"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+(?:\\s+--date-range\\s+[A-Za-z0-9_-]+)?\\s+--json$",
+      "comment": "Plan a read-only Spotify for Artists snapshot"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+(?:\\s+--date-range\\s+[A-Za-z0-9_-]+)?\\s+--json$",
+      "comment": "Plan a read-only Spotify for Artists snapshot from the tool directory"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--capture-file\\s+.+?\\s+(?:--out\\s+.+?|--no-out)\\s+--json$",
+      "comment": "Normalize an observed Spotify browser capture into a local snapshot"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--capture-file\\s+.+?\\s+(?:--out\\s+.+?|--no-out)\\s+--json$",
+      "comment": "Normalize an observed Spotify browser capture from the tool directory"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--capture-file\\s+.+?\\s+--workspace\\s+.+?\\s+--json$",
+      "comment": "Normalize a Spotify capture to the default immutable workspace snapshot path"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+snapshot\\s+spotify\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--capture-file\\s+.+?\\s+--workspace\\s+.+?\\s+--json$",
+      "comment": "Normalize a Spotify capture to the default workspace path from the tool directory"
+    },
+    {
+      "pattern": "^(?!.*--(?:confirm|approved-handoff)\\b)cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+playlist\\s+spotify\\s+create\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run Spotify playlist creation only; live creation must use guarded social execute"
+    },
+    {
+      "pattern": "^(?!.*--(?:confirm|approved-handoff)\\b)node\\s+src/social\\.mjs\\s+playlist\\s+spotify\\s+create\\s+.*\\s+--dry-run\\s+--json$",
+      "comment": "Dry-run Spotify playlist creation only from the tool directory"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--expected-action-digest\\s+sha256:[a-f0-9]{64}\\s+--confirm\\s+yes\\s+--json$",
+      "comment": "Execute an approved Spotify dry-run bound to its exact action and browser-plan digest"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--expected-action-digest\\s+sha256:[a-f0-9]{64}\\s+--confirm\\s+yes\\s+--json$",
+      "comment": "Execute an approved Spotify dry-run from the tool directory bound to its exact digest"
+    },
+    {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+playlist\\s+spotify\\s+receipt\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--expected-action-digest\\s+sha256:[a-f0-9]{64}\\s+--playlist-url\\s+https://open\\.spotify\\.com/playlist/[A-Za-z0-9]{22}(?:\\?si=[A-Za-z0-9_-]{1,128})?\\s+--verification-result\\s+.+?\\s+--json$",
+      "comment": "Record a durable Spotify playlist receipt after observed browser success"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+playlist\\s+spotify\\s+receipt\\s+--profile\\s+[A-Za-z0-9_-]+\\s+--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--expected-action-digest\\s+sha256:[a-f0-9]{64}\\s+--playlist-url\\s+https://open\\.spotify\\.com/playlist/[A-Za-z0-9]{22}(?:\\?si=[A-Za-z0-9_-]{1,128})?\\s+--verification-result\\s+.+?\\s+--json$",
+      "comment": "Record a durable Spotify playlist receipt from the tool directory"
+    },
+    {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--confirm\\s+yes\\s+--json$",
       "comment": "Execute approved dry-run social handoff through the guarded Runner handoff command"
     },
@@ -116,6 +180,16 @@
       "tryInstead": [
         "Run a post/comment/DM dry-run with `--dry-run --json` first",
         "Run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`"
+      ]
+    },
+    {
+      "command": "node src/social.mjs playlist spotify create",
+      "whenNotMatching": "--dry-run\\s+--json",
+      "reason": "Live Spotify playlist creation mutates the connected account and must not run directly.",
+      "context": "Save the dry-run JSON, obtain exact approval, then use the guarded social execute handoff so account verification and action provenance are re-checked.",
+      "tryInstead": [
+        "Run the same playlist command with `--dry-run --json`",
+        "Run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json` after approval"
       ]
     }
   ]

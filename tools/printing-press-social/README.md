@@ -8,6 +8,7 @@ Current packages:
 - `tiktok-cli/` - direct TikTok browser CLI for profile login, video posting, comments, and DMs.
 - `x-cli/` - direct X browser CLI for profile login, posts, replies, and DMs.
 - `youtube-cli/` - direct YouTube browser CLI for profile login, full video uploads, Shorts uploads, and comments.
+- `spotify-cli/` - browser-planned Spotify for Artists snapshots and approval-gated Spotify playlist creation.
 
 Use each platform folder as its own installable CLI package.
 
@@ -41,6 +42,13 @@ Approved Runner handoff workflow:
 ```bash
 social post x --profile artist01 --text "post text" --dry-run --json > dry-run-result.json
 social execute --action-file dry-run-result.json --expected-action-id act_... --confirm yes --json
+```
+
+Spotify playlist creation adds a content-bound approval digest and durable receipt:
+
+```bash
+social execute --action-file spotify-dry-run.json --expected-action-id act_... --expected-action-digest sha256:... --confirm yes --json
+social playlist spotify receipt --profile artist01 --action-file spotify-dry-run.json --expected-action-id act_... --expected-action-digest sha256:... --playlist-url https://open.spotify.com/playlist/... --verification-result verification.json --json
 ```
 
 Safety defaults:

@@ -48,4 +48,25 @@ describe('parseArtistSpotifySnapshotDocResult', () => {
     expect(result.snapshot?.artist.genres).toEqual(['alt pop'])
     expect(result.snapshot?.tracks?.[0]?.name).toBe('Lead Song')
   })
+
+  test('parses browser-captured Spotify for Artists snapshots with an unknown window', () => {
+    const result = parseArtistSpotifySnapshotDocResult(makeDoc(JSON.stringify({
+      version: 1,
+      dataSource: 'spotify-for-artists-browser',
+      snapshotDate: '2026-07-09',
+      windowDays: null,
+      artist: { name: 'Test Artist' },
+      metrics: { streams: 2100, listeners: 900, followers: 500, saves: null },
+      partial: true,
+      errors: ['Reporting window not captured as a positive whole number.'],
+      updatedAt: '2026-07-09T12:00:00.000Z',
+    })))
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.snapshot?.dataSource).toBe('spotify-for-artists-browser')
+    expect(result.snapshot?.windowDays).toBeUndefined()
+    expect(result.snapshot?.metrics.streams).toBe(2100)
+    expect(result.snapshot?.partial).toBe(true)
+  })
 })

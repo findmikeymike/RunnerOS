@@ -1145,7 +1145,9 @@ export function ArtistHQHome({
                   {spotifySnapshot
                     ? spotifyIsPublicApi
                       ? 'Latest public Spotify API snapshot. Streams and listeners require Spotify for Artists access.'
-                      : `Latest ${spotifySnapshot.windowDays}-day Spotify for Artists snapshot.`
+                      : spotifySnapshot.windowDays
+                        ? `Latest ${spotifySnapshot.windowDays}-day Spotify for Artists snapshot.`
+                        : 'Latest Spotify for Artists snapshot; reporting window was not captured.'
                     : 'Run Spotify Analyst to create the first snapshot.'}
                 </p>
                 <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/25">
@@ -2784,12 +2786,18 @@ function createSpotifySyncMatcher(): Record<string, unknown> {
         agentSlug: 'spotify-analyst',
         prompt: `Run the weekly Spotify snapshot for this Artist HQ workspace.
 
-Use Artist Profile first for the Spotify artist URL or ID. If SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET is missing, stop and say to add them in Settings > Secrets > Spotify.
+Use Artist Profile first for artist identity. Find the connected Spotify account in Settings > Social Accounts and use its exact profile id. Do not use Spotify API credentials.
 
-Run:
-bun "$CRAFT_APP_ROOT/packages/shared/src/skills/bundled/spotify-analytics-snapshot/scripts/api-snapshot.ts" --workspace "$CRAFT_WORKSPACE_PATH"
+1. Verify its logged-in browser session with:
+node "$CRAFT_APP_ROOT/tools/printing-press-social/src/social.mjs" profile status spotify --profile <profile-id> --live --json
+2. Request the read-only capture plan with:
+node "$CRAFT_APP_ROOT/tools/printing-press-social/src/social.mjs" snapshot spotify --profile <profile-id> --json
+3. Run that browserPlan against the verified Spotify for Artists session. Capture only visible values, use null for unavailable metrics, and save the observed JSON to "$CRAFT_WORKSPACE_PATH/data/spotify/captures/<date>.json".
+4. Finalize the capture with:
+node "$CRAFT_APP_ROOT/tools/printing-press-social/src/social.mjs" snapshot spotify --profile <profile-id> --capture-file "$CRAFT_WORKSPACE_PATH/data/spotify/captures/<date>.json" --out "$CRAFT_WORKSPACE_PATH/data/spotify/snapshots/<date>-s4a.json" --json
+5. Write the returned contextPayload to Artist HQ context slug ${ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG}.
 
-This writes data/spotify/snapshots/<date>-web-api.json and updates Artist HQ workspace context slug ${ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG} so Spotify Pulse turns current.
+This writes a new data/spotify/snapshots/<date>-s4a.json snapshot inside this workspace. Never overwrite an existing snapshot.
 
 Keep the final note short: snapshot date, key movement, any missing setup.`,
       },

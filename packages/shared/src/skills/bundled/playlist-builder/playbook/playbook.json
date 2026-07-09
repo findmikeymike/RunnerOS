@@ -2,20 +2,20 @@
   "meta": {
     "name": "Spotify Playlist Strategist — playbook",
     "version": "1.0.0",
-    "updated": "2026-07-08",
+    "updated": "2026-07-09",
     "purpose": "The strategy an agent uses to build an artist-curated Spotify playlist (the artist's songs mixed with similar artists, posted on their profile) that grows streams honestly. Turns the app's existing artist context — sound/style + a list of similar artists — into a concrete, algorithm-friendly tracklist and a promotable playlist package.",
     "honest_framing": "An artist-curated playlist is a LEGIT but MODEST lever. Its real value is: (1) manufacturing qualified CO-LISTENING context — your track credibly sequenced next to genuine audience-neighbors; (2) earning ENGAGEMENT (saves, low skips, completion, follows); (3) feeding Spotify's collaborative-filtering 'organizational similarity' and shaping your 'Fans Also Like' neighborhood; (4) growing an owned following you can re-activate. It is NOT a switch that triggers Discover Weekly / Release Radar, and a single artist playlist does not by itself 'train the algorithm.' Frame the value truthfully.",
     "evidence_key": {
-      "EVIDENCE": "stated by Spotify or well-documented across independent sources",
+      "EVIDENCE": "stated by Spotify or supported by a cited primary source",
       "PLAUSIBLE": "credible practitioner/expert consensus, mechanistically sound, not officially confirmed",
       "MYTH": "commonly repeated but weak, contradicted, or against Spotify TOS"
     },
     "app_context_note": "The app already gives the agent the target artist's sound/style descriptor and a list of similar artists. The playbook's job is to convert that into peer selection, track choice, sequencing, and a package — see the 'pipeline'.",
-    "api_caveat": "Spotify deprecated its audio-features, related-artists, recommendations, and featured-playlists API endpoints for new apps in Nov 2024. Third-party BPM/energy/key values may be approximate or stale — treat as directional and cross-check. [EVIDENCE]"
+    "api_caveat": "Spotify restricted audio-features, related-artists, recommendations, and featured-playlists endpoints for new and development-mode apps in Nov 2024, then made further Web API removals and field changes in Feb 2026. Treat third-party BPM/energy/key or related-artist data as directional and verify availability before relying on it. [EVIDENCE]"
   },
   "principles": [
-    {"id":"co-listening","name":"The goal is qualified co-listening, not raw plays","rule":"Design the playlist so real listeners stream your track IN-SESSION alongside genuine peers and engage. That co-listening + the user playlist-adds it inspires is the signal that feeds similarity models.","tag":"PLAUSIBLE","why":"Spotify's collaborative filtering learns 'two songs are similar if users put them on the same playlist' (trained on ~700M user playlists). Your posted list is a vehicle to generate that real behavior, not the signal itself."},
-    {"id":"engagement-over-volume","name":"Engagement beats volume","rule":"Optimize for saves, library/playlist adds, completion, low skips, follows — not stream count. Every construction choice should protect these.","tag":"EVIDENCE","why":"Explicit signals (saves/adds) and completion are the dominant ranking inputs; a skip before ~30s doesn't even count as a stream and reads negative."},
+    {"id":"co-listening","name":"The goal is qualified co-listening, not raw plays","rule":"Design the playlist so real listeners stream your track IN-SESSION alongside genuine peers and engage. That co-listening + the user playlist-adds it inspires may help Spotify learn a more accurate audience neighborhood.","tag":"PLAUSIBLE","why":"Spotify says Fans Also Like uses fan listening habits and explicitly recommends encouraging listening, saves, playlist adds, and creating artist playlists. It does not publish a formula or promise a ranking outcome."},
+    {"id":"engagement-over-volume","name":"Engagement beats volume","rule":"Optimize for genuine saves, library/playlist adds, completion, low skips, and follows — not raw stream count. Every construction choice should protect listener fit.","tag":"PLAUSIBLE","why":"Spotify publicly encourages listening, saves, and playlist adds to improve Fans Also Like data, but does not publish weights or confirm a dominant ranking order."},
     {"id":"relevance-density","name":"Relevance density over star power","rule":"The bulk of the list should be genuine sonic peers your target listener actually chooses; use only a couple of recognizable 'anchors' for trust.","tag":"PLAUSIBLE","why":"'Fans Also Like' rewards the SHARE of an artist's fanbase you overlap with, so you cannot piggyback on a superstar; and mismatched mega-artist crowds skip your track, suppressing you in that cluster."},
     {"id":"right-audience","name":"Drive the RIGHT audience to it","rule":"Promote to fans of the featured peers, via legitimate channels. Wrong-audience traffic can misclassify your sound.","tag":"PLAUSIBLE","why":"One relevant new listener is worth more than ten random ad streams; mismatched virality can drag your 'neighborhood' the wrong way."},
     {"id":"supporting-asset","name":"It's a supporting asset, not the engine","rule":"Treat the playlist as one piece around a steady release cadence and real fan engagement — not a growth engine by itself.","tag":"PLAUSIBLE","why":"Algorithmic placement is earned by broad engagement across many real sessions; playlists compound slowly and usually need legit promotion to get discovered at all."}
@@ -53,7 +53,7 @@
       {"signal":"'Fans Also Like' reciprocity","strength":"strong","source":"in-app related-artists panel","tag":"PLAUSIBLE","note":"A appears in B's panel AND vice versa → overlap likely genuine."},
       {"signal":"Shared genre / micro-genre tags","strength":"moderate","source":"Every Noise at Once, Chosic genre finder","tag":"PLAUSIBLE","note":"Necessary but coarse — same genre ≠ same audience."},
       {"signal":"Label mates / same scene / distributor","strength":"weak-moderate","source":"credits, label pages","tag":"PLAUSIBLE"},
-      {"signal":"Tour mates / bill-sharing","strength":"weak","source":"press, live listings","tag":"EVIDENCE (feeds FAL 'context')","note":"Real-world overlap; also feeds the 'Fans Also Like' descriptive-context component."}
+      {"signal":"Tour mates / bill-sharing","strength":"weak","source":"press, live listings","tag":"PLAUSIBLE","note":"Useful human evidence of scene overlap; Spotify does not state that this directly feeds Fans Also Like."}
     ],
     "finding_tools": [
       {"tool":"Spotify in-app 'Fans Also Like' + 'Discovered On'","use":"Ground truth for who shares your audience (public related-artists API deprecated Nov 2024 — in-app only).","tag":"EVIDENCE"},
@@ -79,14 +79,14 @@
     {"id":"cadence-over-tinkering","rule":"A consistent release cadence matters more than playlist tinkering — the playlist supports steady releases, it doesn't replace them.","tag":"EVIDENCE-adjacent"}
   ],
   "engagement_signals": [
-    {"signal":"Saves / library adds / playlist adds","weight":"strongest","tag":"EVIDENCE","note":"Explicit 'keeper' feedback outweighs passive listening."},
-    {"signal":"Completion / listen-through","weight":"very strong","tag":"EVIDENCE"},
-    {"signal":"Skips (esp. before ~30s)","weight":"strongest negative","tag":"EVIDENCE","note":"A stream under ~30s doesn't count and reads negative — the single biggest red flag; context (lean-back vs skim) changes how much a skip hurts."},
-    {"signal":"Shares, artist/album click-throughs, follows, repeat & downstream plays","weight":"positive","tag":"EVIDENCE"},
+    {"signal":"Saves / library adds / playlist adds","weight":"important","tag":"EVIDENCE","note":"Spotify explicitly recommends saves and playlist adds to generate better Fans Also Like data; it does not publish a precise weight."},
+    {"signal":"Completion / listen-through","weight":"likely positive","tag":"PLAUSIBLE"},
+    {"signal":"Skips","weight":"likely negative","tag":"PLAUSIBLE","note":"Poor listener fit and early exits are useful warning signs, but Spotify does not publish a universal skip-weight formula."},
+    {"signal":"Shares, artist/album click-throughs, follows, repeat & downstream plays","weight":"likely positive","tag":"PLAUSIBLE"},
     {"signal":"Vendor benchmark targets (directional only)","weight":"unofficial","tag":"PLAUSIBLE","note":"Single-vendor figures to beat, NOT confirmed thresholds: save rate ~4.5%+ (20%+ = strong), skip <~30% in first 30s, completion >~60%."}
   ],
   "guardrails": [
-    {"id":"no-artificial-streams","rule":"Never recommend or use bots, stream/click farms, purchased streams/followers, or repeat-looping your own tracks to inflate counts.","tag":"EVIDENCE","penalty":"Since Apr 1 2024 Spotify charges distributors ~$10 PER TRACK for flagrant artificial streaming; flagged streams earn no royalties, don't count publicly, and don't positively influence the algorithm. Escalates to playlist removal, account suspension, catalog removal — and it makes no difference whether you paid or a farm targeted you."},
+    {"id":"no-artificial-streams","rule":"Never recommend or use bots, stream/click farms, purchased streams/followers, or repeat-looping your own tracks to inflate counts.","tag":"EVIDENCE","penalty":"Since Apr 1 2024 Spotify charges labels and distributors per track when flagrant artificial streaming is detected. Spotify may withhold royalties, adjust public counts, and remove tracks from playlists; distributors may separately warn, charge fees, remove content, or suspend accounts. Spotify also provides a reporting path when an artist is targeted without consent."},
     {"id":"no-paid-placement","rule":"Never recommend pay-for-placement playlists, 'guaranteed streams/followers' services, or paid curator slots — prohibited and counterproductive (junk co-occurrence confuses your similarity profile).","tag":"EVIDENCE"},
     {"id":"no-follow-swaps","rule":"No sub-for-sub, follow farms, or multi-account/Family-plan looping schemes.","tag":"EVIDENCE"},
     {"id":"legit-promo-only","rule":"Legitimate promotion only: quality-targeted paid ads (Meta/Spotify Ads/Marquee), genuine sharing, pitching real curators and Spotify editorial (≥7 days pre-release via Spotify for Artists).","tag":"EVIDENCE"},
@@ -120,6 +120,7 @@
     "Spotify for Artists — Fans Also Like: https://support.spotify.com/us/artists/article/fans-also-like/",
     "Spotify for Artists — Artificial Streaming policy: https://artists.spotify.com/artificial-streaming",
     "Spotify for Developers — Web API changes (Nov 2024): https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api",
+    "Spotify for Developers — Web API changelog (Feb 2026): https://developer.spotify.com/documentation/web-api/references/changes/february-2026",
     "Two Story Melody — Building a Spotify Playlist Network (80/20, ordering, length): https://twostorymelody.com/spotify-playlist-network/",
     "Two Story Melody — How 'Fans Also Like' Works: https://twostorymelody.com/spotify-fans-also-like-explained/",
     "Ones To Watch — Playlist curating rules for indies (70/30, tiers): https://resources.onestowatch.com/spotify-playlist-curating-rules-indies/",

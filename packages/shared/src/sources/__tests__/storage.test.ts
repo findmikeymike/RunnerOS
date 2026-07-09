@@ -443,10 +443,11 @@ describe('loadAllSources', () => {
     expect(found!.tier).toBe('project');
     expect(found!.config.type).toBe('local');
     expect(found!.config.local?.format).toBe('cli-tool');
-    expect(found!.guide?.raw).toContain('execute --action-file');
+    expect(found!.guide?.raw).toContain('guarded `social execute`');
+    expect(found!.guide?.raw).toContain('--expected-action-digest');
   });
 
-  test('printing-press-social source permissions include guarded execute handoff only', () => {
+  test('printing-press-social source permissions include safe Spotify reads and guarded execute handoff only', () => {
     const permissionsPath = resolve(import.meta.dir, '../../../../../sources/printing-press-social/permissions.json');
     const permissions = JSON.parse(readFileSync(permissionsPath, 'utf8')) as {
       allowedBashPatterns?: Array<{ pattern: string; comment?: string }>;
@@ -472,6 +473,23 @@ describe('loadAllSources', () => {
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs content --content-root "/tmp/my content" --json', patterns).allowed).toBe(true);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs post instagram --profile p --text hi --dry-run --json', patterns).allowed).toBe(true);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs post instagram --profile p && echo BAD --dry-run --json', patterns).allowed).toBe(false);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs profile status spotify --profile artist01 --live --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs profile status spotify --profile artist01 --live --verification-result verification.json --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs profile status spotify --profile artist01 --live --verification-result verification.json && echo BAD --json', patterns).allowed).toBe(false);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs snapshot spotify --profile artist01 --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs snapshot spotify --profile artist01 --capture-file capture.json --out snapshot.json --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs snapshot spotify --profile artist01 --capture-file capture.json --workspace /tmp/workspace --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs snapshot spotify --profile artist01 --capture-file capture.json --workspace /tmp/workspace && echo BAD --json', patterns).allowed).toBe(false);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs snapshot spotify --profile artist01 --capture-file capture.json && echo BAD --out snapshot.json --json', patterns).allowed).toBe(false);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs playlist spotify create --profile artist01 --name mood --tracks spotify:track:4iV5W9uYEdYUVa79Axb7Rh --dry-run --json', patterns).allowed).toBe(true);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs playlist spotify create --profile artist01 --name mood; echo BAD --tracks spotify:track:4iV5W9uYEdYUVa79Axb7Rh --dry-run --json', patterns).allowed).toBe(false);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs playlist spotify create --profile artist01 --name mood --tracks spotify:track:4iV5W9uYEdYUVa79Axb7Rh --confirm yes --json', patterns).allowed).toBe(false);
+    expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs playlist spotify create --profile artist01 --name mood --tracks spotify:track:4iV5W9uYEdYUVa79Axb7Rh --confirm yes --dry-run --json', patterns).allowed).toBe(false);
+    const digest = `sha256:${'a'.repeat(64)}`;
+    expect(validateBashCommand(`cd tools/printing-press-social && node src/social.mjs execute --action-file spotify-dry-run.json --expected-action-id act_spotify --expected-action-digest ${digest} --confirm yes --json`, patterns).allowed).toBe(true);
+    expect(validateBashCommand(`cd tools/printing-press-social && node src/social.mjs playlist spotify receipt --profile artist01 --action-file spotify-dry-run.json --expected-action-id act_spotify --expected-action-digest ${digest} --playlist-url https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M --verification-result verification.json --json`, patterns).allowed).toBe(true);
+    expect(validateBashCommand(`cd tools/printing-press-social && node src/social.mjs playlist spotify receipt --profile artist01 --action-file spotify-dry-run.json --expected-action-id act_spotify --expected-action-digest ${digest} --playlist-url https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M?si=abc_123 --verification-result verification.json --json`, patterns).allowed).toBe(true);
+    expect(validateBashCommand(`cd tools/printing-press-social && node src/social.mjs playlist spotify receipt --profile artist01 --action-file spotify-dry-run.json --expected-action-id act_spotify --expected-action-digest ${digest} --playlist-url https://evil.example/playlist/37i9dQZF1DXcBWIGoYBM5M --verification-result verification.json --json`, patterns).allowed).toBe(false);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --expected-action-id act_abc-123 --confirm yes --json', patterns).allowed).toBe(true);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file "/tmp/dry runs/dry-run.json" --expected-action-id act_abc-123 --confirm yes --json', patterns).allowed).toBe(true);
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --confirm yes --json', patterns).allowed).toBe(false);

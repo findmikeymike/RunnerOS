@@ -5,6 +5,7 @@ import { app } from 'electron'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { hasLoggedInSignal, isSocialPlatformUrl, socialLoginUrl } from './social-account-browser'
 
 export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.power.SET_KEEP_AWAKE,
@@ -205,15 +206,6 @@ function socialBrowserSegment(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]/g, '-')
 }
 
-function socialLoginUrl(platform: string): string {
-  if (platform === 'instagram') return 'https://www.instagram.com/'
-  if (platform === 'tiktok') return 'https://www.tiktok.com/'
-  if (platform === 'x') return 'https://x.com/'
-  if (platform === 'youtube') return 'https://www.youtube.com/'
-  if (platform === 'spotify') return 'https://artists.spotify.com/'
-  return 'https://www.google.com/'
-}
-
 async function verifySocialBrowserProfile(
   browserPaneManager: NonNullable<HandlerDeps['browserPaneManager']>,
   ref: { platform: string; profile: string },
@@ -253,7 +245,7 @@ async function verifySocialBrowserProfile(
   const urls = [String(page.url || ''), ...(Array.isArray(page.links) ? page.links : [])]
   const hasExpectedUrl = expectedUrl ? urls.some((url) => normalizeComparableUrl(url) === expectedUrl) : false
   const hasExpectedHandle = expectedHandle ? pageHasHandle(rawText, urls, expectedHandle) : false
-  const loggedIn = hasLoggedInSignal(ref.platform, rawText, urls)
+  const loggedIn = hasLoggedInSignal(ref.platform, rawText, String(page.url || ''))
 
   return {
     platform: ref.platform,
@@ -268,41 +260,6 @@ async function verifySocialBrowserProfile(
     },
     checkedAt: new Date().toISOString(),
   }
-}
-
-function hasLoggedInSignal(platform: string, text: string, urls: string[]): boolean {
-  const lower = text.toLowerCase()
-  if (platform === 'instagram') {
-    return urls.some((url) => /instagram\.com\/(direct|accounts\/edit|create)/i.test(url))
-      || /\b(home|messages|notifications|create|profile)\b/i.test(text)
-  }
-  if (platform === 'x') {
-    return urls.some((url) => /x\.com\/(compose|home|messages|notifications|settings)/i.test(url))
-      || /\b(post|messages|notifications|premium)\b/i.test(text)
-  }
-  if (platform === 'tiktok') {
-    return urls.some((url) => /tiktok\.com\/(upload|messages|setting|creator-center)/i.test(url))
-      || /\b(upload|messages|profile|following)\b/i.test(text)
-  }
-  if (platform === 'youtube') {
-    return urls.some((url) => /youtube\.com\/(feed|account|channel|@|upload|studio)/i.test(url))
-      || lower.includes('create') || lower.includes('your channel')
-  }
-  if (platform === 'spotify') {
-    return urls.some((url) => /artists\.spotify\.com\/(c|home|music|audience|profile|roster)/i.test(url)
-      || /open\.spotify\.com\/(collection|playlist)/i.test(url))
-      || lower.includes('spotify for artists') || lower.includes('your library') || lower.includes('create playlist')
-  }
-  return false
-}
-
-function isSocialPlatformUrl(platform: string, value: string): boolean {
-  if (platform === 'instagram') return /(^|\/\/)(www\.)?instagram\.com\//i.test(value)
-  if (platform === 'tiktok') return /(^|\/\/)(www\.)?tiktok\.com\//i.test(value)
-  if (platform === 'x') return /(^|\/\/)(www\.)?(x|twitter)\.com\//i.test(value)
-  if (platform === 'youtube') return /(^|\/\/)(www\.)?youtube\.com\//i.test(value)
-  if (platform === 'spotify') return /(^|\/\/)([a-z]+\.)?spotify\.com\//i.test(value)
-  return false
 }
 
 function wait(ms: number): Promise<void> {

@@ -15082,20 +15082,20 @@ Return paid-ads findings in this order:
   "meta": {
     "name": "Spotify Playlist Strategist — playbook",
     "version": "1.0.0",
-    "updated": "2026-07-08",
+    "updated": "2026-07-09",
     "purpose": "The strategy an agent uses to build an artist-curated Spotify playlist (the artist's songs mixed with similar artists, posted on their profile) that grows streams honestly. Turns the app's existing artist context — sound/style + a list of similar artists — into a concrete, algorithm-friendly tracklist and a promotable playlist package.",
     "honest_framing": "An artist-curated playlist is a LEGIT but MODEST lever. Its real value is: (1) manufacturing qualified CO-LISTENING context — your track credibly sequenced next to genuine audience-neighbors; (2) earning ENGAGEMENT (saves, low skips, completion, follows); (3) feeding Spotify's collaborative-filtering 'organizational similarity' and shaping your 'Fans Also Like' neighborhood; (4) growing an owned following you can re-activate. It is NOT a switch that triggers Discover Weekly / Release Radar, and a single artist playlist does not by itself 'train the algorithm.' Frame the value truthfully.",
     "evidence_key": {
-      "EVIDENCE": "stated by Spotify or well-documented across independent sources",
+      "EVIDENCE": "stated by Spotify or supported by a cited primary source",
       "PLAUSIBLE": "credible practitioner/expert consensus, mechanistically sound, not officially confirmed",
       "MYTH": "commonly repeated but weak, contradicted, or against Spotify TOS"
     },
     "app_context_note": "The app already gives the agent the target artist's sound/style descriptor and a list of similar artists. The playbook's job is to convert that into peer selection, track choice, sequencing, and a package — see the 'pipeline'.",
-    "api_caveat": "Spotify deprecated its audio-features, related-artists, recommendations, and featured-playlists API endpoints for new apps in Nov 2024. Third-party BPM/energy/key values may be approximate or stale — treat as directional and cross-check. [EVIDENCE]"
+    "api_caveat": "Spotify restricted audio-features, related-artists, recommendations, and featured-playlists endpoints for new and development-mode apps in Nov 2024, then made further Web API removals and field changes in Feb 2026. Treat third-party BPM/energy/key or related-artist data as directional and verify availability before relying on it. [EVIDENCE]"
   },
   "principles": [
-    {"id":"co-listening","name":"The goal is qualified co-listening, not raw plays","rule":"Design the playlist so real listeners stream your track IN-SESSION alongside genuine peers and engage. That co-listening + the user playlist-adds it inspires is the signal that feeds similarity models.","tag":"PLAUSIBLE","why":"Spotify's collaborative filtering learns 'two songs are similar if users put them on the same playlist' (trained on ~700M user playlists). Your posted list is a vehicle to generate that real behavior, not the signal itself."},
-    {"id":"engagement-over-volume","name":"Engagement beats volume","rule":"Optimize for saves, library/playlist adds, completion, low skips, follows — not stream count. Every construction choice should protect these.","tag":"EVIDENCE","why":"Explicit signals (saves/adds) and completion are the dominant ranking inputs; a skip before ~30s doesn't even count as a stream and reads negative."},
+    {"id":"co-listening","name":"The goal is qualified co-listening, not raw plays","rule":"Design the playlist so real listeners stream your track IN-SESSION alongside genuine peers and engage. That co-listening + the user playlist-adds it inspires may help Spotify learn a more accurate audience neighborhood.","tag":"PLAUSIBLE","why":"Spotify says Fans Also Like uses fan listening habits and explicitly recommends encouraging listening, saves, playlist adds, and creating artist playlists. It does not publish a formula or promise a ranking outcome."},
+    {"id":"engagement-over-volume","name":"Engagement beats volume","rule":"Optimize for genuine saves, library/playlist adds, completion, low skips, and follows — not raw stream count. Every construction choice should protect listener fit.","tag":"PLAUSIBLE","why":"Spotify publicly encourages listening, saves, and playlist adds to improve Fans Also Like data, but does not publish weights or confirm a dominant ranking order."},
     {"id":"relevance-density","name":"Relevance density over star power","rule":"The bulk of the list should be genuine sonic peers your target listener actually chooses; use only a couple of recognizable 'anchors' for trust.","tag":"PLAUSIBLE","why":"'Fans Also Like' rewards the SHARE of an artist's fanbase you overlap with, so you cannot piggyback on a superstar; and mismatched mega-artist crowds skip your track, suppressing you in that cluster."},
     {"id":"right-audience","name":"Drive the RIGHT audience to it","rule":"Promote to fans of the featured peers, via legitimate channels. Wrong-audience traffic can misclassify your sound.","tag":"PLAUSIBLE","why":"One relevant new listener is worth more than ten random ad streams; mismatched virality can drag your 'neighborhood' the wrong way."},
     {"id":"supporting-asset","name":"It's a supporting asset, not the engine","rule":"Treat the playlist as one piece around a steady release cadence and real fan engagement — not a growth engine by itself.","tag":"PLAUSIBLE","why":"Algorithmic placement is earned by broad engagement across many real sessions; playlists compound slowly and usually need legit promotion to get discovered at all."}
@@ -15133,7 +15133,7 @@ Return paid-ads findings in this order:
       {"signal":"'Fans Also Like' reciprocity","strength":"strong","source":"in-app related-artists panel","tag":"PLAUSIBLE","note":"A appears in B's panel AND vice versa → overlap likely genuine."},
       {"signal":"Shared genre / micro-genre tags","strength":"moderate","source":"Every Noise at Once, Chosic genre finder","tag":"PLAUSIBLE","note":"Necessary but coarse — same genre ≠ same audience."},
       {"signal":"Label mates / same scene / distributor","strength":"weak-moderate","source":"credits, label pages","tag":"PLAUSIBLE"},
-      {"signal":"Tour mates / bill-sharing","strength":"weak","source":"press, live listings","tag":"EVIDENCE (feeds FAL 'context')","note":"Real-world overlap; also feeds the 'Fans Also Like' descriptive-context component."}
+      {"signal":"Tour mates / bill-sharing","strength":"weak","source":"press, live listings","tag":"PLAUSIBLE","note":"Useful human evidence of scene overlap; Spotify does not state that this directly feeds Fans Also Like."}
     ],
     "finding_tools": [
       {"tool":"Spotify in-app 'Fans Also Like' + 'Discovered On'","use":"Ground truth for who shares your audience (public related-artists API deprecated Nov 2024 — in-app only).","tag":"EVIDENCE"},
@@ -15159,14 +15159,14 @@ Return paid-ads findings in this order:
     {"id":"cadence-over-tinkering","rule":"A consistent release cadence matters more than playlist tinkering — the playlist supports steady releases, it doesn't replace them.","tag":"EVIDENCE-adjacent"}
   ],
   "engagement_signals": [
-    {"signal":"Saves / library adds / playlist adds","weight":"strongest","tag":"EVIDENCE","note":"Explicit 'keeper' feedback outweighs passive listening."},
-    {"signal":"Completion / listen-through","weight":"very strong","tag":"EVIDENCE"},
-    {"signal":"Skips (esp. before ~30s)","weight":"strongest negative","tag":"EVIDENCE","note":"A stream under ~30s doesn't count and reads negative — the single biggest red flag; context (lean-back vs skim) changes how much a skip hurts."},
-    {"signal":"Shares, artist/album click-throughs, follows, repeat & downstream plays","weight":"positive","tag":"EVIDENCE"},
+    {"signal":"Saves / library adds / playlist adds","weight":"important","tag":"EVIDENCE","note":"Spotify explicitly recommends saves and playlist adds to generate better Fans Also Like data; it does not publish a precise weight."},
+    {"signal":"Completion / listen-through","weight":"likely positive","tag":"PLAUSIBLE"},
+    {"signal":"Skips","weight":"likely negative","tag":"PLAUSIBLE","note":"Poor listener fit and early exits are useful warning signs, but Spotify does not publish a universal skip-weight formula."},
+    {"signal":"Shares, artist/album click-throughs, follows, repeat & downstream plays","weight":"likely positive","tag":"PLAUSIBLE"},
     {"signal":"Vendor benchmark targets (directional only)","weight":"unofficial","tag":"PLAUSIBLE","note":"Single-vendor figures to beat, NOT confirmed thresholds: save rate ~4.5%+ (20%+ = strong), skip <~30% in first 30s, completion >~60%."}
   ],
   "guardrails": [
-    {"id":"no-artificial-streams","rule":"Never recommend or use bots, stream/click farms, purchased streams/followers, or repeat-looping your own tracks to inflate counts.","tag":"EVIDENCE","penalty":"Since Apr 1 2024 Spotify charges distributors ~$10 PER TRACK for flagrant artificial streaming; flagged streams earn no royalties, don't count publicly, and don't positively influence the algorithm. Escalates to playlist removal, account suspension, catalog removal — and it makes no difference whether you paid or a farm targeted you."},
+    {"id":"no-artificial-streams","rule":"Never recommend or use bots, stream/click farms, purchased streams/followers, or repeat-looping your own tracks to inflate counts.","tag":"EVIDENCE","penalty":"Since Apr 1 2024 Spotify charges labels and distributors per track when flagrant artificial streaming is detected. Spotify may withhold royalties, adjust public counts, and remove tracks from playlists; distributors may separately warn, charge fees, remove content, or suspend accounts. Spotify also provides a reporting path when an artist is targeted without consent."},
     {"id":"no-paid-placement","rule":"Never recommend pay-for-placement playlists, 'guaranteed streams/followers' services, or paid curator slots — prohibited and counterproductive (junk co-occurrence confuses your similarity profile).","tag":"EVIDENCE"},
     {"id":"no-follow-swaps","rule":"No sub-for-sub, follow farms, or multi-account/Family-plan looping schemes.","tag":"EVIDENCE"},
     {"id":"legit-promo-only","rule":"Legitimate promotion only: quality-targeted paid ads (Meta/Spotify Ads/Marquee), genuine sharing, pitching real curators and Spotify editorial (≥7 days pre-release via Spotify for Artists).","tag":"EVIDENCE"},
@@ -15200,6 +15200,7 @@ Return paid-ads findings in this order:
     "Spotify for Artists — Fans Also Like: https://support.spotify.com/us/artists/article/fans-also-like/",
     "Spotify for Artists — Artificial Streaming policy: https://artists.spotify.com/artificial-streaming",
     "Spotify for Developers — Web API changes (Nov 2024): https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api",
+    "Spotify for Developers — Web API changelog (Feb 2026): https://developer.spotify.com/documentation/web-api/references/changes/february-2026",
     "Two Story Melody — Building a Spotify Playlist Network (80/20, ordering, length): https://twostorymelody.com/spotify-playlist-network/",
     "Two Story Melody — How 'Fans Also Like' Works: https://twostorymelody.com/spotify-fans-also-like-explained/",
     "Ones To Watch — Playlist curating rules for indies (70/30, tiers): https://resources.onestowatch.com/spotify-playlist-curating-rules-indies/",
@@ -15294,9 +15295,9 @@ the research.
 Never recommend or assist with: bots, stream/click farms, purchased streams or followers, repeat-
 looping the artist's own tracks, pay-for-placement or "guaranteed streams/placement" services, paid
 curator slots, sub-for-sub, or multi-account/Family-plan looping. These are **against Spotify TOS and
-counterproductive** — flagged streams earn no royalties, don't count publicly, don't help the
-algorithm, and since Apr 2024 carry a ~$10-per-track penalty that escalates to account and catalog
-removal (and it doesn't matter whether the artist paid or a farm did it). If asked for any of this,
+counterproductive** — Spotify can withhold royalties, adjust public counts, remove tracks from
+playlists, and charge labels/distributors per track when flagrant artificial streaming is detected.
+Distributors may add their own fees or account/catalog consequences. If asked for any of this,
 decline plainly and redirect to the legitimate levers above. The whole tool only works by generating
 **real listeners genuinely engaging** — protect that.
 
@@ -22753,50 +22754,94 @@ Timestamp:
     slug: "spotify-analytics-snapshot",
     files: [
       {
+        path: "scripts/delta-brief.test.ts",
+        content: `import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+const script = path.join(import.meta.dir, "delta-brief.ts");
+
+function runDelta(snapshots: Record<string, unknown>[]) {
+  const root = mkdtempSync(path.join(tmpdir(), "spotify-delta-"));
+  const snapshotsDir = path.join(root, "snapshots");
+  const outDir = path.join(root, "briefs");
+  mkdirSync(snapshotsDir, { recursive: true });
+  snapshots.forEach((snapshot) => {
+    const date = String(snapshot.snapshotDate);
+    writeFileSync(path.join(snapshotsDir, \`\${date}-s4a.json\`), JSON.stringify(snapshot));
+  });
+  const result = Bun.spawnSync([process.execPath, script, "--snapshots-dir", snapshotsDir, "--out-dir", outDir]);
+  return { result, brief: result.exitCode === 0 ? readFileSync(path.join(outDir, \`\${snapshots.at(-1)?.snapshotDate}.md\`), "utf8") : "" };
+}
+
+describe("Spotify delta brief", () => {
+  test("discovers s4a snapshots and compares the optional browser schema", () => {
+    const base = { dataSource: "spotify-for-artists-browser", windowDays: 28, artist: { name: "Luna" }, tracks: [], sources: {}, partial: false, errors: [] };
+    const { result, brief } = runDelta([
+      { ...base, snapshotDate: "2026-07-08", metrics: { streams: 100, listeners: 50, followers: 20, saves: 4 } },
+      { ...base, snapshotDate: "2026-07-09", metrics: { streams: 120, listeners: 55, followers: 21, saves: null }, partial: true, errors: ["Missing metrics: saves."] },
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(brief).toContain("100 → 120");
+    expect(brief).toContain("Saves: delta unavailable");
+    expect(brief).toContain("Playlist-driving data was not captured");
+  });
+
+  test("writes a baseline instead of comparing incompatible data sources", () => {
+    const { result, brief } = runDelta([
+      { snapshotDate: "2026-07-08", dataSource: "spotify-web-api", artist: {}, metrics: { followers: 20 } },
+      { snapshotDate: "2026-07-09", dataSource: "spotify-for-artists-browser", artist: {}, metrics: { followers: 21 }, partial: true },
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(brief).toContain("No prior comparable snapshot");
+  });
+
+  test("does not compare an unknown reporting window to a known window", () => {
+    const base = { dataSource: "spotify-for-artists-browser", artist: { name: "Luna" }, tracks: [], sources: {}, partial: false, errors: [] };
+    const { result, brief } = runDelta([
+      { ...base, snapshotDate: "2026-07-08", windowDays: 28, metrics: { streams: 100 } },
+      { ...base, snapshotDate: "2026-07-09", windowDays: null, metrics: { streams: 200 }, partial: true },
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(brief).toContain("No prior comparable snapshot");
+    expect(brief).not.toContain("100 → 200");
+  });
+});
+`,
+      },
+      {
         path: "scripts/delta-brief.ts",
         content: `#!/usr/bin/env npx tsx
-/**
- * Spotify Delta Brief — compare latest two snapshots, emit a markdown brief.
- *
- * Reads \`data/spotify/snapshots/*.json\`, picks the latest two, computes
- * deltas, writes \`data/spotify/briefs/<latest-date>.md\`.
- *
- * No scraping. Pure data manipulation.
- */
+/** Spotify Delta Brief — compare the latest two compatible snapshots. */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+type OptionalNumber = number | null | undefined;
+type Track = { id?: string; name: string; streams?: OptionalNumber };
+type Playlist = { name: string; type?: string; listeners?: OptionalNumber };
 type Snapshot = {
   snapshotDate: string;
-  windowDays: number;
-  artist: { name: string; spotifyArtistId: string };
+  dataSource?: string;
+  windowDays?: OptionalNumber;
+  artist: { name?: string };
   metrics: {
-    streams: number;
-    listeners: number;
-    followers: number;
-    saveRate: number;
-    skipRate: number;
+    streams?: OptionalNumber;
+    listeners?: OptionalNumber;
+    followers?: OptionalNumber;
+    saves?: OptionalNumber;
+    saveRate?: OptionalNumber;
+    skipRate?: OptionalNumber;
   };
-  geo: { topCities: Array<{ city: string; country: string; listeners: number }> };
-  tracks: Array<{ id: string; name: string; streams: number; saves: number; playlistAdds: number }>;
-  playlistsDriving: Array<{ name: string; type: string; listeners: number; addedDate: string | null }>;
-  sources: {
-    algorithmic: number;
-    editorial: number;
-    listenerLibrary: number;
-    search: number;
-    otherListeners: number;
-  };
+  tracks: Track[];
+  playlistsDriving: Playlist[];
+  sources: Record<string, number>;
   partial: boolean;
   errors: string[];
 };
 
-type CliOptions = {
-  snapshotsDir: string;
-  outDir: string;
-  noiseFloorPct: number;
-};
+type CliOptions = { snapshotsDir: string; outDir: string; noiseFloorPct: number };
 
 const DEFAULT_SNAPSHOTS_DIR = "data/spotify/snapshots";
 const DEFAULT_OUT_DIR = "data/spotify/briefs";
@@ -22808,17 +22853,13 @@ function usage() {
 Options:
   --snapshots-dir <path>   Default: \${DEFAULT_SNAPSHOTS_DIR}
   --out-dir <path>         Default: \${DEFAULT_OUT_DIR}
-  --noise-floor <pct>      Movements below this percent flagged as 'noise'. Default: 10
+  --noise-floor <pct>      Movements below this percent flagged as noise. Default: 10
   --help
 \`;
 }
 
 function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = {
-    snapshotsDir: DEFAULT_SNAPSHOTS_DIR,
-    outDir: DEFAULT_OUT_DIR,
-    noiseFloorPct: 10,
-  };
+  const options: CliOptions = { snapshotsDir: DEFAULT_SNAPSHOTS_DIR, outDir: DEFAULT_OUT_DIR, noiseFloorPct: 10 };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const next = () => {
@@ -22830,8 +22871,7 @@ function parseArgs(argv: string[]): CliOptions {
     else if (arg === "--snapshots-dir") options.snapshotsDir = next();
     else if (arg === "--out-dir") options.outDir = next();
     else if (arg === "--noise-floor") options.noiseFloorPct = Number(next());
-    else if (arg === "--") continue;
-    else throw new Error(\`Unknown argument: \${arg}\`);
+    else if (arg !== "--") throw new Error(\`Unknown argument: \${arg}\`);
   }
   if (!Number.isFinite(options.noiseFloorPct) || options.noiseFloorPct < 0) {
     throw new Error("--noise-floor must be a nonnegative number.");
@@ -22841,205 +22881,182 @@ function parseArgs(argv: string[]): CliOptions {
 
 async function listSnapshotFiles(dir: string): Promise<string[]> {
   const stat = await fs.stat(dir).catch(() => null);
-  if (!stat || !stat.isDirectory()) return [];
-  const entries = await fs.readdir(dir);
-  return entries
-    .filter((name) => /^\\d{4}-\\d{2}-\\d{2}\\.json$/.test(name))
+  if (!stat?.isDirectory()) return [];
+  return (await fs.readdir(dir))
+    .filter((name) => /^\\d{4}-\\d{2}-\\d{2}(?:-(?:s4a|web-api))?\\.json$/.test(name))
     .sort();
 }
 
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 async function readSnapshot(filePath: string): Promise<Snapshot> {
-  const raw = await fs.readFile(filePath, "utf8");
-  return JSON.parse(raw) as Snapshot;
+  const parsed = JSON.parse(await fs.readFile(filePath, "utf8")) as unknown;
+  const root = record(parsed);
+  const snapshotDate = typeof root.snapshotDate === "string" ? root.snapshotDate : "";
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(snapshotDate)) throw new Error(\`Invalid snapshotDate in \${filePath}.\`);
+  const metricInput = record(root.metrics);
+  const artistInput = record(root.artist);
+  const sourceInput = record(root.sources);
+  const sources = Object.fromEntries(Object.entries(sourceInput)
+    .map(([key, value]) => [key, finiteNumber(value)] as const)
+    .filter((entry): entry is readonly [string, number] => entry[1] !== undefined));
+  const tracks = Array.isArray(root.tracks) ? root.tracks.flatMap((value) => {
+    const item = record(value);
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    return name ? [{ id: typeof item.id === "string" ? item.id : undefined, name, streams: finiteNumber(item.streams) }] : [];
+  }) : [];
+  const playlistsDriving = Array.isArray(root.playlistsDriving) ? root.playlistsDriving.flatMap((value) => {
+    const item = record(value);
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    return name ? [{ name, type: typeof item.type === "string" ? item.type : undefined, listeners: finiteNumber(item.listeners) }] : [];
+  }) : [];
+
+  return {
+    snapshotDate,
+    dataSource: typeof root.dataSource === "string" ? root.dataSource : undefined,
+    windowDays: finiteNumber(root.windowDays),
+    artist: { name: typeof artistInput.name === "string" ? artistInput.name : undefined },
+    metrics: {
+      streams: finiteNumber(metricInput.streams), listeners: finiteNumber(metricInput.listeners),
+      followers: finiteNumber(metricInput.followers), saves: finiteNumber(metricInput.saves),
+      saveRate: finiteNumber(metricInput.saveRate), skipRate: finiteNumber(metricInput.skipRate),
+    },
+    tracks,
+    playlistsDriving,
+    sources,
+    partial: root.partial === true,
+    errors: Array.isArray(root.errors) ? root.errors.filter((value): value is string => typeof value === "string") : [],
+  };
 }
 
 function pctChange(prev: number, curr: number): { abs: number; pct: number | null } {
   const abs = curr - prev;
-  if (prev === 0) return { abs, pct: curr === 0 ? 0 : null };
-  return { abs, pct: (abs / prev) * 100 };
+  return { abs, pct: prev === 0 ? (curr === 0 ? 0 : null) : (abs / prev) * 100 };
 }
 
 function fmtPct(pct: number | null): string {
-  if (pct === null) return "(from 0)";
-  const sign = pct >= 0 ? "+" : "";
-  return \`\${sign}\${pct.toFixed(1)}%\`;
-}
-
-function fmtDelta(prev: number, curr: number, label: string): string {
-  const { abs, pct } = pctChange(prev, curr);
-  const sign = abs >= 0 ? "+" : "";
-  return \`- \${label}: \${prev} → \${curr} (\${sign}\${abs}, \${fmtPct(pct)})\`;
-}
-
-function fmtRateDelta(prev: number, curr: number, label: string): string {
-  const abs = curr - prev;
-  const sign = abs >= 0 ? "+" : "";
-  const pct = prev === 0 ? null : (abs / prev) * 100;
-  return \`- \${label}: \${(prev * 100).toFixed(2)}% → \${(curr * 100).toFixed(2)}% (\${sign}\${(abs * 100).toFixed(2)} pts\${pct !== null ? \`, \${fmtPct(pct)}\` : ""})\`;
-}
-
-function topMovers(prev: Snapshot, curr: Snapshot, limit = 3): Array<{ name: string; delta: number; pct: number | null }> {
-  const prevMap = new Map(prev.tracks.map((t) => [t.id, t.streams]));
-  const movers: Array<{ name: string; delta: number; pct: number | null }> = [];
-  for (const track of curr.tracks) {
-    const prevStreams = prevMap.get(track.id) ?? 0;
-    const { abs, pct } = pctChange(prevStreams, track.streams);
-    movers.push({ name: track.name, delta: abs, pct });
-  }
-  movers.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-  return movers.slice(0, limit);
-}
-
-function playlistDiff(prev: Snapshot, curr: Snapshot): { added: typeof curr.playlistsDriving; removed: typeof prev.playlistsDriving } {
-  const prevNames = new Set(prev.playlistsDriving.map((p) => p.name));
-  const currNames = new Set(curr.playlistsDriving.map((p) => p.name));
-  const added = curr.playlistsDriving.filter((p) => !prevNames.has(p.name));
-  const removed = prev.playlistsDriving.filter((p) => !currNames.has(p.name));
-  return { added, removed };
+  if (pct === null) return "from 0";
+  return \`\${pct >= 0 ? "+" : ""}\${pct.toFixed(1)}%\`;
 }
 
 function noiseTag(pct: number | null, floor: number): string {
-  if (pct === null) return "";
-  return Math.abs(pct) < floor ? " _(below noise floor — likely insignificant)_" : "";
+  return pct !== null && Math.abs(pct) < floor ? " _(below noise floor — likely insignificant)_" : "";
+}
+
+function metricDelta(prev: OptionalNumber, curr: OptionalNumber, label: string, floor: number): string {
+  if (prev === undefined || prev === null || curr === undefined || curr === null) return \`- \${label}: delta unavailable (not captured in both snapshots)\`;
+  const delta = pctChange(prev, curr);
+  return \`- \${label}: \${prev} → \${curr} (\${delta.abs >= 0 ? "+" : ""}\${delta.abs}, \${fmtPct(delta.pct)})\${noiseTag(delta.pct, floor)}\`;
+}
+
+function rateDelta(prev: OptionalNumber, curr: OptionalNumber, label: string): string | null {
+  if (prev === undefined || prev === null || curr === undefined || curr === null) return null;
+  const abs = curr - prev;
+  return \`- \${label}: \${(prev * 100).toFixed(2)}% → \${(curr * 100).toFixed(2)}% (\${abs >= 0 ? "+" : ""}\${(abs * 100).toFixed(2)} pts)\`;
+}
+
+function trackKey(track: Track): string { return track.id || track.name.toLowerCase(); }
+
+function topMovers(prev: Snapshot, curr: Snapshot, limit = 3) {
+  const prevMap = new Map(prev.tracks.filter((track) => track.streams !== undefined).map((track) => [trackKey(track), track.streams as number]));
+  return curr.tracks.flatMap((track) => {
+    if (track.streams === undefined || track.streams === null) return [];
+    const previous = prevMap.get(trackKey(track));
+    if (previous === undefined) return [];
+    const delta = pctChange(previous, track.streams);
+    return [{ name: track.name, delta: delta.abs, pct: delta.pct }];
+  }).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, limit);
+}
+
+function playlistDiff(prev: Snapshot, curr: Snapshot) {
+  const prevNames = new Set(prev.playlistsDriving.map((playlist) => playlist.name));
+  const currNames = new Set(curr.playlistsDriving.map((playlist) => playlist.name));
+  return {
+    added: curr.playlistsDriving.filter((playlist) => !prevNames.has(playlist.name)),
+    removed: prev.playlistsDriving.filter((playlist) => !currNames.has(playlist.name)),
+  };
 }
 
 function buildBrief(prev: Snapshot, curr: Snapshot, noiseFloorPct: number): string {
-  const lines: string[] = [];
-  const partialNote = curr.partial ? " (current snapshot is partial)" : "";
-  lines.push(\`# Spotify Delta Brief — \${curr.snapshotDate}\${partialNote}\`);
-  lines.push("");
-  lines.push(\`Comparing **\${prev.snapshotDate}** → **\${curr.snapshotDate}** for \${curr.artist.name}.\`);
-  lines.push("");
+  const lines = [\`# Spotify Delta Brief — \${curr.snapshotDate}\${curr.partial ? " (current snapshot is partial)" : ""}\`, ""];
+  lines.push(\`Comparing **\${prev.snapshotDate}** → **\${curr.snapshotDate}** for \${curr.artist.name || prev.artist.name || "the connected artist"}.\`, "");
+  if (curr.partial && curr.errors.length) lines.push(\`> **Partial snapshot.** Errors: \${curr.errors.join("; ")}\`, "");
 
-  if (curr.partial && curr.errors.length > 0) {
-    lines.push(\`> **Partial snapshot.** Errors: \${curr.errors.join("; ")}\`);
-    lines.push("");
-  }
+  lines.push("## Aggregate Metrics", "");
+  lines.push(metricDelta(prev.metrics.streams, curr.metrics.streams, "Streams", noiseFloorPct));
+  lines.push(metricDelta(prev.metrics.listeners, curr.metrics.listeners, "Listeners", noiseFloorPct));
+  lines.push(metricDelta(prev.metrics.followers, curr.metrics.followers, "Followers", noiseFloorPct));
+  lines.push(metricDelta(prev.metrics.saves, curr.metrics.saves, "Saves", noiseFloorPct));
+  const rates = [rateDelta(prev.metrics.saveRate, curr.metrics.saveRate, "Save rate"), rateDelta(prev.metrics.skipRate, curr.metrics.skipRate, "Skip rate")].filter(Boolean);
+  lines.push(...rates as string[], "");
 
-  lines.push("## Aggregate Metrics");
-  lines.push("");
-  const streamsDelta = pctChange(prev.metrics.streams, curr.metrics.streams);
-  const listenersDelta = pctChange(prev.metrics.listeners, curr.metrics.listeners);
-  const followersDelta = pctChange(prev.metrics.followers, curr.metrics.followers);
-  lines.push(\`\${fmtDelta(prev.metrics.streams, curr.metrics.streams, "Streams")}\${noiseTag(streamsDelta.pct, noiseFloorPct)}\`);
-  lines.push(\`\${fmtDelta(prev.metrics.listeners, curr.metrics.listeners, "Listeners")}\${noiseTag(listenersDelta.pct, noiseFloorPct)}\`);
-  lines.push(\`\${fmtDelta(prev.metrics.followers, curr.metrics.followers, "Followers")}\${noiseTag(followersDelta.pct, noiseFloorPct)}\`);
-  lines.push(fmtRateDelta(prev.metrics.saveRate, curr.metrics.saveRate, "Save rate"));
-  lines.push(fmtRateDelta(prev.metrics.skipRate, curr.metrics.skipRate, "Skip rate"));
-  lines.push("");
-
-  lines.push("## Top Track Movement");
-  lines.push("");
-  const movers = topMovers(prev, curr, 3);
-  if (movers.length === 0) {
-    lines.push("- No tracks recorded in current snapshot.");
-  } else {
-    for (const mover of movers) {
-      const sign = mover.delta >= 0 ? "+" : "";
-      lines.push(\`- \${mover.name}: \${sign}\${mover.delta} streams (\${fmtPct(mover.pct)})\`);
-    }
-  }
-  lines.push("");
+  lines.push("## Top Track Movement", "");
+  const movers = topMovers(prev, curr);
+  lines.push(...(movers.length ? movers.map((mover) => \`- \${mover.name}: \${mover.delta >= 0 ? "+" : ""}\${mover.delta} streams (\${fmtPct(mover.pct)})\`) : ["- No comparable per-track stream counts captured."]), "");
 
   const { added, removed } = playlistDiff(prev, curr);
-  lines.push("## Playlist Changes");
-  lines.push("");
-  if (added.length === 0 && removed.length === 0) {
-    lines.push("- No additions or removals.");
-  }
-  if (added.length > 0) {
-    lines.push("**Added:**");
-    for (const p of added) lines.push(\`- \${p.name} (\${p.type}) — \${p.listeners} listeners\`);
-  }
-  if (removed.length > 0) {
-    lines.push(added.length > 0 ? "" : "");
-    lines.push("**Removed (anomaly — investigate):**");
-    for (const p of removed) lines.push(\`- \${p.name} (\${p.type}) — was \${p.listeners} listeners\`);
-  }
+  lines.push("## Playlist Changes", "");
+  if (!prev.playlistsDriving.length && !curr.playlistsDriving.length) lines.push("- Playlist-driving data was not captured.");
+  else if (!added.length && !removed.length) lines.push("- No additions or removals.");
+  if (added.length) lines.push("**Added:**", ...added.map((playlist) => \`- \${playlist.name}\${playlist.type ? \` (\${playlist.type})\` : ""}\`));
+  if (removed.length) lines.push("**Removed (anomaly — investigate):**", ...removed.map((playlist) => \`- \${playlist.name}\${playlist.type ? \` (\${playlist.type})\` : ""}\`));
   lines.push("");
 
-  lines.push("## Source Of Streams");
-  lines.push("");
-  const srcDelta = (key: keyof Snapshot["sources"], label: string) => {
-    const prevV = prev.sources[key];
-    const currV = curr.sources[key];
-    const abs = currV - prevV;
-    const sign = abs >= 0 ? "+" : "";
-    return \`- \${label}: \${(prevV * 100).toFixed(1)}% → \${(currV * 100).toFixed(1)}% (\${sign}\${(abs * 100).toFixed(1)} pts)\`;
-  };
-  lines.push(srcDelta("algorithmic", "Algorithmic"));
-  lines.push(srcDelta("editorial", "Editorial"));
-  lines.push(srcDelta("listenerLibrary", "Listener libraries"));
-  lines.push(srcDelta("search", "Search"));
-  lines.push(srcDelta("otherListeners", "Other listener playlists"));
-  lines.push("");
+  lines.push("## Source Of Streams", "");
+  const sourceKeys = [...new Set([...Object.keys(prev.sources), ...Object.keys(curr.sources)])].sort();
+  lines.push(...(sourceKeys.length ? sourceKeys.map((key) => metricDelta(prev.sources[key], curr.sources[key], key, noiseFloorPct)) : ["- Source-of-streams data was not captured."]), "");
 
-  lines.push("## Interpretation");
+  lines.push("## Interpretation", "");
+  const streamDelta = prev.metrics.streams !== undefined && curr.metrics.streams !== undefined
+    ? pctChange(prev.metrics.streams as number, curr.metrics.streams as number).pct : null;
+  if (streamDelta !== null && Math.abs(streamDelta) >= noiseFloorPct) {
+    lines.push(\`- Streams \${streamDelta > 0 ? "up" : "down"} \${Math.abs(streamDelta).toFixed(1)}%. Review track and source movement before acting.\`);
+  } else if (removed.length) lines.push(\`- \${removed.length} playlist\${removed.length === 1 ? "" : "s"} dropped; investigate the change.\`);
+  else lines.push("- No confirmed movement above the noise floor in the comparable captured metrics.");
   lines.push("");
-  const interpretations: string[] = [];
-  if (streamsDelta.pct !== null && Math.abs(streamsDelta.pct) >= noiseFloorPct) {
-    interpretations.push(streamsDelta.pct > 0
-      ? \`Streams up \${streamsDelta.pct.toFixed(1)}%. Look at top movers to see what carried it.\`
-      : \`Streams down \${Math.abs(streamsDelta.pct).toFixed(1)}%. Check playlist removals and source-of-streams shifts.\`);
-  }
-  if (removed.length > 0) {
-    interpretations.push(\`\${removed.length} playlist\${removed.length === 1 ? "" : "s"} dropped. Anomaly watcher will surface this — investigate before next slate.\`);
-  }
-  if (curr.sources.editorial - prev.sources.editorial > 0.05) {
-    interpretations.push(\`Editorial share grew >5pts. Real lift, but track for sustainability — editorial features are not durable.\`);
-  }
-  if (interpretations.length === 0) {
-    interpretations.push("No movement above noise floor. Stable window.");
-  }
-  for (const line of interpretations) lines.push(\`- \${line}\`);
-  lines.push("");
-
   return lines.join("\\n");
+}
+
+function baselineBrief(snapshot: Snapshot): string {
+  const metric = (label: string, value: OptionalNumber) => \`- \${label}: \${value ?? "not captured"}\`;
+  return [\`# Spotify Delta Brief — \${snapshot.snapshotDate}\`, "", "No prior comparable snapshot. Baseline captured.", "",
+    metric("Streams", snapshot.metrics.streams), metric("Listeners", snapshot.metrics.listeners),
+    metric("Followers", snapshot.metrics.followers), metric("Saves", snapshot.metrics.saves), ""].join("\\n");
+}
+
+function compatible(previous: Snapshot, current: Snapshot): boolean {
+  if ((previous.dataSource || "unknown") !== (current.dataSource || "unknown")) return false;
+  return previous.windowDays !== undefined
+    && current.windowDays !== undefined
+    && previous.windowDays === current.windowDays;
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const files = await listSnapshotFiles(options.snapshotsDir);
-  if (files.length === 0) {
-    throw new Error(\`No snapshots found in \${options.snapshotsDir}.\`);
-  }
+  if (!files.length) throw new Error(\`No snapshots found in \${options.snapshotsDir}.\`);
+  const snapshots = await Promise.all(files.map(async (file) => ({ file, snapshot: await readSnapshot(path.join(options.snapshotsDir, file)) })));
+  snapshots.sort((a, b) => a.snapshot.snapshotDate.localeCompare(b.snapshot.snapshotDate) || a.file.localeCompare(b.file));
+  const current = snapshots.at(-1);
+  if (!current) throw new Error(\`No snapshots found in \${options.snapshotsDir}.\`);
+  const previous = snapshots.slice(0, -1).reverse().find((candidate) => compatible(candidate.snapshot, current.snapshot));
 
   await fs.mkdir(options.outDir, { recursive: true });
-
-  if (files.length === 1) {
-    const firstFile = files[0];
-    if (!firstFile) throw new Error(\`No snapshots found in \${options.snapshotsDir}.\`);
-    const snapshot = await readSnapshot(path.join(options.snapshotsDir, firstFile));
-    const brief = \`# Spotify Delta Brief — \${snapshot.snapshotDate}\\n\\nNo prior snapshot. Baseline captured.\\n\\n- Streams: \${snapshot.metrics.streams}\\n- Listeners: \${snapshot.metrics.listeners}\\n- Followers: \${snapshot.metrics.followers}\\n- Save rate: \${(snapshot.metrics.saveRate * 100).toFixed(2)}%\\n- Skip rate: \${(snapshot.metrics.skipRate * 100).toFixed(2)}%\\n\`;
-    const briefPath = path.join(options.outDir, \`\${snapshot.snapshotDate}.md\`);
-    await fs.writeFile(briefPath, brief);
-    console.log(JSON.stringify({ status: "baseline_brief", path: briefPath }, null, 2));
-    return;
-  }
-
-  const latest = files[files.length - 1];
-  const previous = files[files.length - 2];
-  if (!latest || !previous) {
-    throw new Error(\`At least two snapshots are required in \${options.snapshotsDir}.\`);
-  }
-  const prevSnapshot = await readSnapshot(path.join(options.snapshotsDir, previous));
-  const currSnapshot = await readSnapshot(path.join(options.snapshotsDir, latest));
-
-  const brief = buildBrief(prevSnapshot, currSnapshot, options.noiseFloorPct);
-  const briefPath = path.join(options.outDir, \`\${currSnapshot.snapshotDate}.md\`);
-  await fs.writeFile(briefPath, brief);
-
-  console.log(JSON.stringify({
-    status: "delta_brief_written",
-    path: briefPath,
-    compared: { previous: prevSnapshot.snapshotDate, current: currSnapshot.snapshotDate },
-  }, null, 2));
+  const briefPath = path.join(options.outDir, \`\${current.snapshot.snapshotDate}.md\`);
+  await fs.writeFile(briefPath, previous ? buildBrief(previous.snapshot, current.snapshot, options.noiseFloorPct) : baselineBrief(current.snapshot));
+  console.log(JSON.stringify(previous ? {
+    status: "delta_brief_written", path: briefPath,
+    compared: { previous: previous.snapshot.snapshotDate, current: current.snapshot.snapshotDate },
+  } : { status: "baseline_brief", path: briefPath }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
 `,
       },
       {
@@ -23406,15 +23423,17 @@ node src/social.mjs profile status spotify --profile <id> --live --json
 node src/social.mjs snapshot spotify --profile <id> --json
 \`\`\`
 
-3. Run the returned \`browserPlan\` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams.
+3. Run the returned \`browserPlan\` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Save the observed values as JSON under \`$CRAFT_WORKSPACE_PATH/data/spotify/captures/\`.
 
 4. Normalize and save the captured numbers:
 
 \`\`\`bash
 node src/social.mjs snapshot spotify --profile <id> \\
-  --capture-json '<captured-json>' \\
-  --out data/spotify/snapshots/<YYYY-MM-DD>-s4a.json --json
+  --capture-file "$CRAFT_WORKSPACE_PATH/data/spotify/captures/<YYYY-MM-DD>.json" \\
+  --workspace "$CRAFT_WORKSPACE_PATH" --json
 \`\`\`
+
+The default output is \`data/spotify/snapshots/<YYYY-MM-DD>-s4a.json\` inside the explicit workspace. Relative \`--out\` paths are also workspace-relative. Existing snapshots are immutable and finalization fails closed if the target already exists.
 
 5. Write the returned \`contextPayload\` as the \`artist-spotify-snapshot\` context doc.
 6. Run \`delta-brief.ts\` only when there are two comparable snapshots of the same data source.
@@ -23438,7 +23457,9 @@ node src/social.mjs snapshot spotify --profile <id> \\
 }
 \`\`\`
 
-Any metric not visible on the page is \`null\`, and the snapshot is marked \`partial: true\` with the missing fields listed in \`errors\`.
+Any metric not visible on the page is \`null\`, and the snapshot is marked \`partial: true\` with the missing fields listed in \`errors\`. If the reporting window is unavailable, \`windowDays\` is also \`null\`. If the capture date is unavailable or invalid, finalization uses today's date only for safe file ownership and records that fallback in \`errors\`.
+
+\`delta-brief.ts\` discovers legacy \`<date>.json\`, API \`<date>-web-api.json\`, and browser \`<date>-s4a.json\` snapshots. It compares only compatible data sources/reporting windows and treats missing rates, playlists, tracks, sources, or metrics as unavailable rather than zero.
 
 ## Failure Handling
 
@@ -23450,7 +23471,7 @@ Any metric not visible on the page is \`null\`, and the snapshot is marked \`par
 ## Never
 
 - Never fabricate streams, listeners, followers, saves, cities, tracks, or source percentages.
-- Never modify a past snapshot.
+- Never modify a past snapshot. Snapshot writes fail closed when the target already exists.
 - Never bypass approvals — this skill is read-only.
 - Never silently drop a tracked playlist feature; surface its disappearance as an anomaly.
 `,
@@ -23461,61 +23482,96 @@ Any metric not visible on the page is \`null\`, and the snapshot is marked \`par
     slug: "spotify-anomaly-watch",
     files: [
       {
+        path: "scripts/watch.test.ts",
+        content: `import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+const script = path.join(import.meta.dir, "watch.ts");
+
+function runWatch(files: Record<string, unknown>) {
+  const root = mkdtempSync(path.join(tmpdir(), "spotify-watch-"));
+  const snapshotsDir = path.join(root, "snapshots");
+  const alertsDir = path.join(root, "alerts");
+  mkdirSync(snapshotsDir, { recursive: true });
+  for (const [name, snapshot] of Object.entries(files)) writeFileSync(path.join(snapshotsDir, name), JSON.stringify(snapshot));
+  const result = Bun.spawnSync([process.execPath, script, "--snapshots-dir", snapshotsDir, "--alerts-dir", alertsDir, "--ceo-inbox", ""]);
+  const stdout = result.stdout.toString();
+  const summary = result.exitCode === 0 ? JSON.parse(stdout) as { alertPath: string; snapshotsCompared: number } : null;
+  return { result, summary, alert: summary ? readFileSync(summary.alertPath, "utf8") : "" };
+}
+
+describe("Spotify anomaly watch", () => {
+  test("discovers browser snapshots, preserves partial alerts, and skips unavailable fields", () => {
+    const base = { dataSource: "spotify-for-artists-browser", windowDays: 28, tracks: [], sources: {}, partial: false, errors: [] };
+    const { result, summary, alert } = runWatch({
+      "2026-07-07-s4a.json": { ...base, snapshotDate: "2026-07-07", metrics: { streams: 100, listeners: 50 } },
+      "2026-07-08-s4a.json": { ...base, snapshotDate: "2026-07-08", metrics: { streams: 80, listeners: 45 } },
+      "2026-07-09-s4a.json": { ...base, snapshotDate: "2026-07-09", metrics: { streams: 50, listeners: 44, saveRate: null }, partial: true, errors: ["Missing metrics: saves."] },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(summary?.snapshotsCompared).toBe(3);
+    expect(alert).toContain("partial-snapshot");
+    expect(alert).toContain("stream-drop");
+    expect(alert).not.toContain("NaN");
+  });
+
+  test("treats an incompatible latest source as a baseline", () => {
+    const { result, summary, alert } = runWatch({
+      "2026-07-08-web-api.json": { snapshotDate: "2026-07-08", dataSource: "spotify-web-api", windowDays: 0, metrics: { followers: 10 } },
+      "2026-07-09-s4a.json": { snapshotDate: "2026-07-09", dataSource: "spotify-for-artists-browser", windowDays: 28, metrics: { followers: 11 }, partial: true, errors: ["Missing metrics: streams."] },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(summary?.snapshotsCompared).toBe(1);
+    expect(alert).toContain("Only one compatible snapshot available");
+    expect(alert).toContain("partial-snapshot");
+  });
+
+  test("does not compare snapshots with unknown reporting windows", () => {
+    const base = { dataSource: "spotify-for-artists-browser", tracks: [], sources: {}, partial: false, errors: [] };
+    const { result, summary, alert } = runWatch({
+      "2026-07-08-s4a.json": { ...base, snapshotDate: "2026-07-08", windowDays: 28, metrics: { streams: 100 } },
+      "2026-07-09-s4a.json": { ...base, snapshotDate: "2026-07-09", windowDays: null, metrics: { streams: 10 }, partial: true },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(summary?.snapshotsCompared).toBe(1);
+    expect(alert).toContain("Only one compatible snapshot available");
+    expect(alert).not.toContain("stream-drop");
+  });
+});
+`,
+      },
+      {
         path: "scripts/watch.ts",
         content: `#!/usr/bin/env npx tsx
-/**
- * Spotify Anomaly Watch — daily check on existing snapshots.
- *
- * Reads data/spotify/snapshots/*.json. Compares latest to up-to-3 priors.
- * Flags severe / moderate / informational anomalies. Writes alerts file.
- * Severe items also appended to data/booth/agent-inbox/artist-ceo.md.
- */
+/** Spotify Anomaly Watch — inspect existing compatible snapshots without scraping. */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+type OptionalNumber = number | null | undefined;
+type Playlist = { name: string; type?: string; listeners?: OptionalNumber };
+type Track = { id?: string; name: string; streams?: OptionalNumber };
 type Snapshot = {
   snapshotDate: string;
-  windowDays: number;
-  artist: { name: string; spotifyArtistId: string };
-  metrics: {
-    streams: number;
-    listeners: number;
-    followers: number;
-    saveRate: number;
-    skipRate: number;
-  };
-  geo: { topCities: Array<{ city: string; country: string; listeners: number }> };
-  tracks: Array<{ id: string; name: string; streams: number; saves: number; playlistAdds: number }>;
-  playlistsDriving: Array<{ name: string; type: string; listeners: number; addedDate: string | null }>;
-  sources: {
-    algorithmic: number;
-    editorial: number;
-    listenerLibrary: number;
-    search: number;
-    otherListeners: number;
-  };
+  dataSource?: string;
+  windowDays?: OptionalNumber;
+  metrics: Record<"streams" | "listeners" | "followers" | "saves" | "saveRate" | "skipRate", OptionalNumber>;
+  tracks: Track[];
+  tracksCaptured: boolean;
+  playlistsDriving: Playlist[];
+  playlistsCaptured: boolean;
+  sources: Record<string, number>;
   partial: boolean;
   errors: string[];
 };
-
 type Severity = "severe" | "moderate" | "informational";
-
-type Anomaly = {
-  severity: Severity;
-  kind: string;
-  message: string;
-};
-
+type Anomaly = { severity: Severity; kind: string; message: string };
 type CliOptions = {
-  snapshotsDir: string;
-  alertsDir: string;
-  ceoInbox: string | null;
-  streamDropPct: number;
-  listenerDropPct: number;
-  saveRateDropPct: number;
-  skipRateSpikePct: number;
-  playlistMinListeners: number;
+  snapshotsDir: string; alertsDir: string; ceoInbox: string | null;
+  streamDropPct: number; listenerDropPct: number; saveRateDropPct: number;
+  skipRateSpikePct: number; playlistMinListeners: number;
 };
 
 const DEFAULT_SNAPSHOTS_DIR = "data/spotify/snapshots";
@@ -23523,343 +23579,209 @@ const DEFAULT_ALERTS_DIR = "data/spotify/alerts";
 const DEFAULT_CEO_INBOX = "data/booth/agent-inbox/artist-ceo.md";
 
 function usage() {
-  return \`Usage:
-  npx tsx skills/spotify-anomaly-watch/scripts/watch.ts [options]
+  return \`Usage: bun packages/shared/src/skills/bundled/spotify-anomaly-watch/scripts/watch.ts [options]
 
-Options:
-  --snapshots-dir <path>           Default: \${DEFAULT_SNAPSHOTS_DIR}
-  --alerts-dir <path>              Default: \${DEFAULT_ALERTS_DIR}
-  --ceo-inbox <path>               Default: \${DEFAULT_CEO_INBOX} (use "" to disable)
-  --stream-drop-pct <n>            Sustained stream drop threshold. Default: 30
-  --listener-drop-pct <n>          Sustained listener drop threshold. Default: 30
-  --save-rate-drop-pct <n>         Save rate drop threshold. Default: 20
-  --skip-rate-spike-pct <n>        Skip rate spike threshold. Default: 20
-  --playlist-min-listeners <n>     Playlist removals below this listener count are ignored as noise. Default: 100
-  --help
+  --snapshots-dir <path>       Default: \${DEFAULT_SNAPSHOTS_DIR}
+  --alerts-dir <path>          Default: \${DEFAULT_ALERTS_DIR}
+  --ceo-inbox <path>           Default: \${DEFAULT_CEO_INBOX} (use "" to disable)
+  --stream-drop-pct <n>        Default: 30
+  --listener-drop-pct <n>      Default: 30
+  --save-rate-drop-pct <n>     Default: 20
+  --skip-rate-spike-pct <n>    Default: 20
+  --playlist-min-listeners <n> Default: 100
 \`;
 }
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
-    snapshotsDir: DEFAULT_SNAPSHOTS_DIR,
-    alertsDir: DEFAULT_ALERTS_DIR,
-    ceoInbox: DEFAULT_CEO_INBOX,
-    streamDropPct: 30,
-    listenerDropPct: 30,
-    saveRateDropPct: 20,
-    skipRateSpikePct: 20,
-    playlistMinListeners: 100,
+    snapshotsDir: DEFAULT_SNAPSHOTS_DIR, alertsDir: DEFAULT_ALERTS_DIR, ceoInbox: DEFAULT_CEO_INBOX,
+    streamDropPct: 30, listenerDropPct: 30, saveRateDropPct: 20, skipRateSpikePct: 20, playlistMinListeners: 100,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    const next = () => {
-      const value = argv[++i];
-      if (value === undefined) throw new Error(\`Missing value for \${arg}\`);
-      return value;
-    };
+    const next = () => { const value = argv[++i]; if (value === undefined) throw new Error(\`Missing value for \${arg}\`); return value; };
     if (arg === "--help" || arg === "-h") { console.log(usage()); process.exit(0); }
     else if (arg === "--snapshots-dir") options.snapshotsDir = next();
     else if (arg === "--alerts-dir") options.alertsDir = next();
-    else if (arg === "--ceo-inbox") {
-      const v = next();
-      options.ceoInbox = v === "" ? null : v;
-    }
+    else if (arg === "--ceo-inbox") { const value = next(); options.ceoInbox = value || null; }
     else if (arg === "--stream-drop-pct") options.streamDropPct = Number(next());
     else if (arg === "--listener-drop-pct") options.listenerDropPct = Number(next());
     else if (arg === "--save-rate-drop-pct") options.saveRateDropPct = Number(next());
     else if (arg === "--skip-rate-spike-pct") options.skipRateSpikePct = Number(next());
     else if (arg === "--playlist-min-listeners") options.playlistMinListeners = Number(next());
-    else if (arg === "--") continue;
-    else throw new Error(\`Unknown argument: \${arg}\`);
+    else if (arg !== "--") throw new Error(\`Unknown argument: \${arg}\`);
   }
   for (const key of ["streamDropPct", "listenerDropPct", "saveRateDropPct", "skipRateSpikePct", "playlistMinListeners"] as const) {
-    if (!Number.isFinite(options[key]) || options[key] < 0) {
-      throw new Error(\`--\${key.replace(/[A-Z]/g, (c) => \`-\${c.toLowerCase()}\`)} must be a nonnegative number.\`);
-    }
+    if (!Number.isFinite(options[key]) || options[key] < 0) throw new Error(\`\${key} must be a nonnegative number.\`);
   }
   return options;
 }
 
 async function listSnapshotFiles(dir: string): Promise<string[]> {
   const stat = await fs.stat(dir).catch(() => null);
-  if (!stat || !stat.isDirectory()) return [];
-  const entries = await fs.readdir(dir);
-  return entries
-    .filter((name) => /^\\d{4}-\\d{2}-\\d{2}\\.json$/.test(name))
-    .sort();
+  if (!stat?.isDirectory()) return [];
+  return (await fs.readdir(dir)).filter((name) => /^\\d{4}-\\d{2}-\\d{2}(?:-(?:s4a|web-api))?\\.json$/.test(name)).sort();
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 async function readSnapshot(filePath: string): Promise<Snapshot | { error: string; file: string }> {
   try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw) as Snapshot;
-  } catch (error) {
+    const root = record(JSON.parse(await fs.readFile(filePath, "utf8")) as unknown);
+    const snapshotDate = typeof root.snapshotDate === "string" ? root.snapshotDate : "";
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(snapshotDate)) throw new Error("missing or invalid snapshotDate");
+    const metrics = record(root.metrics);
+    const rawTracks = Array.isArray(root.tracks) ? root.tracks : [];
+    const rawPlaylists = Array.isArray(root.playlistsDriving) ? root.playlistsDriving : [];
+    const sources = Object.fromEntries(Object.entries(record(root.sources))
+      .map(([key, value]) => [key, finiteNumber(value)] as const)
+      .filter((entry): entry is readonly [string, number] => entry[1] !== undefined));
     return {
-      file: path.basename(filePath),
-      error: error instanceof Error ? error.message : String(error),
+      snapshotDate,
+      dataSource: typeof root.dataSource === "string" ? root.dataSource : undefined,
+      windowDays: finiteNumber(root.windowDays),
+      metrics: {
+        streams: finiteNumber(metrics.streams), listeners: finiteNumber(metrics.listeners),
+        followers: finiteNumber(metrics.followers), saves: finiteNumber(metrics.saves),
+        saveRate: finiteNumber(metrics.saveRate), skipRate: finiteNumber(metrics.skipRate),
+      },
+      tracks: rawTracks.flatMap((value) => { const item = record(value); const name = typeof item.name === "string" ? item.name.trim() : ""; return name ? [{ id: typeof item.id === "string" ? item.id : undefined, name, streams: finiteNumber(item.streams) }] : []; }),
+      tracksCaptured: Array.isArray(root.tracks),
+      playlistsDriving: rawPlaylists.flatMap((value) => { const item = record(value); const name = typeof item.name === "string" ? item.name.trim() : ""; return name ? [{ name, type: typeof item.type === "string" ? item.type : undefined, listeners: finiteNumber(item.listeners) }] : []; }),
+      playlistsCaptured: Array.isArray(root.playlistsDriving),
+      sources,
+      partial: root.partial === true,
+      errors: Array.isArray(root.errors) ? root.errors.filter((value): value is string => typeof value === "string") : [],
     };
+  } catch (error) {
+    return { file: path.basename(filePath), error: error instanceof Error ? error.message : String(error) };
   }
 }
 
 function pctChange(prev: number, curr: number): number | null {
-  if (prev === 0) return curr === 0 ? 0 : null;
-  return ((curr - prev) / prev) * 100;
+  return prev === 0 ? (curr === 0 ? 0 : null) : ((curr - prev) / prev) * 100;
 }
+function available(value: OptionalNumber): value is number { return typeof value === "number" && Number.isFinite(value); }
 
-/**
- * A drop is "sustained" if it occurred between two latest snapshots AND
- * the previous-vs-prior also showed a drop in the same direction. This
- * filters single-snapshot artifacts (Spotify recalculates retroactively).
- */
-function sustainedDrop(snaps: Snapshot[], pick: (s: Snapshot) => number, dropPct: number): boolean {
+function sustained(snaps: Snapshot[], pick: (snapshot: Snapshot) => OptionalNumber, threshold: number, direction: "drop" | "spike"): boolean {
   if (snaps.length < 2) return false;
-  const latestSnap = snaps[snaps.length - 1];
-  const prevSnap = snaps[snaps.length - 2];
-  if (!latestSnap || !prevSnap) return false;
-  const latest = pick(latestSnap);
-  const prev = pick(prevSnap);
-  const change1 = pctChange(prev, latest);
-  if (change1 === null || change1 > -dropPct) return false;
-  if (snaps.length < 3) return true; // only two snapshots — accept the single drop
-  const priorSnap = snaps[snaps.length - 3];
-  if (!priorSnap) return false;
-  const prior = pick(priorSnap);
-  const change2 = pctChange(prior, prev);
-  return change2 !== null && change2 < 0; // prior step also moved down
-}
-
-function sustainedSpike(snaps: Snapshot[], pick: (s: Snapshot) => number, spikePct: number): boolean {
-  if (snaps.length < 2) return false;
-  const latestSnap = snaps[snaps.length - 1];
-  const prevSnap = snaps[snaps.length - 2];
-  if (!latestSnap || !prevSnap) return false;
-  const latest = pick(latestSnap);
-  const prev = pick(prevSnap);
-  const change1 = pctChange(prev, latest);
-  if (change1 === null || change1 < spikePct) return false;
+  const latest = pick(snaps.at(-1)!);
+  const previous = pick(snaps.at(-2)!);
+  if (!available(latest) || !available(previous)) return false;
+  const change = pctChange(previous, latest);
+  if (change === null || (direction === "drop" ? change > -threshold : change < threshold)) return false;
   if (snaps.length < 3) return true;
-  const priorSnap = snaps[snaps.length - 3];
-  if (!priorSnap) return false;
-  const prior = pick(priorSnap);
-  const change2 = pctChange(prior, prev);
-  return change2 !== null && change2 > 0;
+  const prior = pick(snaps.at(-3)!);
+  if (!available(prior)) return false;
+  const priorChange = pctChange(prior, previous);
+  return priorChange !== null && (direction === "drop" ? priorChange < 0 : priorChange > 0);
+}
+
+function compatible(previous: Snapshot, current: Snapshot): boolean {
+  if ((previous.dataSource || "unknown") !== (current.dataSource || "unknown")) return false;
+  return previous.windowDays !== undefined
+    && current.windowDays !== undefined
+    && previous.windowDays === current.windowDays;
 }
 
 function detectAnomalies(snaps: Snapshot[], options: CliOptions): Anomaly[] {
   const anomalies: Anomaly[] = [];
-  if (snaps.length === 0) return anomalies;
-  const latest = snaps[snaps.length - 1];
+  const latest = snaps.at(-1);
   if (!latest) return anomalies;
-
-  if (latest.partial) {
-    anomalies.push({
-      severity: "informational",
-      kind: "partial-snapshot",
-      message: \`Latest snapshot is partial. Errors: \${latest.errors.join("; ") || "(unspecified)"}\`,
-    });
-  }
-
+  if (latest.partial) anomalies.push({ severity: "informational", kind: "partial-snapshot", message: \`Latest snapshot is partial. Errors: \${latest.errors.join("; ") || "(unspecified)"}\` });
   if (snaps.length < 2) {
-    anomalies.push({
-      severity: "informational",
-      kind: "baseline",
-      message: \`Only one snapshot available (\${latest.snapshotDate}). No comparisons yet.\`,
-    });
+    anomalies.push({ severity: "informational", kind: "baseline", message: \`Only one compatible snapshot available (\${latest.snapshotDate}). No comparisons yet.\` });
     return anomalies;
   }
+  const previous = snaps.at(-2)!;
+  const metricAlert = (key: keyof Snapshot["metrics"], threshold: number, severity: Severity, kind: string, label: string, direction: "drop" | "spike", rate = false) => {
+    if (!sustained(snaps, (snapshot) => snapshot.metrics[key], threshold, direction)) return;
+    const prev = previous.metrics[key]; const curr = latest.metrics[key];
+    if (!available(prev) || !available(curr)) return;
+    const change = pctChange(prev, curr); if (change === null) return;
+    const values = rate ? \`\${(prev * 100).toFixed(2)}% → \${(curr * 100).toFixed(2)}%\` : \`\${prev} → \${curr}\`;
+    anomalies.push({ severity, kind, message: \`\${label} \${direction === "drop" ? "dropped" : "spiked"} \${Math.abs(change).toFixed(1)}% (\${values}). Sustained.\` });
+  };
+  metricAlert("streams", options.streamDropPct, "severe", "stream-drop", "Streams", "drop");
+  metricAlert("listeners", options.listenerDropPct, "severe", "listener-drop", "Listeners", "drop");
+  metricAlert("saveRate", options.saveRateDropPct, "moderate", "save-rate-drop", "Save rate", "drop", true);
+  metricAlert("skipRate", options.skipRateSpikePct, "moderate", "skip-rate-spike", "Skip rate", "spike", true);
 
-  const previous = snaps[snaps.length - 2];
-  if (!previous) return anomalies;
-
-  // Sustained metric drops (need to look back further if available)
-  if (sustainedDrop(snaps, (s) => s.metrics.streams, options.streamDropPct)) {
-    const change = pctChange(previous.metrics.streams, latest.metrics.streams) ?? 0;
-    anomalies.push({
-      severity: "severe",
-      kind: "stream-drop",
-      message: \`Streams dropped \${Math.abs(change).toFixed(1)}% from \${previous.snapshotDate} → \${latest.snapshotDate} (\${previous.metrics.streams} → \${latest.metrics.streams}). Sustained over multiple snapshots.\`,
-    });
-  }
-  if (sustainedDrop(snaps, (s) => s.metrics.listeners, options.listenerDropPct)) {
-    const change = pctChange(previous.metrics.listeners, latest.metrics.listeners) ?? 0;
-    anomalies.push({
-      severity: "severe",
-      kind: "listener-drop",
-      message: \`Listeners dropped \${Math.abs(change).toFixed(1)}% (\${previous.metrics.listeners} → \${latest.metrics.listeners}). Sustained.\`,
-    });
-  }
-  if (sustainedDrop(snaps, (s) => s.metrics.saveRate, options.saveRateDropPct)) {
-    const change = pctChange(previous.metrics.saveRate, latest.metrics.saveRate) ?? 0;
-    anomalies.push({
-      severity: "moderate",
-      kind: "save-rate-drop",
-      message: \`Save rate dropped \${Math.abs(change).toFixed(1)}% (\${(previous.metrics.saveRate * 100).toFixed(2)}% → \${(latest.metrics.saveRate * 100).toFixed(2)}%). Sustained.\`,
-    });
-  }
-  if (sustainedSpike(snaps, (s) => s.metrics.skipRate, options.skipRateSpikePct)) {
-    const change = pctChange(previous.metrics.skipRate, latest.metrics.skipRate) ?? 0;
-    anomalies.push({
-      severity: "moderate",
-      kind: "skip-rate-spike",
-      message: \`Skip rate spiked \${change.toFixed(1)}% (\${(previous.metrics.skipRate * 100).toFixed(2)}% → \${(latest.metrics.skipRate * 100).toFixed(2)}%). Sustained.\`,
-    });
-  }
-
-  // Playlist removals (single-snapshot is enough; playlists don't recover on their own)
-  const prevPlaylistMap = new Map(previous.playlistsDriving.map((p) => [p.name, p]));
-  for (const removed of previous.playlistsDriving) {
-    if (removed.listeners < options.playlistMinListeners) continue;
-    if (!latest.playlistsDriving.find((p) => p.name === removed.name)) {
-      anomalies.push({
-        severity: "severe",
-        kind: "playlist-removed",
-        message: \`Removed from "\${removed.name}" (\${removed.type}, was \${removed.listeners} listeners) since \${previous.snapshotDate}. Investigate.\`,
-      });
+  if (previous.playlistsCaptured && latest.playlistsCaptured) {
+    for (const removed of previous.playlistsDriving) {
+      if (!available(removed.listeners) || removed.listeners < options.playlistMinListeners) continue;
+      if (!latest.playlistsDriving.some((playlist) => playlist.name === removed.name)) {
+        anomalies.push({ severity: "severe", kind: "playlist-removed", message: \`Removed from "\${removed.name}"\${removed.type ? \` (\${removed.type})\` : ""}, previously \${removed.listeners} listeners. Investigate.\` });
+      }
     }
   }
-
-  // Track disappearance (top track present last, missing now)
-  const prevTopTracks = [...previous.tracks].sort((a, b) => b.streams - a.streams).slice(0, 3);
-  for (const track of prevTopTracks) {
-    if (!latest.tracks.find((t) => t.id === track.id || t.name === track.name)) {
-      anomalies.push({
-        severity: "moderate",
-        kind: "track-disappeared",
-        message: \`Top track "\${track.name}" not present in latest snapshot. Could be metadata change or report shift.\`,
-      });
+  if (previous.tracksCaptured && latest.tracksCaptured) {
+    const topTracks = previous.tracks.filter((track) => available(track.streams)).sort((a, b) => (b.streams as number) - (a.streams as number)).slice(0, 3);
+    for (const track of topTracks) if (!latest.tracks.some((candidate) => (track.id && candidate.id === track.id) || candidate.name === track.name)) {
+      anomalies.push({ severity: "moderate", kind: "track-disappeared", message: \`Top track "\${track.name}" not present in latest snapshot. Could be metadata change or report shift.\` });
     }
   }
-
-  // Editorial dependency growth
-  const editorialGrowth = (latest.sources.editorial - previous.sources.editorial) * 100;
-  if (editorialGrowth > 10) {
-    anomalies.push({
-      severity: "informational",
-      kind: "editorial-dependency-up",
-      message: \`Editorial source share grew \${editorialGrowth.toFixed(1)}pts (\${(previous.sources.editorial * 100).toFixed(1)}% → \${(latest.sources.editorial * 100).toFixed(1)}%). Real lift, but editorial features are not durable — track for follow-through.\`,
-    });
+  const prevEditorial = previous.sources.editorial; const currEditorial = latest.sources.editorial;
+  if (available(prevEditorial) && available(currEditorial) && (currEditorial - prevEditorial) * 100 > 10) {
+    anomalies.push({ severity: "informational", kind: "editorial-dependency-up", message: \`Editorial source share grew \${((currEditorial - prevEditorial) * 100).toFixed(1)}pts.\` });
   }
-
   return anomalies;
 }
 
 function buildAlertMarkdown(latest: Snapshot, anomalies: Anomaly[], parseErrors: Array<{ file: string; error: string }>): string {
-  const lines: string[] = [];
-  lines.push(\`# Spotify Anomaly Alert — \${new Date().toISOString().slice(0, 10)}\`);
-  lines.push("");
-  lines.push(\`Latest snapshot: \\\`\${latest.snapshotDate}\\\`\`);
-  lines.push("");
-
-  if (parseErrors.length > 0) {
-    lines.push("## Parse Errors");
-    lines.push("");
-    for (const err of parseErrors) lines.push(\`- \${err.file}: \${err.error}\`);
-    lines.push("");
+  const lines = [\`# Spotify Anomaly Alert — \${new Date().toISOString().slice(0, 10)}\`, "", \`Latest snapshot: \\\`\${latest.snapshotDate}\\\`\`, ""];
+  if (parseErrors.length) lines.push("## Parse Errors", "", ...parseErrors.map((error) => \`- \${error.file}: \${error.error}\`), "");
+  for (const [severity, header] of [["severe", "## Severe — investigate this cycle"], ["moderate", "## Moderate — track"], ["informational", "## Informational"]] as const) {
+    const group = anomalies.filter((anomaly) => anomaly.severity === severity);
+    if (group.length) lines.push(header, "", ...group.map((anomaly) => \`- **\${anomaly.kind}** — \${anomaly.message}\`), "");
   }
-
-  const grouped: Record<Severity, Anomaly[]> = { severe: [], moderate: [], informational: [] };
-  for (const a of anomalies) grouped[a.severity].push(a);
-
-  const sections: Array<[Severity, string]> = [
-    ["severe", "## Severe — investigate this cycle"],
-    ["moderate", "## Moderate — track"],
-    ["informational", "## Informational"],
-  ];
-  for (const [severity, header] of sections) {
-    if (grouped[severity].length === 0) continue;
-    lines.push(header);
-    lines.push("");
-    for (const a of grouped[severity]) {
-      lines.push(\`- **\${a.kind}** — \${a.message}\`);
-    }
-    lines.push("");
-  }
-
-  if (anomalies.length === 0) {
-    lines.push("No anomalies detected. System is stable in this window.");
-    lines.push("");
-  }
-
+  if (!anomalies.length) lines.push("No anomalies detected. System is stable in this window.", "");
   return lines.join("\\n");
 }
 
-async function appendCeoInbox(inboxPath: string, latest: Snapshot, severeAnomalies: Anomaly[]) {
-  if (severeAnomalies.length === 0) return;
+async function appendCeoInbox(inboxPath: string, latest: Snapshot, severe: Anomaly[]) {
+  if (!severe.length) return;
   await fs.mkdir(path.dirname(inboxPath), { recursive: true });
-  const block: string[] = [];
-  block.push(\`## Spotify Anomaly Watch — \${new Date().toISOString()}\`);
-  block.push("");
-  block.push(\`Latest snapshot: \\\`\${latest.snapshotDate}\\\`\`);
-  block.push("");
-  for (const a of severeAnomalies) block.push(\`- **\${a.kind}** — \${a.message}\`);
-  block.push("");
-
-  const exists = await fs.stat(inboxPath).catch(() => null);
-  if (!exists) {
-    const title = path.basename(inboxPath, ".md").replace(/-/g, " ").replace(/\\b\\w/g, (c) => c.toUpperCase());
-    await fs.writeFile(inboxPath, \`# \${title}\\n\\n\${block.join("\\n")}\\n\`);
-    return;
-  }
-  const current = await fs.readFile(inboxPath, "utf8");
-  const sep = current.endsWith("\\n\\n") ? "" : current.endsWith("\\n") ? "\\n" : "\\n\\n";
-  await fs.writeFile(inboxPath, \`\${current}\${sep}\${block.join("\\n")}\\n\`);
+  const block = [\`## Spotify Anomaly Watch — \${new Date().toISOString()}\`, "", \`Latest snapshot: \\\`\${latest.snapshotDate}\\\`\`, "", ...severe.map((anomaly) => \`- **\${anomaly.kind}** — \${anomaly.message}\`), ""].join("\\n");
+  const existing = await fs.readFile(inboxPath, "utf8").catch(() => \`# \${path.basename(inboxPath, ".md").replace(/-/g, " ")}\\n\\n\`);
+  await fs.writeFile(inboxPath, \`\${existing}\${existing.endsWith("\\n\\n") ? "" : "\\n"}\${block}\\n\`);
 }
+
+function filePriority(file: string): number { return file.endsWith("-s4a.json") ? 2 : file.endsWith("-web-api.json") ? 0 : 1; }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const files = await listSnapshotFiles(options.snapshotsDir);
-  if (files.length === 0) {
-    console.log(JSON.stringify({ status: "no_snapshots", snapshotsDir: options.snapshotsDir }, null, 2));
-    return;
-  }
-
-  // Read up to last 4 snapshots (latest + 3 priors)
-  const slice = files.slice(-4);
-  const snapshots: Snapshot[] = [];
+  if (!files.length) { console.log(JSON.stringify({ status: "no_snapshots", snapshotsDir: options.snapshotsDir }, null, 2)); return; }
+  const parsed: Array<{ file: string; snapshot: Snapshot }> = [];
   const parseErrors: Array<{ file: string; error: string }> = [];
-  for (const file of slice) {
+  for (const file of files) {
     const result = await readSnapshot(path.join(options.snapshotsDir, file));
-    if ("error" in result) parseErrors.push(result);
-    else snapshots.push(result);
+    if ("error" in result) parseErrors.push(result); else parsed.push({ file, snapshot: result });
   }
-  if (snapshots.length === 0) {
-    throw new Error(\`Could not parse any snapshot files. Errors: \${parseErrors.map((e) => \`\${e.file}: \${e.error}\`).join("; ")}\`);
-  }
-
-  const latest = snapshots[snapshots.length - 1];
-  if (!latest) {
-    throw new Error(\`Could not parse any snapshot files. Errors: \${parseErrors.map((e) => \`\${e.file}: \${e.error}\`).join("; ")}\`);
-  }
+  if (!parsed.length) throw new Error(\`Could not parse any snapshot files. Errors: \${parseErrors.map((error) => \`\${error.file}: \${error.error}\`).join("; ")}\`);
+  parsed.sort((a, b) => a.snapshot.snapshotDate.localeCompare(b.snapshot.snapshotDate) || filePriority(a.file) - filePriority(b.file));
+  const latestEntry = parsed.at(-1)!;
+  const snapshots = parsed.filter((entry) => entry === latestEntry || compatible(entry.snapshot, latestEntry.snapshot)).slice(-4).map((entry) => entry.snapshot);
   const anomalies = detectAnomalies(snapshots, options);
-
   await fs.mkdir(options.alertsDir, { recursive: true });
-  const today = new Date().toISOString().slice(0, 10);
-  const alertPath = path.join(options.alertsDir, \`\${today}.md\`);
-  await fs.writeFile(alertPath, buildAlertMarkdown(latest, anomalies, parseErrors));
-
-  if (options.ceoInbox) {
-    const severe = anomalies.filter((a) => a.severity === "severe");
-    if (severe.length > 0) await appendCeoInbox(options.ceoInbox, latest, severe);
-  }
-
+  const alertPath = path.join(options.alertsDir, \`\${new Date().toISOString().slice(0, 10)}.md\`);
+  await fs.writeFile(alertPath, buildAlertMarkdown(latestEntry.snapshot, anomalies, parseErrors));
+  if (options.ceoInbox) await appendCeoInbox(options.ceoInbox, latestEntry.snapshot, anomalies.filter((anomaly) => anomaly.severity === "severe"));
   console.log(JSON.stringify({
-    status: "watch_complete",
-    alertPath,
-    latestSnapshot: latest.snapshotDate,
+    status: "watch_complete", alertPath, latestSnapshot: latestEntry.snapshot.snapshotDate,
     snapshotsCompared: snapshots.length,
-    anomaliesBySeverity: {
-      severe: anomalies.filter((a) => a.severity === "severe").length,
-      moderate: anomalies.filter((a) => a.severity === "moderate").length,
-      informational: anomalies.filter((a) => a.severity === "informational").length,
-    },
+    anomaliesBySeverity: Object.fromEntries(["severe", "moderate", "informational"].map((severity) => [severity, anomalies.filter((anomaly) => anomaly.severity === severity).length])),
     parseErrors,
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
 `,
       },
       {
@@ -23873,11 +23795,9 @@ description: Daily check on existing Spotify snapshots. Flags real anomalies —
 
 Use this skill on a daily heartbeat. It does **not** scrape Spotify — it reads existing snapshots and computes anomalies. Cheap, fast, runs every day even if no new snapshot landed.
 
-Read \`doc/SPOTIFY-STRATEGIST-DOCTRINE.md\` before running.
-
 ## Inputs
 
-- \`data/spotify/snapshots/*.json\` — at least one snapshot. Two or more for trend detection.
+- \`data/spotify/snapshots/<date>.json\`, \`<date>-web-api.json\`, or \`<date>-s4a.json\` — at least one snapshot. Two compatible snapshots from the same data source/reporting window are required for trend detection.
 
 ## Workflow
 
@@ -23890,13 +23810,13 @@ bun packages/shared/src/skills/bundled/spotify-anomaly-watch/scripts/watch.ts \\
 
 The script:
 
-- Reads the latest snapshot plus up to 3 priors.
+- Reads the latest snapshot plus up to 3 compatible priors. Missing optional metrics are skipped, not treated as zero.
 - Computes deltas and flags:
   - **Stream drop** ≥30% sustained over 2 consecutive snapshots → severe.
   - **Listener drop** ≥30% sustained over 2 → severe.
   - **Save rate drop** ≥20% sustained over 2 → moderate.
   - **Skip rate spike** ≥20% sustained over 2 → moderate.
-  - **Playlist removal** when a playlist with ≥100 listeners disappeared from \`playlistsDriving\` between the two latest snapshots → severe (single-snapshot is enough for playlist removals; they don't return on their own).
+  - **Playlist removal** when a playlist with ≥100 listeners disappeared from two snapshots that both captured \`playlistsDriving\` → severe and worth investigating.
   - **Track disappearance** when a top-3 track is missing from the latest snapshot → moderate.
   - **Editorial dependency growth** when editorial-share grew >10pts in two snapshots → informational (not bad, but watch durability).
 - Writes \`data/spotify/alerts/<YYYY-MM-DD>.md\` with all findings categorized by severity.
@@ -23913,6 +23833,8 @@ The script:
 
 - 0 snapshots → exit cleanly with a "no data" message.
 - 1 snapshot → write a baseline alert file noting "first snapshot, no priors to compare."
+- Snapshots from a different data source/reporting window → retain the latest as a baseline instead of creating a false delta.
+- Missing optional metrics, tracks, playlists, or source fields → skip those checks without emitting \`NaN\` or fabricating zeroes. Preserve any \`partial\` alert from the snapshot.
 - Snapshot files malformed → skip the bad file, continue with remaining, surface the parse error in the alert.
 
 ## Idempotency
@@ -23923,7 +23845,7 @@ The script overwrites \`alerts/<today>.md\` on each run (so the latest run alway
 
 - Never scrape. This skill works from existing snapshots.
 - Never silence an anomaly. If a metric crashed, surface it.
-- Never invent thresholds. Use the doctrine numbers above.
+- Never invent thresholds. Use the configured defaults above or explicit CLI overrides.
 `,
       },
     ],

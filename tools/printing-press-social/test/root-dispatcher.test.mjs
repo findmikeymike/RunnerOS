@@ -359,6 +359,34 @@ test('root dispatcher routes X dry-run', () => {
   });
 });
 
+test('root dispatcher routes Spotify snapshot and playlist dry-run', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  run([
+    'profile', 'add', 'spotify',
+    '--profile', 'artist01',
+    '--handle', 'Luna Vale',
+    '--account-url', 'https://open.spotify.com/artist/abc123',
+    '--json',
+  ], env);
+
+  const snapshot = JSON.parse(run(['snapshot', 'spotify', '--profile', 'artist01', '--json'], env));
+  assert.equal(snapshot.status, 'dry_run');
+  assert.equal(snapshot.browserPlan.browserSession.partition, 'persist:social-spotify-artist01');
+
+  const playlist = JSON.parse(run([
+    'playlist', 'spotify', 'create',
+    '--profile', 'artist01',
+    '--name', 'Late Night Drive',
+    '--tracks', 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh',
+    '--dry-run', '--json',
+  ], env));
+  assert.equal(playlist.status, 'dry_run');
+  assert.equal(playlist.actionId, playlist.action.actionId);
+  assert.match(playlist.approvalDigest, /^sha256:[a-f0-9]{64}$/);
+  assert.equal(playlist.action.verb, 'playlist-create');
+});
+
 test('root dispatcher lists assets and content from explicit roots', () => {
   const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
   const assetRoot = path.join(home, 'assets');
@@ -756,6 +784,91 @@ test('root execute returns delegated runner-cdp result for approved dry-run resu
   assert.match(result.next.join(' '), /browserPlan\.browserSession/);
   assert.match(result.next.join(' '), /submit when the visible account and draft match/);
   assert.doesNotMatch(result.next.join(' '), /pause before final submit/i);
+});
+
+test('root execute rejects a Spotify dry-run whose approved payload was edited', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  run(['profile', 'add', 'spotify', '--profile', 'artist01', '--handle', 'Luna Vale', '--json'], env);
+  const dryRun = JSON.parse(run([
+    'playlist', 'spotify', 'create', '--profile', 'artist01', '--name', 'Original Mood',
+    '--tracks', 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh', '--dry-run', '--json',
+  ], env));
+  const approvedDigest = dryRun.approvalDigest;
+  dryRun.action.payload.name = 'Tampered Mood';
+  const actionFile = path.join(home, 'tampered-spotify-dry-run.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+
+  let result;
+  try {
+    run([
+      'execute', '--action-file', actionFile, '--expected-action-id', dryRun.actionId,
+      '--expected-action-digest', approvedDigest, '--confirm', 'yes', '--json',
+    ], env);
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+  assert.equal(result.code, 'ACTION_DIGEST_MISMATCH');
+});
+
+test('root execute accepts an approved Spotify playlist dry-run without changing its action', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  run([
+    'profile', 'add', 'spotify',
+    '--profile', 'artist01',
+    '--handle', 'Luna Vale',
+    '--account-url', 'https://open.spotify.com/artist/abc123',
+    '--json',
+  ], env);
+  const dryRun = JSON.parse(run([
+    'playlist', 'spotify', 'create',
+    '--profile', 'artist01',
+    '--name', 'Late Night Drive',
+    '--description', 'Night drives and neon skies',
+    '--tracks', 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh',
+    '--visibility', 'public',
+    '--dry-run', '--json',
+  ], env));
+  const actionFile = path.join(home, 'spotify-dry-run.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+
+  const result = JSON.parse(run([
+    'execute',
+    '--action-file', actionFile,
+    '--expected-action-id', dryRun.actionId,
+    '--expected-action-digest', dryRun.approvalDigest,
+    '--confirm', 'yes',
+    '--json',
+  ], env));
+
+  assert.equal(result.status, 'delegated');
+  assert.equal(result.actionId, dryRun.actionId);
+  assert.equal(result.approvalDigest, dryRun.approvalDigest);
+  assert.deepEqual(result.action.payload, dryRun.action.payload);
+  assert.equal(result.platform, 'spotify');
+  assert.equal(result.browserPlan.browserSession.partition, 'persist:social-spotify-artist01');
+
+  const verificationFile = path.join(home, 'spotify-verification.json');
+  writeFileSync(verificationFile, JSON.stringify({
+    platform: 'spotify', profile: 'artist01', loggedIn: true,
+    checkedAt: new Date().toISOString(),
+    visibleIdentity: { handle: 'Luna Vale' },
+  }));
+  const receipt = JSON.parse(run([
+    'playlist', 'spotify', 'receipt', '--profile', 'artist01', '--action-file', actionFile,
+    '--expected-action-id', dryRun.actionId, '--expected-action-digest', dryRun.approvalDigest,
+    '--playlist-url', 'https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M',
+    '--verification-result', verificationFile, '--json',
+  ], env));
+  assert.equal(receipt.status, 'succeeded');
+
+  const afterReceipt = JSON.parse(run([
+    'execute', '--action-file', actionFile, '--expected-action-id', dryRun.actionId,
+    '--expected-action-digest', dryRun.approvalDigest, '--confirm', 'yes', '--json',
+  ], env));
+  assert.equal(afterReceipt.status, 'duplicate');
+  assert.equal(afterReceipt.receipt.playlistUrl, receipt.receipt.playlistUrl);
 });
 
 test('root execute rejects dry-runs when current profile verification target changed', () => {

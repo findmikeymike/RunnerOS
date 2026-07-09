@@ -26,15 +26,17 @@ node src/social.mjs profile status spotify --profile <id> --live --json
 node src/social.mjs snapshot spotify --profile <id> --json
 ```
 
-3. Run the returned `browserPlan` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams.
+3. Run the returned `browserPlan` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Save the observed values as JSON under `$CRAFT_WORKSPACE_PATH/data/spotify/captures/`.
 
 4. Normalize and save the captured numbers:
 
 ```bash
 node src/social.mjs snapshot spotify --profile <id> \
-  --capture-json '<captured-json>' \
-  --out data/spotify/snapshots/<YYYY-MM-DD>-s4a.json --json
+  --capture-file "$CRAFT_WORKSPACE_PATH/data/spotify/captures/<YYYY-MM-DD>.json" \
+  --workspace "$CRAFT_WORKSPACE_PATH" --json
 ```
+
+The default output is `data/spotify/snapshots/<YYYY-MM-DD>-s4a.json` inside the explicit workspace. Relative `--out` paths are also workspace-relative. Existing snapshots are immutable and finalization fails closed if the target already exists.
 
 5. Write the returned `contextPayload` as the `artist-spotify-snapshot` context doc.
 6. Run `delta-brief.ts` only when there are two comparable snapshots of the same data source.
@@ -58,7 +60,9 @@ node src/social.mjs snapshot spotify --profile <id> \
 }
 ```
 
-Any metric not visible on the page is `null`, and the snapshot is marked `partial: true` with the missing fields listed in `errors`.
+Any metric not visible on the page is `null`, and the snapshot is marked `partial: true` with the missing fields listed in `errors`. If the reporting window is unavailable, `windowDays` is also `null`. If the capture date is unavailable or invalid, finalization uses today's date only for safe file ownership and records that fallback in `errors`.
+
+`delta-brief.ts` discovers legacy `<date>.json`, API `<date>-web-api.json`, and browser `<date>-s4a.json` snapshots. It compares only compatible data sources/reporting windows and treats missing rates, playlists, tracks, sources, or metrics as unavailable rather than zero.
 
 ## Failure Handling
 
@@ -70,6 +74,6 @@ Any metric not visible on the page is `null`, and the snapshot is marked `partia
 ## Never
 
 - Never fabricate streams, listeners, followers, saves, cities, tracks, or source percentages.
-- Never modify a past snapshot.
+- Never modify a past snapshot. Snapshot writes fail closed when the target already exists.
 - Never bypass approvals — this skill is read-only.
 - Never silently drop a tracked playlist feature; surface its disappearance as an anomaly.

@@ -1,11 +1,23 @@
 ---
-status: current
+status: resolved
 owner: agent
-last_verified: 2026-07-08
-source_of_truth: true
+last_verified: 2026-07-09
+source_of_truth: false
 ---
 
 # Spotify Fix
+
+> Resolved on `codex/agent-work-continued`. The API-script plan below is historical and must not guide new work. Current implementation truth lives in [Spotify Browser Agents Spec](../creator-command-center/12-spotify-browser-agents-spec.md).
+
+## Resolution
+
+- Spotify Analyst now uses the connected Spotify for Artists browser partition and workspace capture files; the dev-only API snapshot script was removed.
+- Spotify Playlist Creator now uses Printing Press Social with dry-run, exact action-id + digest approval, guarded `social execute`, visible-account verification, and a durable observed-playlist-URL receipt.
+- Spotify source permissions, account catalog injection, packaging, HQ weekly sync, snapshot validation, delta briefs, and focused tests are wired.
+- Feature-on-artist-page remains intentionally deferred; playlist creation is the shipped v1 boundary.
+- Real logged-in Spotify browser smoke remains a release validation gate; the implementation is automated-test verified but no local Spotify profile/session is currently available.
+
+## Historical Audit
 
 Make the Spotify Analyst and Spotify Playlist Creator agents fully functional and reliable in packaged builds, not just in a dev monorepo checkout.
 
