@@ -21,6 +21,7 @@ import {
   Zap,
   ListTodo,
   Inbox,
+  Brain,
   Globe,
   FolderOpen,
   Calendar,
@@ -2600,7 +2601,7 @@ function AppShellContent({
       {
         id: "nav:brain",
         title: "Brain",
-        icon: Layers,
+        icon: Brain,
         variant: brainActive ? "default" : "ghost",
         expandable: true,
         expanded: brainExpanded,
