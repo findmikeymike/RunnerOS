@@ -126,6 +126,10 @@ export interface SessionScopedToolCallbacks {
   createAutomationFn?: (
     input: import('@craft-agent/session-tools-core').CreateAutomationToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').CreateAutomationResult>;
+  /** Write a local campaign calendar item from structured agent intent. */
+  campaignCalendarWriteFn?: (
+    input: import('@craft-agent/session-tools-core').CampaignCalendarWriteToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').CampaignCalendarWriteResult>;
   /** Create a workflow in the global library (used by the workflow-creator skill's create_workflow tool). */
   createWorkflowFn?: (
     input: import('@craft-agent/session-tools-core').CreateWorkflowToolInput,

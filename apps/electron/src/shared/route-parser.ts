@@ -54,6 +54,8 @@ export interface ParsedCompoundRoute {
   outputId?: string
   /** Output id for Video Studio navigator. */
   videoStudioOutputId?: string
+  /** Campaign subpage. */
+  campaignSubpage?: 'home' | 'calendar'
   /** Details page info (null for empty state) */
   details: {
     type: string
@@ -103,7 +105,8 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
   const first = segments[0]
 
   if (first === 'campaign') {
-    return { navigator: 'campaign', details: null }
+    const subpage = segments[1] === 'calendar' ? 'calendar' : 'home'
+    return { navigator: 'campaign', campaignSubpage: subpage, details: null }
   }
 
   // Settings navigator
@@ -362,7 +365,7 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
  */
 export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
   if (parsed.navigator === 'campaign') {
-    return 'campaign'
+    return parsed.campaignSubpage === 'calendar' ? 'campaign/calendar' : 'campaign'
   }
 
   if (parsed.navigator === 'settings') {
@@ -708,7 +711,10 @@ export function parseRouteToNavigationState(
  */
 function convertCompoundToNavigationState(compound: ParsedCompoundRoute): NavigationState {
   if (compound.navigator === 'campaign') {
-    return { navigator: 'campaign' }
+    return {
+      navigator: 'campaign',
+      ...(compound.campaignSubpage === 'calendar' ? { subpage: 'calendar' as const } : {}),
+    }
   }
 
   // Settings
@@ -1022,6 +1028,7 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
   if (state.navigator === 'campaign') {
     return {
       navigator: 'campaign',
+      campaignSubpage: state.subpage ?? 'home',
       details: null,
     }
   }

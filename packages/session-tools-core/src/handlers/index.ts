@@ -136,6 +136,13 @@ export type {
   CreateAutomationEventName,
 } from './create-automation.ts';
 
+// Campaign Calendar
+export { handleCampaignCalendarWrite } from './campaign-calendar.ts';
+export type {
+  CampaignCalendarWriteToolInput,
+  CampaignCalendarWriteResult,
+} from './campaign-calendar.ts';
+
 // Create Workflow (workflow-creator skill)
 export { handleCreateWorkflow } from './create-workflow.ts';
 export type {

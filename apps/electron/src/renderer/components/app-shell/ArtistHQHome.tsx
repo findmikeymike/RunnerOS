@@ -3,8 +3,6 @@ import {
   Bot,
   CalendarDays,
   CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
   Circle,
   ExternalLink,
   FileText,
@@ -44,6 +42,12 @@ import {
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
+import {
+  CalendarMonthGrid,
+  parseDateKey,
+  toDateKey,
+  type CalendarMonthDayMeta,
+} from './CalendarMonthGrid'
 import {
   HQ_STATE_CONTEXT_SLUG,
   parseHqStateOfPlay,
@@ -277,7 +281,7 @@ export function ArtistHQHome({
   const [categoryDraft, setCategoryDraft] = React.useState('')
   const [selectedPersonId, setSelectedPersonId] = React.useState<string | null>(null)
   const [selectedDate, setSelectedDate] = React.useState(todayKey)
-  const [visibleMonth, setVisibleMonth] = React.useState(() => startOfMonth(new Date()))
+  const [visibleMonth, setVisibleMonth] = React.useState(() => parseDateKey(todayKey))
   const [draft, setDraft] = React.useState<NetworkDraft>(emptyNetworkDraft)
   const [editDraft, setEditDraft] = React.useState<NetworkDraft>(emptyNetworkDraft)
   const [calendarDraft, setCalendarDraft] = React.useState<CalendarDraft>(emptyCalendarDraft)
@@ -2198,15 +2202,14 @@ function ArtistCalendarView({
   onConnectGoogle: () => void
   onSyncGoogle: () => void
 }) {
-  const days = React.useMemo(() => buildMonthDays(visibleMonth), [visibleMonth])
-  const eventCounts = React.useMemo(() => {
-    const counts = new Map<string, number>()
+  const dayMetaByDate = React.useMemo(() => {
+    const metaByDate = new Map<string, CalendarMonthDayMeta>()
     for (const event of events) {
-      counts.set(event.date, (counts.get(event.date) ?? 0) + 1)
+      const count = (metaByDate.get(event.date)?.count ?? 0) + 1
+      metaByDate.set(event.date, { count })
     }
-    return counts
+    return metaByDate
   }, [events])
-  const monthLabel = visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   const selectedLabel = parseDateKey(selectedDate).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -2215,63 +2218,13 @@ function ArtistCalendarView({
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-      <div className="rounded-[16px] border border-white/[0.05] bg-black/20 p-3">
-        <div className="mb-3 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => onChangeMonth(addMonths(visibleMonth, -1))}
-            className="rounded-full border border-white/[0.06] p-2 text-white/45 hover:bg-white/[0.04] hover:text-white/75"
-            aria-label="Previous month"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <div className="text-sm font-semibold text-white/78">{monthLabel}</div>
-          <button
-            type="button"
-            onClick={() => onChangeMonth(addMonths(visibleMonth, 1))}
-            className="rounded-full border border-white/[0.06] p-2 text-white/45 hover:bg-white/[0.04] hover:text-white/75"
-            aria-label="Next month"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-            <div key={day} className="py-2 text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-white/28">
-              {day}
-            </div>
-          ))}
-          {days.map((day) => {
-            const key = toDateKey(day)
-            const isSelected = key === selectedDate
-            const isToday = key === todayKey
-            const isCurrentMonth = day.getMonth() === visibleMonth.getMonth()
-            const count = eventCounts.get(key) ?? 0
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => onSelectDate(key)}
-                className={cn(
-                  'min-h-[72px] rounded-[12px] border p-2 text-left transition-colors',
-                  isSelected
-                    ? 'border-orange-400/40 bg-orange-500/12'
-                    : 'border-white/[0.045] bg-white/[0.015] hover:bg-white/[0.035]',
-                  !isCurrentMonth && 'opacity-35',
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <span className={cn('text-xs font-medium', isToday ? 'text-orange-200' : 'text-white/65')}>
-                    {day.getDate()}
-                  </span>
-                  {count > 0 ? <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-white/55">{count}</span> : null}
-                </div>
-                {count > 0 ? <div className="mt-5 h-1.5 w-1.5 rounded-full bg-orange-400/80" /> : null}
-              </button>
-            )
-          })}
-        </div>
-      </div>
+      <CalendarMonthGrid
+        visibleMonth={visibleMonth}
+        selectedDate={selectedDate}
+        dayMetaByDate={dayMetaByDate}
+        onSelectDate={onSelectDate}
+        onChangeMonth={onChangeMonth}
+      />
 
       <div className="rounded-[16px] border border-white/[0.05] bg-black/20 p-3">
         <div className="mb-3 flex items-start justify-between gap-3">
@@ -2851,35 +2804,4 @@ function readTabFromHash(): ArtistHQTab {
 
 function isArtistHQTab(value: string): value is ArtistHQTab {
   return value === 'home' || value === 'profile' || value === 'voice' || value === 'calendar' || value === 'network' || value === 'research' || value === 'branding'
-}
-
-function startOfMonth(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), 1)
-}
-
-function addMonths(date: Date, months: number): Date {
-  return new Date(date.getFullYear(), date.getMonth() + months, 1)
-}
-
-function buildMonthDays(month: Date): Date[] {
-  const first = startOfMonth(month)
-  const start = new Date(first)
-  start.setDate(first.getDate() - first.getDay())
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(start)
-    date.setDate(start.getDate() + index)
-    return date
-  })
-}
-
-function toDateKey(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function parseDateKey(key: string): Date {
-  const [year, month, day] = key.split('-').map(Number)
-  return new Date(year || new Date().getFullYear(), (month || 1) - 1, day || 1)
 }

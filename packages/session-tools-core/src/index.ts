@@ -246,6 +246,15 @@ export {
 } from './handlers/index.ts';
 
 export type {
+  CampaignCalendarWriteToolInput,
+  CampaignCalendarWriteResult,
+} from './handlers/index.ts';
+
+export {
+  handleCampaignCalendarWrite,
+} from './handlers/index.ts';
+
+export type {
   CreateWorkflowToolInput,
   CreateWorkflowResult,
   CreateWorkflowMetadata,
@@ -346,6 +355,7 @@ export {
   // Developer feedback schema
   SendDeveloperFeedbackSchema,
   CreateAgentSchema,
+  CampaignCalendarWriteSchema,
   SaveMemorySchema,
   UpdateMemorySchema,
   ForgetMemorySchema,

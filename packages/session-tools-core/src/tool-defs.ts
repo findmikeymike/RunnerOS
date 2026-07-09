@@ -49,6 +49,7 @@ import { handleListMessagingChannels, handleUnbindMessagingChannel } from './han
 import { handleCreateAgent } from './handlers/create-agent.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
 import { handleCreateWorkflow } from './handlers/create-workflow.ts';
+import { handleCampaignCalendarWrite } from './handlers/campaign-calendar.ts';
 import {
   handleSaveMemory,
   handleUpdateMemory,
@@ -483,6 +484,39 @@ export const CreateAutomationSchema = z.object({
     permissionMode: z.enum(['safe', 'ask', 'allow-all']).optional().describe('Permission mode for spawned sessions. Default to "ask".'),
     actions: z.array(CreateAutomationActionSchema).min(1).describe('At least one prompt or webhook action.'),
   }).passthrough().describe('Matcher fields. Trigger-specific fields are passed through and validated server-side.'),
+});
+
+const CampaignCalendarJobSchema = z.object({
+  runAt: z.string().describe('ISO timestamp for when this one-shot job becomes due.'),
+  timezone: z.string().optional().describe('IANA timezone for display.'),
+  actionType: z.enum(['post-asset', 'run-workflow', 'ask-agent', 'generate-content', 'outreach-batch', 'review', 'custom-prompt']),
+  payload: z.record(z.string(), z.unknown()).optional().describe('Structured payload. ask-agent/custom-prompt/review/generate-content require prompt; run-workflow requires workflowSlug.'),
+  approvalPolicy: z.enum(['none', 'approval-before-run', 'approval-before-external-action', 'preapproved-exact-payload']).optional(),
+  maxAttempts: z.number().int().min(1).max(5).optional(),
+});
+
+export const CampaignCalendarWriteSchema = z.object({
+  campaignId: z.string().optional().describe('Target campaign workspace ID. Defaults to the current workspace.'),
+  operation: z.enum(['create', 'update', 'cancel']),
+  explanation: z.string().min(1).describe('Short reason for the calendar write.'),
+  requiresUserConfirmation: z.boolean().optional().describe('True when target/date/payload was not explicitly approved by the user.'),
+  item: z.object({
+    id: z.string().optional().describe('Required for update/cancel.'),
+    date: z.string().optional().describe('YYYY-MM-DD. Required for create.'),
+    time: z.string().optional().describe('Optional HH:mm local display time.'),
+    timezone: z.string().optional(),
+    title: z.string().optional().describe('Required for create.'),
+    notes: z.string().optional(),
+    kind: z.enum(['manual', 'deadline', 'approval', 'scheduled-job']).optional(),
+    status: z.enum(['draft', 'scheduled', 'needs-approval', 'running', 'done', 'failed', 'missed', 'canceled']).optional(),
+    personIds: z.array(z.string()).optional(),
+    assetRefs: z.array(z.object({ assetId: z.string(), label: z.string().optional(), kind: z.string().optional() })).optional(),
+    finalRefs: z.array(z.object({ outputId: z.string(), slot: z.string().optional(), assetId: z.string().optional(), label: z.string().optional() })).optional(),
+    outputRefs: z.array(z.object({ outputId: z.string(), title: z.string().optional(), kind: z.string().optional() })).optional(),
+    accountSetId: z.string().optional(),
+    socialProfileRefs: z.array(z.object({ platform: z.string(), profileId: z.string().optional(), label: z.string().optional() })).optional(),
+    job: CampaignCalendarJobSchema.optional(),
+  }),
 });
 
 const MemoryScopeSchema = z.enum(['agent', 'user']).describe('Where to save: "agent" for this agent only, or "user" for cross-agent USER.md memory. Defaults to "agent".');
@@ -1140,6 +1174,23 @@ Use this only after walking the user through the automation-creator interview an
 
 After success, post a one-line confirmation. For SchedulerTick automations, surface the next-fire time.`,
 
+  campaign_calendar_write: `Create, update, or cancel a local Campaign Calendar item in the current campaign workspace.
+
+Use this when the user explicitly asks to schedule, calendar, queue, or plan campaign work. This writes local campaign calendar state only.
+
+Rules:
+- Ask once if the date/time, asset, account/profile, or target action is ambiguous.
+- For normal reminders/deadlines/reviews, create a local item.
+- For runnable work, include \`item.job\`.
+- For live external actions such as posting or outreach, set/expect \`needs-approval\`; this tool does not approve or execute live actions.
+- Never store passwords, cookies, tokens, 2FA codes, or private local paths in calendar payloads.
+
+Runnable job payloads:
+- \`ask-agent\`, \`generate-content\`, \`review\`, \`custom-prompt\`: \`payload.prompt\`, optional \`payload.agentSlug\`.
+- \`run-workflow\`: \`payload.workflowSlug\`, optional \`payload.triggerInputs\`.
+
+After success, tell the user what was scheduled and whether approval is still required.`,
+
   create_workflow: `Create a new reusable workflow in the global workflow library and activate it in the current workspace.
 
 Use this only after walking the user through the workflow-creator interview and getting explicit confirmation. Always show a complete WORKFLOW.md draft BEFORE calling this tool.
@@ -1426,6 +1477,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   // Creator skills — agent-creator structured write tool
   { name: 'create_agent', description: TOOL_DESCRIPTIONS.create_agent, inputSchema: CreateAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAgent },
   { name: 'create_automation', description: TOOL_DESCRIPTIONS.create_automation, inputSchema: CreateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAutomation },
+  { name: 'campaign_calendar_write', description: TOOL_DESCRIPTIONS.campaign_calendar_write, inputSchema: CampaignCalendarWriteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCampaignCalendarWrite },
   { name: 'create_workflow', description: TOOL_DESCRIPTIONS.create_workflow, inputSchema: CreateWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateWorkflow },
   { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },

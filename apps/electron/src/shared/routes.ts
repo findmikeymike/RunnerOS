@@ -93,7 +93,7 @@ export const routes = {
   // ============================================
   view: {
     /** Campaign command center/home for non-HQ workspaces */
-    campaign: () => 'campaign' as const,
+    campaign: (subpage?: 'calendar') => subpage ? `campaign/${subpage}` as const : 'campaign' as const,
 
     /** All sessions view (sessions navigator, allSessions filter) */
     allSessions: (sessionId?: string) =>

@@ -252,6 +252,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'campaignCalendarWrite', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.campaignCalendarWriteFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createWorkflow', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createWorkflowFn;

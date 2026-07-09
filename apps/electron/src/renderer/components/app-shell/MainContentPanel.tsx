@@ -62,6 +62,7 @@ import VideoStudioPage from '@/pages/VideoStudioPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { ArtistHQHome } from './ArtistHQHome'
 import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
+import { CampaignCalendarPage } from './CampaignCalendarPage'
 import { AgendaPage } from './AgendaPage'
 import { AGENDA_LABEL } from './agenda-utils'
 import { CommunityPage } from './CommunityPage'
@@ -277,10 +278,14 @@ export function MainContentPanel({
   if (isCampaignNavigation(navState)) {
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <ArtistCommandCenterHome
-          workspaceId={activeWorkspaceId || ''}
-          artistProfileWorkspaceId={artistHQWorkspace?.id}
-        />
+        {navState.subpage === 'calendar' ? (
+          <CampaignCalendarPage workspaceId={activeWorkspaceId || ''} />
+        ) : (
+          <ArtistCommandCenterHome
+            workspaceId={activeWorkspaceId || ''}
+            artistProfileWorkspaceId={artistHQWorkspace?.id}
+          />
+        )}
       </Panel>
     )
   }

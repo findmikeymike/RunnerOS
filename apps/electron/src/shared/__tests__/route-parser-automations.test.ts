@@ -96,9 +96,16 @@ describe('route-parser: automations routes', () => {
 describe('route-parser: library routes', () => {
   it('parses "campaign" as the campaign home navigator', () => {
     const parsed = parseCompoundRoute('campaign')
-    expect(parsed).toEqual({ navigator: 'campaign', details: null })
+    expect(parsed).toEqual({ navigator: 'campaign', campaignSubpage: 'home', details: null })
     expect(buildCompoundRoute(parsed!)).toBe('campaign')
     expect(parseRouteToNavigationState('campaign')).toEqual({ navigator: 'campaign' })
+  })
+
+  it('parses "campaign/calendar" as the campaign calendar page', () => {
+    const parsed = parseCompoundRoute('campaign/calendar')
+    expect(parsed).toEqual({ navigator: 'campaign', campaignSubpage: 'calendar', details: null })
+    expect(buildCompoundRoute(parsed!)).toBe('campaign/calendar')
+    expect(parseRouteToNavigationState('campaign/calendar')).toEqual({ navigator: 'campaign', subpage: 'calendar' })
   })
 
   it('parses "agents" as the agents navigator', () => {

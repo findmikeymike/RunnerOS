@@ -41,6 +41,20 @@ import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/co
 import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput } from '@craft-agent/session-tools-core'
 import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import {
+  CAMPAIGN_CALENDAR_CONTEXT_SLUG,
+  applyCampaignCalendarWriteIntent,
+  campaignCalendarMetadata,
+  createCampaignScheduledJob,
+  emptyCampaignCalendar,
+  parseCampaignCalendarDocResult,
+  serializeCampaignCalendarBody,
+} from '@craft-agent/shared/campaign-calendar'
+import {
+  loadAllContextDocs,
+  loadContextDoc,
+  upsertContextDoc,
+} from '@craft-agent/shared/workspace-context'
+import {
   // Session persistence functions
   listSessions as listStoredSessions,
   loadSession as loadStoredSession,
@@ -95,6 +109,7 @@ import { getDefaultSummarizationModel } from '@craft-agent/shared/config/models'
 import type { SummarizeCallback } from '@craft-agent/shared/sources'
 import { type ThinkingLevel, DEFAULT_THINKING_LEVEL, normalizeThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
 import { WorkflowRunner, type WorkflowRunEvent } from '../workflows/runner'
+import { CampaignScheduledJobRunner } from '../campaign-calendar/CampaignScheduledJobRunner'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
 import { DEFAULT_MAX_DEPTH, isPermissionEscalation } from '@craft-agent/shared/agent-messaging'
@@ -1542,6 +1557,8 @@ export class SessionManager implements ISessionManager {
   private lastTimestamp = 0
   /** Workflow runner — bootstrapped during `initialize()`. */
   private workflowRunner!: WorkflowRunner
+  /** Campaign one-shot job runner — bootstrapped lazily after scheduler setup. */
+  private campaignScheduledJobRunner?: CampaignScheduledJobRunner
   /** Deep Research runner — bootstrapped during `initialize()`. */
   private deepResearchRunner!: DeepResearchRunner
 
@@ -1911,6 +1928,7 @@ export class SessionManager implements ISessionManager {
       // AutomationSystem) so SessionManager owns driver-session spawn + workflow
       // dispatch wiring without bloating the shared automations package.
       this.attachPulseDispatch(automationSystem, workspaceId, workspaceRootPath)
+      this.attachCampaignScheduledJobsDispatch(automationSystem, workspaceId, workspaceRootPath)
     }
   }
 
@@ -2024,8 +2042,24 @@ export class SessionManager implements ISessionManager {
             automationFiredAt: new Date().toISOString(),
           })
         } catch (err) {
-          sessionLog.error(`[Pulse] Tick execution failed for pulse "${pulseId}":`, err)
+      sessionLog.error(`[Pulse] Tick execution failed for pulse "${pulseId}":`, err)
         }
+      }
+    })
+  }
+
+  private attachCampaignScheduledJobsDispatch(automationSystem: AutomationSystem, workspaceId: string, workspaceRootPath: string): void {
+    automationSystem.eventBus.onAny(async (event) => {
+      if (event !== 'SchedulerTick') return
+      try {
+        const result = await this.getCampaignScheduledJobRunner().scanWorkspace(workspaceId, workspaceRootPath)
+        if (result.scanned > 0) {
+          sessionLog.info(
+            `[CampaignScheduledJobs] workspace=${workspaceId} scanned=${result.scanned} started=${result.started} blocked=${result.blocked} missed=${result.missed} failed=${result.failed}`,
+          )
+        }
+      } catch (err) {
+        sessionLog.error(`[CampaignScheduledJobs] Tick scan failed for workspace "${workspaceId}":`, err)
       }
     })
   }
@@ -2311,6 +2345,42 @@ export class SessionManager implements ISessionManager {
   /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
   getWorkflowRunner(): WorkflowRunner {
     return this.workflowRunner
+  }
+
+  private getCampaignScheduledJobRunner(): CampaignScheduledJobRunner {
+    if (!this.campaignScheduledJobRunner) {
+      this.campaignScheduledJobRunner = new CampaignScheduledJobRunner({
+        executePromptJob: (input) => this.executePromptAutomation({
+          workspaceId: input.workspaceId,
+          workspaceRootPath: input.workspaceRootPath,
+          prompt: input.prompt,
+          labels: ['campaign-calendar'],
+          permissionMode: input.permissionMode ?? 'safe',
+          agentSlug: input.agentSlug,
+          automationName: input.automationName,
+        }),
+        startWorkflow: async ({ workspaceId, workflowSlug, triggerInputs }) => {
+          const workspace = getWorkspaceByNameOrId(workspaceId)
+          if (!workspace) throw new Error(`Workspace not found: ${workspaceId}`)
+          if (!readActivatedWorkflows(workspace.rootPath).active.includes(workflowSlug)) {
+            throw new Error(`Workflow "${workflowSlug}" is not active in this workspace.`)
+          }
+          const workflow = loadGlobalWorkflow(workflowSlug)
+          if (!workflow) throw new Error(`Workflow not found: ${workflowSlug}`)
+          const run = await this.workflowRunner.start({
+            workflow,
+            workspaceId,
+            triggerInputs: normalizeWorkflowTriggerInputs(workflow, triggerInputs),
+          })
+          return { runId: run.id }
+        },
+        emitContextChanged: (workspaceId, docs) => {
+          this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
+        },
+        log: sessionLog,
+      })
+    }
+    return this.campaignScheduledJobRunner
   }
 
   private broadcastDeepResearchRunUpdated(event: DeepResearchRunnerEvent): void {
@@ -3316,6 +3386,11 @@ user a clickable link to where the thing now lives.`
       )
       if (recoveredWorkflowRuns.length > 0) {
         sessionLog.info(`Recovered ${recoveredWorkflowRuns.length} interrupted workflow run(s)`)
+      }
+      for (const workspace of workspaces) {
+        this.getCampaignScheduledJobRunner()
+          .scanWorkspace(workspace.id, workspace.rootPath)
+          .catch((err) => sessionLog.error(`[CampaignScheduledJobs] Startup scan failed for workspace "${workspace.id}":`, err))
       }
 
       this.deepResearchRunner = new DeepResearchRunner({
@@ -6155,6 +6230,59 @@ user a clickable link to where the thing now lives.`
             const slug = (typeof cloned.slug === 'string' && cloned.slug) || (cloned.id as string)
             return { ok: true, slug, eventName, nextFireAt }
           })
+        },
+        campaignCalendarWriteFn: async (input) => {
+          const campaignId = input.campaignId ?? managed.workspace.id
+          if (campaignId !== managed.workspace.id) {
+            return { ok: false, error: `Campaign calendar writes are scoped to the current workspace (${managed.workspace.id}).` }
+          }
+
+          const doc = loadContextDoc(managed.workspace.rootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG)
+          const parsed = doc
+            ? parseCampaignCalendarDocResult(doc, campaignId)
+            : { ok: true as const, calendar: emptyCampaignCalendar(campaignId) }
+          if (!parsed.ok) return { ok: false, error: parsed.error }
+
+          const job = input.item.job
+            ? createCampaignScheduledJob({
+                runAt: input.item.job.runAt,
+                timezone: input.item.job.timezone,
+                actionType: input.item.job.actionType,
+                payload: input.item.job.payload,
+                approvalPolicy: input.item.job.approvalPolicy,
+                maxAttempts: input.item.job.maxAttempts,
+              })
+            : undefined
+          const writeResult = applyCampaignCalendarWriteIntent(parsed.calendar, {
+            campaignId,
+            operation: input.operation,
+            explanation: input.explanation,
+            requiresUserConfirmation: input.requiresUserConfirmation ?? false,
+            item: {
+              ...input.item,
+              job,
+            },
+          }, { actor: 'agent' })
+          if (!writeResult.ok) return { ok: false, error: writeResult.error }
+
+          upsertContextDoc(managed.workspace.rootPath, {
+            slug: CAMPAIGN_CALENDAR_CONTEXT_SLUG,
+            metadata: campaignCalendarMetadata(),
+            body: serializeCampaignCalendarBody(writeResult.calendar),
+          })
+          this.eventSink?.(
+            RPC_CHANNELS.workspaceContext.CHANGED,
+            { to: 'all' },
+            managed.workspace.id,
+            loadAllContextDocs(managed.workspace.rootPath),
+          )
+          return {
+            ok: true,
+            operation: writeResult.operation,
+            itemId: writeResult.item.id,
+            title: writeResult.item.title,
+            status: writeResult.item.status,
+          }
         },
         createWorkflowFn: async (input) => {
           const slug = input.slug

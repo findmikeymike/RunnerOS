@@ -396,6 +396,9 @@ export interface SessionToolContext {
    */
   createAutomation?(input: import('./handlers/create-automation.ts').CreateAutomationToolInput): Promise<import('./handlers/create-automation.ts').CreateAutomationResult>;
 
+  /** Write a local campaign calendar item from a structured agent intent. */
+  campaignCalendarWrite?(input: import('./handlers/campaign-calendar.ts').CampaignCalendarWriteToolInput): Promise<import('./handlers/campaign-calendar.ts').CampaignCalendarWriteResult>;
+
   /**
    * Create a workflow in the global workflow library and optionally activate it
    * in the current workspace. Backend owns parse/write validation, slug

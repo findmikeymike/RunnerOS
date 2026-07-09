@@ -1782,6 +1782,15 @@ function AppShellContent({
     navigate(routes.view.campaign())
   }, [])
 
+  const handleCampaignCalendarClick = useCallback(() => {
+    if (window.location.hash.startsWith('#artist-hq/')) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}`)
+      setArtistHqHash('')
+    }
+    setSessionsNavExpanded(false)
+    navigate(routes.view.campaign('calendar'))
+  }, [])
+
   const handleWorkChatClick = useCallback(async () => {
     if (!activeWorkspaceId) return
     setSessionsNavExpanded(true)
@@ -2087,7 +2096,9 @@ function AppShellContent({
     isConciergeChat: workChatActive,
   })
   const vaultActive = isVaultNavigation(navState)
-  const campaignHomeActive = !isArtistHQWorkspace && isCampaignNavigation(navState)
+  const campaignActive = !isArtistHQWorkspace && isCampaignNavigation(navState)
+  const campaignHomeActive = campaignActive && (navState.subpage ?? 'home') === 'home'
+  const campaignCalendarActive = campaignActive && navState.subpage === 'calendar'
   const activeCampaignId = !isArtistHQWorkspace ? activeWorkspaceId ?? undefined : undefined
   const planExpanded = expandedMainNavGroups.has('plan')
   const peopleExpanded = expandedMainNavGroups.has('people')
@@ -2110,6 +2121,7 @@ function AppShellContent({
 
     if (!isArtistHQWorkspace) {
       result.push({ id: 'nav:campaign', type: 'nav', action: handleCampaignHomeClick })
+      result.push({ id: 'nav:calendar', type: 'nav', action: handleCampaignCalendarClick })
       result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
       result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
       if (workExpanded) {
@@ -2148,7 +2160,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2420,6 +2432,13 @@ function AppShellContent({
           onClick: handleCampaignHomeClick,
         },
         {
+          id: "nav:calendar",
+          title: "Calendar",
+          icon: Calendar,
+          variant: campaignCalendarActive ? "default" : "ghost",
+          onClick: handleCampaignCalendarClick,
+        },
+        {
           id: "nav:work",
           title: "Work",
           icon: Briefcase,
@@ -2624,7 +2643,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignHomeActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignHomeClick, handleChatHistoryToggle, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, navigate, navState, openAddAutomation, peopleActive, peopleExpanded, planActive, planExpanded, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleChatHistoryToggle, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, navigate, navState, openAddAutomation, peopleActive, peopleExpanded, planActive, planExpanded, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   const sidebarSessionHistory = React.useMemo(() => {
     if (!sessionsNavExpanded || !workChatActive) return null

@@ -1284,6 +1284,7 @@ export interface SessionsNavigationState {
 
 export interface CampaignNavigationState {
   navigator: 'campaign'
+  subpage?: 'home' | 'calendar'
   rightSidebar?: RightSidebarPanel
 }
 
@@ -1509,7 +1510,7 @@ export const DEFAULT_NAVIGATION_STATE: NavigationState = {
 
 export const getNavigationStateKey = (state: NavigationState): string => {
   if (state.navigator === 'campaign') {
-    return 'campaign'
+    return state.subpage === 'calendar' ? 'campaign/calendar' : 'campaign'
   }
   if (state.navigator === 'sources') {
     if (state.details) {
@@ -1585,6 +1586,7 @@ export const getNavigationStateKey = (state: NavigationState): string => {
 
 export const parseNavigationStateKey = (key: string): NavigationState | null => {
   if (key === 'campaign') return { navigator: 'campaign' }
+  if (key === 'campaign/calendar') return { navigator: 'campaign', subpage: 'calendar' }
 
   // Handle sources
   if (key === 'sources') return { navigator: 'sources', details: null }
