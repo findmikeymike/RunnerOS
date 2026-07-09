@@ -2113,8 +2113,10 @@ function AppShellContent({
     || isWorkflowsNavigation(navState)
     || isWorkflowRunNavigation(navState)
   const brainActive = isArtistHQWorkspace
-    && isSessionsNavigation(navState)
-    && ['#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash)
+    && (
+      vaultActive
+      || (isSessionsNavigation(navState) && ['#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash))
+    )
 
   const unifiedSidebarItems = React.useMemo((): KeyboardSidebarItem[] => {
     const result: KeyboardSidebarItem[] = []
@@ -2144,7 +2146,6 @@ function AppShellContent({
       result.push({ id: 'nav:network', type: 'nav', action: () => handleArtistHQNavClick('network') })
       result.push({ id: 'nav:community', type: 'nav', action: () => navigate(routes.view.community()) })
     }
-    result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
     result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
     if (workExpanded) {
       result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
@@ -2157,10 +2158,11 @@ function AppShellContent({
       result.push({ id: 'nav:voice', type: 'nav', action: () => handleArtistHQNavClick('voice') })
       result.push({ id: 'nav:research', type: 'nav', action: () => handleArtistHQNavClick('research') })
       result.push({ id: 'nav:branding', type: 'nav', action: () => handleArtistHQNavClick('branding') })
+      result.push({ id: 'nav:vault', type: 'nav', action: () => navigate(routes.view.vault()) })
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, vaultActive, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2551,13 +2553,6 @@ function AppShellContent({
         ],
       },
       {
-        id: "nav:vault",
-        title: "Vault",
-        icon: FolderOpen,
-        variant: vaultActive ? "default" : "ghost",
-        onClick: () => navigate(routes.view.vault()),
-      },
-      {
         id: "nav:work",
         title: "Work",
         icon: Bot,
@@ -2639,6 +2634,13 @@ function AppShellContent({
             icon: Sparkles,
             variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/branding' ? "default" : "ghost",
             onClick: () => handleArtistHQNavClick('branding'),
+          },
+          {
+            id: "nav:vault",
+            title: "Vault",
+            icon: FolderOpen,
+            variant: vaultActive ? "default" : "ghost",
+            onClick: () => navigate(routes.view.vault()),
           },
         ],
       },
