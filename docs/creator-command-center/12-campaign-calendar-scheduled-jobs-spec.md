@@ -7,6 +7,11 @@ source_of_truth: false
 
 # Campaign Calendar And Scheduled Jobs
 
+> Implementation note: use
+> [`13-scheduled-work-composer-execution-spec.md`](./13-scheduled-work-composer-execution-spec.md)
+> as the source of truth for the progressive composer, HQ routing, typed queue
+> contracts, completion semantics, and the next implementation phases.
+
 ## Purpose
 
 Give each campaign its own execution calendar: not a generic date list, and not another HQ calendar.

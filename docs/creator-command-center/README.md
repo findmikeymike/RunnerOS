@@ -21,6 +21,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [10 Work Products / Output Architecture](./10-work-products-output-architecture-spec.md)
 - [11 Outputs, Finals, And Asset Promotion](./11-outputs-finals-asset-promotion-spec.md)
 - [12 Campaign Calendar And Scheduled Jobs](./12-campaign-calendar-scheduled-jobs-spec.md)
+- [13 Scheduled Work Composer And Execution](./13-scheduled-work-composer-execution-spec.md)
 
 Current V1 implementation note: Outputs -> Finals is wired through UI list/detail actions and the `promote_output_to_final` session tool. Finals are pointers stored in workspace context; campaign promotion should use the active campaign workspace id automatically.
 
