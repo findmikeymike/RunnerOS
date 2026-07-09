@@ -9,8 +9,11 @@ import {
   createCampaignCalendarDraftItem,
   createCampaignScheduledJob,
   formatCampaignExternalReceiptLabel,
+  mutateCampaignCalendarDoc,
   parseCampaignCalendarDocResult,
   requeueCampaignScheduledJob,
+  reviseCampaignCalendarDraftItem,
+  rescheduleCampaignCalendarItem,
   selectDueCampaignScheduledJobs,
   serializeCampaignCalendarBody,
   updateCampaignCalendarItem,
@@ -89,6 +92,44 @@ describe('campaign calendar utilities', () => {
     expect(result.ok).toBe(true)
     expect(result.calendar.campaignId).toBe('campaign-1')
     expect(result.calendar.items).toEqual([])
+  })
+
+  test('retries a conflicting calendar mutation against the latest document', async () => {
+    const existing = createCampaignCalendarItem({ campaignId: 'campaign-1', date: '2026-07-10', title: 'Existing' })
+    const concurrent = createCampaignCalendarItem({ campaignId: 'campaign-1', date: '2026-07-11', title: 'Concurrent runner write' })
+    const added = createCampaignCalendarItem({ campaignId: 'campaign-1', date: '2026-07-12', title: 'User addition' })
+    const bodyFor = (items: typeof existing[]) => serializeCampaignCalendarBody({
+      version: 1,
+      campaignId: 'campaign-1',
+      items,
+      updatedAt: '2026-07-10T13:00:00.000Z',
+    })
+    let latestDoc = makeDoc(bodyFor([existing]))
+    let attempts = 0
+    let savedBody = ''
+
+    await mutateCampaignCalendarDoc({
+      campaignId: 'campaign-1',
+      load: async () => latestDoc,
+      upsert: async (input) => {
+        attempts += 1
+        if (attempts === 1) {
+          latestDoc = makeDoc(bodyFor([existing, concurrent]))
+          throw new Error('CONTEXT_DOC_CONFLICT: campaign-calendar changed')
+        }
+        savedBody = input.body
+      },
+      mutate: (calendar) => ({ ...calendar, items: [...calendar.items, added] }),
+    })
+
+    const saved = parseCampaignCalendarDocResult(makeDoc(savedBody), 'campaign-1')
+    expect(saved.ok).toBe(true)
+    expect(saved.calendar.items.map((item) => item.title)).toEqual([
+      'Existing',
+      'Concurrent runner write',
+      'User addition',
+    ])
+    expect(attempts).toBe(2)
   })
 
   test('round-trips manual, deadline, and approval items', () => {
@@ -225,6 +266,190 @@ describe('campaign calendar utilities', () => {
       expect(result.item.source).toBe('agent')
       expect(result.item.kind).toBe('scheduled-job')
       expect(result.item.status).toBe('needs-approval')
+    }
+  })
+
+  test('rejects agent write intents that still require user confirmation', () => {
+    const result = applyCampaignCalendarWriteIntent({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [],
+      updatedAt: '2026-07-10T13:00:00.000Z',
+    }, {
+      campaignId: 'campaign-1',
+      operation: 'create',
+      explanation: 'The target time is still ambiguous.',
+      requiresUserConfirmation: true,
+      item: { date: '2026-07-10', title: 'Tentative post' },
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error).toContain('confirmation')
+  })
+
+  test('agent updates preserve exact asset, output, and profile binding changes', () => {
+    const existing = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      assetRefs: [{ assetId: 'asset-old' }],
+      finalRefs: [{ outputId: 'output-old', assetId: 'asset-old' }],
+      outputRefs: [{ outputId: 'output-old' }],
+      accountSetId: 'account-old',
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'old-profile' }],
+    })
+    const result = applyCampaignCalendarWriteIntent({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [existing],
+      updatedAt: '2026-07-10T13:00:00.000Z',
+    }, {
+      campaignId: 'campaign-1',
+      operation: 'update',
+      explanation: 'Use the corrected final and profile.',
+      requiresUserConfirmation: false,
+      item: {
+        id: existing.id,
+        assetRefs: [{ assetId: 'asset-new' }],
+        finalRefs: [{ outputId: 'output-new', assetId: 'asset-new' }],
+        outputRefs: [{ outputId: 'output-new' }],
+        accountSetId: 'account-new',
+        socialProfileRefs: [{ platform: 'instagram', profileId: 'new-profile' }],
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.item.assetRefs).toEqual([{ assetId: 'asset-new' }])
+      expect(result.item.finalRefs).toEqual([{ outputId: 'output-new', assetId: 'asset-new' }])
+      expect(result.item.outputRefs).toEqual([{ outputId: 'output-new' }])
+      expect(result.item.accountSetId).toBe('account-new')
+      expect(result.item.socialProfileRefs).toEqual([{ platform: 'instagram', profileId: 'new-profile' }])
+    }
+  })
+
+  test('agent binding changes invalidate an external dry-run and its approval', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { caption: 'Post this.' },
+    })
+    const existing = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'old-profile' }],
+      job: {
+        ...job,
+        externalActionPreview: {
+          actionId: 'act_old',
+          actionDigest: 'sha256:old',
+          platform: 'instagram',
+          profileId: 'old-profile',
+          preparedAt: '2026-07-10T13:30:00.000Z',
+          payloadDigest: job.payloadDigest,
+        },
+      },
+    }), { campaignId: 'campaign-1', now: '2026-07-10T13:40:00.000Z' })
+
+    const result = applyCampaignCalendarWriteIntent({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [existing],
+      updatedAt: '2026-07-10T13:40:00.000Z',
+    }, {
+      campaignId: 'campaign-1',
+      operation: 'update',
+      explanation: 'Use the corrected profile.',
+      requiresUserConfirmation: false,
+      item: {
+        id: existing.id,
+        socialProfileRefs: [{ platform: 'instagram', profileId: 'new-profile' }],
+      },
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.item.job?.externalActionPreview).toBeUndefined()
+      expect(result.item.approvals).toEqual([])
+      expect(result.item.status).toBe('needs-approval')
+    }
+  })
+
+  test('rescheduling a calendar job updates the actual due timestamp', () => {
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      time: '09:30',
+      title: 'Prepare launch copy',
+      kind: 'scheduled-job',
+      job: createCampaignScheduledJob({
+        runAt: new Date('2026-07-10T09:30:00').toISOString(),
+        actionType: 'ask-agent',
+        payload: { prompt: 'Prepare launch copy.' },
+      }),
+    })
+
+    const result = rescheduleCampaignCalendarItem(item, { date: '2026-07-12', time: '14:45' })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.item.date).toBe('2026-07-12')
+      expect(result.item.time).toBe('14:45')
+      expect(result.item.job?.runAt).toBe(new Date('2026-07-12T14:45:00').toISOString())
+    }
+  })
+
+  test('revising a scheduled post invalidates stale approval and dry-run state', () => {
+    const job = createCampaignScheduledJob({
+      runAt: new Date('2026-07-10T09:30:00').toISOString(),
+      actionType: 'post-asset',
+      payload: { caption: 'Old caption' },
+    })
+    const item = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      time: '09:30',
+      title: 'Post launch art',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      finalRefs: [{ outputId: 'output-1', assetId: 'asset-1' }],
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'old-profile' }],
+      job: {
+        ...job,
+        externalActionPreview: {
+          actionId: 'act_old',
+          actionDigest: 'sha256:old',
+          platform: 'instagram',
+          profileId: 'old-profile',
+          preparedAt: '2026-07-10T09:00:00.000Z',
+          payloadDigest: job.payloadDigest,
+        },
+      },
+    }), { campaignId: 'campaign-1', now: '2026-07-10T09:05:00.000Z' })
+
+    const result = reviseCampaignCalendarDraftItem(item, {
+      campaignId: 'campaign-1',
+      date: '2026-07-11',
+      time: '10:45',
+      title: 'Post launch art',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      actionType: 'post-asset',
+      actionInput: 'New caption',
+      finalRefs: item.finalRefs,
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'new-profile' }],
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.item.job?.payload).toEqual({ caption: 'New caption' })
+      expect(result.item.job?.runAt).toBe(new Date('2026-07-11T10:45:00').toISOString())
+      expect(result.item.job?.externalActionPreview).toBeUndefined()
+      expect(result.item.approvals).toEqual([])
+      expect(result.item.socialProfileRefs).toEqual([{ platform: 'instagram', profileId: 'new-profile' }])
     }
   })
 

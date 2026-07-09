@@ -909,6 +909,7 @@ export interface ElectronAPI {
     slug: string
     metadata: ContextDocMetadata
     body: string
+    expectedBody?: string | null
   }): Promise<ContextDocDTO>
   deleteWorkspaceContextDoc(workspaceId: string, slug: string): Promise<boolean>
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void

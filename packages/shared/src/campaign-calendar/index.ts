@@ -363,6 +363,32 @@ export function updateCampaignCalendarItem(
   });
 }
 
+export function rescheduleCampaignCalendarItem(
+  item: CampaignCalendarItem,
+  schedule: { date: string; time?: string; timezone?: string },
+): { ok: true; item: CampaignCalendarItem } | { ok: false; error: string } {
+  if (!item.job) return { ok: false, error: 'Only scheduled jobs can be rescheduled.' };
+  if (!isDateKey(schedule.date)) return { ok: false, error: 'Scheduled job date must use YYYY-MM-DD.' };
+  const time = cleanTime(schedule.time);
+  if (!time) return { ok: false, error: 'Scheduled jobs require a time.' };
+  const runAt = new Date(`${schedule.date}T${time}:00`);
+  if (Number.isNaN(runAt.getTime())) return { ok: false, error: 'Scheduled job date or time is invalid.' };
+  const timezone = clean(schedule.timezone) ?? item.timezone;
+  return {
+    ok: true,
+    item: updateCampaignCalendarItem(item, {
+      date: schedule.date,
+      time,
+      timezone,
+      job: {
+        ...item.job,
+        runAt: runAt.toISOString(),
+        timezone,
+      },
+    }),
+  };
+}
+
 export function approveCampaignCalendarItem(
   item: CampaignCalendarItem,
   options: { campaignId?: string; now?: string; notes?: string; expiresAt?: string } = {},
@@ -426,6 +452,9 @@ export function applyCampaignCalendarWriteIntent(
   if (!intent.explanation.trim()) {
     return { ok: false, calendar, error: 'Calendar write intent requires an explanation.' };
   }
+  if (intent.requiresUserConfirmation) {
+    return { ok: false, calendar, error: 'Calendar write intent still requires user confirmation.' };
+  }
   const now = cleanIso(options.now) ?? new Date().toISOString();
   const source = options.actor ?? 'agent';
 
@@ -477,7 +506,7 @@ export function applyCampaignCalendarWriteIntent(
   const nextStatus = nextJob && shouldRequireApproval(intent.item.status ?? existing.status, nextJob)
     ? 'needs-approval'
     : normalizeStatus(intent.item.status ?? existing.status);
-  const item = updateCampaignCalendarItem(existing, {
+  let item = updateCampaignCalendarItem(existing, {
     date: intent.item.date ?? existing.date,
     time: intent.item.time ?? existing.time,
     timezone: intent.item.timezone ?? existing.timezone,
@@ -486,10 +515,44 @@ export function applyCampaignCalendarWriteIntent(
     kind: nextJob ? 'scheduled-job' : (intent.item.kind ?? existing.kind),
     status: nextStatus,
     personIds: intent.item.personIds ?? existing.personIds,
+    assetRefs: intent.item.assetRefs ?? existing.assetRefs,
+    finalRefs: intent.item.finalRefs ?? existing.finalRefs,
+    outputRefs: intent.item.outputRefs ?? existing.outputRefs,
+    accountSetId: intent.item.accountSetId ?? existing.accountSetId,
+    socialProfileRefs: intent.item.socialProfileRefs ?? existing.socialProfileRefs,
     job: nextJob,
     approvals: intent.item.approvals ?? existing.approvals,
     runHistory: intent.item.runHistory ?? existing.runHistory,
   });
+  const scheduleChanged = intent.item.job === undefined
+    && Boolean(existing.job)
+    && (intent.item.date !== undefined || intent.item.time !== undefined || intent.item.timezone !== undefined);
+  if (scheduleChanged) {
+    const rescheduled = rescheduleCampaignCalendarItem(item, {
+      date: item.date,
+      time: item.time,
+      timezone: item.timezone,
+    });
+    if (!rescheduled.ok) return { ok: false, calendar, error: rescheduled.error };
+    item = rescheduled.item;
+  }
+  const externalBindingsChanged = Boolean(item.job && isLiveExternalActionType(item.job.actionType))
+    && (
+      (existing.accountSetId ?? undefined) !== (item.accountSetId ?? undefined)
+      || stableStringify(existing.socialProfileRefs ?? []) !== stableStringify(item.socialProfileRefs ?? [])
+      || stableStringify(existing.assetRefs) !== stableStringify(item.assetRefs)
+      || stableStringify(existing.finalRefs) !== stableStringify(item.finalRefs)
+      || stableStringify(existing.outputRefs) !== stableStringify(item.outputRefs)
+    );
+  if (item.job && (externalBindingsChanged || scheduleChanged)) {
+    item = updateCampaignCalendarItem(item, {
+      status: isLiveExternalActionType(item.job.actionType) ? 'needs-approval' : item.status,
+      approvals: [],
+      job: externalBindingsChanged
+        ? { ...item.job, externalActionPreview: undefined, error: undefined }
+        : item.job,
+    });
+  }
   return replaceCalendarItem(calendar, item, intent.operation, now);
 }
 

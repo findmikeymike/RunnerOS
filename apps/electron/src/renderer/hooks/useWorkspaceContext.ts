@@ -8,7 +8,7 @@ export interface UseWorkspaceContextResult {
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
-  upsert: (input: { slug: string; metadata: ContextDocMetadata; body: string }) => Promise<ContextDocDTO>
+  upsert: (input: { slug: string; metadata: ContextDocMetadata; body: string; expectedBody?: string | null }) => Promise<ContextDocDTO>
   remove: (slug: string) => Promise<boolean>
 }
 
@@ -103,7 +103,7 @@ export function useWorkspaceContext(workspaceId: string | null | undefined): Use
     }
   }, [workspaceKey])
 
-  const upsert = useCallback(async (input: { slug: string; metadata: ContextDocMetadata; body: string }) => {
+  const upsert = useCallback(async (input: { slug: string; metadata: ContextDocMetadata; body: string; expectedBody?: string | null }) => {
     if (!workspaceId) throw new Error('No active workspace')
     const saved = await window.electronAPI.upsertWorkspaceContextDoc(workspaceId, input)
     setState((prev) => {

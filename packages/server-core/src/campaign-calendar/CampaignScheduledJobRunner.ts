@@ -219,7 +219,7 @@ export class CampaignScheduledJobRunner {
               workspaceId,
               workspaceRootPath,
               calendar,
-              markNeedsApproval(current, current.job, `External dry-run failed: ${message}`),
+              markTerminalFailed(current, current.job, now, `External dry-run failed: ${message}`),
             )
             result.failed += 1
           }

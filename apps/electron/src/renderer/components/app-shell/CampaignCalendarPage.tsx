@@ -7,13 +7,13 @@ import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   activeCampaignCalendarItems,
   approveCampaignCalendarItem,
-  campaignCalendarMetadata,
   createCampaignCalendarDraftItem,
   formatCampaignExternalReceiptLabel,
   isLiveExternalActionType,
   parseCampaignCalendarDocResult,
   requeueCampaignScheduledJob,
-  serializeCampaignCalendarBody,
+  mutateCampaignCalendarDoc,
+  reviseCampaignCalendarDraftItem,
   takePendingCampaignCalendarPrefill,
   updateCampaignCalendarItem,
   type CampaignCalendar,
@@ -68,7 +68,7 @@ const emptyCampaignCalendarDraft = (date = todayKey): CampaignCalendarDraft => (
 })
 
 export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
-  const { docs, upsert } = useWorkspaceContext(workspaceId)
+  const { docs, upsert, refresh } = useWorkspaceContext(workspaceId)
   const savedCampaignCalendarResult = React.useMemo(
     () => parseCampaignCalendarDocResult(docs.find((item) => item.slug === CAMPAIGN_CALENDAR_CONTEXT_SLUG), workspaceId || 'workspace'),
     [docs, workspaceId],
@@ -132,22 +132,32 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   }, [])
 
   const saveCampaignCalendar = React.useCallback(
-    async (nextCalendar: CampaignCalendar) => {
-      setOptimisticCampaignCalendar(nextCalendar)
+    async (mutate: (calendar: CampaignCalendar) => CampaignCalendar): Promise<boolean> => {
       try {
-        await upsert({
-          slug: CAMPAIGN_CALENDAR_CONTEXT_SLUG,
-          metadata: campaignCalendarMetadata(),
-          body: serializeCampaignCalendarBody(nextCalendar),
-        })
+        setOptimisticCampaignCalendar(mutate(campaignCalendar))
       } catch (err) {
         toast.error(err instanceof Error ? err.message : String(err))
+        return false
+      }
+      try {
+        await mutateCampaignCalendarDoc({
+          campaignId: workspaceId || 'workspace',
+          load: () => window.electronAPI.getWorkspaceContextDoc(workspaceId, CAMPAIGN_CALENDAR_CONTEXT_SLUG),
+          upsert,
+          mutate,
+        })
+        return true
+      } catch (err) {
+        setOptimisticCampaignCalendar(null)
+        await refresh()
+        toast.error(err instanceof Error ? err.message : String(err))
+        return false
       }
     },
-    [upsert],
+    [campaignCalendar, refresh, upsert, workspaceId],
   )
 
-  const addCampaignCalendarItem = React.useCallback(() => {
+  const addCampaignCalendarItem = React.useCallback(async () => {
     if (!calendarDraft.title.trim()) {
       toast.error('Add a title first.')
       return
@@ -174,15 +184,15 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
       return
     }
     const item = result.item
-    void saveCampaignCalendar({
-      version: 1,
-      campaignId: campaignCalendar.campaignId || workspaceId || 'workspace',
-      items: [...campaignCalendar.items, item],
+    const saved = await saveCampaignCalendar((latest) => ({
+      ...latest,
+      items: [...latest.items, item],
       updatedAt: new Date().toISOString(),
-    })
+    }))
+    if (!saved) return
     setSelectedCalendarDate(item.date)
     setCalendarDraft(emptyCampaignCalendarDraft(item.date))
-  }, [calendarDraft, campaignCalendar.campaignId, campaignCalendar.items, saveCampaignCalendar, selectedCalendarDate, workspaceId])
+  }, [calendarDraft, saveCampaignCalendar, selectedCalendarDate, workspaceId])
 
   const openCampaignCalendarItemEdit = React.useCallback((item: CampaignCalendarItem) => {
     setCalendarEditId(item.id)
@@ -198,7 +208,9 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
         ? item.job.payload.prompt
         : typeof item.job?.payload.caption === 'string'
           ? item.job.payload.caption
-          : '',
+          : typeof item.job?.payload.workflowSlug === 'string'
+            ? item.job.payload.workflowSlug
+            : '',
       socialPlatform: item.socialProfileRefs?.[0]?.platform ?? '',
       socialProfileId: item.socialProfileRefs?.[0]?.profileId ?? '',
       accountSetId: item.accountSetId ?? '',
@@ -212,13 +224,42 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
     setCalendarEditDraft(emptyCampaignCalendarDraft(selectedCalendarDate))
   }, [selectedCalendarDate])
 
-  const saveCampaignCalendarItemEdit = React.useCallback((itemId: string) => {
+  const saveCampaignCalendarItemEdit = React.useCallback(async (itemId: string) => {
     if (!calendarEditDraft.title.trim()) {
       toast.error('Add a title first.')
       return
     }
-    const nextItems = campaignCalendar.items.map((item) => item.id === itemId
-      ? updateCampaignCalendarItem(item, {
+    const existing = campaignCalendar.items.find((item) => item.id === itemId)
+    if (existing?.job && !calendarEditDraft.time.trim()) {
+      toast.error('Scheduled jobs require a time.')
+      return
+    }
+    const saved = await saveCampaignCalendar((latest) => ({
+      ...latest,
+      items: latest.items.map((item) => {
+        if (item.id !== itemId) return item
+        if (item.job) {
+          const revised = reviseCampaignCalendarDraftItem(item, {
+            campaignId: latest.campaignId,
+            title: calendarEditDraft.title,
+            date: calendarEditDraft.date,
+            time: calendarEditDraft.time,
+            kind: 'scheduled-job',
+            status: calendarEditDraft.status,
+            notes: calendarEditDraft.notes,
+            actionType: calendarEditDraft.actionType,
+            actionInput: calendarEditDraft.actionInput,
+            accountSetId: calendarEditDraft.accountSetId || undefined,
+            socialProfileRefs: calendarEditDraft.socialPlatform && calendarEditDraft.socialProfileId
+              ? [{ platform: calendarEditDraft.socialPlatform, profileId: calendarEditDraft.socialProfileId }]
+              : undefined,
+            finalRefs: calendarEditDraft.finalRefs,
+            outputRefs: calendarEditDraft.outputRefs,
+          })
+          if (!revised.ok) throw new Error(revised.error)
+          return revised.item
+        }
+        return updateCampaignCalendarItem(item, {
           title: calendarEditDraft.title,
           date: calendarEditDraft.date,
           time: calendarEditDraft.time,
@@ -226,54 +267,48 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
           status: calendarEditDraft.status,
           notes: calendarEditDraft.notes,
         })
-      : item)
-    void saveCampaignCalendar({
-      version: 1,
-      campaignId: campaignCalendar.campaignId || workspaceId || 'workspace',
-      items: nextItems,
+      }),
       updatedAt: new Date().toISOString(),
-    })
+    }))
+    if (!saved) return
     setSelectedCalendarDate(calendarEditDraft.date)
     cancelCampaignCalendarItemEdit()
-  }, [calendarEditDraft, campaignCalendar.campaignId, campaignCalendar.items, cancelCampaignCalendarItemEdit, saveCampaignCalendar, workspaceId])
+  }, [calendarEditDraft, campaignCalendar.items, cancelCampaignCalendarItemEdit, saveCampaignCalendar])
 
   const deleteCampaignCalendarItem = React.useCallback((itemId: string) => {
     const now = new Date().toISOString()
-    void saveCampaignCalendar({
-      version: 1,
-      campaignId: campaignCalendar.campaignId || workspaceId || 'workspace',
-      items: campaignCalendar.items.map((item) => item.id === itemId ? { ...item, deletedAt: now, updatedAt: now } : item),
+    void saveCampaignCalendar((latest) => ({
+      ...latest,
+      items: latest.items.map((item) => item.id === itemId ? { ...item, deletedAt: now, updatedAt: now } : item),
       updatedAt: now,
-    })
-  }, [campaignCalendar.campaignId, campaignCalendar.items, saveCampaignCalendar, workspaceId])
+    }))
+  }, [saveCampaignCalendar])
 
-  const patchCampaignCalendarItem = React.useCallback((itemId: string, patcher: (item: CampaignCalendarItem) => CampaignCalendarItem) => {
+  const patchCampaignCalendarItem = React.useCallback(async (itemId: string, patcher: (item: CampaignCalendarItem) => CampaignCalendarItem) => {
     const now = new Date().toISOString()
     let patchedTitle: string | undefined
-    const nextItems = campaignCalendar.items.map((item) => {
-      if (item.id !== itemId) return item
-      const next = patcher(item)
-      patchedTitle = next.title
-      return next
-    })
-    void saveCampaignCalendar({
-      version: 1,
-      campaignId: campaignCalendar.campaignId || workspaceId || 'workspace',
-      items: nextItems,
+    const saved = await saveCampaignCalendar((latest) => ({
+      ...latest,
+      items: latest.items.map((item) => {
+        if (item.id !== itemId) return item
+        const next = patcher(item)
+        patchedTitle = next.title
+        return next
+      }),
       updatedAt: now,
-    })
-    if (patchedTitle) toast.success(`Updated ${patchedTitle}.`)
-  }, [campaignCalendar.campaignId, campaignCalendar.items, saveCampaignCalendar, workspaceId])
+    }))
+    if (saved && patchedTitle) toast.success(`Updated ${patchedTitle}.`)
+  }, [saveCampaignCalendar])
 
   const approveCampaignCalendarJob = React.useCallback((itemId: string) => {
-    patchCampaignCalendarItem(itemId, (item) => approveCampaignCalendarItem(item, {
+    void patchCampaignCalendarItem(itemId, (item) => approveCampaignCalendarItem(item, {
       campaignId: campaignCalendar.campaignId || workspaceId || 'workspace',
       now: new Date().toISOString(),
     }))
   }, [campaignCalendar.campaignId, patchCampaignCalendarItem, workspaceId])
 
   const requeueCampaignCalendarJob = React.useCallback((itemId: string) => {
-    patchCampaignCalendarItem(itemId, requeueCampaignScheduledJob)
+    void patchCampaignCalendarItem(itemId, requeueCampaignScheduledJob)
   }, [patchCampaignCalendarItem])
 
   return (
@@ -440,7 +475,7 @@ function CampaignCalendarSurface({
                     onCancel={onCancelEditItem}
                     onSubmit={() => onSaveEditItem(item.id)}
                     socialProfiles={socialProfiles}
-                    showJobConfig={false}
+                    showJobConfig={Boolean(item.job)}
                   />
                 ) : (
                   <div className="flex items-start justify-between gap-3">

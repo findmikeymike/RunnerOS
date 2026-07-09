@@ -213,6 +213,44 @@ describe('CampaignScheduledJobRunner', () => {
     })
   })
 
+  test('stops retrying a failed external dry-run until the user requeues it', async () => {
+    const root = makeRoot()
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'ig-main' }],
+      job: createCampaignScheduledJob({
+        runAt: '2026-07-10T14:00:00.000Z',
+        actionType: 'post-asset',
+        payload: { caption: 'New song Friday.' },
+      }),
+    })
+    writeCalendar(root, [item])
+
+    let prepareCalls = 0
+    const runner = new CampaignScheduledJobRunner({
+      executePromptJob: async () => ({ sessionId: 'session-1' }),
+      startWorkflow: async () => ({ runId: 'run-1' }),
+      prepareExternalJob: async () => {
+        prepareCalls += 1
+        throw new Error('Profile login expired.')
+      },
+    })
+
+    const first = await runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:01:00.000Z'))
+    const second = await runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:02:00.000Z'))
+    const saved = readCalendar(root).items[0]!
+
+    expect(first.failed).toBe(1)
+    expect(second.scanned).toBe(0)
+    expect(prepareCalls).toBe(1)
+    expect(saved.status).toBe('failed')
+    expect(saved.job?.error).toContain('Profile login expired')
+  })
+
   test('invalidates approval when a prepared external action changes', () => {
     const job = createCampaignScheduledJob({
       runAt: '2026-07-10T14:00:00.000Z',

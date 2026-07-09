@@ -45,6 +45,17 @@ export interface UpsertContextDocPayload {
   slug: string
   metadata: UpsertContextDocInput['metadata']
   body: string
+  expectedBody?: string | null
+}
+
+export function assertExpectedContextBody(
+  slug: string,
+  currentBody: string | null,
+  expectedBody: string | null,
+): void {
+  if (currentBody !== expectedBody) {
+    throw new Error(`CONTEXT_DOC_CONFLICT: ${slug} changed before this update was saved.`)
+  }
 }
 
 function broadcastChanged(deps: HandlerDeps, workspaceId: string, docs: LoadedContextDoc[]): void {
@@ -80,6 +91,10 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
   server.handle(RPC_CHANNELS.workspaceContext.UPSERT, async (_ctx, workspaceId: string, payload: UpsertContextDocPayload): Promise<LoadedContextDoc> => {
     const rootPath = resolveRootPath(workspaceId)
     return withWorkspaceMutex(rootPath, async () => {
+      if (Object.prototype.hasOwnProperty.call(payload, 'expectedBody')) {
+        const currentBody = loadContextDoc(rootPath, payload.slug)?.body ?? null
+        assertExpectedContextBody(payload.slug, currentBody, payload.expectedBody ?? null)
+      }
       const loaded = upsertContextDoc(rootPath, {
         slug: payload.slug,
         metadata: payload.metadata,
