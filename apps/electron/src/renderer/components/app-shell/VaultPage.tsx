@@ -389,8 +389,14 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                   )
                 })}
               </div>
-              <div className="flex justify-end gap-2">
-                <label className="flex h-8 items-center gap-2 rounded-full border border-white/[0.035] bg-black/20 px-3">
+              <div className="flex justify-end">
+                <div className="grid w-[240px] gap-1.5">
+                  <select value={agentFilter} onChange={(event) => setAgentFilter(event.target.value as typeof agentFilter)} className="h-8 rounded-full border border-white/[0.035] bg-black/20 px-3 text-xs text-white/52 outline-none">
+                    <option value="all">All visibility</option>
+                    <option value="usable">Ready</option>
+                    <option value="private">Private</option>
+                  </select>
+                  <label className="flex h-8 items-center gap-2 rounded-full border border-white/[0.025] bg-black/12 px-3">
                   <Search className="h-3.5 w-3.5 text-white/26" />
                   <input
                     value={query}
@@ -398,15 +404,12 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                     placeholder="Search"
                     className="min-w-0 flex-1 bg-transparent text-xs text-white/66 outline-none placeholder:text-white/24"
                   />
-                </label>
-                <select value={agentFilter} onChange={(event) => setAgentFilter(event.target.value as typeof agentFilter)} className="h-8 rounded-full border border-white/[0.035] bg-black/20 px-3 text-xs text-white/52 outline-none">
-                  <option value="all">All visibility</option>
-                  <option value="usable">Ready</option>
-                  <option value="private">Private</option>
-                </select>
+                  </label>
+                </div>
               </div>
 
-              <div className="mt-3 flex gap-1.5 overflow-x-auto pb-0.5">
+              <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-0.5">
+                <span className="shrink-0 text-[10px] font-medium uppercase tracking-[0.16em] text-white/28">Import as</span>
                 <KindChip active={selectedKind === 'all'} label="All" onClick={() => selectKind('all')} />
                 {CATEGORY_KIND_LABELS[selectedCategory].map((item) => (
                   <KindChip
@@ -432,7 +435,7 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
                 </button>
               </div>
               {filteredAssets.length === 0 ? (
-                <EmptyState category={selectedCategory} />
+                <EmptyState kind={selectedKind} />
               ) : (
                 <div className="overflow-hidden rounded-[12px] border border-white/[0.055]">
                   {filteredAssets.map((asset) => (
@@ -768,13 +771,14 @@ function AssetRow({ asset, selected, onSelect }: { asset: VaultAssetRecord; sele
   )
 }
 
-function EmptyState({ category }: { category: VaultCategory }) {
+function EmptyState({ kind }: { kind: VaultAssetKind | 'all' }) {
+  const target = kind === 'all' ? 'files' : formatKind(kind).toLowerCase()
   return (
     <div className="flex min-h-[420px] flex-col items-center justify-center rounded-[14px] border border-dashed border-white/[0.07] bg-white/[0.01] text-center">
       <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-[16px] border border-white/[0.06] bg-white/[0.025]">
         <Upload className="h-5 w-5 text-white/24" />
       </div>
-      <div className="text-sm font-semibold text-white/58">Drop files here</div>
+      <div className="text-sm font-semibold text-white/58">Drop {target} here</div>
       <div className="mt-1 max-w-[300px] text-xs leading-5 text-white/28">Files are staged before import.</div>
     </div>
   )
