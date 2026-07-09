@@ -101,7 +101,21 @@ export interface CampaignJobRun {
   sessionId?: string;
   workflowRunId?: string;
   resultSummary?: string;
+  externalReceipt?: CampaignExternalExecutionReceipt;
   error?: string;
+}
+
+export interface CampaignExternalExecutionReceipt {
+  id: string;
+  actionType: CampaignScheduledJobActionType;
+  platform?: string;
+  profileId?: string;
+  accountSetId?: string;
+  externalUrl?: string;
+  completedAt: string;
+  payloadDigest: string;
+  approvalId: string;
+  summary?: string;
 }
 
 export interface ExternalCalendarSyncState {
@@ -519,7 +533,16 @@ export function hasApprovedScheduledJobPayload(
   now: Date = new Date(),
   campaignId?: string,
 ): boolean {
-  return (item.approvals ?? []).some((approval) => (
+  return Boolean(findApprovedScheduledJobApproval(item, job, now, campaignId));
+}
+
+export function findApprovedScheduledJobApproval(
+  item: CampaignCalendarItem,
+  job: CampaignScheduledJob,
+  now: Date = new Date(),
+  campaignId?: string,
+): CampaignScheduleApproval | undefined {
+  return (item.approvals ?? []).findLast((approval) => (
     approval.status === 'approved'
     && !isApprovalExpired(approval, now)
     && approvalMatchesJob(approval, item, job, campaignId)
@@ -534,6 +557,7 @@ export function createCampaignJobRun(input: {
   sessionId?: string;
   workflowRunId?: string;
   resultSummary?: string;
+  externalReceipt?: CampaignExternalExecutionReceipt;
   error?: string;
 }): CampaignJobRun {
   const startedAt = cleanIso(input.startedAt) ?? new Date().toISOString();
@@ -546,6 +570,7 @@ export function createCampaignJobRun(input: {
     sessionId: clean(input.sessionId),
     workflowRunId: clean(input.workflowRunId),
     resultSummary: clean(input.resultSummary),
+    externalReceipt: normalizeExternalReceipt(input.externalReceipt),
     error: clean(input.error),
   };
 }
@@ -652,8 +677,8 @@ function normalizeCampaignCalendarItem(item: CampaignCalendarItem): CampaignCale
     accountSetId: clean(item.accountSetId),
     socialProfileRefs: normalizeSocialProfileRefs(item.socialProfileRefs),
     job: normalizeScheduledJob(item.job),
-    approvals: Array.isArray(item.approvals) ? item.approvals : [],
-    runHistory: Array.isArray(item.runHistory) ? item.runHistory : [],
+    approvals: normalizeApprovals(item.approvals),
+    runHistory: normalizeJobRuns(item.runHistory),
     deletedAt: clean(item.deletedAt),
     createdAt: typeof item.createdAt === 'string' ? item.createdAt : now,
     updatedAt: typeof item.updatedAt === 'string' ? item.updatedAt : now,
@@ -792,6 +817,97 @@ function normalizeSocialProfileRefs(value: unknown): SocialProfileRef[] | undefi
     .filter((item): item is SocialProfileRef => typeof item?.platform === 'string' && Boolean(item.platform.trim()))
     .map((item) => ({ platform: item.platform.trim(), profileId: clean(item.profileId), label: clean(item.label) }));
   return refs.length ? refs : undefined;
+}
+
+function normalizeApprovals(value: unknown): CampaignScheduleApproval[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const approval = entry as Partial<CampaignScheduleApproval>;
+    const status = approval.status;
+    if (status !== 'pending' && status !== 'approved' && status !== 'rejected' && status !== 'expired') return [];
+    const binding = normalizeApprovalBinding(approval.binding);
+    return [{
+      id: clean(approval.id) ?? `campaign-approval-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      status,
+      approvedAt: cleanIso(approval.approvedAt),
+      expiresAt: cleanIso(approval.expiresAt),
+      payloadDigest: clean(approval.payloadDigest),
+      binding,
+      notes: clean(approval.notes),
+    }];
+  });
+}
+
+function normalizeApprovalBinding(value: unknown): CampaignScheduleApprovalBinding | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const binding = value as Partial<CampaignScheduleApprovalBinding>;
+  const actionType = normalizeActionType(binding.actionType);
+  const campaignId = clean(binding.campaignId);
+  const itemId = clean(binding.itemId);
+  const jobId = clean(binding.jobId);
+  const runAt = cleanIso(binding.runAt);
+  const payloadDigest = clean(binding.payloadDigest);
+  if (!campaignId || !itemId || !jobId || !runAt || !payloadDigest) return undefined;
+  return {
+    campaignId,
+    itemId,
+    jobId,
+    runAt,
+    actionType,
+    payloadDigest,
+    accountSetId: clean(binding.accountSetId),
+    socialProfileRefs: normalizeSocialProfileRefs(binding.socialProfileRefs) ?? [],
+    assetRefs: normalizeAssetRefs(binding.assetRefs),
+    finalRefs: normalizeFinalRefs(binding.finalRefs),
+    outputRefs: normalizeOutputRefs(binding.outputRefs),
+  };
+}
+
+function normalizeJobRuns(value: unknown): CampaignJobRun[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return [];
+    const run = entry as Partial<CampaignJobRun>;
+    const jobId = clean(run.jobId);
+    const startedAt = cleanIso(run.startedAt);
+    const status = run.status;
+    if (!jobId || !startedAt || (status !== 'running' && status !== 'done' && status !== 'failed' && status !== 'skipped')) return [];
+    return [{
+      id: clean(run.id) ?? `campaign-run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      jobId,
+      startedAt,
+      endedAt: cleanIso(run.endedAt),
+      status,
+      sessionId: clean(run.sessionId),
+      workflowRunId: clean(run.workflowRunId),
+      resultSummary: clean(run.resultSummary),
+      externalReceipt: normalizeExternalReceipt(run.externalReceipt),
+      error: clean(run.error),
+    }];
+  });
+}
+
+function normalizeExternalReceipt(value: unknown): CampaignExternalExecutionReceipt | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const receipt = value as Partial<CampaignExternalExecutionReceipt>;
+  const id = clean(receipt.id);
+  const completedAt = cleanIso(receipt.completedAt);
+  const payloadDigest = clean(receipt.payloadDigest);
+  const approvalId = clean(receipt.approvalId);
+  if (!id || !completedAt || !payloadDigest || !approvalId) return undefined;
+  return {
+    id,
+    actionType: normalizeActionType(receipt.actionType),
+    platform: clean(receipt.platform),
+    profileId: clean(receipt.profileId),
+    accountSetId: clean(receipt.accountSetId),
+    externalUrl: clean(receipt.externalUrl),
+    completedAt,
+    payloadDigest,
+    approvalId,
+    summary: clean(receipt.summary),
+  };
 }
 
 function isCampaignCalendarItem(value: unknown): value is CampaignCalendarItem {

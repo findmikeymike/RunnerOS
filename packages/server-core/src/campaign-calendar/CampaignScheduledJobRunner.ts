@@ -2,6 +2,7 @@ import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   campaignCalendarMetadata,
   createCampaignJobRun,
+  findApprovedScheduledJobApproval,
   hasCompletedScheduledJob,
   isLiveExternalActionType,
   parseCampaignCalendarDocResult,
@@ -10,7 +11,9 @@ import {
   updateCampaignCalendarItem,
   type CampaignCalendar,
   type CampaignCalendarItem,
+  type CampaignExternalExecutionReceipt,
   type CampaignJobRun,
+  type CampaignScheduleApproval,
   type CampaignScheduledJob,
 } from '@craft-agent/shared/campaign-calendar'
 import {
@@ -38,7 +41,15 @@ export interface CampaignScheduledJobRunnerDeps {
     workspaceRootPath: string
     item: CampaignCalendarItem
     job: CampaignScheduledJob
-  }): Promise<{ receiptId?: string; resultSummary?: string }>
+    approval: CampaignScheduleApproval
+  }): Promise<{
+    receiptId: string
+    platform?: string
+    profileId?: string
+    externalUrl?: string
+    approvalId?: string
+    resultSummary?: string
+  }>
   emitContextChanged?(workspaceId: string, docs: ReturnType<typeof loadAllContextDocs>): void
   now?(): Date
   log?: Pick<Console, 'info' | 'warn' | 'error'>
@@ -196,9 +207,25 @@ export class CampaignScheduledJobRunner {
       if (!this.deps.executeExternalJob) {
         return markNeedsApproval(item, job, 'Live external action requires exact approval before execution.')
       }
-      const result = await this.deps.executeExternalJob({ workspaceId, workspaceRootPath, item, job })
+      const approval = findApprovedScheduledJobApproval(item, job, now, workspaceId)
+      if (!approval) return markNeedsApproval(item, job, 'Exact approval no longer matches this scheduled job.')
+      const result = await this.deps.executeExternalJob({ workspaceId, workspaceRootPath, item, job, approval })
+      if (!result.receiptId.trim()) throw new Error('External executor did not return a receipt id.')
+      const externalReceipt: CampaignExternalExecutionReceipt = {
+        id: result.receiptId,
+        actionType: job.actionType,
+        platform: result.platform,
+        profileId: result.profileId,
+        accountSetId: item.accountSetId,
+        externalUrl: result.externalUrl,
+        completedAt: now.toISOString(),
+        payloadDigest: job.payloadDigest,
+        approvalId: result.approvalId ?? approval.id,
+        summary: result.resultSummary,
+      }
       return markDone(item, job, now, {
-        resultSummary: result.resultSummary ?? (result.receiptId ? `External action receipt ${result.receiptId}.` : 'External action completed.'),
+        externalReceipt,
+        resultSummary: result.resultSummary ?? `External action receipt ${result.receiptId}.`,
       })
     }
     if (job.actionType === 'review' && !readPayloadString(job.payload, 'prompt')) {
@@ -270,7 +297,7 @@ function markDone(
   item: CampaignCalendarItem,
   job: CampaignScheduledJob,
   now: Date,
-  output: Pick<CampaignJobRun, 'sessionId' | 'workflowRunId' | 'resultSummary'>,
+  output: Pick<CampaignJobRun, 'sessionId' | 'workflowRunId' | 'resultSummary' | 'externalReceipt'>,
 ): CampaignCalendarItem {
   const nowIso = now.toISOString()
   return updateCampaignCalendarItem(item, {
@@ -325,7 +352,7 @@ function finishLatestRun(
   job: CampaignScheduledJob,
   status: CampaignJobRun['status'],
   endedAt: string,
-  output: Partial<Pick<CampaignJobRun, 'sessionId' | 'workflowRunId' | 'resultSummary' | 'error'>>,
+  output: Partial<Pick<CampaignJobRun, 'sessionId' | 'workflowRunId' | 'resultSummary' | 'externalReceipt' | 'error'>>,
   appendIfMissing = true,
 ): CampaignJobRun[] {
   for (let index = runHistory.length - 1; index >= 0; index -= 1) {

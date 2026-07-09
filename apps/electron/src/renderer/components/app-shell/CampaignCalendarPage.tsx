@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CalendarDays, CheckCircle2, Pencil, RotateCcw, Trash2, X } from 'lucide-react'
+import { CalendarDays, CheckCircle2, ExternalLink, Pencil, ReceiptText, RotateCcw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
@@ -9,6 +9,7 @@ import {
   approveCampaignCalendarItem,
   campaignCalendarMetadata,
   createCampaignCalendarItem,
+  formatCampaignExternalReceiptLabel,
   isLiveExternalActionType,
   parseCampaignCalendarDocResult,
   requeueCampaignScheduledJob,
@@ -446,8 +447,9 @@ function CampaignCalendarSurface({
 function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
   const job = item.job
   const latestRun = item.runHistory.at(-1)
+  const receipt = latestRun?.externalReceipt
   if (!job) return null
-  const externalBlocked = isLiveExternalActionType(job.actionType)
+  const externalPending = isLiveExternalActionType(job.actionType) && item.status !== 'done'
   return (
     <div className="mt-3 rounded-[10px] border border-white/[0.045] bg-black/24 p-2.5">
       <div className="flex flex-wrap items-center gap-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/40">
@@ -455,9 +457,9 @@ function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
         <span>Attempts {job.attempts}/{job.maxAttempts}</span>
         {job.lastRunAt ? <span>Last {formatCompactDateTime(job.lastRunAt)}</span> : null}
       </div>
-      {externalBlocked ? (
+      {externalPending ? (
         <div className="mt-2 rounded-[8px] border border-yellow-300/10 bg-yellow-300/[0.055] px-2 py-1.5 text-[11px] leading-4 text-yellow-100/64">
-          Approval can be recorded here. Live posting/outreach still waits for the external runner.
+          Exact approval is required before posting or outreach.
         </div>
       ) : null}
       {job.error ? (
@@ -467,6 +469,29 @@ function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
         <div className="mt-2 text-[10px] leading-4 text-white/34">
           Last run: {latestRun.status} · {formatCompactDateTime(latestRun.endedAt ?? latestRun.startedAt)}
           {latestRun.resultSummary ? ` · ${latestRun.resultSummary}` : ''}
+        </div>
+      ) : null}
+      {receipt ? (
+        <div className="mt-2 rounded-[8px] border border-emerald-300/10 bg-emerald-300/[0.045] p-2 text-[11px] leading-4 text-emerald-100/68">
+          <div className="flex items-center gap-1.5 font-medium">
+            <ReceiptText className="h-3.5 w-3.5" />
+            <span>{formatCampaignExternalReceiptLabel(receipt)}</span>
+          </div>
+          {receipt.summary ? <div className="mt-1 text-emerald-100/52">{receipt.summary}</div> : null}
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 text-[10px] text-white/34">
+            <span>{formatCompactDateTime(receipt.completedAt)}</span>
+            {receipt.externalUrl ? (
+              <a
+                href={receipt.externalUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-emerald-100/58 hover:text-emerald-100/80"
+              >
+                Open result
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>

@@ -7,6 +7,7 @@ import {
   approveCampaignCalendarItem,
   createCampaignCalendarItem,
   createCampaignScheduledJob,
+  formatCampaignExternalReceiptLabel,
   parseCampaignCalendarDocResult,
   requeueCampaignScheduledJob,
   selectDueCampaignScheduledJobs,
@@ -29,6 +30,18 @@ function makeDoc(body: string): ContextDocDTO {
 }
 
 describe('campaign calendar utilities', () => {
+  test('formats external execution receipts for the calendar', () => {
+    expect(formatCampaignExternalReceiptLabel({
+      id: 'receipt-1',
+      actionType: 'post-asset',
+      platform: 'instagram',
+      profileId: 'ig-main',
+      completedAt: '2026-07-10T14:01:00.000Z',
+      payloadDigest: 'fnv1a:12345678',
+      approvalId: 'approval-1',
+    })).toBe('Instagram · ig-main · receipt-1')
+  })
+
   test('returns an empty campaign calendar when no doc exists', () => {
     const result = parseCampaignCalendarDocResult(undefined, 'campaign-1')
 
