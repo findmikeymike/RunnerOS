@@ -190,7 +190,7 @@ describe('campaign calendar utilities', () => {
       job,
     })
 
-    const approved = approveCampaignCalendarItem(item, { now: '2026-07-10T13:50:00.000Z' })
+    const approved = approveCampaignCalendarItem(item, { campaignId: 'campaign-1', now: '2026-07-10T13:50:00.000Z' })
     const due = selectDueCampaignScheduledJobs({
       version: 1,
       campaignId: 'campaign-1',
@@ -250,7 +250,7 @@ describe('campaign calendar utilities', () => {
       kind: 'scheduled-job',
       status: 'needs-approval',
       job,
-    }), { now: '2026-07-10T13:50:00.000Z' })
+    }), { campaignId: 'campaign-1', now: '2026-07-10T13:50:00.000Z' })
 
     const due = selectDueCampaignScheduledJobs({
       version: 1,
@@ -261,6 +261,73 @@ describe('campaign calendar utilities', () => {
 
     expect(due).toHaveLength(1)
     expect(due[0]?.blockedReason).toBeUndefined()
+  })
+
+  test('invalidates exact external approval when bound run time or account changes', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      approvalPolicy: 'approval-before-external-action',
+      payload: { platform: 'instagram' },
+    })
+    const approved = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      accountSetId: 'artist-main',
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'ig-main' }],
+      job,
+    }), { campaignId: 'campaign-1', now: '2026-07-10T13:50:00.000Z' })
+    const moved = updateCampaignCalendarItem(approved, {
+      job: { ...approved.job!, runAt: '2026-07-11T14:00:00.000Z' },
+    })
+    const changedAccount = updateCampaignCalendarItem(approved, {
+      socialProfileRefs: [{ platform: 'instagram', profileId: 'ig-alt' }],
+    })
+
+    const movedDue = selectDueCampaignScheduledJobs({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [moved],
+      updatedAt: '2026-07-10T13:50:00.000Z',
+    }, new Date('2026-07-11T14:01:00.000Z'), { allowLiveExternal: true })
+    const changedAccountDue = selectDueCampaignScheduledJobs({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [changedAccount],
+      updatedAt: '2026-07-10T13:50:00.000Z',
+    }, new Date('2026-07-10T14:01:00.000Z'), { allowLiveExternal: true })
+
+    expect(movedDue[0]?.blockedReason).toBe('needs-approval')
+    expect(changedAccountDue[0]?.blockedReason).toBe('needs-approval')
+  })
+
+  test('expires exact external approvals after the approved execution window', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      approvalPolicy: 'approval-before-external-action',
+      payload: { platform: 'instagram' },
+    })
+    const item = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Post teaser',
+      kind: 'scheduled-job',
+      status: 'needs-approval',
+      job,
+    }), { campaignId: 'campaign-1', now: '2026-07-10T13:50:00.000Z', expiresAt: '2026-07-10T14:30:00.000Z' })
+
+    const due = selectDueCampaignScheduledJobs({
+      version: 1,
+      campaignId: 'campaign-1',
+      items: [item],
+      updatedAt: '2026-07-10T13:50:00.000Z',
+    }, new Date('2026-07-10T14:31:00.000Z'), { allowLiveExternal: true })
+
+    expect(due[0]?.blockedReason).toBe('needs-approval')
   })
 
   test('requeues terminal local jobs with fresh attempts', () => {
@@ -291,5 +358,29 @@ describe('campaign calendar utilities', () => {
     expect(requeued.job?.attempts).toBe(0)
     expect(requeued.job?.lastRunAt).toBeUndefined()
     expect(requeued.job?.error).toBeUndefined()
+  })
+
+  test('does not requeue completed jobs because completed run history is terminal', () => {
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'ask-agent',
+      payload: { prompt: 'Prepare launch copy.' },
+    })
+    const done = updateCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Prepare launch copy',
+      kind: 'scheduled-job',
+      status: 'done',
+      job,
+    }), {
+      runHistory: [{ id: 'run-1', jobId: job.id, startedAt: '2026-07-10T14:01:00.000Z', endedAt: '2026-07-10T14:02:00.000Z', status: 'done' }],
+      job: { ...job, completedAt: '2026-07-10T14:02:00.000Z' },
+    })
+
+    const requeued = requeueCampaignScheduledJob(done)
+
+    expect(requeued.status).toBe('done')
+    expect(requeued.job?.completedAt).toBe('2026-07-10T14:02:00.000Z')
   })
 })

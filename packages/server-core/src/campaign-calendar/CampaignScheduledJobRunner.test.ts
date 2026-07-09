@@ -174,7 +174,7 @@ describe('CampaignScheduledJobRunner', () => {
       kind: 'scheduled-job',
       status: 'needs-approval',
       job,
-    }), { now: '2026-07-10T13:50:00.000Z' })
+    }), { campaignId: 'campaign-1', now: '2026-07-10T13:50:00.000Z' })
     writeCalendar(root, [item])
 
     const externalCalls: string[] = []

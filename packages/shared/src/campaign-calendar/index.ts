@@ -72,8 +72,24 @@ export interface CampaignScheduleApproval {
   id: string;
   status: 'pending' | 'approved' | 'rejected' | 'expired';
   approvedAt?: string;
+  expiresAt?: string;
   payloadDigest?: string;
+  binding?: CampaignScheduleApprovalBinding;
   notes?: string;
+}
+
+export interface CampaignScheduleApprovalBinding {
+  campaignId: string;
+  itemId: string;
+  jobId: string;
+  runAt: string;
+  actionType: CampaignScheduledJobActionType;
+  payloadDigest: string;
+  accountSetId?: string;
+  socialProfileRefs: SocialProfileRef[];
+  assetRefs: CampaignAssetRef[];
+  finalRefs: CampaignFinalRef[];
+  outputRefs: CampaignOutputRef[];
 }
 
 export interface CampaignJobRun {
@@ -154,6 +170,7 @@ export interface DueCampaignScheduledJob {
 
 export const CAMPAIGN_JOB_RETRY_BACKOFF_MS = 5 * 60 * 1000;
 export const CAMPAIGN_JOB_RUNNING_STALE_MS = 30 * 60 * 1000;
+export const CAMPAIGN_EXACT_APPROVAL_GRACE_MS = 30 * 60 * 1000;
 
 export function campaignCalendarMetadata(): ContextDocMetadata {
   return {
@@ -309,7 +326,7 @@ export function createCampaignScheduledJob(input: {
 
 export function updateCampaignCalendarItem(
   item: CampaignCalendarItem,
-  patch: Partial<Pick<CampaignCalendarItem, 'date' | 'time' | 'timezone' | 'title' | 'notes' | 'kind' | 'status' | 'personIds' | 'job' | 'approvals' | 'runHistory'>>,
+  patch: Partial<Pick<CampaignCalendarItem, 'date' | 'time' | 'timezone' | 'title' | 'notes' | 'kind' | 'status' | 'personIds' | 'assetRefs' | 'finalRefs' | 'outputRefs' | 'accountSetId' | 'socialProfileRefs' | 'job' | 'approvals' | 'runHistory'>>,
 ): CampaignCalendarItem {
   return normalizeCampaignCalendarItem({
     ...item,
@@ -320,14 +337,18 @@ export function updateCampaignCalendarItem(
 
 export function approveCampaignCalendarItem(
   item: CampaignCalendarItem,
-  options: { now?: string; notes?: string } = {},
+  options: { campaignId?: string; now?: string; notes?: string; expiresAt?: string } = {},
 ): CampaignCalendarItem {
   const now = cleanIso(options.now) ?? new Date().toISOString();
+  const expiresAt = cleanIso(options.expiresAt)
+    ?? defaultApprovalExpiresAt(item.job, now);
   const approval: CampaignScheduleApproval = {
     id: `campaign-approval-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
     status: 'approved',
     approvedAt: now,
+    expiresAt,
     payloadDigest: item.job?.payloadDigest,
+    binding: item.job ? createApprovalBinding(item, item.job, options.campaignId) : undefined,
     notes: clean(options.notes) ?? (item.job && isLiveExternalActionType(item.job.actionType)
       ? 'Approved for review. Live external execution is still blocked until the external runner is connected.'
       : 'Approved from Campaign Calendar.'),
@@ -348,6 +369,7 @@ export function approveCampaignCalendarItem(
 
 export function requeueCampaignScheduledJob(item: CampaignCalendarItem): CampaignCalendarItem {
   if (!item.job) return item;
+  if (item.status === 'done') return item;
   const liveExternal = isLiveExternalActionType(item.job.actionType);
   return updateCampaignCalendarItem(item, {
     status: liveExternal ? 'needs-approval' : 'scheduled',
@@ -468,7 +490,7 @@ export function selectDueCampaignScheduledJobs(
     const liveExternalApproved = liveExternal
       && options.allowLiveExternal === true
       && job.approvalPolicy === 'preapproved-exact-payload'
-      && hasApprovedScheduledJobPayload(item, job);
+      && hasApprovedScheduledJobPayload(item, job, now, calendar.campaignId);
     if ((item.status === 'needs-approval' && !liveExternalApproved)
       || job.approvalPolicy === 'approval-before-run'
       || (liveExternal && !liveExternalApproved)
@@ -491,10 +513,16 @@ export function hasCompletedScheduledJob(item: CampaignCalendarItem, job: Campai
   return item.runHistory.some((run) => run.jobId === job.id && run.status === 'done');
 }
 
-export function hasApprovedScheduledJobPayload(item: CampaignCalendarItem, job: CampaignScheduledJob): boolean {
+export function hasApprovedScheduledJobPayload(
+  item: CampaignCalendarItem,
+  job: CampaignScheduledJob,
+  now: Date = new Date(),
+  campaignId?: string,
+): boolean {
   return (item.approvals ?? []).some((approval) => (
     approval.status === 'approved'
-    && approval.payloadDigest === job.payloadDigest
+    && !isApprovalExpired(approval, now)
+    && approvalMatchesJob(approval, item, job, campaignId)
   ));
 }
 
@@ -550,6 +578,59 @@ function shouldRequireApproval(status: CampaignCalendarItemStatus | undefined, j
 function hasPromptPayload(payload: Record<string, unknown>): boolean {
   const prompt = payload.prompt;
   return typeof prompt === 'string' && Boolean(prompt.trim());
+}
+
+function defaultApprovalExpiresAt(job: CampaignScheduledJob | undefined, approvedAt: string): string {
+  const baseMs = Date.parse(job?.runAt ?? approvedAt);
+  const fallbackMs = Date.parse(approvedAt);
+  const expiresMs = (Number.isNaN(baseMs) ? fallbackMs : baseMs) + CAMPAIGN_EXACT_APPROVAL_GRACE_MS;
+  return new Date(expiresMs).toISOString();
+}
+
+function createApprovalBinding(
+  item: CampaignCalendarItem,
+  job: CampaignScheduledJob,
+  campaignId?: string,
+): CampaignScheduleApprovalBinding {
+  return {
+    campaignId: clean(campaignId) ?? '',
+    itemId: item.id,
+    jobId: job.id,
+    runAt: job.runAt,
+    actionType: job.actionType,
+    payloadDigest: job.payloadDigest,
+    accountSetId: item.accountSetId,
+    socialProfileRefs: item.socialProfileRefs ?? [],
+    assetRefs: item.assetRefs,
+    finalRefs: item.finalRefs,
+    outputRefs: item.outputRefs,
+  };
+}
+
+function isApprovalExpired(approval: CampaignScheduleApproval, now: Date): boolean {
+  const expiresMs = Date.parse(approval.expiresAt ?? '');
+  return Number.isNaN(expiresMs) || expiresMs <= now.getTime();
+}
+
+function approvalMatchesJob(
+  approval: CampaignScheduleApproval,
+  item: CampaignCalendarItem,
+  job: CampaignScheduledJob,
+  campaignId?: string,
+): boolean {
+  const binding = approval.binding;
+  if (!binding) return false;
+  if (binding.campaignId !== campaignId) return false;
+  return binding.itemId === item.id
+    && binding.jobId === job.id
+    && binding.runAt === job.runAt
+    && binding.actionType === job.actionType
+    && binding.payloadDigest === job.payloadDigest
+    && (binding.accountSetId ?? undefined) === (item.accountSetId ?? undefined)
+    && stableStringify(binding.socialProfileRefs) === stableStringify(item.socialProfileRefs ?? [])
+    && stableStringify(binding.assetRefs) === stableStringify(item.assetRefs)
+    && stableStringify(binding.finalRefs) === stableStringify(item.finalRefs)
+    && stableStringify(binding.outputRefs) === stableStringify(item.outputRefs);
 }
 
 function normalizeCampaignCalendarItem(item: CampaignCalendarItem): CampaignCalendarItem {

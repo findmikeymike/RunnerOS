@@ -191,8 +191,11 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   }, [campaignCalendar.campaignId, campaignCalendar.items, saveCampaignCalendar, workspaceId])
 
   const approveCampaignCalendarJob = React.useCallback((itemId: string) => {
-    patchCampaignCalendarItem(itemId, (item) => approveCampaignCalendarItem(item, { now: new Date().toISOString() }))
-  }, [patchCampaignCalendarItem])
+    patchCampaignCalendarItem(itemId, (item) => approveCampaignCalendarItem(item, {
+      campaignId: campaignCalendar.campaignId || workspaceId || 'workspace',
+      now: new Date().toISOString(),
+    }))
+  }, [campaignCalendar.campaignId, patchCampaignCalendarItem, workspaceId])
 
   const requeueCampaignCalendarJob = React.useCallback((itemId: string) => {
     patchCampaignCalendarItem(itemId, requeueCampaignScheduledJob)
@@ -387,7 +390,7 @@ function CampaignCalendarSurface({
                           <CheckCircle2 className="h-3.5 w-3.5" />
                         </button>
                       ) : null}
-                      {item.job && (item.status === 'failed' || item.status === 'missed' || item.status === 'done') ? (
+                      {item.job && (item.status === 'failed' || item.status === 'missed') ? (
                         <button
                           type="button"
                           onClick={() => onRequeueItem(item.id)}
