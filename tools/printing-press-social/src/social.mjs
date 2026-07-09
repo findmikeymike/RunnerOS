@@ -627,10 +627,11 @@ function parseFlags(args) {
 }
 
 function resolvePlatform(argv) {
+  const platforms = ['instagram', 'tiktok', 'x', 'youtube', 'spotify'];
   const [group, command, maybePlatform] = argv;
-  if (group === 'profile') return argv.find((part) => ['instagram', 'tiktok', 'x', 'youtube'].includes(part));
-  if (['post', 'comment', 'dm'].includes(group)) return command;
-  if (maybePlatform && ['instagram', 'tiktok', 'x', 'youtube'].includes(maybePlatform)) return maybePlatform;
+  if (group === 'profile') return argv.find((part) => platforms.includes(part));
+  if (['post', 'comment', 'dm', 'snapshot', 'playlist'].includes(group)) return command;
+  if (maybePlatform && platforms.includes(maybePlatform)) return maybePlatform;
   return null;
 }
 

@@ -22517,280 +22517,6 @@ Timestamp:
     slug: "spotify-analytics-snapshot",
     files: [
       {
-        path: "scripts/api-snapshot.ts",
-        content: `#!/usr/bin/env bun
-import { mkdir, writeFile } from 'node:fs/promises';
-import { basename, isAbsolute, join } from 'node:path';
-import { loadContextDoc, upsertContextDoc } from '../../../../workspace-context/index.ts';
-
-interface CliOptions {
-  artistId: string | null;
-  artistProfile: string | null;
-  workspace: string | null;
-  out: string;
-  market: string;
-  writeContext: boolean;
-}
-
-interface SpotifyArtist {
-  id: string;
-  name: string;
-  genres?: string[];
-  popularity?: number;
-  followers?: { total?: number };
-  external_urls?: { spotify?: string };
-  images?: Array<{ url?: string; width?: number; height?: number }>;
-}
-
-interface SpotifyTrack {
-  id: string;
-  name: string;
-  popularity?: number;
-  external_urls?: { spotify?: string };
-  album?: { name?: string; release_date?: string };
-}
-
-const DEFAULT_OUT_DIR = 'data/spotify/snapshots';
-const SNAPSHOT_CONTEXT_SLUG = 'artist-spotify-snapshot';
-const ARTIST_PROFILE_CONTEXT_SLUG = 'artist-profile';
-
-function usage(): string {
-  return \`Usage:
-  bun packages/shared/src/skills/bundled/spotify-analytics-snapshot/scripts/api-snapshot.ts [options]
-
-Options:
-  --artist-id <id>          Spotify artist ID.
-  --artist-profile <url|id> Spotify artist URL/URI/ID.
-  --workspace <path>        Workspace root. If present, can read artist-profile and write Artist HQ context.
-  --out <dir>               Snapshot directory. Default: \${DEFAULT_OUT_DIR}
-  --market <code>           Market for top tracks. Default: US
-  --no-context              Do not write artist-spotify-snapshot context.
-
-Requires SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.
-\`;
-}
-
-function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = {
-    artistId: null,
-    artistProfile: null,
-    workspace: process.env.CRAFT_WORKSPACE_PATH ?? null,
-    out: DEFAULT_OUT_DIR,
-    market: 'US',
-    writeContext: true,
-  };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    const next = () => {
-      const value = argv[++i];
-      if (value === undefined) throw new Error(\`Missing value for \${arg}\`);
-      return value;
-    };
-
-    if (arg === '--help' || arg === '-h') {
-      console.log(usage());
-      process.exit(0);
-    } else if (arg === '--artist-id') {
-      options.artistId = next();
-    } else if (arg === '--artist-profile') {
-      options.artistProfile = next();
-    } else if (arg === '--workspace') {
-      options.workspace = next();
-    } else if (arg === '--out') {
-      options.out = next();
-    } else if (arg === '--market') {
-      options.market = next().toUpperCase();
-    } else if (arg === '--no-context') {
-      options.writeContext = false;
-    } else {
-      throw new Error(\`Unknown argument: \${arg}\`);
-    }
-  }
-
-  return options;
-}
-
-function extractArtistId(input: string | null | undefined): string | null {
-  const raw = input?.trim();
-  if (!raw) return null;
-  const uriMatch = raw.match(/^spotify:artist:([A-Za-z0-9]+)$/);
-  if (uriMatch?.[1]) return uriMatch[1];
-  const urlMatch = raw.match(/\\/artist\\/([A-Za-z0-9]+)/);
-  if (urlMatch?.[1]) return urlMatch[1];
-  const last = basename(raw).trim();
-  return /^[A-Za-z0-9]{12,}$/.test(last) ? last : null;
-}
-
-function extractJson(body: string): unknown | null {
-  const fenced = body.match(/\`\`\`json\\s*([\\s\\S]*?)\`\`\`/i);
-  const json = fenced?.[1] ?? body.slice(body.indexOf('{'), body.lastIndexOf('}') + 1);
-  if (!json.trim()) return null;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function readArtistProfileId(workspace: string | null): string | null {
-  if (!workspace) return null;
-  const doc = loadContextDoc(workspace, ARTIST_PROFILE_CONTEXT_SLUG);
-  const parsed = extractJson(doc?.body ?? '');
-  if (!parsed || typeof parsed !== 'object') return null;
-  const spotifyProfile = (parsed as { spotifyProfile?: unknown }).spotifyProfile;
-  return typeof spotifyProfile === 'string' ? extractArtistId(spotifyProfile) : null;
-}
-
-async function getAccessToken(clientId: string, clientSecret: string): Promise<string> {
-  const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      Authorization: \`Basic \${Buffer.from(\`\${clientId}:\${clientSecret}\`).toString('base64')}\`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ grant_type: 'client_credentials' }),
-  });
-  if (!response.ok) {
-    throw new Error(\`Spotify token request failed: \${response.status} \${await response.text()}\`);
-  }
-  const json = await response.json() as { access_token?: string };
-  if (!json.access_token) throw new Error('Spotify token response did not include access_token.');
-  return json.access_token;
-}
-
-async function spotifyGet<T>(token: string, path: string): Promise<T> {
-  const response = await fetch(\`https://api.spotify.com/v1\${path}\`, {
-    headers: { Authorization: \`Bearer \${token}\` },
-  });
-  if (!response.ok) {
-    throw new Error(\`Spotify API request failed for \${path}: \${response.status} \${await response.text()}\`);
-  }
-  return await response.json() as T;
-}
-
-async function spotifyGetOptional<T>(token: string, path: string): Promise<{ data: T | null; error: string | null }> {
-  try {
-    return { data: await spotifyGet<T>(token, path), error: null };
-  } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : String(error) };
-  }
-}
-
-function bestImage(artist: SpotifyArtist): string | undefined {
-  return artist.images?.find((image) => image.url)?.url;
-}
-
-function buildContextBody(snapshot: unknown): string {
-  return [
-    'This is the latest global Spotify snapshot. Public API snapshots include catalog/audience proxy data, not private Spotify for Artists streams/listeners.',
-    '',
-    '\`\`\`json',
-    JSON.stringify(snapshot, null, 2),
-    '\`\`\`',
-  ].join('\\n');
-}
-
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const clientId = process.env.SPOTIFY_CLIENT_ID?.trim();
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET?.trim();
-  if (!clientId || !clientSecret) {
-    throw new Error('SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are required. Add them in Settings > Secrets > Spotify.');
-  }
-
-  const artistId = options.artistId
-    ?? extractArtistId(options.artistProfile)
-    ?? extractArtistId(process.env.SPOTIFY_ARTIST_ID)
-    ?? readArtistProfileId(options.workspace);
-  if (!artistId) {
-    throw new Error('Spotify artist ID is required. Add Artist Profile > Spotify profile, set SPOTIFY_ARTIST_ID, or pass --artist-id.');
-  }
-
-  const token = await getAccessToken(clientId, clientSecret);
-  const artist = await spotifyGet<SpotifyArtist>(token, \`/artists/\${artistId}\`);
-  const topTracks = await spotifyGetOptional<{ tracks?: SpotifyTrack[] }>(
-    token,
-    \`/artists/\${artistId}/top-tracks?market=\${encodeURIComponent(options.market)}\`,
-  );
-  const snapshotDate = new Date().toISOString().slice(0, 10);
-  const snapshot = {
-    version: 1,
-    dataSource: 'spotify-web-api',
-    snapshotDate,
-    windowDays: 0,
-    artist: {
-      name: artist.name,
-      spotifyArtistId: artist.id,
-      spotifyUrl: artist.external_urls?.spotify,
-      genres: artist.genres ?? [],
-      imageUrl: bestImage(artist),
-    },
-    metrics: {
-      followers: artist.followers?.total ?? 0,
-      popularity: artist.popularity ?? 0,
-    },
-    geo: { topCities: [] },
-    tracks: (topTracks.data?.tracks ?? []).map((track) => ({
-      id: track.id,
-      name: track.name,
-      popularity: track.popularity ?? 0,
-      spotifyUrl: track.external_urls?.spotify,
-      album: track.album?.name,
-      releaseDate: track.album?.release_date,
-    })),
-    playlistsDriving: [],
-    sources: {},
-    partial: Boolean(topTracks.error),
-    errors: topTracks.error
-      ? [\`Top tracks unavailable: \${topTracks.error}\`]
-      : [],
-    updatedAt: new Date().toISOString(),
-  };
-
-  const outDir = options.workspace && !isAbsolute(options.out)
-    ? join(options.workspace, options.out)
-    : options.out;
-  await mkdir(outDir, { recursive: true });
-  const outPath = join(outDir, \`\${snapshotDate}-web-api.json\`);
-  await writeFile(outPath, \`\${JSON.stringify(snapshot, null, 2)}\\n\`, 'utf8');
-
-  let contextPath: string | null = null;
-  if (options.writeContext) {
-    if (!options.workspace) throw new Error('--workspace is required to write Artist HQ context.');
-    const loaded = upsertContextDoc(options.workspace, {
-      slug: SNAPSHOT_CONTEXT_SLUG,
-      metadata: {
-        name: 'Artist Spotify Snapshot',
-        description: 'Latest Spotify snapshot for Artist HQ widgets and workers.',
-        routing: { mode: 'broadcast' },
-        enabled: true,
-      },
-      body: buildContextBody(snapshot),
-    });
-    contextPath = loaded.path;
-  }
-
-  console.log(JSON.stringify({
-    status: 'spotify_public_snapshot_written',
-    dataSource: 'spotify-web-api',
-    path: outPath,
-    contextPath,
-    snapshotDate,
-    artist: artist.name,
-    followers: snapshot.metrics.followers,
-    popularity: snapshot.metrics.popularity,
-    topTrackCount: snapshot.tracks.length,
-  }, null, 2));
-}
-
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
-`,
-      },
-      {
         path: "scripts/delta-brief.ts",
         content: `#!/usr/bin/env npx tsx
 /**
@@ -23418,55 +23144,57 @@ main().catch((error) => {
         path: "SKILL.md",
         content: `---
 name: spotify-analytics-snapshot
-description: Weekly Spotify snapshot into Artist HQ context. Uses Spotify Web API credentials for reliable public artist data now; private Spotify for Artists streams/listeners require a logged-in browser capture lane.
+description: Weekly Spotify snapshot into Artist HQ context, captured from the artist's connected Spotify for Artists browser session. Private streams, listeners, followers, saves, top cities, and source-of-streams come from the logged-in browser — there is no Spotify API path.
 ---
 
 # Spotify Analytics Snapshot
 
-Use this skill on the weekly Spotify heartbeat, or when the user requests a fresh read of the artist's Spotify presence. The reliable automated lane is artist profile, followers, popularity, and genres. Top tracks are best-effort when Spotify returns them.
+Use this skill on the weekly Spotify heartbeat, or when the user wants a fresh read of the artist's Spotify presence. All data comes from **Spotify for Artists** through the artist's connected, logged-in browser session, using RunnerOS browser tools. There is no API lane and no client credentials.
 
-## Inputs
+## Prerequisites
 
-- \`SPOTIFY_CLIENT_ID\` and \`SPOTIFY_CLIENT_SECRET\` in Settings > Secrets > Spotify.
-- Artist HQ Profile \`spotifyProfile\`, \`SPOTIFY_ARTIST_ID\`, or \`--artist-id\`.
-- Optional \`CRAFT_WORKSPACE_PATH\` / \`--workspace\` so the script can write \`artist-spotify-snapshot\`.
+- The Spotify account is connected in Settings → Social Accounts as platform \`spotify\` (one login covers Spotify for Artists and the web player).
+- Run \`social\` commands (\`node src/social.mjs ...\`) from the Printing Press Social source path.
 
 ## Workflow
 
-1. For normal weekly sync, run:
+1. Verify the session first — never guess numbers when it is missing or the account does not match:
 
 \`\`\`bash
-bun "$CRAFT_APP_ROOT/packages/shared/src/skills/bundled/spotify-analytics-snapshot/scripts/api-snapshot.ts" \\
-  --workspace "$CRAFT_WORKSPACE_PATH"
+node src/social.mjs profile status spotify --profile <id> --live --json
 \`\`\`
 
-2. This uses Spotify's public Web API and writes:
-   - \`data/spotify/snapshots/<YYYY-MM-DD>-web-api.json\`
-   - Artist HQ context doc \`artist-spotify-snapshot\`
-3. If the user explicitly needs streams, listeners, saves, skips, top cities, or source-of-streams, explain that those are Spotify for Artists metrics and require a separate logged-in browser capture. Do not fabricate them from public API data.
-4. If a private S4A capture is manually obtained as JSON, use \`snapshot.ts --from-stdin\` or \`--from-fixture\` to normalize and store it.
-5. Run \`delta-brief.ts\` only when there are comparable snapshots of the same data source.
+2. Get the browser plan and the exact fields to capture:
+
+\`\`\`bash
+node src/social.mjs snapshot spotify --profile <id> --json
+\`\`\`
+
+3. Run the returned \`browserPlan\` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams.
+
+4. Normalize and save the captured numbers:
+
+\`\`\`bash
+node src/social.mjs snapshot spotify --profile <id> \\
+  --capture-json '<captured-json>' \\
+  --out data/spotify/snapshots/<YYYY-MM-DD>-s4a.json --json
+\`\`\`
+
+5. Write the returned \`contextPayload\` as the \`artist-spotify-snapshot\` context doc.
+6. Run \`delta-brief.ts\` only when there are two comparable snapshots of the same data source.
 
 ## Output Contract
-
-Public API snapshot:
 
 \`\`\`json
 {
   "version": 1,
-  "dataSource": "spotify-web-api",
-  "snapshotDate": "2026-04-25",
-  "windowDays": 0,
-  "artist": { "name": "...", "spotifyArtistId": "...", "spotifyUrl": "...", "genres": [] },
-  "metrics": {
-    "followers": 0,
-    "popularity": 0
-  },
-  "geo": { "topCities": [] },
-  "tracks": [
-    { "id": "...", "name": "...", "popularity": 0, "spotifyUrl": "..." }
-  ],
-  "playlistsDriving": [],
+  "dataSource": "spotify-for-artists-browser",
+  "snapshotDate": "2026-07-08",
+  "windowDays": 28,
+  "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
+  "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
+  "geo": { "topCities": [], "topCountries": [] },
+  "tracks": [{ "name": "...", "streams": 0, "spotifyUrl": "..." }],
   "sources": {},
   "partial": false,
   "errors": [],
@@ -23474,32 +23202,20 @@ Public API snapshot:
 }
 \`\`\`
 
-\`data/spotify/briefs/<YYYY-MM-DD>.md\` is a short markdown brief with:
-
-- Window comparison (which two snapshots).
-- Real movers: streams, listeners, followers, save rate, skip rate. Each with absolute and percent change.
-- Top track movement (top 3 by stream delta).
-- New playlist features.
-- Removed playlist features.
-- Geo shifts worth noting.
-- Source-of-streams shifts (e.g., dependency on editorial growing).
-- Honest interpretation: signal vs. noise. Below ±10% is generally noise unless it's a sustained two-snapshot trend.
+Any metric not visible on the page is \`null\`, and the snapshot is marked \`partial: true\` with the missing fields listed in \`errors\`.
 
 ## Failure Handling
 
-- Missing Spotify client credentials → stop and point user to Settings > Secrets > Spotify.
-- Missing artist ID/profile → stop and ask for Artist Profile > Spotify profile.
-- Spotify API failure → report the status and do not write fake data.
-- Private S4A login expired → stop, report, do not retry blindly.
-- Whole private scrape fails → write nothing rather than fabricate.
-- No prior snapshot → snapshot still writes. Brief script reports "no prior snapshot, no delta."
+- Session not connected / not logged in / wrong account → stop and point the user to Settings → Social Accounts. Do not fabricate.
+- Spotify for Artists page did not load a value → capture it as \`null\`, mark \`partial\`.
+- Login expired → stop, report, do not retry blindly.
+- No prior snapshot → snapshot still writes; the brief reports "no prior snapshot, no delta."
 
 ## Never
 
-- Never fabricate numbers.
+- Never fabricate streams, listeners, followers, saves, cities, tracks, or source percentages.
 - Never modify a past snapshot.
 - Never bypass approvals — this skill is read-only.
-- Never represent public Spotify API popularity/followers as Spotify for Artists streams/listeners.
 - Never silently drop a tracked playlist feature; surface its disappearance as an anomaly.
 `,
       },

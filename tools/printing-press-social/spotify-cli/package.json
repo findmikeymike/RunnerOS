@@ -1,0 +1,10 @@
+{
+  "name": "@runneros/printing-press-spotify-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Spotify browser harness for RunnerOS: Spotify for Artists snapshots and Spotify web-player playlist creation.",
+  "scripts": {
+    "test": "node --test test"
+  }
+}

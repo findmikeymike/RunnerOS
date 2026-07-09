@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-08",
+  "generatedAt": "2026-07-09",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -1301,7 +1301,9 @@
       "skills": [
         "spotify-playlist-curator"
       ],
-      "sources": [],
+      "sources": [
+        "printing-press-social"
+      ],
       "optionalSources": [],
       "trustedWorkerTools": [],
       "visualAgent": false,
@@ -1316,12 +1318,12 @@
       ],
       "riskSignals": [
         "approval-capable",
-        "artifact-output-aware",
         "explicit-approval-required",
-        "external-action-boundary"
+        "external-action-boundary",
+        "requires-source-activation"
       ],
-      "inputs": "Playlist theme, comparable artists/tracks, artist Spotify tracks, target length, feature ratio, visibility, and Spotify account/tool readiness.",
-      "outputs": "A Spotify playlist plan, approval checklist, and creation payload or receipt when approved and Spotify tooling is connected."
+      "inputs": "Playlist theme, comparable artists/tracks, artist Spotify tracks, target length, feature ratio, visibility, and a connected Spotify account.",
+      "outputs": "A playlist plan, approval checklist, and a created playlist URL (receipt) once approved — built on the connected Spotify via browser."
     },
     {
       "slug": "researcher",
@@ -1361,10 +1363,11 @@
       "skills": [
         "spotify-growth-intake",
         "spotify-analytics-snapshot",
-        "spotify-anomaly-watch",
-        "spotify-playlist-curator"
+        "spotify-anomaly-watch"
       ],
-      "sources": [],
+      "sources": [
+        "printing-press-social"
+      ],
       "optionalSources": [],
       "trustedWorkerTools": [],
       "visualAgent": false,
@@ -1380,10 +1383,11 @@
       ],
       "riskSignals": [
         "approval-capable",
-        "explicit-approval-required"
+        "context-doc-aware",
+        "requires-source-activation"
       ],
-      "inputs": "Artist HQ Profile, Spotify client credentials, Spotify artist ID or URL, existing Spotify snapshots, and campaign context.",
-      "outputs": "Spotify public API snapshots, optional S4A snapshot normalization, delta briefs, anomaly alerts, and growth handoff notes."
+      "inputs": "Artist HQ Profile, a connected Spotify account (Spotify for Artists browser session), existing Spotify snapshots, and campaign context.",
+      "outputs": "Spotify for Artists snapshots (streams, listeners, followers, cities, sources), delta briefs, anomaly alerts, and growth handoff notes."
     },
     {
       "slug": "youtube-research-agent",

@@ -1,54 +1,56 @@
 ---
 name: spotify-analytics-snapshot
-description: Weekly Spotify snapshot into Artist HQ context. Uses Spotify Web API credentials for reliable public artist data now; private Spotify for Artists streams/listeners require a logged-in browser capture lane.
+description: Weekly Spotify snapshot into Artist HQ context, captured from the artist's connected Spotify for Artists browser session. Private streams, listeners, followers, saves, top cities, and source-of-streams come from the logged-in browser — there is no Spotify API path.
 ---
 
 # Spotify Analytics Snapshot
 
-Use this skill on the weekly Spotify heartbeat, or when the user requests a fresh read of the artist's Spotify presence. The reliable automated lane is artist profile, followers, popularity, and genres. Top tracks are best-effort when Spotify returns them.
+Use this skill on the weekly Spotify heartbeat, or when the user wants a fresh read of the artist's Spotify presence. All data comes from **Spotify for Artists** through the artist's connected, logged-in browser session, using RunnerOS browser tools. There is no API lane and no client credentials.
 
-## Inputs
+## Prerequisites
 
-- `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` in Settings > Secrets > Spotify.
-- Artist HQ Profile `spotifyProfile`, `SPOTIFY_ARTIST_ID`, or `--artist-id`.
-- Optional `CRAFT_WORKSPACE_PATH` / `--workspace` so the script can write `artist-spotify-snapshot`.
+- The Spotify account is connected in Settings → Social Accounts as platform `spotify` (one login covers Spotify for Artists and the web player).
+- Run `social` commands (`node src/social.mjs ...`) from the Printing Press Social source path.
 
 ## Workflow
 
-1. For normal weekly sync, run:
+1. Verify the session first — never guess numbers when it is missing or the account does not match:
 
 ```bash
-bun "$CRAFT_APP_ROOT/packages/shared/src/skills/bundled/spotify-analytics-snapshot/scripts/api-snapshot.ts" \
-  --workspace "$CRAFT_WORKSPACE_PATH"
+node src/social.mjs profile status spotify --profile <id> --live --json
 ```
 
-2. This uses Spotify's public Web API and writes:
-   - `data/spotify/snapshots/<YYYY-MM-DD>-web-api.json`
-   - Artist HQ context doc `artist-spotify-snapshot`
-3. If the user explicitly needs streams, listeners, saves, skips, top cities, or source-of-streams, explain that those are Spotify for Artists metrics and require a separate logged-in browser capture. Do not fabricate them from public API data.
-4. If a private S4A capture is manually obtained as JSON, use `snapshot.ts --from-stdin` or `--from-fixture` to normalize and store it.
-5. Run `delta-brief.ts` only when there are comparable snapshots of the same data source.
+2. Get the browser plan and the exact fields to capture:
+
+```bash
+node src/social.mjs snapshot spotify --profile <id> --json
+```
+
+3. Run the returned `browserPlan` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams.
+
+4. Normalize and save the captured numbers:
+
+```bash
+node src/social.mjs snapshot spotify --profile <id> \
+  --capture-json '<captured-json>' \
+  --out data/spotify/snapshots/<YYYY-MM-DD>-s4a.json --json
+```
+
+5. Write the returned `contextPayload` as the `artist-spotify-snapshot` context doc.
+6. Run `delta-brief.ts` only when there are two comparable snapshots of the same data source.
 
 ## Output Contract
-
-Public API snapshot:
 
 ```json
 {
   "version": 1,
-  "dataSource": "spotify-web-api",
-  "snapshotDate": "2026-04-25",
-  "windowDays": 0,
-  "artist": { "name": "...", "spotifyArtistId": "...", "spotifyUrl": "...", "genres": [] },
-  "metrics": {
-    "followers": 0,
-    "popularity": 0
-  },
-  "geo": { "topCities": [] },
-  "tracks": [
-    { "id": "...", "name": "...", "popularity": 0, "spotifyUrl": "..." }
-  ],
-  "playlistsDriving": [],
+  "dataSource": "spotify-for-artists-browser",
+  "snapshotDate": "2026-07-08",
+  "windowDays": 28,
+  "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
+  "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
+  "geo": { "topCities": [], "topCountries": [] },
+  "tracks": [{ "name": "...", "streams": 0, "spotifyUrl": "..." }],
   "sources": {},
   "partial": false,
   "errors": [],
@@ -56,30 +58,18 @@ Public API snapshot:
 }
 ```
 
-`data/spotify/briefs/<YYYY-MM-DD>.md` is a short markdown brief with:
-
-- Window comparison (which two snapshots).
-- Real movers: streams, listeners, followers, save rate, skip rate. Each with absolute and percent change.
-- Top track movement (top 3 by stream delta).
-- New playlist features.
-- Removed playlist features.
-- Geo shifts worth noting.
-- Source-of-streams shifts (e.g., dependency on editorial growing).
-- Honest interpretation: signal vs. noise. Below ±10% is generally noise unless it's a sustained two-snapshot trend.
+Any metric not visible on the page is `null`, and the snapshot is marked `partial: true` with the missing fields listed in `errors`.
 
 ## Failure Handling
 
-- Missing Spotify client credentials → stop and point user to Settings > Secrets > Spotify.
-- Missing artist ID/profile → stop and ask for Artist Profile > Spotify profile.
-- Spotify API failure → report the status and do not write fake data.
-- Private S4A login expired → stop, report, do not retry blindly.
-- Whole private scrape fails → write nothing rather than fabricate.
-- No prior snapshot → snapshot still writes. Brief script reports "no prior snapshot, no delta."
+- Session not connected / not logged in / wrong account → stop and point the user to Settings → Social Accounts. Do not fabricate.
+- Spotify for Artists page did not load a value → capture it as `null`, mark `partial`.
+- Login expired → stop, report, do not retry blindly.
+- No prior snapshot → snapshot still writes; the brief reports "no prior snapshot, no delta."
 
 ## Never
 
-- Never fabricate numbers.
+- Never fabricate streams, listeners, followers, saves, cities, tracks, or source percentages.
 - Never modify a past snapshot.
 - Never bypass approvals — this skill is read-only.
-- Never represent public Spotify API popularity/followers as Spotify for Artists streams/listeners.
 - Never silently drop a tracked playlist feature; surface its disappearance as an anomaly.
