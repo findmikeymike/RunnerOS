@@ -24,6 +24,8 @@ import {
 } from '@craft-agent/shared/workspace-context'
 
 export interface CampaignScheduledJobRunnerDeps {
+  canRunBackgroundWork(workspaceRootPath: string): boolean
+  getBackgroundFenceToken?(workspaceRootPath: string): string | null
   executePromptJob(input: {
     workspaceId: string
     workspaceRootPath: string
@@ -89,11 +91,23 @@ export class CampaignScheduledJobRunner {
     this.deps = deps
   }
 
+  private canContinue(workspaceRootPath: string, capturedFence: string | null): boolean {
+    if (!this.deps.canRunBackgroundWork(workspaceRootPath)) return false
+    return !this.deps.getBackgroundFenceToken || this.deps.getBackgroundFenceToken(workspaceRootPath) === capturedFence
+  }
+
   async scanWorkspace(
     workspaceId: string,
     workspaceRootPath: string,
     now = this.deps.now?.() ?? new Date(),
   ): Promise<CampaignScheduledJobRunnerResult> {
+    if (!this.deps.canRunBackgroundWork(workspaceRootPath)) {
+      return { scanned: 0, started: 0, blocked: 0, missed: 0, failed: 0 }
+    }
+    const capturedFence = this.deps.getBackgroundFenceToken?.(workspaceRootPath) ?? null
+    if (this.deps.getBackgroundFenceToken && !capturedFence) {
+      return { scanned: 0, started: 0, blocked: 0, missed: 0, failed: 0 }
+    }
     if (this.inFlight.has(workspaceId)) {
       return { scanned: 0, started: 0, blocked: 0, missed: 0, failed: 0 }
     }
@@ -199,6 +213,7 @@ export class CampaignScheduledJobRunner {
 
         if (isLiveExternalActionType(current.job.actionType) && !current.job.externalActionPreview && this.deps.prepareExternalJob) {
           try {
+            if (!this.canContinue(workspaceRootPath, capturedFence)) continue
             const prepared = await this.deps.prepareExternalJob({
               workspaceId,
               workspaceRootPath,
@@ -230,7 +245,7 @@ export class CampaignScheduledJobRunner {
         calendar = await this.persistItem(workspaceId, workspaceRootPath, calendar, running)
 
         try {
-          const completed = await this.executeDueJob(workspaceId, workspaceRootPath, running, running.job!, now)
+          const completed = await this.executeDueJob(workspaceId, workspaceRootPath, running, running.job!, now, capturedFence)
           calendar = await this.persistItem(workspaceId, workspaceRootPath, calendar, completed)
           result.started += 1
         } catch (error) {
@@ -255,6 +270,7 @@ export class CampaignScheduledJobRunner {
     item: CampaignCalendarItem,
     job: CampaignScheduledJob,
     now: Date,
+    capturedFence: string | null,
   ): Promise<CampaignCalendarItem> {
     if (hasCompletedScheduledJob(item, job)) return item
     if (isLiveExternalActionType(job.actionType)) {
@@ -263,6 +279,7 @@ export class CampaignScheduledJobRunner {
       }
       const approval = findApprovedScheduledJobApproval(item, job, now, workspaceId)
       if (!approval) return markNeedsApproval(item, job, 'Exact approval no longer matches this scheduled job.')
+      if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before external execution.')
       const result = await this.deps.executeExternalJob({ workspaceId, workspaceRootPath, item, job, approval })
       if (!result.receiptId.trim()) throw new Error('External executor did not return a receipt id.')
       const externalReceipt: CampaignExternalExecutionReceipt = {
@@ -290,6 +307,7 @@ export class CampaignScheduledJobRunner {
       const workflowSlug = readPayloadString(job.payload, 'workflowSlug')
       if (!workflowSlug) throw new Error('run-workflow job payload requires workflowSlug.')
       const triggerInputs = readPayloadRecord(job.payload, 'triggerInputs') ?? {}
+      if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before workflow execution.')
       const { runId } = await this.deps.startWorkflow({ workspaceId, workflowSlug, triggerInputs })
       return markDone(item, job, now, { workflowRunId: runId, resultSummary: `Started workflow ${workflowSlug}.` })
     }
@@ -298,6 +316,7 @@ export class CampaignScheduledJobRunner {
     if (!prompt) throw new Error(`${job.actionType} job payload requires prompt.`)
     const agentSlug = readPayloadString(job.payload, 'agentSlug')
     const permissionMode = readPermissionMode(job.payload)
+    if (!this.canContinue(workspaceRootPath, capturedFence)) throw new Error('Team runner fence changed before prompt execution.')
     const { sessionId } = await this.deps.executePromptJob({
       workspaceId,
       workspaceRootPath,

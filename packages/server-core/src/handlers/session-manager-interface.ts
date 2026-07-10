@@ -28,6 +28,12 @@ import type { EventSink } from '../transport/types.ts'
 import type { LoadedSkill } from '@craft-agent/shared/skills'
 import type { QueueWorkAction } from '@craft-agent/shared/automations'
 
+export interface WorkspaceMigrationRuntimeLease {
+  workspaceId: string
+  sourceRootPath: string
+  released: boolean
+}
+
 export interface ISessionManager {
   // ---------------------------------------------------------------------------
   // Lifecycle
@@ -217,6 +223,9 @@ export interface ISessionManager {
   /** Return client-safe workspace list (no rootPath) for remote clients. */
   getWorkspacesInfo(): WorkspaceInfo[]
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void
+  quiesceWorkspaceForMigration?(workspaceId: string): Promise<WorkspaceMigrationRuntimeLease>
+  rebindWorkspaceAfterMigration?(lease: WorkspaceMigrationRuntimeLease, newRootPath: string): Promise<void>
+  resumeWorkspaceAfterMigration?(lease: WorkspaceMigrationRuntimeLease): Promise<void>
   /**
    * Manually notify the ConfigWatcher of a file change.
    * Workaround for Bun's fs.watch on Linux not detecting atomic renames.

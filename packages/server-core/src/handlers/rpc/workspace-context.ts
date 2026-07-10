@@ -84,6 +84,8 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
 
   server.handle(RPC_CHANNELS.workspaceContext.UPSERT, async (_ctx, workspaceId: string, payload: UpsertContextDocPayload): Promise<LoadedContextDoc> => {
     const rootPath = resolveRootPath(workspaceId)
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(rootPath, 'files.write')
     return withWorkspaceContextLock(rootPath, async () => {
       if (Object.prototype.hasOwnProperty.call(payload, 'expectedBody')) {
         const currentBody = loadContextDoc(rootPath, payload.slug)?.body ?? null
@@ -104,6 +106,8 @@ export function registerWorkspaceContextHandlers(server: RpcServer, deps: Handle
 
   server.handle(RPC_CHANNELS.workspaceContext.DELETE, async (_ctx, workspaceId: string, slug: string): Promise<boolean> => {
     const rootPath = resolveRootPath(workspaceId)
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(rootPath, 'files.write')
     return withWorkspaceContextLock(rootPath, async () => {
       const ok = deleteContextDoc(rootPath, slug)
       if (ok) {

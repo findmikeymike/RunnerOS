@@ -31,6 +31,17 @@ const log = createLogger('file-watch');
 const DEFAULT_DEBOUNCE_MS = 500;
 const ALL_CHANGE_TYPES: FileWatchChangeType[] = ['add', 'change', 'remove'];
 
+export function isIgnoredFileWatchPath(relativePath: string): boolean {
+  const normalized = relativePath.replaceAll('\\', '/');
+  const name = normalized.slice(normalized.lastIndexOf('/') + 1);
+  return name === '.DS_Store'
+    || name.startsWith('._')
+    || name.startsWith('~$')
+    || /(?:\.tmp|\.part|\.crdownload|\.icloud)$/i.test(name)
+    || /\b(?:conflicted copy|case conflict)\b/i.test(name)
+    || /(?:^|\/)\.craft-migrating-[^/]+(?:\/|$)/i.test(normalized);
+}
+
 /**
  * Simple glob-to-regex compiler. Supports:
  *   - `*`  (any chars except path separator)
@@ -269,6 +280,7 @@ export class FileWatchService {
 
     // Normalize relative path to forward slashes for glob matching
     const relPath = rawRelative.split(sep).join(posix.sep);
+    if (isIgnoredFileWatchPath(relPath)) return;
 
     for (const m of entry.matchers) {
       if (!m.changeTypes.includes(changeType)) continue;

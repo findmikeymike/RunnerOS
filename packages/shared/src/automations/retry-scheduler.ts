@@ -63,15 +63,18 @@ export interface RetryQueueEntry {
 
 export interface RetrySchedulerOptions {
   workspaceRootPath: string;
+  canRunBackgroundWork: () => boolean;
 }
 
 export class RetryScheduler {
   private readonly workspaceRootPath: string;
+  private readonly canRunBackgroundWork: () => boolean;
   private timer: ReturnType<typeof setInterval> | null = null;
   private processing = false;
 
   constructor(options: RetrySchedulerOptions) {
     this.workspaceRootPath = options.workspaceRootPath;
+    this.canRunBackgroundWork = options.canRunBackgroundWork;
   }
 
   /**
@@ -127,6 +130,7 @@ export class RetryScheduler {
    */
   private async tick(): Promise<void> {
     if (this.processing) return;
+    if (!this.canRunBackgroundWork()) return;
     this.processing = true;
 
     try {
@@ -163,6 +167,11 @@ export class RetryScheduler {
           // Not due yet — keep in queue
           remaining.push(entry);
           continue;
+        }
+
+        if (!this.canRunBackgroundWork()) {
+          remaining.push(entry, ...entries.slice(entries.indexOf(entry) + 1));
+          break;
         }
 
         // Attempt retry

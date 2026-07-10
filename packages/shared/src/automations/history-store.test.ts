@@ -57,6 +57,24 @@ describe('history-store', () => {
       expect(entries).toHaveLength(5);
       expect(entries.map(e => e.ts)).toEqual([0, 1, 2, 3, 4]);
     });
+
+    it('redacts prompts, responses, errors, and secret URL paths in shared-folder history', async () => {
+      writeFileSync(join(tempDir, 'config.json'), JSON.stringify({
+        id: 'workspace-1', name: 'Team', slug: 'team', createdAt: 1, updatedAt: 1,
+        storage: { mode: 'shared-folder', portabilityVersion: 1, sharedRootId: 'shared-1', enabledAt: '2026-07-10T00:00:00.000Z', vaultPolicy: 'copy-into-workspace', pathPolicy: 'relative-required' },
+      }), 'utf-8');
+      await appendAutomationHistoryEntry(tempDir, {
+        id: 'a1', ts: 1, ok: false, prompt: 'private customer prompt', error: 'token=secret',
+        webhook: { method: 'POST', url: 'https://hooks.example.com/secret/path?token=secret', statusCode: 500, responseBody: 'private response', error: 'Bearer secret' },
+      });
+
+      const raw = readFileSync(join(tempDir, AUTOMATIONS_HISTORY_FILE), 'utf-8');
+      expect(raw).not.toContain('private customer prompt');
+      expect(raw).not.toContain('secret/path');
+      expect(raw).not.toContain('private response');
+      expect(raw).not.toContain('Bearer secret');
+      expect(JSON.parse(raw).sharedRedacted).toBe(true);
+    });
   });
 
   // ============================================================================

@@ -1,5 +1,5 @@
 import type { EventSink } from '@craft-agent/server-core/transport'
-import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput } from '@craft-agent/server-core/handlers'
+import type { ISessionManager, IBrowserPaneManager, ExecutePromptAutomationInput, WorkspaceMigrationRuntimeLease } from '@craft-agent/server-core/handlers'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
 import { withAgentDefinitionsLibraryMutex } from '../handlers/rpc/agent-definitions'
 import { createScopedLogger, CONSOLE_LOGGER, type PlatformServices, type Logger } from '@craft-agent/server-core/runtime'
@@ -39,7 +39,7 @@ import {
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
 import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput } from '@craft-agent/session-tools-core'
-import { loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
+import { assertTeamPermission, evaluateTeamRunnerGate, loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   applyCampaignCalendarWriteIntent,
@@ -128,6 +128,7 @@ import {
 } from '../memory/MemorySidecarService'
 import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { OutputService } from '../outputs/OutputService'
+import { recoverInterruptedWorkspaceMigrations } from '../workspaces/workspace-migration-recovery'
 import {
   loadAllGlobalWorkflows,
   loadGlobalWorkflow,
@@ -225,6 +226,54 @@ let _platform: PlatformServices | null = null
 // Named `sessionLog` so all ~30 existing call sites remain unchanged.
 let sessionLog: Logger = createScopedLogger(CONSOLE_LOGGER, 'session')
 
+const MIGRATING_WORKSPACE_ROOTS = new Set<string>()
+
+function canRunWorkspaceBackgroundWork(workspaceRootPath: string): boolean {
+  if (MIGRATING_WORKSPACE_ROOTS.has(workspaceRootPath)) return false
+  try {
+    return evaluateTeamRunnerGate(workspaceRootPath).allowed
+  } catch (error) {
+    sessionLog.warn(`[TeamMode] Background work blocked because runner state could not be verified for ${workspaceRootPath}:`, error)
+    return false
+  }
+}
+
+function getWorkspaceBackgroundFenceToken(workspaceRootPath: string): string | null {
+  try {
+    const decision = evaluateTeamRunnerGate(workspaceRootPath)
+    if (!decision.allowed) return null
+    if (decision.reason === 'solo') return 'solo'
+    return decision.fence ? JSON.stringify(decision.fence) : null
+  } catch (error) {
+    sessionLog.warn(`[TeamMode] Runner fence could not be captured for ${workspaceRootPath}:`, error)
+    return null
+  }
+}
+
+function canExecuteAutomaticBrowserSocial(workspaceRootPath: string): boolean {
+  try {
+    return loadWorkspaceConfig(workspaceRootPath)?.storage?.mode !== 'shared-folder'
+  } catch {
+    return false
+  }
+}
+
+export function assertAgentAutomationCreationAllowed(input: {
+  currentWorkspaceId: string
+  targetWorkspaceId: string
+  targetWorkspaceRootPath: string
+  matcher: { actions?: unknown }
+}): void {
+  if (input.targetWorkspaceId !== input.currentWorkspaceId) {
+    throw new Error('Automation creation is scoped to the current session workspace.')
+  }
+  assertTeamPermission(input.targetWorkspaceRootPath, 'team.settings.update')
+  const actions = Array.isArray(input.matcher.actions) ? input.matcher.actions : []
+  if (actions.some((action) => action && typeof action === 'object' && (action as { type?: unknown }).type === 'webhook')) {
+    assertTeamPermission(input.targetWorkspaceRootPath, 'automation.external.execute')
+  }
+}
+
 export function setSessionPlatform(platform: PlatformServices): void {
   _platform = platform
   sessionLog = createScopedLogger(platform.logger, 'session')
@@ -235,12 +284,14 @@ interface SessionRuntimeHooks {
   captureException: (error: unknown, context?: { errorSource?: string; sessionId?: string }) => void
   onSessionStarted: () => void
   onSessionStopped: () => void
+  onTeamRunnerActiveChange: (active: boolean) => void
 }
 
 const defaultSessionRuntimeHooks: SessionRuntimeHooks = {
   updateBadgeCount: () => {},
   onSessionStarted: () => {},
   onSessionStopped: () => {},
+  onTeamRunnerActiveChange: () => {},
   captureException: (error, context) => {
     const err = error instanceof Error ? error : new Error(String(error))
     if (_platform?.captureError) {
@@ -1537,6 +1588,9 @@ export class SessionManager implements ISessionManager {
   private configWatchers: Map<string, ConfigWatcher> = new Map()
   // Automation systems for workspace event automations - one per workspace (includes scheduler, diffing, and handlers)
   private automationSystems: Map<string, AutomationSystem> = new Map()
+  // Held for the full copy/root-switch/rebind transaction. New session work is
+  // rejected while the workspace filesystem snapshot is being migrated.
+  private workspaceMigrationLocks: Set<string> = new Set()
   // Pending credential request resolvers (keyed by requestId)
   private pendingCredentialResolvers: Map<string, (response: import('@craft-agent/shared/protocol').CredentialResponse) => void> = new Map()
   // Permission request metadata tracking (keyed by requestId)
@@ -1775,6 +1829,89 @@ export class SessionManager implements ISessionManager {
    * Idempotent — returns immediately if already watching.
    * workspaceId must be the global config ID (what the renderer knows).
    */
+  async quiesceWorkspaceForMigration(workspaceId: string): Promise<WorkspaceMigrationRuntimeLease> {
+    if (this.workspaceMigrationLocks.has(workspaceId)) {
+      throw new Error('A workspace migration is already in progress.')
+    }
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error(`Workspace ${workspaceId} not found`)
+
+    this.workspaceMigrationLocks.add(workspaceId)
+    MIGRATING_WORKSPACE_ROOTS.add(workspace.rootPath)
+    try {
+      if (this.getActiveSessionCount(workspaceId) > 0) {
+        throw new Error('Stop all active agent sessions before moving this workspace.')
+      }
+      for (const managed of this.sessions.values()) {
+        if (managed.workspace.id === workspaceId && managed.messageQueue.length > 0) {
+          throw new Error('Wait for queued session messages to finish before moving this workspace.')
+        }
+      }
+
+      await this.flushAllSessions()
+
+      const watcher = this.configWatchers.get(workspace.rootPath)
+      watcher?.stop()
+      this.configWatchers.delete(workspace.rootPath)
+
+      const automationSystem = this.automationSystems.get(workspace.rootPath)
+      this.automationSystems.delete(workspace.rootPath)
+      if (automationSystem) await automationSystem.dispose()
+
+      return { workspaceId, sourceRootPath: workspace.rootPath, released: false }
+    } catch (error) {
+      this.workspaceMigrationLocks.delete(workspaceId)
+      MIGRATING_WORKSPACE_ROOTS.delete(workspace.rootPath)
+      this.setupConfigWatcher(workspace.rootPath, workspaceId)
+      throw error
+    }
+  }
+
+  async rebindWorkspaceAfterMigration(lease: WorkspaceMigrationRuntimeLease, newRootPath: string): Promise<void> {
+    if (lease.released || !this.workspaceMigrationLocks.has(lease.workspaceId)) {
+      throw new Error('Workspace migration lease is not active.')
+    }
+    const workspace = getWorkspaceByNameOrId(lease.workspaceId)
+    if (!workspace || workspace.rootPath !== newRootPath) {
+      throw new Error(`Workspace root was not switched to ${newRootPath}`)
+    }
+    MIGRATING_WORKSPACE_ROOTS.add(newRootPath)
+
+    for (const managed of this.sessions.values()) {
+      if (managed.workspace.id !== lease.workspaceId) continue
+      if (managed.agent) {
+        managed.agent.dispose()
+        managed.agent = null
+      }
+      if (managed.mcpPool) {
+        await managed.mcpPool.disconnectAll()
+        managed.mcpPool = undefined
+      }
+      if (managed.poolServer) {
+        await managed.poolServer.stop()
+        managed.poolServer = undefined
+      }
+      managed.workspace = workspace
+    }
+
+    this.setupConfigWatcher(newRootPath, lease.workspaceId)
+    lease.released = true
+    this.workspaceMigrationLocks.delete(lease.workspaceId)
+    MIGRATING_WORKSPACE_ROOTS.delete(lease.sourceRootPath)
+    MIGRATING_WORKSPACE_ROOTS.delete(newRootPath)
+  }
+
+  async resumeWorkspaceAfterMigration(lease: WorkspaceMigrationRuntimeLease): Promise<void> {
+    if (lease.released) return
+    const workspace = getWorkspaceByNameOrId(lease.workspaceId)
+    if (workspace?.rootPath === lease.sourceRootPath) {
+      this.setupConfigWatcher(lease.sourceRootPath, lease.workspaceId)
+    }
+    lease.released = true
+    this.workspaceMigrationLocks.delete(lease.workspaceId)
+    MIGRATING_WORKSPACE_ROOTS.delete(lease.sourceRootPath)
+  }
+
   setupConfigWatcher(workspaceRootPath: string, workspaceId: string): void {
     // Check if already watching this workspace
     if (this.configWatchers.has(workspaceRootPath)) {
@@ -1922,6 +2059,7 @@ export class SessionManager implements ISessionManager {
         workspaceRootPath,
         workspaceId,
         enableScheduler: true,
+        runSchedulerCatchUpOnStart: false,
         onPromptsReady: async (prompts) => {
           // Execute prompt automations by creating new sessions
           const settled = await Promise.allSettled(
@@ -2001,6 +2139,9 @@ export class SessionManager implements ISessionManager {
         onError: (event, error) => {
           sessionLog.error(`Automation failed for ${event}:`, error.message)
         },
+        onRunnerActiveChange: (active) => {
+          sessionRuntimeHooks.onTeamRunnerActiveChange(active)
+        },
       })
       this.automationSystems.set(workspaceRootPath, automationSystem)
       sessionLog.info(`Initialized AutomationSystem for workspace ${workspaceId}`)
@@ -2011,6 +2152,9 @@ export class SessionManager implements ISessionManager {
       // dispatch wiring without bloating the shared automations package.
       this.attachPulseDispatch(automationSystem, workspaceId, workspaceRootPath)
       this.attachCampaignScheduledJobsDispatch(automationSystem, workspaceId, workspaceRootPath)
+      automationSystem.runMissedSchedulerCatchUp().catch((error) => {
+        sessionLog.warn('[Automations] Failed to run missed scheduler catch-up:', error)
+      })
     }
   }
 
@@ -2467,6 +2611,9 @@ export class SessionManager implements ISessionManager {
   private getScheduledWorkRunner(): ScheduledWorkRunner {
     if (!this.scheduledWorkRunner) {
       this.scheduledWorkRunner = new ScheduledWorkRunner({
+        canRunBackgroundWork: canRunWorkspaceBackgroundWork,
+        getBackgroundFenceToken: getWorkspaceBackgroundFenceToken,
+        canExecuteSocialAutomatically: canExecuteAutomaticBrowserSocial,
         withLock: withWorkspaceContextLock,
         executeAgentTask: async (input) => {
           return this.executePromptAutomation({
@@ -2520,6 +2667,8 @@ export class SessionManager implements ISessionManager {
   private getCampaignScheduledJobRunner(): CampaignScheduledJobRunner {
     if (!this.campaignScheduledJobRunner) {
       this.campaignScheduledJobRunner = new CampaignScheduledJobRunner({
+        canRunBackgroundWork: canRunWorkspaceBackgroundWork,
+        getBackgroundFenceToken: getWorkspaceBackgroundFenceToken,
         executePromptJob: (input) => this.executePromptAutomation({
           workspaceId: input.workspaceId,
           workspaceRootPath: input.workspaceRootPath,
@@ -2722,6 +2871,13 @@ export class SessionManager implements ISessionManager {
 
   async initialize(): Promise<void> {
     try {
+      // Resolve interrupted workspace moves before any watcher, scheduler, or
+      // session can bind to an obsolete/partially committed root.
+      recoverInterruptedWorkspaceMigrations({
+        info: (message) => sessionLog.info(message),
+        error: (message, error) => sessionLog.error(message, error),
+      })
+
       // Seed the global agent-definitions library on first run (idempotent —
       // never overwrites existing AGENT.md files; respects the .seeded marker).
       // Then ensure load-bearing agents (Orchestrator) exist on EVERY startup
@@ -4287,6 +4443,9 @@ user a clickable link to where the thing now lives.`
   }
 
   async createSession(workspaceId: string, options?: import('@craft-agent/shared/protocol').CreateSessionOptions): Promise<Session> {
+    if (this.workspaceMigrationLocks.has(workspaceId)) {
+      throw new Error('Workspace migration is in progress. Try again when the move finishes.')
+    }
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) {
       throw new Error(`Workspace ${workspaceId} not found`)
@@ -6377,6 +6536,16 @@ user a clickable link to where the thing now lives.`
           if (!targetWorkspace) {
             return { ok: false, error: `Workspace not found: ${targetWorkspaceId}` }
           }
+          try {
+            assertAgentAutomationCreationAllowed({
+              currentWorkspaceId: managed.workspace.id,
+              targetWorkspaceId: targetWorkspace.id,
+              targetWorkspaceRootPath: targetWorkspace.rootPath,
+              matcher: input.matcher,
+            })
+          } catch (error) {
+            return { ok: false, error: error instanceof Error ? error.message : String(error) }
+          }
 
           const { eventName, matcher } = input
           const SUPPORTED = new Set(['SchedulerTick', 'WebhookReceive', 'FileWatch', 'PollUrl', 'MessageReceive'])
@@ -8073,6 +8242,10 @@ user a clickable link to where the thing now lives.`
     if (!managed) {
       releaseAdmissionLockOnce()
       throw new Error(`Session ${sessionId} not found`)
+    }
+    if (this.workspaceMigrationLocks.has(managed.workspace.id)) {
+      releaseAdmissionLockOnce()
+      throw new Error('Workspace migration is in progress. Try again when the move finishes.')
     }
 
     try {

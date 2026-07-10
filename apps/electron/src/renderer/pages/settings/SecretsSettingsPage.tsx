@@ -770,9 +770,23 @@ export default function SecretsSettingsPage() {
   }, [])
 
   const remove = async (secretName: string) => {
-    await window.electronAPI.deleteSecret(secretName)
-    toast.success('Secret deleted')
-    await load()
+    if (!activeWorkspaceId) {
+      toast.error('Select an active workspace before deleting secrets')
+      return
+    }
+    try {
+      const result = await window.electronAPI.deleteSecret(secretName, activeWorkspaceId)
+      if (!result.success) {
+        toast.error(result.error || 'Could not delete secret')
+        return
+      }
+      toast.success('Secret deleted')
+      await load()
+    } catch (error) {
+      toast.error('Could not delete secret', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
   const installZero = async () => {
@@ -873,7 +887,11 @@ export default function SecretsSettingsPage() {
           }
           await window.electronAPI.saveSourceCredentials(activeWorkspaceId, preset.sourceSlug, value)
         } else if (preset.storage === 'env') {
-          const result = await window.electronAPI.saveSecret(preset.name, value)
+          if (!activeWorkspaceId) {
+            toast.error('Select an active workspace before saving secrets')
+            return
+          }
+          const result = await window.electronAPI.saveSecret(preset.name, value, activeWorkspaceId)
           if (!result.success) {
             toast.error(result.error || `Could not save ${preset.label}`)
             return
@@ -889,6 +907,10 @@ export default function SecretsSettingsPage() {
       setExpandedServiceId(null)
       toast.success(`${service.title} saved`)
       await load()
+    } catch (error) {
+      toast.error(`Could not save ${service.title}`, {
+        description: error instanceof Error ? error.message : String(error),
+      })
     } finally {
       setBusyServiceId(null)
     }

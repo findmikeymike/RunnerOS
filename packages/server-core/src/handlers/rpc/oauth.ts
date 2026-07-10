@@ -6,6 +6,7 @@ import { createPendingFlow } from '@craft-agent/shared/auth'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { syncGoogleAdsCredentialCache } from './google-ads-credential-cache'
+import { assertGlobalSourceCredentialPermission } from './team-permission-helpers'
 
 async function reloadSourcesForWorkspace(deps: HandlerDeps, workspaceRootPath: string, log: HandlerDeps['platform']['logger'], label: string): Promise<void> {
   try {
@@ -59,6 +60,14 @@ export async function completeOAuthFlow(opts: {
   }
   if (opts.workspaceId != null) {
     if (flow.workspaceId !== opts.workspaceId) throw new Error('Workspace mismatch')
+  }
+  const workspace = getWorkspaceByNameOrId(flow.workspaceId)
+  if (!workspace) throw new Error(`Workspace not found: ${flow.workspaceId}`)
+  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+  if (flow.credentialScope === 'global') {
+    assertGlobalSourceCredentialPermission(flow.workspaceId, flow.sourceSlug)
+  } else {
+    assertTeamPermission(workspace.rootPath, 'secrets.update')
   }
 
   const result = await credManager.exchangeAndStore(
@@ -125,6 +134,12 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     const workspace = getWorkspaceByNameOrId(ctx.workspaceId)
     if (!workspace) {
       throw new Error(`Workspace not found: ${ctx.workspaceId}`)
+    }
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    if (credentialScope === 'global') {
+      assertGlobalSourceCredentialPermission(ctx.workspaceId, sourceSlug)
+    } else {
+      assertTeamPermission(workspace.rootPath, 'secrets.update')
     }
 
     const [workspaceSource] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
@@ -238,6 +253,8 @@ export function registerOAuthHandlers(server: RpcServer, deps: HandlerDeps): voi
     if (!workspace) {
       throw new Error(`Workspace not found: ${ctx.workspaceId}`)
     }
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'secrets.update')
 
     const [source] = getSourcesBySlugs(workspace.rootPath, [sourceSlug])
     if (!source) {

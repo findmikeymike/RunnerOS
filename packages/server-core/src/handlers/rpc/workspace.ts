@@ -1,12 +1,14 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'path'
 import { homedir } from 'os'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, addWorkspace, setActiveWorkspace, updateWorkspaceRemoteServer } from '@craft-agent/shared/config'
+import { assertWorkspaceOpenable } from '@craft-agent/shared/workspaces'
 import { perf } from '@craft-agent/shared/utils'
 import { pushTyped, type RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { isValidWorkspaceRootPath } from '../../utils/path-validation'
+import { assertWorkspaceSecretsUpdatePermission } from './team-permission-helpers'
 
 export const CORE_HANDLED_CHANNELS = [
   RPC_CHANNELS.workspaces.GET,
@@ -52,6 +54,9 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     }
 
     const rootExistedBeforeAdd = existsSync(rootPath)
+    if (rootExistedBeforeAdd && readdirSync(rootPath).length > 0) {
+      assertWorkspaceOpenable(rootPath)
+    }
     const workspace = addWorkspace({ name, rootPath, ...(remoteServer && { remoteServer }) })
     // Make it active
     setActiveWorkspace(workspace.id)
@@ -81,6 +86,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
 
   // Update remote server config for an existing workspace (reconnect flow)
   server.handle(RPC_CHANNELS.workspaces.UPDATE_REMOTE, async (_ctx, workspaceId: string, remoteServer: { url: string; token: string; remoteWorkspaceId: string }) => {
+    assertWorkspaceSecretsUpdatePermission(workspaceId, 'Remote workspace credentials update')
     updateWorkspaceRemoteServer(workspaceId, remoteServer)
     deps.platform.logger.info(`Updated remote server for workspace ${workspaceId}: ${remoteServer.url}`)
     return { success: true }
@@ -219,6 +225,8 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   server.handle(RPC_CHANNELS.workspace.WRITE_IMAGE, async (_ctx, workspaceId: string, relativePath: string, base64: string, mimeType: string) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'files.write')
 
     const { writeFileSync, existsSync, unlinkSync, readdirSync } = await import('fs')
     const { join, normalize, basename } = await import('path')
@@ -337,6 +345,8 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     const workspaces = getWorkspaces()
     const workspace = workspaces.find(w => w.id === workspaceId)
     if (!workspace) return
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'files.write')
     setWorkspaceColorTheme(workspace.rootPath, themeId ?? undefined)
   })
 
@@ -373,6 +383,8 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   server.handle(RPC_CHANNELS.views.SAVE, async (_ctx, workspaceId: string, views: import('@craft-agent/shared/views').ViewConfig[]) => {
     const workspace = getWorkspaceByNameOrId(workspaceId)
     if (!workspace) throw new Error('Workspace not found')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'files.write')
 
     const { saveViews } = await import('@craft-agent/shared/views/storage')
     saveViews(workspace.rootPath, views)

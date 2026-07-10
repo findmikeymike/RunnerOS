@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { AutomationSystem } from './automation-system.ts'
@@ -15,6 +15,9 @@ describe('MessageReceive — AutomationSystem integration', () => {
   test('fires the event on the workspace bus with full payload', async () => {
     const dir = tmpWorkspace()
     try {
+      writeFileSync(join(dir, 'config.json'), JSON.stringify({
+        id: 'ws-1', name: 'Message Test', slug: 'message-test', createdAt: Date.now(), updatedAt: Date.now(),
+      }), 'utf-8')
       const system = new AutomationSystem({
         workspaceRootPath: dir,
         workspaceId: 'ws-1',

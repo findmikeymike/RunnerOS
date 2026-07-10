@@ -27,6 +27,33 @@ import type { PermissionMode } from '@craft-agent/shared/agent/modes';
 export type { PermissionMode };
 export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
+import type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus } from '@craft-agent/shared/workspaces';
+import type { TeamSharedFolderMigrationResult } from '@craft-agent/shared/workspaces';
+import type { SharedRecordClobberIssue, SharedRecordConflict } from '@craft-agent/shared/records';
+import type {
+  CommunityContactRecord,
+  CommunityEmailJobRecord,
+  CommunitySegment,
+  CommunityState,
+  CommunitySuppressionRecord,
+  ConsentStatus,
+  CreateCommunityEmailJobInput,
+  ImportCommunityCsvInput,
+  UpsertCommunityContactInput,
+} from '@craft-agent/shared/community';
+export type { SharedFolderProvider, SharedPathOverrides, TeamModeStatus, TeamSharedFolderMigrationResult };
+export type {
+  CommunityContactRecord,
+  CommunityEmailJobRecord,
+  CommunitySegment,
+  CommunityState,
+  CommunitySuppressionRecord,
+  ConsentStatus,
+  CreateCommunityEmailJobInput,
+  ImportCommunityCsvInput,
+  UpsertCommunityContactInput,
+};
+
 // Thinking level types
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
 export type { ThinkingLevel };
@@ -641,8 +668,8 @@ export interface ElectronAPI {
   // Credential health check (startup validation)
   getCredentialHealth(): Promise<CredentialHealthStatus>
   listSecrets(): Promise<UserSecretSummary[]>
-  saveSecret(name: string, value: string): Promise<{ success: boolean; error?: string }>
-  deleteSecret(name: string): Promise<{ success: boolean }>
+  saveSecret(name: string, value: string, workspaceId: string): Promise<{ success: boolean; error?: string }>
+  deleteSecret(name: string, workspaceId: string): Promise<{ success: boolean; error?: string }>
   onSecretsChanged(callback: () => void): () => void
   getZeroStatus(): Promise<ZeroStatus>
   installZero(): Promise<{ success: boolean; error?: string }>
@@ -691,7 +718,26 @@ export interface ElectronAPI {
   // Workspace Settings (per-workspace configuration)
   getWorkspaceSettings(workspaceId: string): Promise<WorkspaceSettings | null>
   updateWorkspaceSetting<K extends keyof WorkspaceSettings>(workspaceId: string, key: K, value: WorkspaceSettings[K]): Promise<void>
+  getWorkspaceTeamStatus(workspaceId: string): Promise<TeamModeStatus>
+  enableWorkspaceTeamMode(workspaceId: string, options?: { provider?: SharedFolderProvider; providerLabel?: string; makeRunner?: boolean }): Promise<TeamModeStatus>
+  joinWorkspaceTeam(workspaceId: string): Promise<TeamModeStatus>
+  moveWorkspaceToSharedFolder(workspaceId: string, input: { destinationParentPath: string; provider?: SharedFolderProvider; providerLabel?: string; makeRunner?: boolean }): Promise<TeamSharedFolderMigrationResult>
+  setWorkspaceTeamRunner(workspaceId: string, machineId?: string): Promise<TeamModeStatus>
+  rotateWorkspaceOwnerRecoveryCode(workspaceId: string): Promise<{ recoveryCode: string; status: TeamModeStatus }>
+  recoverWorkspaceOwner(workspaceId: string, recoveryCode: string): Promise<TeamModeStatus>
+  approveWorkspaceOwnerRecovery(workspaceId: string, claimId: string): Promise<TeamModeStatus>
+  getWorkspaceTeamPathOverrides(workspaceId: string): Promise<SharedPathOverrides>
+  setWorkspaceTeamPathOverride(workspaceId: string, refId: string, absolutePath: string): Promise<SharedPathOverrides>
+  clearWorkspaceTeamPathOverride(workspaceId: string, refId: string): Promise<SharedPathOverrides>
+  listRecordConflicts(workspaceId: string): Promise<SharedRecordConflict[]>
+  scanRecordProviderConflicts(workspaceId: string): Promise<SharedRecordConflict[]>
+  detectRecordClobbers(workspaceId: string): Promise<SharedRecordClobberIssue[]>
   getSelfEditTarget(workspaceId: string): Promise<SelfEditTargetInfo>
+  getCommunity(workspaceId: string): Promise<CommunityState>
+  addCommunityContact(workspaceId: string, input: UpsertCommunityContactInput): Promise<CommunityState>
+  importCommunityCsv(workspaceId: string, input: Omit<ImportCommunityCsvInput, 'assertedBy'> & { assertedBy?: string }): Promise<CommunityState>
+  createCommunityEmailJob(workspaceId: string, input: CreateCommunityEmailJobInput): Promise<CommunityState>
+  suppressCommunityContact(workspaceId: string, email: string, reason?: CommunitySuppressionRecord['reason']): Promise<CommunityState>
 
   // Folder dialog
   openFolderDialog(): Promise<string | null>

@@ -50,6 +50,7 @@ import {
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
+import { assertTeamPermission } from '@craft-agent/shared/workspaces'
 
 export interface ScheduledWorkMigrationResult {
   updated: boolean
@@ -131,6 +132,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.scheduledWork.MUTATE,
     async (_ctx, workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
       return withWorkspaceContextLock(rootPath, async () => {
         const parsed = readScheduledWork(rootPath, workspaceId)
         if (!parsed.ok) throw new Error(parsed.error)
@@ -147,6 +149,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.scheduledWork.CANCEL_CAMPAIGN,
     async (_ctx, workspaceId: string, input: CancelCampaignWorkInput): Promise<CancelCampaignWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
       return withWorkspaceContextLock(rootPath, async () => {
         const scheduled = readScheduledWork(rootPath, workspaceId)
         if (!scheduled.ok) throw new Error(scheduled.error)
@@ -200,6 +203,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN,
     async (_ctx, workspaceId: string, input: DecideCampaignWorkInput): Promise<DecideCampaignWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
       return withWorkspaceContextLock(rootPath, async () => {
         const scheduled = readScheduledWork(rootPath, workspaceId)
         if (!scheduled.ok) throw new Error(scheduled.error)
@@ -294,6 +298,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.scheduledWork.RESOLVE_CAMPAIGN_OUTPUT,
     async (_ctx, workspaceId: string, input: ResolveCampaignProducedOutputInput): Promise<ResolveCampaignProducedOutputResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
       return withWorkspaceContextLock(rootPath, async () => {
         const scheduled = readScheduledWork(rootPath, workspaceId)
         if (!scheduled.ok) throw new Error(scheduled.error)
@@ -342,6 +347,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL,
     async (ctx, workspaceId: string, input: ApproveCampaignSocialWorkInput): Promise<ApproveCampaignSocialWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'social.publish.approve')
       return withWorkspaceContextLock(rootPath, async () => {
         const scheduled = readScheduledWork(rootPath, workspaceId)
         if (!scheduled.ok) throw new Error(scheduled.error)
@@ -392,6 +398,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN,
     async (_ctx, workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
       return withWorkspaceContextLock(rootPath, async () => {
         const validation = applyScheduledWorkMutation(emptyScheduledWorkDocument(workspaceId), {
           operation: 'upsert',
@@ -460,6 +467,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN,
     async (_ctx, workspaceId: string, input: ScheduleCampaignChainInput): Promise<ScheduleCampaignChainResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
       return withWorkspaceContextLock(rootPath, async () => {
         assertCampaignChainInput(workspaceId, input)
         for (let index = 0; index < input.orders.length; index += 1) {
@@ -525,6 +533,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.scheduledWork.SCHEDULE_HQ,
     async (_ctx, workspaceId: string, input: ScheduleHqWorkInput): Promise<ScheduleHqWorkResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
       return withWorkspaceContextLock(rootPath, async () => {
         if (!input.requestId.trim() || input.orders.length !== 1) throw new Error('HQ work plan is invalid.')
         for (const order of input.orders) {
@@ -565,6 +574,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
     RPC_CHANNELS.scheduledWork.MIGRATE_CAMPAIGN,
     async (_ctx, workspaceId: string): Promise<ScheduledWorkMigrationResult> => {
       const rootPath = resolveRootPath(workspaceId)
+      assertTeamPermission(rootPath, 'files.write')
       return withWorkspaceContextLock(rootPath, async () => {
         const scheduled = readScheduledWork(rootPath, workspaceId)
         if (!scheduled.ok) throw new Error(scheduled.error)

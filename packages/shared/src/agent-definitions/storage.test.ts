@@ -450,7 +450,7 @@ body
     expect(readActivatedAgents(workspace).active).toEqual(['researcher'])
   })
 
-  test('loadActivatedAgents self-heals stale manifest entries for missing globals', () => {
+  test('loadActivatedAgents preserves shared activation entries that are missing only on this machine', () => {
     writeGlobalAgent(
       {
         slug: 'present',
@@ -463,7 +463,7 @@ body
 
     const loaded = loadActivatedAgents(workspace, { globalAgentsDir })
     expect(loaded.map((a) => a.slug)).toEqual(['present'])
-    expect(readActivatedAgents(workspace).active).toEqual(['present'])
+    expect(readActivatedAgents(workspace).active).toEqual(['missing', 'present'])
   })
 
   test('seedGlobalLibraryIfEmpty writes starters once to the injected global dir', () => {
@@ -508,7 +508,7 @@ body
     expect(hnic?.metadata.skills).toContain('automation-creator')
     expect(hnic?.systemPrompt).toContain('current active-agent capability catalog')
     expect(hnic?.systemPrompt).toContain('@setup-concierge')
-    expect(hnic?.systemPrompt).toContain('suggest an automation')
+    expect(hnic?.systemPrompt).toContain('design it as an automation')
     expect(hnic?.systemPrompt).toContain('suggest a workflow')
     expect(hnic?.systemPrompt).toContain('Handoff target')
   })

@@ -61,6 +61,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     landing: 'workspace',
     pages: [
       { id: 'workspace', label: 'Workspace' },
+      { id: 'team', label: 'Team' },
       { id: 'permissions', label: 'Permissions' },
     ],
   },

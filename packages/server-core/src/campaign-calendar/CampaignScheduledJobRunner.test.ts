@@ -55,6 +55,37 @@ function writeCalendar(root: string, items: CampaignCalendarItem[]) {
 }
 
 describe('CampaignScheduledJobRunner', () => {
+  test('skips campaign jobs when this machine is not the background runner', async () => {
+    const root = makeRoot()
+    const item = createCampaignCalendarItem({
+      campaignId: 'campaign-1',
+      date: '2026-07-10',
+      title: 'Prepare launch copy',
+      kind: 'scheduled-job',
+      job: createCampaignScheduledJob({
+        runAt: '2026-07-10T14:00:00.000Z',
+        actionType: 'ask-agent',
+        payload: { prompt: 'Prepare copy.', agentSlug: 'copywriter' },
+      }),
+    })
+    writeCalendar(root, [item])
+    let executions = 0
+    const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => false,
+      executePromptJob: async () => {
+        executions += 1
+        return { sessionId: 'should-not-start' }
+      },
+      startWorkflow: async () => ({ runId: 'should-not-start' }),
+    })
+
+    const result = await runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(result).toEqual({ scanned: 0, started: 0, blocked: 0, missed: 0, failed: 0 })
+    expect(executions).toBe(0)
+    expect(readCalendar(root).items[0]?.status).toBe('scheduled')
+  })
+
   test('runs a due ask-agent job once and records run history', async () => {
     const root = makeRoot()
     const item = createCampaignCalendarItem({
@@ -72,6 +103,7 @@ describe('CampaignScheduledJobRunner', () => {
 
     const promptCalls: string[] = []
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async (input) => {
         promptCalls.push(`${input.agentSlug}:${input.prompt}`)
         return { sessionId: 'session-1' }
@@ -109,6 +141,7 @@ describe('CampaignScheduledJobRunner', () => {
 
     let executed = false
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => {
         executed = true
         return { sessionId: 'session-1' }
@@ -147,6 +180,7 @@ describe('CampaignScheduledJobRunner', () => {
     writeCalendar(root, [item])
 
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
     })
@@ -180,6 +214,7 @@ describe('CampaignScheduledJobRunner', () => {
 
     const prepared: string[] = []
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
       prepareExternalJob: async ({ job }) => {
@@ -232,6 +267,7 @@ describe('CampaignScheduledJobRunner', () => {
 
     let prepareCalls = 0
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
       prepareExternalJob: async () => {
@@ -315,6 +351,7 @@ describe('CampaignScheduledJobRunner', () => {
 
     const externalCalls: string[] = []
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
       executeExternalJob: async ({ item, job, approval }) => {
@@ -352,6 +389,39 @@ describe('CampaignScheduledJobRunner', () => {
     })
   })
 
+  test('rechecks the runner fence immediately before an external campaign action', async () => {
+    const root = makeRoot()
+    const job = createCampaignScheduledJob({
+      runAt: '2026-07-10T14:00:00.000Z',
+      actionType: 'post-asset',
+      payload: { platform: 'instagram' },
+      approvalPolicy: 'approval-before-external-action',
+    })
+    const item = approveCampaignCalendarItem(createCampaignCalendarItem({
+      campaignId: 'campaign-1', date: '2026-07-10', title: 'Fenced post', kind: 'scheduled-job',
+      status: 'needs-approval', accountSetId: 'artist-main', job,
+    }), { campaignId: 'campaign-1', now: '2026-07-10T13:50:00.000Z' })
+    writeCalendar(root, [item])
+    let fenceReads = 0
+    let executeCalls = 0
+    const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
+      getBackgroundFenceToken: () => ++fenceReads === 1 ? 'epoch-1' : 'epoch-2',
+      executePromptJob: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      executeExternalJob: async () => {
+        executeCalls += 1
+        return { receiptId: 'must-not-run' }
+      },
+    })
+
+    const result = await runner.scanWorkspace('campaign-1', root, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(executeCalls).toBe(0)
+    expect(result.failed).toBe(1)
+    expect(readCalendar(root).items[0]?.runHistory.at(-1)?.error).toContain('runner fence changed')
+  })
+
   test('runs a materially late external job after an exact late review', async () => {
     const root = makeRoot()
     const job = createCampaignScheduledJob({
@@ -383,6 +453,7 @@ describe('CampaignScheduledJobRunner', () => {
     writeCalendar(root, [item])
 
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
       executeExternalJob: async () => ({ receiptId: 'receipt-late' }),
@@ -416,6 +487,7 @@ describe('CampaignScheduledJobRunner', () => {
     writeCalendar(root, [item])
 
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
       executeExternalJob: async () => {
@@ -452,6 +524,7 @@ describe('CampaignScheduledJobRunner', () => {
     writeCalendar(root, [item])
 
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
       executeExternalJob: async () => ({ receiptId: '' }),
@@ -488,6 +561,7 @@ describe('CampaignScheduledJobRunner', () => {
     writeCalendar(root, [running])
 
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
     })
@@ -520,6 +594,7 @@ describe('CampaignScheduledJobRunner', () => {
 
     let calls = 0
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => {
         calls += 1
         throw new Error('Agent failed.')
@@ -556,6 +631,7 @@ describe('CampaignScheduledJobRunner', () => {
     writeCalendar(root, [item])
 
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
     })
@@ -603,6 +679,7 @@ describe('CampaignScheduledJobRunner', () => {
 
     let executed = false
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => {
         executed = true
         return { sessionId: 'session-1' }
@@ -638,6 +715,7 @@ describe('CampaignScheduledJobRunner', () => {
     writeCalendar(root, [item])
 
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => ({ sessionId: 'session-1' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
     })
@@ -667,6 +745,7 @@ describe('CampaignScheduledJobRunner', () => {
     writeCalendar(root, [item])
 
     const runner = new CampaignScheduledJobRunner({
+      canRunBackgroundWork: () => true,
       executePromptJob: async () => {
         const latest = readCalendar(root)
         writeCalendar(root, [

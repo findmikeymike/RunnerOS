@@ -221,6 +221,7 @@ export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconPro
   appearance: AppearanceIcon,
   input: InputIcon,
   workspace: WorkspaceIcon,
+  team: WorkspaceIcon,
   permissions: PermissionsIcon,
   labels: LabelsIcon,
   messaging: MessagingSettingsIcon,

@@ -29,8 +29,28 @@ import { matcherMatchesSdk } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
 import { FileWatchService } from './file-watch-service.ts';
 import { PollService } from './poll-service.ts';
+import {
+  appendRunnerPulse,
+  clearReadyRunnerHandover,
+  evaluateTeamRunnerGate,
+  getTeamModeStatus,
+  readTeamRunnerState,
+  recordRunnerSchedulerTick,
+  refreshTeamRunnerHeartbeat,
+  type TeamRunnerGateDecision,
+} from '../workspaces/team-mode.ts';
+import { detectClobberedWrites } from '../records/storage.ts';
+import { loadWorkspaceConfig } from '../workspaces/storage.ts';
 
 const log = createLogger('automation-system');
+const BACKGROUND_AUTOMATION_EVENTS = new Set<AutomationEvent>([
+  'SchedulerTick',
+  'WebhookReceive',
+  'FileWatch',
+  'PollUrl',
+  'MessageReceive',
+]);
+const MISSED_TICK_GRACE_MS = 60 * 1000;
 
 // Re-export SessionMetadataSnapshot from types (single source of truth)
 export type { SessionMetadataSnapshot } from './types.ts';
@@ -51,6 +71,8 @@ export interface AutomationSystemOptions {
   activeSourceSlugs?: string[];
   /** Whether to start the scheduler service (default: false) */
   enableScheduler?: boolean;
+  /** Whether scheduler startup should immediately run missed-tick catch-up (default: true) */
+  runSchedulerCatchUpOnStart?: boolean;
   /** Called when prompts are ready to be executed */
   onPromptsReady?: (prompts: PendingPrompt[]) => void;
   /** Called when a matched trigger queues durable Scheduled Work. */
@@ -61,6 +83,8 @@ export interface AutomationSystemOptions {
   onError?: (event: AutomationEvent, error: Error) => void;
   /** Called when events are lost after retries */
   onEventLost?: (events: string[], error: Error) => void;
+  /** Called when this process becomes or stops being the active team runner. */
+  onRunnerActiveChange?: (active: boolean) => void;
 }
 
 // ============================================================================
@@ -93,6 +117,8 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
     // Create handlers
     this.createHandlers();
+
+    this.updateRunnerActiveFromGate();
 
     // Start scheduler if enabled
     if (options.enableScheduler) {
@@ -280,6 +306,62 @@ export class AutomationSystem implements AutomationsConfigProvider {
     return matchers.find((m) => m.slug === slug && m.enabled !== false);
   }
 
+  private evaluateBackgroundRunnerGate(event: AutomationEvent): TeamRunnerGateDecision | null {
+    if (!BACKGROUND_AUTOMATION_EVENTS.has(event)) return null;
+    try {
+      return evaluateTeamRunnerGate(this.options.workspaceRootPath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.warn(`[AutomationSystem] Background automation gate failed closed for ${event}: ${message}`);
+      return {
+        allowed: false,
+        reason: 'unsupported',
+        machineId: 'unknown',
+        observedTeamRevision: 0,
+        teamRevision: 0,
+        runnerIsStale: false,
+      };
+    }
+  }
+
+  private shouldRunBackgroundAutomation(event: AutomationEvent): boolean {
+    const decision = this.evaluateBackgroundRunnerGate(event);
+    if (!decision) return true;
+    if (decision.allowed) {
+      if (decision.reason === 'solo') {
+        this.options.onRunnerActiveChange?.(false);
+        return true;
+      }
+      clearReadyRunnerHandover(this.options.workspaceRootPath, decision.machineId);
+      const heartbeat = refreshTeamRunnerHeartbeat(this.options.workspaceRootPath);
+      this.options.onRunnerActiveChange?.(decision.reason === 'runner');
+      appendRunnerPulse(this.options.workspaceRootPath, {
+        machineId: heartbeat?.machineId ?? decision.machineId,
+        event,
+        allowed: true,
+        reason: decision.reason,
+      });
+      return true;
+    }
+    this.options.onRunnerActiveChange?.(false);
+    try {
+      refreshTeamRunnerHeartbeat(this.options.workspaceRootPath);
+    } catch {
+      // Skip path must never turn into a side effect beyond best-effort heartbeat.
+    }
+    log.debug(`[AutomationSystem] Skipped ${event} on non-runner machine: ${decision.reason}`);
+    return false;
+  }
+
+  private updateRunnerActiveFromGate(): void {
+    const decision = this.evaluateBackgroundRunnerGate('SchedulerTick');
+    if (!decision || decision.reason === 'solo') {
+      this.options.onRunnerActiveChange?.(false);
+      return;
+    }
+    this.options.onRunnerActiveChange?.(decision.allowed && decision.reason === 'runner');
+  }
+
   /**
    * Fire a MessageReceive event on this workspace's bus.
    * Called by the messaging gateway for every inbound chat message.
@@ -300,6 +382,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
     sentAt: number;
   }): Promise<void> {
     if (this.disposed) return;
+    if (!this.shouldRunBackgroundAutomation('MessageReceive')) return;
     await this.eventBus.emit('MessageReceive', {
       workspaceId: this.options.workspaceId,
       timestamp: Date.now(),
@@ -337,6 +420,9 @@ export class AutomationSystem implements AutomationsConfigProvider {
     remoteIp: string;
   }): Promise<EventDeliveryResult> {
     if (this.disposed) return { status: 'disposed' };
+    if (!this.shouldRunBackgroundAutomation('WebhookReceive')) {
+      return { status: 'skipped', reason: 'non_runner' };
+    }
     return await this.eventBus.emitWithResult('WebhookReceive', {
       workspaceId: this.options.workspaceId,
       timestamp: Date.now(),
@@ -386,6 +472,20 @@ export class AutomationSystem implements AutomationsConfigProvider {
       {
         workspaceId: this.options.workspaceId,
         workspaceRootPath: this.options.workspaceRootPath,
+        canRunBackgroundWork: () => {
+          try {
+            return evaluateTeamRunnerGate(this.options.workspaceRootPath).allowed;
+          } catch {
+            return false;
+          }
+        },
+        canExecuteExternalEffects: () => {
+          try {
+            return loadWorkspaceConfig(this.options.workspaceRootPath)?.storage?.mode !== 'shared-folder';
+          } catch {
+            return false;
+          }
+        },
         onWebhookResults: this.options.onWebhookResults,
         onError: this.options.onError,
       },
@@ -415,14 +515,12 @@ export class AutomationSystem implements AutomationsConfigProvider {
     if (this.scheduler) return;
 
     this.scheduler = new SchedulerService(async (payload: SchedulerTickPayload) => {
-      await this.eventBus.emit('SchedulerTick', {
-        workspaceId: this.options.workspaceId,
-        timestamp: Date.now(),
-        localTime: payload.localTime,
-        utcTime: payload.timestamp,
-      });
+      await this.fireSchedulerTick(payload);
     });
 
+    if (this.options.runSchedulerCatchUpOnStart !== false) {
+      void this.fireMissedSchedulerCatchUp();
+    }
     this.scheduler.start();
     log.debug(`[AutomationSystem] Scheduler started`);
   }
@@ -438,6 +536,76 @@ export class AutomationSystem implements AutomationsConfigProvider {
     }
   }
 
+  async fireSchedulerTickForTest(payload: SchedulerTickPayload): Promise<void> {
+    await this.fireSchedulerTick(payload);
+  }
+
+  async fireMissedSchedulerCatchUpForTest(): Promise<void> {
+    await this.runMissedSchedulerCatchUp();
+  }
+
+  async runMissedSchedulerCatchUp(): Promise<void> {
+    await this.fireMissedSchedulerCatchUp();
+  }
+
+  private createSchedulerPayload(date: Date, catchUp = false): SchedulerTickPayload {
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return {
+      timestamp: date.toISOString(),
+      localTime: date.toTimeString().slice(0, 5),
+      hour: date.getHours(),
+      minute: date.getMinutes(),
+      dayOfWeek: date.getDay(),
+      dayName: days[date.getDay()]!,
+      catchUp,
+    };
+  }
+
+  private async fireMissedSchedulerCatchUp(): Promise<void> {
+    let status: ReturnType<typeof getTeamModeStatus>;
+    try {
+      status = getTeamModeStatus(this.options.workspaceRootPath);
+    } catch {
+      return;
+    }
+    if (status.storage.mode !== 'shared-folder') return;
+    if (status.team.runnerMissedTickPolicy !== 'run-once') return;
+    if (status.team.runnerMachineId !== status.machine.machineId) return;
+    const lastHeartbeat = Date.parse(status.heartbeat.lastAutomationHeartbeatAt ?? status.heartbeat.lastSeenAt);
+    if (Number.isFinite(lastHeartbeat) && Date.now() - lastHeartbeat <= MISSED_TICK_GRACE_MS) return;
+    await this.fireSchedulerTick(this.createSchedulerPayload(new Date(), true));
+  }
+
+  private async fireSchedulerTick(payload: SchedulerTickPayload): Promise<void> {
+    if (this.disposed) return;
+    if (!this.shouldRunBackgroundAutomation('SchedulerTick')) return;
+    try {
+      const decision = evaluateTeamRunnerGate(this.options.workspaceRootPath);
+      if (decision.allowed && decision.reason === 'runner') {
+        if (readTeamRunnerState(this.options.workspaceRootPath).lastSchedulerTickKey === payload.timestamp) {
+          appendRunnerPulse(this.options.workspaceRootPath, {
+            machineId: decision.machineId,
+            event: 'SchedulerTick',
+            allowed: false,
+            reason: 'duplicate-tick',
+          });
+          return;
+        }
+        recordRunnerSchedulerTick(this.options.workspaceRootPath, decision.machineId, payload.timestamp);
+        detectClobberedWrites(this.options.workspaceRootPath, decision.machineId);
+      }
+    } catch {
+      // Legacy/no-config tests and workspaces can still run scheduler ticks.
+    }
+    await this.eventBus.emit('SchedulerTick', {
+      workspaceId: this.options.workspaceId,
+      timestamp: Date.now(),
+      localTime: payload.localTime,
+      utcTime: payload.timestamp,
+      catchUp: payload.catchUp,
+    });
+  }
+
   // ============================================================================
   // External-input services
   // ============================================================================
@@ -448,6 +616,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
       workspaceRootPath: this.options.workspaceRootPath,
       workspaceId: this.options.workspaceId,
       onEvent: async (payload) => {
+        if (!this.shouldRunBackgroundAutomation('FileWatch')) return;
         await this.eventBus.emit('FileWatch', payload);
       },
     });
@@ -460,6 +629,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
     this.pollService = new PollService({
       workspaceId: this.options.workspaceId,
       onEvent: async (payload) => {
+        if (!this.shouldRunBackgroundAutomation('PollUrl')) return;
         await this.eventBus.emit('PollUrl', payload);
       },
     });
@@ -719,6 +889,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
     this.lastKnownMetadata.clear();
 
     this.disposed = true;
+    this.options.onRunnerActiveChange?.(false);
     log.debug(`[AutomationSystem] Disposed`);
   }
 }

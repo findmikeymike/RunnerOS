@@ -284,7 +284,32 @@ export const RPC_CHANNELS = {
     WRITE_IMAGE: 'workspace:writeImage',
     SETTINGS_GET: 'workspaceSettings:get',
     SETTINGS_UPDATE: 'workspaceSettings:update',
+    TEAM_STATUS_GET: 'workspaceTeam:getStatus',
+    TEAM_ENABLE_IN_PLACE: 'workspaceTeam:enableInPlace',
+    TEAM_JOIN: 'workspaceTeam:join',
+    TEAM_MOVE_TO_SHARED_FOLDER: 'workspaceTeam:moveToSharedFolder',
+    TEAM_SET_RUNNER: 'workspaceTeam:setRunner',
+    TEAM_OWNER_RECOVERY_ROTATE: 'workspaceTeam:ownerRecovery:rotate',
+    TEAM_OWNER_RECOVERY_RECOVER: 'workspaceTeam:ownerRecovery:recover',
+    TEAM_OWNER_RECOVERY_APPROVE: 'workspaceTeam:ownerRecovery:approve',
+    TEAM_PATH_OVERRIDES_GET: 'workspaceTeam:pathOverrides:get',
+    TEAM_PATH_OVERRIDE_SET: 'workspaceTeam:pathOverride:set',
+    TEAM_PATH_OVERRIDE_CLEAR: 'workspaceTeam:pathOverride:clear',
     SELF_EDIT_TARGET_GET: 'workspace:selfEditTarget:get',
+  },
+  records: {
+    LIST_CONFLICTS: 'records:conflicts:list',
+    SCAN_PROVIDER_CONFLICTS: 'records:conflicts:scanProvider',
+    DETECT_CLOBBERS: 'records:clobbers:detect',
+  },
+  community: {
+    GET: 'community:get',
+    ADD_CONTACT: 'community:addContact',
+    IMPORT_CSV: 'community:importCsv',
+    CREATE_EMAIL_JOB: 'community:createEmailJob',
+    SUPPRESS: 'community:suppress',
+    /** Legacy raw send channel. Server blocks it until approved-job execution is implemented. */
+    SEND_RESEND_EMAIL: 'community:sendResendEmail',
   },
   permissions: {
     GET_DEFAULTS: 'permissions:getDefaults',
@@ -452,10 +477,6 @@ export const RPC_CHANNELS = {
     GET_CALENDAR_STATUS: 'googleWorkspace:getCalendarStatus',
     /** Sync Artist HQ calendar events to Google Calendar. */
     SYNC_CALENDAR: 'googleWorkspace:syncCalendar',
-  },
-  community: {
-    /** Send an approval-gated community email through Resend. */
-    SEND_RESEND_EMAIL: 'community:sendResendEmail',
   },
   missionAssets: {
     GET: 'missionAssets:get',

@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { dirname } from 'path'
 import { promisify } from 'node:util'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, validateSelfEditRepo } from '@craft-agent/shared/config'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, validateSelfEditRepo, updateWorkspaceRootPath } from '@craft-agent/shared/config'
 import { loadStoredConfig } from '@craft-agent/shared/config/storage'
 import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
 import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
@@ -12,9 +12,19 @@ import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 import { requestClientOpenFileDialog } from '@craft-agent/server-core/transport'
 import { isValidWorkingDirectory } from '../../utils/path-validation'
+import type { SharedFolderProvider } from '@craft-agent/shared/workspaces'
+import { assertSessionFilesWritePermission } from './team-permission-helpers'
 
 const execFileAsync = promisify(execFile)
 const VALID_THINKING_LEVELS_LIST = THINKING_LEVEL_IDS.map(id => `'${id}'`).join(', ')
+const SHARED_FOLDER_PROVIDERS = new Set<SharedFolderProvider>([
+  'google-drive',
+  'dropbox',
+  'icloud-drive',
+  'onedrive',
+  'syncthing',
+  'generic-folder',
+])
 
 async function commandExists(command: string): Promise<string | null> {
   if (process.platform !== 'win32') {
@@ -43,6 +53,16 @@ async function applyStoredSecretsToProcessEnv(): Promise<void> {
 function broadcastSecretsChanged(deps: HandlerDeps): void {
   const wsServerLike = (deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } })
   wsServerLike.wsServer?.push?.(RPC_CHANNELS.secrets.CHANGED, { to: 'all' })
+}
+
+async function assertSecretWorkspaceOwner(workspaceId?: string): Promise<{ success: false; error: string } | null> {
+  if (!workspaceId) {
+    return { success: false, error: 'Select an active workspace before changing secrets.' }
+  }
+  const workspace = getWorkspaceOrThrow(workspaceId)
+  const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+  assertTeamPermission(workspace.rootPath, 'secrets.update')
+  return null
 }
 
 async function getZeroCliStatus() {
@@ -86,6 +106,20 @@ async function getZeroCliStatus() {
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.SETTINGS_GET,
   RPC_CHANNELS.workspace.SETTINGS_UPDATE,
+  RPC_CHANNELS.workspace.TEAM_STATUS_GET,
+  RPC_CHANNELS.workspace.TEAM_ENABLE_IN_PLACE,
+  RPC_CHANNELS.workspace.TEAM_JOIN,
+  RPC_CHANNELS.workspace.TEAM_MOVE_TO_SHARED_FOLDER,
+  RPC_CHANNELS.workspace.TEAM_SET_RUNNER,
+  RPC_CHANNELS.workspace.TEAM_OWNER_RECOVERY_ROTATE,
+  RPC_CHANNELS.workspace.TEAM_OWNER_RECOVERY_RECOVER,
+  RPC_CHANNELS.workspace.TEAM_OWNER_RECOVERY_APPROVE,
+  RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDES_GET,
+  RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_SET,
+  RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_CLEAR,
+  RPC_CHANNELS.records.LIST_CONFLICTS,
+  RPC_CHANNELS.records.SCAN_PROVIDER_CONFLICTS,
+  RPC_CHANNELS.records.DETECT_CLOBBERS,
   RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET,
   RPC_CHANNELS.preferences.READ,
   RPC_CHANNELS.preferences.WRITE,
@@ -133,7 +167,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     return getCredentialManager().listUserSecrets()
   })
 
-  server.handle(RPC_CHANNELS.secrets.SAVE, async (_ctx, name: string, value: string) => {
+  server.handle(RPC_CHANNELS.secrets.SAVE, async (_ctx, name: string, value: string, workspaceId?: string) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
     const normalized = normalizeUserSecretName(name)
     if (!isValidUserSecretName(normalized)) {
       return { success: false, error: 'Use ENV_VAR format: uppercase letters, numbers, and underscores.' }
@@ -147,7 +183,9 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     return { success: true }
   })
 
-  server.handle(RPC_CHANNELS.secrets.DELETE, async (_ctx, name: string) => {
+  server.handle(RPC_CHANNELS.secrets.DELETE, async (_ctx, name: string, workspaceId?: string) => {
+    const workspaceError = await assertSecretWorkspaceOwner(workspaceId)
+    if (workspaceError) return workspaceError
     const normalized = normalizeUserSecretName(name)
     const success = await getCredentialManager().deleteUserSecret(normalized)
     delete process.env[normalized]
@@ -245,7 +283,13 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   // Set session-specific model (and optionally connection)
   server.handle(RPC_CHANNELS.sessions.SET_MODEL, async (_ctx, sessionId: string, workspaceId: string, model: string | null, connection?: string) => {
-    await deps.sessionManager.updateSessionModel(sessionId, workspaceId, model, connection)
+    const session = await assertSessionFilesWritePermission(
+      deps.sessionManager,
+      sessionId,
+      workspaceId,
+      'Session model update',
+    )
+    await deps.sessionManager.updateSessionModel(sessionId, session.workspaceId, model, connection)
     deps.platform.logger.info(`Session ${sessionId} model updated to: ${model}${connection ? ` (connection: ${connection})` : ''}`)
   })
 
@@ -264,9 +308,11 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
   // Get workspace settings (model, permission mode, working directory, credential strategy)
   server.handle(RPC_CHANNELS.workspace.SETTINGS_GET, async (_ctx, workspaceId: string) => {
-    const workspace = getWorkspaceByNameOrId(workspaceId)
-    if (!workspace) {
-      deps.platform.logger.error(`Workspace not found: ${workspaceId}`)
+    let workspace: ReturnType<typeof getWorkspaceOrThrow>
+    try {
+      workspace = getWorkspaceOrThrow(workspaceId)
+    } catch {
+      deps.platform.logger.error(`Workspace unavailable: ${workspaceId}`)
       return null
     }
 
@@ -320,6 +366,8 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     if (!config) {
       throw new Error(`Failed to load workspace config: ${workspaceId}`)
     }
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'team.settings.update')
 
     // Handle 'name' specially - it's a top-level config property, not in defaults
     if (key === 'name') {
@@ -337,6 +385,186 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     // Save the config
     saveWorkspaceConfig(workspace.rootPath, config)
     deps.platform.logger.info(`Workspace setting updated: ${key} = ${JSON.stringify(normalizedValue)}`)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_STATUS_GET, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { getTeamModeStatus } = await import('@craft-agent/shared/workspaces')
+    return getTeamModeStatus(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_ENABLE_IN_PLACE, async (_ctx, workspaceId: string, options?: {
+    provider?: SharedFolderProvider
+    providerLabel?: string
+    makeRunner?: boolean
+  }) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const provider = options?.provider ?? 'generic-folder'
+    if (!SHARED_FOLDER_PROVIDERS.has(provider)) {
+      throw new Error(`Invalid shared folder provider: ${provider}`)
+    }
+    const { markWorkspaceAsSharedFolder } = await import('@craft-agent/shared/workspaces')
+    return markWorkspaceAsSharedFolder(workspace.rootPath, {
+      provider,
+      providerLabel: options?.providerLabel,
+      makeRunner: options?.makeRunner,
+    })
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_JOIN, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { joinWorkspaceTeam } = await import('@craft-agent/shared/workspaces')
+    return joinWorkspaceTeam(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_MOVE_TO_SHARED_FOLDER, async (_ctx, workspaceId: string, input: {
+    destinationParentPath: string
+    provider?: SharedFolderProvider
+    providerLabel?: string
+    makeRunner?: boolean
+  }) => {
+    if (!input?.destinationParentPath || typeof input.destinationParentPath !== 'string') {
+      throw new Error('Destination folder is required.')
+    }
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const provider = input.provider ?? 'generic-folder'
+    if (!SHARED_FOLDER_PROVIDERS.has(provider)) {
+      throw new Error(`Invalid shared folder provider: ${provider}`)
+    }
+    const {
+      completePreparedWorkspaceMigration,
+      prepareWorkspaceMoveToSharedFolder,
+      promotePreparedPrivateSessions,
+      readTeamMigrationJournal,
+      rollbackPreparedWorkspaceMigration,
+      updateTeamMigrationJournal,
+      writeMovedToTombstone,
+    } = await import('@craft-agent/shared/workspaces')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'storage.migrate')
+    const quiesce = deps.sessionManager.quiesceWorkspaceForMigration?.bind(deps.sessionManager)
+    const rebind = deps.sessionManager.rebindWorkspaceAfterMigration?.bind(deps.sessionManager)
+    const resume = deps.sessionManager.resumeWorkspaceAfterMigration?.bind(deps.sessionManager)
+    if (!quiesce || !rebind || !resume) {
+      throw new Error('This runtime does not support safe live workspace migration.')
+    }
+    const lease = await quiesce(workspaceId)
+    let result: import('@craft-agent/shared/workspaces').TeamSharedFolderMigrationResult | undefined
+    let journal: import('@craft-agent/shared/workspaces').TeamMigrationJournal | null = null
+    let rootSwitched = false
+    try {
+      result = prepareWorkspaceMoveToSharedFolder(workspace.rootPath, input.destinationParentPath.trim(), {
+        provider,
+        providerLabel: input.providerLabel,
+        makeRunner: input.makeRunner,
+        initialPhase: 'runtime-quiesced',
+        deferCompletion: true,
+      })
+      journal = result.journalPath ? readTeamMigrationJournal(result.journalPath) : null
+      updateWorkspaceRootPath(workspaceId, result.finalRootPath)
+      rootSwitched = true
+      if (journal) journal = updateTeamMigrationJournal(journal, 'root-switched')
+      promotePreparedPrivateSessions(result)
+      writeMovedToTombstone(result.originalRootPath, result.finalRootPath, result.migrationId)
+      if (journal) journal = updateTeamMigrationJournal(journal, 'source-tombstoned')
+      await rebind(lease, result.finalRootPath)
+      if (journal) journal = updateTeamMigrationJournal(journal, 'runtime-rebound')
+      completePreparedWorkspaceMigration(result)
+      if (journal) updateTeamMigrationJournal(journal, 'complete')
+      return { ...result, tombstoneWritten: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!rootSwitched) {
+        if (journal) rollbackPreparedWorkspaceMigration(journal)
+        await resume(lease)
+      } else if (journal) {
+        // Once the configured root moved, rollback could revive two writable
+        // copies. Leave the runtime gated and recover forward on restart.
+        updateTeamMigrationJournal(journal, 'needs-repair', message)
+      }
+      deps.platform.logger.error(`Workspace migration failed: ${message}`)
+      throw error
+    }
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_SET_RUNNER, async (_ctx, workspaceId: string, machineId?: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { assertTeamPermission, setRunnerMachine } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'team.runner.assign')
+    return setRunnerMachine(workspace.rootPath, machineId)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_OWNER_RECOVERY_ROTATE, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { rotateOwnerRecoveryCode } = await import('@craft-agent/shared/workspaces')
+    return rotateOwnerRecoveryCode(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_OWNER_RECOVERY_RECOVER, async (_ctx, workspaceId: string, recoveryCode: string) => {
+    if (!recoveryCode?.trim()) throw new Error('Owner recovery code is required.')
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { recoverWorkspaceOwner } = await import('@craft-agent/shared/workspaces')
+    return recoverWorkspaceOwner(workspace.rootPath, recoveryCode.trim())
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_OWNER_RECOVERY_APPROVE, async (_ctx, workspaceId: string, claimId: string) => {
+    if (!claimId?.trim()) throw new Error('Owner recovery request is required.')
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { approveOwnerRecoveryClaim } = await import('@craft-agent/shared/workspaces')
+    return approveOwnerRecoveryClaim(workspace.rootPath, claimId.trim())
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDES_GET, async (_ctx, workspaceId: string) => {
+    getWorkspaceOrThrow(workspaceId)
+    const { loadSharedPathOverrides } = await import('@craft-agent/shared/workspaces')
+    return loadSharedPathOverrides(workspaceId)
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_SET, async (_ctx, workspaceId: string, refId: string, absolutePath: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    if (!refId?.trim()) throw new Error('Path override refId is required.')
+    if (!absolutePath?.trim()) throw new Error('Path override path is required.')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'files.write')
+    const { setSharedPathOverride } = await import('@craft-agent/shared/workspaces')
+    return setSharedPathOverride(workspaceId, refId.trim(), absolutePath.trim())
+  })
+
+  server.handle(RPC_CHANNELS.workspace.TEAM_PATH_OVERRIDE_CLEAR, async (_ctx, workspaceId: string, refId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    if (!refId?.trim()) throw new Error('Path override refId is required.')
+    const { assertTeamPermission } = await import('@craft-agent/shared/workspaces')
+    assertTeamPermission(workspace.rootPath, 'files.write')
+    const { clearSharedPathOverride } = await import('@craft-agent/shared/workspaces')
+    return clearSharedPathOverride(workspaceId, refId.trim())
+  })
+
+  server.handle(RPC_CHANNELS.records.LIST_CONFLICTS, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const { listConflictRecords } = await import('@craft-agent/shared/records')
+    return listConflictRecords(workspace.rootPath)
+  })
+
+  server.handle(RPC_CHANNELS.records.SCAN_PROVIDER_CONFLICTS, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const [{ assertTeamPermission, getTeamModeStatus }, { scanProviderConflictedCopies }] = await Promise.all([
+      import('@craft-agent/shared/workspaces'),
+      import('@craft-agent/shared/records'),
+    ])
+    assertTeamPermission(workspace.rootPath, 'files.write')
+    const status = getTeamModeStatus(workspace.rootPath)
+    return scanProviderConflictedCopies(workspace.rootPath, { machineId: status.machine.machineId })
+  })
+
+  server.handle(RPC_CHANNELS.records.DETECT_CLOBBERS, async (_ctx, workspaceId: string) => {
+    const workspace = getWorkspaceOrThrow(workspaceId)
+    const [{ assertTeamPermission, getTeamModeStatus }, { detectClobberedWrites }] = await Promise.all([
+      import('@craft-agent/shared/workspaces'),
+      import('@craft-agent/shared/records'),
+    ])
+    assertTeamPermission(workspace.rootPath, 'files.write')
+    const status = getTeamModeStatus(workspace.rootPath)
+    return detectClobberedWrites(workspace.rootPath, status.machine.machineId)
   })
 
   server.handle(RPC_CHANNELS.workspace.SELF_EDIT_TARGET_GET, async (_ctx, workspaceId: string) => {

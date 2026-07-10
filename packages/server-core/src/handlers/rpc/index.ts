@@ -4,6 +4,7 @@ import type { HandlerDeps } from '../handler-deps'
 import { registerAuthHandlers } from './auth'
 import { registerAutomationsHandlers } from './automations'
 import { registerAgentDefinitionsHandlers } from './agent-definitions'
+import { registerCommunityHandlers } from './community'
 import { registerWorkspaceContextHandlers } from './workspace-context'
 import { registerScheduledWorkHandlers } from './scheduled-work'
 import { registerGoogleWorkspaceHandlers } from './google-workspace'
@@ -48,6 +49,7 @@ export function registerCoreRpcHandlers(
   registerAuthHandlers(server, deps)
   registerAutomationsHandlers(server, deps)
   registerAgentDefinitionsHandlers(server, deps)
+  registerCommunityHandlers(server, deps)
   registerWorkspaceContextHandlers(server, deps)
   registerScheduledWorkHandlers(server, deps)
   registerGoogleWorkspaceHandlers(server, deps)

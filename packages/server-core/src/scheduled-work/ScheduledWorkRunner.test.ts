@@ -135,6 +135,29 @@ async function waitFor(predicate: () => boolean, attempts = 100): Promise<void> 
 }
 
 describe('ScheduledWorkRunner', () => {
+  test('skips scheduled work when this machine is not the background runner', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder()])
+    let executions = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => false,
+      withLock: createLock(),
+      executeAgentTask: async () => {
+        executions += 1
+        return { sessionId: 'should-not-start' }
+      },
+      startWorkflow: async () => ({ runId: 'should-not-start' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    const result = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(result).toEqual({ scanned: 0, started: 0, blocked: 0, completed: 0, failed: 0 })
+    expect(executions).toBe(0)
+    expect(readWork(root).items[0]?.status).toBe('scheduled')
+  })
+
   test('keeps an agent task running after launch, persists the session id immediately, and blocks duplicate scans', async () => {
     const root = makeRoot()
     writeWork(root, [buildOrder()])
@@ -142,6 +165,7 @@ describe('ScheduledWorkRunner', () => {
     const execution = deferred<void>()
     const executeCalls: string[] = []
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async ({ workOrderId, onStarted }) => {
         executeCalls.push(workOrderId)
@@ -188,6 +212,7 @@ describe('ScheduledWorkRunner', () => {
     })])
 
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async ({ onStarted }) => {
         await onStarted('session-2')
@@ -217,6 +242,7 @@ describe('ScheduledWorkRunner', () => {
     writeWork(root, [ask, automatic])
     const permission = deferred<void>()
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async ({ workOrderId, onStarted }) => {
         await onStarted(`session-${workOrderId}`)
@@ -250,6 +276,7 @@ describe('ScheduledWorkRunner', () => {
     writeWork(root, [parent, child])
     const manifest = buildManifest('output-chain-1', 'session-chain-parent')
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async ({ onStarted }) => { await onStarted('session-chain-parent'); return { sessionId: 'session-chain-parent' } },
       startWorkflow: async () => ({ runId: 'unused' }),
@@ -277,6 +304,7 @@ describe('ScheduledWorkRunner', () => {
     writeWork(root, [parent, child])
     const manifests = [buildManifest('output-a', 'session-ambiguous'), buildManifest('output-b', 'session-ambiguous')]
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async ({ onStarted }) => { await onStarted('session-ambiguous'); return { sessionId: 'session-ambiguous' } },
       startWorkflow: async () => ({ runId: 'unused' }),
@@ -309,6 +337,7 @@ describe('ScheduledWorkRunner', () => {
 
     let workflowState: WorkflowRunSnapshot['state'] = 'running'
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => ({ sessionId: 'unused' }),
       startWorkflow: async () => ({ runId: 'run-1' }),
@@ -365,6 +394,7 @@ describe('ScheduledWorkRunner', () => {
     })])
 
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => ({ sessionId: 'unused' }),
       startWorkflow: async () => ({ runId: 'unused' }),
@@ -409,6 +439,7 @@ describe('ScheduledWorkRunner', () => {
     })])
 
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => ({ sessionId: 'unused' }),
       startWorkflow: async () => ({ runId: 'unused' }),
@@ -436,6 +467,7 @@ describe('ScheduledWorkRunner', () => {
     })])
 
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => ({ sessionId: 'unused' }),
       startWorkflow: async () => ({ runId: 'unused' }),
@@ -462,6 +494,7 @@ describe('ScheduledWorkRunner', () => {
     writeWork(root, [order])
     let executeCalls = 0
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => ({ sessionId: 'unused' }),
       startWorkflow: async () => ({ runId: 'unused' }),
@@ -500,6 +533,83 @@ describe('ScheduledWorkRunner', () => {
     expect(executeCalls).toBe(1)
   })
 
+  test('rechecks the runner fence immediately before social execution', async () => {
+    const root = makeRoot()
+    const order = buildOrder({
+      id: 'social-fence-change',
+      type: 'social-publish',
+      status: 'needs-approval',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Guarded.' },
+      executionKey: { payloadDigest: 'payload-fence', idempotencyKey: 'idem-fence' },
+      socialAction: {
+        actionId: 'act-fence', actionDigest: 'sha256:fence', platform: 'x', profileId: 'artist-main',
+        preparedAt: '2026-07-10T14:00:00.000Z', payloadDigest: 'payload-fence', dryRun: { ok: true },
+      },
+      socialApproval: {
+        id: 'approval-fence', approvedAt: '2026-07-10T14:00:00.000Z', expiresAt: '2026-07-10T14:30:00.000Z',
+        actionId: 'act-fence', actionDigest: 'sha256:fence', payloadDigest: 'payload-fence', platform: 'x', profileId: 'artist-main',
+        approvedBy: { type: 'user', clientId: 'test-client' },
+      },
+    })
+    writeWork(root, [order])
+    let fenceReads = 0
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      getBackgroundFenceToken: () => ++fenceReads === 1 ? 'epoch-1' : 'epoch-2',
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      executeSocial: async () => {
+        executeCalls += 1
+        return { receiptId: 'must-not-run', summary: 'unexpected' }
+      },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
+
+    expect(executeCalls).toBe(0)
+    expect(readWork(root).items[0]?.attention?.message).toContain('runner fence changed')
+  })
+
+  test('blocks automatic browser publishing when shared mode has no enforced idempotency', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({
+      id: 'social-no-dedupe', type: 'social-publish', status: 'needs-approval',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Manual only.' },
+      executionKey: { payloadDigest: 'payload-no-dedupe', idempotencyKey: 'idem-no-dedupe' },
+      socialAction: {
+        actionId: 'act-no-dedupe', actionDigest: 'sha256:no-dedupe', platform: 'x', profileId: 'artist-main',
+        preparedAt: '2026-07-10T14:00:00.000Z', payloadDigest: 'payload-no-dedupe', dryRun: { ok: true },
+      },
+      socialApproval: {
+        id: 'approval-no-dedupe', approvedAt: '2026-07-10T14:00:00.000Z', expiresAt: '2026-07-10T14:30:00.000Z',
+        actionId: 'act-no-dedupe', actionDigest: 'sha256:no-dedupe', payloadDigest: 'payload-no-dedupe', platform: 'x', profileId: 'artist-main',
+        approvedBy: { type: 'user', clientId: 'test-client' },
+      },
+    })])
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
+      canExecuteSocialAutomatically: () => false,
+      withLock: createLock(), executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null, listOutputManifests: () => [],
+      executeSocial: async () => {
+        executeCalls += 1
+        return { receiptId: 'must-not-run', summary: 'unexpected' }
+      },
+    })
+
+    const result = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+
+    expect(executeCalls).toBe(0)
+    expect(result.blocked).toBe(1)
+    expect(readWork(root).items[0]?.attention?.reason).toBe('idempotency-unavailable')
+  })
+
   test('does not prepare social approval more than 30 minutes before publish time', async () => {
     const root = makeRoot()
     writeWork(root, [buildOrder({
@@ -508,6 +618,7 @@ describe('ScheduledWorkRunner', () => {
     })])
     let prepareCalls = 0
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(), executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
       readWorkflowRun: () => null, listOutputManifests: () => [],
       prepareSocial: async () => { prepareCalls += 1; throw new Error('must not prepare') },
@@ -526,6 +637,7 @@ describe('ScheduledWorkRunner', () => {
       socialApproval: { id: 'approval-expired', approvedAt: '2026-07-10T13:35:00.000Z', expiresAt: '2026-07-10T13:59:00.000Z', actionId: 'act_expired', actionDigest: 'sha256:expired', payloadDigest: 'digest-1', platform: 'x', profileId: 'artist-main', approvedBy: { type: 'user', clientId: 'test-client' } },
     })])
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(), executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
       readWorkflowRun: () => null, listOutputManifests: () => [],
     })
@@ -552,6 +664,7 @@ describe('ScheduledWorkRunner', () => {
 
     let executeCalls = 0
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => {
         executeCalls += 1
@@ -586,6 +699,7 @@ describe('ScheduledWorkRunner', () => {
     })])
 
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => { throw new Error('must not relaunch') },
       startWorkflow: async () => ({ runId: 'unused' }),
@@ -616,6 +730,7 @@ describe('ScheduledWorkRunner', () => {
     })])
     let state: 'running' | 'completed' = 'running'
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => { throw new Error('must not relaunch') },
       startWorkflow: async () => ({ runId: 'unused' }),
@@ -668,6 +783,7 @@ describe('ScheduledWorkRunner', () => {
     })])
     let executeCalls = 0
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => ({ sessionId: 'unused' }),
       startWorkflow: async () => ({ runId: 'unused' }),
@@ -695,6 +811,7 @@ describe('ScheduledWorkRunner', () => {
     writeWork(root, [buildOrder()])
     const execution = deferred<void>()
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async ({ onStarted }) => {
         await onStarted('session-canceled')
@@ -724,6 +841,7 @@ describe('ScheduledWorkRunner', () => {
     writeWork(root, [buildOrder({ startAt: '2026-07-08T14:00:00.000Z' })])
     let executeCalls = 0
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => {
         executeCalls += 1
@@ -750,6 +868,7 @@ describe('ScheduledWorkRunner', () => {
     })])
 
     const runner = new ScheduledWorkRunner({
+      canRunBackgroundWork: () => true,
       withLock: createLock(),
       executeAgentTask: async () => ({ sessionId: 'unused' }),
       startWorkflow: async () => ({ runId: 'unused' }),
