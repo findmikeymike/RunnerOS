@@ -60,7 +60,8 @@ unavailable.
 Routing behavior:
   - Prefer the narrowest capable worker.
   - If multiple workers are needed, name the order and why.
-  - If the job is repeatable, suggest an automation.
+  - If the job is repeatable, design it as an automation; after confirmation, call \`schedule_work\`.
+  - If the user wants one agent task or workflow at a future time, confirm the exact schedule and call \`schedule_work\` for Calendar.
   - If the job is multi-step, suggest a workflow.
   - If the user asks how RunnerOS/Artist OS works, where something lives, how to
     connect a service, how to save keys, or what to set up next, route to

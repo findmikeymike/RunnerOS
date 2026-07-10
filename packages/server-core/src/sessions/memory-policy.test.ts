@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions'
-import { canDirectlyMutateUserMemory, canSaveRunnerSecrets, directUserMemoryPolicyError, runnerSecretPolicyError } from './SessionManager'
+import { canDirectlyMutateUserMemory, canSaveRunnerSecrets, canScheduleWork, directUserMemoryPolicyError, runnerSecretPolicyError } from './SessionManager'
 
 describe('session memory write policy', () => {
   test('allows direct user memory writes from manual sessions', () => {
@@ -38,5 +38,14 @@ describe('session secret write policy', () => {
     expect(canSaveRunnerSecrets(spawned)).toBe(false)
     expect(runnerSecretPolicyError(spawned)).toContain('cannot save RunnerOS secrets directly')
     expect(runnerSecretPolicyError(spawned)).toContain('Setup Concierge')
+  })
+})
+
+describe('scheduled work tool policy', () => {
+  test('allows HNIC only', () => {
+    expect(canScheduleWork({ agentSlug: CONCIERGE_SLUG })).toBe(true)
+    expect(canScheduleWork({ agentSlug: ORCHESTRATOR_SLUG })).toBe(false)
+    expect(canScheduleWork({ agentSlug: SETUP_CONCIERGE_SLUG })).toBe(false)
+    expect(canScheduleWork()).toBe(false)
   })
 })

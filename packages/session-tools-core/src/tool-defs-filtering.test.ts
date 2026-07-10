@@ -44,6 +44,11 @@ describe('session tool filtering helpers', () => {
     expect(names.includes('send_developer_feedback')).toBe(false);
   });
 
+  it('can hide schedule_work from non-HNIC sessions', () => {
+    expect(getSessionToolNames({ includeScheduleWork: false }).has('schedule_work')).toBe(false);
+    expect(getSessionToolNames({ includeScheduleWork: true }).has('schedule_work')).toBe(true);
+  });
+
   it('all canonical session tools declare safeMode metadata', () => {
     for (const def of SESSION_TOOL_DEFS) {
       expect(def.safeMode === 'allow' || def.safeMode === 'block').toBe(true);

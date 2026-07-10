@@ -50,6 +50,7 @@ import { handleCreateAgent } from './handlers/create-agent.ts';
 import { handleCreateAutomation } from './handlers/create-automation.ts';
 import { handleCreateWorkflow } from './handlers/create-workflow.ts';
 import { handleCampaignCalendarWrite } from './handlers/campaign-calendar.ts';
+import { handleScheduleWork } from './handlers/schedule-work.ts';
 import {
   handleSaveMemory,
   handleUpdateMemory,
@@ -517,6 +518,46 @@ export const CampaignCalendarWriteSchema = z.object({
     socialProfileRefs: z.array(z.object({ platform: z.string(), profileId: z.string().optional(), label: z.string().optional() })).optional(),
     job: CampaignCalendarJobSchema.optional(),
   }),
+});
+
+const ScheduleWorkExecutionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('agent-task'),
+    agentSlug: z.string().min(1),
+    brief: z.string().min(1),
+    permissionMode: z.enum(['safe', 'ask']).optional(),
+    expectedOutput: z.object({
+      requirement: z.enum(['none', 'optional', 'required']),
+      kind: z.enum(['report', 'document', 'image', 'video', 'audio', 'dataset', 'code', 'receipt', 'other']).optional(),
+      title: z.string().optional(),
+    }).optional(),
+  }),
+  z.object({
+    type: z.literal('workflow-run'),
+    workflowSlug: z.string().min(1),
+    triggerInputs: z.record(z.string(), z.unknown()).optional(),
+  }),
+]);
+
+const ScheduleWorkTriggerSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('schedule'), cron: z.string().min(1), timezone: z.string().optional() }),
+  z.object({ type: z.literal('file-change'), watchPath: z.string().min(1), watchGlob: z.string().optional(), changeTypes: z.array(z.enum(['add', 'change', 'remove'])).optional() }),
+  z.object({ type: z.literal('webhook'), slug: z.string().min(1), secretEnv: z.string().optional(), allowUnauthenticated: z.boolean().optional() }),
+  z.object({ type: z.literal('url-change'), url: z.string().url(), intervalSeconds: z.number().int().min(30).optional() }),
+  z.object({ type: z.literal('message'), matcher: z.string().optional() }),
+]);
+
+export const ScheduleWorkSchema = z.object({
+  idempotencyKey: z.string().min(1).max(128).describe('Stable unique key for this user request. Reuse exactly when retrying the same schedule_work call.'),
+  destination: z.enum(['calendar', 'automation']).describe('Calendar creates one one-shot job. Automation queues a new tracked job whenever its trigger fires.'),
+  title: z.string().min(1),
+  explanation: z.string().min(1),
+  requiresUserConfirmation: z.boolean().optional(),
+  execution: ScheduleWorkExecutionSchema,
+  startAt: z.string().optional().describe('ISO timestamp. Required for Calendar work.'),
+  timezone: z.string().optional().describe('IANA timezone. Required for Calendar work and recommended for scheduled automations.'),
+  trigger: ScheduleWorkTriggerSchema.optional().describe('Required for Automation work.'),
+  showOnCalendar: z.boolean().optional().describe('Automation jobs appear on Calendar by default. Set false for background maintenance work.'),
 });
 
 const MemoryScopeSchema = z.enum(['agent', 'user']).describe('Where to save: "agent" for this agent only, or "user" for cross-agent USER.md memory. Defaults to "agent".');
@@ -1191,6 +1232,22 @@ Runnable job payloads:
 
 After success, tell the user what was scheduled and whether approval is still required.`,
 
+  schedule_work: `Create executable tracked work on the current workspace's Calendar or as an Automation. This tool is available only to HNIC.
+
+Use Calendar for one-shot work at an exact start time. Use Automation when the work should repeat or start from a schedule, file change, webhook, URL change, or inbound message.
+
+Rules:
+- Use only after the user has explicitly asked to schedule or automate the work.
+- Create one stable idempotencyKey for the request and reuse it on retries.
+- If the time, trigger, agent, workflow, or expected output is ambiguous, ask once and do not call this tool yet.
+- Use active agent/workflow slugs from list_agents or list_workflows. The backend resolves and locks the current workflow definition.
+- Calendar work requires startAt and timezone.
+- Automation work requires trigger. Set showOnCalendar false for background maintenance that should not clutter Calendar.
+- Agent tasks require a concrete brief. Use expectedOutput when a durable artifact is required.
+- This initial HNIC tool schedules agent tasks and workflow runs only. Social publishing remains approval-gated through Campaign Calendar UI.
+
+After success, state what will run, where it appears, and when or what triggers it.`,
+
   create_workflow: `Create a new reusable workflow in the global workflow library and activate it in the current workspace.
 
 Use this only after walking the user through the workflow-creator interview and getting explicit confirmation. Always show a complete WORKFLOW.md draft BEFORE calling this tool.
@@ -1478,6 +1535,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'create_agent', description: TOOL_DESCRIPTIONS.create_agent, inputSchema: CreateAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAgent },
   { name: 'create_automation', description: TOOL_DESCRIPTIONS.create_automation, inputSchema: CreateAutomationSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateAutomation },
   { name: 'campaign_calendar_write', description: TOOL_DESCRIPTIONS.campaign_calendar_write, inputSchema: CampaignCalendarWriteSchema, executionMode: 'registry', safeMode: 'block', handler: handleCampaignCalendarWrite },
+  { name: 'schedule_work', description: TOOL_DESCRIPTIONS.schedule_work, inputSchema: ScheduleWorkSchema, executionMode: 'registry', safeMode: 'block', handler: handleScheduleWork },
   { name: 'create_workflow', description: TOOL_DESCRIPTIONS.create_workflow, inputSchema: CreateWorkflowSchema, executionMode: 'registry', safeMode: 'block', handler: handleCreateWorkflow },
   { name: 'save_memory', description: TOOL_DESCRIPTIONS.save_memory, inputSchema: SaveMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleSaveMemory },
   { name: 'update_memory', description: TOOL_DESCRIPTIONS.update_memory, inputSchema: UpdateMemorySchema, executionMode: 'registry', safeMode: 'block', handler: handleUpdateMemory },
@@ -1501,6 +1559,8 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
 export interface SessionToolFilterOptions {
   /** Include the experimental send_developer_feedback tool. */
   includeDeveloperFeedback?: boolean;
+  /** Include the HNIC-only schedule_work tool. */
+  includeScheduleWork?: boolean;
 }
 
 /**
@@ -1511,11 +1571,13 @@ export interface SessionToolFilterOptions {
  */
 export function getSessionToolDefs(options?: SessionToolFilterOptions): SessionToolDef[] {
   const includeDeveloperFeedback = options?.includeDeveloperFeedback ?? true;
+  const includeScheduleWork = options?.includeScheduleWork ?? true;
 
   return SESSION_TOOL_DEFS.filter(def => {
     if (!includeDeveloperFeedback && def.name === 'send_developer_feedback') {
       return false;
     }
+    if (!includeScheduleWork && def.name === 'schedule_work') return false;
     return true;
   });
 }
@@ -1627,9 +1689,13 @@ export interface JsonSchemaToolDef {
 export function getToolDefsAsJsonSchema(opts?: {
   prefix?: string;
   includeDeveloperFeedback?: boolean;
+  includeScheduleWork?: boolean;
 }): JsonSchemaToolDef[] {
   const prefix = opts?.prefix || '';
-  const defs = getSessionToolDefs({ includeDeveloperFeedback: opts?.includeDeveloperFeedback });
+  const defs = getSessionToolDefs({
+    includeDeveloperFeedback: opts?.includeDeveloperFeedback,
+    includeScheduleWork: opts?.includeScheduleWork,
+  });
 
   return defs.map(def => {
     // Explicit `as any` avoids TS2589 ("type instantiation is excessively deep")

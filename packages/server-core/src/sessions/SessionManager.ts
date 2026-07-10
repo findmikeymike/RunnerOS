@@ -170,6 +170,7 @@ import { pulseIdFromAutomationMatcher } from '@craft-agent/shared/pulses'
 import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { filterAttachmentsForModelInput } from './runtime-config'
+import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
 
 function isConversationContextMessage(message: Message): boolean {
   return (message.role === 'user' || message.role === 'assistant')
@@ -272,6 +273,7 @@ type SpawnedAgentRef = { agentSlug: string; agentName?: string; timestamp?: numb
 
 const DIRECT_USER_MEMORY_AGENT_SLUGS = new Set([CONCIERGE_SLUG, ORCHESTRATOR_SLUG])
 const SECRET_WRITE_AGENT_SLUGS = new Set([CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG])
+const SCHEDULE_WORK_AGENT_SLUGS = new Set([CONCIERGE_SLUG])
 
 export function canDirectlyMutateUserMemory(spawnedFromAgent?: SpawnedAgentRef): boolean {
   if (!spawnedFromAgent) return true
@@ -285,6 +287,10 @@ export function directUserMemoryPolicyError(spawnedFromAgent?: SpawnedAgentRef):
 
 export function canSaveRunnerSecrets(spawnedFromAgent?: SpawnedAgentRef): boolean {
   return Boolean(spawnedFromAgent?.agentSlug && SECRET_WRITE_AGENT_SLUGS.has(spawnedFromAgent.agentSlug))
+}
+
+export function canScheduleWork(spawnedFromAgent?: SpawnedAgentRef): boolean {
+  return Boolean(spawnedFromAgent?.agentSlug && SCHEDULE_WORK_AGENT_SLUGS.has(spawnedFromAgent.agentSlug))
 }
 
 export function runnerSecretPolicyError(spawnedFromAgent?: SpawnedAgentRef): string {
@@ -3061,6 +3067,13 @@ export class SessionManager implements ISessionManager {
             },
           }).updated) {
             sessionLog.info('[agent-definitions] Renamed Concierge to HNIC')
+          }
+          if (replaceBuiltInAgentPromptText(
+            CONCIERGE_SLUG,
+            '  - If the job is repeatable, suggest an automation.',
+            '  - If the job is repeatable, design it as an automation; after confirmation, call `schedule_work`.\n  - If the user wants one agent task or workflow at a future time, confirm the exact schedule and call `schedule_work` for Calendar.',
+          ).updated) {
+            sessionLog.info('[agent-definitions] Added HNIC scheduled-work routing')
           }
           const powerUpMetadataUpdated = [
             replaceBuiltInAgentMetadata('ig-trending-power-up', {
@@ -6499,6 +6512,42 @@ user a clickable link to where the thing now lives.`
             status: writeResult.item.status,
           }
         },
+        scheduleWorkFn: canScheduleWork(managed.spawnedFromAgent)
+          ? async (input) => {
+              try {
+                const persisted = await persistHnicScheduleWork({
+                  workspaceId: managed.workspace.id,
+                  workspaceRootPath: managed.workspace.rootPath,
+                  scope: inferScheduledWorkScope(managed.workspace),
+                  input,
+                  onContextChanged: (docs) => {
+                    this.eventSink?.(
+                      RPC_CHANNELS.workspaceContext.CHANGED,
+                      { to: 'all' },
+                      managed.workspace.id,
+                      docs,
+                    )
+                  },
+                  withAutomationLock: withAutomationConfigMutex,
+                  writeFileAtomic,
+                })
+                return {
+                  ok: true,
+                  destination: input.destination,
+                  id: persisted.id,
+                  title: persisted.title,
+                  nextFireAt: persisted.nextFireAt,
+                }
+              } catch (error) {
+                return {
+                  ok: false,
+                  destination: input.destination,
+                  title: input.title,
+                  error: error instanceof Error ? error.message : String(error),
+                }
+              }
+            }
+          : undefined,
         createWorkflowFn: async (input) => {
           const slug = input.slug
           if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(slug)) {

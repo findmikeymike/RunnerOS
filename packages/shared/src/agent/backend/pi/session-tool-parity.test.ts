@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'bun:test';
 import { SESSION_BACKEND_TOOL_NAMES } from '@craft-agent/session-tools-core';
 import { PI_BACKEND_SESSION_TOOL_NAMES } from '../../pi-agent.ts';
+import { getSessionToolProxyDefs } from './session-tool-defs.ts';
 
 describe('Pi backend session tool parity', () => {
   it('implements all backend-mode session tools from core registry', () => {
@@ -9,5 +10,10 @@ describe('Pi backend session tool parity', () => {
     );
 
     expect(missing).toEqual([]);
+  });
+
+  it('exposes schedule_work only for HNIC proxy registration', () => {
+    expect(getSessionToolProxyDefs().some((tool) => tool.name === 'mcp__session__schedule_work')).toBe(false);
+    expect(getSessionToolProxyDefs({ includeScheduleWork: true }).some((tool) => tool.name === 'mcp__session__schedule_work')).toBe(true);
   });
 });

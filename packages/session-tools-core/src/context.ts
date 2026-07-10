@@ -399,6 +399,9 @@ export interface SessionToolContext {
   /** Write a local campaign calendar item from a structured agent intent. */
   campaignCalendarWrite?(input: import('./handlers/campaign-calendar.ts').CampaignCalendarWriteToolInput): Promise<import('./handlers/campaign-calendar.ts').CampaignCalendarWriteResult>;
 
+  /** Create typed one-shot or trigger-owned scheduled work. HNIC-only backend capability. */
+  scheduleWork?(input: import('./handlers/schedule-work.ts').ScheduleWorkToolInput): Promise<import('./handlers/schedule-work.ts').ScheduleWorkResult>;
+
   /**
    * Create a workflow in the global workflow library and optionally activate it
    * in the current workspace. Backend owns parse/write validation, slug

@@ -845,7 +845,12 @@ export class ClaudeAgent extends BaseAgent {
       const runnerDocsMcpUrl = process.env.RUNNER_DOCS_MCP_URL?.trim();
       const fullMcpServers: Options['mcpServers'] = {
         // Session-scoped tools (SubmitPlan, source_test, update_user_preferences, transform_data, etc.)
-        session: getSessionScopedTools(sessionId, this.workspaceRootPath),
+        session: getSessionScopedTools(
+          sessionId,
+          this.workspaceRootPath,
+          this.config.workspace.id,
+          this.config.session?.spawnedFromAgent?.agentSlug,
+        ),
         ...(runnerDocsMcpUrl
           ? {
               'runner-docs': {

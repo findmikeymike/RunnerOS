@@ -130,6 +130,10 @@ export interface SessionScopedToolCallbacks {
   campaignCalendarWriteFn?: (
     input: import('@craft-agent/session-tools-core').CampaignCalendarWriteToolInput,
   ) => Promise<import('@craft-agent/session-tools-core').CampaignCalendarWriteResult>;
+  /** Create typed scheduled work. Wired only for HNIC sessions. */
+  scheduleWorkFn?: (
+    input: import('@craft-agent/session-tools-core').ScheduleWorkToolInput,
+  ) => Promise<import('@craft-agent/session-tools-core').ScheduleWorkResult>;
   /** Create a workflow in the global library (used by the workflow-creator skill's create_workflow tool). */
   createWorkflowFn?: (
     input: import('@craft-agent/session-tools-core').CreateWorkflowToolInput,

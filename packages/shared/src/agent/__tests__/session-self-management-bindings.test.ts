@@ -146,6 +146,26 @@ describe('attachSessionSelfManagementBindings', () => {
     expect(ctx.setSessionLabels).toBeDefined();
   });
 
+  it('scheduleWork resolves through the HNIC callback binding', async () => {
+    const ctx = createBaseContext(sessionId);
+    attachSessionSelfManagementBindings(ctx, sessionId);
+    expect(ctx.scheduleWork).toBeUndefined();
+
+    mergeSessionScopedToolCallbacks(sessionId, {
+      scheduleWorkFn: async (input) => ({ ok: true, destination: input.destination, id: 'work-1', title: input.title }),
+    });
+    const result = await ctx.scheduleWork!({
+      idempotencyKey: 'test-work-1',
+      destination: 'calendar',
+      title: 'Test work',
+      explanation: 'Test',
+      startAt: '2026-07-15T14:00:00.000Z',
+      timezone: 'UTC',
+      execution: { type: 'agent-task', agentSlug: 'test-agent', brief: 'Do the work.' },
+    });
+    expect(result.id).toBe('work-1');
+  });
+
   it('recallMemory resolves through the lazy session callback registry', async () => {
     const ctx = createBaseContext(sessionId);
     attachSessionSelfManagementBindings(ctx, sessionId);

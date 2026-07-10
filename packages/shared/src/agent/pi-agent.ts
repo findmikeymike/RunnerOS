@@ -510,7 +510,9 @@ export class PiAgent extends BaseAgent {
     // These tools (SubmitPlan, config_validate, source auth, call_llm, etc.)
     // are executed in the main process when the LLM calls them.
     this.assertBackendSessionToolParity();
-    const sessionToolDefs = getSessionToolProxyDefs();
+    const sessionToolDefs = getSessionToolProxyDefs({
+      includeScheduleWork: this.config.session?.spawnedFromAgent?.agentSlug === 'concierge',
+    });
 
     // Patch call_llm description with provider-specific model hint
     if (this.config.miniModel) {

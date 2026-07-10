@@ -217,9 +217,10 @@ const TOOL_DESCRIPTIONS: Record<string, string> = {
 export function getSessionScopedTools(
   sessionId: string,
   workspaceRootPath: string,
-  workspaceId?: string
+  workspaceId?: string,
+  agentSlug?: string,
 ): ReturnType<typeof createSdkMcpServer> {
-  const cacheKey = `${sessionId}::${workspaceRootPath}`;
+  const cacheKey = `${sessionId}::${workspaceRootPath}::${agentSlug ?? ''}`;
 
   // Return cached tools if available, but always create a fresh MCP server wrapper
   let tools: any[] | undefined = sessionToolsCache.get(cacheKey);
@@ -259,7 +260,10 @@ export function getSessionScopedTools(
 
     // Create tools from the canonical registry — all tools with handlers.
     // Tool visibility is centrally filtered in session-tools-core to avoid backend drift.
-    tools = getSessionToolDefs({ includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback })
+    tools = getSessionToolDefs({
+      includeDeveloperFeedback: FEATURE_FLAGS.developerFeedback,
+      includeScheduleWork: agentSlug === 'concierge',
+    })
       .filter(def => def.handler !== null) // Skip backend-specific tools (call_llm)
       .map(def => registryTool(def.name, def.inputSchema.shape));
 

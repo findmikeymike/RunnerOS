@@ -255,6 +255,15 @@ export {
 } from './handlers/index.ts';
 
 export type {
+  ScheduleWorkToolInput,
+  ScheduleWorkResult,
+  ScheduleWorkExecutionInput,
+  ScheduleWorkTriggerInput,
+} from './handlers/index.ts';
+
+export { handleScheduleWork } from './handlers/index.ts';
+
+export type {
   CreateWorkflowToolInput,
   CreateWorkflowResult,
   CreateWorkflowMetadata,
@@ -356,6 +365,7 @@ export {
   SendDeveloperFeedbackSchema,
   CreateAgentSchema,
   CampaignCalendarWriteSchema,
+  ScheduleWorkSchema,
   SaveMemorySchema,
   UpdateMemorySchema,
   ForgetMemorySchema,

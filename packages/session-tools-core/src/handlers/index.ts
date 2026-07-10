@@ -143,6 +143,15 @@ export type {
   CampaignCalendarWriteResult,
 } from './campaign-calendar.ts';
 
+// HNIC scheduled work
+export { handleScheduleWork } from './schedule-work.ts';
+export type {
+  ScheduleWorkToolInput,
+  ScheduleWorkResult,
+  ScheduleWorkExecutionInput,
+  ScheduleWorkTriggerInput,
+} from './schedule-work.ts';
+
 // Create Workflow (workflow-creator skill)
 export { handleCreateWorkflow } from './create-workflow.ts';
 export type {

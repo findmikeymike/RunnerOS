@@ -260,6 +260,14 @@ export function attachSessionSelfManagementBindings(
     enumerable: true,
   });
 
+  Object.defineProperty(context, 'scheduleWork', {
+    get() {
+      return getSessionScopedToolCallbacks(sessionId)?.scheduleWorkFn;
+    },
+    configurable: true,
+    enumerable: true,
+  });
+
   Object.defineProperty(context, 'createWorkflow', {
     get() {
       return getSessionScopedToolCallbacks(sessionId)?.createWorkflowFn;
