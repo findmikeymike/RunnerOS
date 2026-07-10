@@ -28,6 +28,8 @@ test('root registry returns CLI-Anything style command metadata', () => {
   assert.ok(registry.platforms.tiktok);
   assert.ok(registry.platforms.x);
   assert.ok(registry.platforms.youtube);
+  assert.ok(registry.platforms.spotify);
+  assert.ok(registry.commands.some((command) => command.verb === 'playlist' && command.platform === 'spotify'));
   assert.ok(registry.commands.some((command) => command.verb === 'doctor'));
   assert.ok(registry.commands.some((command) => command.verb === 'catalog'));
   assert.ok(registry.commands.some((command) => command.verb === 'execute'));
@@ -42,7 +44,8 @@ test('root doctor reports install and platform health', () => {
   assert.equal(result.model, 'CLI-Anything');
   assert.equal(result.browserEngine, 'runner-cdp');
   assert.equal(result.checks.find((check) => check.name === 'browser-engine')?.mode, 'delegated');
-  assert.equal(result.platforms.length, 4);
+  assert.equal(result.platforms.length, 5);
+  assert.ok(result.platforms.some((platform) => platform.platform === 'spotify'));
   assert.deepEqual(result.summary, {
     totalProfiles: 0,
     readyProfiles: 0,
@@ -353,6 +356,19 @@ test('root dispatcher routes X dry-run', () => {
     instanceId: 'social-x-smoke',
     partition: 'persist:social-x-smoke',
   });
+});
+
+test('root dispatcher routes Spotify playlist dry-run with an immutable approval digest', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  run(['profile', 'add', 'spotify', '--profile', 'artist01', '--handle', 'Luna Vale', '--account-url', 'https://open.spotify.com/artist/abc123', '--json'], env);
+  const playlist = JSON.parse(run([
+    'playlist', 'spotify', 'create', '--profile', 'artist01', '--name', 'Late Night Drive',
+    '--tracks', 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh', '--dry-run', '--json',
+  ], env));
+  assert.equal(playlist.status, 'dry_run');
+  assert.equal(playlist.action.verb, 'playlist-create');
+  assert.match(playlist.approvalDigest, /^sha256:[a-f0-9]{64}$/);
 });
 
 test('root dispatcher lists assets and content from explicit roots', () => {
@@ -752,6 +768,48 @@ test('root execute returns delegated runner-cdp result for approved dry-run resu
   assert.match(result.next.join(' '), /browserPlan\.browserSession/);
   assert.match(result.next.join(' '), /submit when the visible account and draft match/);
   assert.doesNotMatch(result.next.join(' '), /pause before final submit/i);
+});
+
+test('root execute rejects a Spotify dry-run whose approved payload was edited', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  run(['profile', 'add', 'spotify', '--profile', 'artist01', '--handle', 'Luna Vale', '--json'], env);
+  const dryRun = JSON.parse(run([
+    'playlist', 'spotify', 'create', '--profile', 'artist01', '--name', 'Original Mood',
+    '--tracks', 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh', '--dry-run', '--json',
+  ], env));
+  const approvedDigest = dryRun.approvalDigest;
+  dryRun.action.payload.name = 'Tampered Mood';
+  const actionFile = path.join(home, 'tampered-spotify-dry-run.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+  let result;
+  try {
+    run(['execute', '--action-file', actionFile, '--expected-action-id', dryRun.actionId, '--expected-action-digest', approvedDigest, '--confirm', 'yes', '--json'], env);
+  } catch (error) {
+    result = JSON.parse(error.stdout.toString());
+  }
+  assert.equal(result.code, 'ACTION_DIGEST_MISMATCH');
+});
+
+test('root execute delegates an unchanged approved Spotify playlist contract', () => {
+  const home = mkdtempSync(path.join(tmpdir(), 'social-root-'));
+  const env = { SOCIAL_HOME: home };
+  run(['profile', 'add', 'spotify', '--profile', 'artist01', '--handle', 'Luna Vale', '--account-url', 'https://open.spotify.com/artist/abc123', '--json'], env);
+  const dryRun = JSON.parse(run([
+    'playlist', 'spotify', 'create', '--profile', 'artist01', '--name', 'Late Night Drive',
+    '--description', 'Night drives and neon skies', '--tracks', 'spotify:track:4iV5W9uYEdYUVa79Axb7Rh',
+    '--visibility', 'public', '--dry-run', '--json',
+  ], env));
+  const actionFile = path.join(home, 'spotify-dry-run.json');
+  writeFileSync(actionFile, JSON.stringify(dryRun));
+  const result = JSON.parse(run([
+    'execute', '--action-file', actionFile, '--expected-action-id', dryRun.actionId,
+    '--expected-action-digest', dryRun.approvalDigest, '--confirm', 'yes', '--json',
+  ], env));
+  assert.equal(result.status, 'delegated');
+  assert.equal(result.approvalDigest, dryRun.approvalDigest);
+  assert.deepEqual(result.action.payload, dryRun.action.payload);
+  assert.equal(result.browserPlan.browserSession.partition, 'persist:social-spotify-artist01');
 });
 
 test('root execute rejects dry-runs when current profile verification target changed', () => {

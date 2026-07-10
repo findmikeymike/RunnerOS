@@ -2995,6 +2995,18 @@ export class SessionManager implements ISessionManager {
           ).updated) {
             sessionLog.info('[skills] Updated Squad skill to bundled-engine instructions')
           }
+          const spotifyPlaylistCuratorSkillMd = BUNDLED_STARTER_SKILLS
+            .find(skill => skill.slug === 'spotify-playlist-curator')
+            ?.files.find(file => file.path === 'SKILL.md')
+            ?.content
+          if (spotifyPlaylistCuratorSkillMd && replaceRequiredGlobalSkillFileIfContains(
+            'spotify-playlist-curator',
+            'SKILL.md',
+            'bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/build-plan.ts',
+            spotifyPlaylistCuratorSkillMd,
+          ).updated) {
+            sessionLog.info('[skills] Updated Spotify playlist curator to packaged execution paths')
+          }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
           const missingBrandingSkills = brandingSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
@@ -3243,6 +3255,41 @@ export class SessionManager implements ISessionManager {
               '- RunnerOS ships Squad as a built-in source. If it is missing, report a packaging or installation problem; do not ask for `SQUAD_HOME`.',
             ).updated) {
               sessionLog.info('[agent-definitions] Removed Video Director external Squad dependency')
+            }
+          }
+          const spotifyPlaylistCreator = STARTER_AGENTS.find(agent => agent.slug === 'spotify-playlist-creator')
+          if (spotifyPlaylistCreator) {
+            if (ensureBuiltInAgentMetadataSlugs('spotify-playlist-creator', {
+              skills: spotifyPlaylistCreator.metadata.skills,
+              sources: spotifyPlaylistCreator.metadata.sources,
+            }).updated) {
+              sessionLog.info('[agent-definitions] Updated Spotify Playlist Creator strategy and browser source routing')
+            }
+            if (replaceBuiltInAgentMetadata('spotify-playlist-creator', {
+              greeting: {
+                from: 'Give me the playlist mood, comparable artists, and the artist tracks to feature. I will build the plan first, then ask before creating anything.',
+                to: spotifyPlaylistCreator.metadata.greeting,
+              },
+              outputs: {
+                from: 'A Spotify playlist plan, approval checklist, and creation payload or receipt when approved and Spotify tooling is connected.',
+                to: spotifyPlaylistCreator.metadata.outputs,
+              },
+            }).updated) {
+              sessionLog.info('[agent-definitions] Updated Spotify Playlist Creator product contract')
+            }
+            if (replaceBuiltInAgentPromptText(
+              'spotify-playlist-creator',
+              'Use the spotify-playlist-curator skill. Work in two phases:',
+              'Use `playlist-builder` for evidence-labeled strategy and `spotify-playlist-curator` for the deterministic validated order. Work in two phases:',
+            ).updated) {
+              sessionLog.info('[agent-definitions] Updated Spotify Playlist Creator planning doctrine')
+            }
+            if (replaceBuiltInAgentPromptText(
+              'spotify-playlist-creator',
+              '   - If Spotify MCP/API/OAuth tooling is available, use it after approval to create the playlist on the user\'s connected Spotify account.\n   - If Spotify tooling is not available, return the exact create-playlist payload and say what setup is missing.',
+              '   - Resolve the exact connected Spotify profile from Printing Press Social. Dry-run `playlist spotify create`, preserve its immutable action ID and approval digest, and execute only after approval.\n   - Complete the returned browser plan against the verified account, then record the observed playlist URL with `playlist spotify receipt`. A delegated plan is not completion.',
+            ).updated) {
+              sessionLog.info('[agent-definitions] Updated Spotify Playlist Creator execution path')
             }
           }
           if (replaceBuiltInAgentMetadata(CONCIERGE_SLUG, {

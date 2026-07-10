@@ -26,6 +26,7 @@ export function readProfileVerificationResult(profile, flags = {}) {
     loggedIn,
     matchesExpected,
     visibleIdentity,
+    checkedAtProvided: typeof data.checkedAt === 'string' && Boolean(data.checkedAt.trim()),
     checkedAt: data.checkedAt || new Date().toISOString(),
     message: data.message || 'RunnerOS browser verification result was applied.',
   };

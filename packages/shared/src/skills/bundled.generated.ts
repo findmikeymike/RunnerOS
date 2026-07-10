@@ -29667,6 +29667,243 @@ Return paid-ads findings in this order:
     ],
   },
   {
+    slug: "playlist-builder",
+    files: [
+      {
+        path: "playbook/playbook.json",
+        content: `{
+  "meta": {
+    "name": "Spotify Playlist Strategist — playbook",
+    "version": "1.0.0",
+    "updated": "2026-07-09",
+    "purpose": "The strategy an agent uses to build an artist-curated Spotify playlist (the artist's songs mixed with similar artists, posted on their profile) that grows streams honestly. Turns the app's existing artist context — sound/style + a list of similar artists — into a concrete, algorithm-friendly tracklist and a promotable playlist package.",
+    "honest_framing": "An artist-curated playlist is a LEGIT but MODEST lever. Its real value is: (1) manufacturing qualified CO-LISTENING context — your track credibly sequenced next to genuine audience-neighbors; (2) earning ENGAGEMENT (saves, low skips, completion, follows); (3) feeding Spotify's collaborative-filtering 'organizational similarity' and shaping your 'Fans Also Like' neighborhood; (4) growing an owned following you can re-activate. It is NOT a switch that triggers Discover Weekly / Release Radar, and a single artist playlist does not by itself 'train the algorithm.' Frame the value truthfully.",
+    "evidence_key": {
+      "EVIDENCE": "stated by Spotify or supported by a cited primary source",
+      "PLAUSIBLE": "credible practitioner/expert consensus, mechanistically sound, not officially confirmed",
+      "MYTH": "commonly repeated but weak, contradicted, or against Spotify TOS"
+    },
+    "app_context_note": "The app already gives the agent the target artist's sound/style descriptor and a list of similar artists. The playbook's job is to convert that into peer selection, track choice, sequencing, and a package — see the 'pipeline'.",
+    "api_caveat": "Spotify restricted audio-features, related-artists, recommendations, and featured-playlists endpoints for new and development-mode apps in Nov 2024, then made further Web API removals and field changes in Feb 2026. Treat third-party BPM/energy/key or related-artist data as directional and verify availability before relying on it. [EVIDENCE]"
+  },
+  "principles": [
+    {"id":"co-listening","name":"The goal is qualified co-listening, not raw plays","rule":"Design the playlist so real listeners stream your track IN-SESSION alongside genuine peers and engage. That co-listening + the user playlist-adds it inspires may help Spotify learn a more accurate audience neighborhood.","tag":"PLAUSIBLE","why":"Spotify says Fans Also Like uses fan listening habits and explicitly recommends encouraging listening, saves, playlist adds, and creating artist playlists. It does not publish a formula or promise a ranking outcome."},
+    {"id":"engagement-over-volume","name":"Engagement beats volume","rule":"Optimize for genuine saves, library/playlist adds, completion, low skips, and follows — not raw stream count. Every construction choice should protect listener fit.","tag":"PLAUSIBLE","why":"Spotify publicly encourages listening, saves, and playlist adds to improve Fans Also Like data, but does not publish weights or confirm a dominant ranking order."},
+    {"id":"relevance-density","name":"Relevance density over star power","rule":"The bulk of the list should be genuine sonic peers your target listener actually chooses; use only a couple of recognizable 'anchors' for trust.","tag":"PLAUSIBLE","why":"'Fans Also Like' rewards the SHARE of an artist's fanbase you overlap with, so you cannot piggyback on a superstar; and mismatched mega-artist crowds skip your track, suppressing you in that cluster."},
+    {"id":"right-audience","name":"Drive the RIGHT audience to it","rule":"Promote to fans of the featured peers, via legitimate channels. Wrong-audience traffic can misclassify your sound.","tag":"PLAUSIBLE","why":"One relevant new listener is worth more than ten random ad streams; mismatched virality can drag your 'neighborhood' the wrong way."},
+    {"id":"supporting-asset","name":"It's a supporting asset, not the engine","rule":"Treat the playlist as one piece around a steady release cadence and real fan engagement — not a growth engine by itself.","tag":"PLAUSIBLE","why":"Algorithmic placement is earned by broad engagement across many real sessions; playlists compound slowly and usually need legit promotion to get discovered at all."}
+  ],
+  "peer_sizing": {
+    "rule": "Choose peers within roughly ONE ORDER OF MAGNITUDE of the target's monthly listeners — not the biggest names in the genre.",
+    "tag": "PLAUSIBLE",
+    "example": "At ~5K monthly listeners, the comparable band is ~1K–50K, not 5M. Re-baseline the window upward every release cycle as the artist grows.",
+    "composition_split": "~70% emerging/peer artists (same tier, many under ~100K listeners) + ~30% recognizable 'anchor' acts for credibility and pull-in.",
+    "weight_engagement": "Within the size filter, prefer artists with high engagement (save rate, followers, repeat plays) over raw listener count: a 5K-listener act with a 15% save rate is a better neighbor than a 50K act at 2%.",
+    "myth_flag": "'X monthly listeners is a magic algorithmic threshold' is overstated — monthly listeners are a reach metric that spikes/crashes with placement, not a loyalty metric. Use listener count as a SIZE filter only. [MYTH]"
+  },
+  "composition": {
+    "length": {"target":"~25–40 tracks (acceptable ~20–50); ~1.5–3 hours","tag":"PLAUSIBLE","note":"Curate — every track earns its spot. Avoid 100+ track lists; they read as spam and dilute the signal."},
+    "own_share": {"rule":"Your own songs = ~10–25% of the list (about 1 of yours per 4–5 others), spaced out, never clustered.","tag":"PLAUSIBLE","note":"On a 30-track list, ~3–6 of your tracks. Keeps it from reading as self-promo and stays algorithmically neutral."},
+    "ordering": [
+      {"id":"slot1-anchor","rule":"Slot 1 = a recognizable, well-matched anchor artist — the hook that makes a stranger follow.","tag":"PLAUSIBLE"},
+      {"id":"slot2-you","rule":"Put your own strongest song in slot 2, not slot 1.","tag":"PLAUSIBLE"},
+      {"id":"popular-up-top","rule":"Front-load the most engaging/recognizable tracks so listeners get hooked and stay for the buried gems.","tag":"PLAUSIBLE"},
+      {"id":"sandwich","rule":"Sandwich each of your tracks BETWEEN two well-matched peer tracks a listener already likes — a classic co-listening/Discover-Weekly trigger.","tag":"PLAUSIBLE"},
+      {"id":"no-repeat-stacking","rule":"Don't stack multiple of your songs (or the same artist) back-to-back.","tag":"PLAUSIBLE"}
+    ],
+    "sequencing": [
+      {"id":"bpm-drift","rule":"Keep adjacent tracks close in tempo; drift gradually ~5–10 BPM rather than jumping.","tag":"PLAUSIBLE"},
+      {"id":"key-adjacent","rule":"Favor Camelot-adjacent keys or relative major/minor swaps for clean transitions; avoid clashing distant keys.","tag":"PLAUSIBLE"},
+      {"id":"energy-arc","rule":"Plan a deliberate energy/valence arc (build or wind-down) and group into consistent mini-sets rather than random swings.","tag":"PLAUSIBLE"},
+      {"id":"cohesion","rule":"Keep the whole list cohesive in genre/tempo/timbre/mood — cohesion IS the data that teaches Spotify where your songs belong.","tag":"PLAUSIBLE"}
+    ]
+  },
+  "overlap_signals": {
+    "note": "How to tell two artists genuinely share an audience. Require 2+ independent signals before trusting an artist as a true neighbor.",
+    "ranked": [
+      {"signal":"Quantified audience-overlap %","strength":"strongest","source":"Chartmetric 'Neighboring Artists'/Artist Similarity, Soundcharts","tag":"EVIDENCE (tools exist); overlap value proprietary"},
+      {"signal":"Co-playlisting","strength":"strong","source":"each artist's 'Discovered On'; Chartmetric playlist data","tag":"PLAUSIBLE","note":"Repeated appearance on the same user/editorial playlists — the same co-occurrence Spotify weighs."},
+      {"signal":"'Fans Also Like' reciprocity","strength":"strong","source":"in-app related-artists panel","tag":"PLAUSIBLE","note":"A appears in B's panel AND vice versa → overlap likely genuine."},
+      {"signal":"Shared genre / micro-genre tags","strength":"moderate","source":"Every Noise at Once, Chosic genre finder","tag":"PLAUSIBLE","note":"Necessary but coarse — same genre ≠ same audience."},
+      {"signal":"Label mates / same scene / distributor","strength":"weak-moderate","source":"credits, label pages","tag":"PLAUSIBLE"},
+      {"signal":"Tour mates / bill-sharing","strength":"weak","source":"press, live listings","tag":"PLAUSIBLE","note":"Useful human evidence of scene overlap; Spotify does not state that this directly feeds Fans Also Like."}
+    ],
+    "finding_tools": [
+      {"tool":"Spotify in-app 'Fans Also Like' + 'Discovered On'","use":"Ground truth for who shares your audience (public related-artists API deprecated Nov 2024 — in-app only).","tag":"EVIDENCE"},
+      {"tool":"Chartmetric / Soundcharts","use":"Quantify overlap and size-match peers cross-platform.","tag":"PLAUSIBLE"},
+      {"tool":"Chosic / Musicstax / Tunebat","use":"Track-level BPM/key/energy for picking & sequencing (values may be approximate post-API-change).","tag":"PLAUSIBLE"},
+      {"tool":"Every Noise at Once","use":"Micro-genre map to widen the net into adjacent niches.","tag":"PLAUSIBLE"}
+    ]
+  },
+  "track_selection": [
+    {"id":"recent-active","rule":"Favor artists with recent/upcoming releases and tracks still gaining saves/adds — 'warm' tracks strengthen the neighborhood; dead catalog cuts do less.","tag":"PLAUSIBLE"},
+    {"id":"vibe-band","rule":"Score candidate tracks against the artist's vibe descriptor (energy/tempo/mood/key); keep those inside the target's sonic band.","tag":"PLAUSIBLE"},
+    {"id":"known-plus-lesser","rule":"Blend recognizable anchor tracks (draw listeners in) with lesser-known peer tracks (where your song hides in plain sight and the co-listen signal is most useful).","tag":"PLAUSIBLE"},
+    {"id":"clean-seams","rule":"Prefer tracks with short instrumental intros/outros for cleaner transitions; avoid jarring tonal jumps between neighbors.","tag":"PLAUSIBLE"}
+  ],
+  "metadata_seo": {
+    "title": {"rule":"Specific, keyword-forward: mood + genre + activity (+ year). 'Rainy Day Indie Folk 2026' > 'Indie Music'.","tag":"PLAUSIBLE"},
+    "description": {"rule":"Keyword-rich: name peer artists + genre/mood/activity terms; explicitly ask listeners to follow; promise regular updates.","tag":"PLAUSIBLE","note":"Playlist title/description are crawled as text context around your release (real NLP signal)."},
+    "cover": {"rule":"Custom, on-brand cover art improves click-through. Follow Spotify image guidelines.","tag":"PLAUSIBLE","warning":"Do NOT use another artist's photo/likeness without permission; avoid low-effort generic AI art."}
+  },
+  "cadence": [
+    {"id":"refresh","rule":"Swap 2–3 tracks and re-order to spotlight your latest release every ~1–2 weeks (monthly-ish minimum). 'Active' lists are treated as live.","tag":"PLAUSIBLE"},
+    {"id":"seasonal","rule":"Rotate title/description for seasonal search; build release-timed lists on drop day.","tag":"PLAUSIBLE"},
+    {"id":"cadence-over-tinkering","rule":"A consistent release cadence matters more than playlist tinkering — the playlist supports steady releases, it doesn't replace them.","tag":"EVIDENCE-adjacent"}
+  ],
+  "engagement_signals": [
+    {"signal":"Saves / library adds / playlist adds","weight":"important","tag":"EVIDENCE","note":"Spotify explicitly recommends saves and playlist adds to generate better Fans Also Like data; it does not publish a precise weight."},
+    {"signal":"Completion / listen-through","weight":"likely positive","tag":"PLAUSIBLE"},
+    {"signal":"Skips","weight":"likely negative","tag":"PLAUSIBLE","note":"Poor listener fit and early exits are useful warning signs, but Spotify does not publish a universal skip-weight formula."},
+    {"signal":"Shares, artist/album click-throughs, follows, repeat & downstream plays","weight":"likely positive","tag":"PLAUSIBLE"},
+    {"signal":"Vendor benchmark targets (directional only)","weight":"unofficial","tag":"PLAUSIBLE","note":"Single-vendor figures to beat, NOT confirmed thresholds: save rate ~4.5%+ (20%+ = strong), skip <~30% in first 30s, completion >~60%."}
+  ],
+  "guardrails": [
+    {"id":"no-artificial-streams","rule":"Never recommend or use bots, stream/click farms, purchased streams/followers, or repeat-looping your own tracks to inflate counts.","tag":"EVIDENCE","penalty":"Since Apr 1 2024 Spotify charges labels and distributors per track when flagrant artificial streaming is detected. Spotify may withhold royalties, adjust public counts, and remove tracks from playlists; distributors may separately warn, charge fees, remove content, or suspend accounts. Spotify also provides a reporting path when an artist is targeted without consent."},
+    {"id":"no-paid-placement","rule":"Never recommend pay-for-placement playlists, 'guaranteed streams/followers' services, or paid curator slots — prohibited and counterproductive (junk co-occurrence confuses your similarity profile).","tag":"EVIDENCE"},
+    {"id":"no-follow-swaps","rule":"No sub-for-sub, follow farms, or multi-account/Family-plan looping schemes.","tag":"EVIDENCE"},
+    {"id":"legit-promo-only","rule":"Legitimate promotion only: quality-targeted paid ads (Meta/Spotify Ads/Marquee), genuine sharing, pitching real curators and Spotify editorial (≥7 days pre-release via Spotify for Artists).","tag":"EVIDENCE"},
+    {"id":"no-likeness","rule":"Don't use other artists' photos/likeness on cover art without permission.","tag":"PLAUSIBLE"}
+  ],
+  "myths": [
+    {"claim":"A single artist-curated playlist 'trains the algorithm.'","verdict":"MYTH (overstated)","reality":"Collaborative filtering is trained on millions of independent user playlists; your one posted list is a low-authority data point. It helps INDIRECTLY by generating real co-listening and organizing metadata."},
+    {"claim":"Hit a stream threshold (e.g., 20K) and Discover Weekly unlocks.","verdict":"MYTH","reality":"No evidence of such thresholds; placement is earned by engagement signals across many real sessions."},
+    {"claim":"Just release constantly to stay 'in the algorithm.'","verdict":"MYTH","reality":"Rushed, underperforming releases train the algorithm to DEPRIORITIZE you. Consistency matters, but quality/engagement gates it."},
+    {"claim":"Pair with the biggest artists in your genre to borrow their audience.","verdict":"MYTH","reality":"'Fans Also Like' rewards shared-fan PERCENTAGE, so superstars won't rank you; mismatched crowds skip you and suppress your reach in that cluster."},
+    {"claim":"Buy streams/followers/placements to kickstart it.","verdict":"MYTH / dangerous","reality":"Bannable and self-defeating — no royalties, no algorithmic benefit, corrupts your targeting, and can get your catalog removed."}
+  ],
+  "pipeline": [
+    {"step":1,"name":"Tier-filter the similar-artist list","do":"From the app's similar-artist list, keep artists within ~1 order of magnitude of the target's monthly listeners. Bucket into 'peers' (same tier, the ~70% bulk) and a few 'anchors' (bigger, credible, the ~30%). Drop anyone wildly out of scale."},
+    {"step":2,"name":"Corroborate overlap","do":"Where data is reachable (Chartmetric/Soundcharts or in-app 'Fans Also Like'/'Discovered On'), keep artists with 2+ overlap signals; deprioritize genre-only matches."},
+    {"step":3,"name":"Pull recent/active tracks","do":"For each kept artist, gather recent or still-gaining tracks, biasing to warm releases over dead catalog."},
+    {"step":4,"name":"Score tracks to the vibe","do":"Match candidate tracks to the artist's sound/style band by energy/tempo/mood/key (treat third-party BPM/energy as approximate). Keep those inside the band."},
+    {"step":5,"name":"Sequence for flow","do":"Order by gradual BPM drift (~5–10 steps), Camelot-adjacent keys, and a deliberate energy arc; group into mini-sets; anchor in slot 1."},
+    {"step":6,"name":"Insert the artist's own tracks","do":"Place the artist's songs at ~1-in-4-to-5 (10–25%), spaced out, each sandwiched between two well-matched peer tracks; strongest own song in slot 2."},
+    {"step":7,"name":"Size & finalize the list","do":"Target ~25–40 tracks / ~1.5–3 hrs, ~70% peers + ~30% anchors, mixing known and lesser-known."},
+    {"step":8,"name":"Package it","do":"Write a keyword-forward title and keyword-rich description (name peers, genre, mood, activity; ask-to-follow; promise updates); spec on-brand cover; set a refresh cadence (swap 2–3 / re-order every 1–2 weeks)."},
+    {"step":9,"name":"Recommend legit promotion","do":"Suggest driving fans of the featured peers via quality-targeted ads and genuine sharing; pitch aligned real curators/editorial. Never anything on the guardrails list."}
+  ],
+  "expectations": {
+    "can": ["Put your songs credibly next to relevant peers — useful collaborative-filtering context that nudges your 'Fans Also Like'/Radio neighborhood toward the right artists.","Generate a modest, steady trickle of genre-targeted streams (especially slots 2–5).","Grow an owned following you can re-activate; benefit a circle of artist friends at once."],
+    "cannot": ["Trigger Discover Weekly/Release Radar by itself — that's earned by broad engagement across many real listeners.","Match the engagement of direct-to-artist streams (playlist listeners save/repeat less).","Get organic discovery with no promotion or SEO — new artist playlists usually need legit ads first.","Overcome a weak first 30 seconds, a mismatched audience, or a thin release cadence."]
+  },
+  "sources": [
+    "Music Tomorrow — How Spotify's Recommendation System Works (2025): https://music-tomorrow.com/blog/how-spotify-recommendation-system-works-complete-guide",
+    "Music Tomorrow — How Artists Can Influence the Algorithm: https://www.music-tomorrow.com/blog/towards-recommender-system-optimization-how-can-artists-influence-recommendation-algorithms",
+    "Spotify for Artists — Fans Also Like: https://support.spotify.com/us/artists/article/fans-also-like/",
+    "Spotify for Artists — Artificial Streaming policy: https://artists.spotify.com/artificial-streaming",
+    "Spotify for Developers — Web API changes (Nov 2024): https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api",
+    "Spotify for Developers — Web API changelog (Feb 2026): https://developer.spotify.com/documentation/web-api/references/changes/february-2026",
+    "Two Story Melody — Building a Spotify Playlist Network (80/20, ordering, length): https://twostorymelody.com/spotify-playlist-network/",
+    "Two Story Melody — How 'Fans Also Like' Works: https://twostorymelody.com/spotify-fans-also-like-explained/",
+    "Ones To Watch — Playlist curating rules for indies (70/30, tiers): https://resources.onestowatch.com/spotify-playlist-curating-rules-indies/",
+    "Chartmetric — Artist Similarity / Neighboring Artists: https://hmc.chartmetric.com/chartmetric-artist-similarity/",
+    "artist.tools — Guide to Playlists on Spotify (signals, mismatch skips): https://www.artist.tools/post/a-guide-to-playlists-on-spotify-and-how-they-grow-your-music",
+    "Chartlex — algorithm benchmarks (single-vendor, directional): https://www.chartlex.com/blog/streaming/how-spotify-algorithm-works-2026-complete-guide"
+  ]
+}
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: playlist-builder
+description: >-
+  Build an artist-curated Spotify playlist (the artist's songs mixed with similar artists, posted on
+  their profile) that grows streams honestly and shapes their recommendation "neighborhood." Use when
+  an artist wants to make a playlist to grow on Spotify, asks which artists or songs to put on it, how
+  to order it, how big it should be, or how to promote it. Trigger on: "build me a Spotify playlist,"
+  "which artists should I add," "make an artist playlist to get plays," "help me grow on Spotify,"
+  "playlist to train the algorithm," "how do I order my playlist." Turns the app's existing artist
+  context (sound/style + similar artists) into a concrete, sequenced tracklist plus a promotable
+  package. Built on researched, evidence-tagged strategy with hard TOS guardrails. Do NOT use for
+  buying streams/followers/placements or any artificial-streaming scheme.
+---
+
+# Playlist Builder — grow on Spotify, honestly
+
+An artist-curated playlist is a **legit but modest** growth lever. Be straight with the artist about
+what it does: its real value is manufacturing **qualified co-listening** (their track credibly
+sequenced next to genuine audience-neighbors) and earning **engagement** (saves, low skips,
+completion, follows), which feeds Spotify's similarity models and shapes their "Fans Also Like"
+neighborhood. It is **not** a switch that triggers Discover Weekly, and one playlist doesn't by itself
+"train the algorithm." Sell the real mechanism, never the myth.
+
+## The playbook (\`playbook/playbook.json\`)
+
+Everything is there, evidence-tagged \`[EVIDENCE]\` / \`[PLAUSIBLE]\` / \`[MYTH]\`: principles, peer sizing,
+composition & ordering, sequencing, overlap signals, track selection, metadata/SEO, cadence,
+engagement signals, guardrails, myths, and the step-by-step pipeline. **When you state a claim to the
+artist, carry its tag** — say what's confirmed vs. practitioner consensus vs. myth. Don't launder
+folklore as fact.
+
+## What the app already gives you
+
+The app supplies the target artist's **sound/style descriptor** and a **list of similar artists**.
+That's your raw material — you don't start cold. Your job is to turn it into peer selection, track
+choice, sequencing, and a package.
+
+## The build pipeline
+
+Run the playbook's \`pipeline\` in order:
+
+1. **Tier-filter the similar-artist list.** Keep artists within ~1 order of magnitude of the target's
+   monthly listeners. Bucket into **~70% peers** (same tier, many <100K) and **~30% anchors**
+   (recognizable, credible). Drop anyone wildly out of scale — pairing a 5K-listener artist with
+   superstars is near-useless (Fans Also Like rewards shared-fan *percentage*).
+2. **Corroborate overlap.** Where data is reachable (in-app "Fans Also Like"/"Discovered On", or
+   Chartmetric/Soundcharts), keep artists with **2+ overlap signals**; deprioritize genre-only matches.
+3. **Pull recent/active tracks** for each kept artist — bias to warm releases still gaining saves over
+   dead catalog.
+4. **Score tracks to the vibe.** Match candidates to the artist's sound band by energy/tempo/mood/key.
+   (Third-party BPM/energy values are approximate post-2024 API changes — treat as directional.)
+5. **Sequence for flow.** Gradual BPM drift (~5–10), Camelot-adjacent keys, a deliberate energy arc,
+   mini-sets. Anchor in **slot 1**.
+6. **Insert the artist's own tracks** at ~1-in-4-to-5 (**10–25%**), spaced out, each **sandwiched
+   between two well-matched peer tracks**; strongest own song in **slot 2** (not slot 1).
+7. **Size it:** ~**25–40 tracks** / ~1.5–3 hrs, ~70% peers + ~30% anchors, known + lesser-known.
+8. **Package it:** keyword-forward **title** (mood + genre + activity + year); keyword-rich
+   **description** (name peers, genre, mood; ask-to-follow; promise updates); on-brand **cover** spec;
+   a **refresh cadence** (swap 2–3 tracks / re-order every 1–2 weeks).
+9. **Recommend legit promotion:** drive fans of the featured peers via quality-targeted ads and real
+   sharing; pitch aligned real curators / Spotify editorial (≥7 days pre-release). Never the guardrails.
+
+## What to hand back
+
+A finished, usable deliverable, not a lecture:
+
+- **The tracklist** — numbered, in final order, marking which are the artist's own (and showing the
+  slot-1 anchor / slot-2 you / sandwich structure). A one-line why for the peer choices (the overlap
+  signal that justifies each).
+- **The package** — title options, a ready description, a cover concept, and the refresh cadence.
+- **The promotion note** — 2–3 legitimate ways to drive the *right* audience.
+- **Honest expectations** — a short, plain line on what this will and won't do (compounding trickle +
+  better neighborhood accuracy; not an overnight Discover Weekly breakout).
+
+Keep tags visible where it matters, but lead with the deliverable — the artist wants the playlist, not
+the research.
+
+## Guardrails (hard lines — non-negotiable)
+
+Never recommend or assist with: bots, stream/click farms, purchased streams or followers, repeat-
+looping the artist's own tracks, pay-for-placement or "guaranteed streams/placement" services, paid
+curator slots, sub-for-sub, or multi-account/Family-plan looping. These are **against Spotify TOS and
+counterproductive** — Spotify can withhold royalties, adjust public counts, remove tracks from
+playlists, and charge labels/distributors per track when flagrant artificial streaming is detected.
+Distributors may add their own fees or account/catalog consequences. If asked for any of this,
+decline plainly and redirect to the legitimate levers above. The whole tool only works by generating
+**real listeners genuinely engaging** — protect that.
+
+## Fits the toolkit
+
+This is the distribution end of the suite: **The Excavator** finds the song → **References** /
+**Impact Phrases** / **Prosody** / **hook-writer** make it → **Playlist Builder** helps it find its
+right audience on Spotify. When an artist has a release ready, this is the growth step.
+`,
+      },
+    ],
+  },
+  {
     slug: "pricing-strategy",
     files: [
       {
@@ -38988,6 +39225,70 @@ main().catch((error) => {
 `,
       },
       {
+        path: "scripts/build-plan.test.ts",
+        content: `import { describe, expect, test } from 'bun:test'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
+
+const script = join(import.meta.dir, 'build-plan.ts')
+const ids = Array.from({ length: 20 }, (_, index) => String(index + 1).padStart(22, '0'))
+
+function run(args: string[]) {
+  return spawnSync(process.execPath, [script, ...args], { encoding: 'utf8' })
+}
+
+describe('spotify playlist deterministic planner', () => {
+  test('keeps an anchor in slot 1, strongest artist song in slot 2, and never repeats artist tracks', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'playlist-plan-'))
+    const comparablePath = join(dir, 'comparable.json')
+    const oursPath = join(dir, 'ours.json')
+    const out = join(dir, 'plan.json')
+    writeFileSync(comparablePath, JSON.stringify({ comparableTracks: [
+      { spotifyArtistId: 'a', artistName: 'Peer A', tier: 'peer', tracks: [{ id: ids[0], name: 'A', popularity: 20, bpm: 100, energy: 0.5 }] },
+      { spotifyArtistId: 'b', artistName: 'Anchor', tier: 'anchor', tracks: [{ id: ids[1], name: 'B', popularity: 80, bpm: 104, energy: 0.55 }] },
+      { spotifyArtistId: 'c', artistName: 'Peer C', tier: 'peer', tracks: [{ id: ids[2], name: 'C', popularity: 30, bpm: 108, energy: 0.6 }] },
+      { spotifyArtistId: 'd', artistName: 'Peer D', tier: 'peer', tracks: ids.slice(3, 13).map((id, index) => ({ id, name: \`D\${index}\`, bpm: 110 + index, energy: 0.6 })) },
+    ] }))
+    writeFileSync(oursPath, JSON.stringify({ ourTracks: [
+      { id: ids[13], name: 'Secondary', preferredFeatureWeight: 1 },
+      { id: ids[14], name: 'Strongest', preferredFeatureWeight: 10 },
+      { id: ids[15], name: 'Third', preferredFeatureWeight: 2 },
+    ] }))
+
+    const result = run([
+      '--comparable-tracks', comparablePath, '--our-tracks', oursPath,
+      '--theme', 'Night Drive', '--target-length', '12', '--our-ratio', '0.25',
+      '--our-artist-name', 'Our Artist', '--out', out,
+    ])
+    expect(result.status).toBe(0)
+    const plan = JSON.parse(readFileSync(out, 'utf8'))
+    expect(plan.slots).toHaveLength(12)
+    expect(plan.slots[0]).toMatchObject({ kind: 'comparable', artistName: 'Anchor' })
+    expect(plan.slots[1]).toMatchObject({ kind: 'ours', trackName: 'Strongest' })
+    const ownIds = plan.slots.filter((slot: { kind: string }) => slot.kind === 'ours').map((slot: { trackId: string }) => slot.trackId)
+    expect(new Set(ownIds).size).toBe(ownIds.length)
+  })
+
+  test('rejects malformed Spotify track ids', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'playlist-plan-invalid-'))
+    const comparablePath = join(dir, 'comparable.json')
+    const oursPath = join(dir, 'ours.json')
+    writeFileSync(comparablePath, JSON.stringify({ comparableTracks: [
+      { spotifyArtistId: 'a', artistName: 'A', tracks: [{ id: ids[0], name: 'A' }] },
+      { spotifyArtistId: 'b', artistName: 'B', tracks: [{ id: ids[1], name: 'B' }] },
+      { spotifyArtistId: 'c', artistName: 'C', tracks: [{ id: ids[2], name: 'C' }] },
+    ] }))
+    writeFileSync(oursPath, JSON.stringify({ ourTracks: [{ id: 'not-a-track-id', name: 'Bad' }] }))
+    const result = run(['--comparable-tracks', comparablePath, '--our-tracks', oursPath, '--theme', 'Mood'])
+    expect(result.status).not.toBe(0)
+    expect(result.stderr).toContain('invalid Spotify track ID')
+  })
+})
+`,
+      },
+      {
         path: "scripts/build-plan.ts",
         content: `#!/usr/bin/env bun
 /**
@@ -39007,12 +39308,17 @@ type ComparableTrack = {
   name: string;
   durationMs?: number;
   popularity?: number;
+  bpm?: number;
+  energy?: number;
+  key?: string;
 };
 
 type ComparableArtist = {
   spotifyArtistId: string;
   artistName: string;
   vibe?: string;
+  tier?: "peer" | "anchor";
+  monthlyListeners?: number;
   tracks: ComparableTrack[];
 };
 
@@ -39175,19 +39481,34 @@ function shuffleInPlace<T>(arr: T[], rng: () => number): T[] {
 }
 
 function pickOurFeaturePositions(targetLength: number, ourCount: number): number[] {
-  // Distribute our-tracks evenly through the playlist with slight jitter
-  // toward the front to ensure listeners discover them before bouncing.
   if (ourCount === 0) return [];
-  const segment = targetLength / ourCount;
-  const positions: number[] = [];
-  for (let i = 0; i < ourCount; i += 1) {
-    const center = Math.round(segment * i + segment * 0.5);
-    // Slight bias forward (subtract 1 for first half, leave latter half)
-    const adj = i < ourCount / 2 ? Math.max(2, center - 1) : center;
-    positions.push(Math.min(targetLength - 1, adj));
+  if (ourCount === 1) return [1];
+  const positions = [1]; // Slot 1 is an anchor; strongest artist track is slot 2.
+  for (let i = 1; i < ourCount; i += 1) {
+    positions.push(Math.round(1 + (i * (targetLength - 3)) / (ourCount - 1)));
   }
-  // Ensure unique and sorted
   return [...new Set(positions)].sort((a, b) => a - b);
+}
+
+function transitionDistance(previous: ComparableTrack, candidate: ComparableTrack): number {
+  let score = 0;
+  if (Number.isFinite(previous.bpm) && Number.isFinite(candidate.bpm)) {
+    score += Math.abs(Number(previous.bpm) - Number(candidate.bpm)) / 10;
+  }
+  if (Number.isFinite(previous.energy) && Number.isFinite(candidate.energy)) {
+    score += Math.abs(Number(previous.energy) - Number(candidate.energy)) * 4;
+  }
+  if (previous.key && candidate.key && previous.key !== candidate.key) score += 0.75;
+  return score;
+}
+
+function assertSpotifyTrackIds(ids: string[], label: string): void {
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (!/^[A-Za-z0-9]{22}$/.test(id)) throw new Error(\`\${label} contains an invalid Spotify track ID: \${id || "(missing)"}\`);
+    if (seen.has(id)) throw new Error(\`\${label} contains a duplicate Spotify track ID: \${id}\`);
+    seen.add(id);
+  }
 }
 
 function buildPlan(
@@ -39204,67 +39525,60 @@ function buildPlan(
     throw new Error("No our-tracks provided. Cannot build playlist plan with zero of the artist's tracks.");
   }
 
-  const ourCount = Math.max(1, Math.round(options.targetLength * options.ourRatio));
+  const requestedOurCount = Math.max(1, Math.round(options.targetLength * options.ourRatio));
+  const ourCount = Math.min(requestedOurCount, our.length);
   const comparableCount = options.targetLength - ourCount;
 
   // Sort our tracks by preferredFeatureWeight desc (default 1.0)
   const ourSorted = [...our].sort(
     (a, b) => (b.preferredFeatureWeight ?? 1.0) - (a.preferredFeatureWeight ?? 1.0),
   );
-  const ourPicks: OurTrack[] = [];
-  for (let i = 0; i < ourCount; i += 1) {
-    const pick = ourSorted[i % ourSorted.length];
-    if (!pick) throw new Error("No our-tracks provided. Cannot build playlist plan with zero of the artist's tracks.");
-    ourPicks.push(pick);
-  }
-  if (ourCount > our.length) {
-    warnings.push(\`Requested \${ourCount} our-track slots but only \${our.length} unique tracks supplied — some will repeat.\`);
+  const ourPicks = ourSorted.slice(0, ourCount);
+  if (requestedOurCount > our.length) {
+    warnings.push(\`Requested \${requestedOurCount} artist-track slots but only \${our.length} unique tracks were supplied; reduced the feature count instead of repeating songs.\`);
   }
 
   // Build a flat pool of comparable tracks tagged by artist, shuffled deterministically.
   const rng = makeRng(options.seed);
-  type ComparableEntry = { track: ComparableTrack; artistName: string };
+  type ComparableEntry = { track: ComparableTrack; artistName: string; tier?: "peer" | "anchor" };
   const comparablePool: ComparableEntry[] = [];
   for (const artist of comparable) {
     for (const track of artist.tracks) {
-      comparablePool.push({ track, artistName: artist.artistName });
+      if (!our.some((ourTrack) => ourTrack.id === track.id)) {
+        comparablePool.push({ track, artistName: artist.artistName, tier: artist.tier });
+      }
     }
   }
   if (comparablePool.length === 0) {
     throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
   }
   if (comparablePool.length < comparableCount) {
-    warnings.push(\`Only \${comparablePool.length} comparable tracks available but \${comparableCount} slots needed — some will repeat.\`);
+    throw new Error(\`Need \${comparableCount} unique comparable tracks for this plan, but only \${comparablePool.length} were supplied. Add tracks or reduce target length.\`);
   }
-  shuffleInPlace(comparablePool, rng);
+  const anchor = [...comparablePool].sort((a, b) => {
+    const tierDelta = Number(b.tier === "anchor") - Number(a.tier === "anchor");
+    return tierDelta || (b.track.popularity ?? 0) - (a.track.popularity ?? 0);
+  })[0];
+  if (!anchor) throw new Error("No comparable anchor track is available.");
+  const remainingPool = comparablePool.filter((entry) => entry.track.id !== anchor.track.id);
+  shuffleInPlace(remainingPool, rng);
 
   // Take comparableCount tracks but try not to repeat the same artist back-to-back.
-  const comparableSequence: ComparableEntry[] = [];
-  const usedTrackIds = new Set<string>();
-  let cursor = 0;
-  let lastArtist: string | null = null;
-  let attempts = 0;
+  const comparableSequence: ComparableEntry[] = [anchor];
+  const usedTrackIds = new Set<string>([anchor.track.id]);
+  let lastArtist: string | null = anchor.artistName;
   while (comparableSequence.length < comparableCount) {
-    if (attempts > comparablePool.length * 3) {
-      // Fallback: relax the no-repeat-artist constraint
-      const next = comparablePool[cursor % comparablePool.length];
-      if (!next) throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
-      comparableSequence.push(next);
-      cursor += 1;
-      lastArtist = next.artistName;
-      attempts = 0;
-      continue;
-    }
-    const candidate = comparablePool[cursor % comparablePool.length];
-    if (!candidate) throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
-    cursor += 1;
-    attempts += 1;
-    if (candidate.artistName === lastArtist) continue;
-    if (usedTrackIds.has(candidate.track.id) && comparablePool.length > comparableCount) continue;
+    const uniqueCandidates = remainingPool.filter((entry) => !usedTrackIds.has(entry.track.id));
+    const differentArtist = uniqueCandidates.filter((entry) => entry.artistName !== lastArtist);
+    const candidates = differentArtist.length > 0 ? differentArtist : uniqueCandidates;
+    const previous = comparableSequence.at(-1)?.track;
+    const candidate = [...candidates].sort((a, b) => previous
+      ? transitionDistance(previous, a.track) - transitionDistance(previous, b.track)
+      : 0)[0];
+    if (!candidate) throw new Error("Not enough comparable tracks to complete the playlist.");
     comparableSequence.push(candidate);
     usedTrackIds.add(candidate.track.id);
     lastArtist = candidate.artistName;
-    attempts = 0;
   }
 
   // Pick our-track feature positions
@@ -39347,7 +39661,7 @@ function buildMarkdown(plan: Plan): string {
   lines.push("Review the order above. If approved, run:");
   lines.push("");
   lines.push("\`\`\`sh");
-  lines.push(\`bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/apply-plan.ts --plan <plan.json> --apply --confirm\`);
+  lines.push(\`"\\\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/apply-plan.ts" --plan <plan.json> --apply --confirm\`);
   lines.push("\`\`\`");
   lines.push("");
 
@@ -39363,6 +39677,9 @@ async function main() {
     (a) => a && Array.isArray(a.tracks) && a.tracks.length > 0,
   );
   const our = (ourFile.ourTracks ?? []).filter((t) => t && typeof t.id === "string");
+
+  assertSpotifyTrackIds(our.map((track) => track.id), "ourTracks");
+  assertSpotifyTrackIds(comparable.flatMap((artist) => artist.tracks.map((track) => track.id)), "comparableTracks");
 
   const plan = buildPlan(comparable, our, options);
 
@@ -39395,12 +39712,14 @@ main().catch((error) => {
         path: "SKILL.md",
         content: `---
 name: spotify-playlist-curator
-description: Build Spotify adjacency playlists where the artist's tracks sit naturally between bigger comparable artists. Generates a sandwich-pattern plan first, then applies only after explicit approval and only when Spotify MCP/API/OAuth tooling is available.
+description: Deterministically build and validate Spotify adjacency playlist plans before guarded browser creation through Printing Press Social.
 ---
 
 # Spotify Playlist Curator
 
 Use this skill when the artist wants a Spotify playlist that creates tasteful adjacency: bigger comparable artists set the lane, and the artist's songs are placed naturally inside that emotional pocket.
+
+Use the \`playlist-builder\` skill first for peer/anchor strategy, overlap evidence, track selection, packaging, honest expectations, and anti-artificial-streaming doctrine. This skill turns those choices into a validated, reproducible order.
 
 ## Core Rule
 
@@ -39441,7 +39760,7 @@ Expected JSON files:
 ## Build A Plan
 
 \`\`\`sh
-bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/build-plan.ts \\
+"\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/build-plan.ts" \\
   --comparable-tracks data/spotify/comparable-tracks.json \\
   --our-tracks data/spotify/our-tracks.json \\
   --theme "Drive Home Slow" \\
@@ -39456,6 +39775,9 @@ The planner:
 - Uses only provided Spotify track IDs.
 - Spreads the artist's tracks through the playlist.
 - Avoids same comparable artist back-to-back where possible.
+- Keeps an anchor in slot 1 and the strongest artist track in slot 2.
+- Uses BPM, energy, and key metadata for smoother transitions when supplied.
+- Rejects malformed/duplicate Spotify track IDs and never repeats artist tracks.
 - Writes JSON plus a readable Markdown review file.
 
 ## Apply Gate
@@ -39463,13 +39785,19 @@ The planner:
 After user approval:
 
 \`\`\`sh
-bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/apply-plan.ts \\
+"\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/apply-plan.ts" \\
   --plan data/spotify/playlist-plans/drive-home-slow.json \\
   --apply \\
   --confirm
 \`\`\`
 
-This writes an apply checklist. If a Spotify MCP/API/OAuth tool is available in the session, use that approved checklist to create the playlist. If no Spotify write tool is available, stop and return the exact payload plus the missing setup requirement.
+This writes an apply checklist. Create the playlist through the bundled Printing Press Social Spotify browser action only after approval:
+
+\`\`\`sh
+node src/social.mjs playlist spotify create --profile <profile> --name "<name>" --description "<description>" --tracks "<spotify-uri-list>" --visibility public|private --dry-run --json
+\`\`\`
+
+Save the dry-run JSON. Run \`social execute\` with its exact action ID and approval digest. Browser completion is not final until \`playlist spotify receipt\` records the observed Spotify playlist URL with fresh matching-account evidence.
 
 ## Naming Discipline
 

@@ -7,7 +7,8 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_BROWSER_ENGINE, checkBrowserEngine } from './browser-engines.mjs';
 import { listAssets, listContent, normalizeList } from './content-assets.mjs';
-import { buildProfileBrowserSession } from './action-safety.mjs';
+import { buildProfileBrowserSession, duplicateActionResult, findCompletedAction } from './action-safety.mjs';
+import { computeApprovalDigest } from './approval-contract.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const REGISTRY_PATH = path.join(ROOT, 'registry.json');
@@ -408,11 +409,34 @@ async function runExecute(args) {
   if (expectedActionId !== action.actionId) {
     throw new CliError(`Action id mismatch: expected ${expectedActionId}, got ${action.actionId}`, 'ACTION_ID_MISMATCH');
   }
+  const approvalDigest = computeApprovalDigest(action, browserPlan);
+  if (approved.approvalDigest) {
+    if (approved.approvalDigest !== approvalDigest) {
+      throw new CliError('Dry-run approval digest does not match its action and browser plan', 'ACTION_DIGEST_MISMATCH');
+    }
+    const expectedDigest = flags['expected-action-digest'];
+    if (!expectedDigest || expectedDigest === true) {
+      throw new CliError('Spotify execute needs --expected-action-digest <sha256:...>', 'EXPECTED_ACTION_DIGEST_REQUIRED');
+    }
+    if (expectedDigest !== approvalDigest) {
+      throw new CliError('Approved action digest does not match the current action contract', 'ACTION_DIGEST_MISMATCH');
+    }
+  } else if (action.platform === 'spotify') {
+    throw new CliError('Spotify dry-run is missing its approval digest', 'ACTION_DIGEST_REQUIRED');
+  }
   if (!action.options?.dryRun) {
     throw new CliError('execute only accepts action files produced by a dry-run result', 'ACTION_NOT_DRY_RUN');
   }
   assertAccountVerificationReady(browserPlan);
   assertBrowserPlanMatchesCurrentProfile(action, browserPlan);
+
+  if (action.platform === 'spotify' && action.verb === 'playlist-create') {
+    const completed = findCompletedAction({ action, socialHome: socialHome(action.platform) });
+    if (completed) {
+      process.stdout.write(`${JSON.stringify(duplicateActionResult(action, completed, 'execute.spotify'), null, 2)}\n`);
+      return;
+    }
+  }
 
   const engine = flags.engine || process.env.SOCIAL_BROWSER_ENGINE || DEFAULT_BROWSER_ENGINE;
   if (engine === 'runner-cdp') {
@@ -425,6 +449,7 @@ async function runExecute(args) {
       profile: action.profile,
       action,
       browserPlan,
+      approvalDigest: approved.approvalDigest || null,
       message: 'runner-cdp execution is delegated to RunnerOS native browser tools after account verification and approval.',
       code: 'RUNNER_CDP_DELEGATED',
       next: [
@@ -458,7 +483,7 @@ function readApprovedActionFile(filePath) {
   }
   assertDryRunResultShape(data);
   assertActionShape(data.action);
-  return { action: data.action, browserPlan: data.browserPlan };
+  return { action: data.action, browserPlan: data.browserPlan, approvalDigest: data.approvalDigest || null };
 }
 
 function assertActionShape(action) {
@@ -470,11 +495,16 @@ function assertActionShape(action) {
       throw new CliError(`Action file is missing ${key}`, 'INVALID_ACTION_FILE');
     }
   }
-  if (!['post', 'comment', 'dm'].includes(action.verb)) {
+  if (!['post', 'comment', 'dm', 'playlist-create'].includes(action.verb)) {
     throw new CliError(`Unsupported action verb: ${action.verb}`, 'UNSUPPORTED_VERB');
   }
-  if (!['instagram', 'tiktok', 'x', 'youtube'].includes(action.platform)) {
+  if (!['instagram', 'tiktok', 'x', 'youtube', 'spotify'].includes(action.platform)) {
     throw new CliError(`Unsupported platform: ${action.platform}`, 'UNSUPPORTED_PLATFORM');
+  }
+  const isSpotifyPlaylistCreate = action.platform === 'spotify' && action.verb === 'playlist-create';
+  const isStandardSocialAction = action.platform !== 'spotify' && ['post', 'comment', 'dm'].includes(action.verb);
+  if (!isSpotifyPlaylistCreate && !isStandardSocialAction) {
+    throw new CliError(`Unsupported action combination: ${action.verb}.${action.platform}`, 'UNSUPPORTED_ACTION');
   }
   if (action.mode !== 'browser') {
     throw new CliError(`Unsupported action mode: ${action.mode}`, 'UNSUPPORTED_MODE');
@@ -558,7 +588,9 @@ function socialHome(platform) {
 
 function buildLiveReplayArgs(action, flags) {
   const payload = action.payload || {};
-  const out = [action.verb, action.platform, '--profile', action.profile, '--action-id', action.actionId, '--confirm', 'yes'];
+  const out = action.platform === 'spotify' && action.verb === 'playlist-create'
+    ? ['playlist', 'spotify', 'create', '--profile', action.profile, '--action-id', action.actionId, '--confirm', 'yes', '--approved-handoff']
+    : [action.verb, action.platform, '--profile', action.profile, '--action-id', action.actionId, '--confirm', 'yes'];
 
   if (action.options?.idempotencyKey) out.push('--idempotency-key', action.options.idempotencyKey);
   if (flags.json) out.push('--json');
@@ -570,7 +602,15 @@ function buildLiveReplayArgs(action, flags) {
   if (action.verb === 'post') addPostPayloadArgs(out, action.platform, payload);
   if (action.verb === 'comment') addCommentPayloadArgs(out, payload);
   if (action.verb === 'dm') addDmPayloadArgs(out, payload);
+  if (action.verb === 'playlist-create') addSpotifyPlaylistPayloadArgs(out, payload);
   return out;
+}
+
+function addSpotifyPlaylistPayloadArgs(out, payload) {
+  if (payload.name) out.push('--name', payload.name);
+  if (payload.description) out.push('--description', payload.description);
+  if (payload.visibility) out.push('--visibility', payload.visibility);
+  if (Array.isArray(payload.tracks) && payload.tracks.length) out.push('--tracks', payload.tracks.join(','));
 }
 
 function addPostPayloadArgs(out, platform, payload) {
@@ -629,10 +669,11 @@ function parseFlags(args) {
 }
 
 function resolvePlatform(argv) {
+  const platforms = ['instagram', 'tiktok', 'x', 'youtube', 'spotify'];
   const [group, command, maybePlatform] = argv;
-  if (group === 'profile') return argv.find((part) => ['instagram', 'tiktok', 'x', 'youtube'].includes(part));
-  if (['post', 'comment', 'dm'].includes(group)) return command;
-  if (maybePlatform && ['instagram', 'tiktok', 'x', 'youtube'].includes(maybePlatform)) return maybePlatform;
+  if (group === 'profile') return argv.find((part) => platforms.includes(part));
+  if (['post', 'comment', 'dm', 'snapshot', 'playlist'].includes(group)) return command;
+  if (maybePlatform && platforms.includes(maybePlatform)) return maybePlatform;
   return null;
 }
 
@@ -675,6 +716,7 @@ Commands:
   social profile add tiktok --profile creator01 --json
   social profile add x --profile artist01 --json
   social profile add youtube --profile channel01 --json
+  social profile add spotify --profile artist01 --json
   social profile update x --profile artist01 --handle @artist01 --account-url https://x.com/artist01 --json
   social profile status x --profile artist01 --live --json
   social profile delete x --profile artist01 --json
@@ -682,5 +724,6 @@ Commands:
   social post tiktok --profile creator01 --text "caption" --media video.mp4 --dry-run --json
   social post x --profile artist01 --text "post text" --dry-run --json
   social post youtube --profile channel01 --post-type short --text "title" --media short.mp4 --dry-run --json
+  social playlist spotify create --profile artist01 --name "Late Night Drive" --tracks spotify:track:... --dry-run --json
 `);
 }

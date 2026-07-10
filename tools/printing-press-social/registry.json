@@ -26,6 +26,12 @@
       "entrypoint": "src/cli.mjs",
       "skill": "skills/SKILL.md",
       "harness": "HARNESS.md"
+    },
+    "spotify": {
+      "path": "spotify-cli",
+      "entrypoint": "src/cli.mjs",
+      "skill": "skills/SKILL.md",
+      "harness": "HARNESS.md"
     }
   },
   "commands": [
@@ -46,7 +52,10 @@
     { "verb": "dm", "platform": "x" },
     { "verb": "profile", "platform": "youtube" },
     { "verb": "post", "platform": "youtube" },
-    { "verb": "comment", "platform": "youtube" }
+    { "verb": "comment", "platform": "youtube" },
+    { "verb": "profile", "platform": "spotify" },
+    { "verb": "snapshot", "platform": "spotify" },
+    { "verb": "playlist", "platform": "spotify" }
   ],
   "schemas": {
     "action": "schemas/action.schema.json",

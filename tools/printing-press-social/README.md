@@ -8,6 +8,7 @@ Current packages:
 - `tiktok-cli/` - direct TikTok browser CLI for profile login, video posting, comments, and DMs.
 - `x-cli/` - direct X browser CLI for profile login, posts, replies, and DMs.
 - `youtube-cli/` - direct YouTube browser CLI for profile login, full video uploads, Shorts uploads, and comments.
+- `spotify-cli/` - guarded Spotify browser plans for private analytics capture and approved playlist creation.
 
 Use each platform folder as its own installable CLI package.
 
@@ -43,6 +44,13 @@ social post x --profile artist01 --text "post text" --dry-run --json > dry-run-r
 social execute --action-file dry-run-result.json --expected-action-id act_... --confirm yes --json
 ```
 
+Spotify playlist actions additionally bind approval to the full immutable action contract:
+
+```bash
+social playlist spotify create --profile artist01 --name "Late Night Drive" --tracks "spotify:track:..." --dry-run --json
+social execute --action-file dry-run-result.json --expected-action-id act_... --expected-action-digest sha256:... --confirm yes --json
+```
+
 Safety defaults:
 
 - New profiles default to `require-confirm`.
@@ -66,6 +74,6 @@ Asset and content roots:
 Default browser engine:
 
 - Use one Runner agent, `@social-publisher`, as the front door for all channel posting.
-- Keep Instagram/TikTok/X/YouTube differences as platform playbooks inside this CLI harness, not as separate posting agents by default.
+- Keep Instagram/TikTok/X/YouTube/Spotify differences as platform playbooks inside this CLI harness, not as separate posting agents by default.
 - `runner-cdp` inside RunnerOS. The CLI emits structured plans; Runner executes with native browser/CDP tools. Direct live CLI execution requires a non-delegated fallback engine.
 - `playwright` is optional fallback for standalone local execution.

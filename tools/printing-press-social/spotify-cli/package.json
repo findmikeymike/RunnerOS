@@ -1,0 +1,11 @@
+{
+  "name": "@runneros/printing-press-spotify-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Spotify browser harness for RunnerOS: Spotify for Artists snapshots and Spotify web-player playlist creation.",
+  "scripts": {
+    "test": "node --test",
+    "smoke": "node src/cli.mjs --help && node src/cli.mjs profile list --json && node src/cli.mjs playlist spotify create --profile smoke --name \"Late Night Drive\" --tracks spotify:track:4iV5W9uYEdYUVa79Axb7Rh --visibility private --dry-run --json"
+  }
+}

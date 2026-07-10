@@ -30,11 +30,16 @@
     "youtube-cli/HARNESS.md",
     "youtube-cli/package.json",
     "youtube-cli/skills",
-    "youtube-cli/src"
+    "youtube-cli/src",
+    "spotify-cli/README.md",
+    "spotify-cli/HARNESS.md",
+    "spotify-cli/package.json",
+    "spotify-cli/skills",
+    "spotify-cli/src"
   ],
   "scripts": {
-    "test": "npm test --prefix instagram-cli && npm test --prefix tiktok-cli && npm test --prefix x-cli && npm test --prefix youtube-cli && node --test test/root-dispatcher.test.mjs",
-    "smoke": "npm run smoke --prefix instagram-cli && npm run smoke --prefix tiktok-cli && npm run smoke --prefix x-cli && npm run smoke --prefix youtube-cli && node src/social.mjs registry --json && node src/social.mjs post instagram --profile smoke --text hello --media instagram-cli/test/fixtures/sample.jpg --dry-run --json && node src/social.mjs post tiktok --profile smoke --text hello --media tiktok-cli/test/fixtures/sample.mp4 --dry-run --json && node src/social.mjs post x --profile smoke --text hello --dry-run --json && node src/social.mjs post youtube --profile smoke --post-type short --text hello --media youtube-cli/test/fixtures/sample.mp4 --dry-run --json"
+    "test": "npm test --prefix instagram-cli && npm test --prefix tiktok-cli && npm test --prefix x-cli && npm test --prefix youtube-cli && npm test --prefix spotify-cli && node --test test/*.test.mjs",
+    "smoke": "npm run smoke --prefix instagram-cli && npm run smoke --prefix tiktok-cli && npm run smoke --prefix x-cli && npm run smoke --prefix youtube-cli && npm run smoke --prefix spotify-cli && node src/social.mjs registry --json && node src/social.mjs post instagram --profile smoke --text hello --media instagram-cli/test/fixtures/sample.jpg --dry-run --json && node src/social.mjs post tiktok --profile smoke --text hello --media tiktok-cli/test/fixtures/sample.mp4 --dry-run --json && node src/social.mjs post x --profile smoke --text hello --dry-run --json && node src/social.mjs post youtube --profile smoke --post-type short --text hello --media youtube-cli/test/fixtures/sample.mp4 --dry-run --json && node src/social.mjs playlist spotify create --profile smoke --name \"Late Night Drive\" --tracks spotify:track:4iV5W9uYEdYUVa79Axb7Rh --visibility private --dry-run --json"
   },
   "engines": {
     "node": ">=20"

@@ -1216,7 +1216,7 @@ export interface MessagingPlatformRuntimeInfo {
   updatedAt: number
 }
 
-export type SocialPlatform = 'instagram' | 'tiktok' | 'x' | 'youtube'
+export type SocialPlatform = 'instagram' | 'tiktok' | 'x' | 'youtube' | 'spotify'
 
 export interface SocialAccountProfileRef {
   platform: SocialPlatform

@@ -9,6 +9,7 @@
     "status": { "type": "string", "enum": ["succeeded", "failed", "dry_run", "duplicate", "delegated"] },
     "command": { "type": "string" },
     "actionId": { "type": "string" },
+    "approvalDigest": { "type": ["string", "null"], "pattern": "^sha256:[a-f0-9]{64}$" },
     "platform": { "type": "string" },
     "profile": { "type": "string" },
     "action": { "$ref": "action.schema.json" },

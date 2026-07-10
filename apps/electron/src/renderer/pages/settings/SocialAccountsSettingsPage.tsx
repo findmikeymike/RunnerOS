@@ -31,6 +31,7 @@ const PLATFORMS: Array<{ id: SocialPlatform; label: string }> = [
   { id: 'tiktok', label: 'TikTok' },
   { id: 'x', label: 'X' },
   { id: 'youtube', label: 'YouTube' },
+  { id: 'spotify', label: 'Spotify' },
 ]
 
 type Draft = {

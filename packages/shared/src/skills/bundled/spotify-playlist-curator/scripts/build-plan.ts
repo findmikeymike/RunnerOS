@@ -16,12 +16,17 @@ type ComparableTrack = {
   name: string;
   durationMs?: number;
   popularity?: number;
+  bpm?: number;
+  energy?: number;
+  key?: string;
 };
 
 type ComparableArtist = {
   spotifyArtistId: string;
   artistName: string;
   vibe?: string;
+  tier?: "peer" | "anchor";
+  monthlyListeners?: number;
   tracks: ComparableTrack[];
 };
 
@@ -184,19 +189,34 @@ function shuffleInPlace<T>(arr: T[], rng: () => number): T[] {
 }
 
 function pickOurFeaturePositions(targetLength: number, ourCount: number): number[] {
-  // Distribute our-tracks evenly through the playlist with slight jitter
-  // toward the front to ensure listeners discover them before bouncing.
   if (ourCount === 0) return [];
-  const segment = targetLength / ourCount;
-  const positions: number[] = [];
-  for (let i = 0; i < ourCount; i += 1) {
-    const center = Math.round(segment * i + segment * 0.5);
-    // Slight bias forward (subtract 1 for first half, leave latter half)
-    const adj = i < ourCount / 2 ? Math.max(2, center - 1) : center;
-    positions.push(Math.min(targetLength - 1, adj));
+  if (ourCount === 1) return [1];
+  const positions = [1]; // Slot 1 is an anchor; strongest artist track is slot 2.
+  for (let i = 1; i < ourCount; i += 1) {
+    positions.push(Math.round(1 + (i * (targetLength - 3)) / (ourCount - 1)));
   }
-  // Ensure unique and sorted
   return [...new Set(positions)].sort((a, b) => a - b);
+}
+
+function transitionDistance(previous: ComparableTrack, candidate: ComparableTrack): number {
+  let score = 0;
+  if (Number.isFinite(previous.bpm) && Number.isFinite(candidate.bpm)) {
+    score += Math.abs(Number(previous.bpm) - Number(candidate.bpm)) / 10;
+  }
+  if (Number.isFinite(previous.energy) && Number.isFinite(candidate.energy)) {
+    score += Math.abs(Number(previous.energy) - Number(candidate.energy)) * 4;
+  }
+  if (previous.key && candidate.key && previous.key !== candidate.key) score += 0.75;
+  return score;
+}
+
+function assertSpotifyTrackIds(ids: string[], label: string): void {
+  const seen = new Set<string>();
+  for (const id of ids) {
+    if (!/^[A-Za-z0-9]{22}$/.test(id)) throw new Error(`${label} contains an invalid Spotify track ID: ${id || "(missing)"}`);
+    if (seen.has(id)) throw new Error(`${label} contains a duplicate Spotify track ID: ${id}`);
+    seen.add(id);
+  }
 }
 
 function buildPlan(
@@ -213,67 +233,60 @@ function buildPlan(
     throw new Error("No our-tracks provided. Cannot build playlist plan with zero of the artist's tracks.");
   }
 
-  const ourCount = Math.max(1, Math.round(options.targetLength * options.ourRatio));
+  const requestedOurCount = Math.max(1, Math.round(options.targetLength * options.ourRatio));
+  const ourCount = Math.min(requestedOurCount, our.length);
   const comparableCount = options.targetLength - ourCount;
 
   // Sort our tracks by preferredFeatureWeight desc (default 1.0)
   const ourSorted = [...our].sort(
     (a, b) => (b.preferredFeatureWeight ?? 1.0) - (a.preferredFeatureWeight ?? 1.0),
   );
-  const ourPicks: OurTrack[] = [];
-  for (let i = 0; i < ourCount; i += 1) {
-    const pick = ourSorted[i % ourSorted.length];
-    if (!pick) throw new Error("No our-tracks provided. Cannot build playlist plan with zero of the artist's tracks.");
-    ourPicks.push(pick);
-  }
-  if (ourCount > our.length) {
-    warnings.push(`Requested ${ourCount} our-track slots but only ${our.length} unique tracks supplied — some will repeat.`);
+  const ourPicks = ourSorted.slice(0, ourCount);
+  if (requestedOurCount > our.length) {
+    warnings.push(`Requested ${requestedOurCount} artist-track slots but only ${our.length} unique tracks were supplied; reduced the feature count instead of repeating songs.`);
   }
 
   // Build a flat pool of comparable tracks tagged by artist, shuffled deterministically.
   const rng = makeRng(options.seed);
-  type ComparableEntry = { track: ComparableTrack; artistName: string };
+  type ComparableEntry = { track: ComparableTrack; artistName: string; tier?: "peer" | "anchor" };
   const comparablePool: ComparableEntry[] = [];
   for (const artist of comparable) {
     for (const track of artist.tracks) {
-      comparablePool.push({ track, artistName: artist.artistName });
+      if (!our.some((ourTrack) => ourTrack.id === track.id)) {
+        comparablePool.push({ track, artistName: artist.artistName, tier: artist.tier });
+      }
     }
   }
   if (comparablePool.length === 0) {
     throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
   }
   if (comparablePool.length < comparableCount) {
-    warnings.push(`Only ${comparablePool.length} comparable tracks available but ${comparableCount} slots needed — some will repeat.`);
+    throw new Error(`Need ${comparableCount} unique comparable tracks for this plan, but only ${comparablePool.length} were supplied. Add tracks or reduce target length.`);
   }
-  shuffleInPlace(comparablePool, rng);
+  const anchor = [...comparablePool].sort((a, b) => {
+    const tierDelta = Number(b.tier === "anchor") - Number(a.tier === "anchor");
+    return tierDelta || (b.track.popularity ?? 0) - (a.track.popularity ?? 0);
+  })[0];
+  if (!anchor) throw new Error("No comparable anchor track is available.");
+  const remainingPool = comparablePool.filter((entry) => entry.track.id !== anchor.track.id);
+  shuffleInPlace(remainingPool, rng);
 
   // Take comparableCount tracks but try not to repeat the same artist back-to-back.
-  const comparableSequence: ComparableEntry[] = [];
-  const usedTrackIds = new Set<string>();
-  let cursor = 0;
-  let lastArtist: string | null = null;
-  let attempts = 0;
+  const comparableSequence: ComparableEntry[] = [anchor];
+  const usedTrackIds = new Set<string>([anchor.track.id]);
+  let lastArtist: string | null = anchor.artistName;
   while (comparableSequence.length < comparableCount) {
-    if (attempts > comparablePool.length * 3) {
-      // Fallback: relax the no-repeat-artist constraint
-      const next = comparablePool[cursor % comparablePool.length];
-      if (!next) throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
-      comparableSequence.push(next);
-      cursor += 1;
-      lastArtist = next.artistName;
-      attempts = 0;
-      continue;
-    }
-    const candidate = comparablePool[cursor % comparablePool.length];
-    if (!candidate) throw new Error("No comparable tracks provided. Cannot build playlist plan with zero comparable tracks.");
-    cursor += 1;
-    attempts += 1;
-    if (candidate.artistName === lastArtist) continue;
-    if (usedTrackIds.has(candidate.track.id) && comparablePool.length > comparableCount) continue;
+    const uniqueCandidates = remainingPool.filter((entry) => !usedTrackIds.has(entry.track.id));
+    const differentArtist = uniqueCandidates.filter((entry) => entry.artistName !== lastArtist);
+    const candidates = differentArtist.length > 0 ? differentArtist : uniqueCandidates;
+    const previous = comparableSequence.at(-1)?.track;
+    const candidate = [...candidates].sort((a, b) => previous
+      ? transitionDistance(previous, a.track) - transitionDistance(previous, b.track)
+      : 0)[0];
+    if (!candidate) throw new Error("Not enough comparable tracks to complete the playlist.");
     comparableSequence.push(candidate);
     usedTrackIds.add(candidate.track.id);
     lastArtist = candidate.artistName;
-    attempts = 0;
   }
 
   // Pick our-track feature positions
@@ -356,7 +369,7 @@ function buildMarkdown(plan: Plan): string {
   lines.push("Review the order above. If approved, run:");
   lines.push("");
   lines.push("```sh");
-  lines.push(`bun packages/shared/src/skills/bundled/spotify-playlist-curator/scripts/apply-plan.ts --plan <plan.json> --apply --confirm`);
+  lines.push(`"\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/apply-plan.ts" --plan <plan.json> --apply --confirm`);
   lines.push("```");
   lines.push("");
 
@@ -372,6 +385,9 @@ async function main() {
     (a) => a && Array.isArray(a.tracks) && a.tracks.length > 0,
   );
   const our = (ourFile.ourTracks ?? []).filter((t) => t && typeof t.id === "string");
+
+  assertSpotifyTrackIds(our.map((track) => track.id), "ourTracks");
+  assertSpotifyTrackIds(comparable.flatMap((artist) => artist.tracks.map((track) => track.id)), "comparableTracks");
 
   const plan = buildPlan(comparable, our, options);
 
