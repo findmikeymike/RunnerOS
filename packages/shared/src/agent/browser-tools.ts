@@ -121,6 +121,8 @@ export interface BrowserLifecycleActionResult {
 }
 
 export interface BrowserPaneFns {
+  /** Runtime authorization hook. Called once per parsed browser_tool command. */
+  authorizeCommand?: (command: string, args: string[]) => void | Promise<void>;
   openPanel: (options?: { background?: boolean }) => Promise<{ instanceId: string }>;
   navigate: (url: string) => Promise<{ url: string; title: string }>;
   snapshot: () => Promise<{ url: string; title: string; nodes: Array<{ ref: string; role: string; name: string; value?: string; description?: string; focused?: boolean; checked?: boolean; disabled?: boolean }> }>;

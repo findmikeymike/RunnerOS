@@ -1,5 +1,17 @@
-import { describe, expect, test } from 'bun:test'
-import type { TeamMigrationJournal } from '@craft-agent/shared/workspaces'
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  loadWorkspaceConfig,
+  prepareWorkspaceMoveToSharedFolder,
+  readTeamMigrationJournal,
+  rollbackPreparedWorkspaceMigration,
+  updateTeamMigrationJournal,
+  validatePreparedWorkspaceMigration,
+  type TeamMigrationJournal,
+  type WorkspaceConfig,
+} from '@craft-agent/shared/workspaces'
 import {
   recoverInterruptedWorkspaceMigrations,
   type WorkspaceMigrationRecoveryDeps,
@@ -37,9 +49,78 @@ function harness(initial: TeamMigrationJournal, currentRoot: string) {
     writeTombstone: () => { calls.push('tombstone') },
     promotePrivateSessions: () => { calls.push('promote-private-sessions') },
     completeDestination: () => { calls.push('complete-destination') },
+    validateDestination: () => ({ ok: true }),
   }
   const log = { info: (_message: string) => {}, error: (_message: string, _error?: unknown) => {} }
   return { calls, deps, log }
+}
+
+const tempDirs: string[] = []
+
+afterEach(() => {
+  delete process.env.CRAFT_CONFIG_DIR
+  for (const root of tempDirs.splice(0)) rmSync(root, { recursive: true, force: true })
+})
+
+function makeTempRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), 'workspace-migration-recovery-'))
+  tempDirs.push(root)
+  return root
+}
+
+function prepareRealInterruptedMigration(): {
+  source: string
+  result: ReturnType<typeof prepareWorkspaceMoveToSharedFolder>
+  journal: TeamMigrationJournal
+} {
+  const root = makeTempRoot()
+  const source = join(root, 'source-workspace')
+  const destinationParent = join(root, 'shared')
+  const privateRoot = join(root, 'private')
+  mkdirSync(source, { recursive: true })
+  mkdirSync(destinationParent, { recursive: true })
+  mkdirSync(privateRoot, { recursive: true })
+  process.env.CRAFT_CONFIG_DIR = privateRoot
+  const config: WorkspaceConfig = {
+    id: 'ws_real_recovery',
+    name: 'Recovery Workspace',
+    slug: 'recovery-workspace',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+  writeFileSync(join(source, 'config.json'), JSON.stringify(config, null, 2))
+  const result = prepareWorkspaceMoveToSharedFolder(source, destinationParent, {
+    deferCompletion: true,
+    initialPhase: 'runtime-quiesced',
+  })
+  const loaded = result.journalPath ? readTeamMigrationJournal(result.journalPath) : null
+  if (!loaded) throw new Error('expected migration journal')
+  const journal = updateTeamMigrationJournal(loaded, 'root-switched')
+  return { source, result, journal }
+}
+
+function recoverInvalidRealDestination(
+  mutate: (prepared: ReturnType<typeof prepareRealInterruptedMigration>) => void,
+): { calls: string[]; prepared: ReturnType<typeof prepareRealInterruptedMigration> } {
+  const prepared = prepareRealInterruptedMigration()
+  mutate(prepared)
+  const calls: string[] = []
+  const deps: WorkspaceMigrationRecoveryDeps = {
+    listJournals: () => [prepared.journal],
+    getWorkspace: () => ({ rootPath: prepared.source }),
+    updateRoot: () => { calls.push('root-updated') },
+    updateJournal: updateTeamMigrationJournal,
+    rollback: (value) => {
+      calls.push('rolled-back')
+      return rollbackPreparedWorkspaceMigration(value)
+    },
+    validateDestination: validatePreparedWorkspaceMigration,
+    writeTombstone: () => { calls.push('tombstoned') },
+    promotePrivateSessions: () => { calls.push('private-promoted') },
+    completeDestination: () => { calls.push('destination-completed') },
+  }
+  recoverInterruptedWorkspaceMigrations({ info: () => {}, error: () => {} }, deps)
+  return { calls, prepared }
 }
 
 describe('interrupted workspace migration recovery', () => {
@@ -76,5 +157,33 @@ describe('interrupted workspace migration recovery', () => {
     recoverInterruptedWorkspaceMigrations(h.log, h.deps)
     expect(h.calls).toContain('journal:needs-repair:disk unavailable')
     expect(h.calls).not.toContain('complete-destination')
+  })
+
+  test('missing destination config rolls back without changing registry or tombstoning source', () => {
+    const { calls, prepared } = recoverInvalidRealDestination(({ result }) => {
+      rmSync(join(result.finalRootPath, 'config.json'))
+    })
+    expect(calls).toEqual(['rolled-back'])
+    expect(loadWorkspaceConfig(prepared.source)?.movedTo).toBeUndefined()
+    expect(readTeamMigrationJournal(prepared.result.journalPath!)?.phase).toBe('rolled-back')
+  })
+
+  test('corrupt destination receipt rolls back without changing registry or tombstoning source', () => {
+    const { calls, prepared } = recoverInvalidRealDestination(({ result }) => {
+      writeFileSync(result.receiptPath, '{broken json')
+    })
+    expect(calls).toEqual(['rolled-back'])
+    expect(loadWorkspaceConfig(prepared.source)?.movedTo).toBeUndefined()
+    expect(readTeamMigrationJournal(prepared.result.journalPath!)?.phase).toBe('rolled-back')
+  })
+
+  test('incomplete destination receipt rolls back without changing registry or tombstoning source', () => {
+    const { calls, prepared } = recoverInvalidRealDestination(({ result }) => {
+      const receipt = JSON.parse(readFileSync(result.receiptPath, 'utf-8')) as Record<string, unknown>
+      writeFileSync(result.receiptPath, JSON.stringify({ ...receipt, status: 'in-progress' }, null, 2))
+    })
+    expect(calls).toEqual(['rolled-back'])
+    expect(loadWorkspaceConfig(prepared.source)?.movedTo).toBeUndefined()
+    expect(readTeamMigrationJournal(prepared.result.journalPath!)?.phase).toBe('rolled-back')
   })
 })

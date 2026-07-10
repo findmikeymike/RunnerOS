@@ -292,6 +292,34 @@ function purgeUndo(workspaceRootPath: string, entityId: string): void {
   rmSync(getPrivateUndoDir(workspaceRootPath, entityId), { recursive: true, force: true });
 }
 
+function purgeConflictArtifacts(workspaceRootPath: string, entityPath: string): void {
+  const conflictsDir = getTeamConflictsDir(workspaceRootPath);
+  if (existsSync(conflictsDir)) {
+    for (const name of readdirSync(conflictsDir).filter((entry) => entry.endsWith('.json'))) {
+      const file = join(conflictsDir, name);
+      try {
+        const conflict = JSON.parse(readFileSync(file, 'utf-8')) as SharedRecordConflict;
+        if (conflict?.entityPath !== entityPath) continue;
+        if (conflict.providerConflictPath) {
+          const providerFile = resolve(workspaceRootPath, conflict.providerConflictPath);
+          if (isContainedPath(getRecordsDir(workspaceRootPath), providerFile) && isProviderConflictFilename(basename(providerFile))) {
+            rmSync(providerFile, { force: true });
+          }
+        }
+        rmSync(file, { force: true });
+      } catch {
+        // Malformed conflict artifacts are unusable and cannot be proven free
+        // of the purged subject's PII, so privacy wins over retention.
+        rmSync(file, { force: true });
+      }
+    }
+  }
+  for (const file of walkFiles(getRecordsDir(workspaceRootPath))) {
+    if (!isProviderConflictFilename(basename(file))) continue;
+    if (canonicalEntityPathForProviderConflict(workspaceRootPath, file) === entityPath) rmSync(file, { force: true });
+  }
+}
+
 function existingOpenConflict(
   workspaceRootPath: string,
   input: Pick<SharedRecordConflict, 'entityPath' | 'reason'> & {
@@ -560,6 +588,7 @@ export function deleteSharedRecord(
     purgeUndo(workspaceRootPath, entityId);
     purgeRecordPayloads(workspaceRootPath, entityPath, op.opId);
     purgeOplogPayloads(workspaceRootPath, recordEntityPath(collection, entityId));
+    if (input.piiScrub) purgeConflictArtifacts(workspaceRootPath, entityPath);
   } else {
     saveUndo(workspaceRootPath, current);
     saveUndo(workspaceRootPath, tombstone);
@@ -671,6 +700,7 @@ function reconcileV2RecordOps(
     if (purgeHead) {
       purgeRecordPayloads(workspaceRootPath, entityPath, purgeHead.op.opId);
       purgeOplogPayloads(workspaceRootPath, entityPath);
+      purgeConflictArtifacts(workspaceRootPath, entityPath);
       if (current?.headOpId !== purgeHead.op.opId) atomicWriteJson(canonicalFile, purgeHead.entity);
       continue;
     }

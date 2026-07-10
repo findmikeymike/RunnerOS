@@ -7,6 +7,7 @@ import {
   rollbackPreparedWorkspaceMigration,
   promotePreparedPrivateSessions,
   updateTeamMigrationJournal,
+  validatePreparedWorkspaceMigration,
   writeMovedToTombstone,
   type TeamMigrationJournal,
   type TeamSharedFolderMigrationResult,
@@ -28,6 +29,7 @@ export interface WorkspaceMigrationRecoveryDeps {
   writeTombstone(sourceRootPath: string, finalRootPath: string, migrationId: string): unknown
   completeDestination(result: TeamSharedFolderMigrationResult): void
   promotePrivateSessions(result: TeamSharedFolderMigrationResult): void
+  validateDestination(journal: TeamMigrationJournal): { ok: boolean; reason?: string }
 }
 
 const DEFAULT_DEPS: WorkspaceMigrationRecoveryDeps = {
@@ -39,6 +41,7 @@ const DEFAULT_DEPS: WorkspaceMigrationRecoveryDeps = {
   writeTombstone: writeMovedToTombstone,
   completeDestination: completePreparedWorkspaceMigration,
   promotePrivateSessions: promotePreparedPrivateSessions,
+  validateDestination: validatePreparedWorkspaceMigration,
 }
 
 function resultFromJournal(journal: TeamMigrationJournal): TeamSharedFolderMigrationResult {
@@ -69,6 +72,19 @@ export function recoverInterruptedWorkspaceMigrations(
       if (!rootAlreadySwitched && !FORWARD_PHASES.has(journal.phase)) {
         deps.rollback(journal)
         log.info(`[TeamMigration] Rolled back interrupted migration ${journal.migrationId}`)
+        continue
+      }
+
+      const validation = deps.validateDestination(journal)
+      if (!validation.ok) {
+        const reason = validation.reason ?? 'Migration destination validation failed.'
+        if (!rootAlreadySwitched) {
+          deps.rollback(journal)
+          log.error(`[TeamMigration] Rolled back invalid destination for ${journal.migrationId}`, new Error(reason))
+        } else {
+          deps.updateJournal(journal, 'needs-repair', reason)
+          log.error(`[TeamMigration] Destination needs repair for ${journal.migrationId}`, new Error(reason))
+        }
         continue
       }
 

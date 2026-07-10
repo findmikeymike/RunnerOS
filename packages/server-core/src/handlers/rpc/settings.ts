@@ -403,12 +403,26 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
     if (!SHARED_FOLDER_PROVIDERS.has(provider)) {
       throw new Error(`Invalid shared folder provider: ${provider}`)
     }
+    const quiesce = deps.sessionManager.quiesceWorkspaceForMigration?.bind(deps.sessionManager)
+    const rebind = deps.sessionManager.rebindWorkspaceAfterMigration?.bind(deps.sessionManager)
+    const resume = deps.sessionManager.resumeWorkspaceAfterMigration?.bind(deps.sessionManager)
+    if (!quiesce || !rebind || !resume) {
+      throw new Error('This runtime does not support safe Team Mode initialization.')
+    }
+    const lease = await quiesce(workspaceId)
     const { markWorkspaceAsSharedFolder } = await import('@craft-agent/shared/workspaces')
-    return markWorkspaceAsSharedFolder(workspace.rootPath, {
-      provider,
-      providerLabel: options?.providerLabel,
-      makeRunner: options?.makeRunner,
-    })
+    try {
+      const status = markWorkspaceAsSharedFolder(workspace.rootPath, {
+        provider,
+        providerLabel: options?.providerLabel,
+        makeRunner: options?.makeRunner,
+      })
+      await rebind(lease, workspace.rootPath)
+      return status
+    } catch (error) {
+      await resume(lease)
+      throw error
+    }
   })
 
   server.handle(RPC_CHANNELS.workspace.TEAM_JOIN, async (_ctx, workspaceId: string) => {

@@ -113,6 +113,19 @@ describe('createBrowserTools', () => {
   })
 
   describe('browser_tool', () => {
+    it('runs the runtime authorization hook for each parsed command', async () => {
+      const authorized: string[] = []
+      mockFns.authorizeCommand = async (command) => {
+        authorized.push(command)
+        if (command === 'click') throw new Error('blocked by runtime policy')
+      }
+
+      const result = await executeTool(tools, 'browser_tool', { command: 'snapshot; click @e1' })
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('blocked by runtime policy')
+      expect(authorized).toEqual(['snapshot', 'click'])
+    })
+
     it('returns help text for --help without release hint', async () => {
       const result = await executeTool(tools, 'browser_tool', { command: '--help' })
       expect(result.content[0].text).toContain('browser_tool command help')

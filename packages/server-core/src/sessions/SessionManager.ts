@@ -172,6 +172,7 @@ import { PulseExecutor } from '../pulses/PulseExecutor.ts'
 import { CONCIERGE_SLUG, ORCHESTRATOR_SLUG, SETUP_CONCIERGE_SLUG, loadActivatedAgents, loadAllGlobalAgents, loadGlobalAgent } from '@craft-agent/shared/agent-definitions'
 import { filterAttachmentsForModelInput } from './runtime-config'
 import { inferScheduledWorkScope, persistHnicScheduleWork } from '../scheduled-work/HnicScheduledWork'
+import { assertAutomatedTeamBrowserCommandAllowed } from './team-automation-browser-guard'
 
 function isConversationContextMessage(message: Message): boolean {
   return (message.role === 'user' || message.role === 'assistant')
@@ -585,6 +586,7 @@ function completeLaunchReceipt(
     agentSkillSlugs?: string[]
     enabledSourceSlugs?: string[]
     spawnedFromAgent?: { agentSlug: string; agentName: string; timestamp?: number }
+    inheritedAutomatedAncestry?: boolean
   },
 ): SessionLaunchReceipt {
   const injected = receipt?.injected ?? {
@@ -595,6 +597,9 @@ function completeLaunchReceipt(
   return {
     createdAt: receipt?.createdAt ?? Date.now(),
     origin: receipt?.origin ?? fallback.origin,
+    automatedAncestry: hasAutomatedSessionAncestry(receipt)
+      || fallback.inheritedAutomatedAncestry === true
+      || isAutomatedLaunchOrigin(receipt?.origin ?? fallback.origin),
     summary: receipt?.summary,
     agent: receipt?.agent ?? (fallback.spawnedFromAgent
       ? {
@@ -623,6 +628,14 @@ function completeLaunchReceipt(
     },
     routing: receipt?.routing,
   }
+}
+
+function isAutomatedLaunchOrigin(origin: SessionLaunchReceipt['origin'] | undefined): boolean {
+  return origin === 'automation' || origin === 'workflow' || origin === 'deep-research'
+}
+
+export function hasAutomatedSessionAncestry(receipt: SessionLaunchReceipt | undefined): boolean {
+  return receipt?.automatedAncestry === true || isAutomatedLaunchOrigin(receipt?.origin)
 }
 
 async function recordInjectedMemoryFromLaunchReceipt(
@@ -2200,6 +2213,13 @@ export class SessionManager implements ISessionManager {
               customSystemPrompt: composedPrompt,
               hidden: true,
               permissionMode: params.permissionMode,
+              launchReceipt: {
+                ...baseOpts.launchReceipt,
+                createdAt: Date.now(),
+                origin: 'automation',
+                automatedAncestry: true,
+                automation: { name: `Pulse: ${pulseId}` },
+              },
             } as import('@craft-agent/shared/protocol').CreateSessionOptions)
             await this.sendMessage(session.id, params.userMessage)
             return {
@@ -4748,6 +4768,7 @@ user a clickable link to where the thing now lives.`
       agentSkillSlugs: options?.agentSkillSlugs,
       enabledSourceSlugs: defaultEnabledSourceSlugs,
       spawnedFromAgent: options?.spawnedFromAgent,
+      inheritedAutomatedAncestry: hasAutomatedSessionAncestry(validatedBranch?.sourceSession.launchReceipt),
     })
 
     // Use storage layer to create and persist the session
@@ -5154,6 +5175,10 @@ user a clickable link to where the thing now lives.`
         systemPromptPreset: managed.systemPromptPreset,
         customSystemPrompt: managed.customSystemPrompt,
         agentSkillSlugs: managed.agentSkillSlugs,
+        teamAutomationPolicy: {
+          enabled: workspaceConfig?.team?.enabled === true,
+          automatedAncestry: hasAutomatedSessionAncestry(managed.launchReceipt),
+        },
         debugMode: _platform?.isDebugMode ? { enabled: true, logFilePath: _platform.getLogFilePath?.() } : undefined,
         enable1MContext: await (async () => { const { getEnable1MContext } = await import('@craft-agent/shared/config/storage'); return getEnable1MContext(); })(),
         // Image resize callback — prevents oversized images from entering conversation history
@@ -5307,6 +5332,15 @@ user a clickable link to where the thing now lives.`
 
         mergeSessionScopedToolCallbacks(sid, {
           browserPaneFns: {
+            authorizeCommand: (command) => {
+              const teamModeEnabled = loadWorkspaceConfig(managed.workspace.rootPath)?.team?.enabled === true
+              assertAutomatedTeamBrowserCommandAllowed({
+                teamModeEnabled,
+                launchOrigin: managed.launchReceipt?.origin,
+                automatedAncestry: hasAutomatedSessionAncestry(managed.launchReceipt),
+                command,
+              })
+            },
             openPanel: async (options) => {
               const instanceId = options?.background
                 ? bpm.createForSession(sid, { show: false })
@@ -5818,6 +5852,7 @@ user a clickable link to where the thing now lives.`
           launchReceipt: {
             createdAt: Date.now(),
             origin: 'spawned-session',
+            automatedAncestry: hasAutomatedSessionAncestry(managed.launchReceipt),
             summary: `Spawned from session "${managed.name || managed.id}".`,
             config: {},
             injected: {
@@ -6483,6 +6518,7 @@ user a clickable link to where the thing now lives.`
             callerAgentSlug: managed.spawnedFromAgent?.agentSlug,
             callerAgentName: managed.spawnedFromAgent?.agentName,
             parentPermissionMode: managed.permissionMode ?? 'ask',
+            automatedAncestry: hasAutomatedSessionAncestry(managed.launchReceipt),
             depth: getAgentMessageDepth(managed.labels),
           }, input)
         },
@@ -10423,8 +10459,19 @@ user a clickable link to where the thing now lives.`
       })
     }
 
+    // Shared-folder Team Mode cannot safely prove exclusive authority for
+    // non-idempotent browser effects. Automated sessions stay inspect/draft-only.
+    const teamModePrompt = loadWorkspaceConfig(workspaceRootPath)?.team?.enabled === true
+      ? [
+          '[TEAM MODE AUTOMATION SAFETY]',
+          'This automated run may inspect external sites and draft proposed actions, but it must not click, type, paste, upload, submit, publish, comment, message, follow, or otherwise mutate an external browser surface. Save the draft and ask for a manual session to perform the final action.',
+          '',
+          prompt,
+        ].join('\n')
+      : prompt
+
     // Send the prompt
-    await this.sendMessage(session.id, prompt, undefined, undefined, {
+    await this.sendMessage(session.id, teamModePrompt, undefined, undefined, {
       skillSlugs: resolved?.skillSlugs,
     })
 

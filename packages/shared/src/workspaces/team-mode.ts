@@ -1,5 +1,6 @@
 import {
   appendFileSync,
+  cpSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -214,6 +215,77 @@ function atomicWriteJson(file: string, value: unknown): void {
   } catch (error) {
     try { rmSync(tmp, { force: true }); } catch { /* ignore */ }
     throw error;
+  }
+}
+
+const IN_PLACE_PRIVATE_FILES = ['automations-history.jsonl', 'automations-retry-queue.jsonl'];
+const IN_PLACE_SECRET_NAMES = /^(?:\.env(?:\..+)?|auth\.json|credentials(?:\.enc)?|secrets\.json|\.npmrc|\.netrc|\.pypirc)$/i;
+const IN_PLACE_SECRET_EXTENSIONS = /\.(?:pem|key|p12|pfx|jks|keystore)$/i;
+const IN_PLACE_SECRET_JSON_KEYS = new Set([
+  'clientsecret', 'refreshtoken', 'accesstoken', 'apikey', 'bearertoken',
+  'privatekey', 'password', 'token',
+]);
+
+function jsonContainsSecret(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(jsonContainsSecret);
+  return Object.entries(value as Record<string, unknown>).some(([key, child]) => {
+    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return (IN_PLACE_SECRET_JSON_KEYS.has(normalized) && typeof child === 'string' && child.trim().length > 0)
+      || jsonContainsSecret(child);
+  });
+}
+
+function findInPlaceSecretFiles(root: string, relativeDir = ''): string[] {
+  const dir = join(root, relativeDir);
+  if (!existsSync(dir)) return [];
+  const blocked: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const relativePath = join(relativeDir, entry.name);
+    if (relativeDir === '' && entry.name === 'sessions') continue;
+    if (entry.isDirectory()) {
+      blocked.push(...findInPlaceSecretFiles(root, relativePath));
+      continue;
+    }
+    if (IN_PLACE_PRIVATE_FILES.includes(entry.name)) continue;
+    if (IN_PLACE_SECRET_NAMES.test(entry.name) || IN_PLACE_SECRET_EXTENSIONS.test(entry.name)) {
+      blocked.push(relativePath);
+      continue;
+    }
+    if (entry.name.toLowerCase().endsWith('.json')) {
+      try {
+        if (jsonContainsSecret(JSON.parse(readFileSync(join(root, relativePath), 'utf-8')))) blocked.push(relativePath);
+      } catch { /* malformed JSON is handled by its owning feature */ }
+    }
+  }
+  return blocked.sort();
+}
+
+function quarantineInPlacePrivateArtifacts(workspaceRootPath: string, workspaceId: string): void {
+  const blocked = findInPlaceSecretFiles(workspaceRootPath);
+  if (blocked.length > 0) {
+    throw new Error(`Team Mode cannot share this folder while credential-bearing files are present: ${blocked.join(', ')}`);
+  }
+
+  const sourceSessions = join(workspaceRootPath, 'sessions');
+  const privateSessions = join(getPrivateTeamDir(workspaceId), 'private-sessions');
+  if (existsSync(sourceSessions)) {
+    if (existsSync(privateSessions) && readdirSync(privateSessions).length > 0) {
+      throw new Error('Team Mode cannot move private sessions because the private destination is not empty.');
+    }
+    mkdirSync(dirname(privateSessions), { recursive: true });
+    rmSync(privateSessions, { recursive: true, force: true });
+    try {
+      renameSync(sourceSessions, privateSessions);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+      cpSync(sourceSessions, privateSessions, { recursive: true, errorOnExist: true });
+      rmSync(sourceSessions, { recursive: true, force: true });
+    }
+  }
+
+  for (const filename of IN_PLACE_PRIVATE_FILES) {
+    rmSync(join(workspaceRootPath, filename), { force: true });
   }
 }
 
@@ -1076,6 +1148,9 @@ export function markWorkspaceAsSharedFolder(
   const previousTeam = loaded.team ?? createDisabledTeamConfig();
   if (previousTeam.enabled && loaded.storage?.mode === 'shared-folder') {
     assertTeamPermission(workspaceRootPath, 'team.settings.update');
+  }
+  if (loaded.storage?.mode !== 'shared-folder') {
+    quarantineInPlacePrivateArtifacts(workspaceRootPath, loaded.id);
   }
   const automationsPolicy = input.makeRunner
     ? 'runner-only'

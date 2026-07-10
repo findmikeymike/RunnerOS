@@ -696,6 +696,7 @@ async function executeSingleCommand(args: {
   }
 
   const { fns } = args;
+  await fns.authorizeCommand?.(cmd, parts.slice(1));
 
   if (cmd === 'open') {
     const foreground = parts.includes('--foreground') || parts.includes('-f');

@@ -645,6 +645,11 @@ export interface PreToolUseInput {
   hasSourceActivation: boolean;
   /** Session tool names preauthorized for this trusted worker session. */
   trustedWorkerTools?: string[];
+  /** Host-stamped Team Mode background ancestry; agents cannot opt out. */
+  teamAutomationPolicy?: {
+    enabled: boolean;
+    automatedAncestry: boolean;
+  };
   /** PermissionManager for session-scoped whitelists */
   permissionManager: PermissionManagerLike;
   /** PrerequisiteManager for guide.md checking */
@@ -687,6 +692,57 @@ const TRUST_ELIGIBLE_SESSION_TOOLS = new Set([
   'get_deep_research_run',
   'create_output',
 ]);
+
+const EXTERNAL_OPERATOR_MUTATION_TOKENS = [
+  'click', 'type', 'fill', 'paste', 'upload', 'press', 'key', 'drag',
+  'select', 'submit', 'send', 'post', 'publish', 'comment', 'message',
+  'follow', 'unfollow', 'like', 'react', 'evaluate', 'evalraw', 'loadall',
+];
+
+function browserToolCommandNames(command: unknown): string[] {
+  if (Array.isArray(command)) {
+    const first = command[0];
+    return typeof first === 'string' ? [first.toLowerCase()] : [];
+  }
+  if (typeof command !== 'string') return [];
+  return command
+    .split(';')
+    .map((part) => part.trim().split(/\s+/, 1)[0]?.toLowerCase())
+    .filter((part): part is string => Boolean(part));
+}
+
+export function teamAutomationExternalOperatorBlockReason(input: {
+  toolName: string;
+  toolInput: Record<string, unknown>;
+  policy?: { enabled: boolean; automatedAncestry: boolean };
+}): string | null {
+  if (!input.policy?.enabled || !input.policy.automatedAncestry) return null;
+  const tool = input.toolName.toLowerCase();
+  const block = 'Team Mode blocks automated external browser/operator mutations. Inspect and draft only; perform the final action in a manual session.';
+
+  if (tool === 'skill') {
+    const skill = String(input.toolInput.skill ?? input.toolInput.name ?? '').toLowerCase();
+    if (skill.includes('chrome-cdp') || skill.includes('computer-use')) return block;
+  }
+
+  if (tool === 'browser_tool' || tool.endsWith('__browser_tool')) {
+    const commands = browserToolCommandNames(input.toolInput.command);
+    if (commands.some((command) => EXTERNAL_OPERATOR_MUTATION_TOKENS.includes(command))) return block;
+  }
+
+  if (tool.startsWith('mcp__') && /(chrome|browser|computer[_-]?use|playwright|puppeteer)/.test(tool)) {
+    if (EXTERNAL_OPERATOR_MUTATION_TOKENS.some((token) => tool.includes(token))) return block;
+  }
+
+  if (tool === 'bash') {
+    // Shell syntax is too expressive to prove an external mutation cannot be
+    // hidden behind variables, aliases, scripts, or raw CDP. Background Team
+    // sessions use typed tools only; Bash is manual-session-only.
+    return block;
+  }
+
+  return null;
+}
 
 function normalizeTrustedWorkerToolName(toolName: string): string {
   return toolName.startsWith('mcp__session__') ? toolName.slice('mcp__session__'.length) : toolName;
@@ -748,6 +804,16 @@ export function runPreToolUseChecks(ctx: PreToolUseInput): PreToolUseCheckResult
     backendMetadata,
     onDebug,
   } = ctx;
+
+  const externalOperatorBlock = teamAutomationExternalOperatorBlockReason({
+    toolName,
+    toolInput: input,
+    policy: ctx.teamAutomationPolicy,
+  });
+  if (externalOperatorBlock) {
+    onDebug?.(`Team automation policy: blocking ${toolName}`);
+    return { type: 'block', reason: externalOperatorBlock };
+  }
 
   // Build permissions context for custom permissions.json rules
   const permissionsContext: PermissionsContext = {

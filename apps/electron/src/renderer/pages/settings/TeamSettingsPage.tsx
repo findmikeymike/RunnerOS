@@ -131,9 +131,9 @@ export default function TeamSettingsPage() {
       const result = await window.electronAPI.rotateWorkspaceOwnerRecoveryCode(activeWorkspaceId)
       setStatus(result.status)
       setNewOwnerRecoveryCode(result.recoveryCode)
-      toast.success('New owner recovery code created')
+      toast.success('New Owner transfer code created')
     } catch (error) {
-      toast.error('Failed to create owner recovery code', {
+      toast.error('Failed to create Owner transfer code', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
@@ -148,9 +148,9 @@ export default function TeamSettingsPage() {
       const next = await window.electronAPI.recoverWorkspaceOwner(activeWorkspaceId, ownerRecoveryCode.trim())
       setStatus(next)
       setOwnerRecoveryCode('')
-      toast.success('Owner recovery request submitted for approval')
+      toast.success('Owner transfer request submitted for approval')
     } catch (error) {
-      toast.error('Failed to recover workspace ownership', {
+      toast.error('Failed to request workspace ownership transfer', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
@@ -165,7 +165,7 @@ export default function TeamSettingsPage() {
       setStatus(await window.electronAPI.approveWorkspaceOwnerRecovery(activeWorkspaceId, claimId))
       toast.success('Replacement machine approved as Owner')
     } catch (error) {
-      toast.error('Failed to approve Owner recovery', {
+      toast.error('Failed to approve Owner transfer', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
@@ -368,9 +368,9 @@ export default function TeamSettingsPage() {
                           size="sm"
                           onClick={() => void setMachineAsRunner()}
                           disabled={busy || unsupported || !canMakeRunner}
-                          title={!canManageTeam && status?.team.enabled ? 'Only the Owner can change runner' : runnerHandoverPending ? 'Waiting for previous runner acknowledgement or grace window' : status?.runnerIsStale ? 'Take over runner duties on this machine' : 'Assign runner duties to this machine'}
+                          title={!canManageTeam && status?.team.enabled ? 'Only the Owner can change runner' : runnerHandoverPending ? 'Waiting for previous runner acknowledgement' : status?.runnerIsStale ? 'Request handoff; a dead runner cannot be replaced without its acknowledgement' : 'Assign runner duties to this machine'}
                         >
-                          {runnerHandoverPending ? 'Pending' : runnerIsThisMachine ? 'Runner active' : status?.runnerIsStale ? 'Take over' : 'Make runner'}
+                          {runnerHandoverPending ? 'Pending' : runnerIsThisMachine ? 'Runner active' : status?.runnerIsStale ? 'Request handoff' : 'Make runner'}
                         </Button>
                       </div>
                     </div>
@@ -475,15 +475,15 @@ export default function TeamSettingsPage() {
 
               {status?.team.enabled && (
                 <SettingsSection
-                  title="Owner recovery"
-                  description="Keep a one-time recovery code somewhere private so a replacement machine can recover team administration."
+                  title="Owner transfer approval"
+                  description="A one-time code lets a replacement machine request ownership. The current Owner must still approve it; this does not recover a lost sole Owner."
                 >
                   <SettingsCard>
                     <SettingsCardContent>
                       {status.currentRole === 'owner' ? (
                         <div className="space-y-3">
                           <Button size="sm" onClick={() => void rotateOwnerRecoveryCode()} disabled={busy}>
-                            Generate new recovery code
+                            Generate transfer code
                           </Button>
                           {newOwnerRecoveryCode && (
                             <div className="rounded-[8px] border border-amber-300/20 bg-amber-300/[0.06] p-3">
@@ -500,7 +500,7 @@ export default function TeamSettingsPage() {
                                     <div className="mt-0.5 truncate font-mono text-[11px] text-white/36">{claim.machineId}</div>
                                   </div>
                                   <Button size="sm" onClick={() => void approveOwnerRecovery(claim.claimId)} disabled={busy || status.team.ownerRecovery?.state === 'contested'}>
-                                    Approve recovery
+                                    Approve transfer
                                   </Button>
                                 </div>
                               ))}
@@ -516,11 +516,11 @@ export default function TeamSettingsPage() {
                             type="password"
                             value={ownerRecoveryCode}
                             onChange={(event) => setOwnerRecoveryCode(event.target.value)}
-                            placeholder="One-time owner recovery code"
+                            placeholder="One-time owner transfer code"
                             className="h-9 min-w-0 flex-1 rounded-[10px] border border-white/[0.06] bg-white/[0.025] px-3 font-mono text-xs text-white/70 outline-none placeholder:text-white/25"
                           />
                           <Button size="sm" onClick={() => void recoverOwnership()} disabled={busy || !ownerRecoveryCode.trim()}>
-                            Request recovery
+                            Request transfer
                           </Button>
                         </div>
                       )}

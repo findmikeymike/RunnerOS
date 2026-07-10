@@ -98,6 +98,11 @@ export interface TeamSharedFolderMigrationResult {
   tombstoneError?: string;
 }
 
+export interface TeamPreparedMigrationValidation {
+  ok: boolean;
+  reason?: string;
+}
+
 const BLOCKED_SECRET_BASENAMES = new Set([
   '.env',
   '.env.local',
@@ -240,6 +245,70 @@ export function listTeamMigrationReceipts(rootPath: string): TeamMigrationReceip
     .filter(name => name.endsWith('.json'))
     .map(name => readJson<TeamMigrationReceipt>(join(dir, name)))
     .filter((receipt): receipt is TeamMigrationReceipt => Boolean(receipt?.migrationId));
+}
+
+/**
+ * Validate the durable destination proof before changing the local workspace
+ * registry or tombstoning the source. This deliberately accepts only a
+ * staged (`ready`) or already-completed receipt whose identity and paths
+ * match both the local journal and destination config.
+ */
+export function validatePreparedWorkspaceMigration(
+  journal: TeamMigrationJournal,
+): TeamPreparedMigrationValidation {
+  if (!existsSync(journal.finalRootPath)) {
+    return { ok: false, reason: 'Migration destination is missing.' };
+  }
+
+  const config = loadWorkspaceConfig(journal.finalRootPath);
+  if (!config) return { ok: false, reason: 'Migration destination config is missing or corrupt.' };
+  if (config.id !== journal.workspaceId) {
+    return { ok: false, reason: 'Migration destination workspace identity does not match the journal.' };
+  }
+  if (config.movedTo?.path) {
+    return { ok: false, reason: 'Migration destination is itself a moved workspace tombstone.' };
+  }
+  if (config.storage?.mode !== 'shared-folder' || !config.team?.enabled) {
+    return { ok: false, reason: 'Migration destination is not an enabled shared-folder workspace.' };
+  }
+  if (config.storage.provider !== journal.provider || config.storage.movedFrom !== journal.sourceRootPath) {
+    return { ok: false, reason: 'Migration destination storage metadata does not match the journal.' };
+  }
+
+  const receiptPath = getMigrationReceiptPath(journal.finalRootPath, journal.migrationId);
+  const receipt = readJson<TeamMigrationReceipt>(receiptPath);
+  if (!receipt) return { ok: false, reason: 'Migration destination receipt is missing or corrupt.' };
+  if (receipt.status !== 'ready' && receipt.status !== 'complete') {
+    return { ok: false, reason: `Migration destination receipt is incomplete (${receipt.status}).` };
+  }
+  if (
+    receipt.migrationId !== journal.migrationId
+    || resolve(receipt.sourceRootPath) !== resolve(journal.sourceRootPath)
+    || resolve(receipt.destinationParentPath) !== resolve(journal.destinationParentPath)
+    || resolve(receipt.finalRootPath) !== resolve(journal.finalRootPath)
+    || receipt.provider !== journal.provider
+  ) {
+    return { ok: false, reason: 'Migration destination receipt does not match the journal.' };
+  }
+
+  const mirror = readJson<{
+    version?: number;
+    workspaceId?: string;
+    storage?: WorkspaceConfig['storage'];
+    team?: WorkspaceConfig['team'];
+  }>(getTeamConfigFile(journal.finalRootPath));
+  if (!mirror || mirror.version !== 1 || mirror.workspaceId !== config.id) {
+    return { ok: false, reason: 'Migration destination team mirror is missing, corrupt, or mismatched.' };
+  }
+  if (
+    mirror.storage?.mode !== 'shared-folder'
+    || mirror.storage.sharedRootId !== config.storage.sharedRootId
+    || mirror.team?.teamId !== config.team.teamId
+  ) {
+    return { ok: false, reason: 'Migration destination team mirror does not match config.json.' };
+  }
+
+  return { ok: true };
 }
 
 export function assertWorkspaceOpenable(rootPath: string): void {

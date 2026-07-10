@@ -128,6 +128,8 @@ The existing `team.runnerMachineId` remains the runner source of truth.
 
 Shared-folder access is the current invite/remove mechanism. If someone can open the shared folder, they can join the workspace as an Editor from the app. True app-level invites, removals, and tamper-proof membership require a future signed metadata or server-backed auth layer.
 
+The current one-time Owner code is an Owner-approved transfer request, not disaster recovery. A lost sole Owner and a dead runner require future online coordination or a separately designed force-recovery protocol.
+
 ## Permission Checks
 
 Every sensitive action should call one shared guard:

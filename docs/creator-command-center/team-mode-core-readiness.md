@@ -16,8 +16,9 @@ Status: core Team Mode foundation implemented; email transport and Git advanced 
 - Missed scheduler ticks support `skip` and `run-once`; `run-once` emits a single catch-up tick after subscribers are attached.
 - Non-runner webhook delivery returns/logs a skipped result instead of pretending the event ran.
 - Shared-folder outbound webhooks and browser social publishing fail closed until the receiver/provider can enforce a stable idempotency key. Drafting and exact approval remain available.
-- Owner recovery codes create an immutable replacement-machine request. The current Owner must approve the single visible request; concurrent offline claims become contested and block sensitive execution.
+- Owner transfer codes create an immutable replacement-machine request. The current Owner must approve it; this is not lost-Owner disaster recovery. Concurrent offline claims become contested and block sensitive execution.
 - Live workspace moves quiesce sessions, watchers, automations, and scheduled runners; durable journals roll back before root switch and recover forward afterward.
+- In-place initialization uses the same quiescence gate, moves legacy sessions to machine-private storage, removes private automation history/retry files, and refuses known credential-bearing files.
 - Owner/Editor permissions are enforced for runner assignment, team settings, storage migration, and credential mutations when workspace context is available.
 - Editor-created community broadcast jobs default to `needs-owner-approval`.
 
@@ -45,7 +46,7 @@ Status: core Team Mode foundation implemented; email transport and Git advanced 
 9. Move workspace old path should show moved tombstone behavior, not allow stale writes.
 10. Confirm no `.env`, credential cache, or private session folders were copied into the shared workspace.
 11. Confirm Editor role cannot assign runner or save connected-account secrets.
-12. Submit one Owner recovery request and approve it from the current Owner; submit two offline claims and confirm the workspace reports contested recovery.
+12. Submit one Owner transfer request and approve it from the current Owner; submit two offline claims and confirm the workspace reports a contested transfer.
 13. Confirm automatic browser publishing and outbound webhook actions remain blocked in shared-folder mode.
 
 ## Current Verification

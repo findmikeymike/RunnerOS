@@ -70,6 +70,32 @@ afterEach(() => {
 });
 
 describe('team mode metadata', () => {
+  it('moves legacy sessions private and removes automation history before in-place sharing', () => {
+    const root = makeWorkspaceRoot();
+    const config = writeWorkspace(root);
+    mkdirSync(join(root, 'sessions', 'session-1'), { recursive: true });
+    writeFileSync(join(root, 'sessions', 'session-1', 'messages.jsonl'), 'private conversation\n');
+    writeFileSync(join(root, 'automations-history.jsonl'), '{"prompt":"private"}\n');
+    writeFileSync(join(root, 'automations-retry-queue.jsonl'), '{"url":"https://secret"}\n');
+
+    markWorkspaceAsSharedFolder(root);
+
+    expect(existsSync(join(root, 'sessions'))).toBe(false);
+    expect(existsSync(join(process.env.CRAFT_CONFIG_DIR!, 'team', config.id, 'private-sessions', 'session-1', 'messages.jsonl'))).toBe(true);
+    expect(existsSync(join(root, 'automations-history.jsonl'))).toBe(false);
+    expect(existsSync(join(root, 'automations-retry-queue.jsonl'))).toBe(false);
+  });
+
+  it('refuses in-place sharing while credential-bearing files are present', () => {
+    const root = makeWorkspaceRoot();
+    writeWorkspace(root);
+    mkdirSync(join(root, 'sources', 'private-source'), { recursive: true });
+    writeFileSync(join(root, 'sources', 'private-source', 'secrets.json'), JSON.stringify({ accessToken: 'do-not-sync' }));
+
+    expect(() => markWorkspaceAsSharedFolder(root)).toThrow('credential-bearing files are present');
+    expect(loadWorkspaceConfig(root)?.storage?.mode).not.toBe('shared-folder');
+  });
+
   it('loads legacy workspaces with no storage field unchanged', () => {
     const root = makeWorkspaceRoot();
     writeWorkspace(root);

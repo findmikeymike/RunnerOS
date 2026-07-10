@@ -23,6 +23,7 @@ export interface AgentMessageRuntimeContext {
   callerAgentSlug?: string;
   callerAgentName?: string;
   parentPermissionMode: PermissionMode;
+  automatedAncestry?: boolean;
   depth?: number;
   maxDepth?: number;
 }
@@ -198,6 +199,7 @@ export class AgentMessageService {
           ...baseLaunchReceipt,
           createdAt: Date.now(),
           origin: 'agent',
+          automatedAncestry: runtime.automatedAncestry === true,
           summary: `Delegated by ${runtime.callerAgentSlug ?? 'session'} via message_agent.`,
           agent: baseLaunchReceipt?.agent ?? {
             slug: input.agentSlug,

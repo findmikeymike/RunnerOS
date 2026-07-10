@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  createConflictRecord,
   createFakeSyncHarness,
   deleteSharedRecord,
   detectClobberedWrites,
@@ -291,6 +292,71 @@ describe('conflict-safe shared records', () => {
     expect(raw.tags).toBeUndefined();
     expect(raw.purgeUndoFor).toEqual(['fan_03']);
     expect(existsSync(getPrivateUndoDir(workspace, 'fan_03'))).toBe(false);
+  });
+
+  test('PII purge removes preexisting open and resolved conflict payloads for the record', () => {
+    const workspace = tempRoot();
+    const created = writeSharedRecord(workspace, 'community/contacts', 'fan_conflict_purge', {
+      email: 'conflict-purge@example.com', name: 'Conflict Purge', emailHash: 'hash_conflict_purge',
+    }, { machineId: 'machine_a', now: '2026-07-02T12:00:00.000Z' });
+    if (created.status !== 'written') throw new Error('expected write');
+    const entityPath = 'records/community/contacts/fan_conflict_purge.json';
+    for (const status of ['open', 'resolved'] as const) {
+      createConflictRecord(workspace, {
+        entityPath,
+        detectedByMachineId: 'machine_c',
+        sourceMachineId: `machine_${status}`,
+        baseRevision: 1,
+        mine: { email: 'conflict-purge@example.com', name: `${status} mine` },
+        current: { email: 'conflict-purge@example.com', name: `${status} current` },
+        incoming: { email: 'conflict-purge@example.com', name: `${status} incoming` },
+        reason: 'clobbered-write',
+        status,
+      });
+    }
+    expect(listConflictRecords(workspace).filter((conflict) => conflict.entityPath === entityPath)).toHaveLength(2);
+
+    deleteSharedRecord(workspace, 'community/contacts', 'fan_conflict_purge', {
+      machineId: 'machine_a', baseline: created.baseline, emailHash: 'hash_conflict_purge',
+      piiScrub: true, eraseUndo: true, now: '2026-07-02T12:03:00.000Z',
+    });
+
+    expect(listConflictRecords(workspace).filter((conflict) => conflict.entityPath === entityPath)).toHaveLength(0);
+    const conflictDir = join(workspace, 'team', 'conflicts');
+    const remaining = existsSync(conflictDir)
+      ? readdirSync(conflictDir).map((name) => readFileSync(join(conflictDir, name), 'utf-8')).join('\n')
+      : '';
+    expect(remaining).not.toContain('conflict-purge@example.com');
+  });
+
+  test('PII purge removes provider-copy conflict payloads for the record', () => {
+    const workspace = tempRoot();
+    const created = writeSharedRecord(workspace, 'community/contacts', 'fan_provider_purge', {
+      email: 'provider-purge@example.com', name: 'Provider Purge', emailHash: 'hash_provider_purge',
+    }, { machineId: 'machine_a', now: '2026-07-02T12:00:00.000Z' });
+    if (created.status !== 'written') throw new Error('expected write');
+    const entityPath = 'records/community/contacts/fan_provider_purge.json';
+    const providerConflictPath = 'records/community/contacts/fan_provider_purge (conflicted copy).json';
+    const providerConflictFile = join(workspace, providerConflictPath);
+    writeFileSync(providerConflictFile, JSON.stringify({
+      id: 'fan_provider_purge', email: 'provider-purge@example.com', name: 'Provider Copy',
+    }, null, 2), 'utf-8');
+    createConflictRecord(workspace, {
+      entityPath,
+      detectedByMachineId: 'machine_c',
+      incoming: { email: 'provider-purge@example.com', name: 'Provider Copy' },
+      providerConflictPath,
+      reason: 'provider-conflicted-copy',
+      status: 'open',
+    });
+
+    deleteSharedRecord(workspace, 'community/contacts', 'fan_provider_purge', {
+      machineId: 'machine_a', baseline: created.baseline, emailHash: 'hash_provider_purge',
+      piiScrub: true, eraseUndo: true, now: '2026-07-02T12:03:00.000Z',
+    });
+
+    expect(listConflictRecords(workspace).filter((conflict) => conflict.entityPath === entityPath)).toHaveLength(0);
+    expect(existsSync(providerConflictFile)).toBe(false);
   });
 
   test('a stale replica cannot resurrect a payload after PII purge', () => {

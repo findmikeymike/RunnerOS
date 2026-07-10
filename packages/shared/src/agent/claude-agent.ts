@@ -1085,6 +1085,7 @@ export class ClaudeAgent extends BaseAgent {
                 allSourceSlugs: this.sourceManager.getAllSources().map(s => s.config.slug),
                 hasSourceActivation: !!this.onSourceActivationRequest,
                 trustedWorkerTools: this.config.session?.trustedWorkerTools,
+                teamAutomationPolicy: this.config.teamAutomationPolicy,
                 permissionManager: this.permissionManager,
                 prerequisiteManager: this.prerequisiteManager,
                 onDebug: (msg) => this.onDebug?.(msg),
