@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 import * as actualConfig from '@craft-agent/shared/config'
 import * as actualWorkspaceContext from '@craft-agent/shared/workspace-context'
 import * as actualAgentDefinitions from '@craft-agent/shared/agent-definitions'
@@ -241,6 +242,51 @@ function seedAwaitingReviewWork(): ScheduledWorkOrder {
   return order
 }
 
+function buildChainInput() {
+  const requestId = 'request-chain-1'
+  const chainId = `campaign-chain-${requestId}`
+  const root: ScheduledWorkOrder = {
+    ...buildOrder(),
+    id: `${chainId}-0`,
+    calendarLink: { calendar: 'campaign', itemId: `${chainId}-calendar-0` },
+    chain: { chainId, stepId: `${chainId}-step-0`, ordinal: 0 },
+  }
+  const child: ScheduledWorkOrder = {
+    ...buildOrder(),
+    id: `${chainId}-1`,
+    calendarLink: { calendar: 'campaign', itemId: `${chainId}-calendar-1` },
+    title: 'Review launch copy',
+    type: 'review',
+    status: 'waiting',
+    execution: { type: 'review', reviewerType: 'user' },
+    inputRefs: [{ kind: 'produced-output', stepId: `${chainId}-step-0`, bindTo: { kind: 'review-target' } }],
+    chain: {
+      chainId,
+      stepId: `${chainId}-step-1`,
+      ordinal: 1,
+      predecessor: { orderId: root.id, stepId: `${chainId}-step-0`, releaseOn: 'success' },
+    },
+    executionKey: { payloadDigest: 'digest-child', idempotencyKey: 'idem-child' },
+  }
+  return {
+    requestId,
+    orders: [root, child] as [ScheduledWorkOrder, ScheduledWorkOrder],
+    calendarItems: [
+      createCampaignCalendarItem({ id: root.calendarLink.itemId, campaignId: workspace.id, date: '2026-07-10', time: '10:00', timezone: root.timezone, title: root.title, kind: 'scheduled-job', status: 'scheduled', scheduledWorkId: root.id }),
+      createCampaignCalendarItem({ id: child.calendarLink.itemId, campaignId: workspace.id, date: '2026-07-10', time: '10:00', timezone: child.timezone, title: child.title, kind: 'scheduled-job', status: 'draft', scheduledWorkId: child.id }),
+    ] as ReturnType<typeof buildCalendarShell>[],
+  }
+}
+
+function stableTestJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableTestJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableTestJson(record[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
 beforeEach(() => {
   contextDocs = new Map()
   upsertCalls = []
@@ -315,6 +361,110 @@ describe('scheduled-work RPC handler', () => {
     expect(pushCalls).toEqual([])
     expect(readScheduledWork().items).toHaveLength(1)
     expect(readCampaignCalendar().items).toHaveLength(1)
+  })
+
+  test('scheduleCampaignChain creates two linked orders and shells idempotently', async () => {
+    seedEmptyCampaignCalendar()
+    const { invoke } = await registerServer()
+    const input = buildChainInput()
+
+    const first = await invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN, workspace.id, input)
+    expect(first).toMatchObject({ updated: true, orders: [{ status: 'scheduled' }, { status: 'waiting' }] })
+    expect(readScheduledWork().items).toHaveLength(2)
+    expect(readCampaignCalendar().items).toHaveLength(2)
+
+    upsertCalls = []
+    const second = await invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN, workspace.id, input)
+    expect(second).toMatchObject({ updated: false })
+    expect(upsertCalls).toEqual([])
+  })
+
+  test('scheduleCampaignChain rejects unsupported or mismatched topology', async () => {
+    seedEmptyCampaignCalendar()
+    const { invoke } = await registerServer()
+    const input = buildChainInput()
+    input.orders[1] = { ...input.orders[1], chain: { ...input.orders[1].chain!, predecessor: { ...input.orders[1].chain!.predecessor!, orderId: 'wrong-parent' } } }
+
+    await expect(invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN, workspace.id, input))
+      .rejects.toThrow('chain is invalid')
+    expect(contextDocs.has(SCHEDULED_WORK_CONTEXT_SLUG)).toBe(false)
+  })
+
+  test('scheduleCampaignChain rejects changed schedule data while healing a partial write', async () => {
+    seedEmptyCampaignCalendar()
+    const { invoke } = await registerServer()
+    const input = buildChainInput()
+    failOnSlug = CAMPAIGN_CALENDAR_CONTEXT_SLUG
+    await expect(invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN, workspace.id, input)).rejects.toThrow('Forced upsert failure')
+    expect(readScheduledWork().items).toHaveLength(2)
+
+    failOnSlug = null
+    const changed = buildChainInput()
+    changed.orders[0] = { ...changed.orders[0], title: 'Changed after partial write' }
+    changed.calendarItems[0] = { ...changed.calendarItems[0]!, title: 'Changed after partial write' }
+    await expect(invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN, workspace.id, changed))
+      .rejects.toThrow('different execution data')
+    expect(readCampaignCalendar().items).toHaveLength(0)
+  })
+
+  test('scheduleHq creates HQ work and an Artist Calendar shell idempotently', async () => {
+    const { invoke } = await registerServer()
+    const order: ScheduledWorkOrder = {
+      ...buildOrder(),
+      id: 'hq-work-1',
+      owner: { scope: 'hq', workspaceId: workspace.id },
+      calendarLink: { calendar: 'hq', itemId: 'hq-work-1-calendar' },
+    }
+    const input = { requestId: 'hq-1', orders: [order] }
+
+    const first = await invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_HQ, workspace.id, input)
+    expect(first).toMatchObject({ updated: true, orders: [{ id: 'hq-work-1' }] })
+    expect(contextDocs.get('artist-calendar')?.body).toContain('hq-work-1-calendar')
+    upsertCalls = []
+    const second = await invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_HQ, workspace.id, input)
+    expect(second).toMatchObject({ updated: false })
+    expect(upsertCalls).toEqual([])
+  })
+
+  test('scheduleHq rejects review and social work the HQ surface cannot service', async () => {
+    const { invoke } = await registerServer()
+    const order: ScheduledWorkOrder = {
+      ...buildOrder(),
+      id: 'hq-review-1',
+      owner: { scope: 'hq', workspaceId: workspace.id },
+      calendarLink: { calendar: 'hq', itemId: 'hq-review-1-calendar' },
+      type: 'review',
+      execution: { type: 'review', reviewerType: 'user' },
+    }
+    await expect(invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_HQ, workspace.id, { requestId: 'hq-review', orders: [order] }))
+      .rejects.toThrow('standalone agent and workflow')
+    expect(contextDocs.has(SCHEDULED_WORK_CONTEXT_SLUG)).toBe(false)
+  })
+
+  test('approveCampaignSocial binds only an untampered exact dry-run', async () => {
+    const dryRun = {
+      action: {
+        actionId: 'act_social-order-1', platform: 'x', profile: 'artist-main',
+        payload: { text: 'Out Friday.' }, options: { dryRun: true, idempotencyKey: 'social-idem-1' },
+      },
+      browserPlan: { accountVerification: { verificationTargetKnown: true } },
+    }
+    const actionDigest = `sha256:${createHash('sha256').update(stableTestJson({ action: dryRun.action, browserPlan: dryRun.browserPlan, mediaDigest: undefined })).digest('hex')}`
+    const order: ScheduledWorkOrder = {
+      ...buildOrder(), id: 'social-order-1', calendarLink: { calendar: 'campaign', itemId: 'social-calendar-1' },
+      startAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+      title: 'Publish teaser', type: 'social-publish', status: 'needs-approval',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Out Friday.' },
+      executionKey: { payloadDigest: 'social-payload-1', idempotencyKey: 'social-idem-1' },
+      socialAction: { actionId: 'act_social-order-1', actionDigest, platform: 'x', profileId: 'artist-main', preparedAt: '2026-07-10T14:00:00.000Z', payloadDigest: 'social-payload-1', dryRun },
+    }
+    seedContextDoc(SCHEDULED_WORK_CONTEXT_SLUG, serializeScheduledWorkBody({ version: 1, workspaceId: workspace.id, items: [order], updatedAt: order.updatedAt }), 'Scheduled Work')
+    const item = createCampaignCalendarItem({ id: 'social-calendar-1', campaignId: workspace.id, date: '2026-07-10', time: '10:00', timezone: order.timezone, title: order.title, kind: 'scheduled-job', status: 'needs-approval', scheduledWorkId: order.id })
+    seedContextDoc(CAMPAIGN_CALENDAR_CONTEXT_SLUG, serializeCampaignCalendarBody({ version: 1, campaignId: workspace.id, items: [item], updatedAt: order.updatedAt }), 'Campaign Calendar')
+    const { invoke } = await registerServer()
+
+    const approved = await invoke(RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL, workspace.id, { orderId: order.id, calendarItemId: item.id, expectedUpdatedAt: order.updatedAt })
+    expect(approved).toMatchObject({ order: { socialApproval: { actionId: 'act_social-order-1', actionDigest } } })
   })
 
   test('scheduleCampaign rejects client-supplied terminal history in a new shell', async () => {

@@ -110,7 +110,9 @@ import {
   prepareCampaignSocialJob,
   fingerprintCampaignSocialMediaPath,
   resolveCampaignSocialMediaPath,
+  prepareScheduledSocialWork,
 } from './campaign-social-job-preparer'
+import { executeScheduledSocialBrowser } from './scheduled-social-browser-executor'
 import { runSocialJson } from './social-cli'
 
 // Initialize electron-log for renderer process support
@@ -663,6 +665,10 @@ app.whenReady().then(async () => {
             resolveMediaPath: resolveCampaignSocialMediaPath,
             fingerprintMediaPath: fingerprintCampaignSocialMediaPath,
           }))
+          sm.setScheduledSocialExecution(
+            (input) => prepareScheduledSocialWork(input, { runSocialJson }),
+            (input) => executeScheduledSocialBrowser(input, { browserPaneManager: browserPaneManager! }),
+          )
           sm.setBrowserPaneManager(browserPaneManager!)
           return sm
         },
@@ -736,11 +742,11 @@ app.whenReady().then(async () => {
             validateSocialProfile: async ({ platform, profileId }) => {
               const { runSocialJson } = await import('./social-cli')
               const doctor = await runSocialJson(['doctor', '--json']) as {
-                platforms?: Array<{ profiles?: Array<{ platform?: string; profile?: string; ready?: boolean }> }>
+                platforms?: Array<{ profiles?: Array<{ platform?: string; profile?: string; ready?: boolean; localSessionExists?: boolean; accountHandle?: string | null; accountUrl?: string | null }> }>
               }
               const profile = doctor.platforms?.flatMap((group) => group.profiles ?? [])
                 .find((candidate) => candidate.platform === platform && candidate.profile === profileId)
-              return profile?.ready
+              return profile?.ready || (profile?.localSessionExists && Boolean(profile.accountHandle || profile.accountUrl))
                 ? { ready: true }
                 : { ready: false, reason: 'Social profile login or setup is required.' }
             },

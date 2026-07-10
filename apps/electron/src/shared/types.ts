@@ -126,8 +126,16 @@ import type {
   CancelCampaignWorkResult,
   DecideCampaignWorkInput,
   DecideCampaignWorkResult,
+  ResolveCampaignProducedOutputInput,
+  ResolveCampaignProducedOutputResult,
+  ApproveCampaignSocialWorkInput,
+  ApproveCampaignSocialWorkResult,
+  ScheduleHqWorkInput,
+  ScheduleHqWorkResult,
   ScheduleCampaignWorkInput,
   ScheduleCampaignWorkResult,
+  ScheduleCampaignChainInput,
+  ScheduleCampaignChainResult,
   ScheduledWorkDocument,
   ScheduledWorkMutation,
   ScheduledWorkMutationResult,
@@ -138,8 +146,16 @@ export type {
   CancelCampaignWorkResult,
   DecideCampaignWorkInput,
   DecideCampaignWorkResult,
+  ResolveCampaignProducedOutputInput,
+  ResolveCampaignProducedOutputResult,
+  ApproveCampaignSocialWorkInput,
+  ApproveCampaignSocialWorkResult,
+  ScheduleHqWorkInput,
+  ScheduleHqWorkResult,
   ScheduleCampaignWorkInput,
   ScheduleCampaignWorkResult,
+  ScheduleCampaignChainInput,
+  ScheduleCampaignChainResult,
   ScheduledWorkDocument,
   ScheduledWorkMutation,
   ScheduledWorkMutationResult,
@@ -949,8 +965,12 @@ export interface ElectronAPI {
   getScheduledWork(workspaceId: string): Promise<ScheduledWorkParseResult>
   mutateScheduledWork(workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult>
   scheduleCampaignWork(workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult>
+  scheduleCampaignWorkChain(workspaceId: string, input: ScheduleCampaignChainInput): Promise<ScheduleCampaignChainResult>
   cancelCampaignWork(workspaceId: string, input: CancelCampaignWorkInput): Promise<CancelCampaignWorkResult>
   decideCampaignWork(workspaceId: string, input: DecideCampaignWorkInput): Promise<DecideCampaignWorkResult>
+  resolveCampaignProducedOutput(workspaceId: string, input: ResolveCampaignProducedOutputInput): Promise<ResolveCampaignProducedOutputResult>
+  approveCampaignSocialWork(workspaceId: string, input: ApproveCampaignSocialWorkInput): Promise<ApproveCampaignSocialWorkResult>
+  scheduleHqWork(workspaceId: string, input: ScheduleHqWorkInput): Promise<ScheduleHqWorkResult>
   migrateCampaignScheduledWork(workspaceId: string): Promise<ScheduledWorkMigrationResult>
   shareSessionIntel(input: ShareIntelRequest): Promise<ShareIntelResult>
   getGoogleCalendarStatus(workspaceId: string): Promise<{ ok: boolean; connected: boolean; error?: string }>

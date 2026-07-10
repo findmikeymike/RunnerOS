@@ -613,6 +613,7 @@ export function MainContentPanel({
             workspaceId={activeWorkspaceId || ''}
             workspaceName={activeWorkspace?.name}
             primaryCampaignWorkspaceName={primaryCampaignWorkspace?.name}
+            primaryCampaignWorkspaceId={primaryCampaignWorkspace?.id}
             onOpenPrimaryCampaignWorkspace={primaryCampaignWorkspace ? handleOpenPrimaryCampaignWorkspace : undefined}
           />
         </Panel>
@@ -636,6 +637,7 @@ export function MainContentPanel({
             workspaceId={activeWorkspaceId || ''}
             workspaceName={activeWorkspace?.name}
             primaryCampaignWorkspaceName={primaryCampaignWorkspace?.name}
+            primaryCampaignWorkspaceId={primaryCampaignWorkspace?.id}
             onOpenPrimaryCampaignWorkspace={primaryCampaignWorkspace ? handleOpenPrimaryCampaignWorkspace : undefined}
           />
         </Panel>

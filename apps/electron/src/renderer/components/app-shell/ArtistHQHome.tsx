@@ -42,6 +42,9 @@ import {
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
+import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
+import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
+import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
   CalendarMonthGrid,
   parseDateKey,
@@ -125,6 +128,7 @@ interface ArtistHQHomeProps {
   workspaceId: string
   workspaceName?: string
   primaryCampaignWorkspaceName?: string
+  primaryCampaignWorkspaceId?: string
   onOpenPrimaryCampaignWorkspace?: () => void
 }
 
@@ -262,6 +266,7 @@ export function ArtistHQHome({
   workspaceId,
   workspaceName,
   primaryCampaignWorkspaceName,
+  primaryCampaignWorkspaceId,
   onOpenPrimaryCampaignWorkspace,
 }: ArtistHQHomeProps) {
   const {
@@ -287,6 +292,7 @@ export function ArtistHQHome({
   const [calendarDraft, setCalendarDraft] = React.useState<CalendarDraft>(emptyCalendarDraft)
   const [calendarEditId, setCalendarEditId] = React.useState<string | null>(null)
   const [calendarEditDraft, setCalendarEditDraft] = React.useState<CalendarEditDraft>(emptyCalendarEditDraft)
+  const [calendarComposerTarget, setCalendarComposerTarget] = React.useState<'hq' | 'campaign' | null>(null)
   const [profileDraft, setProfileDraft] = React.useState<ProfileDraft>(emptyProfileDraft)
   const [brandingDraft, setBrandingDraft] = React.useState<BrandingDraft>(emptyBrandingDraft)
   const [voiceDraft, setVoiceDraft] = React.useState<VoiceDraft>(emptyVoiceDraft)
@@ -341,6 +347,14 @@ export function ArtistHQHome({
     [docs],
   )
   const calendar = calendarResult.calendar
+  const scheduledWorkResult = React.useMemo(
+    () => parseScheduledWorkDocResult(docs.find((doc) => doc.slug === SCHEDULED_WORK_CONTEXT_SLUG), workspaceId),
+    [docs, workspaceId],
+  )
+  const scheduledWorkById = React.useMemo(
+    () => new Map(scheduledWorkResult.work.items.map((order) => [order.id, order])),
+    [scheduledWorkResult.work.items],
+  )
   const networkResult = React.useMemo(
     () => parseArtistNetworkDocResult(docs.find((doc) => doc.slug === ARTIST_NETWORK_CONTEXT_SLUG)),
     [docs],
@@ -381,6 +395,13 @@ export function ArtistHQHome({
     () => activeCalendarEvents.filter((event) => event.date === selectedDate),
     [activeCalendarEvents, selectedDate],
   )
+  const calendarComposerEntry = React.useMemo<ScheduledWorkComposerEntry>(() => ({
+    owner: calendarComposerTarget === 'campaign' && primaryCampaignWorkspaceId
+      ? { scope: 'campaign', workspaceId: primaryCampaignWorkspaceId, campaignId: primaryCampaignWorkspaceId }
+      : { scope: 'hq', workspaceId },
+    date: selectedDate,
+    suggestedType: 'agent-task',
+  }), [calendarComposerTarget, primaryCampaignWorkspaceId, selectedDate, workspaceId])
   const selectedPerson = React.useMemo(
     () => network.people.find((person) => person.id === selectedPersonId) ?? null,
     [network.people, selectedPersonId],
@@ -810,6 +831,27 @@ export function ArtistHQHome({
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }, [calendar.events, calendarDraft, saveCalendar, selectedDate])
+
+  const submitCalendarWork = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
+    if (draft.type === 'event') {
+      const event = createCalendarEvent({ date: draft.date, title: draft.title, time: draft.time, notes: draft.notes })
+      await saveCalendar({ ...calendar, events: [...calendar.events, event], updatedAt: new Date().toISOString() })
+      setSelectedDate(event.date)
+      toast.success('Event added')
+      return
+    }
+    if (draft.owner.scope === 'hq') {
+      const plan = buildHqSchedulePlanFromComposer(draft)
+      await window.electronAPI.scheduleHqWork(workspaceId, plan)
+      await refreshContext()
+      toast.success(`${draft.title} queued in HQ`)
+      return
+    }
+    const plan = buildCampaignSchedulePlanFromComposer(draft)
+    if ('orders' in plan) await window.electronAPI.scheduleCampaignWorkChain(draft.owner.workspaceId, plan)
+    else await window.electronAPI.scheduleCampaignWork(draft.owner.workspaceId, plan)
+    toast.success(`${draft.title} queued in ${primaryCampaignWorkspaceName ?? 'campaign'}`)
+  }, [calendar, primaryCampaignWorkspaceName, refreshContext, saveCalendar, workspaceId])
 
   const openCalendarEventEdit = React.useCallback((event: ArtistCalendarEvent) => {
     setCalendarEditId(event.id)
@@ -1269,12 +1311,17 @@ export function ArtistHQHome({
                 {calendarResult.error} Saving is paused so existing calendar context is not overwritten.
               </div>
             ) : null}
+            {!scheduledWorkResult.ok ? (
+              <div className="mb-4 rounded-[14px] border border-red-400/20 bg-red-500/10 p-3 text-xs leading-5 text-red-100/80">
+                {scheduledWorkResult.error} Queueing is paused so existing scheduled work is not overwritten.
+              </div>
+            ) : null}
             <ArtistCalendarView
               events={activeCalendarEvents}
               selectedDate={selectedDate}
               visibleMonth={visibleMonth}
               draft={calendarDraft}
-              disabled={!calendarResult.ok}
+              disabled={!calendarResult.ok || !scheduledWorkResult.ok}
               googleConnected={googleCalendarConnected}
               googleBusy={googleCalendarBusy}
               onSelectDate={setSelectedDate}
@@ -1290,7 +1337,20 @@ export function ArtistHQHome({
               onDeleteEvent={deleteCalendarEvent}
               onConnectGoogle={connectGoogleCalendar}
               onSyncGoogle={syncGoogleCalendar}
+              onQueueHqWork={() => setCalendarComposerTarget('hq')}
+              onQueueCampaignWork={primaryCampaignWorkspaceId ? () => setCalendarComposerTarget('campaign') : undefined}
               selectedDateEvents={selectedDateEvents}
+              workById={scheduledWorkById}
+              workspaceId={workspaceId}
+            />
+            <ScheduledWorkComposer
+              open={calendarComposerTarget !== null}
+              entry={calendarComposerEntry}
+              disabled={!calendarResult.ok || !scheduledWorkResult.ok}
+              onOpenChange={(open) => { if (!open) setCalendarComposerTarget(null) }}
+              onSubmit={submitCalendarWork}
+              allowedTypes={calendarComposerTarget === 'hq' ? ['event', 'agent-task', 'workflow-run'] : undefined}
+              allowFollowUps={calendarComposerTarget !== 'hq'}
             />
           </HQCard>
         )}
@@ -2166,6 +2226,8 @@ function ArtistCalendarView({
   googleConnected,
   googleBusy,
   selectedDateEvents,
+  workById,
+  workspaceId,
   editingEventId,
   editDraft,
   onSelectDate,
@@ -2179,6 +2241,8 @@ function ArtistCalendarView({
   onDeleteEvent,
   onConnectGoogle,
   onSyncGoogle,
+  onQueueHqWork,
+  onQueueCampaignWork,
 }: {
   events: ArtistCalendarEvent[]
   selectedDate: string
@@ -2188,6 +2252,8 @@ function ArtistCalendarView({
   googleConnected?: boolean
   googleBusy?: boolean
   selectedDateEvents: ArtistCalendarEvent[]
+  workById: Map<string, ScheduledWorkOrder>
+  workspaceId: string
   editingEventId: string | null
   editDraft: CalendarEditDraft
   onSelectDate: (date: string) => void
@@ -2201,6 +2267,8 @@ function ArtistCalendarView({
   onDeleteEvent: (eventId: string) => void
   onConnectGoogle: () => void
   onSyncGoogle: () => void
+  onQueueHqWork: () => void
+  onQueueCampaignWork?: () => void
 }) {
   const dayMetaByDate = React.useMemo(() => {
     const metaByDate = new Map<string, CalendarMonthDayMeta>()
@@ -2258,7 +2326,13 @@ function ArtistCalendarView({
             <div className="rounded-[12px] border border-white/[0.045] bg-white/[0.016] p-3 text-xs text-white/36">
               No events yet.
             </div>
-          ) : selectedDateEvents.map((event) => (
+          ) : selectedDateEvents.map((event) => {
+            const work = event.scheduledWorkId ? workById.get(event.scheduledWorkId) : undefined
+            const agentResult = work?.result?.type === 'agent-task' ? work.result : undefined
+            const workflowResult = work?.result?.type === 'workflow-run' ? work.result : undefined
+            const outputIds = work?.result && 'outputIds' in work.result ? work.result.outputIds : []
+            const latestRun = work?.runs.at(-1)
+            return (
             <div key={event.id} className="rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3">
               {editingEventId === event.id ? (
                 <div className="space-y-2">
@@ -2299,7 +2373,10 @@ function ArtistCalendarView({
               ) : (
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <div className="text-sm font-semibold text-white/76">{event.title}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="text-sm font-semibold text-white/76">{event.title}</div>
+                      {work ? <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.12em] text-white/44">{work.status.replace(/-/g, ' ')}</span> : null}
+                    </div>
                     {event.time ? <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-orange-200/65">{event.time}</div> : null}
                     {event.notes ? <div className="mt-2 text-xs leading-5 text-white/38">{event.notes}</div> : null}
                     <ContextBadges
@@ -2307,9 +2384,19 @@ function ArtistCalendarView({
                       googleStatus={event.google?.syncStatus}
                       relatedCount={event.relatedPersonIds.length}
                     />
+                    {work?.attention ? <div className="mt-2 rounded-[6px] border border-red-300/10 bg-red-300/[0.04] px-2 py-1.5 text-[11px] text-red-100/65">{work.attention.message}</div> : null}
+                    {work ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {agentResult ? <HqWorkLink label="Open session" onClick={() => window.electronAPI.openSessionInNewWindow(workspaceId, agentResult.sessionId)} /> : null}
+                        {workflowResult ? <HqWorkLink label="Open run" onClick={() => navigate(routes.view.workflowRun(workflowResult.workflowRunId))} /> : null}
+                        {!agentResult && latestRun?.sessionId ? <HqWorkLink label="Open session" onClick={() => window.electronAPI.openSessionInNewWindow(workspaceId, latestRun.sessionId!)} /> : null}
+                        {!workflowResult && latestRun?.workflowRunId ? <HqWorkLink label="Open run" onClick={() => navigate(routes.view.workflowRun(latestRun.workflowRunId!))} /> : null}
+                        {outputIds.map((outputId, index) => <HqWorkLink key={outputId} label={outputIds.length === 1 ? 'Open Output' : `Output ${index + 1}`} onClick={() => navigate(routes.view.output(outputId))} />)}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <button
+                    {!work ? <button
                       type="button"
                       onClick={() => onEditEvent(event)}
                       disabled={disabled}
@@ -2317,8 +2404,8 @@ function ArtistCalendarView({
                       aria-label="Edit event"
                     >
                       <Pencil className="h-3.5 w-3.5" />
-                    </button>
-                    <button
+                    </button> : null}
+                    {!work ? <button
                       type="button"
                       onClick={() => onDeleteEvent(event.id)}
                       disabled={disabled}
@@ -2326,16 +2413,22 @@ function ArtistCalendarView({
                       aria-label="Delete event"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                    </button> : null}
                   </div>
                 </div>
               )}
             </div>
-          ))}
+          )})}
         </div>
 
         <div className="mt-4 rounded-[14px] border border-white/[0.05] bg-white/[0.018] p-3">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Add Event</div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Add Event</div>
+            <div className="flex flex-wrap gap-1.5">
+              <button type="button" onClick={onQueueHqWork} disabled={disabled} className="h-8 rounded-[6px] border border-white/[0.08] px-2.5 text-[10px] font-medium text-white/58 disabled:opacity-40">Queue HQ work</button>
+              {onQueueCampaignWork ? <button type="button" onClick={onQueueCampaignWork} disabled={disabled} className="h-8 rounded-[6px] border border-orange-200/15 px-2.5 text-[10px] font-medium text-orange-100/65 disabled:opacity-40">Queue campaign work</button> : null}
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-2">
             <Input value={draft.title} onChange={(title) => onChangeDraft({ ...draft, title })} placeholder="Title" />
             <Input value={draft.time} onChange={(time) => onChangeDraft({ ...draft, time })} placeholder="Time, optional" />
@@ -2358,6 +2451,10 @@ function ArtistCalendarView({
       </div>
     </div>
   )
+}
+
+function HqWorkLink({ label, onClick }: { label: string; onClick: () => void }) {
+  return <button type="button" onClick={onClick} className="inline-flex h-7 items-center gap-1 rounded-[5px] border border-white/[0.07] px-2 text-[10px] font-medium text-white/52 hover:bg-white/[0.04]">{label}<ExternalLink className="h-3 w-3" /></button>
 }
 
 function ProjectBoard({

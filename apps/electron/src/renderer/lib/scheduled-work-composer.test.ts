@@ -3,6 +3,7 @@ import {
   composerReviewSentence,
   composerDefinitionDigest,
   buildCampaignScheduleFromComposer,
+  buildCampaignSchedulePlanFromComposer,
   createScheduledWorkComposerDraft,
   selectScheduledWorkComposerType,
   validateComposerDraft,
@@ -119,6 +120,29 @@ describe('scheduled work composer drafts', () => {
     expect(result.calendarItem.job).toBeUndefined()
   })
 
+  test('requires exact safe YouTube settings and blocks unverified Shorts', () => {
+    const initial = createScheduledWorkComposerDraft({
+      ...defaults,
+      suggestedType: 'social-publish',
+      inputRefs: [{ kind: 'final', outputId: 'output-1', assetId: 'asset-1', slot: 'primary' }],
+    })
+    if (initial.type !== 'social-publish') throw new Error('Expected social draft')
+    const draft = {
+      ...initial,
+      title: 'Publish video',
+      time: '10:00',
+      platform: 'youtube',
+      profileId: 'channel-main',
+      caption: 'Official video',
+      platformOptions: { postType: 'short', visibility: 'public', madeForKids: 'no' },
+    }
+    expect(validateComposerDraft(draft)).toMatch(/Shorts classification/)
+    expect(validateComposerDraft({
+      ...draft,
+      platformOptions: { postType: 'video', visibility: 'private', madeForKids: 'no' },
+    })).toBeUndefined()
+  })
+
   test('keeps ask-mode agent tasks runnable while preserving permission mode', () => {
     const initial = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'agent-task' })
     if (initial.type !== 'agent-task') throw new Error('Expected agent draft')
@@ -135,5 +159,30 @@ describe('scheduled work composer drafts', () => {
     expect(result.order.status).toBe('scheduled')
     expect(result.calendarItem.status).toBe('scheduled')
     expect(result.order.execution).toMatchObject({ type: 'agent-task', permissionMode: 'ask' })
+  })
+
+  test('builds a stable Agent to Review chain with a waiting exact-output child', () => {
+    const initial = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'agent-task' })
+    if (initial.type !== 'agent-task') throw new Error('Expected agent draft')
+    const plan = buildCampaignSchedulePlanFromComposer({
+      ...initial,
+      requestId: 'chain-1',
+      title: 'Draft launch copy',
+      time: '10:00',
+      agentSlug: 'content-genius',
+      brief: 'Draft the launch copy.',
+      followUp: { type: 'review', reviewerType: 'user', reviewerId: '', reviewerName: 'You', outputKind: 'document' },
+    }, '2026-07-10T00:00:00.000Z')
+    if (!('orders' in plan)) throw new Error('Expected chain plan')
+
+    expect(plan.orders[0]).toMatchObject({ id: 'campaign-chain-chain-1-0', status: 'scheduled', chain: { ordinal: 0 } })
+    expect(plan.orders[1]).toMatchObject({
+      id: 'campaign-chain-chain-1-1',
+      status: 'waiting',
+      type: 'review',
+      chain: { ordinal: 1, predecessor: { orderId: 'campaign-chain-chain-1-0', releaseOn: 'success' } },
+      inputRefs: [{ kind: 'produced-output', selector: { kind: 'document' }, bindTo: { kind: 'review-target' } }],
+    })
+    expect(plan.calendarItems.map((item) => item.status)).toEqual(['scheduled', 'draft'])
   })
 })

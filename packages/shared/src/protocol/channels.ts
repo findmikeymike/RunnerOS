@@ -428,10 +428,18 @@ export const RPC_CHANNELS = {
     MUTATE: 'scheduledWork:mutate',
     /** Atomically create campaign work and its linked calendar shell. */
     SCHEDULE_CAMPAIGN: 'scheduledWork:scheduleCampaign',
+    /** Create a supported two-step campaign chain and both calendar shells. */
+    SCHEDULE_CAMPAIGN_CHAIN: 'scheduledWork:scheduleCampaignChain',
     /** Cancel campaign work and remove its linked calendar shell. */
     CANCEL_CAMPAIGN: 'scheduledWork:cancelCampaign',
     /** Record a decision for campaign work awaiting review. */
     DECIDE_CAMPAIGN: 'scheduledWork:decideCampaign',
+    /** Resolve one ambiguous produced Output for a waiting campaign follow-up. */
+    RESOLVE_CAMPAIGN_OUTPUT: 'scheduledWork:resolveCampaignOutput',
+    /** Approve one exact prepared native social action. */
+    APPROVE_CAMPAIGN_SOCIAL: 'scheduledWork:approveCampaignSocial',
+    /** Create HQ-owned scheduled work and authoritative Artist Calendar shells. */
+    SCHEDULE_HQ: 'scheduledWork:scheduleHq',
     /** Migrate embedded campaign jobs into scheduled-work. */
     MIGRATE_CAMPAIGN: 'scheduledWork:migrateCampaign',
   },

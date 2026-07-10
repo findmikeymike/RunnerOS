@@ -45,7 +45,7 @@ import {
   type ScheduledWorkComposerEntry,
 } from '@/components/calendar/ScheduledWorkComposer'
 import {
-  buildCampaignScheduleFromComposer,
+  buildCampaignSchedulePlanFromComposer,
   type ScheduledWorkComposerDraft,
 } from '@/lib/scheduled-work-composer'
 
@@ -257,13 +257,17 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
       toast.success('Event added')
       return
     }
-    const input = buildCampaignScheduleFromComposer(draft)
-    const result = await window.electronAPI.scheduleCampaignWork(workspaceId, input)
+    const input = buildCampaignSchedulePlanFromComposer(draft)
+    const result = 'orders' in input
+      ? await window.electronAPI.scheduleCampaignWorkChain(workspaceId, input)
+      : await window.electronAPI.scheduleCampaignWork(workspaceId, input)
     setOptimisticCampaignCalendar(result.calendar)
     setOptimisticScheduledWork(result.work)
-    setSelectedCalendarDate(result.calendarItem.date)
+    const queuedOrder = 'orders' in result ? result.orders[0] : result.order
+    const queuedCalendarItem = 'calendarItems' in result ? result.calendarItems[0] : result.calendarItem
+    setSelectedCalendarDate(queuedCalendarItem.date)
     setComposerPrefill(null)
-    toast.success(`${result.order.title} queued`)
+    toast.success(`${queuedOrder.title} queued`)
   }, [saveCampaignCalendar, workspaceId])
 
   const openCampaignCalendarItemEdit = React.useCallback((item: CampaignCalendarItem) => {
@@ -423,6 +427,43 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
     }
   }, [refresh, workspaceId])
 
+  const resolveProducedOutput = React.useCallback(async (order: ScheduledWorkOrder, outputId: string) => {
+    try {
+      const result = await window.electronAPI.resolveCampaignProducedOutput(workspaceId, {
+        orderId: order.id,
+        calendarItemId: order.calendarLink.itemId,
+        expectedUpdatedAt: order.updatedAt,
+        outputId,
+      })
+      setOptimisticCampaignCalendar(result.calendar)
+      setOptimisticScheduledWork(result.work)
+      toast.success(`Selected Output for ${order.title}`)
+    } catch (error) {
+      setOptimisticCampaignCalendar(null)
+      setOptimisticScheduledWork(null)
+      await refresh()
+      throw error
+    }
+  }, [refresh, workspaceId])
+
+  const approveScheduledSocial = React.useCallback(async (order: ScheduledWorkOrder) => {
+    try {
+      const result = await window.electronAPI.approveCampaignSocialWork(workspaceId, {
+        orderId: order.id,
+        calendarItemId: order.calendarLink.itemId,
+        expectedUpdatedAt: order.updatedAt,
+      })
+      setOptimisticCampaignCalendar(result.calendar)
+      setOptimisticScheduledWork(result.work)
+      toast.success(`${order.title} approved for publishing`)
+    } catch (error) {
+      setOptimisticCampaignCalendar(null)
+      setOptimisticScheduledWork(null)
+      await refresh()
+      throw error
+    }
+  }, [refresh, workspaceId])
+
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto flex min-h-full w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
@@ -482,6 +523,17 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
           onOpenRun={(runId) => navigate(routes.view.workflowRun(runId))}
           onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
           onReviewDecision={decideScheduledWork}
+          onResolveProducedOutput={resolveProducedOutput}
+          onApproveSocial={approveScheduledSocial}
+          onQueueReplacement={(work) => {
+            setComposerPrefill({
+              title: work.title,
+              suggestedType: work.type,
+              inputRefs: work.inputRefs.filter((ref) => ref.kind !== 'produced-output'),
+            })
+            setComposerOpen(true)
+          }}
+          onOpenSocialSettings={() => navigate(routes.view.settings('social-accounts'))}
           onOpenComposer={() => {
             setComposerPrefill(null)
             setComposerOpen(true)
@@ -526,6 +578,10 @@ function CampaignCalendarSurface({
   onOpenRun,
   onOpenOutput,
   onReviewDecision,
+  onResolveProducedOutput,
+  onApproveSocial,
+  onQueueReplacement,
+  onOpenSocialSettings,
   onOpenComposer,
 }: {
   items: CampaignCalendarItem[]
@@ -554,6 +610,10 @@ function CampaignCalendarSurface({
   onOpenRun: (runId: string) => void
   onOpenOutput: (outputId: string) => void
   onReviewDecision: (order: ScheduledWorkOrder, decision: 'approved' | 'changes-requested', notes?: string) => Promise<void>
+  onResolveProducedOutput: (order: ScheduledWorkOrder, outputId: string) => Promise<void>
+  onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
+  onQueueReplacement: (order: ScheduledWorkOrder) => void
+  onOpenSocialSettings: () => void
   onOpenComposer: () => void
 }) {
   const dayMetaByDate = React.useMemo(() => {
@@ -607,6 +667,8 @@ function CampaignCalendarSurface({
               </div>
             ) : selectedDateItems.map((item) => {
               const work = item.scheduledWorkId ? workById.get(item.scheduledWorkId) : undefined
+              const predecessor = work?.chain?.predecessor ? workById.get(work.chain.predecessor.orderId) : undefined
+              const producedOutputIds = predecessor?.result && 'outputIds' in predecessor.result ? predecessor.result.outputIds : []
               const displayStatus = work?.status ?? item.status
               return <div key={item.id} className="rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3">
                 {editingItemId === item.id ? (
@@ -634,7 +696,7 @@ function CampaignCalendarSurface({
                       </div>
                       {item.notes ? <div className="mt-2 text-xs leading-5 text-white/38">{item.notes}</div> : null}
                       <CampaignCalendarJobDetails item={item} />
-                      {work ? <ScheduledWorkDetails work={work} onOpenSession={onOpenSession} onOpenRun={onOpenRun} onOpenOutput={onOpenOutput} onReviewDecision={onReviewDecision} /> : null}
+                      {work ? <ScheduledWorkDetails work={work} calendarStatus={item.status} producedOutputIds={producedOutputIds} onOpenSession={onOpenSession} onOpenRun={onOpenRun} onOpenOutput={onOpenOutput} onReviewDecision={onReviewDecision} onResolveProducedOutput={onResolveProducedOutput} onApproveSocial={onApproveSocial} onQueueReplacement={onQueueReplacement} onOpenSocialSettings={onOpenSocialSettings} /> : null}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
                       {item.status === 'needs-approval' && !item.scheduledWorkId ? (
@@ -776,12 +838,18 @@ function CampaignCalendarJobDetails({ item }: { item: CampaignCalendarItem }) {
   )
 }
 
-function ScheduledWorkDetails({ work, onOpenSession, onOpenRun, onOpenOutput, onReviewDecision }: {
+function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenSession, onOpenRun, onOpenOutput, onReviewDecision, onResolveProducedOutput, onApproveSocial, onQueueReplacement, onOpenSocialSettings }: {
   work: ScheduledWorkOrder
+  calendarStatus: CampaignCalendarItemStatus
+  producedOutputIds: string[]
   onOpenSession: (sessionId: string) => void
   onOpenRun: (runId: string) => void
   onOpenOutput: (outputId: string) => void
   onReviewDecision: (order: ScheduledWorkOrder, decision: 'approved' | 'changes-requested', notes?: string) => Promise<void>
+  onResolveProducedOutput: (order: ScheduledWorkOrder, outputId: string) => Promise<void>
+  onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
+  onQueueReplacement: (order: ScheduledWorkOrder) => void
+  onOpenSocialSettings: () => void
 }) {
   const latestRun = work.runs.at(-1)
   const agentResult = work.result?.type === 'agent-task' ? work.result : undefined
@@ -791,15 +859,17 @@ function ScheduledWorkDetails({ work, onOpenSession, onOpenRun, onOpenOutput, on
   const [notes, setNotes] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [decisionError, setDecisionError] = React.useState<string | null>(null)
-  const decide = async (decision: 'approved' | 'changes-requested') => {
-    if (decision === 'changes-requested' && !notes.trim()) {
+  const expectedCalendarStatus = work.reviewDecision?.decision === 'approved' ? 'done' : work.reviewDecision ? 'failed' : undefined
+  const needsCalendarRepair = Boolean(expectedCalendarStatus && calendarStatus !== expectedCalendarStatus)
+  const decide = async (decision: 'approved' | 'changes-requested', decisionNotes = notes) => {
+    if (decision === 'changes-requested' && !decisionNotes.trim()) {
       setDecisionError('Explain what needs to change.')
       return
     }
     setBusy(true)
     setDecisionError(null)
     try {
-      await onReviewDecision(work, decision, notes.trim() || undefined)
+      await onReviewDecision(work, decision, decisionNotes.trim() || undefined)
     } catch (error) {
       setDecisionError(error instanceof Error ? error.message : String(error))
     } finally {
@@ -815,6 +885,25 @@ function ScheduledWorkDetails({ work, onOpenSession, onOpenRun, onOpenOutput, on
       {work.attention ? (
         <div className="mt-2 rounded-[6px] border border-red-300/10 bg-red-300/[0.045] px-2 py-1.5 text-[11px] leading-4 text-red-100/66">
           {work.attention.message}
+        </div>
+      ) : null}
+      {work.status === 'needs-attention' && work.attention?.reason !== 'produced-output-ambiguous' && work.attention?.reason !== 'produced-output-missing' ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          <button type="button" onClick={() => onQueueReplacement(work)} className="h-7 rounded-[5px] border border-white/[0.08] px-2.5 text-[10px] font-medium text-white/58">Queue replacement</button>
+          {work.attention?.reason === 'profile-login-required' ? <button type="button" onClick={onOpenSocialSettings} className="h-7 rounded-[5px] border border-yellow-200/15 px-2.5 text-[10px] font-medium text-yellow-100/65">Open Social Accounts</button> : null}
+        </div>
+      ) : null}
+      {(work.attention?.reason === 'produced-output-missing' || work.attention?.reason === 'produced-output-ambiguous') && producedOutputIds.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {producedOutputIds.map((outputId, index) => (
+            <div key={outputId} className="flex items-center gap-1">
+              <WorkAction label={`Open Output ${index + 1}`} onClick={() => onOpenOutput(outputId)} />
+              <button type="button" disabled={busy} onClick={() => {
+                setBusy(true)
+                void onResolveProducedOutput(work, outputId).catch((error) => setDecisionError(error instanceof Error ? error.message : String(error))).finally(() => setBusy(false))
+              }} className="h-7 rounded-[5px] bg-white/85 px-2 text-[10px] font-semibold text-black disabled:opacity-40">Use</button>
+            </div>
+          ))}
         </div>
       ) : null}
       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -843,8 +932,39 @@ function ScheduledWorkDetails({ work, onOpenSession, onOpenRun, onOpenOutput, on
         </div>
       ) : null}
       {work.reviewDecision ? (
-        <div className="mt-2 text-[10px] text-white/38">
-          Review {work.reviewDecision.decision.replace(/-/g, ' ')} · {formatCompactDateTime(work.reviewDecision.decidedAt)}
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px] text-white/38">
+          <span>Review {work.reviewDecision.decision.replace(/-/g, ' ')} · {formatCompactDateTime(work.reviewDecision.decidedAt)}</span>
+          {needsCalendarRepair ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void decide(work.reviewDecision!.decision, work.reviewDecision!.notes ?? '')}
+              className="h-7 rounded-[5px] border border-yellow-200/15 px-2 text-[10px] font-medium text-yellow-100/65 disabled:opacity-40"
+            >
+              Repair calendar status
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {work.execution.type === 'social-publish' && work.socialAction ? (
+        <div className="mt-2.5 rounded-[6px] border border-yellow-200/10 bg-yellow-200/[0.04] px-2.5 py-2 text-[11px] leading-4 text-yellow-100/65">
+          <div>{work.socialAction.summary ?? `Prepared ${work.socialAction.platform}/${work.socialAction.profileId}`}</div>
+          <div className="mt-1 font-mono text-[9px] text-white/30">{work.socialAction.actionId} · {work.socialAction.actionDigest.slice(0, 20)}...</div>
+          {work.socialApproval ? (
+            <div className="mt-1.5 text-emerald-100/65">Approved until {formatCompactDateTime(work.socialApproval.expiresAt)}</div>
+          ) : work.status === 'needs-approval' ? (
+            <button type="button" disabled={busy} onClick={() => {
+              setBusy(true)
+              void onApproveSocial(work).catch((error) => setDecisionError(error instanceof Error ? error.message : String(error))).finally(() => setBusy(false))
+            }} className="mt-2 h-7 rounded-[5px] bg-yellow-100/90 px-2.5 text-[10px] font-semibold text-black disabled:opacity-40">Approve exact post</button>
+          ) : null}
+        </div>
+      ) : null}
+      {work.result?.type === 'social-publish' ? (
+        <div className="mt-2 rounded-[6px] border border-emerald-200/10 bg-emerald-200/[0.04] px-2.5 py-2 text-[11px] text-emerald-100/68">
+          <div>{work.result.receipt.summary ?? `Published to ${work.result.receipt.platform}/${work.result.receipt.profileId}`}</div>
+          <div className="mt-1 text-[10px] text-white/34">Receipt {work.result.receipt.id} · {formatCompactDateTime(work.result.receipt.completedAt)}</div>
+          {work.result.receipt.externalUrl ? <a href={work.result.receipt.externalUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-emerald-100/70">Open post <ExternalLink className="h-3 w-3" /></a> : null}
         </div>
       ) : null}
     </div>
@@ -1023,6 +1143,7 @@ function statusBadgeClass(status: CampaignCalendarItemStatus): string {
 
 function campaignStatusForWork(status: ScheduledWorkStatus | undefined): CampaignCalendarItemStatus | undefined {
   if (!status) return undefined
+  if (status === 'waiting') return 'draft'
   if (status === 'needs-setup' || status === 'needs-attention') return 'failed'
   if (status === 'awaiting-review') return 'needs-approval'
   return status

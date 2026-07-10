@@ -122,6 +122,7 @@ export interface OutputOrigin {
   workflowName?: string;
   stepId?: string;
   sessionId?: string;
+  workOrderId?: string;
   agentSlug?: string;
   agentName?: string;
   automationId?: string;

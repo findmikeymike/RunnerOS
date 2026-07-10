@@ -1,4 +1,5 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
+import { createHash } from 'node:crypto'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { loadGlobalAgent, readActivatedAgents } from '@craft-agent/shared/agent-definitions'
 import { loadGlobalWorkflow, readActivatedWorkflows } from '@craft-agent/shared/workflows'
@@ -24,10 +25,18 @@ import {
   type ScheduledWorkDocument,
   type ScheduleCampaignWorkInput,
   type ScheduleCampaignWorkResult,
+  type ScheduleCampaignChainInput,
+  type ScheduleCampaignChainResult,
   type CancelCampaignWorkInput,
   type CancelCampaignWorkResult,
   type DecideCampaignWorkInput,
   type DecideCampaignWorkResult,
+  type ResolveCampaignProducedOutputInput,
+  type ResolveCampaignProducedOutputResult,
+  type ApproveCampaignSocialWorkInput,
+  type ApproveCampaignSocialWorkResult,
+  type ScheduleHqWorkInput,
+  type ScheduleHqWorkResult,
   type ScheduledWorkMutation,
   type ScheduledWorkMutationResult,
   type ScheduledWorkParseResult,
@@ -53,8 +62,12 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.scheduledWork.GET,
   RPC_CHANNELS.scheduledWork.MUTATE,
   RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN,
+  RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN,
   RPC_CHANNELS.scheduledWork.CANCEL_CAMPAIGN,
   RPC_CHANNELS.scheduledWork.DECIDE_CAMPAIGN,
+  RPC_CHANNELS.scheduledWork.RESOLVE_CAMPAIGN_OUTPUT,
+  RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL,
+  RPC_CHANNELS.scheduledWork.SCHEDULE_HQ,
   RPC_CHANNELS.scheduledWork.MIGRATE_CAMPAIGN,
 ] as const
 
@@ -230,9 +243,18 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
             : undefined,
           updatedAt: now,
         }
+        const decidedItems = scheduled.work.items.map((candidate) => candidate.id === nextOrder.id ? nextOrder : candidate)
+        const downstream = decidedItems.find((candidate) => candidate.chain?.predecessor?.orderId === nextOrder.id
+          && candidate.chain.predecessor.releaseOn === 'creative-approval')
+        const nextDownstream = downstream && !alreadyDecided ? {
+          ...downstream,
+          status: input.decision === 'approved' ? 'needs-approval' as const : 'canceled' as const,
+          attention: input.decision === 'approved' ? undefined : { reason: 'changes-requested' as const, message: notes! },
+          updatedAt: now,
+        } : downstream
         const nextWork = alreadyDecided ? scheduled.work : {
           ...scheduled.work,
-          items: scheduled.work.items.map((candidate) => candidate.id === nextOrder.id ? nextOrder : candidate),
+          items: decidedItems.map((candidate) => candidate.id === nextDownstream?.id ? nextDownstream : candidate),
           updatedAt: now,
         }
         const calendarStatus = input.decision === 'approved' ? 'done' as const : 'failed' as const
@@ -241,10 +263,21 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           status: calendarStatus,
           updatedAt: now,
         }
+        const downstreamCalendarItem = nextDownstream
+          ? parsedCalendar.calendar.items.find((candidate) => candidate.id === nextDownstream.calendarLink.itemId)
+          : undefined
+        const downstreamCalendarStatus = nextDownstream?.status === 'needs-approval' ? 'needs-approval' as const : nextDownstream ? 'canceled' as const : undefined
         const calendarAlreadyUpdated = linkedItem.status === calendarStatus
+          && (!downstreamCalendarItem || downstreamCalendarItem.status === downstreamCalendarStatus)
         const calendar = calendarAlreadyUpdated ? parsedCalendar.calendar : {
           ...parsedCalendar.calendar,
-          items: parsedCalendar.calendar.items.map((candidate) => candidate.id === calendarItem.id ? calendarItem : candidate),
+          items: parsedCalendar.calendar.items.map((candidate) => {
+            if (candidate.id === calendarItem.id) return calendarItem
+            if (candidate.id === downstreamCalendarItem?.id && downstreamCalendarStatus) {
+              return { ...candidate, status: downstreamCalendarStatus, updatedAt: now }
+            }
+            return candidate
+          }),
           updatedAt: now,
         }
         if (!alreadyDecided) writeScheduledWork(rootPath, nextWork)
@@ -253,6 +286,104 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
           broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
         }
         return { work: nextWork, order: nextOrder, calendar, calendarItem }
+      })
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.scheduledWork.RESOLVE_CAMPAIGN_OUTPUT,
+    async (_ctx, workspaceId: string, input: ResolveCampaignProducedOutputInput): Promise<ResolveCampaignProducedOutputResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      return withWorkspaceContextLock(rootPath, async () => {
+        const scheduled = readScheduledWork(rootPath, workspaceId)
+        if (!scheduled.ok) throw new Error(scheduled.error)
+        const parsedCalendar = readCampaignCalendar(rootPath, workspaceId)
+        if (!parsedCalendar.ok) throw new Error(parsedCalendar.error)
+        const order = scheduled.work.items.find((candidate) => candidate.id === input.orderId && !candidate.deletedAt)
+        const calendarItem = parsedCalendar.calendar.items.find((candidate) => candidate.id === input.calendarItemId && !candidate.deletedAt)
+        if (!order || !calendarItem || calendarItem.scheduledWorkId !== order.id || order.calendarLink.itemId !== calendarItem.id) {
+          throw new Error('Linked campaign work was not found.')
+        }
+        if (order.updatedAt !== input.expectedUpdatedAt) throw new Error(`Scheduled work order changed before Output selection: ${order.id}`)
+        if (order.status !== 'needs-attention'
+          || (order.attention?.reason !== 'produced-output-missing' && order.attention?.reason !== 'produced-output-ambiguous')) {
+          throw new Error('This work is not waiting for an exact produced Output.')
+        }
+        const predecessorId = order.chain?.predecessor?.orderId
+        const parent = scheduled.work.items.find((candidate) => candidate.id === predecessorId && candidate.status === 'done')
+        const parentOutputIds = parent?.result && 'outputIds' in parent.result ? parent.result.outputIds : []
+        if (!parent || !parentOutputIds.includes(input.outputId)) throw new Error('Selected Output was not produced by the predecessor.')
+        const manifest = listOutputManifests(rootPath).find((candidate) => candidate.id === input.outputId)
+        if (!manifest) throw new Error('Selected Output no longer exists.')
+        const producedRef = order.inputRefs.find((ref) => ref.kind === 'produced-output')
+        if (!producedRef || (producedRef.selector?.kind && producedRef.selector.kind !== manifest.kind)) {
+          throw new Error('Selected Output does not match the required kind.')
+        }
+        const now = new Date().toISOString()
+        const resolution = { outputId: input.outputId, parentResultDigest: scheduledWorkDefinitionDigest(parent.result), source: 'user' as const, resolvedAt: now }
+        const inputRefs = order.inputRefs.map((ref) => ref === producedRef ? { ...ref, resolution } : ref)
+        let execution = order.execution
+        if (execution.type === 'workflow-run' && producedRef.bindTo.kind === 'workflow-trigger') {
+          execution = { ...execution, triggerInputs: { ...execution.triggerInputs, [producedRef.bindTo.input]: input.outputId } }
+        }
+        const nextOrder = { ...order, status: order.type === 'review' ? 'awaiting-review' as const : 'scheduled' as const, attention: undefined, inputRefs, execution, updatedAt: now }
+        const work = { ...scheduled.work, items: scheduled.work.items.map((candidate) => candidate.id === nextOrder.id ? nextOrder : candidate), updatedAt: now }
+        const nextCalendarItem = { ...calendarItem, status: order.type === 'review' ? 'needs-approval' as const : 'scheduled' as const, updatedAt: now }
+        const calendar = { ...parsedCalendar.calendar, items: parsedCalendar.calendar.items.map((candidate) => candidate.id === nextCalendarItem.id ? nextCalendarItem : candidate), updatedAt: now }
+        writeScheduledWork(rootPath, work)
+        writeCampaignCalendar(rootPath, calendar)
+        broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+        return { work, order: nextOrder, calendar, calendarItem: nextCalendarItem }
+      })
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.scheduledWork.APPROVE_CAMPAIGN_SOCIAL,
+    async (ctx, workspaceId: string, input: ApproveCampaignSocialWorkInput): Promise<ApproveCampaignSocialWorkResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      return withWorkspaceContextLock(rootPath, async () => {
+        const scheduled = readScheduledWork(rootPath, workspaceId)
+        if (!scheduled.ok) throw new Error(scheduled.error)
+        const parsedCalendar = readCampaignCalendar(rootPath, workspaceId)
+        if (!parsedCalendar.ok) throw new Error(parsedCalendar.error)
+        const order = scheduled.work.items.find((candidate) => candidate.id === input.orderId && !candidate.deletedAt)
+        const calendarItem = parsedCalendar.calendar.items.find((candidate) => candidate.id === input.calendarItemId && !candidate.deletedAt)
+        if (!order || !calendarItem || calendarItem.scheduledWorkId !== order.id || order.calendarLink.itemId !== calendarItem.id) {
+          throw new Error('Linked campaign work was not found.')
+        }
+        if (order.updatedAt !== input.expectedUpdatedAt) throw new Error(`Scheduled work order changed before social approval: ${order.id}`)
+        if (order.status !== 'needs-approval' || order.execution.type !== 'social-publish' || !order.socialAction) {
+          throw new Error('Social work needs a current dry-run before approval.')
+        }
+        const now = new Date()
+        if (Date.parse(order.startAt) - now.getTime() > 30 * 60 * 1000) {
+          throw new Error('Social approval opens 30 minutes before the scheduled publish time.')
+        }
+        if (order.socialAction.payloadDigest !== order.executionKey.payloadDigest
+          || order.socialAction.platform !== order.execution.platform
+          || order.socialAction.profileId !== order.execution.profileId) {
+          throw new Error('Social dry-run no longer matches the work order.')
+        }
+        assertNativeSocialPreview(order)
+        const expiresAt = new Date(Math.max(now.getTime(), Date.parse(order.startAt)) + 30 * 60 * 1000).toISOString()
+        const approval = {
+          id: `scheduled-social-approval-${order.id}-${now.getTime()}`,
+          approvedAt: now.toISOString(),
+          expiresAt,
+          actionId: order.socialAction.actionId,
+          actionDigest: order.socialAction.actionDigest,
+          mediaDigest: order.socialAction.mediaDigest,
+          payloadDigest: order.socialAction.payloadDigest,
+          platform: order.socialAction.platform,
+          profileId: order.socialAction.profileId,
+          approvedBy: { type: 'user' as const, clientId: ctx.clientId },
+        }
+        const nextOrder = { ...order, socialApproval: approval, updatedAt: now.toISOString() }
+        const work = { ...scheduled.work, items: scheduled.work.items.map((candidate) => candidate.id === nextOrder.id ? nextOrder : candidate), updatedAt: now.toISOString() }
+        writeScheduledWork(rootPath, work)
+        broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+        return { work, order: nextOrder, calendar: parsedCalendar.calendar, calendarItem }
       })
     },
   )
@@ -326,6 +457,111 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
   )
 
   server.handle(
+    RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN_CHAIN,
+    async (_ctx, workspaceId: string, input: ScheduleCampaignChainInput): Promise<ScheduleCampaignChainResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      return withWorkspaceContextLock(rootPath, async () => {
+        assertCampaignChainInput(workspaceId, input)
+        for (let index = 0; index < input.orders.length; index += 1) {
+          const order = input.orders[index]!
+          const shell = input.calendarItems[index]!
+          const validation = applyScheduledWorkMutation(emptyScheduledWorkDocument(workspaceId), {
+            operation: 'upsert', order, expectedUpdatedAt: null,
+          }, order.updatedAt)
+          if (!validation.ok) throw new Error(validation.error)
+          assertCampaignScheduleInput(workspaceId, { order: validation.item, calendarItem: shell }, true)
+          await validateScheduleRuntime(deps, rootPath, validation.item)
+        }
+        const scheduled = readScheduledWork(rootPath, workspaceId)
+        if (!scheduled.ok) throw new Error(scheduled.error)
+        const parsedCalendar = readCampaignCalendar(rootPath, workspaceId)
+        if (!parsedCalendar.ok) throw new Error(parsedCalendar.error)
+
+        const resolvedOrders = input.orders.map((candidate) => {
+          const existing = scheduled.work.items.find((item) => item.id === candidate.id)
+          if (existing && !sameScheduleIdentity(existing, candidate)) {
+            throw new Error(`Scheduled work id already exists with different execution data: ${candidate.id}`)
+          }
+          return existing ?? candidate
+        }) as [ScheduledWorkDocument['items'][number], ScheduledWorkDocument['items'][number]]
+        const missingOrders = resolvedOrders.filter((order) => !scheduled.work.items.some((item) => item.id === order.id))
+        const work = missingOrders.length === 0 ? scheduled.work : {
+          ...scheduled.work,
+          items: [...scheduled.work.items, ...missingOrders],
+          updatedAt: new Date().toISOString(),
+        }
+
+        const resolvedShells = input.calendarItems.map((candidate, index) => {
+          const existing = parsedCalendar.calendar.items.find((item) => item.id === candidate.id)
+          if (existing && existing.scheduledWorkId !== resolvedOrders[index]!.id) {
+            throw new Error(`Campaign Calendar item id already belongs to different work: ${candidate.id}`)
+          }
+          if (existing) assertCampaignShellMatchesOrder(resolvedOrders[index]!, existing)
+          return existing ?? candidate
+        }) as [CampaignCalendarItem, CampaignCalendarItem]
+        const missingShells = resolvedShells.filter((item) => !parsedCalendar.calendar.items.some((candidate) => candidate.id === item.id))
+        const calendar = missingShells.length === 0 ? parsedCalendar.calendar : {
+          ...parsedCalendar.calendar,
+          items: [...parsedCalendar.calendar.items, ...missingShells],
+          updatedAt: new Date().toISOString(),
+        }
+        if (missingOrders.length > 0) writeScheduledWork(rootPath, work)
+        if (missingShells.length > 0) writeCampaignCalendar(rootPath, calendar)
+        if (missingOrders.length > 0 || missingShells.length > 0) {
+          broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+        }
+        return {
+          updated: missingOrders.length > 0 || missingShells.length > 0,
+          work,
+          orders: resolvedOrders,
+          calendar,
+          calendarItems: resolvedShells,
+        }
+      })
+    },
+  )
+
+  server.handle(
+    RPC_CHANNELS.scheduledWork.SCHEDULE_HQ,
+    async (_ctx, workspaceId: string, input: ScheduleHqWorkInput): Promise<ScheduleHqWorkResult> => {
+      const rootPath = resolveRootPath(workspaceId)
+      return withWorkspaceContextLock(rootPath, async () => {
+        if (!input.requestId.trim() || input.orders.length !== 1) throw new Error('HQ work plan is invalid.')
+        for (const order of input.orders) {
+          const validation = applyScheduledWorkMutation(emptyScheduledWorkDocument(workspaceId), { operation: 'upsert', order, expectedUpdatedAt: null }, order.updatedAt)
+          if (!validation.ok) throw new Error(validation.error)
+          if (order.owner.scope !== 'hq' || order.owner.workspaceId !== workspaceId || order.owner.campaignId || order.calendarLink.calendar !== 'hq') {
+            throw new Error('Scheduled work owner does not match the HQ workspace.')
+          }
+          if ((order.type !== 'agent-task' && order.type !== 'workflow-run') || order.status !== 'scheduled' || order.chain) {
+            throw new Error('HQ Calendar currently supports standalone agent and workflow work only.')
+          }
+          await validateScheduleRuntime(deps, rootPath, order)
+        }
+        const scheduled = readScheduledWork(rootPath, workspaceId)
+        if (!scheduled.ok) throw new Error(scheduled.error)
+        const resolvedOrders = input.orders.map((candidate) => {
+          const existing = scheduled.work.items.find((item) => item.id === candidate.id)
+          if (existing && !sameScheduleIdentity(existing, candidate)) throw new Error(`Scheduled work id already exists with different execution data: ${candidate.id}`)
+          return existing ?? candidate
+        })
+        const missingOrders = resolvedOrders.filter((order) => !scheduled.work.items.some((candidate) => candidate.id === order.id))
+        const work = missingOrders.length ? { ...scheduled.work, items: [...scheduled.work.items, ...missingOrders], updatedAt: new Date().toISOString() } : scheduled.work
+        const artistCalendar = readArtistCalendar(rootPath)
+        for (const order of resolvedOrders) {
+          const existingEvent = artistCalendar.events.find((event) => event.id === order.calendarLink.itemId)
+          if (existingEvent && existingEvent.scheduledWorkId !== order.id) throw new Error(`Artist Calendar event id already belongs to different work: ${existingEvent.id}`)
+        }
+        const missingEvents = resolvedOrders.filter((order) => !artistCalendar.events.some((event) => event.id === order.calendarLink.itemId)).map(hqEventFromOrder)
+        if (missingOrders.length) writeScheduledWork(rootPath, work)
+        if (missingEvents.length) writeArtistCalendar(rootPath, { ...artistCalendar, events: [...artistCalendar.events, ...missingEvents], updatedAt: new Date().toISOString() })
+        if (missingOrders.length || missingEvents.length) broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+        return { updated: Boolean(missingOrders.length || missingEvents.length), work, orders: resolvedOrders }
+      })
+    },
+  )
+
+  server.handle(
     RPC_CHANNELS.scheduledWork.MIGRATE_CAMPAIGN,
     async (_ctx, workspaceId: string): Promise<ScheduledWorkMigrationResult> => {
       const rootPath = resolveRootPath(workspaceId)
@@ -356,8 +592,9 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
   )
 }
 
-function assertCampaignScheduleInput(workspaceId: string, input: ScheduleCampaignWorkInput): void {
+function assertCampaignScheduleInput(workspaceId: string, input: ScheduleCampaignWorkInput, allowWaiting = false): void {
   const { order, calendarItem } = input
+  const expectedShellStatus = order.status === 'waiting' ? 'draft' : order.status
   if (order.owner.scope !== 'campaign'
     || order.owner.workspaceId !== workspaceId
     || order.owner.campaignId !== workspaceId
@@ -368,8 +605,8 @@ function assertCampaignScheduleInput(workspaceId: string, input: ScheduleCampaig
     || calendarItem.scheduledWorkId !== order.id
     || calendarItem.kind !== 'scheduled-job'
     || calendarItem.source !== 'user'
-    || calendarItem.status !== order.status
-    || (order.status !== 'scheduled' && order.status !== 'needs-approval')
+    || calendarItem.status !== expectedShellStatus
+    || (order.status !== 'scheduled' && order.status !== 'needs-approval' && !(allowWaiting && order.status === 'waiting'))
     || order.approvals.length > 0
     || order.runs.length > 0
     || order.result
@@ -381,6 +618,52 @@ function assertCampaignScheduleInput(workspaceId: string, input: ScheduleCampaig
     throw new Error('Campaign Calendar shell does not match the scheduled work order.')
   }
   assertCampaignShellMatchesOrder(order, calendarItem)
+}
+
+function assertCampaignChainInput(workspaceId: string, input: ScheduleCampaignChainInput): void {
+  const [root, child] = input.orders
+  const [rootShell, childShell] = input.calendarItems
+  const chainId = `campaign-chain-${input.requestId}`
+  const allowedPair = (root.type === 'agent-task' && (child.type === 'review' || child.type === 'workflow-run'))
+    || (root.type === 'workflow-run' && child.type === 'review')
+    || (root.type === 'review' && child.type === 'social-publish')
+  const producedRefs = child.inputRefs.filter((ref) => ref.kind === 'produced-output')
+  const validInputs = root.type === 'review'
+    ? root.inputRefs.length === 1
+      && child.inputRefs.length === 1
+      && JSON.stringify(root.inputRefs) === JSON.stringify(child.inputRefs)
+      && (root.inputRefs[0]?.kind === 'final' || root.inputRefs[0]?.kind === 'output')
+    : producedRefs.length === 1
+      && (child.type === 'review'
+        ? producedRefs[0]?.bindTo.kind === 'review-target'
+        : producedRefs[0]?.bindTo.kind === 'workflow-trigger')
+  const duplicateReviewGate = root.execution.type === 'agent-task'
+    && child.type === 'review'
+    && root.execution.expectedOutput.reviewRequired === true
+  if (!input.requestId.trim()
+    || !allowedPair
+    || !validInputs
+    || duplicateReviewGate
+    || root.id !== `${chainId}-0`
+    || child.id !== `${chainId}-1`
+    || rootShell.id !== `${chainId}-calendar-0`
+    || childShell.id !== `${chainId}-calendar-1`
+    || root.status !== 'scheduled'
+    || child.status !== 'waiting'
+    || root.owner.workspaceId !== workspaceId
+    || child.owner.workspaceId !== workspaceId
+    || root.chain?.chainId !== chainId
+    || root.chain.stepId !== `${chainId}-step-0`
+    || root.chain.ordinal !== 0
+    || root.chain.predecessor
+    || child.chain?.chainId !== chainId
+    || child.chain.stepId !== `${chainId}-step-1`
+    || child.chain.ordinal !== 1
+    || child.chain.predecessor?.orderId !== root.id
+    || child.chain.predecessor.stepId !== root.chain.stepId
+    || child.chain.predecessor.releaseOn !== (root.type === 'review' ? 'creative-approval' : 'success')) {
+    throw new Error('Campaign work chain is invalid.')
+  }
 }
 
 function assertCampaignShellMatchesOrder(order: ScheduledWorkDocument['items'][number], calendarItem: CampaignCalendarItem): void {
@@ -440,13 +723,121 @@ function sameJson(left: unknown, right: unknown): boolean {
   return JSON.stringify(left) === JSON.stringify(right)
 }
 
+function assertNativeSocialPreview(order: ScheduledWorkDocument['items'][number]): void {
+  if (order.execution.type !== 'social-publish' || !order.socialAction) throw new Error('Social dry-run is missing.')
+  const dryRun = order.socialAction.dryRun
+  const action = dryRun.action
+  if (!action || typeof action !== 'object' || Array.isArray(action)) throw new Error('Social dry-run action is missing.')
+  const record = action as Record<string, unknown>
+  const payload = record.payload && typeof record.payload === 'object' && !Array.isArray(record.payload) ? record.payload as Record<string, unknown> : {}
+  const options = record.options && typeof record.options === 'object' && !Array.isArray(record.options) ? record.options as Record<string, unknown> : {}
+  const digest = `sha256:${createHash('sha256').update(stableSocialStringify({ action, browserPlan: dryRun.browserPlan, mediaDigest: order.socialAction.mediaDigest })).digest('hex')}`
+  const youtubeSettingsMatch = order.execution.platform !== 'youtube' || (
+    payload.postType === (typeof order.execution.platformOptions?.postType === 'string' ? order.execution.platformOptions.postType : 'video')
+    && payload.visibility === (typeof order.execution.platformOptions?.visibility === 'string' ? order.execution.platformOptions.visibility : 'private')
+    && payload.madeForKids === (typeof order.execution.platformOptions?.madeForKids === 'string' ? order.execution.platformOptions.madeForKids : 'no')
+  )
+  if (record.actionId !== order.socialAction.actionId
+    || record.platform !== order.execution.platform
+    || record.profile !== order.execution.profileId
+    || payload.text !== order.execution.caption
+    || options.idempotencyKey !== order.executionKey.idempotencyKey
+    || options.dryRun !== true
+    || !youtubeSettingsMatch
+    || digest !== order.socialAction.actionDigest) {
+    throw new Error('Social dry-run no longer matches the work order.')
+  }
+}
+
+function stableSocialStringify(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableSocialStringify).join(',')}]`
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableSocialStringify(record[key])}`).join(',')}}`
+  }
+  return JSON.stringify(value)
+}
+
+type ArtistCalendarServerEvent = {
+  id: string
+  date: string
+  title: string
+  time?: string
+  notes?: string
+  scheduledWorkId?: string
+  workspaceLinks: unknown[]
+  relatedPersonIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+type ArtistCalendarServerDocument = { version: 1; events: ArtistCalendarServerEvent[]; updatedAt: string }
+const ARTIST_CALENDAR_CONTEXT_SLUG = 'artist-calendar'
+
+function readArtistCalendar(rootPath: string): ArtistCalendarServerDocument {
+  const doc = loadContextDoc(rootPath, ARTIST_CALENDAR_CONTEXT_SLUG)
+  if (!doc) return { version: 1, events: [], updatedAt: new Date().toISOString() }
+  const match = doc.body.match(/```json\s*([\s\S]*?)```/i)
+  if (!match?.[1]) throw new Error('Artist Calendar JSON block is missing.')
+  const parsed = JSON.parse(match[1]) as Partial<ArtistCalendarServerDocument>
+  if (parsed.version !== 1 || !Array.isArray(parsed.events)) throw new Error('Artist Calendar JSON has an unsupported shape.')
+  return { version: 1, events: parsed.events as ArtistCalendarServerEvent[], updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString() }
+}
+
+function writeArtistCalendar(rootPath: string, calendar: ArtistCalendarServerDocument): void {
+  upsertContextDoc(rootPath, {
+    slug: ARTIST_CALENDAR_CONTEXT_SLUG,
+    metadata: { name: 'Artist Calendar', description: 'Global dates, deadlines, meetings, releases, reminders, and scheduled work.', routing: { mode: 'broadcast' }, enabled: true },
+    body: ['This is global artist calendar context. Treat it as long-term creator context, not one-campaign context.', '', '```json', JSON.stringify(calendar, null, 2), '```'].join('\n'),
+  })
+}
+
+function hqEventFromOrder(order: ScheduledWorkDocument['items'][number]): ArtistCalendarServerEvent {
+  const local = formatInTimezone(order.startAt, order.timezone)
+  return {
+    id: order.calendarLink.itemId,
+    date: local.date,
+    time: local.time,
+    title: order.title,
+    scheduledWorkId: order.id,
+    workspaceLinks: [],
+    relatedPersonIds: [],
+    createdAt: order.createdAt,
+    updatedAt: order.updatedAt,
+  }
+}
+
+
 function sameScheduleIdentity(left: ScheduledWorkDocument['items'][number], right: ScheduledWorkDocument['items'][number]): boolean {
-  return left.id === right.id
-    && left.owner.workspaceId === right.owner.workspaceId
-    && left.calendarLink.calendar === right.calendarLink.calendar
-    && left.calendarLink.itemId === right.calendarLink.itemId
-    && left.executionKey.idempotencyKey === right.executionKey.idempotencyKey
-    && left.executionKey.payloadDigest === right.executionKey.payloadDigest
+  return sameJson({
+    id: left.id,
+    owner: left.owner,
+    calendarLink: left.calendarLink,
+    title: left.title,
+    type: left.type,
+    status: left.status,
+    startAt: left.startAt,
+    dueAt: left.dueAt,
+    timezone: left.timezone,
+    execution: left.execution,
+    inputRefs: left.inputRefs,
+    executionKey: left.executionKey,
+    chain: left.chain,
+  }, {
+    id: right.id,
+    owner: right.owner,
+    calendarLink: right.calendarLink,
+    title: right.title,
+    type: right.type,
+    status: right.status,
+    startAt: right.startAt,
+    dueAt: right.dueAt,
+    timezone: right.timezone,
+    execution: right.execution,
+    inputRefs: right.inputRefs,
+    executionKey: right.executionKey,
+    chain: right.chain,
+  })
 }
 
 async function validateScheduleRuntime(deps: HandlerDeps, rootPath: string, order: ScheduledWorkDocument['items'][number]): Promise<void> {

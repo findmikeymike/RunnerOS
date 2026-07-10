@@ -16,6 +16,7 @@ export type ScheduledWorkScope = 'hq' | 'campaign'
 export type ScheduledWorkType = 'agent-task' | 'workflow-run' | 'social-publish' | 'review'
 export type ScheduledWorkStatus =
   | 'draft'
+  | 'waiting'
   | 'scheduled'
   | 'needs-setup'
   | 'needs-approval'
@@ -37,6 +38,8 @@ export type WorkAttentionReason =
   | 'approval-expired'
   | 'approval-invalidated'
   | 'changes-requested'
+  | 'produced-output-missing'
+  | 'produced-output-ambiguous'
 
 export interface ScheduledWorkAttention {
   reason: WorkAttentionReason
@@ -58,7 +61,29 @@ export type ScheduledWorkInputRef =
   | { kind: 'final'; outputId: string; assetId?: string; slot?: string; label?: string }
   | { kind: 'output'; outputId: string; title?: string; outputKind?: string }
   | { kind: 'vault'; assetId: string; label?: string; assetKind?: string }
-  | { kind: 'produced-output'; stepId: string; selector?: { kind?: OutputKind } }
+  | {
+      kind: 'produced-output'
+      stepId: string
+      selector?: { kind?: OutputKind }
+      bindTo: { kind: 'review-target' } | { kind: 'workflow-trigger'; input: string }
+      resolution?: {
+        outputId: string
+        parentResultDigest: string
+        source: 'automatic' | 'user'
+        resolvedAt: string
+      }
+    }
+
+export interface ScheduledWorkChainLink {
+  chainId: string
+  stepId: string
+  ordinal: 0 | 1
+  predecessor?: {
+    orderId: string
+    stepId: string
+    releaseOn: 'success' | 'creative-approval'
+  }
+}
 
 export interface ExpectedOutputContract {
   requirement: 'none' | 'optional' | 'required'
@@ -111,6 +136,31 @@ export interface ScheduledWorkReviewDecision {
   reviewerId?: string
 }
 
+export interface ScheduledSocialActionPreview {
+  actionId: string
+  actionDigest: string
+  mediaDigest?: string
+  platform: string
+  profileId: string
+  preparedAt: string
+  payloadDigest: string
+  summary?: string
+  dryRun: Record<string, unknown>
+}
+
+export interface ScheduledSocialApproval {
+  id: string
+  approvedAt: string
+  expiresAt: string
+  actionId: string
+  actionDigest: string
+  mediaDigest?: string
+  payloadDigest: string
+  platform: string
+  profileId: string
+  approvedBy: { type: 'user'; clientId: string }
+}
+
 export interface ScheduledWorkOrder {
   version: 1
   id: string
@@ -128,11 +178,14 @@ export interface ScheduledWorkOrder {
   runs: CampaignJobRun[]
   result?: ScheduledWorkResult
   reviewDecision?: ScheduledWorkReviewDecision
+  socialAction?: ScheduledSocialActionPreview
+  socialApproval?: ScheduledSocialApproval
   attention?: ScheduledWorkAttention
   executionKey: {
     payloadDigest: string
     idempotencyKey: string
   }
+  chain?: ScheduledWorkChainLink
   legacyRef?: {
     campaignItemId: string
     campaignJobId: string
@@ -188,6 +241,58 @@ export interface DecideCampaignWorkResult {
   order: ScheduledWorkOrder
   calendar: CampaignCalendar
   calendarItem: CampaignCalendarItem
+}
+
+export interface ScheduleCampaignChainInput {
+  requestId: string
+  orders: [ScheduledWorkOrder, ScheduledWorkOrder]
+  calendarItems: [CampaignCalendarItem, CampaignCalendarItem]
+}
+
+export interface ScheduleCampaignChainResult {
+  updated: boolean
+  work: ScheduledWorkDocument
+  orders: [ScheduledWorkOrder, ScheduledWorkOrder]
+  calendar: CampaignCalendar
+  calendarItems: [CampaignCalendarItem, CampaignCalendarItem]
+}
+
+export interface ResolveCampaignProducedOutputInput {
+  orderId: string
+  calendarItemId: string
+  expectedUpdatedAt: string
+  outputId: string
+}
+
+export interface ResolveCampaignProducedOutputResult {
+  work: ScheduledWorkDocument
+  order: ScheduledWorkOrder
+  calendar: CampaignCalendar
+  calendarItem: CampaignCalendarItem
+}
+
+export interface ApproveCampaignSocialWorkInput {
+  orderId: string
+  calendarItemId: string
+  expectedUpdatedAt: string
+}
+
+export interface ApproveCampaignSocialWorkResult {
+  work: ScheduledWorkDocument
+  order: ScheduledWorkOrder
+  calendar: CampaignCalendar
+  calendarItem: CampaignCalendarItem
+}
+
+export interface ScheduleHqWorkInput {
+  requestId: string
+  orders: ScheduledWorkOrder[]
+}
+
+export interface ScheduleHqWorkResult {
+  updated: boolean
+  work: ScheduledWorkDocument
+  orders: ScheduledWorkOrder[]
 }
 
 export type ScheduledWorkParseResult =
@@ -495,7 +600,10 @@ function isScheduledWorkOrder(value: unknown): value is ScheduledWorkOrder {
     && Array.isArray(order.runs)
     && (order.result === undefined || isScheduledWorkResult(order.result, order.type))
     && (order.reviewDecision === undefined || isScheduledWorkReviewDecision(order.reviewDecision))
+    && (order.socialAction === undefined || isScheduledSocialActionPreview(order.socialAction))
+    && (order.socialApproval === undefined || isScheduledSocialApproval(order.socialApproval))
     && (order.attention === undefined || isScheduledWorkAttention(order.attention))
+    && (order.chain === undefined || isScheduledWorkChainLink(order.chain))
     && Boolean(order.executionKey
       && clean(order.executionKey.payloadDigest)
       && clean(order.executionKey.idempotencyKey))
@@ -510,6 +618,7 @@ function isScheduledWorkType(value: unknown): value is ScheduledWorkType {
 
 function isScheduledWorkStatus(value: unknown): value is ScheduledWorkStatus {
   return value === 'draft'
+    || value === 'waiting'
     || value === 'scheduled'
     || value === 'needs-setup'
     || value === 'needs-approval'
@@ -556,7 +665,29 @@ function isScheduledWorkInputRef(value: unknown): value is ScheduledWorkInputRef
   const ref = value as Partial<ScheduledWorkInputRef>
   if (ref.kind === 'final' || ref.kind === 'output') return Boolean(clean(ref.outputId))
   if (ref.kind === 'vault') return Boolean(clean(ref.assetId))
-  return ref.kind === 'produced-output' && Boolean(clean(ref.stepId))
+  if (ref.kind !== 'produced-output' || !clean(ref.stepId) || !ref.bindTo) return false
+  const validBinding = ref.bindTo.kind === 'review-target'
+    || (ref.bindTo.kind === 'workflow-trigger' && Boolean(clean(ref.bindTo.input)))
+  const validResolution = ref.resolution === undefined
+    || (Boolean(clean(ref.resolution.outputId))
+      && Boolean(clean(ref.resolution.parentResultDigest))
+      && (ref.resolution.source === 'automatic' || ref.resolution.source === 'user')
+      && Boolean(cleanIso(ref.resolution.resolvedAt)))
+  return validBinding && validResolution
+}
+
+function isScheduledWorkChainLink(value: unknown): value is ScheduledWorkChainLink {
+  if (!value || typeof value !== 'object') return false
+  const chain = value as Partial<ScheduledWorkChainLink>
+  const predecessor = chain.predecessor
+  return Boolean(clean(chain.chainId))
+    && Boolean(clean(chain.stepId))
+    && (chain.ordinal === 0 || chain.ordinal === 1)
+    && (predecessor === undefined || Boolean(
+      clean(predecessor.orderId)
+      && clean(predecessor.stepId)
+      && (predecessor.releaseOn === 'success' || predecessor.releaseOn === 'creative-approval'),
+    ))
 }
 
 function isScheduledWorkResult(value: unknown, type: ScheduledWorkType): value is ScheduledWorkResult {
@@ -582,7 +713,9 @@ function isScheduledWorkAttention(value: unknown): value is ScheduledWorkAttenti
     || attention.reason === 'missed-start-window'
     || attention.reason === 'approval-expired'
     || attention.reason === 'approval-invalidated'
-    || attention.reason === 'changes-requested')
+    || attention.reason === 'changes-requested'
+    || attention.reason === 'produced-output-missing'
+    || attention.reason === 'produced-output-ambiguous')
     && Boolean(clean(attention.message))
 }
 
@@ -594,9 +727,38 @@ function isScheduledWorkReviewDecision(value: unknown): value is ScheduledWorkRe
     && Boolean(cleanIso(decision.decidedAt))
 }
 
+function isScheduledSocialActionPreview(value: unknown): value is ScheduledSocialActionPreview {
+  if (!value || typeof value !== 'object') return false
+  const preview = value as Partial<ScheduledSocialActionPreview>
+  return Boolean(clean(preview.actionId)
+    && clean(preview.actionDigest)
+    && clean(preview.platform)
+    && clean(preview.profileId)
+    && cleanIso(preview.preparedAt)
+    && clean(preview.payloadDigest)
+    && preview.dryRun
+    && typeof preview.dryRun === 'object'
+    && !Array.isArray(preview.dryRun))
+}
+
+function isScheduledSocialApproval(value: unknown): value is ScheduledSocialApproval {
+  if (!value || typeof value !== 'object') return false
+  const approval = value as Partial<ScheduledSocialApproval>
+  return Boolean(clean(approval.id)
+    && cleanIso(approval.approvedAt)
+    && cleanIso(approval.expiresAt)
+    && clean(approval.actionId)
+    && clean(approval.actionDigest)
+    && clean(approval.payloadDigest)
+    && clean(approval.platform)
+    && clean(approval.profileId)
+    && approval.approvedBy?.type === 'user'
+    && Boolean(clean(approval.approvedBy.clientId)))
+}
+
 function pickPlatformOptions(payload: Record<string, unknown>): Record<string, unknown> | undefined {
   const options: Record<string, unknown> = {}
-  for (const key of ['postType', 'visibility']) {
+  for (const key of ['postType', 'visibility', 'madeForKids']) {
     if (payload[key] !== undefined) options[key] = payload[key]
   }
   return Object.keys(options).length > 0 ? options : undefined

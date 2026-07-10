@@ -11,6 +11,7 @@ import {
   Workflow,
 } from 'lucide-react'
 import type { ScheduledWorkInputRef, ScheduledWorkOwner } from '@craft-agent/shared/scheduled-work'
+import type { OutputKind } from '@craft-agent/shared/outputs'
 import type { VaultAssetRecord } from '@craft-agent/shared/artist-vault'
 import type { WorkflowDTO } from '../../../shared/types'
 import { useAgents } from '@/hooks/useAgents'
@@ -24,6 +25,7 @@ import {
   selectScheduledWorkComposerType,
   validateComposerDraft,
   type ScheduledWorkComposerDraft,
+  type ScheduledWorkComposerFollowUp,
   type ScheduledWorkComposerType,
 } from '@/lib/scheduled-work-composer'
 import { Button } from '@/components/ui/button'
@@ -44,9 +46,11 @@ export interface ScheduledWorkComposerProps {
   disabled?: boolean
   onOpenChange: (open: boolean) => void
   onSubmit: (draft: ScheduledWorkComposerDraft) => Promise<void> | void
+  allowedTypes?: ScheduledWorkComposerType[]
+  allowFollowUps?: boolean
 }
 
-type ComposerSection = 'what' | 'runner' | 'inputs' | 'timing' | 'safeguards'
+type ComposerSection = 'what' | 'runner' | 'inputs' | 'timing' | 'then' | 'safeguards'
 type SocialProfile = { platform: string; profileId: string; label: string; accountSetId: string; ready: boolean }
 
 const QUEUE_OPTIONS: Array<{
@@ -64,7 +68,7 @@ const QUEUE_OPTIONS: Array<{
 
 const INPUT_CLASS = 'h-10 w-full rounded-[6px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none placeholder:text-white/28 focus:border-white/20'
 
-export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onSubmit }: ScheduledWorkComposerProps) {
+export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onSubmit, allowedTypes, allowFollowUps = true }: ScheduledWorkComposerProps) {
   const [draft, setDraft] = React.useState(() => createScheduledWorkComposerDraft(entry))
   const [section, setSection] = React.useState<ComposerSection>('what')
   const [busy, setBusy] = React.useState(false)
@@ -101,7 +105,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
         profileId: profile.profile,
         label: `${profile.platform} @${profile.profile}`,
         accountSetId: profile.accountGroup ?? '',
-        ready: profile.ready,
+        ready: profile.ready || (profile.localSessionExists && Boolean(profile.accountHandle || profile.accountUrl)),
       }))))
       setVaultAssets(manifest.assets.filter((asset) => asset.status !== 'missing' && asset.status !== 'archived'))
       setExplicitActiveAgentSlugs(activeSlugs)
@@ -139,7 +143,8 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
     }
   }, [activeAgents, activeWorkflows, draft, onOpenChange, onSubmit, profiles])
 
-  const sections = visibleSections(draft)
+  const queueOptions = allowedTypes ? QUEUE_OPTIONS.filter((option) => allowedTypes.includes(option.type)) : QUEUE_OPTIONS
+  const sections = visibleSections(draft, allowFollowUps)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -161,7 +166,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
               summary={sectionSummary(item, draft)}
               onOpen={() => setSection(item)}
             >
-              {item === 'what' ? <QueueTypeList draft={draft} onChoose={chooseType} /> : null}
+              {item === 'what' ? <QueueTypeList draft={draft} options={queueOptions} onChoose={chooseType} /> : null}
               {item === 'runner' && draft.type !== 'event' ? (
                 <RunnerSection
                   draft={draft}
@@ -182,6 +187,9 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
                 />
               ) : null}
               {item === 'timing' ? <TimingSection draft={draft} onChange={setDraft} /> : null}
+              {item === 'then' && draft.type !== 'event' ? (
+                <ThenSection draft={draft} agents={activeAgents} workflows={activeWorkflows} profiles={profiles} onChange={setDraft} />
+              ) : null}
               {item === 'safeguards' && draft.type !== 'event' ? <SafeguardsSection draft={draft} onChange={setDraft} /> : null}
             </ComposerSectionRow>
           ))}
@@ -224,10 +232,10 @@ function ComposerSectionRow({ section, active, title, summary, onOpen, children 
   )
 }
 
-function QueueTypeList({ draft, onChoose }: { draft: ScheduledWorkComposerDraft; onChoose: (type: ScheduledWorkComposerType) => void }) {
+function QueueTypeList({ draft, options, onChoose }: { draft: ScheduledWorkComposerDraft; options: typeof QUEUE_OPTIONS; onChoose: (type: ScheduledWorkComposerType) => void }) {
   return (
     <div className="divide-y divide-white/[0.05]">
-      {QUEUE_OPTIONS.map((option) => {
+      {options.map((option) => {
         const Icon = option.icon
         return (
           <button
@@ -282,7 +290,7 @@ function RunnerSection({ draft, agents, workflows, profiles, loading, onChange }
     return <ChoiceList choices={profiles.map((profile) => ({ id: `${profile.platform}/${profile.profileId}`, label: profile.label, description: profile.ready ? 'Ready' : 'Login or setup required', disabled: !profile.ready }))} selected={draft.profileId ? `${draft.platform}/${draft.profileId}` : ''} empty="No social profiles configured." onSelect={(id) => {
       const profile = profiles.find((candidate) => `${candidate.platform}/${candidate.profileId}` === id)
       if (!profile) return
-      onChange({ ...draft, platform: profile.platform, profileId: profile.profileId, profileLabel: profile.label, accountSetId: profile.accountSetId })
+      onChange({ ...draft, platform: profile.platform, profileId: profile.profileId, profileLabel: profile.label, accountSetId: profile.accountSetId, platformOptions: defaultSocialPlatformOptions(profile.platform) })
     }} />
   }
   return (
@@ -327,9 +335,34 @@ function InputsSection({ draft, outputs, vaultAssets, loading, onChange }: {
       ) : null}
       {draft.type === 'workflow-run' ? <WorkflowInputs draft={draft} onChange={onChange} /> : null}
       {draft.type === 'social-publish' ? (
-        <Field label="Caption">
-          <Textarea className="min-h-24 border-white/[0.08] bg-white/[0.025] text-white/80" value={draft.caption} onChange={(event) => update({ caption: event.target.value })} placeholder="Final post text" />
-        </Field>
+        <>
+          <Field label={draft.platform === 'youtube' ? 'Title' : 'Caption'}>
+            <Textarea className="min-h-24 border-white/[0.08] bg-white/[0.025] text-white/80" value={draft.caption} onChange={(event) => update({ caption: event.target.value })} placeholder={draft.platform === 'youtube' ? 'Final video title' : 'Final post text'} />
+          </Field>
+          {draft.platform === 'youtube' ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Post type">
+                <select className={INPUT_CLASS} value={String(draft.platformOptions.postType ?? 'video')} onChange={(event) => update({ platformOptions: { ...draft.platformOptions, postType: event.target.value } })}>
+                  <option value="video">Video</option>
+                  <option value="short" disabled>Short (not yet verifiable)</option>
+                </select>
+              </Field>
+              <Field label="Visibility">
+                <select className={INPUT_CLASS} value={String(draft.platformOptions.visibility ?? 'private')} onChange={(event) => update({ platformOptions: { ...draft.platformOptions, visibility: event.target.value } })}>
+                  <option value="private">Private</option>
+                  <option value="unlisted">Unlisted</option>
+                  <option value="public">Public</option>
+                </select>
+              </Field>
+              <Field label="Made for kids">
+                <select className={INPUT_CLASS} value={String(draft.platformOptions.madeForKids ?? 'no')} onChange={(event) => update({ platformOptions: { ...draft.platformOptions, madeForKids: event.target.value } })}>
+                  <option value="no">No</option>
+                  <option value="yes">Yes</option>
+                </select>
+              </Field>
+            </div>
+          ) : null}
+        </>
       ) : null}
       {workDraft ? (
         <InputReferencePicker
@@ -482,6 +515,98 @@ function SafeguardsSection({ draft, onChange }: { draft: Exclude<ScheduledWorkCo
   return <EmptyLine icon={ShieldCheck}>{draft.type === 'review' ? 'A recorded decision is required.' : 'The workflow must finish successfully.'}</EmptyLine>
 }
 
+function ThenSection({ draft, agents, workflows, profiles, onChange }: {
+  draft: Exclude<ScheduledWorkComposerDraft, { type: 'event' }>
+  agents: ReturnType<typeof useAgents>['activeAgents']
+  workflows: WorkflowDTO[]
+  profiles: SocialProfile[]
+  onChange: React.Dispatch<React.SetStateAction<ScheduledWorkComposerDraft>>
+}) {
+  const allowed: Array<ScheduledWorkComposerFollowUp['type']> = draft.type === 'agent-task'
+    ? ['none', 'review', 'workflow-run']
+    : draft.type === 'workflow-run'
+      ? ['none', 'review']
+      : draft.type === 'review'
+        ? ['none', 'social-publish']
+        : ['none']
+  const choose = (type: ScheduledWorkComposerFollowUp['type']) => {
+    let followUp: ScheduledWorkComposerFollowUp = { type: 'none' }
+    if (type === 'review') followUp = { type, reviewerType: 'user', reviewerId: '', reviewerName: 'You' }
+    if (type === 'workflow-run') followUp = { type, workflowSlug: '', workflowName: '', workflowDigest: '', triggerInputs: {}, outputInput: '' }
+    if (type === 'social-publish') followUp = { type, platform: '', profileId: '', profileLabel: '', accountSetId: '', caption: '', platformOptions: {} }
+    onChange({ ...draft, followUp } as ScheduledWorkComposerDraft)
+  }
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        {allowed.map((type) => (
+          <button key={type} type="button" onClick={() => choose(type)} className={cn('min-h-10 rounded-[6px] border px-3 text-xs font-medium', draft.followUp.type === type ? 'border-white/24 bg-white/10 text-white/80' : 'border-white/[0.07] text-white/42')}>
+            {type === 'none' ? 'No follow-up' : type === 'review' ? 'Request review' : type === 'workflow-run' ? 'Run workflow' : 'Publish to social'}
+          </button>
+        ))}
+      </div>
+      {draft.followUp.type === 'review' ? (
+        <>
+          <ChoiceList
+            choices={[{ id: 'user', label: 'You', description: 'Decision stays in RunnerOS' }, ...agents.map((agent) => ({ id: `agent:${agent.slug}`, label: agent.metadata.name, description: agent.metadata.description }))]}
+            selected={draft.followUp.reviewerType === 'user' ? 'user' : `agent:${draft.followUp.reviewerId}`}
+            empty="No reviewers available."
+            onSelect={(id) => {
+              const followUp = id === 'user'
+                ? { ...draft.followUp, reviewerType: 'user' as const, reviewerId: '', reviewerName: 'You' }
+                : { ...draft.followUp, reviewerType: 'agent' as const, reviewerId: id.slice(6), reviewerName: agents.find((agent) => agent.slug === id.slice(6))?.metadata.name ?? id.slice(6) }
+              onChange({ ...draft, followUp } as ScheduledWorkComposerDraft)
+            }}
+          />
+          <OutputKindSelector value={draft.followUp.outputKind} onChange={(outputKind) => onChange({ ...draft, followUp: { ...draft.followUp, outputKind } } as ScheduledWorkComposerDraft)} />
+        </>
+      ) : null}
+      {draft.followUp.type === 'workflow-run' ? (
+        <>
+          <ChoiceList choices={workflows.map((workflow) => ({ id: workflow.slug, label: workflow.metadata.name, description: `${workflow.metadata.steps.length} steps · ${workflow.metadata.description}` }))} selected={draft.followUp.workflowSlug} empty="No active workflows." onSelect={(id) => {
+            const workflow = workflows.find((candidate) => candidate.slug === id)
+            if (!workflow || draft.followUp.type !== 'workflow-run') return
+            const inputs = workflow.metadata.trigger.inputs ?? []
+            onChange({ ...draft, followUp: { ...draft.followUp, workflowSlug: workflow.slug, workflowName: workflow.metadata.name, workflowDigest: composerDefinitionDigest({ metadata: workflow.metadata, body: workflow.body }), triggerInputs: Object.fromEntries(inputs.map((input) => [input.name, input.default ?? defaultTriggerValue(input.type)])), outputInput: inputs[0]?.name ?? '' } } as ScheduledWorkComposerDraft)
+          }} />
+          {(() => {
+            const workflowSlug = draft.followUp.type === 'workflow-run' ? draft.followUp.workflowSlug : ''
+            const workflow = workflows.find((candidate) => candidate.slug === workflowSlug)
+            const inputs = workflow?.metadata.trigger.inputs ?? []
+            return inputs.length ? <Field label="Use produced Output as"><select className={INPUT_CLASS} value={draft.followUp.type === 'workflow-run' ? draft.followUp.outputInput : ''} onChange={(event) => draft.followUp.type === 'workflow-run' && onChange({ ...draft, followUp: { ...draft.followUp, outputInput: event.target.value } } as ScheduledWorkComposerDraft)}>{inputs.map((input) => <option key={input.name} value={input.name}>{input.name}</option>)}</select></Field> : <EmptyLine>The workflow needs a trigger input for the produced Output.</EmptyLine>
+          })()}
+          <OutputKindSelector value={draft.followUp.outputKind} onChange={(outputKind) => onChange({ ...draft, followUp: { ...draft.followUp, outputKind } } as ScheduledWorkComposerDraft)} />
+        </>
+      ) : null}
+      {draft.followUp.type === 'social-publish' ? (
+        <>
+          <ChoiceList choices={profiles.map((profile) => ({ id: `${profile.platform}/${profile.profileId}`, label: profile.label, description: profile.ready ? 'Ready' : 'Login or setup required', disabled: !profile.ready }))} selected={draft.followUp.profileId ? `${draft.followUp.platform}/${draft.followUp.profileId}` : ''} empty="No social profiles configured." onSelect={(id) => {
+            const profile = profiles.find((candidate) => `${candidate.platform}/${candidate.profileId}` === id)
+            if (!profile || draft.followUp.type !== 'social-publish') return
+            onChange({ ...draft, followUp: { ...draft.followUp, platform: profile.platform, profileId: profile.profileId, profileLabel: profile.label, accountSetId: profile.accountSetId, platformOptions: defaultSocialPlatformOptions(profile.platform) } } as ScheduledWorkComposerDraft)
+          }} />
+          <Field label={draft.followUp.platform === 'youtube' ? 'Title' : 'Caption'}><Textarea className="min-h-20 border-white/[0.08] bg-white/[0.025] text-white/80" value={draft.followUp.caption} onChange={(event) => draft.followUp.type === 'social-publish' && onChange({ ...draft, followUp: { ...draft.followUp, caption: event.target.value } } as ScheduledWorkComposerDraft)} /></Field>
+          {draft.followUp.platform === 'youtube' ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Post type"><select className={INPUT_CLASS} value={String(draft.followUp.platformOptions.postType ?? 'video')} onChange={(event) => draft.followUp.type === 'social-publish' && onChange({ ...draft, followUp: { ...draft.followUp, platformOptions: { ...draft.followUp.platformOptions, postType: event.target.value } } } as ScheduledWorkComposerDraft)}><option value="video">Video</option><option value="short" disabled>Short (not yet verifiable)</option></select></Field>
+              <Field label="Visibility"><select className={INPUT_CLASS} value={String(draft.followUp.platformOptions.visibility ?? 'private')} onChange={(event) => draft.followUp.type === 'social-publish' && onChange({ ...draft, followUp: { ...draft.followUp, platformOptions: { ...draft.followUp.platformOptions, visibility: event.target.value } } } as ScheduledWorkComposerDraft)}><option value="private">Private</option><option value="unlisted">Unlisted</option><option value="public">Public</option></select></Field>
+              <Field label="Made for kids"><select className={INPUT_CLASS} value={String(draft.followUp.platformOptions.madeForKids ?? 'no')} onChange={(event) => draft.followUp.type === 'social-publish' && onChange({ ...draft, followUp: { ...draft.followUp, platformOptions: { ...draft.followUp.platformOptions, madeForKids: event.target.value } } } as ScheduledWorkComposerDraft)}><option value="no">No</option><option value="yes">Yes</option></select></Field>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+function OutputKindSelector({ value, onChange }: { value?: OutputKind; onChange: (value: OutputKind | undefined) => void }) {
+  return <Field label="Produced Output kind"><select className={INPUT_CLASS} value={value ?? ''} onChange={(event) => onChange((event.target.value || undefined) as OutputKind | undefined)}><option value="">Any kind (must resolve exactly once)</option>{['report', 'document', 'image', 'video', 'audio', 'dataset', 'code', 'receipt', 'other'].map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></Field>
+}
+
+function defaultSocialPlatformOptions(platform: string): Record<string, unknown> {
+  return platform === 'youtube' ? { postType: 'video', visibility: 'private', madeForKids: 'no' } : {}
+}
+
 function ChoiceList({ choices, selected, empty, onSelect }: { choices: Array<{ id: string; label: string; description: string; disabled?: boolean }>; selected: string; empty: string; onSelect: (id: string) => void }) {
   if (choices.length === 0) return <EmptyLine>{empty}</EmptyLine>
   return (
@@ -509,8 +634,12 @@ function EmptyLine({ icon: Icon = FileOutput, children }: { icon?: React.Compone
   return <div className="flex min-h-12 items-center gap-2 border-y border-white/[0.06] px-2 text-xs text-white/38"><Icon className="h-4 w-4" />{children}</div>
 }
 
-function visibleSections(draft: ScheduledWorkComposerDraft): ComposerSection[] {
-  return draft.type === 'event' ? ['what', 'inputs', 'timing'] : ['what', 'runner', 'inputs', 'timing', 'safeguards']
+function visibleSections(draft: ScheduledWorkComposerDraft, allowFollowUps: boolean): ComposerSection[] {
+  if (draft.type === 'event') return ['what', 'inputs', 'timing']
+  const sections: ComposerSection[] = ['what', 'runner', 'inputs', 'timing']
+  if (allowFollowUps && draft.type !== 'social-publish') sections.push('then')
+  sections.push('safeguards')
+  return sections
 }
 
 function sectionTitle(section: ComposerSection): string {
@@ -518,6 +647,7 @@ function sectionTitle(section: ComposerSection): string {
   if (section === 'runner') return 'Who or what should do it?'
   if (section === 'inputs') return 'What should it use or produce?'
   if (section === 'timing') return 'When should it happen?'
+  if (section === 'then') return 'Then'
   return 'Safeguards'
 }
 
@@ -534,6 +664,12 @@ function sectionSummary(section: ComposerSection, draft: ScheduledWorkComposerDr
     return `${draft.title || 'Add details'}${draft.inputRefs.length ? ` · ${draft.inputRefs.length} input${draft.inputRefs.length === 1 ? '' : 's'}` : ''}`
   }
   if (section === 'timing') return `${draft.date}${draft.time ? ` at ${draft.time}` : ''}`
+  if (section === 'then' && draft.type !== 'event') {
+    if (draft.followUp.type === 'none') return 'No follow-up'
+    if (draft.followUp.type === 'review') return `Request review from ${draft.followUp.reviewerName}`
+    if (draft.followUp.type === 'workflow-run') return draft.followUp.workflowName || 'Choose workflow'
+    return draft.followUp.profileLabel || 'Choose social profile'
+  }
   if (draft.type === 'agent-task') return draft.permissionMode === 'safe' ? 'Run automatically' : 'Ask before starting'
   if (draft.type === 'social-publish') return 'Exact approval required'
   return 'Completion required'

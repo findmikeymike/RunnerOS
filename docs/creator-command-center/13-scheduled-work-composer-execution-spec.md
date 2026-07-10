@@ -63,14 +63,19 @@ Verified implementation now includes:
 - Output/Final Schedule prefill
 - Settings-backed social profile selection
 - social dry-run preparation, exact approval binding, approval invalidation, and media-byte fingerprinting
+- native live social execution with exact account, browser partition, draft, media, and success-proof checks
+- per-profile social serialization plus persisted running claims that stop duplicate scheduler execution
 - durable review decisions with approve and changes-requested states
+- Agent -> Review, Agent -> Workflow, Workflow -> Review, and Review -> Social follow-up chains
+- exact produced-Output resolution with visible recovery when zero or multiple Outputs match
+- HQ Event and agent/workflow scheduling plus explicit routing into the primary Campaign Calendar
 
 Remaining gaps:
 
-- live social execution after approval still needs a verified executor path
-- HQ Calendar can create events but does not yet expose the executable composer
-- follow-up chains remain deferred beyond the current one-order composer
 - the shipped UI and runner still need full real-app smoke across every queue type
+- each supported social platform needs a live-account publish smoke; selector drift fails closed and must never create a receipt
+- YouTube Shorts remain deliberately blocked until media classification can be proven before submit
+- HQ review and social work remain intentionally routed to Campaign Calendar, where their decision and recovery controls live
 
 ## Product Decisions
 
@@ -508,7 +513,7 @@ On terminal state:
 
 Platform-specific fields appear only when relevant:
 
-- YouTube: post type and visibility
+- YouTube: post type, visibility, and made-for-kids audience
 - Instagram: supported media/post format
 - TikTok: supported media/post format
 - X: optional media

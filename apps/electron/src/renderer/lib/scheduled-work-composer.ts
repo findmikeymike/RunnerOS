@@ -1,10 +1,13 @@
 import type {
   ExpectedOutputContract,
   ScheduleCampaignWorkInput,
+  ScheduleCampaignChainInput,
+  ScheduleHqWorkInput,
   ScheduledWorkInputRef,
   ScheduledWorkOwner,
   ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
+import type { OutputKind } from '@craft-agent/shared/outputs'
 import { scheduledWorkDefinitionDigest } from '@craft-agent/shared/scheduled-work'
 import { createCampaignCalendarItem } from '@craft-agent/shared/campaign-calendar'
 
@@ -29,7 +32,14 @@ export interface EventComposerDraft extends ComposerBase {
 
 interface WorkComposerBase extends ComposerBase {
   inputRefs: ScheduledWorkInputRef[]
+  followUp: ScheduledWorkComposerFollowUp
 }
+
+export type ScheduledWorkComposerFollowUp =
+  | { type: 'none' }
+  | { type: 'review'; reviewerType: 'user' | 'agent'; reviewerId: string; reviewerName: string; outputKind?: OutputKind }
+  | { type: 'workflow-run'; workflowSlug: string; workflowName: string; workflowDigest: string; triggerInputs: Record<string, unknown>; outputInput: string; outputKind?: OutputKind }
+  | { type: 'social-publish'; platform: string; profileId: string; profileLabel: string; accountSetId: string; caption: string; platformOptions: Record<string, unknown> }
 
 export interface AgentTaskComposerDraft extends WorkComposerBase {
   type: 'agent-task'
@@ -145,6 +155,8 @@ export function validateComposerDraft(draft: ScheduledWorkComposerDraft): string
     if (draft.inputRefs.length !== 1 || (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output')) {
       return 'Choose one exact Output or Final.'
     }
+    const platformError = validateSocialPlatformOptions(draft.platform, draft.platformOptions)
+    if (platformError) return platformError
   }
   if (draft.type === 'review') {
     if (!draft.reviewerId && draft.reviewerType !== 'user') return 'Choose a reviewer.'
@@ -152,6 +164,8 @@ export function validateComposerDraft(draft: ScheduledWorkComposerDraft): string
       return 'Choose an Output or Final to review.'
     }
   }
+  const followUpError = validateFollowUp(draft)
+  if (followUpError) return followUpError
   return undefined
 }
 
@@ -219,6 +233,132 @@ export function buildCampaignScheduleFromComposer(
   return { order, calendarItem }
 }
 
+export function buildCampaignSchedulePlanFromComposer(
+  draft: Exclude<ScheduledWorkComposerDraft, EventComposerDraft>,
+  now = new Date().toISOString(),
+): ScheduleCampaignWorkInput | ScheduleCampaignChainInput {
+  const single = buildCampaignScheduleFromComposer(draft, now)
+  if (draft.followUp.type === 'none') return single
+  const chainId = `campaign-chain-${draft.requestId}`
+  const rootStepId = `${chainId}-step-0`
+  const childStepId = `${chainId}-step-1`
+  const rootId = `${chainId}-0`
+  const childId = `${chainId}-1`
+  const rootCalendarId = `${chainId}-calendar-0`
+  const childCalendarId = `${chainId}-calendar-1`
+  const rootOrder: ScheduledWorkOrder = {
+    ...single.order,
+    id: rootId,
+    calendarLink: { calendar: 'campaign', itemId: rootCalendarId },
+    chain: { chainId, stepId: rootStepId, ordinal: 0 },
+    executionKey: {
+      payloadDigest: scheduledWorkDefinitionDigest({ execution: single.order.execution, inputRefs: single.order.inputRefs, chainId, ordinal: 0 }),
+      idempotencyKey: `${chainId}:0`,
+    },
+  }
+  const childExecution = executionFromFollowUp(draft.followUp, draft.dueDate, draft.dueTime)
+  const childInputRefs: ScheduledWorkInputRef[] = draft.followUp.type === 'social-publish'
+    ? draft.inputRefs
+    : [{
+        kind: 'produced-output',
+        stepId: rootStepId,
+        selector: draft.followUp.outputKind ? { kind: draft.followUp.outputKind } : undefined,
+        bindTo: draft.followUp.type === 'review'
+          ? { kind: 'review-target' }
+          : { kind: 'workflow-trigger', input: draft.followUp.outputInput },
+      }]
+  const childTitle = draft.followUp.type === 'review'
+    ? `Review: ${draft.title.trim()}`
+    : draft.followUp.type === 'workflow-run'
+      ? `${draft.followUp.workflowName}: ${draft.title.trim()}`
+      : `Publish: ${draft.title.trim()}`
+  const childOrder: ScheduledWorkOrder = {
+    version: 1,
+    id: childId,
+    owner: draft.owner,
+    calendarLink: { calendar: 'campaign', itemId: childCalendarId },
+    title: childTitle,
+    type: draft.followUp.type,
+    status: 'waiting',
+    startAt: single.order.startAt,
+    dueAt: single.order.dueAt,
+    timezone: draft.timezone,
+    execution: childExecution,
+    inputRefs: childInputRefs,
+    approvals: [],
+    runs: [],
+    executionKey: {
+      payloadDigest: scheduledWorkDefinitionDigest({ execution: childExecution, inputRefs: childInputRefs, chainId, ordinal: 1 }),
+      idempotencyKey: `${chainId}:1`,
+    },
+    chain: {
+      chainId,
+      stepId: childStepId,
+      ordinal: 1,
+      predecessor: { orderId: rootId, stepId: rootStepId, releaseOn: draft.type === 'review' ? 'creative-approval' : 'success' },
+    },
+    createdAt: now,
+    updatedAt: now,
+  }
+  const rootCalendarItem = { ...single.calendarItem, id: rootCalendarId, scheduledWorkId: rootId }
+  const childCalendarItem = createCampaignCalendarItem({
+    id: childCalendarId,
+    campaignId: draft.owner.campaignId!,
+    date: draft.date,
+    time: draft.time,
+    timezone: draft.timezone,
+    title: childTitle,
+    kind: 'scheduled-job',
+    status: 'draft',
+    finalRefs: childInputRefs.filter((ref) => ref.kind === 'final').map((ref) => ({ outputId: ref.outputId, assetId: ref.assetId, slot: ref.slot, label: ref.label })),
+    outputRefs: childInputRefs.filter((ref) => ref.kind === 'output').map((ref) => ({ outputId: ref.outputId, title: ref.title, kind: ref.outputKind })),
+    accountSetId: draft.followUp.type === 'social-publish' ? draft.followUp.accountSetId || undefined : undefined,
+    socialProfileRefs: draft.followUp.type === 'social-publish' ? [{ platform: draft.followUp.platform, profileId: draft.followUp.profileId, label: draft.followUp.profileLabel }] : undefined,
+    scheduledWorkId: childId,
+  })
+  return { requestId: draft.requestId, orders: [rootOrder, childOrder], calendarItems: [rootCalendarItem, childCalendarItem] }
+}
+
+export function buildHqSchedulePlanFromComposer(
+  draft: Exclude<ScheduledWorkComposerDraft, EventComposerDraft>,
+  now = new Date().toISOString(),
+): ScheduleHqWorkInput {
+  if (draft.owner.scope !== 'hq') throw new Error('HQ work requires an HQ owner.')
+  const campaignDraft = {
+    ...draft,
+    owner: { scope: 'campaign' as const, workspaceId: draft.owner.workspaceId, campaignId: draft.owner.workspaceId },
+  } as Exclude<ScheduledWorkComposerDraft, EventComposerDraft>
+  const plan = buildCampaignSchedulePlanFromComposer(campaignDraft, now)
+  const sourceOrders = 'orders' in plan ? plan.orders : [plan.order]
+  const chainId = `hq-chain-${draft.requestId}`
+  const orders = sourceOrders.map((order, index): ScheduledWorkOrder => {
+    const id = sourceOrders.length === 1 ? `hq-work-${draft.requestId}` : `${chainId}-${index}`
+    const stepId = `${chainId}-step-${index}`
+    return {
+      ...order,
+      id,
+      owner: draft.owner,
+      calendarLink: { calendar: 'hq', itemId: `${id}-calendar` },
+      chain: sourceOrders.length === 1 ? undefined : {
+        chainId,
+        stepId,
+        ordinal: index as 0 | 1,
+        predecessor: index === 0 ? undefined : {
+          orderId: `${chainId}-0`,
+          stepId: `${chainId}-step-0`,
+          releaseOn: draft.type === 'review' ? 'creative-approval' : 'success',
+        },
+      },
+      inputRefs: order.inputRefs.map((ref) => ref.kind === 'produced-output' ? { ...ref, stepId: `${chainId}-step-0` } : ref),
+      executionKey: {
+        payloadDigest: scheduledWorkDefinitionDigest({ execution: order.execution, inputRefs: order.inputRefs, chainId: sourceOrders.length === 1 ? undefined : chainId, ordinal: index }),
+        idempotencyKey: `${id}:${order.startAt}`,
+      },
+    }
+  })
+  return { requestId: draft.requestId, orders }
+}
+
 function draftForType(base: ComposerBase, type: ScheduledWorkComposerType, inputRefs: ScheduledWorkInputRef[]): ScheduledWorkComposerDraft {
   if (type === 'event') return { ...base, type, endTime: '' }
   if (type === 'agent-task') {
@@ -231,6 +371,7 @@ function draftForType(base: ComposerBase, type: ScheduledWorkComposerType, input
       brief: '',
       permissionMode: 'safe',
       expectedOutput: { requirement: 'none' },
+      followUp: { type: 'none' },
     }
   }
   if (type === 'workflow-run') {
@@ -242,6 +383,7 @@ function draftForType(base: ComposerBase, type: ScheduledWorkComposerType, input
       workflowName: '',
       workflowDigest: '',
       triggerInputs: {},
+      followUp: { type: 'none' },
     }
   }
   if (type === 'social-publish') {
@@ -255,6 +397,7 @@ function draftForType(base: ComposerBase, type: ScheduledWorkComposerType, input
       accountSetId: '',
       caption: '',
       platformOptions: {},
+      followUp: { type: 'none' },
     }
   }
   return {
@@ -264,6 +407,65 @@ function draftForType(base: ComposerBase, type: ScheduledWorkComposerType, input
     reviewerType: 'user',
     reviewerId: '',
     reviewerName: 'You',
+    followUp: { type: 'none' },
+  }
+}
+
+function validateFollowUp(draft: Exclude<ScheduledWorkComposerDraft, EventComposerDraft>): string | undefined {
+  const followUp = draft.followUp
+  if (followUp.type === 'none') return undefined
+  const supported = (draft.type === 'agent-task' && (followUp.type === 'review' || followUp.type === 'workflow-run'))
+    || (draft.type === 'workflow-run' && followUp.type === 'review')
+    || (draft.type === 'review' && followUp.type === 'social-publish')
+  if (!supported) return 'That follow-up sequence is not supported yet.'
+  if (followUp.type === 'review' && !followUp.reviewerId && followUp.reviewerType !== 'user') return 'Choose a follow-up reviewer.'
+  if (followUp.type === 'workflow-run' && (!followUp.workflowSlug || !followUp.outputInput)) return 'Choose a follow-up workflow and its Output input.'
+  if (followUp.type === 'social-publish') {
+    if (!followUp.profileId) return 'Choose the follow-up social profile.'
+    if (!followUp.caption.trim()) return 'Add the follow-up caption.'
+    if (draft.inputRefs.length !== 1 || (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output')) return 'Review one exact Output or Final before publishing.'
+    const platformError = validateSocialPlatformOptions(followUp.platform, followUp.platformOptions)
+    if (platformError) return platformError
+  }
+  if (draft.type !== 'review' && draft.type === 'agent-task' && followUp.type === 'review' && draft.expectedOutput.reviewRequired) {
+    return 'Use either the agent review requirement or a Then review, not both.'
+  }
+  return undefined
+}
+
+function validateSocialPlatformOptions(platform: string, options: Record<string, unknown>): string | undefined {
+  if (platform !== 'youtube') return undefined
+  if (options.postType !== 'video') return 'Scheduled YouTube Shorts are blocked until Shorts classification can be verified.'
+  if (options.visibility !== 'private' && options.visibility !== 'unlisted' && options.visibility !== 'public') {
+    return 'Choose a valid YouTube visibility.'
+  }
+  if (options.madeForKids !== 'yes' && options.madeForKids !== 'no') return 'Choose the YouTube audience setting.'
+  return undefined
+}
+
+function executionFromFollowUp(
+  followUp: Exclude<ScheduledWorkComposerFollowUp, { type: 'none' }>,
+  dueDate: string,
+  dueTime: string,
+): ScheduledWorkOrder['execution'] {
+  if (followUp.type === 'review') {
+    return {
+      type: 'review',
+      reviewerType: followUp.reviewerType,
+      reviewerId: followUp.reviewerId || undefined,
+      decisionDueAt: dueDate ? localDateTimeToIso(dueDate, dueTime || '23:59') : undefined,
+    }
+  }
+  if (followUp.type === 'workflow-run') {
+    return { type: 'workflow-run', workflowSlug: followUp.workflowSlug, workflowDigest: followUp.workflowDigest, triggerInputs: followUp.triggerInputs }
+  }
+  return {
+    type: 'social-publish',
+    platform: followUp.platform,
+    profileId: followUp.profileId,
+    accountSetId: followUp.accountSetId || undefined,
+    caption: followUp.caption.trim(),
+    platformOptions: Object.keys(followUp.platformOptions).length ? followUp.platformOptions : undefined,
   }
 }
 

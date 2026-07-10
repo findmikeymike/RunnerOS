@@ -114,7 +114,7 @@ import {
   CampaignScheduledJobRunner,
   type CampaignExternalJobPreparer,
 } from '../campaign-calendar/CampaignScheduledJobRunner'
-import { ScheduledWorkRunner } from '../scheduled-work/ScheduledWorkRunner'
+import { ScheduledWorkRunner, type ScheduledSocialExecutor, type ScheduledSocialPreparer } from '../scheduled-work/ScheduledWorkRunner'
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
@@ -1598,6 +1598,8 @@ export class SessionManager implements ISessionManager {
   /** Campaign one-shot job runner — bootstrapped lazily after scheduler setup. */
   private campaignScheduledJobRunner?: CampaignScheduledJobRunner
   private scheduledWorkRunner?: ScheduledWorkRunner
+  private scheduledSocialPreparer?: ScheduledSocialPreparer
+  private scheduledSocialExecutor?: ScheduledSocialExecutor
   private campaignExternalJobPreparer?: CampaignExternalJobPreparer
   /** Deep Research runner — bootstrapped during `initialize()`. */
   private deepResearchRunner!: DeepResearchRunner
@@ -2428,6 +2430,8 @@ export class SessionManager implements ISessionManager {
         },
         readWorkflowRun: readWorkflowRun,
         listOutputManifests,
+        prepareSocial: this.scheduledSocialPreparer,
+        executeSocial: this.scheduledSocialExecutor,
         emitContextChanged: (workspaceId, docs) => {
           this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
         },
@@ -2477,6 +2481,12 @@ export class SessionManager implements ISessionManager {
   setCampaignExternalJobPreparer(preparer: CampaignExternalJobPreparer): void {
     this.campaignExternalJobPreparer = preparer
     this.campaignScheduledJobRunner = undefined
+  }
+
+  setScheduledSocialExecution(preparer: ScheduledSocialPreparer, executor: ScheduledSocialExecutor): void {
+    this.scheduledSocialPreparer = preparer
+    this.scheduledSocialExecutor = executor
+    this.scheduledWorkRunner = undefined
   }
 
   private broadcastDeepResearchRunUpdated(event: DeepResearchRunnerEvent): void {
@@ -3520,6 +3530,9 @@ user a clickable link to where the thing now lives.`
         sessionLog.info(`Recovered ${recoveredWorkflowRuns.length} interrupted workflow run(s)`)
       }
       for (const workspace of workspaces) {
+        this.getScheduledWorkRunner()
+          .scanWorkspace(workspace.id, workspace.rootPath)
+          .catch((err) => sessionLog.error(`[ScheduledWork] Startup scan failed for workspace "${workspace.id}":`, err))
         this.getCampaignScheduledJobRunner()
           .scanWorkspace(workspace.id, workspace.rootPath)
           .catch((err) => sessionLog.error(`[CampaignScheduledJobs] Startup scan failed for workspace "${workspace.id}":`, err))

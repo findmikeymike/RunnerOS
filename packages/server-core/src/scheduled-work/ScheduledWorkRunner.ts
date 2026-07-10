@@ -1,15 +1,18 @@
-import { createCampaignJobRun, type CampaignJobRun } from '@craft-agent/shared/campaign-calendar'
+import { createCampaignJobRun, type CampaignExternalExecutionReceipt, type CampaignJobRun } from '@craft-agent/shared/campaign-calendar'
 import type { OutputManifest } from '@craft-agent/shared/outputs'
 import {
   SCHEDULED_WORK_CONTEXT_SLUG,
   parseScheduledWorkDocResult,
   scheduledWorkMetadata,
   serializeScheduledWorkBody,
+  scheduledWorkDefinitionDigest,
   type ExpectedOutputContract,
   type ScheduledWorkAttention,
   type ScheduledWorkDocument,
   type ScheduledWorkInputRef,
   type ScheduledWorkOrder,
+  type ScheduledSocialActionPreview,
+  type ScheduledSocialApproval,
 } from '@craft-agent/shared/scheduled-work'
 import {
   loadAllContextDocs,
@@ -21,6 +24,7 @@ import type { WorkflowRunSnapshot, WorkflowRunState } from '@craft-agent/shared/
 
 const ACTIVE_WORKFLOW_STATES = new Set<WorkflowRunState>(['created', 'queued', 'running', 'paused'])
 const START_GRACE_MS = 24 * 60 * 60 * 1000
+const SOCIAL_PREP_WINDOW_MS = 30 * 60 * 1000
 
 export interface ScheduledWorkRunnerDeps {
   withLock<T>(workspaceRootPath: string, fn: () => Promise<T> | T): Promise<T>
@@ -43,10 +47,15 @@ export interface ScheduledWorkRunnerDeps {
   }): Promise<{ runId: string }>
   readWorkflowRun(workspaceRootPath: string, runId: string): WorkflowRunSnapshot | null | undefined
   listOutputManifests(workspaceRootPath: string): OutputManifest[]
+  prepareSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder }): Promise<ScheduledSocialActionPreview>
+  executeSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder; preview: ScheduledSocialActionPreview; approval: ScheduledSocialApproval }): Promise<{ receiptId: string; externalUrl?: string; summary: string }>
   emitContextChanged?(workspaceId: string, docs: LoadedContextDoc[]): void
   now?(): Date
   log?: Pick<Console, 'info' | 'warn' | 'error'>
 }
+
+export type ScheduledSocialPreparer = NonNullable<ScheduledWorkRunnerDeps['prepareSocial']>
+export type ScheduledSocialExecutor = NonNullable<ScheduledWorkRunnerDeps['executeSocial']>
 
 export interface ScheduledWorkRunnerResult {
   scanned: number
@@ -70,6 +79,8 @@ interface OutputMatchResult {
 
 export class ScheduledWorkRunner {
   private readonly inFlight = new Set<string>()
+  private readonly activeAgentRuns = new Set<string>()
+  private readonly activeSocialProfiles = new Set<string>()
 
   constructor(private readonly deps: ScheduledWorkRunnerDeps) {}
 
@@ -89,7 +100,8 @@ export class ScheduledWorkRunner {
         return { scanned: 0, started: 0, blocked: 0, completed: 0, failed: 0 }
       }
       const candidates = parsed.work.items
-        .filter((order) => this.shouldScanOrder(order, now))
+        .filter((order) => this.shouldScanOrder(order, now)
+          && !this.activeAgentRuns.has(activeAgentRunKey(workspaceRootPath, order.id)))
         .map((order) => order.id)
       const result: ScheduledWorkRunnerResult = {
         scanned: candidates.length,
@@ -102,6 +114,51 @@ export class ScheduledWorkRunner {
       for (const orderId of candidates) {
         const current = this.getCurrentOrder(workspaceRootPath, workspaceId, orderId)
         if (!current || current.deletedAt || current.legacyRef) continue
+        if (current.status === 'needs-approval' && current.execution.type === 'social-publish') {
+          if (!current.socialAction) {
+            if (!this.deps.prepareSocial) continue
+            try {
+              const preview = await this.deps.prepareSocial({ workspaceId, workspaceRootPath, order: current })
+              const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => order.status === 'needs-approval' && order.execution.type === 'social-publish'
+                ? { ...order, socialAction: preview, socialApproval: undefined, attention: undefined, updatedAt: nowIso }
+                : null)
+              if (persisted.updated) result.blocked += 1
+            } catch (error) {
+              const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => order.status === 'needs-approval'
+                ? { ...order, status: 'needs-attention', attention: this.buildAttention('execution-failed', `Social dry-run failed: ${errorMessage(error)}`), updatedAt: nowIso }
+                : null)
+              if (persisted.updated) result.failed += 1
+            }
+            continue
+          }
+          if (current.socialApproval && Date.parse(current.socialApproval.expiresAt) <= now.getTime()) {
+            const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => ({
+              ...order,
+              status: 'needs-attention',
+              socialApproval: undefined,
+              attention: this.buildAttention('approval-expired', 'Exact social approval expired. Prepare and approve the post again.'),
+              updatedAt: nowIso,
+            }))
+            if (persisted.updated) result.blocked += 1
+            continue
+          }
+          if (!current.socialApproval || Date.parse(current.startAt) > now.getTime()) continue
+          if (!socialApprovalMatches(current)) {
+            const persisted = await this.updateOrder(workspaceId, workspaceRootPath, current.id, (order, nowIso) => ({ ...order, status: 'needs-attention', attention: this.buildAttention('approval-invalidated', 'Social action changed after approval. Prepare and approve it again.'), updatedAt: nowIso }))
+            if (persisted.updated) result.failed += 1
+            continue
+          }
+          const profileKey = `${current.execution.platform}/${current.execution.profileId}`
+          if (this.activeSocialProfiles.has(profileKey) || !this.deps.executeSocial) continue
+          const claimed = await this.claimSocialRunning(workspaceId, workspaceRootPath, current.id)
+          if (!claimed.order || claimed.order.execution.type !== 'social-publish' || !claimed.order.socialAction || !claimed.order.socialApproval) continue
+          this.activeSocialProfiles.add(profileKey)
+          void this.runSocial(workspaceId, workspaceRootPath, claimed.order)
+            .catch((error) => this.deps.log?.error?.(`[ScheduledWork] ${errorMessage(error)}`))
+            .finally(() => this.activeSocialProfiles.delete(profileKey))
+          result.started += 1
+          continue
+        }
         if (current.status === 'scheduled') {
           if (isPastStartGrace(current, now)) {
             const persisted = await this.updateOrder(
@@ -157,10 +214,12 @@ export class ScheduledWorkRunner {
             continue
           }
           if (claimed.order.execution.type === 'agent-task') {
-            const outcome = await this.runAgentTask(workspaceId, workspaceRootPath, claimed.order)
+            const activeKey = activeAgentRunKey(workspaceRootPath, claimed.order.id)
+            this.activeAgentRuns.add(activeKey)
+            void this.runAgentTask(workspaceId, workspaceRootPath, claimed.order)
+              .catch((error) => this.deps.log?.error?.(`[ScheduledWork] ${errorMessage(error)}`))
+              .finally(() => this.activeAgentRuns.delete(activeKey))
             result.started += 1
-            if (outcome === 'done') result.completed += 1
-            if (outcome === 'failed') result.failed += 1
           }
           continue
         }
@@ -270,6 +329,38 @@ export class ScheduledWorkRunner {
         this.buildAttention('execution-failed', errorMessage(error)),
       )
       return 'failed'
+    }
+  }
+
+  private async runSocial(workspaceId: string, workspaceRootPath: string, order: ScheduledWorkOrder): Promise<void> {
+    try {
+      if (!this.deps.executeSocial || order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return
+      const result = await this.deps.executeSocial({ workspaceId, workspaceRootPath, order, preview: order.socialAction, approval: order.socialApproval })
+      const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
+      const receipt: CampaignExternalExecutionReceipt = {
+        id: result.receiptId,
+        actionType: 'post-asset',
+        platform: order.execution.platform,
+        profileId: order.execution.profileId,
+        accountSetId: order.execution.accountSetId,
+        externalUrl: result.externalUrl,
+        completedAt: nowIso,
+        payloadDigest: order.executionKey.payloadDigest,
+        approvalId: order.socialApproval.id,
+        summary: result.summary,
+      }
+      await this.updateOrder(workspaceId, workspaceRootPath, order.id, (current, completedAt) => current.status === 'running'
+        ? {
+            ...current,
+            status: 'done',
+            result: { type: 'social-publish', receipt },
+            attention: undefined,
+            updatedAt: completedAt,
+            runs: updateLatestRun(current.runs, current.id, { status: 'done', endedAt: completedAt, resultSummary: result.summary, externalReceipt: receipt }),
+          }
+        : null)
+    } catch (error) {
+      await this.finishWithAttention(workspaceId, workspaceRootPath, order.id, this.buildAttention('execution-failed', errorMessage(error)))
     }
   }
 
@@ -384,6 +475,13 @@ export class ScheduledWorkRunner {
         updatedAt: nowIso,
         runs: [...order.runs, createCampaignJobRun({ jobId: order.id, status: 'running', startedAt: nowIso })],
       }
+    })
+  }
+
+  private async claimSocialRunning(workspaceId: string, workspaceRootPath: string, orderId: string): Promise<PersistResult> {
+    return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
+      if (order.status !== 'needs-approval' || order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return null
+      return { ...order, status: 'running', attention: undefined, updatedAt: nowIso, runs: [...order.runs, createCampaignJobRun({ jobId: order.id, status: 'running', startedAt: nowIso })] }
     })
   }
 
@@ -519,9 +617,13 @@ export class ScheduledWorkRunner {
       const nowIso = (this.deps.now?.() ?? new Date()).toISOString()
       const nextOrder = mutate(current, nowIso)
       if (!nextOrder) return { updated: false, work: parsed.work, order: current }
+      let items = parsed.work.items.map((candidate, candidateIndex) => candidateIndex === index ? nextOrder : candidate)
+      if (nextOrder.status === 'done') {
+        items = this.releaseSuccessor(items, nextOrder, nowIso, workspaceRootPath)
+      }
       const nextWork: ScheduledWorkDocument = {
         ...parsed.work,
-        items: parsed.work.items.map((candidate, candidateIndex) => candidateIndex === index ? nextOrder : candidate),
+        items,
         updatedAt: nowIso,
       }
       this.writeWork(workspaceRootPath, nextWork)
@@ -555,14 +657,99 @@ export class ScheduledWorkRunner {
   private shouldScanOrder(order: ScheduledWorkOrder, now: Date): boolean {
     if (order.deletedAt || order.legacyRef) return false
     if (order.status === 'running') return true
+    if (order.status === 'needs-approval' && order.execution.type === 'social-publish') {
+      const profileKey = `${order.execution.platform}/${order.execution.profileId}`
+      const startAt = Date.parse(order.startAt)
+      const insidePreparationWindow = !Number.isNaN(startAt) && startAt - now.getTime() <= SOCIAL_PREP_WINDOW_MS
+      return insidePreparationWindow
+        && !this.activeSocialProfiles.has(profileKey)
+        && (!order.socialAction || Boolean(order.socialApproval))
+    }
     if (order.status !== 'scheduled') return false
     const startedAt = Date.parse(order.startAt)
     return !Number.isNaN(startedAt) && startedAt <= now.getTime()
   }
 
+  private releaseSuccessor(
+    items: ScheduledWorkOrder[],
+    parent: ScheduledWorkOrder,
+    nowIso: string,
+    workspaceRootPath: string,
+  ): ScheduledWorkOrder[] {
+    const childIndex = items.findIndex((candidate) => candidate.status === 'waiting'
+      && candidate.chain?.predecessor?.orderId === parent.id
+      && candidate.chain.predecessor.releaseOn === 'success')
+    if (childIndex < 0) return items
+    const child = items[childIndex]!
+    const outputIds = parent.result && 'outputIds' in parent.result ? parent.result.outputIds : []
+    const manifests = this.deps.listOutputManifests(workspaceRootPath)
+    const parentResultDigest = scheduledWorkDefinitionDigest(parent.result)
+    let issue: ScheduledWorkAttention | undefined
+    const inputRefs = child.inputRefs.map((ref) => {
+      if (ref.kind !== 'produced-output') return ref
+      const candidates = manifests.filter((manifest) => outputIds.includes(manifest.id)
+        && (!ref.selector?.kind || manifest.kind === ref.selector.kind))
+      if (candidates.length === 0) {
+        issue = this.buildAttention('produced-output-missing', `No Output from ${parent.title} matched the follow-up selector.`)
+        return ref
+      }
+      if (candidates.length > 1) {
+        issue = this.buildAttention('produced-output-ambiguous', `${candidates.length} Outputs from ${parent.title} matched. Choose the exact Output before continuing.`)
+        return ref
+      }
+      return {
+        ...ref,
+        resolution: {
+          outputId: candidates[0]!.id,
+          parentResultDigest,
+          source: 'automatic' as const,
+          resolvedAt: nowIso,
+        },
+      }
+    })
+    let execution = child.execution
+    if (!issue && execution.type === 'workflow-run') {
+      const workflowRef = inputRefs.find((ref) => ref.kind === 'produced-output' && ref.bindTo.kind === 'workflow-trigger')
+      if (workflowRef?.kind === 'produced-output' && workflowRef.resolution && workflowRef.bindTo.kind === 'workflow-trigger') {
+        execution = {
+          ...execution,
+          triggerInputs: { ...execution.triggerInputs, [workflowRef.bindTo.input]: workflowRef.resolution.outputId },
+        }
+      }
+    }
+    const nextChild: ScheduledWorkOrder = issue ? {
+      ...child,
+      status: 'needs-attention',
+      attention: issue,
+      updatedAt: nowIso,
+    } : {
+      ...child,
+      status: child.type === 'review' ? 'awaiting-review' : 'scheduled',
+      attention: undefined,
+      inputRefs,
+      execution,
+      updatedAt: nowIso,
+    }
+    return items.map((candidate, candidateIndex) => candidateIndex === childIndex ? nextChild : candidate)
+  }
+
   private buildAttention(reason: ScheduledWorkAttention['reason'], message: string): ScheduledWorkAttention {
     return { reason, message }
   }
+}
+
+function socialApprovalMatches(order: ScheduledWorkOrder): boolean {
+  if (order.execution.type !== 'social-publish' || !order.socialAction || !order.socialApproval) return false
+  return order.socialApproval.actionId === order.socialAction.actionId
+    && order.socialApproval.actionDigest === order.socialAction.actionDigest
+    && order.socialApproval.mediaDigest === order.socialAction.mediaDigest
+    && order.socialApproval.payloadDigest === order.executionKey.payloadDigest
+    && order.socialApproval.platform === order.execution.platform
+    && order.socialApproval.profileId === order.execution.profileId
+}
+
+function activeAgentRunKey(workspaceRootPath: string, orderId: string): string {
+  return `${workspaceRootPath}:${orderId}`
 }
 
 function isPastStartGrace(order: ScheduledWorkOrder, now: Date): boolean {

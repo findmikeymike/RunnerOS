@@ -74,12 +74,35 @@ function buildOrder(overrides: Partial<ScheduledWorkOrder> = {}): ScheduledWorkO
     approvals: overrides.approvals ?? [],
     runs: overrides.runs ?? [],
     result: overrides.result,
+    reviewDecision: overrides.reviewDecision,
+    socialAction: overrides.socialAction,
+    socialApproval: overrides.socialApproval,
     attention: overrides.attention,
     executionKey: overrides.executionKey ?? { payloadDigest: 'digest-1', idempotencyKey: 'idem-1' },
+    chain: overrides.chain,
     legacyRef: overrides.legacyRef,
     createdAt: overrides.createdAt ?? '2026-07-09T00:00:00.000Z',
     updatedAt: overrides.updatedAt ?? '2026-07-09T00:00:00.000Z',
     deletedAt: overrides.deletedAt,
+  }
+}
+
+function buildManifest(id: string, sessionId: string, kind: OutputManifest['kind'] = 'report'): OutputManifest {
+  return {
+    schemaVersion: 1,
+    id,
+    workspaceId,
+    title: `Output ${id}`,
+    slug: `output-${id}`,
+    kind,
+    status: 'published',
+    summary: 'Scheduled output.',
+    createdAt: '2026-07-10T14:00:00.000Z',
+    updatedAt: '2026-07-10T14:00:00.000Z',
+    origin: { source: 'session', sessionId },
+    assets: [],
+    receipts: [],
+    links: [],
   }
 }
 
@@ -103,7 +126,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-async function waitFor(predicate: () => boolean, attempts = 20): Promise<void> {
+async function waitFor(predicate: () => boolean, attempts = 100): Promise<void> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (predicate()) return
     await Promise.resolve()
@@ -144,6 +167,7 @@ describe('ScheduledWorkRunner', () => {
 
     execution.resolve()
     await firstScan
+    await waitFor(() => readWork(root).items[0]?.status === 'done')
 
     const saved = readWork(root).items[0]!
     expect(saved.status).toBe('done')
@@ -175,12 +199,98 @@ describe('ScheduledWorkRunner', () => {
     })
 
     await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
 
     const saved = readWork(root).items[0]!
     expect(saved.status).toBe('needs-attention')
     expect(saved.attention?.reason).toBe('required-output-missing')
     expect(saved.attention?.message).toContain('Expected at least 1 output')
     expect(saved.runs.at(-1)?.status).toBe('failed')
+  })
+
+  test('does not let an ask-mode agent block later due work in the workspace', async () => {
+    const root = makeRoot()
+    const ask = buildOrder({ id: 'ask-1', calendarLink: { calendar: 'campaign', itemId: 'calendar-ask' }, execution: {
+      type: 'agent-task', agentSlug: 'content-genius', brief: 'Wait for permission.', permissionMode: 'ask', expectedOutput: { requirement: 'none' },
+    } })
+    const automatic = buildOrder({ id: 'auto-2', calendarLink: { calendar: 'campaign', itemId: 'calendar-auto' } })
+    writeWork(root, [ask, automatic])
+    const permission = deferred<void>()
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(),
+      executeAgentTask: async ({ workOrderId, onStarted }) => {
+        await onStarted(`session-${workOrderId}`)
+        if (workOrderId === 'ask-1') await permission.promise
+        return { sessionId: `session-${workOrderId}` }
+      },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items.find((order) => order.id === 'auto-2')?.status === 'done')
+    expect(readWork(root).items.find((order) => order.id === 'ask-1')?.status).toBe('running')
+    permission.resolve()
+    await waitFor(() => readWork(root).items.find((order) => order.id === 'ask-1')?.status === 'done')
+  })
+
+  test('releases a review child only after one exact produced Output resolves', async () => {
+    const root = makeRoot()
+    const parent = buildOrder({ id: 'chain-parent', chain: { chainId: 'chain-1', stepId: 'step-0', ordinal: 0 } })
+    const child = buildOrder({
+      id: 'chain-child',
+      type: 'review',
+      status: 'waiting',
+      calendarLink: { calendar: 'campaign', itemId: 'calendar-child' },
+      execution: { type: 'review', reviewerType: 'user' },
+      inputRefs: [{ kind: 'produced-output', stepId: 'step-0', selector: { kind: 'report' }, bindTo: { kind: 'review-target' } }],
+      chain: { chainId: 'chain-1', stepId: 'step-1', ordinal: 1, predecessor: { orderId: 'chain-parent', stepId: 'step-0', releaseOn: 'success' } },
+    })
+    writeWork(root, [parent, child])
+    const manifest = buildManifest('output-chain-1', 'session-chain-parent')
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => { await onStarted('session-chain-parent'); return { sessionId: 'session-chain-parent' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [manifest],
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items.find((order) => order.id === 'chain-parent')?.status === 'done')
+    expect(readWork(root).items.find((order) => order.id === 'chain-child')?.status).toBe('awaiting-review')
+    await waitFor(() => readWork(root).items.find((order) => order.id === 'chain-child')?.status === 'awaiting-review')
+    const savedChild = readWork(root).items.find((order) => order.id === 'chain-child')!
+    expect(savedChild.inputRefs[0]).toMatchObject({ kind: 'produced-output', resolution: { outputId: 'output-chain-1', source: 'automatic' } })
+  })
+
+  test('stops an ambiguous produced-output follow-up for exact user selection', async () => {
+    const root = makeRoot()
+    const parent = buildOrder({ id: 'ambiguous-parent', chain: { chainId: 'chain-2', stepId: 'step-0', ordinal: 0 } })
+    const child = buildOrder({
+      id: 'ambiguous-child', type: 'review', status: 'waiting', calendarLink: { calendar: 'campaign', itemId: 'calendar-ambiguous' },
+      execution: { type: 'review', reviewerType: 'user' },
+      inputRefs: [{ kind: 'produced-output', stepId: 'step-0', selector: { kind: 'report' }, bindTo: { kind: 'review-target' } }],
+      chain: { chainId: 'chain-2', stepId: 'step-1', ordinal: 1, predecessor: { orderId: 'ambiguous-parent', stepId: 'step-0', releaseOn: 'success' } },
+    })
+    writeWork(root, [parent, child])
+    const manifests = [buildManifest('output-a', 'session-ambiguous'), buildManifest('output-b', 'session-ambiguous')]
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => { await onStarted('session-ambiguous'); return { sessionId: 'session-ambiguous' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => manifests,
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items.find((order) => order.id === 'ambiguous-parent')?.status === 'done')
+    expect(readWork(root).items.find((order) => order.id === 'ambiguous-child')?.status).toBe('needs-attention')
+    await waitFor(() => readWork(root).items.find((order) => order.id === 'ambiguous-child')?.status === 'needs-attention')
+    const savedChild = readWork(root).items.find((order) => order.id === 'ambiguous-child')!
+    expect(savedChild.attention?.reason).toBe('produced-output-ambiguous')
+    expect(savedChild.inputRefs[0]).not.toHaveProperty('resolution')
   })
 
   test('starts workflow jobs without marking them done, then completes them on a later poll', async () => {
@@ -338,6 +448,92 @@ describe('ScheduledWorkRunner', () => {
     const saved = readWork(root).items[0]!
     expect(saved.status).toBe('needs-approval')
     expect(saved.runs).toEqual([])
+  })
+
+  test('prepares, exact-approves, and publishes social work once with a receipt', async () => {
+    const root = makeRoot()
+    const order = buildOrder({
+      id: 'social-live-1',
+      type: 'social-publish',
+      status: 'needs-approval',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Out Friday.' },
+      executionKey: { payloadDigest: 'payload-social-1', idempotencyKey: 'idem-social-1' },
+    })
+    writeWork(root, [order])
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      prepareSocial: async () => ({
+        actionId: 'act_social-live-1', actionDigest: 'sha256:action', platform: 'x', profileId: 'artist-main',
+        preparedAt: '2026-07-10T14:00:00.000Z', payloadDigest: 'payload-social-1', dryRun: { ok: true },
+      }),
+      executeSocial: async () => {
+        executeCalls += 1
+        return { receiptId: 'receipt-social-1', externalUrl: 'https://x.com/example/status/1', summary: 'Published.' }
+      },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    let saved = readWork(root).items[0]!
+    expect(saved.socialAction?.actionId).toBe('act_social-live-1')
+    saved = {
+      ...saved,
+      socialApproval: {
+        id: 'approval-social-1', approvedAt: '2026-07-10T14:01:00.000Z', expiresAt: '2026-07-10T14:31:00.000Z',
+        actionId: 'act_social-live-1', actionDigest: 'sha256:action', payloadDigest: 'payload-social-1', platform: 'x', profileId: 'artist-main',
+        approvedBy: { type: 'user', clientId: 'test-client' },
+      },
+      updatedAt: '2026-07-10T14:01:00.000Z',
+    }
+    writeWork(root, [saved])
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:02:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'done')
+    const completed = readWork(root).items[0]!
+    expect(executeCalls).toBe(1)
+    expect(completed.result).toMatchObject({ type: 'social-publish', receipt: { id: 'receipt-social-1', approvalId: 'approval-social-1' } })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:03:00.000Z'))
+    expect(executeCalls).toBe(1)
+  })
+
+  test('does not prepare social approval more than 30 minutes before publish time', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({
+      id: 'social-future', type: 'social-publish', status: 'needs-approval', startAt: '2026-07-11T14:00:00.000Z',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Tomorrow.' },
+    })])
+    let prepareCalls = 0
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(), executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null, listOutputManifests: () => [],
+      prepareSocial: async () => { prepareCalls += 1; throw new Error('must not prepare') },
+    })
+    const result = await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:00:00.000Z'))
+    expect(result.scanned).toBe(0)
+    expect(prepareCalls).toBe(0)
+  })
+
+  test('moves expired social approval to actionable attention', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({
+      id: 'social-expired', type: 'social-publish', status: 'needs-approval',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Late.' },
+      socialAction: { actionId: 'act_expired', actionDigest: 'sha256:expired', platform: 'x', profileId: 'artist-main', preparedAt: '2026-07-10T13:30:00.000Z', payloadDigest: 'digest-1', dryRun: {} },
+      socialApproval: { id: 'approval-expired', approvedAt: '2026-07-10T13:35:00.000Z', expiresAt: '2026-07-10T13:59:00.000Z', actionId: 'act_expired', actionDigest: 'sha256:expired', payloadDigest: 'digest-1', platform: 'x', profileId: 'artist-main', approvedBy: { type: 'user', clientId: 'test-client' } },
+    })])
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(), executeAgentTask: async () => ({ sessionId: 'unused' }), startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null, listOutputManifests: () => [],
+    })
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    const saved = readWork(root).items[0]!
+    expect(saved.status).toBe('needs-attention')
+    expect(saved.attention?.reason).toBe('approval-expired')
+    expect(saved.socialApproval).toBeUndefined()
   })
 
   test('marks stale running agent tasks with a persisted session id as needs-attention instead of rerunning them', async () => {

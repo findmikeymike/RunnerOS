@@ -28,6 +28,7 @@ export interface ArtistCalendarEvent {
   notes?: string
   workspaceLinks: ArtistWorkspaceLink[]
   relatedPersonIds: string[]
+  scheduledWorkId?: string
   google?: GoogleCalendarSyncState
   deletedAt?: string
   createdAt: string
