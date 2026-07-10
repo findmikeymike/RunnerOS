@@ -101,6 +101,14 @@ No integration is marked "fully end-to-end verified" until it passes:
 - [ ] Confirm exact-target fallback guards prevent a reply from becoming a top-level comment or new DM thread.
 - [ ] Confirm browser/CDP recovery is clear for missing sessions, expired login, CAPTCHA/2FA, account mismatch, and selector drift.
 
+### Spotify Analyst / Playlist Creator
+
+- [ ] Connect a real Spotify browser profile through Settings -> Social Accounts and confirm live status.
+- [ ] Capture and normalize one Spotify for Artists analytics snapshot, then verify the saved snapshot and `artist-spotify-snapshot` context payload.
+- [ ] Capture a second compatible reporting window and confirm delta/anomaly analysis skips unavailable metrics instead of treating them as zero.
+- [ ] Dry-run, approve, and create one private test playlist; confirm exact account/track bindings, idempotency, and the durable receipt.
+- [ ] Confirm expired login, wrong account, CAPTCHA/2FA, missing analytics fields, and browser selector drift stop clearly without fabricating data or writing a playlist.
+
 ### Hypermotion / Remotion / HyperFrames
 
 - [ ] Run local `doctor` in packaged and dev app contexts.

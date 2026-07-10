@@ -1,11 +1,24 @@
 ---
-status: current
+status: complete
 owner: agent
-last_verified: 2026-07-08
-source_of_truth: true
+last_verified: 2026-07-10
+source_of_truth: false
 ---
 
 # Spotify Fix
+
+## Resolution
+
+Completed on `codex/creator-social-integration`.
+
+- Spotify Analyst now captures Spotify for Artists data through the built-in authenticated Spotify browser source and normalizes only visible fields.
+- Snapshot comparison and anomaly detection require compatible sources/reporting windows and preserve unavailable metrics as unavailable rather than zero.
+- Packaged execution uses materialized skills plus the bundled Bun; the broken client-credentials and monorepo-only scripts were removed.
+- Playlist Creator now uses the same connected source with guarded dry-run, approval, idempotency, and receipt behavior.
+- Existing installed agents and skills migrate conservatively; customized prompts are preserved unless they contain the obsolete execution marker.
+- Remaining real-account proof is tracked in `docs/backlog/external-integration-live-verification.md`.
+
+The material below is retained as the historical finding that drove the implementation.
 
 Make the Spotify Analyst and Spotify Playlist Creator agents fully functional and reliable in packaged builds, not just in a dev monorepo checkout.
 

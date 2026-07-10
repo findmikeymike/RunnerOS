@@ -3007,6 +3007,18 @@ export class SessionManager implements ISessionManager {
           ).updated) {
             sessionLog.info('[skills] Updated Spotify playlist curator to packaged execution paths')
           }
+          for (const [slug, marker] of [
+            ['spotify-analytics-snapshot', 'SPOTIFY_CLIENT_ID'],
+            ['spotify-anomaly-watch', 'bun packages/shared/src/skills/bundled/spotify-anomaly-watch/scripts/watch.ts'],
+          ] as const) {
+            const skillMd = BUNDLED_STARTER_SKILLS
+              .find(skill => skill.slug === slug)
+              ?.files.find(file => file.path === 'SKILL.md')
+              ?.content
+            if (skillMd && replaceRequiredGlobalSkillFileIfContains(slug, 'SKILL.md', marker, skillMd).updated) {
+              sessionLog.info(`[skills] Updated ${slug} to Spotify browser and packaged execution paths`)
+            }
+          }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
           const missingBrandingSkills = brandingSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
@@ -3290,6 +3302,42 @@ export class SessionManager implements ISessionManager {
               '   - Resolve the exact connected Spotify profile from Printing Press Social. Dry-run `playlist spotify create`, preserve its immutable action ID and approval digest, and execute only after approval.\n   - Complete the returned browser plan against the verified account, then record the observed playlist URL with `playlist spotify receipt`. A delegated plan is not completion.',
             ).updated) {
               sessionLog.info('[agent-definitions] Updated Spotify Playlist Creator execution path')
+            }
+          }
+          const spotifyAnalyst = STARTER_AGENTS.find(agent => agent.slug === 'spotify-analyst')
+          if (spotifyAnalyst) {
+            if (ensureBuiltInAgentMetadataSlugs('spotify-analyst', {
+              skills: spotifyAnalyst.metadata.skills,
+              sources: spotifyAnalyst.metadata.sources,
+            }).updated) {
+              sessionLog.info('[agent-definitions] Added Spotify Analyst browser source routing')
+            }
+            if (replaceBuiltInAgentMetadata('spotify-analyst', {
+              greeting: {
+                from: 'I can run a Spotify snapshot, check anomalies, or explain what changed. Add Spotify client credentials and the artist URL/ID first.',
+                to: spotifyAnalyst.metadata.greeting,
+              },
+              inputs: {
+                from: 'Artist HQ Profile, Spotify client credentials, Spotify artist ID or URL, existing Spotify snapshots, and campaign context.',
+                to: spotifyAnalyst.metadata.inputs,
+              },
+              outputs: {
+                from: 'Spotify public API snapshots, optional S4A snapshot normalization, delta briefs, anomaly alerts, and growth handoff notes.',
+                to: spotifyAnalyst.metadata.outputs,
+              },
+              skills: {
+                from: ['spotify-growth-intake', 'spotify-analytics-snapshot', 'spotify-anomaly-watch', 'spotify-playlist-curator'],
+                to: spotifyAnalyst.metadata.skills,
+              },
+            }).updated) {
+              sessionLog.info('[agent-definitions] Updated Spotify Analyst browser product contract')
+            }
+            if (replaceBuiltInAgentPromptPattern(
+              'spotify-analyst',
+              /^You are Spotify Analyst,[\s\S]*api-snapshot\.ts[\s\S]*$/,
+              spotifyAnalyst.systemPrompt,
+            ).updated) {
+              sessionLog.info('[agent-definitions] Replaced Spotify Analyst dev-only API prompt')
             }
           }
           if (replaceBuiltInAgentMetadata(CONCIERGE_SLUG, {

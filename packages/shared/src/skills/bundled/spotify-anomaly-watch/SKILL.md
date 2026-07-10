@@ -7,16 +7,14 @@ description: Daily check on existing Spotify snapshots. Flags real anomalies —
 
 Use this skill on a daily heartbeat. It does **not** scrape Spotify — it reads existing snapshots and computes anomalies. Cheap, fast, runs every day even if no new snapshot landed.
 
-Read `doc/SPOTIFY-STRATEGIST-DOCTRINE.md` before running.
-
 ## Inputs
 
-- `data/spotify/snapshots/*.json` — at least one snapshot. Two or more for trend detection.
+- `data/spotify/snapshots/<date>.json`, `<date>-web-api.json`, or `<date>-s4a.json` — at least one snapshot. Two compatible snapshots from the same data source/reporting window are required for trend detection.
 
 ## Workflow
 
 ```sh
-bun packages/shared/src/skills/bundled/spotify-anomaly-watch/scripts/watch.ts \
+"${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-anomaly-watch/scripts/watch.ts" \
   --snapshots-dir data/spotify/snapshots \
   --alerts-dir data/spotify/alerts \
   --ceo-inbox data/spotify/artist-ceo-alerts.md
@@ -24,13 +22,13 @@ bun packages/shared/src/skills/bundled/spotify-anomaly-watch/scripts/watch.ts \
 
 The script:
 
-- Reads the latest snapshot plus up to 3 priors.
+- Reads the latest snapshot plus up to 3 compatible priors. Missing optional metrics are skipped, not treated as zero.
 - Computes deltas and flags:
   - **Stream drop** ≥30% sustained over 2 consecutive snapshots → severe.
   - **Listener drop** ≥30% sustained over 2 → severe.
   - **Save rate drop** ≥20% sustained over 2 → moderate.
   - **Skip rate spike** ≥20% sustained over 2 → moderate.
-  - **Playlist removal** when a playlist with ≥100 listeners disappeared from `playlistsDriving` between the two latest snapshots → severe (single-snapshot is enough for playlist removals; they don't return on their own).
+  - **Playlist removal** when a playlist with ≥100 listeners disappeared from two snapshots that both captured `playlistsDriving` → severe and worth investigating.
   - **Track disappearance** when a top-3 track is missing from the latest snapshot → moderate.
   - **Editorial dependency growth** when editorial-share grew >10pts in two snapshots → informational (not bad, but watch durability).
 - Writes `data/spotify/alerts/<YYYY-MM-DD>.md` with all findings categorized by severity.
@@ -47,6 +45,8 @@ The script:
 
 - 0 snapshots → exit cleanly with a "no data" message.
 - 1 snapshot → write a baseline alert file noting "first snapshot, no priors to compare."
+- Snapshots from a different data source/reporting window → retain the latest as a baseline instead of creating a false delta.
+- Missing optional metrics, tracks, playlists, or source fields → skip those checks without emitting `NaN` or fabricating zeroes. Preserve any `partial` alert from the snapshot.
 - Snapshot files malformed → skip the bad file, continue with remaining, surface the parse error in the alert.
 
 ## Idempotency
@@ -57,4 +57,4 @@ The script overwrites `alerts/<today>.md` on each run (so the latest run always 
 
 - Never scrape. This skill works from existing snapshots.
 - Never silence an anomaly. If a metric crashed, surface it.
-- Never invent thresholds. Use the doctrine numbers above.
+- Never invent thresholds. Use the configured defaults above or explicit CLI overrides.

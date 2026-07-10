@@ -37438,346 +37438,112 @@ Timestamp:
     slug: "spotify-analytics-snapshot",
     files: [
       {
-        path: "scripts/api-snapshot.ts",
-        content: `#!/usr/bin/env bun
-import { mkdir, writeFile } from 'node:fs/promises';
-import { basename, isAbsolute, join } from 'node:path';
-import { loadContextDoc, upsertContextDoc } from '../../../../workspace-context/index.ts';
+        path: "scripts/delta-brief.test.ts",
+        content: `import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-interface CliOptions {
-  artistId: string | null;
-  artistProfile: string | null;
-  workspace: string | null;
-  out: string;
-  market: string;
-  writeContext: boolean;
-}
+const script = path.join(import.meta.dir, "delta-brief.ts");
 
-interface SpotifyArtist {
-  id: string;
-  name: string;
-  genres?: string[];
-  popularity?: number;
-  followers?: { total?: number };
-  external_urls?: { spotify?: string };
-  images?: Array<{ url?: string; width?: number; height?: number }>;
-}
-
-interface SpotifyTrack {
-  id: string;
-  name: string;
-  popularity?: number;
-  external_urls?: { spotify?: string };
-  album?: { name?: string; release_date?: string };
-}
-
-const DEFAULT_OUT_DIR = 'data/spotify/snapshots';
-const SNAPSHOT_CONTEXT_SLUG = 'artist-spotify-snapshot';
-const ARTIST_PROFILE_CONTEXT_SLUG = 'artist-profile';
-
-function usage(): string {
-  return \`Usage:
-  bun packages/shared/src/skills/bundled/spotify-analytics-snapshot/scripts/api-snapshot.ts [options]
-
-Options:
-  --artist-id <id>          Spotify artist ID.
-  --artist-profile <url|id> Spotify artist URL/URI/ID.
-  --workspace <path>        Workspace root. If present, can read artist-profile and write Artist HQ context.
-  --out <dir>               Snapshot directory. Default: \${DEFAULT_OUT_DIR}
-  --market <code>           Market for top tracks. Default: US
-  --no-context              Do not write artist-spotify-snapshot context.
-
-Requires SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET.
-\`;
-}
-
-function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = {
-    artistId: null,
-    artistProfile: null,
-    workspace: process.env.CRAFT_WORKSPACE_PATH ?? null,
-    out: DEFAULT_OUT_DIR,
-    market: 'US',
-    writeContext: true,
-  };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    const next = () => {
-      const value = argv[++i];
-      if (value === undefined) throw new Error(\`Missing value for \${arg}\`);
-      return value;
-    };
-
-    if (arg === '--help' || arg === '-h') {
-      console.log(usage());
-      process.exit(0);
-    } else if (arg === '--artist-id') {
-      options.artistId = next();
-    } else if (arg === '--artist-profile') {
-      options.artistProfile = next();
-    } else if (arg === '--workspace') {
-      options.workspace = next();
-    } else if (arg === '--out') {
-      options.out = next();
-    } else if (arg === '--market') {
-      options.market = next().toUpperCase();
-    } else if (arg === '--no-context') {
-      options.writeContext = false;
-    } else {
-      throw new Error(\`Unknown argument: \${arg}\`);
-    }
-  }
-
-  return options;
-}
-
-function extractArtistId(input: string | null | undefined): string | null {
-  const raw = input?.trim();
-  if (!raw) return null;
-  const uriMatch = raw.match(/^spotify:artist:([A-Za-z0-9]+)$/);
-  if (uriMatch?.[1]) return uriMatch[1];
-  const urlMatch = raw.match(/\\/artist\\/([A-Za-z0-9]+)/);
-  if (urlMatch?.[1]) return urlMatch[1];
-  const last = basename(raw).trim();
-  return /^[A-Za-z0-9]{12,}$/.test(last) ? last : null;
-}
-
-function extractJson(body: string): unknown | null {
-  const fenced = body.match(/\`\`\`json\\s*([\\s\\S]*?)\`\`\`/i);
-  const json = fenced?.[1] ?? body.slice(body.indexOf('{'), body.lastIndexOf('}') + 1);
-  if (!json.trim()) return null;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
-function readArtistProfileId(workspace: string | null): string | null {
-  if (!workspace) return null;
-  const doc = loadContextDoc(workspace, ARTIST_PROFILE_CONTEXT_SLUG);
-  const parsed = extractJson(doc?.body ?? '');
-  if (!parsed || typeof parsed !== 'object') return null;
-  const spotifyProfile = (parsed as { spotifyProfile?: unknown }).spotifyProfile;
-  return typeof spotifyProfile === 'string' ? extractArtistId(spotifyProfile) : null;
-}
-
-async function getAccessToken(clientId: string, clientSecret: string): Promise<string> {
-  const response = await fetch('https://accounts.spotify.com/api/token', {
-    method: 'POST',
-    headers: {
-      Authorization: \`Basic \${Buffer.from(\`\${clientId}:\${clientSecret}\`).toString('base64')}\`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ grant_type: 'client_credentials' }),
+function runDelta(snapshots: Record<string, unknown>[]) {
+  const root = mkdtempSync(path.join(tmpdir(), "spotify-delta-"));
+  const snapshotsDir = path.join(root, "snapshots");
+  const outDir = path.join(root, "briefs");
+  mkdirSync(snapshotsDir, { recursive: true });
+  snapshots.forEach((snapshot) => {
+    const date = String(snapshot.snapshotDate);
+    writeFileSync(path.join(snapshotsDir, \`\${date}-s4a.json\`), JSON.stringify(snapshot));
   });
-  if (!response.ok) {
-    throw new Error(\`Spotify token request failed: \${response.status} \${await response.text()}\`);
-  }
-  const json = await response.json() as { access_token?: string };
-  if (!json.access_token) throw new Error('Spotify token response did not include access_token.');
-  return json.access_token;
+  const result = Bun.spawnSync([process.execPath, script, "--snapshots-dir", snapshotsDir, "--out-dir", outDir]);
+  return { result, brief: result.exitCode === 0 ? readFileSync(path.join(outDir, \`\${snapshots.at(-1)?.snapshotDate}.md\`), "utf8") : "" };
 }
 
-async function spotifyGet<T>(token: string, path: string): Promise<T> {
-  const response = await fetch(\`https://api.spotify.com/v1\${path}\`, {
-    headers: { Authorization: \`Bearer \${token}\` },
+describe("Spotify delta brief", () => {
+  test("discovers s4a snapshots and compares the optional browser schema", () => {
+    const base = { dataSource: "spotify-for-artists-browser", windowDays: 28, artist: { name: "Luna" }, tracks: [], sources: {}, partial: false, errors: [] };
+    const { result, brief } = runDelta([
+      { ...base, snapshotDate: "2026-07-08", metrics: { streams: 100, listeners: 50, followers: 20, saves: 4 } },
+      { ...base, snapshotDate: "2026-07-09", metrics: { streams: 120, listeners: 55, followers: 21, saves: null }, partial: true, errors: ["Missing metrics: saves."] },
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(brief).toContain("100 → 120");
+    expect(brief).toContain("Saves: delta unavailable");
+    expect(brief).toContain("Playlist-driving data was not captured");
   });
-  if (!response.ok) {
-    throw new Error(\`Spotify API request failed for \${path}: \${response.status} \${await response.text()}\`);
-  }
-  return await response.json() as T;
-}
 
-async function spotifyGetOptional<T>(token: string, path: string): Promise<{ data: T | null; error: string | null }> {
-  try {
-    return { data: await spotifyGet<T>(token, path), error: null };
-  } catch (error) {
-    return { data: null, error: error instanceof Error ? error.message : String(error) };
-  }
-}
+  test("writes a baseline instead of comparing incompatible data sources", () => {
+    const { result, brief } = runDelta([
+      { snapshotDate: "2026-07-08", dataSource: "spotify-web-api", artist: {}, metrics: { followers: 20 } },
+      { snapshotDate: "2026-07-09", dataSource: "spotify-for-artists-browser", artist: {}, metrics: { followers: 21 }, partial: true },
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(brief).toContain("No prior comparable snapshot");
+  });
 
-function bestImage(artist: SpotifyArtist): string | undefined {
-  return artist.images?.find((image) => image.url)?.url;
-}
-
-function buildContextBody(snapshot: unknown): string {
-  return [
-    'This is the latest global Spotify snapshot. Public API snapshots include catalog/audience proxy data, not private Spotify for Artists streams/listeners.',
-    '',
-    '\`\`\`json',
-    JSON.stringify(snapshot, null, 2),
-    '\`\`\`',
-  ].join('\\n');
-}
-
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const clientId = process.env.SPOTIFY_CLIENT_ID?.trim();
-  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET?.trim();
-  if (!clientId || !clientSecret) {
-    throw new Error('SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are required. Add them in Settings > Secrets > Spotify.');
-  }
-
-  const artistId = options.artistId
-    ?? extractArtistId(options.artistProfile)
-    ?? extractArtistId(process.env.SPOTIFY_ARTIST_ID)
-    ?? readArtistProfileId(options.workspace);
-  if (!artistId) {
-    throw new Error('Spotify artist ID is required. Add Artist Profile > Spotify profile, set SPOTIFY_ARTIST_ID, or pass --artist-id.');
-  }
-
-  const token = await getAccessToken(clientId, clientSecret);
-  const artist = await spotifyGet<SpotifyArtist>(token, \`/artists/\${artistId}\`);
-  const topTracks = await spotifyGetOptional<{ tracks?: SpotifyTrack[] }>(
-    token,
-    \`/artists/\${artistId}/top-tracks?market=\${encodeURIComponent(options.market)}\`,
-  );
-  const snapshotDate = new Date().toISOString().slice(0, 10);
-  const snapshot = {
-    version: 1,
-    dataSource: 'spotify-web-api',
-    snapshotDate,
-    windowDays: 0,
-    artist: {
-      name: artist.name,
-      spotifyArtistId: artist.id,
-      spotifyUrl: artist.external_urls?.spotify,
-      genres: artist.genres ?? [],
-      imageUrl: bestImage(artist),
-    },
-    metrics: {
-      followers: artist.followers?.total ?? 0,
-      popularity: artist.popularity ?? 0,
-    },
-    geo: { topCities: [] },
-    tracks: (topTracks.data?.tracks ?? []).map((track) => ({
-      id: track.id,
-      name: track.name,
-      popularity: track.popularity ?? 0,
-      spotifyUrl: track.external_urls?.spotify,
-      album: track.album?.name,
-      releaseDate: track.album?.release_date,
-    })),
-    playlistsDriving: [],
-    sources: {},
-    partial: Boolean(topTracks.error),
-    errors: topTracks.error
-      ? [\`Top tracks unavailable: \${topTracks.error}\`]
-      : [],
-    updatedAt: new Date().toISOString(),
-  };
-
-  const outDir = options.workspace && !isAbsolute(options.out)
-    ? join(options.workspace, options.out)
-    : options.out;
-  await mkdir(outDir, { recursive: true });
-  const outPath = join(outDir, \`\${snapshotDate}-web-api.json\`);
-  await writeFile(outPath, \`\${JSON.stringify(snapshot, null, 2)}\\n\`, 'utf8');
-
-  let contextPath: string | null = null;
-  if (options.writeContext) {
-    if (!options.workspace) throw new Error('--workspace is required to write Artist HQ context.');
-    const loaded = upsertContextDoc(options.workspace, {
-      slug: SNAPSHOT_CONTEXT_SLUG,
-      metadata: {
-        name: 'Artist Spotify Snapshot',
-        description: 'Latest Spotify snapshot for Artist HQ widgets and workers.',
-        routing: { mode: 'broadcast' },
-        enabled: true,
-      },
-      body: buildContextBody(snapshot),
-    });
-    contextPath = loaded.path;
-  }
-
-  console.log(JSON.stringify({
-    status: 'spotify_public_snapshot_written',
-    dataSource: 'spotify-web-api',
-    path: outPath,
-    contextPath,
-    snapshotDate,
-    artist: artist.name,
-    followers: snapshot.metrics.followers,
-    popularity: snapshot.metrics.popularity,
-    topTrackCount: snapshot.tracks.length,
-  }, null, 2));
-}
-
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
+  test("does not compare an unknown reporting window to a known window", () => {
+    const base = { dataSource: "spotify-for-artists-browser", artist: { name: "Luna" }, tracks: [], sources: {}, partial: false, errors: [] };
+    const { result, brief } = runDelta([
+      { ...base, snapshotDate: "2026-07-08", windowDays: 28, metrics: { streams: 100 } },
+      { ...base, snapshotDate: "2026-07-09", windowDays: null, metrics: { streams: 200 }, partial: true },
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(brief).toContain("No prior comparable snapshot");
+    expect(brief).not.toContain("100 → 200");
+  });
 });
 `,
       },
       {
         path: "scripts/delta-brief.ts",
         content: `#!/usr/bin/env npx tsx
-/**
- * Spotify Delta Brief — compare latest two snapshots, emit a markdown brief.
- *
- * Reads \`data/spotify/snapshots/*.json\`, picks the latest two, computes
- * deltas, writes \`data/spotify/briefs/<latest-date>.md\`.
- *
- * No scraping. Pure data manipulation.
- */
+/** Spotify Delta Brief — compare the latest two compatible snapshots. */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+type OptionalNumber = number | null | undefined;
+type Track = { id?: string; name: string; streams?: OptionalNumber };
+type Playlist = { name: string; type?: string; listeners?: OptionalNumber };
 type Snapshot = {
   snapshotDate: string;
-  windowDays: number;
-  artist: { name: string; spotifyArtistId: string };
+  dataSource?: string;
+  windowDays?: OptionalNumber;
+  artist: { name?: string };
   metrics: {
-    streams: number;
-    listeners: number;
-    followers: number;
-    saveRate: number;
-    skipRate: number;
+    streams?: OptionalNumber;
+    listeners?: OptionalNumber;
+    followers?: OptionalNumber;
+    saves?: OptionalNumber;
+    saveRate?: OptionalNumber;
+    skipRate?: OptionalNumber;
   };
-  geo: { topCities: Array<{ city: string; country: string; listeners: number }> };
-  tracks: Array<{ id: string; name: string; streams: number; saves: number; playlistAdds: number }>;
-  playlistsDriving: Array<{ name: string; type: string; listeners: number; addedDate: string | null }>;
-  sources: {
-    algorithmic: number;
-    editorial: number;
-    listenerLibrary: number;
-    search: number;
-    otherListeners: number;
-  };
+  tracks: Track[];
+  playlistsDriving: Playlist[];
+  sources: Record<string, number>;
   partial: boolean;
   errors: string[];
 };
 
-type CliOptions = {
-  snapshotsDir: string;
-  outDir: string;
-  noiseFloorPct: number;
-};
+type CliOptions = { snapshotsDir: string; outDir: string; noiseFloorPct: number };
 
 const DEFAULT_SNAPSHOTS_DIR = "data/spotify/snapshots";
 const DEFAULT_OUT_DIR = "data/spotify/briefs";
 
 function usage() {
   return \`Usage:
-  npx tsx skills/spotify-analytics-snapshot/scripts/delta-brief.ts [options]
+  "\\\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-analytics-snapshot/scripts/delta-brief.ts" [options]
 
 Options:
   --snapshots-dir <path>   Default: \${DEFAULT_SNAPSHOTS_DIR}
   --out-dir <path>         Default: \${DEFAULT_OUT_DIR}
-  --noise-floor <pct>      Movements below this percent flagged as 'noise'. Default: 10
+  --noise-floor <pct>      Movements below this percent flagged as noise. Default: 10
   --help
 \`;
 }
 
 function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = {
-    snapshotsDir: DEFAULT_SNAPSHOTS_DIR,
-    outDir: DEFAULT_OUT_DIR,
-    noiseFloorPct: 10,
-  };
+  const options: CliOptions = { snapshotsDir: DEFAULT_SNAPSHOTS_DIR, outDir: DEFAULT_OUT_DIR, noiseFloorPct: 10 };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     const next = () => {
@@ -37789,8 +37555,7 @@ function parseArgs(argv: string[]): CliOptions {
     else if (arg === "--snapshots-dir") options.snapshotsDir = next();
     else if (arg === "--out-dir") options.outDir = next();
     else if (arg === "--noise-floor") options.noiseFloorPct = Number(next());
-    else if (arg === "--") continue;
-    else throw new Error(\`Unknown argument: \${arg}\`);
+    else if (arg !== "--") throw new Error(\`Unknown argument: \${arg}\`);
   }
   if (!Number.isFinite(options.noiseFloorPct) || options.noiseFloorPct < 0) {
     throw new Error("--noise-floor must be a nonnegative number.");
@@ -37800,594 +37565,241 @@ function parseArgs(argv: string[]): CliOptions {
 
 async function listSnapshotFiles(dir: string): Promise<string[]> {
   const stat = await fs.stat(dir).catch(() => null);
-  if (!stat || !stat.isDirectory()) return [];
-  const entries = await fs.readdir(dir);
-  return entries
-    .filter((name) => /^\\d{4}-\\d{2}-\\d{2}\\.json$/.test(name))
+  if (!stat?.isDirectory()) return [];
+  return (await fs.readdir(dir))
+    .filter((name) => /^\\d{4}-\\d{2}-\\d{2}(?:-(?:s4a|web-api))?\\.json$/.test(name))
     .sort();
 }
 
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
 async function readSnapshot(filePath: string): Promise<Snapshot> {
-  const raw = await fs.readFile(filePath, "utf8");
-  return JSON.parse(raw) as Snapshot;
+  const parsed = JSON.parse(await fs.readFile(filePath, "utf8")) as unknown;
+  const root = record(parsed);
+  const snapshotDate = typeof root.snapshotDate === "string" ? root.snapshotDate : "";
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(snapshotDate)) throw new Error(\`Invalid snapshotDate in \${filePath}.\`);
+  const metricInput = record(root.metrics);
+  const artistInput = record(root.artist);
+  const sourceInput = record(root.sources);
+  const sources = Object.fromEntries(Object.entries(sourceInput)
+    .map(([key, value]) => [key, finiteNumber(value)] as const)
+    .filter((entry): entry is readonly [string, number] => entry[1] !== undefined));
+  const tracks = Array.isArray(root.tracks) ? root.tracks.flatMap((value) => {
+    const item = record(value);
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    return name ? [{ id: typeof item.id === "string" ? item.id : undefined, name, streams: finiteNumber(item.streams) }] : [];
+  }) : [];
+  const playlistsDriving = Array.isArray(root.playlistsDriving) ? root.playlistsDriving.flatMap((value) => {
+    const item = record(value);
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    return name ? [{ name, type: typeof item.type === "string" ? item.type : undefined, listeners: finiteNumber(item.listeners) }] : [];
+  }) : [];
+
+  return {
+    snapshotDate,
+    dataSource: typeof root.dataSource === "string" ? root.dataSource : undefined,
+    windowDays: finiteNumber(root.windowDays),
+    artist: { name: typeof artistInput.name === "string" ? artistInput.name : undefined },
+    metrics: {
+      streams: finiteNumber(metricInput.streams), listeners: finiteNumber(metricInput.listeners),
+      followers: finiteNumber(metricInput.followers), saves: finiteNumber(metricInput.saves),
+      saveRate: finiteNumber(metricInput.saveRate), skipRate: finiteNumber(metricInput.skipRate),
+    },
+    tracks,
+    playlistsDriving,
+    sources,
+    partial: root.partial === true,
+    errors: Array.isArray(root.errors) ? root.errors.filter((value): value is string => typeof value === "string") : [],
+  };
 }
 
 function pctChange(prev: number, curr: number): { abs: number; pct: number | null } {
   const abs = curr - prev;
-  if (prev === 0) return { abs, pct: curr === 0 ? 0 : null };
-  return { abs, pct: (abs / prev) * 100 };
+  return { abs, pct: prev === 0 ? (curr === 0 ? 0 : null) : (abs / prev) * 100 };
 }
 
 function fmtPct(pct: number | null): string {
-  if (pct === null) return "(from 0)";
-  const sign = pct >= 0 ? "+" : "";
-  return \`\${sign}\${pct.toFixed(1)}%\`;
-}
-
-function fmtDelta(prev: number, curr: number, label: string): string {
-  const { abs, pct } = pctChange(prev, curr);
-  const sign = abs >= 0 ? "+" : "";
-  return \`- \${label}: \${prev} → \${curr} (\${sign}\${abs}, \${fmtPct(pct)})\`;
-}
-
-function fmtRateDelta(prev: number, curr: number, label: string): string {
-  const abs = curr - prev;
-  const sign = abs >= 0 ? "+" : "";
-  const pct = prev === 0 ? null : (abs / prev) * 100;
-  return \`- \${label}: \${(prev * 100).toFixed(2)}% → \${(curr * 100).toFixed(2)}% (\${sign}\${(abs * 100).toFixed(2)} pts\${pct !== null ? \`, \${fmtPct(pct)}\` : ""})\`;
-}
-
-function topMovers(prev: Snapshot, curr: Snapshot, limit = 3): Array<{ name: string; delta: number; pct: number | null }> {
-  const prevMap = new Map(prev.tracks.map((t) => [t.id, t.streams]));
-  const movers: Array<{ name: string; delta: number; pct: number | null }> = [];
-  for (const track of curr.tracks) {
-    const prevStreams = prevMap.get(track.id) ?? 0;
-    const { abs, pct } = pctChange(prevStreams, track.streams);
-    movers.push({ name: track.name, delta: abs, pct });
-  }
-  movers.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-  return movers.slice(0, limit);
-}
-
-function playlistDiff(prev: Snapshot, curr: Snapshot): { added: typeof curr.playlistsDriving; removed: typeof prev.playlistsDriving } {
-  const prevNames = new Set(prev.playlistsDriving.map((p) => p.name));
-  const currNames = new Set(curr.playlistsDriving.map((p) => p.name));
-  const added = curr.playlistsDriving.filter((p) => !prevNames.has(p.name));
-  const removed = prev.playlistsDriving.filter((p) => !currNames.has(p.name));
-  return { added, removed };
+  if (pct === null) return "from 0";
+  return \`\${pct >= 0 ? "+" : ""}\${pct.toFixed(1)}%\`;
 }
 
 function noiseTag(pct: number | null, floor: number): string {
-  if (pct === null) return "";
-  return Math.abs(pct) < floor ? " _(below noise floor — likely insignificant)_" : "";
+  return pct !== null && Math.abs(pct) < floor ? " _(below noise floor — likely insignificant)_" : "";
+}
+
+function metricDelta(prev: OptionalNumber, curr: OptionalNumber, label: string, floor: number): string {
+  if (prev === undefined || prev === null || curr === undefined || curr === null) return \`- \${label}: delta unavailable (not captured in both snapshots)\`;
+  const delta = pctChange(prev, curr);
+  return \`- \${label}: \${prev} → \${curr} (\${delta.abs >= 0 ? "+" : ""}\${delta.abs}, \${fmtPct(delta.pct)})\${noiseTag(delta.pct, floor)}\`;
+}
+
+function rateDelta(prev: OptionalNumber, curr: OptionalNumber, label: string): string | null {
+  if (prev === undefined || prev === null || curr === undefined || curr === null) return null;
+  const abs = curr - prev;
+  return \`- \${label}: \${(prev * 100).toFixed(2)}% → \${(curr * 100).toFixed(2)}% (\${abs >= 0 ? "+" : ""}\${(abs * 100).toFixed(2)} pts)\`;
+}
+
+function trackKey(track: Track): string { return track.id || track.name.toLowerCase(); }
+
+function topMovers(prev: Snapshot, curr: Snapshot, limit = 3) {
+  const prevMap = new Map(prev.tracks.filter((track) => track.streams !== undefined).map((track) => [trackKey(track), track.streams as number]));
+  return curr.tracks.flatMap((track) => {
+    if (track.streams === undefined || track.streams === null) return [];
+    const previous = prevMap.get(trackKey(track));
+    if (previous === undefined) return [];
+    const delta = pctChange(previous, track.streams);
+    return [{ name: track.name, delta: delta.abs, pct: delta.pct }];
+  }).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, limit);
+}
+
+function playlistDiff(prev: Snapshot, curr: Snapshot) {
+  const prevNames = new Set(prev.playlistsDriving.map((playlist) => playlist.name));
+  const currNames = new Set(curr.playlistsDriving.map((playlist) => playlist.name));
+  return {
+    added: curr.playlistsDriving.filter((playlist) => !prevNames.has(playlist.name)),
+    removed: prev.playlistsDriving.filter((playlist) => !currNames.has(playlist.name)),
+  };
 }
 
 function buildBrief(prev: Snapshot, curr: Snapshot, noiseFloorPct: number): string {
-  const lines: string[] = [];
-  const partialNote = curr.partial ? " (current snapshot is partial)" : "";
-  lines.push(\`# Spotify Delta Brief — \${curr.snapshotDate}\${partialNote}\`);
-  lines.push("");
-  lines.push(\`Comparing **\${prev.snapshotDate}** → **\${curr.snapshotDate}** for \${curr.artist.name}.\`);
-  lines.push("");
+  const lines = [\`# Spotify Delta Brief — \${curr.snapshotDate}\${curr.partial ? " (current snapshot is partial)" : ""}\`, ""];
+  lines.push(\`Comparing **\${prev.snapshotDate}** → **\${curr.snapshotDate}** for \${curr.artist.name || prev.artist.name || "the connected artist"}.\`, "");
+  if (curr.partial && curr.errors.length) lines.push(\`> **Partial snapshot.** Errors: \${curr.errors.join("; ")}\`, "");
 
-  if (curr.partial && curr.errors.length > 0) {
-    lines.push(\`> **Partial snapshot.** Errors: \${curr.errors.join("; ")}\`);
-    lines.push("");
-  }
+  lines.push("## Aggregate Metrics", "");
+  lines.push(metricDelta(prev.metrics.streams, curr.metrics.streams, "Streams", noiseFloorPct));
+  lines.push(metricDelta(prev.metrics.listeners, curr.metrics.listeners, "Listeners", noiseFloorPct));
+  lines.push(metricDelta(prev.metrics.followers, curr.metrics.followers, "Followers", noiseFloorPct));
+  lines.push(metricDelta(prev.metrics.saves, curr.metrics.saves, "Saves", noiseFloorPct));
+  const rates = [rateDelta(prev.metrics.saveRate, curr.metrics.saveRate, "Save rate"), rateDelta(prev.metrics.skipRate, curr.metrics.skipRate, "Skip rate")].filter(Boolean);
+  lines.push(...rates as string[], "");
 
-  lines.push("## Aggregate Metrics");
-  lines.push("");
-  const streamsDelta = pctChange(prev.metrics.streams, curr.metrics.streams);
-  const listenersDelta = pctChange(prev.metrics.listeners, curr.metrics.listeners);
-  const followersDelta = pctChange(prev.metrics.followers, curr.metrics.followers);
-  lines.push(\`\${fmtDelta(prev.metrics.streams, curr.metrics.streams, "Streams")}\${noiseTag(streamsDelta.pct, noiseFloorPct)}\`);
-  lines.push(\`\${fmtDelta(prev.metrics.listeners, curr.metrics.listeners, "Listeners")}\${noiseTag(listenersDelta.pct, noiseFloorPct)}\`);
-  lines.push(\`\${fmtDelta(prev.metrics.followers, curr.metrics.followers, "Followers")}\${noiseTag(followersDelta.pct, noiseFloorPct)}\`);
-  lines.push(fmtRateDelta(prev.metrics.saveRate, curr.metrics.saveRate, "Save rate"));
-  lines.push(fmtRateDelta(prev.metrics.skipRate, curr.metrics.skipRate, "Skip rate"));
-  lines.push("");
-
-  lines.push("## Top Track Movement");
-  lines.push("");
-  const movers = topMovers(prev, curr, 3);
-  if (movers.length === 0) {
-    lines.push("- No tracks recorded in current snapshot.");
-  } else {
-    for (const mover of movers) {
-      const sign = mover.delta >= 0 ? "+" : "";
-      lines.push(\`- \${mover.name}: \${sign}\${mover.delta} streams (\${fmtPct(mover.pct)})\`);
-    }
-  }
-  lines.push("");
+  lines.push("## Top Track Movement", "");
+  const movers = topMovers(prev, curr);
+  lines.push(...(movers.length ? movers.map((mover) => \`- \${mover.name}: \${mover.delta >= 0 ? "+" : ""}\${mover.delta} streams (\${fmtPct(mover.pct)})\`) : ["- No comparable per-track stream counts captured."]), "");
 
   const { added, removed } = playlistDiff(prev, curr);
-  lines.push("## Playlist Changes");
-  lines.push("");
-  if (added.length === 0 && removed.length === 0) {
-    lines.push("- No additions or removals.");
-  }
-  if (added.length > 0) {
-    lines.push("**Added:**");
-    for (const p of added) lines.push(\`- \${p.name} (\${p.type}) — \${p.listeners} listeners\`);
-  }
-  if (removed.length > 0) {
-    lines.push(added.length > 0 ? "" : "");
-    lines.push("**Removed (anomaly — investigate):**");
-    for (const p of removed) lines.push(\`- \${p.name} (\${p.type}) — was \${p.listeners} listeners\`);
-  }
+  lines.push("## Playlist Changes", "");
+  if (!prev.playlistsDriving.length && !curr.playlistsDriving.length) lines.push("- Playlist-driving data was not captured.");
+  else if (!added.length && !removed.length) lines.push("- No additions or removals.");
+  if (added.length) lines.push("**Added:**", ...added.map((playlist) => \`- \${playlist.name}\${playlist.type ? \` (\${playlist.type})\` : ""}\`));
+  if (removed.length) lines.push("**Removed (anomaly — investigate):**", ...removed.map((playlist) => \`- \${playlist.name}\${playlist.type ? \` (\${playlist.type})\` : ""}\`));
   lines.push("");
 
-  lines.push("## Source Of Streams");
-  lines.push("");
-  const srcDelta = (key: keyof Snapshot["sources"], label: string) => {
-    const prevV = prev.sources[key];
-    const currV = curr.sources[key];
-    const abs = currV - prevV;
-    const sign = abs >= 0 ? "+" : "";
-    return \`- \${label}: \${(prevV * 100).toFixed(1)}% → \${(currV * 100).toFixed(1)}% (\${sign}\${(abs * 100).toFixed(1)} pts)\`;
-  };
-  lines.push(srcDelta("algorithmic", "Algorithmic"));
-  lines.push(srcDelta("editorial", "Editorial"));
-  lines.push(srcDelta("listenerLibrary", "Listener libraries"));
-  lines.push(srcDelta("search", "Search"));
-  lines.push(srcDelta("otherListeners", "Other listener playlists"));
-  lines.push("");
+  lines.push("## Source Of Streams", "");
+  const sourceKeys = [...new Set([...Object.keys(prev.sources), ...Object.keys(curr.sources)])].sort();
+  lines.push(...(sourceKeys.length ? sourceKeys.map((key) => metricDelta(prev.sources[key], curr.sources[key], key, noiseFloorPct)) : ["- Source-of-streams data was not captured."]), "");
 
-  lines.push("## Interpretation");
+  lines.push("## Interpretation", "");
+  const streamDelta = prev.metrics.streams !== undefined && curr.metrics.streams !== undefined
+    ? pctChange(prev.metrics.streams as number, curr.metrics.streams as number).pct : null;
+  if (streamDelta !== null && Math.abs(streamDelta) >= noiseFloorPct) {
+    lines.push(\`- Streams \${streamDelta > 0 ? "up" : "down"} \${Math.abs(streamDelta).toFixed(1)}%. Review track and source movement before acting.\`);
+  } else if (removed.length) lines.push(\`- \${removed.length} playlist\${removed.length === 1 ? "" : "s"} dropped; investigate the change.\`);
+  else lines.push("- No confirmed movement above the noise floor in the comparable captured metrics.");
   lines.push("");
-  const interpretations: string[] = [];
-  if (streamsDelta.pct !== null && Math.abs(streamsDelta.pct) >= noiseFloorPct) {
-    interpretations.push(streamsDelta.pct > 0
-      ? \`Streams up \${streamsDelta.pct.toFixed(1)}%. Look at top movers to see what carried it.\`
-      : \`Streams down \${Math.abs(streamsDelta.pct).toFixed(1)}%. Check playlist removals and source-of-streams shifts.\`);
-  }
-  if (removed.length > 0) {
-    interpretations.push(\`\${removed.length} playlist\${removed.length === 1 ? "" : "s"} dropped. Anomaly watcher will surface this — investigate before next slate.\`);
-  }
-  if (curr.sources.editorial - prev.sources.editorial > 0.05) {
-    interpretations.push(\`Editorial share grew >5pts. Real lift, but track for sustainability — editorial features are not durable.\`);
-  }
-  if (interpretations.length === 0) {
-    interpretations.push("No movement above noise floor. Stable window.");
-  }
-  for (const line of interpretations) lines.push(\`- \${line}\`);
-  lines.push("");
-
   return lines.join("\\n");
+}
+
+function baselineBrief(snapshot: Snapshot): string {
+  const metric = (label: string, value: OptionalNumber) => \`- \${label}: \${value ?? "not captured"}\`;
+  return [\`# Spotify Delta Brief — \${snapshot.snapshotDate}\`, "", "No prior comparable snapshot. Baseline captured.", "",
+    metric("Streams", snapshot.metrics.streams), metric("Listeners", snapshot.metrics.listeners),
+    metric("Followers", snapshot.metrics.followers), metric("Saves", snapshot.metrics.saves), ""].join("\\n");
+}
+
+function compatible(previous: Snapshot, current: Snapshot): boolean {
+  if ((previous.dataSource || "unknown") !== (current.dataSource || "unknown")) return false;
+  return previous.windowDays !== undefined
+    && current.windowDays !== undefined
+    && previous.windowDays === current.windowDays;
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const files = await listSnapshotFiles(options.snapshotsDir);
-  if (files.length === 0) {
-    throw new Error(\`No snapshots found in \${options.snapshotsDir}.\`);
-  }
+  if (!files.length) throw new Error(\`No snapshots found in \${options.snapshotsDir}.\`);
+  const snapshots = await Promise.all(files.map(async (file) => ({ file, snapshot: await readSnapshot(path.join(options.snapshotsDir, file)) })));
+  snapshots.sort((a, b) => a.snapshot.snapshotDate.localeCompare(b.snapshot.snapshotDate) || a.file.localeCompare(b.file));
+  const current = snapshots.at(-1);
+  if (!current) throw new Error(\`No snapshots found in \${options.snapshotsDir}.\`);
+  const previous = snapshots.slice(0, -1).reverse().find((candidate) => compatible(candidate.snapshot, current.snapshot));
 
   await fs.mkdir(options.outDir, { recursive: true });
-
-  if (files.length === 1) {
-    const firstFile = files[0];
-    if (!firstFile) throw new Error(\`No snapshots found in \${options.snapshotsDir}.\`);
-    const snapshot = await readSnapshot(path.join(options.snapshotsDir, firstFile));
-    const brief = \`# Spotify Delta Brief — \${snapshot.snapshotDate}\\n\\nNo prior snapshot. Baseline captured.\\n\\n- Streams: \${snapshot.metrics.streams}\\n- Listeners: \${snapshot.metrics.listeners}\\n- Followers: \${snapshot.metrics.followers}\\n- Save rate: \${(snapshot.metrics.saveRate * 100).toFixed(2)}%\\n- Skip rate: \${(snapshot.metrics.skipRate * 100).toFixed(2)}%\\n\`;
-    const briefPath = path.join(options.outDir, \`\${snapshot.snapshotDate}.md\`);
-    await fs.writeFile(briefPath, brief);
-    console.log(JSON.stringify({ status: "baseline_brief", path: briefPath }, null, 2));
-    return;
-  }
-
-  const latest = files[files.length - 1];
-  const previous = files[files.length - 2];
-  if (!latest || !previous) {
-    throw new Error(\`At least two snapshots are required in \${options.snapshotsDir}.\`);
-  }
-  const prevSnapshot = await readSnapshot(path.join(options.snapshotsDir, previous));
-  const currSnapshot = await readSnapshot(path.join(options.snapshotsDir, latest));
-
-  const brief = buildBrief(prevSnapshot, currSnapshot, options.noiseFloorPct);
-  const briefPath = path.join(options.outDir, \`\${currSnapshot.snapshotDate}.md\`);
-  await fs.writeFile(briefPath, brief);
-
-  console.log(JSON.stringify({
-    status: "delta_brief_written",
-    path: briefPath,
-    compared: { previous: prevSnapshot.snapshotDate, current: currSnapshot.snapshotDate },
-  }, null, 2));
+  const briefPath = path.join(options.outDir, \`\${current.snapshot.snapshotDate}.md\`);
+  await fs.writeFile(briefPath, previous ? buildBrief(previous.snapshot, current.snapshot, options.noiseFloorPct) : baselineBrief(current.snapshot));
+  console.log(JSON.stringify(previous ? {
+    status: "delta_brief_written", path: briefPath,
+    compared: { previous: previous.snapshot.snapshotDate, current: current.snapshot.snapshotDate },
+  } : { status: "baseline_brief", path: briefPath }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
-`,
-      },
-      {
-        path: "scripts/snapshot.ts",
-        content: `#!/usr/bin/env npx tsx
-/**
- * Spotify Analytics Snapshot — bi-weekly capture.
- *
- * Drives Browser Harness through Spotify for Artists (read-only) to
- * capture a structured snapshot. Writes to data/spotify/snapshots/<date>.json.
- *
- * The browser scraping itself is delegated to the Browser Harness CLI, which
- * the calling agent invokes step by step per \`doc/BROWSER-AGENT-SETUP.md\`.
- * This script handles:
- *
- *   - argument parsing
- *   - input validation (SPOTIFY_ARTIST_ID present, browser-harness reachable)
- *   - reading a captured payload from a fixture or from stdin (--input)
- *   - shape validation
- *   - writing the snapshot file with correct schema
- *
- * Two run modes:
- *
- *   --from-fixture <path>  read JSON from a fixture file (for tests / dry runs)
- *   --from-stdin           read JSON from stdin (for piping from a harness run)
- *
- * Live scraping orchestration belongs in the agent prompt, not this script.
- * That keeps the script deterministic and testable, and the harness flow
- * explicit in markdown rather than buried in TS.
- */
-
-import { promises as fs } from "node:fs";
-import path from "node:path";
-
-type SnapshotInput = {
-  snapshotDate?: string;
-  windowDays?: number;
-  artist?: { name?: string; spotifyArtistId?: string };
-  metrics?: {
-    streams?: number;
-    listeners?: number;
-    followers?: number;
-    saveRate?: number;
-    skipRate?: number;
-  };
-  geo?: {
-    topCities?: Array<{ city?: string; country?: string; listeners?: number }>;
-  };
-  tracks?: Array<{
-    id?: string;
-    name?: string;
-    streams?: number;
-    saves?: number;
-    playlistAdds?: number;
-  }>;
-  playlistsDriving?: Array<{
-    name?: string;
-    type?: string;
-    listeners?: number;
-    addedDate?: string;
-  }>;
-  sources?: {
-    algorithmic?: number;
-    editorial?: number;
-    listenerLibrary?: number;
-    search?: number;
-    otherListeners?: number;
-  };
-  partial?: boolean;
-  errors?: string[];
-};
-
-type Snapshot = {
-  snapshotDate: string;
-  windowDays: number;
-  artist: { name: string; spotifyArtistId: string };
-  metrics: {
-    streams: number;
-    listeners: number;
-    followers: number;
-    saveRate: number;
-    skipRate: number;
-  };
-  geo: {
-    topCities: Array<{ city: string; country: string; listeners: number }>;
-  };
-  tracks: Array<{
-    id: string;
-    name: string;
-    streams: number;
-    saves: number;
-    playlistAdds: number;
-  }>;
-  playlistsDriving: Array<{
-    name: string;
-    type: "editorial" | "algorithmic" | "user" | "unknown";
-    listeners: number;
-    addedDate: string | null;
-  }>;
-  sources: {
-    algorithmic: number;
-    editorial: number;
-    listenerLibrary: number;
-    search: number;
-    otherListeners: number;
-  };
-  partial: boolean;
-  errors: string[];
-};
-
-type CliOptions = {
-  out: string;
-  fromFixture: string | null;
-  fromStdin: boolean;
-  artistId: string | null;
-  artistName: string | null;
-  windowDays: number;
-};
-
-const DEFAULT_OUT_DIR = "data/spotify/snapshots";
-const VALID_PLAYLIST_TYPES = new Set(["editorial", "algorithmic", "user", "unknown"]);
-
-function usage() {
-  return \`Usage:
-  npx tsx skills/spotify-analytics-snapshot/scripts/snapshot.ts --from-fixture <path> [options]
-  npx tsx skills/spotify-analytics-snapshot/scripts/snapshot.ts --from-stdin [options]
-
-Options:
-  --from-fixture <path>   Read snapshot JSON from a file (testing / dry runs).
-  --from-stdin            Read snapshot JSON from stdin (live harness piping).
-  --out <dir>             Output directory. Default: \${DEFAULT_OUT_DIR}
-  --artist-id <id>        Override SPOTIFY_ARTIST_ID env.
-  --artist-name <name>    Artist display name. Default: from input or "Unknown".
-  --window-days <n>       Snapshot window in days. Default: 28 (Spotify standard).
-  --help                  Show this help.
-
-Inputs (stdin or fixture) must be JSON shaped like the doctrine snapshot schema.
-Missing fields are normalized to safe defaults; the script does not invent metrics.
-\`;
-}
-
-function parseArgs(argv: string[]): CliOptions {
-  const options: CliOptions = {
-    out: DEFAULT_OUT_DIR,
-    fromFixture: null,
-    fromStdin: false,
-    artistId: null,
-    artistName: null,
-    windowDays: 28,
-  };
-
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    const next = () => {
-      const value = argv[++i];
-      if (value === undefined) throw new Error(\`Missing value for \${arg}\`);
-      return value;
-    };
-
-    if (arg === "--help" || arg === "-h") {
-      console.log(usage());
-      process.exit(0);
-    } else if (arg === "--from-fixture") {
-      options.fromFixture = next();
-    } else if (arg === "--from-stdin") {
-      options.fromStdin = true;
-    } else if (arg === "--out") {
-      options.out = next();
-    } else if (arg === "--artist-id") {
-      options.artistId = next();
-    } else if (arg === "--artist-name") {
-      options.artistName = next();
-    } else if (arg === "--window-days") {
-      options.windowDays = Number(next());
-    } else if (arg === "--") {
-      continue;
-    } else {
-      throw new Error(\`Unknown argument: \${arg}\`);
-    }
-  }
-
-  if (!options.fromFixture && !options.fromStdin) {
-    throw new Error("One of --from-fixture or --from-stdin is required.");
-  }
-  if (options.fromFixture && options.fromStdin) {
-    throw new Error("Choose exactly one of --from-fixture or --from-stdin.");
-  }
-  if (!Number.isInteger(options.windowDays) || options.windowDays < 1 || options.windowDays > 365) {
-    throw new Error("--window-days must be an integer between 1 and 365.");
-  }
-  return options;
-}
-
-async function readInput(options: CliOptions): Promise<SnapshotInput> {
-  if (options.fromFixture) {
-    const raw = await fs.readFile(options.fromFixture, "utf8");
-    return JSON.parse(raw) as SnapshotInput;
-  }
-  // stdin
-  const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
-    chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
-  }
-  const raw = Buffer.concat(chunks).toString("utf8").trim();
-  if (!raw) throw new Error("No JSON received on stdin.");
-  return JSON.parse(raw) as SnapshotInput;
-}
-
-function clampRate(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
-  if (value < 0) return 0;
-  if (value > 1) return 1;
-  return Number(value.toFixed(4));
-}
-
-function nonNegativeInt(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return 0;
-  return Math.floor(value);
-}
-
-function nonNegativeNumber(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return 0;
-  return Number(value.toFixed(4));
-}
-
-function safeString(value: unknown, fallback: string): string {
-  return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
-
-function normalizePlaylistType(value: unknown): Snapshot["playlistsDriving"][number]["type"] {
-  if (typeof value !== "string") return "unknown";
-  const v = value.toLowerCase().trim();
-  if (VALID_PLAYLIST_TYPES.has(v)) return v as Snapshot["playlistsDriving"][number]["type"];
-  if (v === "playlist" || v === "user-playlist") return "user";
-  if (v === "spotify" || v === "official") return "editorial";
-  if (v === "discover-weekly" || v === "release-radar" || v === "daily-mix") return "algorithmic";
-  return "unknown";
-}
-
-function normalizeSnapshot(input: SnapshotInput, options: CliOptions): Snapshot {
-  const errors = Array.isArray(input.errors) ? input.errors.map(String) : [];
-  const partial = Boolean(input.partial) || errors.length > 0;
-
-  const artistId = options.artistId
-    ?? input.artist?.spotifyArtistId
-    ?? process.env.SPOTIFY_ARTIST_ID
-    ?? "";
-  if (!artistId) {
-    throw new Error("SPOTIFY_ARTIST_ID is required (set env or pass --artist-id or include in input).");
-  }
-
-  const artistName = options.artistName ?? input.artist?.name ?? "Unknown Artist";
-  const snapshotDate = safeString(input.snapshotDate, new Date().toISOString().slice(0, 10));
-
-  return {
-    snapshotDate,
-    windowDays: typeof input.windowDays === "number" ? input.windowDays : options.windowDays,
-    artist: { name: artistName, spotifyArtistId: artistId },
-    metrics: {
-      streams: nonNegativeInt(input.metrics?.streams),
-      listeners: nonNegativeInt(input.metrics?.listeners),
-      followers: nonNegativeInt(input.metrics?.followers),
-      saveRate: clampRate(input.metrics?.saveRate),
-      skipRate: clampRate(input.metrics?.skipRate),
-    },
-    geo: {
-      topCities: (input.geo?.topCities ?? [])
-        .filter((city) => city && typeof city.city === "string")
-        .map((city) => ({
-          city: safeString(city.city, "Unknown"),
-          country: safeString(city.country, ""),
-          listeners: nonNegativeInt(city.listeners),
-        })),
-    },
-    tracks: (input.tracks ?? [])
-      .filter((track) => track && typeof track.name === "string")
-      .map((track) => ({
-        id: safeString(track.id, safeString(track.name, "")),
-        name: safeString(track.name, "Unknown"),
-        streams: nonNegativeInt(track.streams),
-        saves: nonNegativeInt(track.saves),
-        playlistAdds: nonNegativeInt(track.playlistAdds),
-      })),
-    playlistsDriving: (input.playlistsDriving ?? [])
-      .filter((p) => p && typeof p.name === "string")
-      .map((p) => ({
-        name: safeString(p.name, "Unknown"),
-        type: normalizePlaylistType(p.type),
-        listeners: nonNegativeInt(p.listeners),
-        addedDate: typeof p.addedDate === "string" && p.addedDate.trim() ? p.addedDate : null,
-      })),
-    sources: {
-      algorithmic: clampRate(input.sources?.algorithmic),
-      editorial: clampRate(input.sources?.editorial),
-      listenerLibrary: clampRate(input.sources?.listenerLibrary),
-      search: clampRate(input.sources?.search),
-      otherListeners: clampRate(input.sources?.otherListeners),
-    },
-    partial,
-    errors,
-  };
-}
-
-async function main() {
-  const options = parseArgs(process.argv.slice(2));
-  const input = await readInput(options);
-  const snapshot = normalizeSnapshot(input, options);
-
-  await fs.mkdir(options.out, { recursive: true });
-  const filename = \`\${snapshot.snapshotDate}.json\`;
-  const fullPath = path.join(options.out, filename);
-
-  if (await fs.stat(fullPath).catch(() => null)) {
-    throw new Error(\`Refusing to overwrite existing snapshot: \${fullPath}. Snapshots are append-only.\`);
-  }
-
-  await fs.writeFile(fullPath, \`\${JSON.stringify(snapshot, null, 2)}\\n\`);
-
-  console.log(JSON.stringify({
-    status: "snapshot_written",
-    path: fullPath,
-    snapshotDate: snapshot.snapshotDate,
-    partial: snapshot.partial,
-    errors: snapshot.errors,
-    metrics: snapshot.metrics,
-    trackCount: snapshot.tracks.length,
-    playlistCount: snapshot.playlistsDriving.length,
-  }, null, 2));
-}
-
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
 `,
       },
       {
         path: "SKILL.md",
         content: `---
 name: spotify-analytics-snapshot
-description: Weekly Spotify snapshot into Artist HQ context. Uses Spotify Web API credentials for reliable public artist data now; private Spotify for Artists streams/listeners require a logged-in browser capture lane.
+description: Weekly Spotify snapshot into Artist HQ context, captured from the artist's connected Spotify for Artists browser session. Private streams, listeners, followers, saves, top cities, and source-of-streams come from the logged-in browser — there is no Spotify API path.
 ---
 
 # Spotify Analytics Snapshot
 
-Use this skill on the weekly Spotify heartbeat, or when the user requests a fresh read of the artist's Spotify presence. The reliable automated lane is artist profile, followers, popularity, and genres. Top tracks are best-effort when Spotify returns them.
+Use this skill on the weekly Spotify heartbeat, or when the user wants a fresh read of the artist's Spotify presence. All data comes from **Spotify for Artists** through the artist's connected, logged-in browser session, using RunnerOS browser tools. There is no API lane and no client credentials.
 
-## Inputs
+## Prerequisites
 
-- \`SPOTIFY_CLIENT_ID\` and \`SPOTIFY_CLIENT_SECRET\` in Settings > Secrets > Spotify.
-- Artist HQ Profile \`spotifyProfile\`, \`SPOTIFY_ARTIST_ID\`, or \`--artist-id\`.
-- Optional \`CRAFT_WORKSPACE_PATH\` / \`--workspace\` so the script can write \`artist-spotify-snapshot\`.
+- The Spotify account is connected in Settings → Social Accounts as platform \`spotify\` (one login covers Spotify for Artists and the web player).
+- Run \`social\` commands (\`node src/social.mjs ...\`) from the Printing Press Social source path.
 
 ## Workflow
 
-1. For normal weekly sync, run:
+1. Verify the session first — never guess numbers when it is missing or the account does not match:
 
 \`\`\`bash
-bun "$CRAFT_APP_ROOT/packages/shared/src/skills/bundled/spotify-analytics-snapshot/scripts/api-snapshot.ts" \\
-  --workspace "$CRAFT_WORKSPACE_PATH"
+node src/social.mjs profile status spotify --profile <id> --live --json
 \`\`\`
 
-2. This uses Spotify's public Web API and writes:
-   - \`data/spotify/snapshots/<YYYY-MM-DD>-web-api.json\`
-   - Artist HQ context doc \`artist-spotify-snapshot\`
-3. If the user explicitly needs streams, listeners, saves, skips, top cities, or source-of-streams, explain that those are Spotify for Artists metrics and require a separate logged-in browser capture. Do not fabricate them from public API data.
-4. If a private S4A capture is manually obtained as JSON, use \`snapshot.ts --from-stdin\` or \`--from-fixture\` to normalize and store it.
-5. Run \`delta-brief.ts\` only when there are comparable snapshots of the same data source.
+2. Get the browser plan and the exact fields to capture:
+
+\`\`\`bash
+node src/social.mjs snapshot spotify --profile <id> --json
+\`\`\`
+
+3. Run the returned \`browserPlan\` against the verified Spotify for Artists session with RunnerOS browser tools. Read only what is visible: streams, listeners, followers, saves, the reporting window, top cities/countries, top tracks, and source-of-streams. Save the observed values as JSON under \`$CRAFT_WORKSPACE_PATH/data/spotify/captures/\`.
+
+4. Normalize and save the captured numbers:
+
+\`\`\`bash
+node src/social.mjs snapshot spotify --profile <id> \\
+  --capture-file "$CRAFT_WORKSPACE_PATH/data/spotify/captures/<YYYY-MM-DD>.json" \\
+  --workspace "$CRAFT_WORKSPACE_PATH" --json
+\`\`\`
+
+The default output is \`data/spotify/snapshots/<YYYY-MM-DD>-s4a.json\` inside the explicit workspace. Relative \`--out\` paths are also workspace-relative. Existing snapshots are immutable and finalization fails closed if the target already exists.
+
+5. Write the returned \`contextPayload\` as the \`artist-spotify-snapshot\` context doc.
+6. Run \`delta-brief.ts\` only when there are two comparable snapshots of the same data source.
 
 ## Output Contract
-
-Public API snapshot:
 
 \`\`\`json
 {
   "version": 1,
-  "dataSource": "spotify-web-api",
-  "snapshotDate": "2026-04-25",
-  "windowDays": 0,
-  "artist": { "name": "...", "spotifyArtistId": "...", "spotifyUrl": "...", "genres": [] },
-  "metrics": {
-    "followers": 0,
-    "popularity": 0
-  },
-  "geo": { "topCities": [] },
-  "tracks": [
-    { "id": "...", "name": "...", "popularity": 0, "spotifyUrl": "..." }
-  ],
-  "playlistsDriving": [],
+  "dataSource": "spotify-for-artists-browser",
+  "snapshotDate": "2026-07-08",
+  "windowDays": 28,
+  "artist": { "name": "...", "spotifyUrl": "...", "profile": "..." },
+  "metrics": { "streams": 0, "listeners": 0, "followers": 0, "saves": 0 },
+  "geo": { "topCities": [], "topCountries": [] },
+  "tracks": [{ "name": "...", "streams": 0, "spotifyUrl": "..." }],
   "sources": {},
   "partial": false,
   "errors": [],
@@ -38395,32 +37807,22 @@ Public API snapshot:
 }
 \`\`\`
 
-\`data/spotify/briefs/<YYYY-MM-DD>.md\` is a short markdown brief with:
+Any metric not visible on the page is \`null\`, and the snapshot is marked \`partial: true\` with the missing fields listed in \`errors\`. If the reporting window is unavailable, \`windowDays\` is also \`null\`. If the capture date is unavailable or invalid, finalization uses today's date only for safe file ownership and records that fallback in \`errors\`.
 
-- Window comparison (which two snapshots).
-- Real movers: streams, listeners, followers, save rate, skip rate. Each with absolute and percent change.
-- Top track movement (top 3 by stream delta).
-- New playlist features.
-- Removed playlist features.
-- Geo shifts worth noting.
-- Source-of-streams shifts (e.g., dependency on editorial growing).
-- Honest interpretation: signal vs. noise. Below ±10% is generally noise unless it's a sustained two-snapshot trend.
+\`delta-brief.ts\` discovers legacy \`<date>.json\`, API \`<date>-web-api.json\`, and browser \`<date>-s4a.json\` snapshots. It compares only compatible data sources/reporting windows and treats missing rates, playlists, tracks, sources, or metrics as unavailable rather than zero.
 
 ## Failure Handling
 
-- Missing Spotify client credentials → stop and point user to Settings > Secrets > Spotify.
-- Missing artist ID/profile → stop and ask for Artist Profile > Spotify profile.
-- Spotify API failure → report the status and do not write fake data.
-- Private S4A login expired → stop, report, do not retry blindly.
-- Whole private scrape fails → write nothing rather than fabricate.
-- No prior snapshot → snapshot still writes. Brief script reports "no prior snapshot, no delta."
+- Session not connected / not logged in / wrong account → stop and point the user to Settings → Social Accounts. Do not fabricate.
+- Spotify for Artists page did not load a value → capture it as \`null\`, mark \`partial\`.
+- Login expired → stop, report, do not retry blindly.
+- No prior snapshot → snapshot still writes; the brief reports "no prior snapshot, no delta."
 
 ## Never
 
-- Never fabricate numbers.
-- Never modify a past snapshot.
+- Never fabricate streams, listeners, followers, saves, cities, tracks, or source percentages.
+- Never modify a past snapshot. Snapshot writes fail closed when the target already exists.
 - Never bypass approvals — this skill is read-only.
-- Never represent public Spotify API popularity/followers as Spotify for Artists streams/listeners.
 - Never silently drop a tracked playlist feature; surface its disappearance as an anomaly.
 `,
       },
@@ -38430,61 +37832,96 @@ Public API snapshot:
     slug: "spotify-anomaly-watch",
     files: [
       {
+        path: "scripts/watch.test.ts",
+        content: `import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+const script = path.join(import.meta.dir, "watch.ts");
+
+function runWatch(files: Record<string, unknown>) {
+  const root = mkdtempSync(path.join(tmpdir(), "spotify-watch-"));
+  const snapshotsDir = path.join(root, "snapshots");
+  const alertsDir = path.join(root, "alerts");
+  mkdirSync(snapshotsDir, { recursive: true });
+  for (const [name, snapshot] of Object.entries(files)) writeFileSync(path.join(snapshotsDir, name), JSON.stringify(snapshot));
+  const result = Bun.spawnSync([process.execPath, script, "--snapshots-dir", snapshotsDir, "--alerts-dir", alertsDir, "--ceo-inbox", ""]);
+  const stdout = result.stdout.toString();
+  const summary = result.exitCode === 0 ? JSON.parse(stdout) as { alertPath: string; snapshotsCompared: number } : null;
+  return { result, summary, alert: summary ? readFileSync(summary.alertPath, "utf8") : "" };
+}
+
+describe("Spotify anomaly watch", () => {
+  test("discovers browser snapshots, preserves partial alerts, and skips unavailable fields", () => {
+    const base = { dataSource: "spotify-for-artists-browser", windowDays: 28, tracks: [], sources: {}, partial: false, errors: [] };
+    const { result, summary, alert } = runWatch({
+      "2026-07-07-s4a.json": { ...base, snapshotDate: "2026-07-07", metrics: { streams: 100, listeners: 50 } },
+      "2026-07-08-s4a.json": { ...base, snapshotDate: "2026-07-08", metrics: { streams: 80, listeners: 45 } },
+      "2026-07-09-s4a.json": { ...base, snapshotDate: "2026-07-09", metrics: { streams: 50, listeners: 44, saveRate: null }, partial: true, errors: ["Missing metrics: saves."] },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(summary?.snapshotsCompared).toBe(3);
+    expect(alert).toContain("partial-snapshot");
+    expect(alert).toContain("stream-drop");
+    expect(alert).not.toContain("NaN");
+  });
+
+  test("treats an incompatible latest source as a baseline", () => {
+    const { result, summary, alert } = runWatch({
+      "2026-07-08-web-api.json": { snapshotDate: "2026-07-08", dataSource: "spotify-web-api", windowDays: 0, metrics: { followers: 10 } },
+      "2026-07-09-s4a.json": { snapshotDate: "2026-07-09", dataSource: "spotify-for-artists-browser", windowDays: 28, metrics: { followers: 11 }, partial: true, errors: ["Missing metrics: streams."] },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(summary?.snapshotsCompared).toBe(1);
+    expect(alert).toContain("Only one compatible snapshot available");
+    expect(alert).toContain("partial-snapshot");
+  });
+
+  test("does not compare snapshots with unknown reporting windows", () => {
+    const base = { dataSource: "spotify-for-artists-browser", tracks: [], sources: {}, partial: false, errors: [] };
+    const { result, summary, alert } = runWatch({
+      "2026-07-08-s4a.json": { ...base, snapshotDate: "2026-07-08", windowDays: 28, metrics: { streams: 100 } },
+      "2026-07-09-s4a.json": { ...base, snapshotDate: "2026-07-09", windowDays: null, metrics: { streams: 10 }, partial: true },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(summary?.snapshotsCompared).toBe(1);
+    expect(alert).toContain("Only one compatible snapshot available");
+    expect(alert).not.toContain("stream-drop");
+  });
+});
+`,
+      },
+      {
         path: "scripts/watch.ts",
         content: `#!/usr/bin/env npx tsx
-/**
- * Spotify Anomaly Watch — daily check on existing snapshots.
- *
- * Reads data/spotify/snapshots/*.json. Compares latest to up-to-3 priors.
- * Flags severe / moderate / informational anomalies. Writes alerts file.
- * Severe items also appended to data/booth/agent-inbox/artist-ceo.md.
- */
+/** Spotify Anomaly Watch — inspect existing compatible snapshots without scraping. */
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+type OptionalNumber = number | null | undefined;
+type Playlist = { name: string; type?: string; listeners?: OptionalNumber };
+type Track = { id?: string; name: string; streams?: OptionalNumber };
 type Snapshot = {
   snapshotDate: string;
-  windowDays: number;
-  artist: { name: string; spotifyArtistId: string };
-  metrics: {
-    streams: number;
-    listeners: number;
-    followers: number;
-    saveRate: number;
-    skipRate: number;
-  };
-  geo: { topCities: Array<{ city: string; country: string; listeners: number }> };
-  tracks: Array<{ id: string; name: string; streams: number; saves: number; playlistAdds: number }>;
-  playlistsDriving: Array<{ name: string; type: string; listeners: number; addedDate: string | null }>;
-  sources: {
-    algorithmic: number;
-    editorial: number;
-    listenerLibrary: number;
-    search: number;
-    otherListeners: number;
-  };
+  dataSource?: string;
+  windowDays?: OptionalNumber;
+  metrics: Record<"streams" | "listeners" | "followers" | "saves" | "saveRate" | "skipRate", OptionalNumber>;
+  tracks: Track[];
+  tracksCaptured: boolean;
+  playlistsDriving: Playlist[];
+  playlistsCaptured: boolean;
+  sources: Record<string, number>;
   partial: boolean;
   errors: string[];
 };
-
 type Severity = "severe" | "moderate" | "informational";
-
-type Anomaly = {
-  severity: Severity;
-  kind: string;
-  message: string;
-};
-
+type Anomaly = { severity: Severity; kind: string; message: string };
 type CliOptions = {
-  snapshotsDir: string;
-  alertsDir: string;
-  ceoInbox: string | null;
-  streamDropPct: number;
-  listenerDropPct: number;
-  saveRateDropPct: number;
-  skipRateSpikePct: number;
-  playlistMinListeners: number;
+  snapshotsDir: string; alertsDir: string; ceoInbox: string | null;
+  streamDropPct: number; listenerDropPct: number; saveRateDropPct: number;
+  skipRateSpikePct: number; playlistMinListeners: number;
 };
 
 const DEFAULT_SNAPSHOTS_DIR = "data/spotify/snapshots";
@@ -38492,343 +37929,209 @@ const DEFAULT_ALERTS_DIR = "data/spotify/alerts";
 const DEFAULT_CEO_INBOX = "data/booth/agent-inbox/artist-ceo.md";
 
 function usage() {
-  return \`Usage:
-  npx tsx skills/spotify-anomaly-watch/scripts/watch.ts [options]
+  return \`Usage: "\\\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-anomaly-watch/scripts/watch.ts" [options]
 
-Options:
-  --snapshots-dir <path>           Default: \${DEFAULT_SNAPSHOTS_DIR}
-  --alerts-dir <path>              Default: \${DEFAULT_ALERTS_DIR}
-  --ceo-inbox <path>               Default: \${DEFAULT_CEO_INBOX} (use "" to disable)
-  --stream-drop-pct <n>            Sustained stream drop threshold. Default: 30
-  --listener-drop-pct <n>          Sustained listener drop threshold. Default: 30
-  --save-rate-drop-pct <n>         Save rate drop threshold. Default: 20
-  --skip-rate-spike-pct <n>        Skip rate spike threshold. Default: 20
-  --playlist-min-listeners <n>     Playlist removals below this listener count are ignored as noise. Default: 100
-  --help
+  --snapshots-dir <path>       Default: \${DEFAULT_SNAPSHOTS_DIR}
+  --alerts-dir <path>          Default: \${DEFAULT_ALERTS_DIR}
+  --ceo-inbox <path>           Default: \${DEFAULT_CEO_INBOX} (use "" to disable)
+  --stream-drop-pct <n>        Default: 30
+  --listener-drop-pct <n>      Default: 30
+  --save-rate-drop-pct <n>     Default: 20
+  --skip-rate-spike-pct <n>    Default: 20
+  --playlist-min-listeners <n> Default: 100
 \`;
 }
 
 function parseArgs(argv: string[]): CliOptions {
   const options: CliOptions = {
-    snapshotsDir: DEFAULT_SNAPSHOTS_DIR,
-    alertsDir: DEFAULT_ALERTS_DIR,
-    ceoInbox: DEFAULT_CEO_INBOX,
-    streamDropPct: 30,
-    listenerDropPct: 30,
-    saveRateDropPct: 20,
-    skipRateSpikePct: 20,
-    playlistMinListeners: 100,
+    snapshotsDir: DEFAULT_SNAPSHOTS_DIR, alertsDir: DEFAULT_ALERTS_DIR, ceoInbox: DEFAULT_CEO_INBOX,
+    streamDropPct: 30, listenerDropPct: 30, saveRateDropPct: 20, skipRateSpikePct: 20, playlistMinListeners: 100,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
-    const next = () => {
-      const value = argv[++i];
-      if (value === undefined) throw new Error(\`Missing value for \${arg}\`);
-      return value;
-    };
+    const next = () => { const value = argv[++i]; if (value === undefined) throw new Error(\`Missing value for \${arg}\`); return value; };
     if (arg === "--help" || arg === "-h") { console.log(usage()); process.exit(0); }
     else if (arg === "--snapshots-dir") options.snapshotsDir = next();
     else if (arg === "--alerts-dir") options.alertsDir = next();
-    else if (arg === "--ceo-inbox") {
-      const v = next();
-      options.ceoInbox = v === "" ? null : v;
-    }
+    else if (arg === "--ceo-inbox") { const value = next(); options.ceoInbox = value || null; }
     else if (arg === "--stream-drop-pct") options.streamDropPct = Number(next());
     else if (arg === "--listener-drop-pct") options.listenerDropPct = Number(next());
     else if (arg === "--save-rate-drop-pct") options.saveRateDropPct = Number(next());
     else if (arg === "--skip-rate-spike-pct") options.skipRateSpikePct = Number(next());
     else if (arg === "--playlist-min-listeners") options.playlistMinListeners = Number(next());
-    else if (arg === "--") continue;
-    else throw new Error(\`Unknown argument: \${arg}\`);
+    else if (arg !== "--") throw new Error(\`Unknown argument: \${arg}\`);
   }
   for (const key of ["streamDropPct", "listenerDropPct", "saveRateDropPct", "skipRateSpikePct", "playlistMinListeners"] as const) {
-    if (!Number.isFinite(options[key]) || options[key] < 0) {
-      throw new Error(\`--\${key.replace(/[A-Z]/g, (c) => \`-\${c.toLowerCase()}\`)} must be a nonnegative number.\`);
-    }
+    if (!Number.isFinite(options[key]) || options[key] < 0) throw new Error(\`\${key} must be a nonnegative number.\`);
   }
   return options;
 }
 
 async function listSnapshotFiles(dir: string): Promise<string[]> {
   const stat = await fs.stat(dir).catch(() => null);
-  if (!stat || !stat.isDirectory()) return [];
-  const entries = await fs.readdir(dir);
-  return entries
-    .filter((name) => /^\\d{4}-\\d{2}-\\d{2}\\.json$/.test(name))
-    .sort();
+  if (!stat?.isDirectory()) return [];
+  return (await fs.readdir(dir)).filter((name) => /^\\d{4}-\\d{2}-\\d{2}(?:-(?:s4a|web-api))?\\.json$/.test(name)).sort();
+}
+
+function record(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 async function readSnapshot(filePath: string): Promise<Snapshot | { error: string; file: string }> {
   try {
-    const raw = await fs.readFile(filePath, "utf8");
-    return JSON.parse(raw) as Snapshot;
-  } catch (error) {
+    const root = record(JSON.parse(await fs.readFile(filePath, "utf8")) as unknown);
+    const snapshotDate = typeof root.snapshotDate === "string" ? root.snapshotDate : "";
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(snapshotDate)) throw new Error("missing or invalid snapshotDate");
+    const metrics = record(root.metrics);
+    const rawTracks = Array.isArray(root.tracks) ? root.tracks : [];
+    const rawPlaylists = Array.isArray(root.playlistsDriving) ? root.playlistsDriving : [];
+    const sources = Object.fromEntries(Object.entries(record(root.sources))
+      .map(([key, value]) => [key, finiteNumber(value)] as const)
+      .filter((entry): entry is readonly [string, number] => entry[1] !== undefined));
     return {
-      file: path.basename(filePath),
-      error: error instanceof Error ? error.message : String(error),
+      snapshotDate,
+      dataSource: typeof root.dataSource === "string" ? root.dataSource : undefined,
+      windowDays: finiteNumber(root.windowDays),
+      metrics: {
+        streams: finiteNumber(metrics.streams), listeners: finiteNumber(metrics.listeners),
+        followers: finiteNumber(metrics.followers), saves: finiteNumber(metrics.saves),
+        saveRate: finiteNumber(metrics.saveRate), skipRate: finiteNumber(metrics.skipRate),
+      },
+      tracks: rawTracks.flatMap((value) => { const item = record(value); const name = typeof item.name === "string" ? item.name.trim() : ""; return name ? [{ id: typeof item.id === "string" ? item.id : undefined, name, streams: finiteNumber(item.streams) }] : []; }),
+      tracksCaptured: Array.isArray(root.tracks),
+      playlistsDriving: rawPlaylists.flatMap((value) => { const item = record(value); const name = typeof item.name === "string" ? item.name.trim() : ""; return name ? [{ name, type: typeof item.type === "string" ? item.type : undefined, listeners: finiteNumber(item.listeners) }] : []; }),
+      playlistsCaptured: Array.isArray(root.playlistsDriving),
+      sources,
+      partial: root.partial === true,
+      errors: Array.isArray(root.errors) ? root.errors.filter((value): value is string => typeof value === "string") : [],
     };
+  } catch (error) {
+    return { file: path.basename(filePath), error: error instanceof Error ? error.message : String(error) };
   }
 }
 
 function pctChange(prev: number, curr: number): number | null {
-  if (prev === 0) return curr === 0 ? 0 : null;
-  return ((curr - prev) / prev) * 100;
+  return prev === 0 ? (curr === 0 ? 0 : null) : ((curr - prev) / prev) * 100;
 }
+function available(value: OptionalNumber): value is number { return typeof value === "number" && Number.isFinite(value); }
 
-/**
- * A drop is "sustained" if it occurred between two latest snapshots AND
- * the previous-vs-prior also showed a drop in the same direction. This
- * filters single-snapshot artifacts (Spotify recalculates retroactively).
- */
-function sustainedDrop(snaps: Snapshot[], pick: (s: Snapshot) => number, dropPct: number): boolean {
+function sustained(snaps: Snapshot[], pick: (snapshot: Snapshot) => OptionalNumber, threshold: number, direction: "drop" | "spike"): boolean {
   if (snaps.length < 2) return false;
-  const latestSnap = snaps[snaps.length - 1];
-  const prevSnap = snaps[snaps.length - 2];
-  if (!latestSnap || !prevSnap) return false;
-  const latest = pick(latestSnap);
-  const prev = pick(prevSnap);
-  const change1 = pctChange(prev, latest);
-  if (change1 === null || change1 > -dropPct) return false;
-  if (snaps.length < 3) return true; // only two snapshots — accept the single drop
-  const priorSnap = snaps[snaps.length - 3];
-  if (!priorSnap) return false;
-  const prior = pick(priorSnap);
-  const change2 = pctChange(prior, prev);
-  return change2 !== null && change2 < 0; // prior step also moved down
-}
-
-function sustainedSpike(snaps: Snapshot[], pick: (s: Snapshot) => number, spikePct: number): boolean {
-  if (snaps.length < 2) return false;
-  const latestSnap = snaps[snaps.length - 1];
-  const prevSnap = snaps[snaps.length - 2];
-  if (!latestSnap || !prevSnap) return false;
-  const latest = pick(latestSnap);
-  const prev = pick(prevSnap);
-  const change1 = pctChange(prev, latest);
-  if (change1 === null || change1 < spikePct) return false;
+  const latest = pick(snaps.at(-1)!);
+  const previous = pick(snaps.at(-2)!);
+  if (!available(latest) || !available(previous)) return false;
+  const change = pctChange(previous, latest);
+  if (change === null || (direction === "drop" ? change > -threshold : change < threshold)) return false;
   if (snaps.length < 3) return true;
-  const priorSnap = snaps[snaps.length - 3];
-  if (!priorSnap) return false;
-  const prior = pick(priorSnap);
-  const change2 = pctChange(prior, prev);
-  return change2 !== null && change2 > 0;
+  const prior = pick(snaps.at(-3)!);
+  if (!available(prior)) return false;
+  const priorChange = pctChange(prior, previous);
+  return priorChange !== null && (direction === "drop" ? priorChange < 0 : priorChange > 0);
+}
+
+function compatible(previous: Snapshot, current: Snapshot): boolean {
+  if ((previous.dataSource || "unknown") !== (current.dataSource || "unknown")) return false;
+  return previous.windowDays !== undefined
+    && current.windowDays !== undefined
+    && previous.windowDays === current.windowDays;
 }
 
 function detectAnomalies(snaps: Snapshot[], options: CliOptions): Anomaly[] {
   const anomalies: Anomaly[] = [];
-  if (snaps.length === 0) return anomalies;
-  const latest = snaps[snaps.length - 1];
+  const latest = snaps.at(-1);
   if (!latest) return anomalies;
-
-  if (latest.partial) {
-    anomalies.push({
-      severity: "informational",
-      kind: "partial-snapshot",
-      message: \`Latest snapshot is partial. Errors: \${latest.errors.join("; ") || "(unspecified)"}\`,
-    });
-  }
-
+  if (latest.partial) anomalies.push({ severity: "informational", kind: "partial-snapshot", message: \`Latest snapshot is partial. Errors: \${latest.errors.join("; ") || "(unspecified)"}\` });
   if (snaps.length < 2) {
-    anomalies.push({
-      severity: "informational",
-      kind: "baseline",
-      message: \`Only one snapshot available (\${latest.snapshotDate}). No comparisons yet.\`,
-    });
+    anomalies.push({ severity: "informational", kind: "baseline", message: \`Only one compatible snapshot available (\${latest.snapshotDate}). No comparisons yet.\` });
     return anomalies;
   }
+  const previous = snaps.at(-2)!;
+  const metricAlert = (key: keyof Snapshot["metrics"], threshold: number, severity: Severity, kind: string, label: string, direction: "drop" | "spike", rate = false) => {
+    if (!sustained(snaps, (snapshot) => snapshot.metrics[key], threshold, direction)) return;
+    const prev = previous.metrics[key]; const curr = latest.metrics[key];
+    if (!available(prev) || !available(curr)) return;
+    const change = pctChange(prev, curr); if (change === null) return;
+    const values = rate ? \`\${(prev * 100).toFixed(2)}% → \${(curr * 100).toFixed(2)}%\` : \`\${prev} → \${curr}\`;
+    anomalies.push({ severity, kind, message: \`\${label} \${direction === "drop" ? "dropped" : "spiked"} \${Math.abs(change).toFixed(1)}% (\${values}). Sustained.\` });
+  };
+  metricAlert("streams", options.streamDropPct, "severe", "stream-drop", "Streams", "drop");
+  metricAlert("listeners", options.listenerDropPct, "severe", "listener-drop", "Listeners", "drop");
+  metricAlert("saveRate", options.saveRateDropPct, "moderate", "save-rate-drop", "Save rate", "drop", true);
+  metricAlert("skipRate", options.skipRateSpikePct, "moderate", "skip-rate-spike", "Skip rate", "spike", true);
 
-  const previous = snaps[snaps.length - 2];
-  if (!previous) return anomalies;
-
-  // Sustained metric drops (need to look back further if available)
-  if (sustainedDrop(snaps, (s) => s.metrics.streams, options.streamDropPct)) {
-    const change = pctChange(previous.metrics.streams, latest.metrics.streams) ?? 0;
-    anomalies.push({
-      severity: "severe",
-      kind: "stream-drop",
-      message: \`Streams dropped \${Math.abs(change).toFixed(1)}% from \${previous.snapshotDate} → \${latest.snapshotDate} (\${previous.metrics.streams} → \${latest.metrics.streams}). Sustained over multiple snapshots.\`,
-    });
-  }
-  if (sustainedDrop(snaps, (s) => s.metrics.listeners, options.listenerDropPct)) {
-    const change = pctChange(previous.metrics.listeners, latest.metrics.listeners) ?? 0;
-    anomalies.push({
-      severity: "severe",
-      kind: "listener-drop",
-      message: \`Listeners dropped \${Math.abs(change).toFixed(1)}% (\${previous.metrics.listeners} → \${latest.metrics.listeners}). Sustained.\`,
-    });
-  }
-  if (sustainedDrop(snaps, (s) => s.metrics.saveRate, options.saveRateDropPct)) {
-    const change = pctChange(previous.metrics.saveRate, latest.metrics.saveRate) ?? 0;
-    anomalies.push({
-      severity: "moderate",
-      kind: "save-rate-drop",
-      message: \`Save rate dropped \${Math.abs(change).toFixed(1)}% (\${(previous.metrics.saveRate * 100).toFixed(2)}% → \${(latest.metrics.saveRate * 100).toFixed(2)}%). Sustained.\`,
-    });
-  }
-  if (sustainedSpike(snaps, (s) => s.metrics.skipRate, options.skipRateSpikePct)) {
-    const change = pctChange(previous.metrics.skipRate, latest.metrics.skipRate) ?? 0;
-    anomalies.push({
-      severity: "moderate",
-      kind: "skip-rate-spike",
-      message: \`Skip rate spiked \${change.toFixed(1)}% (\${(previous.metrics.skipRate * 100).toFixed(2)}% → \${(latest.metrics.skipRate * 100).toFixed(2)}%). Sustained.\`,
-    });
-  }
-
-  // Playlist removals (single-snapshot is enough; playlists don't recover on their own)
-  const prevPlaylistMap = new Map(previous.playlistsDriving.map((p) => [p.name, p]));
-  for (const removed of previous.playlistsDriving) {
-    if (removed.listeners < options.playlistMinListeners) continue;
-    if (!latest.playlistsDriving.find((p) => p.name === removed.name)) {
-      anomalies.push({
-        severity: "severe",
-        kind: "playlist-removed",
-        message: \`Removed from "\${removed.name}" (\${removed.type}, was \${removed.listeners} listeners) since \${previous.snapshotDate}. Investigate.\`,
-      });
+  if (previous.playlistsCaptured && latest.playlistsCaptured) {
+    for (const removed of previous.playlistsDriving) {
+      if (!available(removed.listeners) || removed.listeners < options.playlistMinListeners) continue;
+      if (!latest.playlistsDriving.some((playlist) => playlist.name === removed.name)) {
+        anomalies.push({ severity: "severe", kind: "playlist-removed", message: \`Removed from "\${removed.name}"\${removed.type ? \` (\${removed.type})\` : ""}, previously \${removed.listeners} listeners. Investigate.\` });
+      }
     }
   }
-
-  // Track disappearance (top track present last, missing now)
-  const prevTopTracks = [...previous.tracks].sort((a, b) => b.streams - a.streams).slice(0, 3);
-  for (const track of prevTopTracks) {
-    if (!latest.tracks.find((t) => t.id === track.id || t.name === track.name)) {
-      anomalies.push({
-        severity: "moderate",
-        kind: "track-disappeared",
-        message: \`Top track "\${track.name}" not present in latest snapshot. Could be metadata change or report shift.\`,
-      });
+  if (previous.tracksCaptured && latest.tracksCaptured) {
+    const topTracks = previous.tracks.filter((track) => available(track.streams)).sort((a, b) => (b.streams as number) - (a.streams as number)).slice(0, 3);
+    for (const track of topTracks) if (!latest.tracks.some((candidate) => (track.id && candidate.id === track.id) || candidate.name === track.name)) {
+      anomalies.push({ severity: "moderate", kind: "track-disappeared", message: \`Top track "\${track.name}" not present in latest snapshot. Could be metadata change or report shift.\` });
     }
   }
-
-  // Editorial dependency growth
-  const editorialGrowth = (latest.sources.editorial - previous.sources.editorial) * 100;
-  if (editorialGrowth > 10) {
-    anomalies.push({
-      severity: "informational",
-      kind: "editorial-dependency-up",
-      message: \`Editorial source share grew \${editorialGrowth.toFixed(1)}pts (\${(previous.sources.editorial * 100).toFixed(1)}% → \${(latest.sources.editorial * 100).toFixed(1)}%). Real lift, but editorial features are not durable — track for follow-through.\`,
-    });
+  const prevEditorial = previous.sources.editorial; const currEditorial = latest.sources.editorial;
+  if (available(prevEditorial) && available(currEditorial) && (currEditorial - prevEditorial) * 100 > 10) {
+    anomalies.push({ severity: "informational", kind: "editorial-dependency-up", message: \`Editorial source share grew \${((currEditorial - prevEditorial) * 100).toFixed(1)}pts.\` });
   }
-
   return anomalies;
 }
 
 function buildAlertMarkdown(latest: Snapshot, anomalies: Anomaly[], parseErrors: Array<{ file: string; error: string }>): string {
-  const lines: string[] = [];
-  lines.push(\`# Spotify Anomaly Alert — \${new Date().toISOString().slice(0, 10)}\`);
-  lines.push("");
-  lines.push(\`Latest snapshot: \\\`\${latest.snapshotDate}\\\`\`);
-  lines.push("");
-
-  if (parseErrors.length > 0) {
-    lines.push("## Parse Errors");
-    lines.push("");
-    for (const err of parseErrors) lines.push(\`- \${err.file}: \${err.error}\`);
-    lines.push("");
+  const lines = [\`# Spotify Anomaly Alert — \${new Date().toISOString().slice(0, 10)}\`, "", \`Latest snapshot: \\\`\${latest.snapshotDate}\\\`\`, ""];
+  if (parseErrors.length) lines.push("## Parse Errors", "", ...parseErrors.map((error) => \`- \${error.file}: \${error.error}\`), "");
+  for (const [severity, header] of [["severe", "## Severe — investigate this cycle"], ["moderate", "## Moderate — track"], ["informational", "## Informational"]] as const) {
+    const group = anomalies.filter((anomaly) => anomaly.severity === severity);
+    if (group.length) lines.push(header, "", ...group.map((anomaly) => \`- **\${anomaly.kind}** — \${anomaly.message}\`), "");
   }
-
-  const grouped: Record<Severity, Anomaly[]> = { severe: [], moderate: [], informational: [] };
-  for (const a of anomalies) grouped[a.severity].push(a);
-
-  const sections: Array<[Severity, string]> = [
-    ["severe", "## Severe — investigate this cycle"],
-    ["moderate", "## Moderate — track"],
-    ["informational", "## Informational"],
-  ];
-  for (const [severity, header] of sections) {
-    if (grouped[severity].length === 0) continue;
-    lines.push(header);
-    lines.push("");
-    for (const a of grouped[severity]) {
-      lines.push(\`- **\${a.kind}** — \${a.message}\`);
-    }
-    lines.push("");
-  }
-
-  if (anomalies.length === 0) {
-    lines.push("No anomalies detected. System is stable in this window.");
-    lines.push("");
-  }
-
+  if (!anomalies.length) lines.push("No anomalies detected. System is stable in this window.", "");
   return lines.join("\\n");
 }
 
-async function appendCeoInbox(inboxPath: string, latest: Snapshot, severeAnomalies: Anomaly[]) {
-  if (severeAnomalies.length === 0) return;
+async function appendCeoInbox(inboxPath: string, latest: Snapshot, severe: Anomaly[]) {
+  if (!severe.length) return;
   await fs.mkdir(path.dirname(inboxPath), { recursive: true });
-  const block: string[] = [];
-  block.push(\`## Spotify Anomaly Watch — \${new Date().toISOString()}\`);
-  block.push("");
-  block.push(\`Latest snapshot: \\\`\${latest.snapshotDate}\\\`\`);
-  block.push("");
-  for (const a of severeAnomalies) block.push(\`- **\${a.kind}** — \${a.message}\`);
-  block.push("");
-
-  const exists = await fs.stat(inboxPath).catch(() => null);
-  if (!exists) {
-    const title = path.basename(inboxPath, ".md").replace(/-/g, " ").replace(/\\b\\w/g, (c) => c.toUpperCase());
-    await fs.writeFile(inboxPath, \`# \${title}\\n\\n\${block.join("\\n")}\\n\`);
-    return;
-  }
-  const current = await fs.readFile(inboxPath, "utf8");
-  const sep = current.endsWith("\\n\\n") ? "" : current.endsWith("\\n") ? "\\n" : "\\n\\n";
-  await fs.writeFile(inboxPath, \`\${current}\${sep}\${block.join("\\n")}\\n\`);
+  const block = [\`## Spotify Anomaly Watch — \${new Date().toISOString()}\`, "", \`Latest snapshot: \\\`\${latest.snapshotDate}\\\`\`, "", ...severe.map((anomaly) => \`- **\${anomaly.kind}** — \${anomaly.message}\`), ""].join("\\n");
+  const existing = await fs.readFile(inboxPath, "utf8").catch(() => \`# \${path.basename(inboxPath, ".md").replace(/-/g, " ")}\\n\\n\`);
+  await fs.writeFile(inboxPath, \`\${existing}\${existing.endsWith("\\n\\n") ? "" : "\\n"}\${block}\\n\`);
 }
+
+function filePriority(file: string): number { return file.endsWith("-s4a.json") ? 2 : file.endsWith("-web-api.json") ? 0 : 1; }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const files = await listSnapshotFiles(options.snapshotsDir);
-  if (files.length === 0) {
-    console.log(JSON.stringify({ status: "no_snapshots", snapshotsDir: options.snapshotsDir }, null, 2));
-    return;
-  }
-
-  // Read up to last 4 snapshots (latest + 3 priors)
-  const slice = files.slice(-4);
-  const snapshots: Snapshot[] = [];
+  if (!files.length) { console.log(JSON.stringify({ status: "no_snapshots", snapshotsDir: options.snapshotsDir }, null, 2)); return; }
+  const parsed: Array<{ file: string; snapshot: Snapshot }> = [];
   const parseErrors: Array<{ file: string; error: string }> = [];
-  for (const file of slice) {
+  for (const file of files) {
     const result = await readSnapshot(path.join(options.snapshotsDir, file));
-    if ("error" in result) parseErrors.push(result);
-    else snapshots.push(result);
+    if ("error" in result) parseErrors.push(result); else parsed.push({ file, snapshot: result });
   }
-  if (snapshots.length === 0) {
-    throw new Error(\`Could not parse any snapshot files. Errors: \${parseErrors.map((e) => \`\${e.file}: \${e.error}\`).join("; ")}\`);
-  }
-
-  const latest = snapshots[snapshots.length - 1];
-  if (!latest) {
-    throw new Error(\`Could not parse any snapshot files. Errors: \${parseErrors.map((e) => \`\${e.file}: \${e.error}\`).join("; ")}\`);
-  }
+  if (!parsed.length) throw new Error(\`Could not parse any snapshot files. Errors: \${parseErrors.map((error) => \`\${error.file}: \${error.error}\`).join("; ")}\`);
+  parsed.sort((a, b) => a.snapshot.snapshotDate.localeCompare(b.snapshot.snapshotDate) || filePriority(a.file) - filePriority(b.file));
+  const latestEntry = parsed.at(-1)!;
+  const snapshots = parsed.filter((entry) => entry === latestEntry || compatible(entry.snapshot, latestEntry.snapshot)).slice(-4).map((entry) => entry.snapshot);
   const anomalies = detectAnomalies(snapshots, options);
-
   await fs.mkdir(options.alertsDir, { recursive: true });
-  const today = new Date().toISOString().slice(0, 10);
-  const alertPath = path.join(options.alertsDir, \`\${today}.md\`);
-  await fs.writeFile(alertPath, buildAlertMarkdown(latest, anomalies, parseErrors));
-
-  if (options.ceoInbox) {
-    const severe = anomalies.filter((a) => a.severity === "severe");
-    if (severe.length > 0) await appendCeoInbox(options.ceoInbox, latest, severe);
-  }
-
+  const alertPath = path.join(options.alertsDir, \`\${new Date().toISOString().slice(0, 10)}.md\`);
+  await fs.writeFile(alertPath, buildAlertMarkdown(latestEntry.snapshot, anomalies, parseErrors));
+  if (options.ceoInbox) await appendCeoInbox(options.ceoInbox, latestEntry.snapshot, anomalies.filter((anomaly) => anomaly.severity === "severe"));
   console.log(JSON.stringify({
-    status: "watch_complete",
-    alertPath,
-    latestSnapshot: latest.snapshotDate,
+    status: "watch_complete", alertPath, latestSnapshot: latestEntry.snapshot.snapshotDate,
     snapshotsCompared: snapshots.length,
-    anomaliesBySeverity: {
-      severe: anomalies.filter((a) => a.severity === "severe").length,
-      moderate: anomalies.filter((a) => a.severity === "moderate").length,
-      informational: anomalies.filter((a) => a.severity === "informational").length,
-    },
+    anomaliesBySeverity: Object.fromEntries(["severe", "moderate", "informational"].map((severity) => [severity, anomalies.filter((anomaly) => anomaly.severity === severity).length])),
     parseErrors,
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exit(1);
-});
+main().catch((error) => { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); });
 `,
       },
       {
@@ -38842,16 +38145,14 @@ description: Daily check on existing Spotify snapshots. Flags real anomalies —
 
 Use this skill on a daily heartbeat. It does **not** scrape Spotify — it reads existing snapshots and computes anomalies. Cheap, fast, runs every day even if no new snapshot landed.
 
-Read \`doc/SPOTIFY-STRATEGIST-DOCTRINE.md\` before running.
-
 ## Inputs
 
-- \`data/spotify/snapshots/*.json\` — at least one snapshot. Two or more for trend detection.
+- \`data/spotify/snapshots/<date>.json\`, \`<date>-web-api.json\`, or \`<date>-s4a.json\` — at least one snapshot. Two compatible snapshots from the same data source/reporting window are required for trend detection.
 
 ## Workflow
 
 \`\`\`sh
-bun packages/shared/src/skills/bundled/spotify-anomaly-watch/scripts/watch.ts \\
+"\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-anomaly-watch/scripts/watch.ts" \\
   --snapshots-dir data/spotify/snapshots \\
   --alerts-dir data/spotify/alerts \\
   --ceo-inbox data/spotify/artist-ceo-alerts.md
@@ -38859,13 +38160,13 @@ bun packages/shared/src/skills/bundled/spotify-anomaly-watch/scripts/watch.ts \\
 
 The script:
 
-- Reads the latest snapshot plus up to 3 priors.
+- Reads the latest snapshot plus up to 3 compatible priors. Missing optional metrics are skipped, not treated as zero.
 - Computes deltas and flags:
   - **Stream drop** ≥30% sustained over 2 consecutive snapshots → severe.
   - **Listener drop** ≥30% sustained over 2 → severe.
   - **Save rate drop** ≥20% sustained over 2 → moderate.
   - **Skip rate spike** ≥20% sustained over 2 → moderate.
-  - **Playlist removal** when a playlist with ≥100 listeners disappeared from \`playlistsDriving\` between the two latest snapshots → severe (single-snapshot is enough for playlist removals; they don't return on their own).
+  - **Playlist removal** when a playlist with ≥100 listeners disappeared from two snapshots that both captured \`playlistsDriving\` → severe and worth investigating.
   - **Track disappearance** when a top-3 track is missing from the latest snapshot → moderate.
   - **Editorial dependency growth** when editorial-share grew >10pts in two snapshots → informational (not bad, but watch durability).
 - Writes \`data/spotify/alerts/<YYYY-MM-DD>.md\` with all findings categorized by severity.
@@ -38882,6 +38183,8 @@ The script:
 
 - 0 snapshots → exit cleanly with a "no data" message.
 - 1 snapshot → write a baseline alert file noting "first snapshot, no priors to compare."
+- Snapshots from a different data source/reporting window → retain the latest as a baseline instead of creating a false delta.
+- Missing optional metrics, tracks, playlists, or source fields → skip those checks without emitting \`NaN\` or fabricating zeroes. Preserve any \`partial\` alert from the snapshot.
 - Snapshot files malformed → skip the bad file, continue with remaining, surface the parse error in the alert.
 
 ## Idempotency
@@ -38892,7 +38195,7 @@ The script overwrites \`alerts/<today>.md\` on each run (so the latest run alway
 
 - Never scrape. This skill works from existing snapshots.
 - Never silence an anomaly. If a metric crashed, surface it.
-- Never invent thresholds. Use the doctrine numbers above.
+- Never invent thresholds. Use the configured defaults above or explicit CLI overrides.
 `,
       },
     ],

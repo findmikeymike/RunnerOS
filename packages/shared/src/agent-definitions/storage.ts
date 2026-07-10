@@ -624,7 +624,7 @@ export function ensureBuiltInAgentMetadataSlugs(
   required: Partial<Pick<AgentMetadata, 'skills' | 'sources' | 'optionalSources'>>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'video-director', 'spotify-playlist-creator']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'video-director', 'spotify-playlist-creator', 'spotify-analyst']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
@@ -692,6 +692,7 @@ export function replaceBuiltInAgentMetadata(
     'outreach-agent',
     'art-director',
     'spotify-playlist-creator',
+    'spotify-analyst',
   ]);
   if (!builtIns.has(slug)) return { updated: false };
 
@@ -764,7 +765,7 @@ export function replaceBuiltInAgentPromptPattern(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'art-director']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'art-director', 'spotify-analyst']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !pattern.test(loaded.systemPrompt)) return { updated: false };

@@ -15,7 +15,6 @@ This folder contains only unfinished work, partial implementations, and release 
 - [Google OAuth Production App](./google-oauth-production-app.md) - Runner-owned verified OAuth app so users can connect Gmail, Calendar, and Drive without creating a Google Cloud project.
 - [Tool Licensing + Packaging Audit](./tool-licensing-packaging-audit.md) - commercial-license, binary, model, checksum, provenance, and clean-machine packaging gate.
 - [Windows Version](./windows-version.md) - Windows binaries, packaged runtime behavior, browser automation, and cross-platform agent/tool QA.
-- [Spotify Fix](./spotify-fix.md) - packaged Spotify Analyst reliability plus the decision to add a real playlist actuator or make Playlist Creator explicitly plan-only.
 
 ## Partially Shipped
 
@@ -35,6 +34,7 @@ This folder contains only unfinished work, partial implementations, and release 
 - [Workflow Outputs](../archive/2026-07-10/workflow-outputs.md) - superseded by shipped Outputs/Finals specs 10 and 11.
 - [Social Accounts + Operations](../archive/2026-07-10/social-accounts-and-operations.md) - V1 shipped; remaining proof moved to live verification and Connected Accounts.
 - [Paid Ads Execution Prep](../archive/2026-07-10/paid-ads-execution-prep.md) - preparation completed; remaining work stays in the Ads Operator backlog.
+- [Spotify Fix](../archive/2026-07-10/spotify-fix.md) - Analyst and Playlist Creator now use the built-in authenticated Spotify browser source; live-account proof remains in External Integration Live Verification.
 
 ## Maintenance Rule
 

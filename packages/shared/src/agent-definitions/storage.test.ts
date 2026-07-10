@@ -665,7 +665,11 @@ body
     expect(spotifyAnalyst?.metadata.name).toBe('Spotify Analyst')
     expect(spotifyAnalyst?.metadata.skills).toContain('spotify-analytics-snapshot')
     expect(spotifyAnalyst?.metadata.skills).toContain('spotify-anomaly-watch')
+    expect(spotifyAnalyst?.metadata.skills).not.toContain('spotify-playlist-curator')
+    expect(spotifyAnalyst?.metadata.sources).toContain('printing-press-social')
     expect(spotifyAnalyst?.metadata.tags).toContain('analytics')
+    expect(spotifyAnalyst?.systemPrompt).toContain('snapshot spotify')
+    expect(spotifyAnalyst?.systemPrompt).toContain('same data source and reporting window')
     expect(spotifyAnalyst?.systemPrompt).toContain('artist-spotify-snapshot')
   })
 
