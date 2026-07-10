@@ -35,6 +35,10 @@ describe('runneros squad wrapper', () => {
     assert.equal(payload.mode, 'runneros_squad_doctor');
     assert.equal(payload.ok, true);
     assert.equal(typeof payload.providers, 'object');
+    assert.equal(typeof payload.python_runtime, 'object');
+    assert.equal(typeof payload.storyboard_ready, 'boolean');
+    assert.equal(typeof payload.modular_orchestration_ready, 'boolean');
+    assert.equal(typeof payload.native_production_ready, 'boolean');
   });
 
   it('modular preflight does not require OpenAI when a non-OpenAI route is configured', () => {
@@ -58,5 +62,25 @@ describe('runneros squad wrapper', () => {
     assert.notEqual(result.status, 0);
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.code, 'approval_required');
+  });
+
+  it('storyboard returns a Canvas output payload', () => {
+    const result = run(['storyboard', '--brief-file', briefFile()]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.create_output.kind, 'report');
+    assert.equal(payload.create_output.showInCanvas, true);
+    assert.equal(payload.create_output.files[0].role, 'primary');
+  });
+
+  it('approved modular run returns an honest pending receipt', () => {
+    const result = run(['run', '--brief-file', briefFile(), '--provider-mode', 'modular', '--approved'], {
+      WAVESPEED_API_KEY: 'test-wavespeed-key',
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.final_status, 'planned_waiting_for_external_generation_or_assembly');
+    assert.equal(payload.create_output.kind, 'receipt');
+    assert.match(payload.create_output.summary, /not a finished video/i);
   });
 });

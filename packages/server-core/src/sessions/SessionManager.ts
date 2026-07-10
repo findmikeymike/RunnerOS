@@ -2903,7 +2903,7 @@ export class SessionManager implements ISessionManager {
         }
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
-        // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Hypermotion, Lottie Animation,
+        // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Hypermotion, Video Director, Lottie Animation,
         // Video Editor, Lyric Video, Content Genius, Scroll Stopper, promotion helpers, Shopify, Print Agent,
         // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
         // and Update System Agent.
@@ -2914,6 +2914,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === SOCIAL_PUBLISHER_SLUG
             || a.slug === 'trypost-agent'
             || a.slug === 'hypermotion-agent'
+            || a.slug === 'video-director'
             || a.slug === 'lottie-animation-agent'
             || a.slug === 'video-editor-agent'
             || a.slug === 'lyric-video-agent'
@@ -2981,6 +2982,18 @@ export class SessionManager implements ISessionManager {
             if (updated) {
               sessionLog.info('[skills] Updated built-in workflow-creator skill')
             }
+          }
+          const squadSkillMd = BUNDLED_STARTER_SKILLS
+            .find(skill => skill.slug === 'squad')
+            ?.files.find(file => file.path === 'SKILL.md')
+            ?.content
+          if (squadSkillMd && replaceRequiredGlobalSkillFileIfContains(
+            'squad',
+            'SKILL.md',
+            'Michael\'s local default is `/Users/michaelb.williams/CAS4/Squad`.',
+            squadSkillMd,
+          ).updated) {
+            sessionLog.info('[skills] Updated Squad skill to bundled-engine instructions')
           }
           const brandingAgent = STARTER_AGENTS.find(agent => agent.slug === 'branding-agent')
           const brandingSkillSlugs = brandingAgent?.metadata.skills ?? []
@@ -3214,6 +3227,23 @@ export class SessionManager implements ISessionManager {
           }
           if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
             sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
+          }
+          const videoDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'video-director')
+          if (videoDirectorAgent) {
+            if (ensureBuiltInAgentMetadataSlugs('video-director', {
+              skills: videoDirectorAgent.metadata.skills,
+              sources: videoDirectorAgent.metadata.sources,
+              optionalSources: videoDirectorAgent.metadata.optionalSources,
+            }).updated) {
+              sessionLog.info('[agent-definitions] Updated Video Director Squad routing')
+            }
+            if (replaceBuiltInAgentPromptText(
+              'video-director',
+              '- If Squad is not found, tell the user to set `SQUAD_HOME=/absolute/path/to/Squad`.',
+              '- RunnerOS ships Squad as a built-in source. If it is missing, report a packaging or installation problem; do not ask for `SQUAD_HOME`.',
+            ).updated) {
+              sessionLog.info('[agent-definitions] Removed Video Director external Squad dependency')
+            }
           }
           if (replaceBuiltInAgentMetadata(CONCIERGE_SLUG, {
             name: { from: 'Concierge', to: 'HNIC' },

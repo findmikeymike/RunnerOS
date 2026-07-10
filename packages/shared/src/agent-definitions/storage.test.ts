@@ -733,6 +733,22 @@ body
     expect(hypermotionAgent?.systemPrompt).toContain('showInCanvas')
   })
 
+  test('starter library includes Video Director with the bundled Squad lane', () => {
+    const videoDirector = STARTER_AGENTS.find((agent) => agent.slug === 'video-director')
+
+    expect(videoDirector).toBeDefined()
+    expect(videoDirector?.metadata.name).toBe('Video Director')
+    expect(videoDirector?.metadata.visualAgent).toBe(true)
+    expect(videoDirector?.metadata.permissionMode).toBe('ask')
+    expect(videoDirector?.metadata.skills).toContain('squad')
+    expect(videoDirector?.metadata.sources).toContain('squad')
+    expect(videoDirector?.metadata.optionalSources).toContain('media-generation')
+    expect(videoDirector?.systemPrompt).toContain('storyboard')
+    expect(videoDirector?.systemPrompt).toContain('create_output')
+    expect(videoDirector?.systemPrompt).toContain('not a finished video')
+    expect(videoDirector?.systemPrompt).toContain('Never spend credits')
+  })
+
   test('starter library includes the Lyric Video Agent with Genesis lyric source', () => {
     const lyricVideoAgent = STARTER_AGENTS.find((agent) => agent.slug === 'lyric-video-agent')
 
@@ -1202,6 +1218,39 @@ body
     const creative = loadGlobalAgent('ad-creative-agent', { globalAgentsDir })!
     expect(creative.metadata.skills).toEqual(['artist-ad-dna', 'ad-library-intel', 'ads-creative-development', 'ad-creative', 'artist-campaign-angle-builder'])
     expect(creative.systemPrompt).toBe('Ad Creative body stays intact.')
+  })
+
+  test('upgrades stale Video Director routing without replacing its prompt', () => {
+    writeGlobalAgent(
+      {
+        slug: 'video-director',
+        metadata: {
+          name: 'Video Director',
+          description: 'Plans video.',
+          skills: ['squad'],
+          sources: ['squad'],
+        },
+        systemPrompt: '- If Squad is not found, tell the user to set `SQUAD_HOME=/absolute/path/to/Squad`.',
+      },
+      { globalAgentsDir },
+    )
+
+    expect(ensureBuiltInAgentMetadataSlugs('video-director', {
+      skills: ['squad', 'spotify-canvas-video'],
+      sources: ['squad'],
+      optionalSources: ['media-generation', 'video-studio', 'hypermotion'],
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText(
+      'video-director',
+      '- If Squad is not found, tell the user to set `SQUAD_HOME=/absolute/path/to/Squad`.',
+      '- RunnerOS ships Squad as a built-in source.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+
+    const videoDirector = loadGlobalAgent('video-director', { globalAgentsDir })!
+    expect(videoDirector.metadata.skills).toEqual(['squad', 'spotify-canvas-video'])
+    expect(videoDirector.metadata.optionalSources).toEqual(['media-generation', 'video-studio', 'hypermotion'])
+    expect(videoDirector.systemPrompt).toBe('- RunnerOS ships Squad as a built-in source.')
   })
 
   test('replaceBuiltInAgentPromptText only patches built-in prompt bodies on exact match', () => {

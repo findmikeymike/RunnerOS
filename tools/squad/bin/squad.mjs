@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
@@ -79,12 +79,15 @@ function readBrief(path) {
 
 function runPython(script, scriptArgs) {
   const python = process.env.SQUAD_PYTHON || process.env.PYTHON || 'python3';
+  const briefIndex = scriptArgs.indexOf('--brief-file');
+  const briefPath = briefIndex >= 0 ? scriptArgs[briefIndex + 1] : undefined;
+  const runtimeCwd = briefPath ? dirname(resolve(briefPath)) : process.cwd();
   const env = {
     ...process.env,
     PYTHONPATH: [vendorRoot, process.env.PYTHONPATH].filter(Boolean).join(process.platform === 'win32' ? ';' : ':'),
   };
   return spawnSync(python, [join(vendorRoot, 'scripts', script), ...scriptArgs], {
-    cwd: vendorRoot,
+    cwd: runtimeCwd,
     env,
     encoding: 'utf-8',
   });
@@ -137,6 +140,39 @@ function commandExists(bin) {
   return result.status === 0;
 }
 
+function pythonRuntimeState() {
+  const python = process.env.SQUAD_PYTHON || process.env.PYTHON || 'python3';
+  const result = spawnSync(python, [
+    '-c',
+    'import importlib.util,json; names=["openai","langgraph","PIL","fal_client"]; print(json.dumps({name: importlib.util.find_spec(name) is not None for name in names}))',
+  ], { encoding: 'utf-8' });
+  let modules = {};
+  if (result.status === 0) {
+    try {
+      modules = JSON.parse((result.stdout || '').trim());
+    } catch {
+      modules = {};
+    }
+  }
+  return {
+    command: python,
+    available: result.status === 0,
+    version_supported: result.status === 0 && spawnSync(python, ['-c', 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)']).status === 0,
+    modules,
+  };
+}
+
+function nativeProductionReady(state = providerState(), python = pythonRuntimeState()) {
+  return Boolean(
+    state.openai
+    && python.available
+    && python.version_supported
+    && python.modules.openai
+    && python.modules.langgraph
+    && python.modules.PIL,
+  );
+}
+
 function hasNonOpenAiProvider(state = providerState()) {
   return state.wavespeed || state.fal || state.replicate || state.heygen || state.muapi || state.runpod || state.zero;
 }
@@ -160,6 +196,90 @@ function artifactDir(kind, briefFile) {
 function runId(briefFile) {
   const stem = briefFile.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '') || 'brief';
   return `${stem}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}`;
+}
+
+function fileEntry(path, label, role = 'supporting') {
+  return path && existsSync(path) ? { path, label: label || basename(path), role } : null;
+}
+
+function storyboardOutput(payload, briefFile) {
+  const files = [
+    fileEntry(payload?.html_path, 'Storyboard board', 'primary'),
+    fileEntry(payload?.json_path, 'Storyboard JSON'),
+  ].filter(Boolean);
+  if (files.length === 0) return undefined;
+  return {
+    title: `Squad storyboard ${payload.run_id || basename(briefFile).replace(/\.[^.]+$/, '')}`,
+    kind: 'report',
+    summary: 'No-spend Squad storyboard ready for review.',
+    files,
+    receipts: [{
+      provider: 'squad',
+      action: 'storyboard-plan-board',
+      status: payload.ok === false ? 'failed' : 'succeeded',
+      displayText: 'No provider spend. Storyboard review only.',
+      metadata: {
+        run_id: payload.run_id,
+        lane: payload.lane,
+        finding_count: Array.isArray(payload.findings) ? payload.findings.length : 0,
+      },
+    }],
+    tags: ['squad', 'video-director', 'storyboard', 'no-spend'],
+    showInCanvas: true,
+  };
+}
+
+function runOutput(payload, briefFile) {
+  const finalAsset = payload?.final_asset_path;
+  const rendered = Boolean(finalAsset && existsSync(finalAsset));
+  const hasReview = Boolean(payload?.review_path && existsSync(payload.review_path));
+  const files = [
+    fileEntry(rendered ? finalAsset : undefined, finalAsset ? basename(finalAsset) : '', 'primary'),
+    fileEntry(payload?.review_path, 'Squad review', rendered ? 'supporting' : 'primary'),
+    fileEntry(payload?.manifest_path, 'Squad manifest', rendered || hasReview ? 'supporting' : 'primary'),
+  ].filter(Boolean);
+  if (files.length === 0) return undefined;
+  const failed = payload.ok === false || String(payload.final_status || '').toLowerCase().includes('fail');
+  return {
+    title: `Squad video ${payload.run_id || basename(briefFile).replace(/\.[^.]+$/, '')}`,
+    kind: rendered ? 'video' : 'receipt',
+    summary: rendered ? 'Squad video ready for review.' : 'Squad production receipt ready for review.',
+    files,
+    receipts: [{
+      provider: 'squad',
+      action: 'creative-production-run',
+      status: failed ? 'failed' : (rendered ? 'succeeded' : 'pending'),
+      displayText: rendered ? 'Playable video artifact created.' : 'No final video exists yet; inspect the receipt and next actions.',
+      metadata: {
+        run_id: payload.run_id,
+        final_status: payload.final_status,
+        total_spend_usd: payload.total_spend_usd,
+        video_attempt_count: payload.video_attempt_count,
+      },
+    }],
+    tags: ['squad', 'video-director', rendered ? 'video-output' : 'run-receipt'],
+    showInCanvas: true,
+  };
+}
+
+function planOutput(payload, briefFile) {
+  const manifest = fileEntry(payload.manifest_path, 'Squad modular production plan', 'primary');
+  if (!manifest) return undefined;
+  return {
+    title: `Squad production plan ${basename(briefFile).replace(/\.[^.]+$/, '')}`,
+    kind: 'receipt',
+    summary: 'Generation or assembly is still required. This is not a finished video.',
+    files: [manifest],
+    receipts: [{
+      provider: 'squad',
+      action: 'modular-production-plan',
+      status: 'pending',
+      displayText: 'Waiting for provider generation or editor assembly.',
+      metadata: { provider_mode: payload.provider_mode, final_status: payload.final_status },
+    }],
+    tags: ['squad', 'video-director', 'production-plan'],
+    showInCanvas: true,
+  };
 }
 
 function normalizeOpenAiBlockers(payload, mode, state) {
@@ -255,12 +375,18 @@ function modularRun(briefFile, mode) {
     preflight,
   };
   writeFileSync(manifestPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf-8');
+  payload.create_output = planOutput(payload, briefFile);
   print(payload);
 }
 
-function passThrough(script, scriptArgs, fallbackMode) {
+function passThrough(script, scriptArgs, fallbackMode, outputFactory, briefFile) {
   const result = parsePythonResult(runPython(script, scriptArgs), fallbackMode);
-  if (result.payload) print(result.payload);
+  if (result.payload) {
+    const payload = { ...result.payload };
+    const createOutput = outputFactory?.(payload, briefFile);
+    if (createOutput) payload.create_output = createOutput;
+    print(payload);
+  }
   else print({ ok: result.ok, mode: fallbackMode, stdout: result.stdout, stderr: result.stderr });
   process.exit(result.ok ? 0 : 1);
 }
@@ -269,6 +395,7 @@ if (command === 'help' || command === '--help' || command === '-h') {
   usage();
 } else if (command === 'doctor') {
   const state = providerState();
+  const python = pythonRuntimeState();
   print({
     ok: existsSync(vendorRoot) && existsSync(join(vendorRoot, 'scripts', 'run_creative_production.py')),
     mode: 'runneros_squad_doctor',
@@ -276,8 +403,11 @@ if (command === 'help' || command === '--help' || command === '-h') {
     vendor_root: vendorRoot,
     python: process.env.SQUAD_PYTHON || process.env.PYTHON || 'python3',
     providers: state,
-    modular_generation_ready: hasNonOpenAiProvider(state),
-    openai_director_ready: state.openai,
+    python_runtime: python,
+    storyboard_ready: python.available && python.version_supported,
+    modular_orchestration_ready: hasNonOpenAiProvider(state),
+    native_production_ready: nativeProductionReady(state, python),
+    openai_director_ready: nativeProductionReady(state, python),
   });
 } else if (command === 'recipe') {
   const briefFile = requireBriefFile();
@@ -287,7 +417,7 @@ if (command === 'help' || command === '--help' || command === '-h') {
   const out = opt('output-dir') || join(artifactDir('storyboards', briefFile), runId(briefFile));
   const pyArgs = ['--brief-file', briefFile, '--output-dir', out, '--video-quality', opt('video-quality', 'budget')];
   for (const root of allOpt('asset-root')) pyArgs.push('--asset-root', root);
-  passThrough('build_storyboard_plan_board.py', pyArgs, 'storyboard_plan_board');
+  passThrough('build_storyboard_plan_board.py', pyArgs, 'storyboard_plan_board', storyboardOutput, briefFile);
 } else if (command === 'audit') {
   const briefFile = opt('brief-file');
   const pyArgs = briefFile ? ['--brief-file', isAbsolute(briefFile) ? briefFile : resolve(process.cwd(), briefFile)] : [];
@@ -313,7 +443,7 @@ if (command === 'help' || command === '--help' || command === '-h') {
   } else {
     if (!hasFlag('--approved')) fail('Run requires --approved. Use preflight/storyboard first.', { code: 'approval_required' });
     const pyArgs = ['--brief-file', briefFile, '--video-quality', opt('video-quality', 'budget'), '--budget-cap-usd', opt('budget-cap-usd', '1.00')];
-    passThrough('run_creative_production.py', pyArgs, 'creative_production_run');
+    passThrough('run_creative_production.py', pyArgs, 'creative_production_run', runOutput, briefFile);
   }
 } else {
   fail(`Unknown command: ${command}`);
