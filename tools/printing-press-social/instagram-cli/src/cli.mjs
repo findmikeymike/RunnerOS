@@ -243,6 +243,7 @@ async function handleProfile(command, flags) {
 async function handleInstagramComment(flags) {
   const action = buildInstagramTextAction('comment', flags, {
     targetUrl: flags.url || flags['target-url'],
+    replyTo: flags['reply-to'] || null,
   });
   if (!action.payload.targetUrl) {
     throw new CliError('Instagram comment needs --url', 'MISSING_TARGET_URL');
@@ -250,8 +251,14 @@ async function handleInstagramComment(flags) {
   validateTextAction(action, 2200);
 
   if (flags['dry-run']) {
-    writeResult(dryRunResult(action, ['open target post', 'focus comment field', 'enter comment', 'submit']), flags.json);
+    const steps = action.payload.replyTo
+      ? ['open target post', `locate exact comment ${action.payload.replyTo}`, 'open its reply field', 'enter reply', 'submit']
+      : ['open target post', 'focus comment field', 'enter comment', 'submit'];
+    writeResult(dryRunResult(action, steps), flags.json);
     return;
+  }
+  if (action.payload.replyTo) {
+    throw new CliError('Exact Instagram replies require the guarded Runner browser handoff', 'EXACT_REPLY_REQUIRES_RUNNER_HANDOFF');
   }
 
   const profile = getProfile('instagram', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
@@ -275,6 +282,7 @@ async function handleInstagramComment(flags) {
 async function handleInstagramDm(flags) {
   const action = buildInstagramTextAction('dm', flags, {
     recipient: flags.to || flags.recipient,
+    threadUrl: flags['thread-url'] || null,
   });
   if (!action.payload.recipient) {
     throw new CliError('Instagram DM needs --to <username>', 'MISSING_RECIPIENT');
@@ -282,8 +290,14 @@ async function handleInstagramDm(flags) {
   validateTextAction(action, 1000);
 
   if (flags['dry-run']) {
-    writeResult(dryRunResult(action, ['open inbox', 'start message', 'select recipient', 'enter message', 'send']), flags.json);
+    const steps = action.payload.threadUrl
+      ? ['open exact existing DM thread', `verify recipient ${action.payload.recipient}`, 'enter reply', 'send']
+      : ['open inbox', 'start message', 'select recipient', 'enter message', 'send'];
+    writeResult(dryRunResult(action, steps), flags.json);
     return;
+  }
+  if (action.payload.threadUrl) {
+    throw new CliError('Exact Instagram DM threads require the guarded Runner browser handoff', 'EXACT_THREAD_REQUIRES_RUNNER_HANDOFF');
   }
 
   const profile = getProfile('instagram', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
@@ -837,7 +851,7 @@ Instagram MVP:
   social profile delete instagram --profile artist01 --json
   social post instagram --profile artist01 --text "caption" --media image.jpg --dry-run --json
   social post instagram --profile artist01 --text "caption" --media image.jpg --engine playwright --confirm yes --json
-  social comment instagram --profile artist01 --url "https://www.instagram.com/p/..." --text "comment" --dry-run --json
+  social comment instagram --profile artist01 --url "https://www.instagram.com/p/..." --reply-to "comment-id-or-permalink" --text "reply" --dry-run --json
   social comment instagram --profile artist01 --url "https://www.instagram.com/p/..." --text "comment" --engine playwright --confirm yes --json
   social dm instagram --profile artist01 --to username --text "message" --dry-run --json
   social dm instagram --profile artist01 --to username --text "message" --engine playwright --confirm yes --json

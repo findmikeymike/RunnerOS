@@ -1,5 +1,33 @@
 import { describe, expect, it } from 'bun:test'
-import { inferModelSelectionMode, shouldMigratePiOpenAiProvider, shouldRepairPiApiKeyCodexProvider } from '../storage'
+import { assignMissingArtistWorkspaceScopes, inferModelSelectionMode, shouldMigratePiOpenAiProvider, shouldRepairPiApiKeyCodexProvider } from '../storage'
+import type { Workspace } from '@craft-agent/core/types'
+
+describe('assignMissingArtistWorkspaceScopes', () => {
+  it('persists one legacy HQ and does not misclassify campaign labels', () => {
+    const workspaces = [
+      { id: 'campaign', name: 'Global Launch', slug: 'global-launch', rootPath: '/tmp/global-launch', createdAt: 1 },
+      { id: 'hq', name: 'My Workspace', slug: 'my-workspace', rootPath: '/tmp/hq', createdAt: 2 },
+    ] as Workspace[]
+
+    expect(assignMissingArtistWorkspaceScopes(workspaces)).toBe(true)
+    expect(workspaces.map(workspace => [workspace.id, workspace.artistWorkspaceScope])).toEqual([
+      ['campaign', 'campaign'],
+      ['hq', 'hq'],
+    ])
+    expect(assignMissingArtistWorkspaceScopes(workspaces)).toBe(false)
+  })
+
+  it('uses the oldest workspace only when no legacy or explicit HQ exists', () => {
+    const workspaces = [
+      { id: 'newer', name: 'Second', slug: 'second', rootPath: '/tmp/second', createdAt: 20 },
+      { id: 'older', name: 'First', slug: 'first', rootPath: '/tmp/first', createdAt: 10 },
+    ] as Workspace[]
+
+    assignMissingArtistWorkspaceScopes(workspaces)
+    expect(workspaces.find(workspace => workspace.id === 'older')?.artistWorkspaceScope).toBe('hq')
+    expect(workspaces.find(workspace => workspace.id === 'newer')?.artistWorkspaceScope).toBe('campaign')
+  })
+})
 
 describe('shouldMigratePiOpenAiProvider', () => {
   it('migrates legacy Pi OAuth OpenAI connections to openai-codex', () => {

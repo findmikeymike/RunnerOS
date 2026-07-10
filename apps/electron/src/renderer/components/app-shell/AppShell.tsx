@@ -2139,8 +2139,8 @@ function AppShellContent({
     result.push({ id: 'nav:work-chat', type: 'nav', action: handleWorkChatClick })
     result.push({ id: 'nav:plan', type: 'nav', action: () => toggleMainNavGroup('plan') })
     if (planExpanded) {
-      result.push({ id: 'nav:agenda', type: 'nav', action: handleAgendaNavClick })
       result.push({ id: 'nav:calendar', type: 'nav', action: () => handleArtistHQNavClick('calendar') })
+      result.push({ id: 'nav:agenda', type: 'nav', action: handleAgendaNavClick })
     }
     result.push({ id: 'nav:people', type: 'nav', action: () => toggleMainNavGroup('people') })
     if (peopleExpanded) {
@@ -2512,18 +2512,18 @@ function AppShellContent({
         onClick: () => toggleMainNavGroup('plan'),
         items: [
           {
-            id: "nav:agenda",
-            title: "Agenda",
-            icon: MessageSquare,
-            variant: isAgendaNavigation(navState) ? "default" : "ghost",
-            onClick: handleAgendaNavClick,
-          },
-          {
             id: "nav:calendar",
             title: "Calendar",
             icon: Calendar,
             variant: isArtistHQWorkspace && isSessionsNavigation(navState) && artistHqHash === '#artist-hq/calendar' ? "default" : "ghost",
             onClick: () => handleArtistHQNavClick('calendar'),
+          },
+          {
+            id: "nav:agenda",
+            title: "Agenda",
+            icon: MessageSquare,
+            variant: isAgendaNavigation(navState) ? "default" : "ghost",
+            onClick: handleAgendaNavClick,
           },
         ],
       },

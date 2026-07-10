@@ -154,6 +154,7 @@ test('dry-runs an TikTok comment', () => {
     'comment', 'tiktok',
     '--profile', 'smoke',
     '--url', 'https://www.tiktok.com/@user/video/123',
+    '--reply-to', 'comment-123',
     '--text', 'nice post',
     '--dry-run',
     '--json',
@@ -162,6 +163,8 @@ test('dry-runs an TikTok comment', () => {
   assert.equal(result.ok, true);
   assert.equal(result.action.verb, 'comment');
   assert.equal(result.action.payload.targetUrl, 'https://www.tiktok.com/@user/video/123');
+  assert.equal(result.action.payload.replyTo, 'comment-123');
+  assert.match(result.browserPlan.steps.join(' '), /comment-123/);
 });
 
 test('dry-runs an TikTok dm', () => {
@@ -171,6 +174,7 @@ test('dry-runs an TikTok dm', () => {
     'dm', 'tiktok',
     '--profile', 'smoke',
     '--to', 'testuser',
+    '--thread-url', 'https://www.tiktok.com/messages/123',
     '--text', 'hello',
     '--dry-run',
     '--json',
@@ -179,6 +183,8 @@ test('dry-runs an TikTok dm', () => {
   assert.equal(result.ok, true);
   assert.equal(result.action.verb, 'dm');
   assert.equal(result.action.payload.recipient, 'testuser');
+  assert.equal(result.action.payload.threadUrl, 'https://www.tiktok.com/messages/123');
+  assert.match(result.browserPlan.steps.join(' '), /exact existing DM thread/);
 });
 
 test('sets require-confirm policy on a profile', () => {

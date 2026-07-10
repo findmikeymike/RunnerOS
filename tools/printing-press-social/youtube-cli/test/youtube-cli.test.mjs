@@ -158,6 +158,7 @@ test('dry-runs an YouTube comment', () => {
     'comment', 'youtube',
     '--profile', 'smoke',
     '--url', 'https://www.youtube.com/@user/video/123',
+    '--reply-to', 'comment-123',
     '--text', 'nice post',
     '--dry-run',
     '--json',
@@ -166,6 +167,8 @@ test('dry-runs an YouTube comment', () => {
   assert.equal(result.ok, true);
   assert.equal(result.action.verb, 'comment');
   assert.equal(result.action.payload.targetUrl, 'https://www.youtube.com/@user/video/123');
+  assert.equal(result.action.payload.replyTo, 'comment-123');
+  assert.match(result.browserPlan.steps.join(' '), /comment-123/);
 });
 
 test('YouTube rejects unsupported dm command', () => {

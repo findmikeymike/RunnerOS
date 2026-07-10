@@ -27,6 +27,7 @@ import {
   hasSaveableMissionBrief,
   missionBriefContentKey,
   missionBriefMetadata,
+  missionReleaseDateKey,
   serializeMissionBriefBody,
   type MissionBrief,
   type MissionReference,
@@ -228,12 +229,12 @@ export function MissionBriefDrawer({
                 />
               </Field>
               <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Release Target">
+                <Field label="Release date">
                   <input
-                    value={draft.timeline ?? ''}
-                    onChange={(event) => setDraft((value) => ({ ...value, timeline: event.target.value }))}
+                    type="date"
+                    value={missionReleaseDateKey(draft) ?? ''}
+                    onChange={(event) => setDraft((value) => ({ ...value, releaseDate: event.target.value || undefined }))}
                     className={missionFieldClass}
-                    placeholder="June 30, next month, this summer..."
                   />
                 </Field>
                 <Field label="Promo Budget">
@@ -245,6 +246,14 @@ export function MissionBriefDrawer({
                   />
                 </Field>
               </div>
+              <Field label="Timeline">
+                <input
+                  value={draft.timeline ?? ''}
+                  onChange={(event) => setDraft((value) => ({ ...value, timeline: event.target.value }))}
+                  className={missionFieldClass}
+                  placeholder="Release week, next month, this summer..."
+                />
+              </Field>
               <Field label="Mood">
                 <textarea
                   value={draft.mood ?? ''}

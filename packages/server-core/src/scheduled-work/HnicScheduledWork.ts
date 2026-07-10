@@ -50,9 +50,11 @@ export async function persistHnicScheduleWork(options: ScheduleWorkPersistenceOp
   return persistCalendarWork(options, execution)
 }
 
-export function inferScheduledWorkScope(workspace: { id: string; name: string; slug?: string }): WorkspaceScope {
-  const text = `${workspace.name} ${workspace.slug ?? ''} ${workspace.id}`.toLowerCase()
-  return /\b(m|master|artist hq|global|hq|my workspace|my-workspace)\b/.test(text) ? 'hq' : 'campaign'
+export function inferScheduledWorkScope(workspace: { artistWorkspaceScope?: WorkspaceScope }): WorkspaceScope {
+  if (!workspace.artistWorkspaceScope) {
+    throw new Error('Workspace is missing its persisted artist calendar scope. Restart RunnerOS to migrate workspace metadata.')
+  }
+  return workspace.artistWorkspaceScope
 }
 
 function resolveExecution(rootPath: string, input: ScheduleWorkToolInput['execution']): ScheduledWorkExecution {
@@ -242,6 +244,7 @@ async function persistAutomation(options: ScheduleWorkPersistenceOptions, execut
     }
     config.automations ??= {}
     for (const existingMatchers of Object.values(config.automations)) {
+      if (!Array.isArray(existingMatchers)) throw new Error('Automation config contains a non-list event entry.')
       const existing = existingMatchers.find((candidate) => candidate.scheduleWorkKey === options.input.idempotencyKey)
       if (!existing) continue
       if (existing.scheduleWorkDigest !== definitionDigest) {

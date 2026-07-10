@@ -8,6 +8,7 @@ import {
   createScheduledWorkComposerDraft,
   selectScheduledWorkComposerType,
   validateComposerDraft,
+  validateComposerSection,
 } from './scheduled-work-composer'
 
 const defaults = {
@@ -67,6 +68,17 @@ describe('scheduled work composer drafts', () => {
       brief: 'Prepare copy.',
     }
     expect(validateComposerDraft(agent)).toBe('Choose an active agent.')
+  })
+
+  test('blocks each wizard section at the field that needs attention', () => {
+    const initial = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'agent-task' })
+    if (initial.type !== 'agent-task') throw new Error('Expected agent draft')
+
+    expect(validateComposerSection(initial, 'inputs')).toBe('Add a title.')
+    expect(validateComposerSection({ ...initial, title: 'Draft copy' }, 'inputs')).toBe('Add a clear brief.')
+    expect(validateComposerSection({ ...initial, title: 'Draft copy', brief: 'Write it.' }, 'inputs')).toBeUndefined()
+    expect(validateComposerSection(initial, 'runner')).toBe('Choose an active agent.')
+    expect(validateComposerSection({ ...initial, agentSlug: 'writer' }, 'timing')).toBe('Choose a start time.')
   })
 
   test('writes a plain-language footer summary', () => {

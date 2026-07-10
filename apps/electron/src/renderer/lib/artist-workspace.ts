@@ -2,6 +2,7 @@ export interface ArtistWorkspaceLike {
   id: string
   name: string
   slug?: string
+  artistWorkspaceScope?: 'hq' | 'campaign'
 }
 
 export function isArtistHQWorkspace(
@@ -9,6 +10,7 @@ export function isArtistHQWorkspace(
   _workspaces: ArtistWorkspaceLike[],
 ): boolean {
   if (!workspace) return false
+  if (workspace.artistWorkspaceScope) return workspace.artistWorkspaceScope === 'hq'
   const text = `${workspace.name} ${workspace.slug ?? ''}`.toLowerCase()
   return /\b(m|master|artist hq|global|hq|my workspace|my-workspace)\b/.test(text)
 }

@@ -154,6 +154,7 @@ test('dry-runs an Instagram comment', () => {
     'comment', 'instagram',
     '--profile', 'smoke',
     '--url', 'https://www.instagram.com/p/test/',
+    '--reply-to', 'comment-123',
     '--text', 'nice post',
     '--dry-run',
     '--json',
@@ -162,6 +163,8 @@ test('dry-runs an Instagram comment', () => {
   assert.equal(result.ok, true);
   assert.equal(result.action.verb, 'comment');
   assert.equal(result.action.payload.targetUrl, 'https://www.instagram.com/p/test/');
+  assert.equal(result.action.payload.replyTo, 'comment-123');
+  assert.match(result.browserPlan.steps.join(' '), /comment-123/);
 });
 
 test('dry-runs an Instagram dm', () => {
@@ -171,6 +174,7 @@ test('dry-runs an Instagram dm', () => {
     'dm', 'instagram',
     '--profile', 'smoke',
     '--to', 'testuser',
+    '--thread-url', 'https://www.instagram.com/direct/t/123/',
     '--text', 'hello',
     '--dry-run',
     '--json',
@@ -179,6 +183,8 @@ test('dry-runs an Instagram dm', () => {
   assert.equal(result.ok, true);
   assert.equal(result.action.verb, 'dm');
   assert.equal(result.action.payload.recipient, 'testuser');
+  assert.equal(result.action.payload.threadUrl, 'https://www.instagram.com/direct/t/123/');
+  assert.match(result.browserPlan.steps.join(' '), /exact existing DM thread/);
 });
 
 test('sets require-confirm policy on a profile', () => {

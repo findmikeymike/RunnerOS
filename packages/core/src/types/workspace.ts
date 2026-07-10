@@ -26,6 +26,7 @@ export interface WorkspaceInfo {
   id: string;
   name: string;
   slug: string;              // Server-computed from rootPath basename
+  artistWorkspaceScope?: 'hq' | 'campaign';
   lastAccessedAt?: number;
   iconUrl?: string;
   mcpUrl?: string;
@@ -71,4 +72,3 @@ export interface StoredConfig {
   activeSessionId: string | null;  // Currently active session (primary scope)
   model?: string;
 }
-

@@ -238,6 +238,7 @@ async function handleProfile(command, flags) {
 async function handleYouTubeComment(flags) {
   const action = buildYouTubeTextAction('comment', flags, {
     targetUrl: flags.url || flags['target-url'],
+    replyTo: flags['reply-to'] || null,
   });
   if (!action.payload.targetUrl) {
     throw new CliError('YouTube comment needs --url', 'MISSING_TARGET_URL');
@@ -245,8 +246,14 @@ async function handleYouTubeComment(flags) {
   validateTextAction(action, 10000);
 
   if (flags['dry-run']) {
-    writeResult(dryRunResult(action, ['open target video', 'focus comment field', 'enter comment', 'submit']), flags.json);
+    const steps = action.payload.replyTo
+      ? ['open target video', `locate exact comment ${action.payload.replyTo}`, 'open its reply field', 'enter reply', 'submit']
+      : ['open target video', 'focus comment field', 'enter comment', 'submit'];
+    writeResult(dryRunResult(action, steps), flags.json);
     return;
+  }
+  if (action.payload.replyTo) {
+    throw new CliError('Exact YouTube replies require the guarded Runner browser handoff', 'EXACT_REPLY_REQUIRES_RUNNER_HANDOFF');
   }
 
   const profile = getProfile('youtube', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
@@ -860,7 +867,7 @@ YouTube MVP:
   social profile delete youtube --profile channel01 --json
   social post youtube --profile channel01 --post-type video --text "Video title" --media video.mp4 --visibility public --dry-run --json
   social post youtube --profile channel01 --post-type short --text "Short title" --media short.mp4 --visibility public --engine playwright --confirm yes --json
-  social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --text "comment" --dry-run --json
+  social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --reply-to "comment-id-or-permalink" --text "reply" --dry-run --json
   social comment youtube --profile channel01 --url "https://www.youtube.com/watch?v=..." --text "comment" --engine playwright --confirm yes --json
 
 Global env:

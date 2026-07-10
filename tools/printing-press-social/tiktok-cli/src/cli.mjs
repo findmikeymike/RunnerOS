@@ -243,6 +243,7 @@ async function handleProfile(command, flags) {
 async function handleTikTokComment(flags) {
   const action = buildTikTokTextAction('comment', flags, {
     targetUrl: flags.url || flags['target-url'],
+    replyTo: flags['reply-to'] || null,
   });
   if (!action.payload.targetUrl) {
     throw new CliError('TikTok comment needs --url', 'MISSING_TARGET_URL');
@@ -250,8 +251,14 @@ async function handleTikTokComment(flags) {
   validateTextAction(action, 2200);
 
   if (flags['dry-run']) {
-    writeResult(dryRunResult(action, ['open target post', 'focus comment field', 'enter comment', 'submit']), flags.json);
+    const steps = action.payload.replyTo
+      ? ['open target post', `locate exact comment ${action.payload.replyTo}`, 'open its reply field', 'enter reply', 'submit']
+      : ['open target post', 'focus comment field', 'enter comment', 'submit'];
+    writeResult(dryRunResult(action, steps), flags.json);
     return;
+  }
+  if (action.payload.replyTo) {
+    throw new CliError('Exact TikTok replies require the guarded Runner browser handoff', 'EXACT_REPLY_REQUIRES_RUNNER_HANDOFF');
   }
 
   const profile = getProfile('tiktok', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
@@ -275,6 +282,7 @@ async function handleTikTokComment(flags) {
 async function handleTikTokDm(flags) {
   const action = buildTikTokTextAction('dm', flags, {
     recipient: flags.to || flags.recipient,
+    threadUrl: flags['thread-url'] || null,
   });
   if (!action.payload.recipient) {
     throw new CliError('TikTok DM needs --to <username>', 'MISSING_RECIPIENT');
@@ -282,8 +290,14 @@ async function handleTikTokDm(flags) {
   validateTextAction(action, 1000);
 
   if (flags['dry-run']) {
-    writeResult(dryRunResult(action, ['open inbox', 'start message', 'select recipient', 'enter message', 'send']), flags.json);
+    const steps = action.payload.threadUrl
+      ? ['open exact existing DM thread', `verify recipient ${action.payload.recipient}`, 'enter reply', 'send']
+      : ['open inbox', 'start message', 'select recipient', 'enter message', 'send'];
+    writeResult(dryRunResult(action, steps), flags.json);
     return;
+  }
+  if (action.payload.threadUrl) {
+    throw new CliError('Exact TikTok DM threads require the guarded Runner browser handoff', 'EXACT_THREAD_REQUIRES_RUNNER_HANDOFF');
   }
 
   const profile = getProfile('tiktok', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
@@ -835,7 +849,7 @@ TikTok MVP:
   social profile delete tiktok --profile artist01 --json
   social post tiktok --profile artist01 --text "caption" --media video.mp4 --dry-run --json
   social post tiktok --profile artist01 --text "caption" --media video.mp4 --engine playwright --confirm yes --json
-  social comment tiktok --profile artist01 --url "https://www.tiktok.com/@user/video/123" --text "comment" --dry-run --json
+  social comment tiktok --profile artist01 --url "https://www.tiktok.com/@user/video/123" --reply-to "comment-id-or-permalink" --text "reply" --dry-run --json
   social comment tiktok --profile artist01 --url "https://www.tiktok.com/@user/video/123" --text "comment" --engine playwright --confirm yes --json
   social dm tiktok --profile artist01 --to username --text "message" --dry-run --json
   social dm tiktok --profile artist01 --to username --text "message" --engine playwright --confirm yes --json

@@ -13,6 +13,7 @@ import { createCampaignCalendarItem } from '@craft-agent/shared/campaign-calenda
 import type { QueueWorkAction } from '@craft-agent/shared/automations'
 
 export type ScheduledWorkComposerType = 'event' | 'agent-task' | 'workflow-run' | 'social-publish' | 'review'
+export type ScheduledWorkComposerSection = 'what' | 'runner' | 'inputs' | 'timing' | 'then' | 'safeguards'
 
 interface ComposerBase {
   requestId: string
@@ -167,6 +168,44 @@ export function validateComposerDraft(draft: ScheduledWorkComposerDraft): string
   }
   const followUpError = validateFollowUp(draft)
   if (followUpError) return followUpError
+  return undefined
+}
+
+export function validateComposerSection(
+  draft: ScheduledWorkComposerDraft,
+  section: ScheduledWorkComposerSection,
+): string | undefined {
+  if (section === 'inputs') {
+    if (!draft.title.trim()) return 'Add a title.'
+    if (draft.type === 'agent-task' && !draft.brief.trim()) return 'Add a clear brief.'
+    if (draft.type === 'social-publish') {
+      if (!draft.caption.trim()) return 'Add the final caption.'
+      if (draft.inputRefs.length !== 1 || (draft.inputRefs[0]?.kind !== 'final' && draft.inputRefs[0]?.kind !== 'output')) {
+        return 'Choose one exact Output or Final.'
+      }
+      return validateSocialPlatformOptions(draft.platform, draft.platformOptions)
+    }
+    if (draft.type === 'review' && (
+      draft.inputRefs.length === 0
+      || draft.inputRefs.some(ref => ref.kind !== 'final' && ref.kind !== 'output')
+    )) {
+      return 'Choose an Output or Final to review.'
+    }
+    return undefined
+  }
+  if (section === 'runner') {
+    if (draft.type === 'agent-task' && !draft.agentSlug) return 'Choose an active agent.'
+    if (draft.type === 'workflow-run' && !draft.workflowSlug) return 'Choose an active workflow.'
+    if (draft.type === 'social-publish' && !draft.profileId) return 'Choose one ready social profile.'
+    if (draft.type === 'review' && !draft.reviewerId && draft.reviewerType !== 'user') return 'Choose a reviewer.'
+    return undefined
+  }
+  if (section === 'timing') {
+    if (!draft.date) return 'Choose a date.'
+    if (draft.type !== 'event' && !draft.time) return 'Choose a start time.'
+    return undefined
+  }
+  if (section === 'then' && draft.type !== 'event') return validateFollowUp(draft)
   return undefined
 }
 

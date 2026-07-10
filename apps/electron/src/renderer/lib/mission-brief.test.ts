@@ -5,6 +5,7 @@ import {
   hasSaveableMissionBrief,
   missionBriefContentKey,
   missionBriefMetadata,
+  missionReleaseDateKey,
   parseMissionBriefDoc,
   serializeMissionBriefBody,
 } from './mission-brief'
@@ -94,5 +95,23 @@ describe('mission brief utilities', () => {
 
     expect(brief.releaseDate).toBe('2026-06-30')
     expect(missionBriefMetadata(brief).deadline).toBe('2026-06-30')
+  })
+
+  test('projects exact release dates into a stable calendar day', () => {
+    const exact = buildMissionBrief('workspace-1', {
+      missionType: 'album',
+      title: 'Night Drive',
+      goal: 'Launch the album.',
+      releaseDate: '2026-07-24',
+    })
+
+    expect(missionReleaseDateKey(exact)).toBe('2026-07-24')
+    expect(exact.completeness).toBeGreaterThanOrEqual(70)
+    expect(exact.status).toBe('full')
+  })
+
+  test('accepts dated campaign context but ignores fuzzy release targets', () => {
+    expect(missionReleaseDateKey({ releaseDate: 'July 24, 2026' })).toBe('2026-07-24')
+    expect(missionReleaseDateKey({ releaseDate: 'this summer' })).toBeUndefined()
   })
 })

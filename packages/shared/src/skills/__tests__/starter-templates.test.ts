@@ -151,6 +151,16 @@ describe('BUNDLED_STARTER_SKILLS', () => {
     expect(engine?.content).toContain('realism_doctrine');
   });
 
+  it('bundles delegated social engagement guidance', () => {
+    const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'social-publishing');
+    expect(skill).toBeDefined();
+    expect(getSkillMd(skill!)).toContain('bounded engagement mandate');
+    const playbook = skill!.files.find(file => file.path === 'references/engagement-playbook.md');
+    expect(playbook?.content).toContain('Do not ask for approval on every reply');
+    expect(playbook?.content).toContain('commentReplyExamples');
+    expect(playbook?.content).toContain('Never copy full private threads');
+  });
+
   it('includes artist-industry-hunter for the Industry Hunter worker', () => {
     const skill = BUNDLED_STARTER_SKILLS.find(s => s.slug === 'artist-industry-hunter');
     expect(skill).toBeDefined();

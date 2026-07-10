@@ -246,6 +246,7 @@ async function handleProfile(command, flags) {
 async function handleXComment(flags) {
   const action = buildXTextAction('comment', flags, {
     targetUrl: flags.url || flags['target-url'],
+    replyTo: flags['reply-to'] || null,
   });
   if (!action.payload.targetUrl) {
     throw new CliError('X comment needs --url', 'MISSING_TARGET_URL');
@@ -253,8 +254,14 @@ async function handleXComment(flags) {
   validateTextAction(action, 280);
 
   if (flags['dry-run']) {
-    writeResult(dryRunResult(action, ['open target post', 'focus comment field', 'enter comment', 'submit']), flags.json);
+    const steps = action.payload.replyTo
+      ? ['open target post', `locate exact reply target ${action.payload.replyTo}`, 'open its reply field', 'enter reply', 'submit']
+      : ['open target post', 'focus comment field', 'enter comment', 'submit'];
+    writeResult(dryRunResult(action, steps), flags.json);
     return;
+  }
+  if (action.payload.replyTo) {
+    throw new CliError('Exact X replies require the guarded Runner browser handoff', 'EXACT_REPLY_REQUIRES_RUNNER_HANDOFF');
   }
 
   const profile = getProfile('x', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
@@ -278,6 +285,7 @@ async function handleXComment(flags) {
 async function handleXDm(flags) {
   const action = buildXTextAction('dm', flags, {
     recipient: flags.to || flags.recipient,
+    threadUrl: flags['thread-url'] || null,
   });
   if (!action.payload.recipient) {
     throw new CliError('X DM needs --to <username>', 'MISSING_RECIPIENT');
@@ -285,8 +293,14 @@ async function handleXDm(flags) {
   validateTextAction(action, 1000);
 
   if (flags['dry-run']) {
-    writeResult(dryRunResult(action, ['open inbox', 'start message', 'select recipient', 'enter message', 'send']), flags.json);
+    const steps = action.payload.threadUrl
+      ? ['open exact existing DM thread', `verify recipient ${action.payload.recipient}`, 'enter reply', 'send']
+      : ['open inbox', 'start message', 'select recipient', 'enter message', 'send'];
+    writeResult(dryRunResult(action, steps), flags.json);
     return;
+  }
+  if (action.payload.threadUrl) {
+    throw new CliError('Exact X DM threads require the guarded Runner browser handoff', 'EXACT_THREAD_REQUIRES_RUNNER_HANDOFF');
   }
 
   const profile = getProfile('x', action.profile, { allowSmoke: smokeProfileAllowed(flags) });
@@ -871,7 +885,7 @@ X MVP:
   social profile delete x --profile artist01 --json
   social post x --profile artist01 --text "post text" --dry-run --json
   social post x --profile artist01 --text "post text" --media image.jpg --engine playwright --confirm yes --json
-  social comment x --profile artist01 --url "https://x.com/user/status/123" --text "reply" --dry-run --json
+  social comment x --profile artist01 --url "https://x.com/user/status/123" --reply-to "reply-id-or-permalink" --text "reply" --dry-run --json
   social comment x --profile artist01 --url "https://x.com/user/status/123" --text "reply" --engine playwright --confirm yes --json
   social dm x --profile artist01 --to username --text "message" --dry-run --json
   social dm x --profile artist01 --to username --text "message" --engine playwright --confirm yes --json

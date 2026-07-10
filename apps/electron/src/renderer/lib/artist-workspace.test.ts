@@ -2,6 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistHQWorkspace } from './artist-workspace'
 
 describe('artist workspace helpers', () => {
+  test('prefers persisted scope over a misleading workspace name', () => {
+    const workspace = { id: 'campaign', name: 'Global HQ Launch', artistWorkspaceScope: 'campaign' as const }
+    expect(isArtistHQWorkspace(workspace, [workspace])).toBe(false)
+  })
+
   test('recognizes the global artist HQ workspace', () => {
     const workspaces = [
       { id: 'song-1', name: 'Night Drive' },
