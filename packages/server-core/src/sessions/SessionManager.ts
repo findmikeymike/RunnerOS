@@ -3070,8 +3070,8 @@ export class SessionManager implements ISessionManager {
           }
           if (replaceBuiltInAgentPromptText(
             CONCIERGE_SLUG,
-            '  - If the job is repeatable, suggest an automation.',
-            '  - If the job is repeatable, design it as an automation; after confirmation, call `schedule_work`.\n  - If the user wants one agent task or workflow at a future time, confirm the exact schedule and call `schedule_work` for Calendar.',
+            '- If the job is repeatable, suggest an automation.',
+            '- If the job is repeatable, design it as an automation; after confirmation, call `schedule_work`.\n- If the user wants one agent task or workflow at a future time, confirm the exact schedule and call `schedule_work` for Calendar.',
           ).updated) {
             sessionLog.info('[agent-definitions] Added HNIC scheduled-work routing')
           }
