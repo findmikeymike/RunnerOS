@@ -45,6 +45,7 @@ describe('session tool filtering helpers', () => {
   });
 
   it('can hide schedule_work from non-HNIC sessions', () => {
+    expect(getSessionToolNames().has('schedule_work')).toBe(false);
     expect(getSessionToolNames({ includeScheduleWork: false }).has('schedule_work')).toBe(false);
     expect(getSessionToolNames({ includeScheduleWork: true }).has('schedule_work')).toBe(true);
   });

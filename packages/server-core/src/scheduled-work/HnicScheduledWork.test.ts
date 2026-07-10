@@ -1,0 +1,139 @@
+import { afterEach, describe, expect, mock, test } from 'bun:test'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import type { ScheduleWorkToolInput } from '@craft-agent/session-tools-core'
+import * as actualAgentDefinitions from '@craft-agent/shared/agent-definitions'
+import { CAMPAIGN_CALENDAR_CONTEXT_SLUG, campaignCalendarMetadata, parseCampaignCalendarDocResult, serializeCampaignCalendarBody } from '@craft-agent/shared/campaign-calendar'
+import { resolveAutomationsConfigPath } from '@craft-agent/shared/automations/resolve-config-path'
+import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult } from '@craft-agent/shared/scheduled-work'
+import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
+import { persistHnicScheduleWork } from './HnicScheduledWork'
+
+mock.module('@craft-agent/shared/agent-definitions', () => ({
+  ...actualAgentDefinitions,
+  readActivatedAgents: (rootPath: string) => rootPath.includes('hnic-scheduled-work-')
+    ? { version: 1, active: ['youtube-intel'] }
+    : actualAgentDefinitions.readActivatedAgents(rootPath),
+  loadGlobalAgent: (slug: string) => slug === 'youtube-intel'
+    ? { slug, metadata: { name: 'YouTube Intel', description: 'Creates reports.' }, systemPrompt: 'Research.', path: '/tmp/youtube-intel', source: 'global' }
+    : actualAgentDefinitions.loadGlobalAgent(slug),
+}))
+
+const roots: string[] = []
+
+function createRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), 'hnic-scheduled-work-'))
+  roots.push(root)
+  return root
+}
+
+function input(overrides: Partial<ScheduleWorkToolInput> = {}): ScheduleWorkToolInput {
+  return {
+    idempotencyKey: 'weekly-youtube-report',
+    destination: 'calendar',
+    title: 'Weekly YouTube report',
+    explanation: 'The user confirmed this schedule.',
+    startAt: '2026-07-15T14:00:00.000Z',
+    timezone: 'America/Chicago',
+    execution: {
+      type: 'agent-task',
+      agentSlug: 'youtube-intel',
+      brief: 'Create the weekly YouTube intelligence report.',
+      expectedOutput: { requirement: 'required', kind: 'report' },
+    },
+    ...overrides,
+  }
+}
+
+function options(root: string, workInput: ScheduleWorkToolInput, scope: 'hq' | 'campaign' = 'campaign') {
+  return {
+    workspaceId: 'campaign-1',
+    workspaceRootPath: root,
+    scope,
+    input: workInput,
+    onContextChanged: () => {},
+    withAutomationLock: async <T>(_path: string, callback: () => Promise<T>) => callback(),
+    writeFileAtomic: async (path: string, data: string) => {
+      await mkdir(dirname(path), { recursive: true })
+      await writeFile(path, data, 'utf-8')
+    },
+  }
+}
+
+afterEach(async () => {
+  while (roots.length) await rm(roots.pop()!, { recursive: true, force: true })
+})
+
+describe('persistHnicScheduleWork', () => {
+  test('writes one idempotent work order and linked campaign item', async () => {
+    const root = createRoot()
+    const first = await persistHnicScheduleWork(options(root, input()))
+    const second = await persistHnicScheduleWork(options(root, input()))
+
+    expect(second).toEqual(first)
+    const work = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    const calendar = parseCampaignCalendarDocResult(loadContextDoc(root, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    if (!work.ok) throw new Error(work.error)
+    if (!calendar.ok) throw new Error(calendar.error)
+    expect(work.work.items).toHaveLength(1)
+    expect(calendar.calendar.items).toHaveLength(1)
+    expect(calendar.calendar.items[0]?.scheduledWorkId).toBe(work.work.items[0]?.id)
+  })
+
+  test('rejects reusing an idempotency key for different work', async () => {
+    const root = createRoot()
+    await persistHnicScheduleWork(options(root, input()))
+    await expect(persistHnicScheduleWork(options(root, input({ title: 'Different report' })))).rejects.toThrow(/idempotencyKey/)
+  })
+
+  test('heals a missing campaign shell without duplicating the work order', async () => {
+    const root = createRoot()
+    await persistHnicScheduleWork(options(root, input()))
+    upsertContextDoc(root, {
+      slug: CAMPAIGN_CALENDAR_CONTEXT_SLUG,
+      metadata: campaignCalendarMetadata(),
+      body: serializeCampaignCalendarBody({ version: 1, campaignId: 'campaign-1', items: [], updatedAt: '2026-07-15T00:00:00.000Z' }),
+    })
+
+    await persistHnicScheduleWork(options(root, input()))
+    const work = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    const calendar = parseCampaignCalendarDocResult(loadContextDoc(root, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    if (!work.ok) throw new Error(work.error)
+    if (!calendar.ok) throw new Error(calendar.error)
+    expect(work.work.items).toHaveLength(1)
+    expect(calendar.calendar.items).toHaveLength(1)
+  })
+
+  test('writes HQ work to the global calendar contract', async () => {
+    const root = createRoot()
+    await persistHnicScheduleWork(options(root, input(), 'hq'))
+    const work = parseScheduledWorkDocResult(loadContextDoc(root, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, 'campaign-1')
+    if (!work.ok) throw new Error(work.error)
+
+    expect(work.work.items[0]?.owner).toEqual({ scope: 'hq', workspaceId: 'campaign-1' })
+    expect(loadContextDoc(root, 'artist-calendar')?.body).toContain(work.work.items[0]!.id)
+  })
+
+  test('writes one hidden scheduled automation and reuses it on retry', async () => {
+    const root = createRoot()
+    const automationInput = input({
+      destination: 'automation',
+      startAt: undefined,
+      showOnCalendar: false,
+      trigger: { type: 'schedule', cron: '0 9 * * 1', timezone: 'America/Chicago' },
+    })
+    const first = await persistHnicScheduleWork(options(root, automationInput))
+    const second = await persistHnicScheduleWork(options(root, automationInput))
+    const config = await Bun.file(resolveAutomationsConfigPath(root)).json()
+
+    expect(second.id).toBe(first.id)
+    expect(config.automations.SchedulerTick).toHaveLength(1)
+    expect(config.automations.SchedulerTick[0].actions[0]).toMatchObject({
+      type: 'queue-work',
+      ownerScope: 'campaign',
+      calendarVisibility: 'hidden',
+    })
+  })
+})

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
+const MAX_VISIBLE_DAY_ITEMS = 6
+
 export interface CalendarDayMenuItem {
   id: string
   label: string
@@ -63,13 +65,13 @@ export function CalendarMonthGrid({
 
   const openMenu = React.useCallback((date: string, x: number, y: number) => {
     onSelectDate(date)
-    if (dayActions.length === 0) return
+    if (dayActions.length === 0 && (dayMetaByDate.get(date)?.items?.length ?? 0) === 0) return
     setMenu({
       date,
       x: Math.max(8, Math.min(x, window.innerWidth - 248)),
       y: Math.max(8, Math.min(y, window.innerHeight - 360)),
     })
-  }, [dayActions.length, onSelectDate])
+  }, [dayActions.length, dayMetaByDate, onSelectDate])
 
   return (
     <div className="rounded-[16px] border border-white/[0.05] bg-black/20 p-2.5">
@@ -104,6 +106,8 @@ export function CalendarMonthGrid({
           const count = meta?.count ?? 0
           const dots = meta?.dots ?? (count > 0 ? ['bg-orange-400/80'] : [])
           const items = meta?.items ?? []
+          const visibleItems = items.slice(0, MAX_VISIBLE_DAY_ITEMS)
+          const hiddenItemCount = items.length - visibleItems.length
           const isSelected = key === selectedDate
           const isToday = key === todayKey
           const isCurrentMonth = day.getMonth() === visibleMonth.getMonth()
@@ -123,7 +127,7 @@ export function CalendarMonthGrid({
                 event.preventDefault()
                 openMenu(key, event.clientX, event.clientY)
               }}
-              aria-haspopup={dayActions.length > 0 ? 'menu' : undefined}
+              aria-haspopup={dayActions.length > 0 || items.length > 0 ? 'menu' : undefined}
               className={cn(
                 'flex min-h-[56px] flex-col rounded-[10px] border p-1.5 text-left transition-colors',
                 isSelected
@@ -136,8 +140,8 @@ export function CalendarMonthGrid({
                 {day.getDate()}
               </span>
               {items.length > 0 ? (
-                <div className="mt-auto flex flex-wrap gap-1.5 pt-1.5">
-                  {items.map((item, index) => (
+                <div className="mt-auto flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden pt-1.5">
+                  {visibleItems.map((item, index) => (
                     <button
                       key={item.id}
                       type="button"
@@ -148,9 +152,23 @@ export function CalendarMonthGrid({
                         onSelectDate(key)
                         onSelectItem?.(key, item.id)
                       }}
-                      className={cn('size-2.5 rounded-[2px] ring-1 ring-white/15 transition-transform hover:scale-125', item.markerClass ?? dots[index % Math.max(dots.length, 1)] ?? 'bg-orange-400/85')}
+                      className={cn('size-2.5 shrink-0 rounded-[2px] ring-1 ring-white/15 transition-transform hover:scale-125', item.markerClass ?? dots[index % Math.max(dots.length, 1)] ?? 'bg-orange-400/85')}
                     />
                   ))}
+                  {hiddenItemCount > 0 ? (
+                    <button
+                      type="button"
+                      title={`Open ${hiddenItemCount} more items`}
+                      aria-label={`Open ${hiddenItemCount} more items`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        openMenu(key, event.clientX, event.clientY)
+                      }}
+                      className="shrink-0 text-[9px] font-semibold text-white/48 hover:text-white/80"
+                    >
+                      +{hiddenItemCount}
+                    </button>
+                  ) : null}
                 </div>
               ) : dots.length > 0 ? (
                 <div className="mt-auto flex gap-1.5 pt-1.5">

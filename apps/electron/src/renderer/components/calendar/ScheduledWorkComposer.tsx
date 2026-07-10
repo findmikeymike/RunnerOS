@@ -25,8 +25,10 @@ import {
   createScheduledWorkComposerDraft,
   selectScheduledWorkComposerType,
   validateComposerDraft,
+  validateComposerSection,
   type ScheduledWorkComposerDraft,
   type ScheduledWorkComposerFollowUp,
+  type ScheduledWorkComposerSection,
   type ScheduledWorkComposerType,
 } from '@/lib/scheduled-work-composer'
 import { Button } from '@/components/ui/button'
@@ -53,7 +55,7 @@ export interface ScheduledWorkComposerProps {
   timingMode?: 'scheduled' | 'triggered'
 }
 
-type ComposerSection = 'what' | 'runner' | 'inputs' | 'timing' | 'then' | 'safeguards'
+type ComposerSection = ScheduledWorkComposerSection
 type SocialProfile = { platform: string; profileId: string; label: string; accountSetId: string; ready: boolean }
 
 const QUEUE_OPTIONS: Array<{
@@ -123,9 +125,14 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
     const submittedDraft = timingMode === 'triggered' && draft.type !== 'event'
       ? withCurrentTiming(draft)
       : draft
-    const validationError = validateComposerDraft(submittedDraft)
-      ?? validateLiveTarget(submittedDraft, activeAgents, activeWorkflows, profiles)
+    const invalidSection = visibleSections(submittedDraft, allowFollowUps, timingMode).find(candidate => (
+      validateSection(submittedDraft, candidate, activeAgents, activeWorkflows, profiles)
+    ))
+    const validationError = invalidSection
+      ? validateSection(submittedDraft, invalidSection, activeAgents, activeWorkflows, profiles)
+      : validateComposerDraft(submittedDraft) ?? validateLiveTarget(submittedDraft, activeAgents, activeWorkflows, profiles)
     if (validationError) {
+      if (invalidSection) setSection(invalidSection)
       setError(validationError)
       return
     }
@@ -139,7 +146,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
     } finally {
       setBusy(false)
     }
-  }, [activeAgents, activeWorkflows, draft, onOpenChange, onSubmit, profiles, timingMode])
+  }, [activeAgents, activeWorkflows, allowFollowUps, draft, onOpenChange, onSubmit, profiles, timingMode])
 
   const queueOptions = QUEUE_OPTIONS.filter((option) => option.type !== 'event' && (!allowedTypes || allowedTypes.includes(option.type)))
   const sections = visibleSections(draft, allowFollowUps, timingMode)
@@ -151,6 +158,11 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
     if (activeIndex > 0) setSection(sections[activeIndex - 1])
   }
   const goNext = () => {
+    const validationError = validateSection(draft, activeSection, activeAgents, activeWorkflows, profiles)
+    if (validationError) {
+      setError(validationError)
+      return
+    }
     setError(null)
     if (!isLastSection) setSection(sections[activeIndex + 1])
   }
@@ -780,6 +792,21 @@ function validateLiveTarget(
   if (draft.type === 'social-publish') {
     const profile = profiles.find((candidate) => candidate.platform === draft.platform && candidate.profileId === draft.profileId)
     if (!profile?.ready) return 'That social profile is no longer ready. Choose another profile or fix its login.'
+  }
+  return undefined
+}
+
+function validateSection(
+  draft: ScheduledWorkComposerDraft,
+  section: ComposerSection,
+  activeAgents: ReturnType<typeof useAgents>['activeAgents'],
+  activeWorkflows: WorkflowDTO[],
+  profiles: SocialProfile[],
+): string | undefined {
+  const sectionError = validateComposerSection(draft, section)
+  if (sectionError) return sectionError
+  if (section === 'runner' || (section === 'inputs' && draft.type === 'workflow-run')) {
+    return validateLiveTarget(draft, activeAgents, activeWorkflows, profiles)
   }
   return undefined
 }

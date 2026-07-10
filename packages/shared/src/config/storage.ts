@@ -94,6 +94,34 @@ export interface StoredConfig {
   migrationsApplied?: string[];
 }
 
+const LEGACY_HQ_WORKSPACE_NAMES = new Set([
+  'm',
+  'master',
+  'global',
+  'hq',
+  'artist hq',
+  'artist-hq',
+  'my workspace',
+  'my-workspace',
+]);
+
+export function assignMissingArtistWorkspaceScopes(workspaces: Workspace[]): boolean {
+  const missing = workspaces.filter(workspace => !workspace.artistWorkspaceScope);
+  if (missing.length === 0) return false;
+
+  const explicitHq = workspaces.find(workspace => workspace.artistWorkspaceScope === 'hq');
+  const legacyHq = explicitHq ?? missing.find(workspace => {
+    const name = workspace.name.trim().toLowerCase();
+    const slug = workspace.slug?.trim().toLowerCase();
+    return LEGACY_HQ_WORKSPACE_NAMES.has(name) || Boolean(slug && LEGACY_HQ_WORKSPACE_NAMES.has(slug));
+  }) ?? [...missing].sort((a, b) => a.createdAt - b.createdAt)[0];
+
+  for (const workspace of missing) {
+    workspace.artistWorkspaceScope = workspace.id === legacyHq?.id ? 'hq' : 'campaign';
+  }
+  return true;
+}
+
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 const CONFIG_DEFAULTS_FILE = join(CONFIG_DIR, 'config-defaults.json');
 
@@ -239,6 +267,10 @@ export function loadStoredConfig(): StoredConfig | null {
     // Expand path variables (~ and ${HOME}) for portability
     for (const workspace of config.workspaces) {
       workspace.rootPath = expandPath(workspace.rootPath);
+    }
+
+    if (assignMissingArtistWorkspaceScopes(config.workspaces)) {
+      saveConfig(config);
     }
 
     // Validate active workspace exists
@@ -727,6 +759,7 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt' | 'sl
 
   const newWorkspace: Workspace = {
     ...workspace,
+    artistWorkspaceScope: workspace.artistWorkspaceScope ?? (config.workspaces.length === 0 ? 'hq' : 'campaign'),
     slug,
     id: generateWorkspaceId(),
     createdAt: Date.now(),
@@ -773,6 +806,7 @@ export function syncWorkspaces(): void {
       name: wsConfig.name,
       slug: extractWorkspaceSlugFromPath(rootPath, ''),
       rootPath,
+      artistWorkspaceScope: config.workspaces.length === 0 ? 'hq' : 'campaign',
       createdAt: wsConfig.createdAt || Date.now(),
     };
 
