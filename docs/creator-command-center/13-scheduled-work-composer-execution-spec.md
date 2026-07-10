@@ -1159,13 +1159,14 @@ Automations extends this system with event-driven timing. It does not introduce 
 
 - Automations owns **when** work is requested: recurring schedule, file change, signed webhook, URL change, or inbound message.
 - Scheduled Work owns **execution and lifecycle**: target validation, idempotency, chaining, approvals, retries, recovery, Outputs, workflow runs, sessions, and external receipts.
-- Calendar owns **visibility**: every triggered run receives an HQ or Campaign Calendar shell linked to its Scheduled Work order.
+- Calendar owns **optional visibility**: event-worthy runs receive an HQ or Campaign Calendar shell. Background agent/workflow runs may explicitly opt out while remaining fully tracked Scheduled Work.
 - One automation definition may create many deterministic work runs. Redelivery uses a stable source key when available: signed webhook delivery, messaging platform/channel/message id, URL fingerprint transition, or scheduler tick. The same matcher, source key, and action resolve to the same work-order ids even when receipt time changes.
 - Trigger variables may populate titles, briefs, workflow inputs, and captions, but the expanded action is validated again before any work is written.
 - Workflow definitions and active agent/workflow status are revalidated at trigger time. A stale target fails visibly in automation history and creates no partial work.
 - Social work never inherits approval from the automation. Exact-asset approval remains bound to the resulting Scheduled Work payload and is required near execution.
 - Supported Campaign chains remain deliberately narrow: Agent -> Review, Agent -> Workflow, Workflow -> Review, and Review -> Social Publish.
 - HQ automations may queue standalone agent or workflow work only in V1. Campaign work must be created in the campaign workspace so ownership stays singular.
+- Hidden-from-Calendar runs are limited to standalone agent or workflow work in V1. Reviews, social publishing, and chains stay visible because their approval and recovery controls live on Calendar.
 
 The Hub creation flow is progressive:
 

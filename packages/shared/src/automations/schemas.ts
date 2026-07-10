@@ -137,6 +137,7 @@ const WorkInputRefSchema = z.union([
 export const QueueWorkActionSchema = z.object({
   type: z.literal('queue-work'),
   ownerScope: z.enum(['hq', 'campaign']),
+  calendarVisibility: z.enum(['visible', 'hidden']).optional(),
   title: z.string().min(1),
   execution: ScheduledExecutionSchema,
   inputRefs: z.array(WorkInputRefSchema).optional(),
@@ -148,6 +149,9 @@ export const QueueWorkActionSchema = z.object({
 }).superRefine((action, ctx) => {
   const rootType = action.execution.type;
   const childType = action.followUp?.execution.type;
+  if (action.calendarVisibility === 'hidden' && (action.followUp || (rootType !== 'agent-task' && rootType !== 'workflow-run'))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Hidden tracked work supports standalone agent and workflow work only', path: ['calendarVisibility'] });
+  }
   if (action.ownerScope === 'hq' && (action.followUp || (rootType !== 'agent-task' && rootType !== 'workflow-run'))) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'HQ tracked work supports standalone agent and workflow work only' });
   }

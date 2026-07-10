@@ -197,11 +197,12 @@ describe('scheduled work composer drafts', () => {
       agentSlug: 'content-genius',
       brief: 'Draft the launch copy.',
       followUp: { type: 'review', reviewerType: 'user', reviewerId: '', reviewerName: 'You', outputKind: 'document' },
-    })
+    }, { calendarVisibility: 'hidden' })
 
     expect(action).toMatchObject({
       type: 'queue-work',
       ownerScope: 'campaign',
+      calendarVisibility: 'hidden',
       title: 'Draft launch copy',
       execution: { type: 'agent-task', agentSlug: 'content-genius' },
       followUp: { execution: { type: 'review', reviewerType: 'user' }, outputKind: 'document' },

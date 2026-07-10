@@ -59,7 +59,7 @@ function QueueWorkText({ action }: { action: Extract<AutomationAction, { type: '
     <div className="min-w-0">
       <p className="text-sm break-words">{action.title}</p>
       <p className="mt-0.5 text-xs text-foreground/50">
-        {action.execution.type}{action.followUp ? `, then ${action.followUp.execution.type}` : ''}
+        {action.execution.type}{action.followUp ? `, then ${action.followUp.execution.type}` : ''}{action.calendarVisibility === 'hidden' ? ' - Hidden from Calendar' : ''}
       </p>
     </div>
   )

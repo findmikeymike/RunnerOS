@@ -125,6 +125,7 @@ describe('validation', () => {
             actions: [{
               type: 'queue-work',
               ownerScope: 'campaign',
+              calendarVisibility: 'hidden',
               title: 'Draft the campaign post',
               execution: {
                 type: 'agent-task',
@@ -138,6 +139,25 @@ describe('validation', () => {
         },
       });
       expect(result.valid).toBe(true);
+    });
+
+    it('rejects hidden tracked work that needs a visible approval surface', () => {
+      const result = validateAutomationsConfig({
+        automations: {
+          SchedulerTick: [{
+            cron: '0 9 * * *',
+            actions: [{
+              type: 'queue-work',
+              ownerScope: 'campaign',
+              calendarVisibility: 'hidden',
+              title: 'Hidden review',
+              execution: { type: 'review', reviewerType: 'user' },
+              inputRefs: [{ kind: 'output', outputId: 'output-1' }],
+            }],
+          }],
+        },
+      });
+      expect(result.valid).toBe(false);
     });
 
     it('rejects unsupported tracked-work topology before runtime', () => {

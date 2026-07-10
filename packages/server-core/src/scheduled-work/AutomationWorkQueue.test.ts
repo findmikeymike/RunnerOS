@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -6,7 +6,18 @@ import type { PendingQueuedWork } from '@craft-agent/shared/automations'
 import { CAMPAIGN_CALENDAR_CONTEXT_SLUG, parseCampaignCalendarDocResult } from '@craft-agent/shared/campaign-calendar'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, scheduledWorkDefinitionDigest } from '@craft-agent/shared/scheduled-work'
 import { loadContextDoc } from '@craft-agent/shared/workspace-context'
+import * as actualAgentDefinitions from '@craft-agent/shared/agent-definitions'
 import { queueAutomationWork } from './AutomationWorkQueue'
+
+mock.module('@craft-agent/shared/agent-definitions', () => ({
+  ...actualAgentDefinitions,
+  readActivatedAgents: (rootPath: string) => rootPath.includes('automation-work-queue-')
+    ? { version: 1, active: ['youtube-intel'] }
+    : actualAgentDefinitions.readActivatedAgents(rootPath),
+  loadGlobalAgent: (slug: string) => slug === 'youtube-intel'
+    ? { slug, metadata: { name: 'YouTube Intel', description: 'Creates YouTube intelligence reports.' }, systemPrompt: 'Research YouTube.', path: '/tmp/youtube-intel', source: 'global' }
+    : actualAgentDefinitions.loadGlobalAgent(slug),
+}))
 
 const roots: string[] = []
 const workspaceId = 'campaign-1'
@@ -101,5 +112,34 @@ describe('queueAutomationWork', () => {
     const calendar = parseCampaignCalendarDocResult(loadContextDoc(workspaceRoot, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined, workspaceId)
     if (!calendar.ok) throw new Error(calendar.error)
     expect(calendar.calendar.items[0]).toMatchObject({ date: '2026-07-10', time: '04:00', timezone: 'Pacific/Honolulu' })
+  })
+
+  test('queues hidden standalone work without creating a calendar shell', async () => {
+    const workspaceRoot = root()
+    const pending = reviewToSocial()
+    pending.action = {
+      type: 'queue-work',
+      ownerScope: 'campaign',
+      calendarVisibility: 'hidden',
+      title: 'Weekly YouTube intelligence report',
+      execution: {
+        type: 'agent-task',
+        agentSlug: 'youtube-intel',
+        brief: 'Gather this week\'s YouTube intelligence and create a report.',
+        permissionMode: 'safe',
+        expectedOutput: { requirement: 'required', kind: 'report' },
+      },
+    }
+
+    const result = await queueAutomationWork(workspaceId, workspaceRoot, pending)
+    expect(result.calendarItemIds).toEqual([])
+    expect(loadContextDoc(workspaceRoot, CAMPAIGN_CALENDAR_CONTEXT_SLUG)).toBeNull()
+    const work = parseScheduledWorkDocResult(loadContextDoc(workspaceRoot, SCHEDULED_WORK_CONTEXT_SLUG) ?? undefined, workspaceId)
+    if (!work.ok) throw new Error(work.error)
+    expect(work.work.items[0]).toMatchObject({
+      title: 'Weekly YouTube intelligence report',
+      calendarVisibility: 'hidden',
+      type: 'agent-task',
+    })
   })
 })

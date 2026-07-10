@@ -114,6 +114,7 @@ export interface WebhookAction {
 export interface QueueWorkAction {
   type: 'queue-work';
   ownerScope: 'hq' | 'campaign';
+  calendarVisibility?: 'visible' | 'hidden';
   title: string;
   execution: ScheduledWorkExecution;
   inputRefs?: Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }>[];

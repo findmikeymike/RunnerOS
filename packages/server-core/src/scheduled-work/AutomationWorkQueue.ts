@@ -67,7 +67,9 @@ export async function queueAutomationWork(
       })
     }
 
-    if (pending.action.ownerScope === 'campaign') {
+    if (pending.action.calendarVisibility === 'hidden') {
+      // The work remains fully durable; only its optional calendar projection is omitted.
+    } else if (pending.action.ownerScope === 'campaign') {
       const parsedCalendar = parseCampaignCalendarDocResult(
         loadContextDoc(workspaceRootPath, CAMPAIGN_CALENDAR_CONTEXT_SLUG) ?? undefined,
         workspaceId,
@@ -97,7 +99,9 @@ export async function queueAutomationWork(
     deps.emitContextChanged?.(workspaceId, loadAllContextDocs(workspaceRootPath))
     return {
       orderIds: built.orders.map((order) => order.id),
-      calendarItemIds: built.orders.map((order) => order.calendarLink.itemId),
+      calendarItemIds: pending.action.calendarVisibility === 'hidden'
+        ? []
+        : built.orders.map((order) => order.calendarLink.itemId),
     }
   })
 }
@@ -182,6 +186,7 @@ function buildOrder(
       ? { scope: 'campaign', workspaceId, campaignId: workspaceId }
       : { scope: 'hq', workspaceId },
     calendarLink: { calendar: action.ownerScope, itemId: `${id}-calendar` },
+    calendarVisibility: action.calendarVisibility ?? 'visible',
     title: action.title,
     type: action.execution.type,
     status: 'scheduled',
@@ -202,6 +207,9 @@ function buildOrder(
 
 function validateAction(rootPath: string, action: QueueWorkAction): void {
   const executions = [action.execution, action.followUp?.execution].filter((value): value is ScheduledWorkExecution => Boolean(value))
+  if (action.calendarVisibility === 'hidden' && (action.followUp || executions.some((execution) => execution.type !== 'agent-task' && execution.type !== 'workflow-run'))) {
+    throw new Error('Hidden queue-work automations support standalone agent and workflow work only.')
+  }
   if (action.ownerScope === 'hq' && (action.followUp || executions.some((execution) => execution.type !== 'agent-task' && execution.type !== 'workflow-run'))) {
     throw new Error('HQ queue-work automations support standalone agent and workflow work only.')
   }
@@ -344,6 +352,7 @@ function identity(order: ScheduledWorkOrder) {
     id: order.id,
     owner: order.owner,
     calendarLink: order.calendarLink,
+    calendarVisibility: order.calendarVisibility,
     title: order.title,
     execution: order.execution,
     inputRefs: order.inputRefs,

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { ScheduledWorkComposer } from '@/components/calendar/ScheduledWorkComposer'
+import { Switch } from '@/components/ui/switch'
 import { useActiveWorkspace, useAppShellContext } from '@/context/AppShellContext'
 import { isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { buildAutomationQueueWorkAction, type ScheduledWorkComposerDraft, type ScheduledWorkComposerType } from '@/lib/scheduled-work-composer'
@@ -47,6 +48,7 @@ export function AutomationWorkDialog({ trigger }: AutomationWorkDialogProps) {
   const [pollUrl, setPollUrl] = React.useState('')
   const [pollIntervalSec, setPollIntervalSec] = React.useState(300)
   const [messageMatcher, setMessageMatcher] = React.useState('')
+  const [showOnCalendar, setShowOnCalendar] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
 
   const isHq = isArtistHQWorkspace(workspace ?? undefined, workspaces)
@@ -56,8 +58,8 @@ export function AutomationWorkDialog({ trigger }: AutomationWorkDialogProps) {
       : { scope: 'campaign' as const, workspaceId: workspace.id, campaignId: workspace.id }
     : null, [isHq, workspace])
   const allowedTypes = React.useMemo<ScheduledWorkComposerType[]>(
-    () => isHq ? ['agent-task', 'workflow-run'] : ['agent-task', 'workflow-run', 'review', 'social-publish'],
-    [isHq],
+    () => isHq || !showOnCalendar ? ['agent-task', 'workflow-run'] : ['agent-task', 'workflow-run', 'review', 'social-publish'],
+    [isHq, showOnCalendar],
   )
 
   const continueToWork = React.useCallback(() => {
@@ -73,11 +75,11 @@ export function AutomationWorkDialog({ trigger }: AutomationWorkDialogProps) {
 
   const submit = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
     if (!workspace || draft.type === 'event') return
-    const action = buildAutomationQueueWorkAction(draft)
+    const action = buildAutomationQueueWorkAction(draft, { calendarVisibility: showOnCalendar ? 'visible' : 'hidden' })
     const matcher = buildMatcher({ event, name, cron, timezone, watchPath, watchGlob, webhookSlug, secretEnv, pollUrl, pollIntervalSec, messageMatcher, action })
     await window.electronAPI.createAutomationFromTemplate(workspace.id, event, matcher)
     toast.success('Tracked-work automation created', { description: `${name.trim()} will queue ${draft.title.trim()} when it fires.` })
-  }, [cron, event, messageMatcher, name, pollIntervalSec, pollUrl, secretEnv, timezone, watchGlob, watchPath, webhookSlug, workspace])
+  }, [cron, event, messageMatcher, name, pollIntervalSec, pollUrl, secretEnv, showOnCalendar, timezone, watchGlob, watchPath, webhookSlug, workspace])
 
   const today = React.useMemo(() => {
     const now = new Date()
@@ -144,6 +146,14 @@ export function AutomationWorkDialog({ trigger }: AutomationWorkDialogProps) {
               onMessageMatcher={setMessageMatcher}
             />
 
+            <div className="flex items-center justify-between gap-4 border-t border-border/35 pt-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Show each run on Calendar</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Turn off for recurring background reports and maintenance.</p>
+              </div>
+              <Switch checked={showOnCalendar} onCheckedChange={setShowOnCalendar} aria-label="Show each run on Calendar" />
+            </div>
+
             {error ? <p className="text-xs text-destructive">{error}</p> : null}
           </div>
 
@@ -160,7 +170,7 @@ export function AutomationWorkDialog({ trigger }: AutomationWorkDialogProps) {
           onOpenChange={setComposerOpen}
           entry={{ owner, date: today }}
           allowedTypes={allowedTypes}
-          allowFollowUps={!isHq}
+          allowFollowUps={!isHq && showOnCalendar}
           timingMode="triggered"
           onSubmit={submit}
         />

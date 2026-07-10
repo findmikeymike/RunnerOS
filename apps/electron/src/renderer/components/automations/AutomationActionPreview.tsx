@@ -28,7 +28,7 @@ export function AutomationActionPreview({ actions, className }: AutomationAction
             {action.type === 'webhook'
               ? `${action.method ?? DEFAULT_WEBHOOK_METHOD} ${action.url}`
               : action.type === 'queue-work'
-                ? `${action.title}${action.followUp ? `, then ${action.followUp.execution.type}` : ''}`
+                ? `${action.title}${action.followUp ? `, then ${action.followUp.execution.type}` : ''}${action.calendarVisibility === 'hidden' ? ' - Hidden from Calendar' : ''}`
               : action.prompt}
           </span>
         </div>

@@ -167,6 +167,8 @@ export interface ScheduledWorkOrder {
   id: string
   owner: ScheduledWorkOwner
   calendarLink: ScheduledWorkCalendarLink
+  /** Hidden automation work keeps a reserved link id but creates no calendar shell. */
+  calendarVisibility?: 'visible' | 'hidden'
   title: string
   type: ScheduledWorkType
   status: ScheduledWorkStatus
@@ -594,6 +596,7 @@ function isScheduledWorkOrder(value: unknown): value is ScheduledWorkOrder {
     && Boolean(order.calendarLink
       && (order.calendarLink.calendar === 'hq' || order.calendarLink.calendar === 'campaign')
       && Boolean(clean(order.calendarLink.itemId)))
+    && (order.calendarVisibility === undefined || order.calendarVisibility === 'visible' || order.calendarVisibility === 'hidden')
     && isScheduledWorkExecution(order.execution, order.type)
     && Array.isArray(order.inputRefs)
     && order.inputRefs.every(isScheduledWorkInputRef)

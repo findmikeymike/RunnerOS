@@ -176,10 +176,12 @@ export function composerDefinitionDigest(value: unknown): string {
 
 export function buildAutomationQueueWorkAction(
   draft: Exclude<ScheduledWorkComposerDraft, EventComposerDraft>,
+  options: { calendarVisibility?: 'visible' | 'hidden' } = {},
 ): QueueWorkAction {
   const action: QueueWorkAction = {
     type: 'queue-work',
     ownerScope: draft.owner.scope,
+    calendarVisibility: options.calendarVisibility,
     title: draft.title.trim(),
     execution: executionFromDraft(draft),
     inputRefs: draft.inputRefs.filter((ref): ref is Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }> => ref.kind !== 'produced-output'),
