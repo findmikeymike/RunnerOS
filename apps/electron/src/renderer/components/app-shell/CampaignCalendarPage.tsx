@@ -619,7 +619,8 @@ function CampaignCalendarSurface({
   const dayMetaByDate = React.useMemo(() => {
     const statusesByDate = new Map<string, CampaignCalendarItemStatus[]>()
     for (const item of items) {
-      const work = item.scheduledWorkId ? workById.get(item.scheduledWorkId) : undefined
+      const linkedWork = item.scheduledWorkId ? workById.get(item.scheduledWorkId) : undefined
+      const work = linkedWork?.legacyRef ? undefined : linkedWork
       statusesByDate.set(item.date, [...(statusesByDate.get(item.date) ?? []), campaignStatusForWork(work?.status) ?? item.status])
     }
     const metaByDate = new Map<string, CalendarMonthDayMeta>()
@@ -666,7 +667,8 @@ function CampaignCalendarSurface({
                 Nothing scheduled.
               </div>
             ) : selectedDateItems.map((item) => {
-              const work = item.scheduledWorkId ? workById.get(item.scheduledWorkId) : undefined
+              const linkedWork = item.scheduledWorkId ? workById.get(item.scheduledWorkId) : undefined
+              const work = linkedWork?.legacyRef ? undefined : linkedWork
               const predecessor = work?.chain?.predecessor ? workById.get(work.chain.predecessor.orderId) : undefined
               const producedOutputIds = predecessor?.result && 'outputIds' in predecessor.result ? predecessor.result.outputIds : []
               const displayStatus = work?.status ?? item.status
@@ -887,7 +889,7 @@ function ScheduledWorkDetails({ work, calendarStatus, producedOutputIds, onOpenS
           {work.attention.message}
         </div>
       ) : null}
-      {work.status === 'needs-attention' && work.attention?.reason !== 'produced-output-ambiguous' && work.attention?.reason !== 'produced-output-missing' ? (
+      {work.status === 'needs-attention' && work.attention?.reason !== 'produced-output-ambiguous' && work.attention?.reason !== 'produced-output-missing' && work.attention?.reason !== 'execution-uncertain' ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           <button type="button" onClick={() => onQueueReplacement(work)} className="h-7 rounded-[5px] border border-white/[0.08] px-2.5 text-[10px] font-medium text-white/58">Queue replacement</button>
           {work.attention?.reason === 'profile-login-required' ? <button type="button" onClick={onOpenSocialSettings} className="h-7 rounded-[5px] border border-yellow-200/15 px-2.5 text-[10px] font-medium text-yellow-100/65">Open Social Accounts</button> : null}

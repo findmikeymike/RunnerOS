@@ -2430,6 +2430,13 @@ export class SessionManager implements ISessionManager {
         },
         readWorkflowRun: readWorkflowRun,
         listOutputManifests,
+        readAgentSession: async (sessionId) => {
+          const session = await this.getSession(sessionId)
+          if (!session) return 'missing'
+          const managed = this.sessions.get(sessionId)
+          if (session.isProcessing || (managed?.messageQueue.length ?? 0) > 0) return 'running'
+          return session.lastFinalMessageId ? 'completed' : 'interrupted'
+        },
         prepareSocial: this.scheduledSocialPreparer,
         executeSocial: this.scheduledSocialExecutor,
         emitContextChanged: (workspaceId, docs) => {

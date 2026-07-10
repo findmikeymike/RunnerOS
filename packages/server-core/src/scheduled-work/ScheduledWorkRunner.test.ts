@@ -571,6 +571,125 @@ describe('ScheduledWorkRunner', () => {
     expect(saved.attention?.message).toContain('session session-stale')
   })
 
+  test('reconciles a completed persisted agent session after restart', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({
+      id: 'agent-recovered',
+      status: 'running',
+      runs: [{
+        id: 'run-entry-recovered',
+        jobId: 'agent-recovered',
+        startedAt: '2026-07-10T14:00:00.000Z',
+        status: 'running',
+        sessionId: 'session-recovered',
+      }],
+    })])
+
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(),
+      executeAgentTask: async () => { throw new Error('must not relaunch') },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      readAgentSession: async () => 'completed',
+      listOutputManifests: () => [],
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:10:00.000Z'))
+    const saved = readWork(root).items[0]!
+    expect(saved.status).toBe('done')
+    expect(saved.result).toEqual({ type: 'agent-task', sessionId: 'session-recovered', outputIds: [] })
+    expect(saved.runs[0]?.status).toBe('done')
+  })
+
+  test('keeps a recoverable queued agent session running until its final response exists', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({
+      id: 'agent-queued-recovery',
+      status: 'running',
+      runs: [{
+        id: 'run-entry-queued',
+        jobId: 'agent-queued-recovery',
+        startedAt: '2026-07-10T14:00:00.000Z',
+        status: 'running',
+        sessionId: 'session-queued',
+      }],
+    })])
+    let state: 'running' | 'completed' = 'running'
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(),
+      executeAgentTask: async () => { throw new Error('must not relaunch') },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      readAgentSession: async () => state,
+      listOutputManifests: () => [],
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:10:00.000Z'))
+    expect(readWork(root).items[0]?.status).toBe('running')
+
+    state = 'completed'
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:11:00.000Z'))
+    expect(readWork(root).items[0]?.status).toBe('done')
+  })
+
+  test('blocks uncertain social execution after restart instead of posting again', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({
+      id: 'social-uncertain',
+      type: 'social-publish',
+      status: 'running',
+      execution: { type: 'social-publish', platform: 'x', profileId: 'artist-main', caption: 'Out Friday.' },
+      socialAction: {
+        actionId: 'act_social-uncertain',
+        actionDigest: 'sha256:uncertain',
+        platform: 'x',
+        profileId: 'artist-main',
+        preparedAt: '2026-07-10T13:30:00.000Z',
+        payloadDigest: 'digest-1',
+        dryRun: {},
+      },
+      socialApproval: {
+        id: 'approval-uncertain',
+        approvedAt: '2026-07-10T13:35:00.000Z',
+        expiresAt: '2026-07-10T15:00:00.000Z',
+        actionId: 'act_social-uncertain',
+        actionDigest: 'sha256:uncertain',
+        payloadDigest: 'digest-1',
+        platform: 'x',
+        profileId: 'artist-main',
+        approvedBy: { type: 'user', clientId: 'test-client' },
+      },
+      runs: [{
+        id: 'run-social-uncertain',
+        jobId: 'social-uncertain',
+        startedAt: '2026-07-10T14:00:00.000Z',
+        status: 'running',
+      }],
+    })])
+    let executeCalls = 0
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(),
+      executeAgentTask: async () => ({ sessionId: 'unused' }),
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [],
+      executeSocial: async () => {
+        executeCalls += 1
+        return { receiptId: 'must-not-post', summary: 'must not post' }
+      },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:10:00.000Z'))
+    const saved = readWork(root).items[0]!
+    expect(executeCalls).toBe(0)
+    expect(saved.status).toBe('needs-attention')
+    expect(saved.attention?.reason).toBe('execution-uncertain')
+    expect(saved.socialApproval).toBeUndefined()
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:11:00.000Z'))
+    expect(executeCalls).toBe(0)
+  })
+
   test('keeps canceled work terminal when an in-flight agent later fails', async () => {
     const root = makeRoot()
     writeWork(root, [buildOrder()])

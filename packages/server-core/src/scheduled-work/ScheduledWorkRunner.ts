@@ -47,6 +47,7 @@ export interface ScheduledWorkRunnerDeps {
   }): Promise<{ runId: string }>
   readWorkflowRun(workspaceRootPath: string, runId: string): WorkflowRunSnapshot | null | undefined
   listOutputManifests(workspaceRootPath: string): OutputManifest[]
+  readAgentSession?(sessionId: string): Promise<'running' | 'completed' | 'interrupted' | 'missing'>
   prepareSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder }): Promise<ScheduledSocialActionPreview>
   executeSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder; preview: ScheduledSocialActionPreview; approval: ScheduledSocialApproval }): Promise<{ receiptId: string; externalUrl?: string; summary: string }>
   emitContextChanged?(workspaceId: string, docs: LoadedContextDoc[]): void
@@ -233,12 +234,9 @@ export class ScheduledWorkRunner {
         }
 
         if (current.execution.type === 'agent-task') {
-          const attention = this.buildAttention(
-            'execution-failed',
-            runningAgentMessage(current),
-          )
-          const persisted = await this.finishWithAttention(workspaceId, workspaceRootPath, current.id, attention)
-          if (persisted.updated) result.failed += 1
+          const outcome = await this.pollAgentSession(workspaceId, workspaceRootPath, current)
+          if (outcome === 'done') result.completed += 1
+          if (outcome === 'failed') result.failed += 1
           continue
         }
 
@@ -260,9 +258,23 @@ export class ScheduledWorkRunner {
           workspaceId,
           workspaceRootPath,
           current.id,
-          (order, nowIso) => ({ ...order, status: 'needs-approval', attention: undefined, updatedAt: nowIso }),
+          (order, nowIso) => ({
+            ...order,
+            status: 'needs-attention',
+            socialApproval: undefined,
+            attention: this.buildAttention(
+              'execution-uncertain',
+              'Runner restarted during social submission. The post may already be live. Verify the social account before creating any replacement.',
+            ),
+            updatedAt: nowIso,
+            runs: updateLatestRun(order.runs, order.id, {
+              status: 'failed',
+              endedAt: nowIso,
+              error: 'Execution outcome is uncertain after restart; automatic retry is blocked.',
+            }),
+          }),
         )
-        if (persisted.updated) result.blocked += 1
+        if (persisted.updated) result.failed += 1
       }
 
       return result
@@ -330,6 +342,62 @@ export class ScheduledWorkRunner {
       )
       return 'failed'
     }
+  }
+
+  private async pollAgentSession(
+    workspaceId: string,
+    workspaceRootPath: string,
+    order: ScheduledWorkOrder,
+  ): Promise<'running' | 'done' | 'failed'> {
+    const sessionId = currentSessionId(order)
+    if (!sessionId || !this.deps.readAgentSession) {
+      const persisted = await this.finishWithAttention(
+        workspaceId,
+        workspaceRootPath,
+        order.id,
+        this.buildAttention('execution-failed', runningAgentMessage(order)),
+      )
+      return persisted.updated ? 'failed' : 'running'
+    }
+    const state = await this.deps.readAgentSession(sessionId)
+    if (state === 'running') return 'running'
+    if (state !== 'completed') {
+      const persisted = await this.finishWithAttention(
+        workspaceId,
+        workspaceRootPath,
+        order.id,
+        this.buildAttention(
+          'execution-failed',
+          state === 'missing'
+            ? `Scheduled agent session ${sessionId} no longer exists.`
+            : `Scheduled agent session ${sessionId} stopped before producing a final response.`,
+        ),
+      )
+      return persisted.updated ? 'failed' : 'running'
+    }
+    if (order.execution.type !== 'agent-task') return 'failed'
+    const outputs = this.matchExpectedOutputs(
+      order.execution.expectedOutput,
+      sessionId,
+      this.deps.listOutputManifests(workspaceRootPath),
+    )
+    if (!outputs.satisfied) {
+      const persisted = await this.finishWithAttention(
+        workspaceId,
+        workspaceRootPath,
+        order.id,
+        this.buildAttention('required-output-missing', outputs.message ?? 'Required output was not produced.'),
+      )
+      return persisted.updated ? 'failed' : 'running'
+    }
+    const persisted = await this.finishAgentDone(
+      workspaceId,
+      workspaceRootPath,
+      order.id,
+      sessionId,
+      outputs.matched.map((output) => output.id),
+    )
+    return persisted.updated ? 'done' : 'running'
   }
 
   private async runSocial(workspaceId: string, workspaceRootPath: string, order: ScheduledWorkOrder): Promise<void> {
