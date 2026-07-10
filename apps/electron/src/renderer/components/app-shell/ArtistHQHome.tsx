@@ -1852,14 +1852,12 @@ function IntelConfigDialog({
 }) {
   const [sources, setSources] = React.useState<ArtistIntelSource[]>(config.sources)
   const [sinceDays, setSinceDays] = React.useState(config.sinceDays)
-  const [maxPerChannel, setMaxPerChannel] = React.useState(config.maxPerChannel)
   const [cadence, setCadence] = React.useState(config.cadence)
 
   React.useEffect(() => {
     if (!open) return
     setSources(config.sources)
     setSinceDays(config.sinceDays)
-    setMaxPerChannel(config.maxPerChannel)
     setCadence(config.cadence)
   }, [config, open])
 
@@ -1900,10 +1898,10 @@ function IntelConfigDialog({
       cadence,
       sources: nextSources,
       sinceDays,
-      maxPerChannel,
+      maxPerChannel: 1,
       updatedAt: new Date().toISOString(),
     })
-  }, [cadence, config, maxPerChannel, onSave, sinceDays, sources])
+  }, [cadence, config, onSave, sinceDays, sources])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1915,7 +1913,7 @@ function IntelConfigDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
-          <div className="grid gap-2 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-2">
             <label className="block space-y-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Cadence</span>
               <select
@@ -1935,17 +1933,6 @@ function IntelConfigDialog({
                 max={30}
                 value={sinceDays}
                 onChange={(event) => setSinceDays(Number(event.target.value))}
-                className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-orange-400/45"
-              />
-            </label>
-            <label className="block space-y-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/36">Max per channel</span>
-              <input
-                type="number"
-                min={1}
-                max={10}
-                value={maxPerChannel}
-                onChange={(event) => setMaxPerChannel(Number(event.target.value))}
                 className="h-9 w-full rounded-[10px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none focus:border-orange-400/45"
               />
             </label>

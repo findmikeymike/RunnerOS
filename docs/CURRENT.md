@@ -40,6 +40,7 @@ source_of_truth: true
 - Hidden Calendar runs are limited to standalone agent/workflow Automations.
 - YouTube supports comment replies, not general DMs; Shorts remain blocked pending media classification proof.
 - YouTube Intelligence reuses the API key saved on YouTube Research. A weekly run fails visibly if transcripts, its report Output, or its structured `youtube-intel` nugget block are missing.
+- Token control is enforced: only the newest upload per channel is eligible, processed video IDs persist in `artist-intel-state`, unchanged channels skip transcript ingestion, and no older fallback video is used.
 
 ## Verification State
 

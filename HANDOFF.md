@@ -81,8 +81,10 @@ Primary files:
 - Artist HQ Intel Pulse ships with Managers Playbook, Viral VSN, No Labels Necessary, Neighborhood Art Supply, and Its21Master preloaded.
 - The dashboard toggle creates or pauses a hidden Monday 10:00 weekly `queue-work` job; manual Run uses the identical tracked pipeline.
 - `youtube-intelligence-agent` reuses the API key on YouTube Research, scans the configured lookback window, pulls transcripts, and must create one HQ report Output.
+- Each run checks only the newest upload per channel. It skips transcript ingestion when that video ID already exists in targeted `artist-intel-state`; it never falls back to older uploads.
 - The report must include a validated `youtube-intel` JSON fence. The server maps branding/content/rollout/audience/outreach/creative/operations nuggets to active specialist agents and writes targeted `shared-intel-*` context docs.
 - Scheduled Work does not mark the run done until the report and postprocessing succeed. The Intel Pulse card links directly to the completed Output.
+- A no-new-videos week completes with an empty report, updates no Shared Intel, and spends no transcript-synthesis tokens.
 - Legacy prompt-based Intel Pulse automations upgrade to the tracked pipeline when re-enabled.
 
 Primary files:

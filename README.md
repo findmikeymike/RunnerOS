@@ -15,7 +15,7 @@ Current focus: Artist HQ and Campaign execution, including Calendar/Automations 
 - HNIC scheduling: HNIC alone can use `schedule_work` to create confirmed Calendar work or queue-work Automations for agent tasks and workflow runs.
 - Scheduled publishing: exact social actions wait for bound approval, then a native guarded executor verifies account, browser partition, payload, and media bytes before submitting once and recording a receipt.
 - Social Publisher: can handle authorized Instagram/TikTok/X comments and DMs plus YouTube comments. A direct or scheduled inbox mandate permits bounded inbound replies without per-item approval while cold DMs, posts, account changes, and sensitive conversations remain excluded.
-- YouTube Intel Pulse: five trusted channels are preloaded; a one-click weekly job uses the saved YouTube Research API key to pull transcripts, create an HQ report Output, and route categorized nuggets into targeted Shared Intel context for the proper agents.
+- YouTube Intel Pulse: five trusted channels are preloaded; a one-click weekly job checks only each channel's newest upload, skips already processed video IDs, then creates an HQ report Output and routes categorized nuggets into targeted Shared Intel context.
 - College Radio (`college-radio-agent`): uses Artist HQ/campaign context plus a bundled personal directory to build verified station targets and an Outreach-ready campaign packet.
 - Spotify Playlist Creator (`spotify-playlist-creator`): default-visible in both Artist HQ and Campaigns, distinct from the separate Playlisting service handoff.
 - Outreach Agent (`outreach-agent`): accepts verified College Radio packets and owns approval-gated Gmail drafts/sends.

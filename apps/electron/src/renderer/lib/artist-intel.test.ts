@@ -49,7 +49,7 @@ describe('artist-intel', () => {
 
     expect(result.ok).toBe(true)
     expect(result.config.enabled).toBe(true)
-    expect(result.config.maxPerChannel).toBe(4)
+    expect(result.config.maxPerChannel).toBe(1)
     expect(result.config.sinceDays).toBe(10)
     expect(result.config.sources).toHaveLength(2)
   })
@@ -60,7 +60,8 @@ describe('artist-intel', () => {
     expect(prompt).toContain('Run the HQ YouTube Intel Pulse')
     expect(prompt).toContain('Managers Playbook')
     expect(prompt).toContain('No Labels Necessary')
-    expect(prompt).toContain('required weekly report Output')
+    expect(prompt).toContain('only the newest upload')
+    expect(prompt).toContain('only when that newest video ID is not already recorded')
     expect(prompt).toContain('youtube-intel JSON block')
     expect(prompt).toContain('Do not publish, comment, upload')
   })
@@ -70,7 +71,9 @@ describe('artist-intel', () => {
 
     expect(prompt).toContain('context/artist-intel-config/CONTEXT.md')
     expect(prompt).toContain('exactly one HQ report Output')
-    expect(prompt).toContain('scheduler handles dashboard and agent-context routing')
+    expect(prompt).toContain('context/artist-intel-state/CONTEXT.md')
+    expect(prompt).toContain('no-new-videos report is a valid completion')
+    expect(prompt).toContain('scheduler handles deduplication state, dashboard, and agent-context routing')
     expect(prompt).toContain('enabled is false')
   })
 

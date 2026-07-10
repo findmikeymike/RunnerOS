@@ -120,7 +120,7 @@ export function emptyArtistIntelConfig(): ArtistIntelConfig {
     version: 1,
     enabled: false,
     cadence: 'weekly',
-    maxPerChannel: 3,
+    maxPerChannel: 1,
     sinceDays: 7,
     sources: DEFAULT_ARTIST_INTEL_SOURCES,
     updatedAt: new Date().toISOString(),
@@ -227,10 +227,11 @@ export function createIntelRunPrompt(config: ArtistIntelConfig, artistName: stri
     'Watchlist:',
     sources || '- No configured sources. Ask the user to add YouTube channels first.',
     '',
-    `Scan window: last ${config.sinceDays} days. Max videos per channel: ${config.maxPerChannel}.`,
+    `Scan window: last ${config.sinceDays} days. Hard limit: only the newest upload per channel.`,
     '',
     'Use YouTube Intelligence with the connected YouTube Research API source.',
-    'For each configured channel, check recent uploads, pull transcripts, and create the required weekly report Output.',
+    'Read artist-intel-state when present. Check only the newest upload per configured channel.',
+    'Fetch a transcript only when that newest video ID is not already recorded. Never ingest an older fallback video.',
     '',
     'Report shape:',
     '1. What changed or is worth noticing',
@@ -239,7 +240,7 @@ export function createIntelRunPrompt(config: ArtistIntelConfig, artistName: stri
     '4. Suggested campaign/content/brand moves',
     '5. Confidence and missing data',
     '',
-    'End the Output with the required fenced youtube-intel JSON block of categorized nuggets.',
+    'End the Output with the required fenced youtube-intel JSON block containing processedVideos and categorized nuggets.',
     'Reject generic music-business filler. Do not publish, comment, upload, or modify any YouTube account.',
   ].join('\n')
 }
@@ -249,11 +250,13 @@ export function createScheduledIntelRunPrompt(artistName: string): string {
     `Run the scheduled HQ YouTube Intel Pulse for ${artistName || 'this artist'}.`,
     '',
     `First read the current workspace context doc at context/${ARTIST_INTEL_CONFIG_CONTEXT_SLUG}/CONTEXT.md.`,
+    'Then read context/artist-intel-state/CONTEXT.md when it exists.',
     'Use its JSON config as the source of truth for enabled, cadence, scan window, max videos per channel, and source URLs.',
     'If enabled is false, stop and report that Intel Pulse was disabled before execution.',
     '',
     'Use YouTube Intelligence with the connected YouTube Research API source.',
-    'For each configured YouTube channel, check recent uploads, pull transcripts, and create exactly one HQ report Output titled "Weekly YouTube Intelligence Report".',
+    'For each configured YouTube channel, inspect only its newest upload. Fetch its transcript only when its video ID is not already in state. Never ingest an older fallback video.',
+    'Create exactly one HQ report Output titled "Weekly YouTube Intelligence Report". A no-new-videos report is a valid completion.',
     '',
     'Report shape:',
     '1. What changed or is worth noticing',
@@ -262,7 +265,7 @@ export function createScheduledIntelRunPrompt(artistName: string): string {
     '4. Suggested campaign/content/brand moves',
     '5. Confidence and missing data',
     '',
-    'End the Output with the required fenced youtube-intel JSON block of categorized nuggets. The scheduler handles dashboard and agent-context routing.',
+    'End the Output with the required fenced youtube-intel JSON block containing processedVideos and categorized nuggets. The scheduler handles deduplication state, dashboard, and agent-context routing.',
     '',
     'Reject generic music-business filler. Do not publish, comment, upload, or modify any YouTube account.',
   ].join('\n')
@@ -326,7 +329,6 @@ export function isValidYouTubeChannelUrl(value: string): boolean {
 }
 
 function normalizeIntelConfig(config: Partial<ArtistIntelConfig>): ArtistIntelConfig {
-  const maxPerChannel = Number.isInteger(config.maxPerChannel) ? Number(config.maxPerChannel) : 3
   const sinceDays = Number.isInteger(config.sinceDays) ? Number(config.sinceDays) : 7
   const sources = Array.isArray(config.sources)
     ? config.sources.map(normalizeSource).filter((source) => source.name && source.url && isValidYouTubeChannelUrl(source.url))
@@ -336,7 +338,7 @@ function normalizeIntelConfig(config: Partial<ArtistIntelConfig>): ArtistIntelCo
     version: 1,
     enabled: Boolean(config.enabled),
     cadence: config.cadence === 'manual' ? 'manual' : 'weekly',
-    maxPerChannel: clamp(maxPerChannel, 1, 10),
+    maxPerChannel: 1,
     sinceDays: clamp(sinceDays, 1, 30),
     sources: sources.length ? sources : DEFAULT_ARTIST_INTEL_SOURCES,
     updatedAt: clean(config.updatedAt) || new Date().toISOString(),

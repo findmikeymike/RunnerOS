@@ -46601,6 +46601,17 @@ Use this skill when the user wants to turn YouTube videos, channels, playlists, 
 
 This is not a summarization skill. The goal is evidence-backed extraction: tactics, principles, frameworks, warnings, tools, contradictions, implementation steps, experiments, and agent-ready instructions.
 
+## Weekly Watchlist Rule
+
+For scheduled Artist HQ Intel Pulse runs:
+
+1. Read \`artist-intel-state\` when it exists.
+2. Request only the latest upload metadata for each configured channel.
+3. Skip the channel when that latest video ID is already recorded. Do not fetch a transcript and do not fall back to an older video.
+4. When the latest video is unseen and inside the configured lookback window, ingest only that video.
+5. Record newly ingested videos in the report's \`processedVideos\` array so the scheduler can update durable state.
+6. If all channels are unchanged, create a no-new-videos report with empty \`processedVideos\` and \`nuggets\` arrays.
+
 ## Source And Tool
 
 Use the bundled \`youtube-intelligence\` source first:

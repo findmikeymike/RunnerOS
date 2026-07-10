@@ -164,9 +164,10 @@ import {
   buildYouTubeIntelCandidates,
   isSharedIntelContextSlug,
   parseSharedIntelNote,
-  parseYouTubeIntelNuggets,
+  parseYouTubeIntelReportData,
   type ExistingSharedIntelDoc,
   type SharedIntelAgentCatalogEntry,
+  type YouTubeIntelProcessedVideo,
 } from '@craft-agent/shared/shared-intel'
 import { resolveOutputAssetPath, type OutputManifest } from '@craft-agent/shared/outputs'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
@@ -272,6 +273,25 @@ function parseFencedJson(body: string | undefined): unknown {
 function artistIntelSourceCount(body: string | undefined): number {
   const config = parseFencedJson(body) as { sources?: unknown[] } | null
   return Array.isArray(config?.sources) ? config.sources.length : 0
+}
+
+function buildArtistIntelStateContext(existingBody: string | undefined, processedVideos: YouTubeIntelProcessedVideo[]) {
+  const previous = parseFencedJson(existingBody) as { channels?: Record<string, unknown> } | null
+  const channels = { ...(previous?.channels ?? {}) }
+  const processedAt = new Date().toISOString()
+  for (const video of processedVideos) {
+    channels[video.channelUrl] = { ...video, processedAt }
+  }
+  return {
+    slug: 'artist-intel-state',
+    metadata: {
+      name: 'Artist Intel Processing State',
+      description: 'Latest processed YouTube video per watched channel. Used to prevent duplicate transcript ingestion.',
+      routing: { mode: 'targeted' as const, agents: ['youtube-intelligence-agent'] },
+      enabled: true,
+    },
+    body: ['Durable deduplication state for HQ Intel Pulse.', '', '```json', JSON.stringify({ version: 1, channels, updatedAt: processedAt }, null, 2), '```'].join('\n'),
+  }
 }
 
 function isTransientCodexSseHeaderTimeout(message: string): boolean {
@@ -2596,8 +2616,8 @@ export class SessionManager implements ISessionManager {
     const reportPath = resolveOutputAssetPath(input.workspaceRootPath, reportOutput.id, reportOutput.primary.path)
     if (!reportPath) throw new Error('YouTube Intelligence report Output path is invalid.')
     const markdown = await readFile(reportPath, 'utf8')
-    const nuggets = parseYouTubeIntelNuggets(markdown)
-    if (nuggets.length === 0) throw new Error('YouTube Intelligence report did not contain valid categorized nuggets.')
+    const reportData = parseYouTubeIntelReportData(markdown)
+    if (!reportData) throw new Error('YouTube Intelligence report did not contain valid processing metadata and categorized nuggets.')
 
     return withWorkspaceContextLock(input.workspaceRootPath, async () => {
       const activeAgents = loadActivatedAgents(input.workspaceRootPath)
@@ -2611,8 +2631,8 @@ export class SessionManager implements ISessionManager {
         visualAgent: agent.metadata.visualAgent,
         active: true,
       }))
-      const candidates = buildYouTubeIntelCandidates(nuggets, agentCatalog)
-      if (candidates.length === 0) throw new Error('YouTube Intelligence found nuggets, but none matched active destination agents.')
+      const candidates = buildYouTubeIntelCandidates(reportData.nuggets, agentCatalog)
+      if (reportData.nuggets.length > 0 && candidates.length === 0) throw new Error('YouTube Intelligence found nuggets, but none matched active destination agents.')
       const existingNotes: ExistingSharedIntelDoc[] = loadAllContextDocs(input.workspaceRootPath)
         .filter((doc) => isSharedIntelContextSlug(doc.slug))
         .flatMap((doc) => {
@@ -2640,6 +2660,10 @@ export class SessionManager implements ISessionManager {
           body: doc.body,
         })
       }
+      upsertContextDoc(input.workspaceRootPath, buildArtistIntelStateContext(
+        loadContextDoc(input.workspaceRootPath, 'artist-intel-state')?.body,
+        reportData.processedVideos,
+      ))
       upsertContextDoc(input.workspaceRootPath, buildArtistIntelReportContext({
         reportOutput,
         sessionId: input.sessionId,

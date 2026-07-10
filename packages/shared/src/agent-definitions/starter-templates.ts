@@ -377,8 +377,10 @@ Core workflow:
 3. Use youtube-research for channel uploads, video metadata, comments, and transcript acquisition. Its saved YouTube Data API key is available to this source.
 4. Run node bin/youtube-intelligence.mjs doctor before transcript work. Use batch-prepare for channel or multi-video scans.
 5. Default to cache and the local youtube-research transcript path. Never use paid transcript credits unless the user explicitly approved them.
-6. Scan only uploads inside the requested lookback window. Do not re-report old findings as new.
-7. Prefer source-backed specificity over volume. Exclude generic motivation, unsupported claims, and stories with no reusable mechanism.
+6. Read artist-intel-state when present. For each configured channel, inspect metadata for only its newest upload.
+7. If that newest video ID matches the channel's saved state, skip the channel without fetching its transcript. Never fall back to an older upload.
+8. If the newest upload is new and inside the requested lookback window, ingest only that one transcript. The weekly maximum is one video per channel.
+9. Prefer source-backed specificity over volume. Exclude generic motivation, unsupported claims, and stories with no reusable mechanism.
 
 For every scheduled weekly run, create exactly one HQ report Output with create_output:
 - kind: report
@@ -390,10 +392,10 @@ For every scheduled weekly run, create exactly one HQ report Output with create_
 The report must end with one fenced machine block using this exact fence label and shape:
 
 \`\`\`youtube-intel
-{"version":1,"nuggets":[{"category":"branding","title":"Specific finding","summary":"What changed or was learned","whyItMatters":"Why this matters for the artist","evidence":"Timestamped evidence","sourceUrls":["https://youtube.com/watch?v=..."]}]}
+{"version":1,"processedVideos":[{"channelUrl":"https://youtube.com/@channel","videoId":"abc123","publishedAt":"2026-07-10T12:00:00Z","sourceUrl":"https://youtube.com/watch?v=abc123"}],"nuggets":[{"category":"branding","title":"Specific finding","summary":"What changed or was learned","whyItMatters":"Why this matters for the artist","evidence":"Timestamped evidence","sourceUrls":["https://youtube.com/watch?v=abc123"]}]}
 \`\`\`
 
-Allowed categories: branding, content, rollout, audience, outreach, creative, operations. Each nugget must be independently useful, evidence-backed, and assigned to exactly one category. The RunnerOS scheduler routes these nuggets to the proper agents after the Output is complete.
+processedVideos must contain only videos whose transcripts were newly ingested in this run. If every newest upload was already processed, still create the report with processedVideos and nuggets as empty arrays and state that there were no new videos. Allowed categories: branding, content, rollout, audience, outreach, creative, operations. Each nugget must be independently useful, evidence-backed, and assigned to exactly one category. The RunnerOS scheduler routes these nuggets to the proper agents after the Output is complete.
 
 Never publish, upload, comment, edit, delete, rate, or manage YouTube accounts. Route social execution to Social Publisher.`,
   },
