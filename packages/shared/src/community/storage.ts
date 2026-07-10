@@ -175,8 +175,16 @@ function buildCommunityIndex(
   };
 }
 
-function writeCommunityIndex(workspaceRootPath: string, index: CommunityIndex): void {
-  atomicWriteJson(join(workspaceRootPath, COMMUNITY_INDEX_FILE), index);
+function writeCommunityIndex(workspaceRootPath: string, index: CommunityIndex): CommunityIndex {
+  const file = join(workspaceRootPath, COMMUNITY_INDEX_FILE);
+  try {
+    const existing = JSON.parse(readFileSync(file, 'utf-8')) as CommunityIndex;
+    const comparableExisting = { ...existing, generatedAt: '' };
+    const comparableNext = { ...index, generatedAt: '' };
+    if (JSON.stringify(comparableExisting) === JSON.stringify(comparableNext)) return existing;
+  } catch { /* missing or malformed projections are rebuilt */ }
+  atomicWriteJson(file, index);
+  return index;
 }
 
 function generateSummaryBody(state: Omit<CommunityState, 'migrated'>): string {
@@ -220,6 +228,8 @@ function writeCommunitySummary(
 ): void {
   const existing = loadContextDoc(workspaceRootPath, ARTIST_COMMUNITY_CONTEXT_SLUG);
   if (existing && !options.replaceExisting && !isGeneratedCommunitySummary(existing.body)) return;
+  const body = generateSummaryBody(state);
+  if (existing?.body === body) return;
   upsertContextDoc(workspaceRootPath, {
     slug: ARTIST_COMMUNITY_CONTEXT_SLUG,
     metadata: {
@@ -228,7 +238,7 @@ function writeCommunitySummary(
       routing: { mode: 'broadcast' },
       enabled: true,
     },
-    body: generateSummaryBody(state),
+    body,
   });
 }
 
@@ -335,8 +345,7 @@ export function loadCommunityState(
   const contacts = listCommunityContacts(workspaceRootPath);
   const emailJobs = listCommunityEmailJobs(workspaceRootPath);
   const suppressions = listCommunitySuppressions(workspaceRootPath);
-  const index = buildCommunityIndex(contacts, emailJobs, suppressions);
-  writeCommunityIndex(workspaceRootPath, index);
+  const index = writeCommunityIndex(workspaceRootPath, buildCommunityIndex(contacts, emailJobs, suppressions));
   writeCommunitySummary(workspaceRootPath, { contacts, emailJobs, suppressions, index }, {
     replaceExisting: options.replaceExistingSummary || migrated,
   });

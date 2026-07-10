@@ -8,6 +8,7 @@ Status: core Team Mode foundation implemented; email transport and Git advanced 
 - Shared-folder workspaces can store portable team metadata in `config.json` plus the `team/config.json` mirror.
 - Each joined machine has a private identity under the local config directory and a shared heartbeat under `team/machines/`.
 - Team Settings shows storage mode, runner state, owner/editor role, join state, sync health, conflict count, and machine heartbeat count.
+- Provider-delivered shared files are batched and pushed into live UI refreshes for Team state, HQ/context, Community records, Vaults, Outputs, workflow/deep-research runs, automations, notifications, and pulse history. A lightweight two-second metadata reconciliation pass covers filesystem watchers that miss newly created provider directories.
 - Existing workspaces can be moved into a shared folder with preflight checks, migration receipt, config-last copy, and moved-path tombstone.
 - Team Mode refuses unsafe open states: in-progress migration folders, config-less workspace folders, active migration receipts, and moved tombstones.
 - Shared records use immutable per-write operations plus removable payload capsules; JSON entity files are rebuildable projections. Concurrent branches are preserved and surfaced in Conflict Inbox, including branches detected by a third runner.
@@ -56,3 +57,4 @@ Status: core Team Mode foundation implemented; email transport and Git advanced 
 - Team migration tests cover preflight, rollback, in-progress open guard, and moved tombstones.
 - Automation tests cover solo runner behavior, non-runner skips, runner pulse state, pending catch-up, skipped webhooks, and startup runner-active state.
 - Fault tests cover pre-switch migration rollback, forward restart recovery, private-session promotion, runner fence changes immediately before execution, and provider-noise filtering.
+- Provider-sync tests cover path classification, record-op cross-refresh, temporary-file filtering, metadata reconciliation, and batched multi-surface delivery.

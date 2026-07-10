@@ -446,6 +446,10 @@ export const RPC_CHANNELS = {
     /** Push event when a workspace's context docs changed. */
     CHANGED: 'workspaceContext:changed',
   },
+  workspaceSync: {
+    /** Batched filesystem changes delivered by a shared-folder sync provider. */
+    CHANGED: 'workspaceSync:changed',
+  },
   scheduledWork: {
     /** Read the parsed scheduled-work document for a workspace. */
     GET: 'scheduledWork:get',

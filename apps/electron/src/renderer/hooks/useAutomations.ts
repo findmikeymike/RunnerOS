@@ -15,6 +15,7 @@ import { useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { automationsAtom } from '@/atoms/automations'
 import { parseAutomationsConfig, type AutomationListItem, type TestResult, type ExecutionEntry } from '@/components/automations/types'
+import { useWorkspaceSyncRefresh } from './useWorkspaceSyncRefresh'
 
 async function loadAutomationsFromServer(workspaceId: string): Promise<AutomationListItem[]> {
   const json = await window.electronAPI.getAutomations(workspaceId)
@@ -69,6 +70,7 @@ export function useAutomations(
       setAutomations([])
     }
   }, [activeWorkspaceId])
+  useWorkspaceSyncRefresh(activeWorkspaceId, ['automations'], loadAndHydrate)
 
   // Initial load
   useEffect(() => {

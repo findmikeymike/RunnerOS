@@ -449,6 +449,7 @@ const EXPECTED_CHANNELS: string[] = [
   "workspaceContext:upsert",
   "workspaceSettings:get",
   "workspaceSettings:update",
+  "workspaceSync:changed",
   "workspaceTeam:enableInPlace",
   "workspaceTeam:getStatus",
   "workspaceTeam:join",

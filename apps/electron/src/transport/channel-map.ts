@@ -444,6 +444,7 @@ export const CHANNEL_MAP = {
   upsertWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.UPSERT),
   deleteWorkspaceContextDoc: invoke(RPC_CHANNELS.workspaceContext.DELETE),
   onWorkspaceContextChanged: listener(RPC_CHANNELS.workspaceContext.CHANGED),
+  onWorkspaceSyncChanged: listener(RPC_CHANNELS.workspaceSync.CHANGED),
   getScheduledWork: invoke(RPC_CHANNELS.scheduledWork.GET),
   mutateScheduledWork: invoke(RPC_CHANNELS.scheduledWork.MUTATE),
   scheduleCampaignWork: invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN),

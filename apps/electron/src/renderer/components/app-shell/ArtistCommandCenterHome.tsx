@@ -27,6 +27,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
+import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import type { MissionAssetKindHint, MissionAssetManifest } from '../../../shared/types'
 import {
   ARTIST_PROFILE_CONTEXT_SLUG,
@@ -224,6 +225,12 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     : 'Start with a goal, files, or a worker.'
   const focus = mission.timeline || mission.releaseDate || (hasMission ? mission.missionType || 'Campaign active' : 'No brief yet')
   const readinessLabel = hasMission ? `${mission.completeness}% ready` : 'Not started'
+  const refreshAssetManifest = React.useCallback(async () => {
+    if (!workspaceId) return
+    const manifest = await window.electronAPI.getMissionAssetManifest(workspaceId)
+    setAssetManifest(manifest)
+  }, [workspaceId])
+
   React.useEffect(() => {
     let cancelled = false
     if (!workspaceId) return
@@ -238,6 +245,7 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
       cancelled = true
     }
   }, [workspaceId])
+  useWorkspaceSyncRefresh(workspaceId, ['vault', 'context'], refreshAssetManifest)
 
   const importAssetPaths = React.useCallback(
     async (filePaths: string[], kindHint: MissionAssetKindHint = 'any') => {

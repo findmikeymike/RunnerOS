@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import type {
   VaultAssetKind,
   VaultAssetRecord,
@@ -127,9 +128,9 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
   const [importDraft, setImportDraft] = React.useState<ImportDraft>(emptyImportDraft)
   const [dragActive, setDragActive] = React.useState(false)
 
-  const refresh = React.useCallback(async () => {
+  const refresh = React.useCallback(async (foreground = true) => {
     if (!workspaceId) return
-    setLoading(true)
+    if (foreground) setLoading(true)
     try {
       const next = await window.electronAPI.getArtistVaultManifest(workspaceId)
       setManifest(next)
@@ -137,13 +138,14 @@ export function VaultPage({ workspaceId, workspaceName }: VaultPageProps) {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
-      setLoading(false)
+      if (foreground) setLoading(false)
     }
   }, [workspaceId])
 
   React.useEffect(() => {
     void refresh()
   }, [refresh])
+  useWorkspaceSyncRefresh(workspaceId, ['vault', 'context'], () => refresh(false))
 
   const assets = manifest?.assets ?? []
   const selectedAsset = React.useMemo(

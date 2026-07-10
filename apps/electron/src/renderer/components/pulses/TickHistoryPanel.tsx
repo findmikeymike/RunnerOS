@@ -9,6 +9,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { Activity } from 'lucide-react'
 import { useNavigation } from '@/contexts/NavigationContext'
+import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import { routes } from '../../../shared/routes'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
@@ -79,6 +80,22 @@ export function TickHistoryPanel({
   const [ticks, setTicks] = React.useState<PulseTickEntry[]>([])
   const [loading, setLoading] = React.useState(true)
 
+  const refresh = React.useCallback(async (foreground = false) => {
+    const api = getApi()
+    if (foreground) setLoading(true)
+    if (!api.listPulseTicks) {
+      setTicks([])
+      if (foreground) setLoading(false)
+      return
+    }
+    try {
+      const entries = await api.listPulseTicks(workspaceId, pulseId, limit)
+      setTicks([...entries].sort((a, b) => b.tickedAt.localeCompare(a.tickedAt)))
+    } finally {
+      if (foreground) setLoading(false)
+    }
+  }, [limit, pulseId, workspaceId])
+
   React.useEffect(() => {
     let cancelled = false
     const api = getApi()
@@ -103,6 +120,7 @@ export function TickHistoryPanel({
       cancelled = true
     }
   }, [workspaceId, pulseId, limit])
+  useWorkspaceSyncRefresh(workspaceId, ['pulses'], () => refresh(false))
 
   React.useEffect(() => {
     const api = getApi()

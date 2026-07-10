@@ -51,3 +51,4 @@ export {
 export * from './team-mode.ts';
 export * from './team-migration.ts';
 export * from './shared-paths.ts';
+export * from './sync-events.ts';

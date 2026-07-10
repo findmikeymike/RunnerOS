@@ -10,6 +10,7 @@ import { useCallback, useEffect } from 'react'
 import { useAtom } from 'jotai'
 import { workflowRunsStateAtomFamily, type WorkflowRunsState } from '@/atoms/workflow-runs'
 import { RPC_CHANNELS, type WorkflowRunDTO } from '../../shared/types'
+import { useWorkspaceSyncRefresh } from './useWorkspaceSyncRefresh'
 
 export interface UseWorkflowRunsResult {
   runs: WorkflowRunDTO[]
@@ -49,7 +50,7 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
   const workspaceKey = getWorkspaceKey(workspaceId)
   const [state, setState] = useAtom(workflowRunsStateAtomFamily(workspaceKey))
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (authoritative = false) => {
     const existing = inFlightRefreshes.get(workspaceKey)
     if (existing) return existing
 
@@ -62,10 +63,12 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
         setState((prev) => {
           const byId = new Map<string, WorkflowRunDTO>()
           for (const run of runs) byId.set(run.id, run)
-          for (const run of prev.runs) {
-            const listed = byId.get(run.id)
-            if (!listed || (run.updatedAt ?? '') > (listed.updatedAt ?? '')) {
-              byId.set(run.id, run)
+          if (!authoritative) {
+            for (const run of prev.runs) {
+              const listed = byId.get(run.id)
+              if (!listed || (run.updatedAt ?? '') > (listed.updatedAt ?? '')) {
+                byId.set(run.id, run)
+              }
             }
           }
           return {
@@ -89,6 +92,8 @@ export function useWorkflowRuns(workspaceId: string | null | undefined): UseWork
     inFlightRefreshes.set(workspaceKey, run)
     return run
   }, [setState, workspaceId, workspaceKey])
+
+  useWorkspaceSyncRefresh(workspaceId, ['workflow-runs', 'agent-messages'], () => refresh(true))
 
   useEffect(() => {
     refreshersByWorkspaceKey.set(workspaceKey, refresh)

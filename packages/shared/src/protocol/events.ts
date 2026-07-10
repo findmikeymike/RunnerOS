@@ -12,6 +12,7 @@ import type { LoadedSource } from '../sources/types'
 import type { LoadedSkill } from '../skills/types'
 import type { LoadedContextDoc } from '../workspace-context/types'
 import type { LoadedWorkflow, WorkflowRunSnapshot } from '../workflows'
+import type { WorkspaceSyncChange } from '../workspaces/sync-events'
 import { RPC_CHANNELS } from './channels'
 import type {
   SessionEvent,
@@ -37,6 +38,7 @@ export interface BroadcastEventMap {
   [RPC_CHANNELS.automations.CHANGED]: [workspaceId: string]
   [RPC_CHANNELS.agentDefinitions.CHANGED]: [workspaceId: string | null]
   [RPC_CHANNELS.workspaceContext.CHANGED]: [workspaceId: string, docs: LoadedContextDoc[]]
+  [RPC_CHANNELS.workspaceSync.CHANGED]: [change: WorkspaceSyncChange]
   [RPC_CHANNELS.memory.CHANGED]: [scope: 'agent' | 'user', agentSlug: string | null]
   [RPC_CHANNELS.workflows.CHANGED]: [workspaceId: string | null, workflows: LoadedWorkflow[]]
   [RPC_CHANNELS.workflowRuns.UPDATED]: [

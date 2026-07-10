@@ -39,7 +39,8 @@ import {
 } from '@craft-agent/shared/config'
 import type { ActiveSessionInfo, SessionProcessingStatus } from '@craft-agent/core/types'
 import type { MemoryMutationResult, RecalledMemoryEntry, RecallMemoryResult, RecallMemoryToolInput } from '@craft-agent/session-tools-core'
-import { assertTeamPermission, evaluateTeamRunnerGate, loadWorkspaceConfig } from '@craft-agent/shared/workspaces'
+import { assertTeamPermission, evaluateTeamRunnerGate, getTeamModeStatus, loadWorkspaceConfig, type WorkspaceSyncArea } from '@craft-agent/shared/workspaces'
+import { detectClobberedWrites, scanProviderConflictedCopies } from '@craft-agent/shared/records'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
   applyCampaignCalendarWriteIntent,
@@ -2060,6 +2061,11 @@ export class SessionManager implements ISessionManager {
           })
         }
       },
+      onWorkspaceSyncChange: (change) => {
+        void this.handleWorkspaceSyncChange(workspaceRootPath, workspaceId, change.areas).catch((error) => {
+          sessionLog.error(`Failed to process shared workspace sync change for ${workspaceId}:`, error)
+        })
+      },
     }
 
     const watcher = new ConfigWatcher(workspaceRootPath, callbacks)
@@ -2535,6 +2541,53 @@ export class SessionManager implements ISessionManager {
     if (!this.eventSink) return
     sessionLog.info(`Broadcasting automations changed for ${workspaceId}`)
     this.eventSink(RPC_CHANNELS.automations.CHANGED, { to: 'workspace', workspaceId }, workspaceId)
+  }
+
+  private async handleWorkspaceSyncChange(
+    workspaceRootPath: string,
+    workspaceId: string,
+    changedAreas: WorkspaceSyncArea[],
+  ): Promise<void> {
+    if (!this.eventSink) return
+    const config = loadWorkspaceConfig(workspaceRootPath)
+    if (config?.storage?.mode !== 'shared-folder' || !config.team?.enabled) return
+
+    const areas = new Set(changedAreas)
+    if (areas.has('records')) {
+      try {
+        const status = getTeamModeStatus(workspaceRootPath)
+        const clobbers = detectClobberedWrites(workspaceRootPath, status.machine.machineId)
+        const providerConflicts = scanProviderConflictedCopies(workspaceRootPath, { machineId: status.machine.machineId })
+        if (clobbers.length > 0 || providerConflicts.length > 0) areas.add('team')
+      } catch (error) {
+        // The generic event still reaches the UI, where Team health fails closed.
+        sessionLog.warn(`Shared record reconciliation failed for ${workspaceId}:`, error)
+        areas.add('team')
+      }
+    }
+
+    if (areas.has('context')) {
+      invalidateContextFileCache(workspaceRootPath)
+      this.eventSink(
+        RPC_CHANNELS.workspaceContext.CHANGED,
+        { to: 'workspace', workspaceId },
+        workspaceId,
+        loadAllContextDocs(workspaceRootPath),
+      )
+    }
+    if (areas.has('outputs')) {
+      this.eventSink(RPC_CHANNELS.outputs.UPDATED, { to: 'workspace', workspaceId }, workspaceId)
+    }
+    if (areas.has('workflows')) this.broadcastWorkflowsChanged(workspaceId)
+    if (areas.has('agents')) this.broadcastAgentDefinitionsChanged(workspaceId)
+
+    const change = {
+      workspaceId,
+      areas: [...areas].sort(),
+      detectedAt: new Date().toISOString(),
+    }
+    sessionLog.info(`Shared workspace files changed for ${workspaceId}: ${change.areas.join(', ')}`)
+    this.eventSink(RPC_CHANNELS.workspaceSync.CHANGED, { to: 'workspace', workspaceId }, change)
   }
 
   private broadcastAppThemeChanged(theme: import('@craft-agent/shared/config').ThemeOverrides | null): void {

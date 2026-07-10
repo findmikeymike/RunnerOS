@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { useDirectoryPicker } from '@/hooks/useDirectoryPicker'
+import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import { routes } from '@/lib/navigate'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { TeamModeStatus } from '../../../shared/types'
@@ -44,19 +45,20 @@ export default function TeamSettingsPage() {
   const [ownerRecoveryCode, setOwnerRecoveryCode] = useState('')
   const [newOwnerRecoveryCode, setNewOwnerRecoveryCode] = useState('')
 
-  const loadStatus = useCallback(async () => {
+  const loadStatus = useCallback(async (foreground = true) => {
     if (!activeWorkspaceId) {
       setStatus(null)
       setLoading(false)
       return
     }
-    setLoading(true)
+    if (foreground) setLoading(true)
     try {
-      const [nextStatus, nextOverrides, nextConflicts] = await Promise.all([
+      const [nextStatus, nextOverrides] = await Promise.all([
         window.electronAPI.getWorkspaceTeamStatus(activeWorkspaceId),
         window.electronAPI.getWorkspaceTeamPathOverrides(activeWorkspaceId),
-        window.electronAPI.listRecordConflicts(activeWorkspaceId),
       ])
+      // Status reconciliation can create provider conflict artifacts; list them afterward.
+      const nextConflicts = await window.electronAPI.listRecordConflicts(activeWorkspaceId)
       setStatus(nextStatus)
       setPathOverrides(nextOverrides)
       setRecordConflicts(nextConflicts)
@@ -65,13 +67,14 @@ export default function TeamSettingsPage() {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
-      setLoading(false)
+      if (foreground) setLoading(false)
     }
   }, [activeWorkspaceId])
 
   useEffect(() => {
     void loadStatus()
   }, [loadStatus])
+  useWorkspaceSyncRefresh(activeWorkspaceId, ['workspace', 'team', 'records'], () => loadStatus(false))
 
   const enableTeamMode = async () => {
     if (!activeWorkspaceId) return

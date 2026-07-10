@@ -118,6 +118,25 @@ describe('community record storage', () => {
     expect(JSON.parse(readFileSync(join(root, 'records/community/index.json'), 'utf-8'))).toMatchObject({ totalContacts: 0 });
   });
 
+  test('repeated community reads do not rewrite unchanged shared projections', async () => {
+    const root = tempRoot();
+    upsertCommunityContact(root, 'machine_a', {
+      name: 'Stable Fan',
+      email: 'stable@example.com',
+      segment: 'general',
+      consentStatus: 'opted-in',
+    });
+    const indexPath = join(root, 'records/community/index.json');
+    const firstIndex = readFileSync(indexPath, 'utf-8');
+    const firstSummary = loadContextDoc(root, ARTIST_COMMUNITY_CONTEXT_SLUG)?.body;
+
+    await Bun.sleep(5);
+    loadCommunityState(root, 'machine_a');
+
+    expect(readFileSync(indexPath, 'utf-8')).toBe(firstIndex);
+    expect(loadContextDoc(root, ARTIST_COMMUNITY_CONTEXT_SLUG)?.body).toBe(firstSummary);
+  });
+
   test('read-only community state does not migrate legacy context or write generated files', () => {
     const root = tempRoot();
     upsertContextDoc(root, {

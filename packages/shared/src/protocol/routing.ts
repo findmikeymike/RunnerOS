@@ -482,6 +482,7 @@ export const REMOTE_ELIGIBLE_CHANNELS = new Set<string>([
   RPC_CHANNELS.workspaceContext.UPSERT,
   RPC_CHANNELS.workspaceContext.DELETE,
   RPC_CHANNELS.workspaceContext.CHANGED,
+  RPC_CHANNELS.workspaceSync.CHANGED,
   RPC_CHANNELS.scheduledWork.GET,
   RPC_CHANNELS.scheduledWork.MUTATE,
   RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN,

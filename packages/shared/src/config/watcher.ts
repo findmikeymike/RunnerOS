@@ -41,7 +41,7 @@ import {
   downloadSourceIcon,
 } from '../sources/storage.ts';
 import { permissionsConfigCache, getAppPermissionsDir } from '../agent/permissions-config.ts';
-import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath } from '../workspaces/storage.ts';
+import { getWorkspacePath, getWorkspaceSourcesPath, getWorkspaceSkillsPath, loadWorkspaceConfig } from '../workspaces/storage.ts';
 import type { LoadedSkill } from '../skills/types.ts';
 import { loadSkill, loadAllSkills, invalidateSkillsCache, skillNeedsIconDownload, downloadSkillIcon, mirrorSkillToGlobal } from '../skills/storage.ts';
 import {
@@ -54,6 +54,7 @@ import type { SessionHeader } from '../sessions/types.ts';
 import { AUTOMATIONS_CONFIG_FILE } from '../automations/constants.ts';
 import { loadAppTheme, loadPresetThemes, loadPresetTheme, getAppThemesDir } from './storage.ts';
 import type { ThemeOverrides, PresetTheme } from './theme.ts';
+import { classifyWorkspaceSyncAreas, type WorkspaceSyncArea } from '../workspaces/sync-events.ts';
 
 // ============================================================
 // Active Watcher Registry (duplicate detection)
@@ -84,6 +85,74 @@ const DEBOUNCE_MS = 100;
 // Longer debounce for session metadata on Windows where fs.watch() fires
 // aggressively for atomic writes (unlink + rename = 2+ events)
 const SESSION_META_DEBOUNCE_MS = platform() === 'win32' ? 300 : DEBOUNCE_MS;
+const WORKSPACE_SYNC_DEBOUNCE_MS = 250;
+const WORKSPACE_SYNC_RECONCILE_MS = 2_000;
+
+const WORKSPACE_SYNC_RECONCILE_TARGETS: Array<{
+  area: WorkspaceSyncArea;
+  paths: string[];
+  include?: (name: string) => boolean;
+}> = [
+  { area: 'workspace', paths: ['config.json'] },
+  { area: 'team', paths: ['team'], include: (name) => /\.(?:json|jsonl)$/i.test(name) },
+  { area: 'context', paths: ['context'], include: (name) => /\.(?:md|json)$/i.test(name) },
+  { area: 'records', paths: ['records', 'team/record-ops', 'team/record-payloads', 'team/oplog', 'team/conflicts'], include: (name) => /\.(?:json|jsonl)$/i.test(name) },
+  { area: 'outputs', paths: ['outputs'], include: (name) => /(?:output\.json|\.(?:json|md|html|svg))$/i.test(name) },
+  { area: 'workflow-runs', paths: ['runs'], include: (name) => /\.json$/i.test(name) },
+  { area: 'deep-research', paths: ['deep-research-runs'], include: (name) => /\.json$/i.test(name) },
+  { area: 'workflows', paths: ['activated-workflows.json'] },
+  { area: 'agents', paths: ['activated-agents.json'] },
+  { area: 'automations', paths: ['automations-history.jsonl', 'automations-retry-queue.jsonl'] },
+  { area: 'pulses', paths: ['pulses'], include: (name) => /\.(?:json|jsonl)$/i.test(name) },
+  { area: 'notifications', paths: ['notifications.json'] },
+  { area: 'vault', paths: ['vault/manifest.json', 'assets/manifest.json'] },
+  { area: 'agent-messages', paths: ['agent-messages'], include: (name) => /\.json$/i.test(name) },
+  { area: 'labels', paths: ['labels/config.json'] },
+  { area: 'statuses', paths: ['statuses/config.json'] },
+  { area: 'permissions', paths: ['permissions.json'] },
+];
+
+function metadataFingerprint(rootPath: string, targets: string[], include?: (name: string) => boolean): string {
+  const entries: string[] = [];
+  const visit = (absolutePath: string, relativePath: string): void => {
+    if (!existsSync(absolutePath)) {
+      entries.push(`${relativePath}:missing`);
+      return;
+    }
+    let stat;
+    try { stat = statSync(absolutePath); } catch { return; }
+    if (stat.isDirectory()) {
+      entries.push(`${relativePath}:d:${stat.mtimeMs}`);
+      let children;
+      try { children = readdirSync(absolutePath, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)); } catch { return; }
+      for (const child of children) {
+        if (child.isSymbolicLink()) continue;
+        const childRelative = relativePath ? `${relativePath}/${child.name}` : child.name;
+        if (child.isDirectory() || !include || include(child.name)) visit(join(absolutePath, child.name), childRelative);
+      }
+      return;
+    }
+    if (!include || include(basename(relativePath))) entries.push(`${relativePath}:f:${stat.size}:${stat.mtimeMs}`);
+  };
+  for (const target of targets) visit(join(rootPath, target), target);
+
+  // Compact deterministic FNV-1a signature; file contents are never read.
+  let hash = 0x811c9dc5;
+  for (const entry of entries) {
+    for (let i = 0; i < entry.length; i += 1) {
+      hash ^= entry.charCodeAt(i);
+      hash = Math.imul(hash, 0x01000193);
+    }
+  }
+  return `${entries.length}:${hash >>> 0}`;
+}
+
+export function snapshotWorkspaceSyncMetadata(workspaceRootPath: string): Map<WorkspaceSyncArea, string> {
+  return new Map(WORKSPACE_SYNC_RECONCILE_TARGETS.map((target) => [
+    target.area,
+    metadataFingerprint(workspaceRootPath, target.paths, target.include),
+  ]));
+}
 
 // ============================================================
 // Types
@@ -156,6 +225,9 @@ export interface ConfigWatcherCallbacks {
   /** Called when a session's JSONL header is modified externally (labels, name, flags, etc.) */
   onSessionMetadataChange?: (sessionId: string, header: SessionHeader) => void;
 
+  /** Batched provider/local filesystem changes for shared workspace data. */
+  onWorkspaceSyncChange?: (change: { areas: WorkspaceSyncArea[]; paths: string[] }) => void;
+
   // Theme callbacks (app-level only)
   /** Called when app-level theme.json changes */
   onAppThemeChange?: (theme: ThemeOverrides | null) => void;
@@ -204,6 +276,9 @@ export class ConfigWatcher {
   private callbacks: ConfigWatcherCallbacks;
   private watchers: FSWatcher[] = [];
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  private pendingWorkspaceSyncPaths = new Map<string, Set<WorkspaceSyncArea>>();
+  private workspaceSyncReconcileTimer: ReturnType<typeof setInterval> | null = null;
+  private workspaceSyncSignatures = new Map<WorkspaceSyncArea, string>();
   private isRunning = false;
 
   // Track known items for detecting adds/removes
@@ -283,6 +358,9 @@ export class ConfigWatcher {
     this.watchWorkspaceDir();
     span.mark('watchWorkspaceDir');
 
+    this.ensureWorkspaceSyncReconciliation();
+    span.mark('ensureWorkspaceSyncReconciliation');
+
     // Watch app-level themes directory
     this.watchAppThemesDir();
     span.mark('watchAppThemesDir');
@@ -349,6 +427,10 @@ export class ConfigWatcher {
       clearTimeout(timer);
     }
     this.debounceTimers.clear();
+    this.pendingWorkspaceSyncPaths.clear();
+    if (this.workspaceSyncReconcileTimer) clearInterval(this.workspaceSyncReconcileTimer);
+    this.workspaceSyncReconcileTimer = null;
+    this.workspaceSyncSignatures.clear();
 
     // Close all watchers
     for (const watcher of this.watchers) {
@@ -421,9 +503,12 @@ export class ConfigWatcher {
   private handleWorkspaceFileChange(relativePath: string, eventType: string): void {
     const parts = relativePath.split('/');
 
+    if (relativePath === 'config.json') this.ensureWorkspaceSyncReconciliation();
+
     // Workspace-level permissions.json
     if (relativePath === 'permissions.json') {
       this.debounce('workspace-permissions', () => this.handleWorkspacePermissionsChange());
+      this.queueWorkspaceSyncChange(relativePath, 'permissions');
       return;
     }
 
@@ -524,6 +609,64 @@ export class ConfigWatcher {
       }
 
     }
+
+    for (const syncArea of classifyWorkspaceSyncAreas(relativePath)) {
+      this.queueWorkspaceSyncChange(relativePath, syncArea);
+    }
+  }
+
+  private queueWorkspaceSyncChange(relativePath: string, area: WorkspaceSyncArea): void {
+    const areasForPath = this.pendingWorkspaceSyncPaths.get(relativePath) ?? new Set<WorkspaceSyncArea>();
+    areasForPath.add(area);
+    this.pendingWorkspaceSyncPaths.set(relativePath, areasForPath);
+    this.debounce('workspace-sync', () => {
+      const paths = [...this.pendingWorkspaceSyncPaths.keys()].sort();
+      const areas = [...new Set([...this.pendingWorkspaceSyncPaths.values()].flatMap((entry) => [...entry]))].sort();
+      this.pendingWorkspaceSyncPaths.clear();
+      if (paths.length > 0) {
+        // Advance the fallback baseline so a normal fs.watch delivery is not emitted again.
+        if (this.workspaceSyncSignatures.size > 0) {
+          const current = snapshotWorkspaceSyncMetadata(this.workspaceDir);
+          for (const area of areas) this.workspaceSyncSignatures.set(area, current.get(area) ?? 'missing');
+        }
+        this.callbacks.onWorkspaceSyncChange?.({ areas, paths });
+      }
+    }, WORKSPACE_SYNC_DEBOUNCE_MS);
+  }
+
+  private ensureWorkspaceSyncReconciliation(): void {
+    const config = loadWorkspaceConfig(this.workspaceDir);
+    const shouldRun = config?.storage?.mode === 'shared-folder' && config.team?.enabled === true;
+    if (!shouldRun) {
+      if (this.workspaceSyncReconcileTimer) clearInterval(this.workspaceSyncReconcileTimer);
+      this.workspaceSyncReconcileTimer = null;
+      this.workspaceSyncSignatures.clear();
+      return;
+    }
+    if (this.workspaceSyncReconcileTimer) return;
+    this.workspaceSyncSignatures = snapshotWorkspaceSyncMetadata(this.workspaceDir);
+    this.workspaceSyncReconcileTimer = setInterval(() => {
+      this.reconcileWorkspaceSyncNow();
+    }, WORKSPACE_SYNC_RECONCILE_MS);
+    this.workspaceSyncReconcileTimer.unref?.();
+  }
+
+  /** Public for deterministic tests and explicit lifecycle refreshes. */
+  reconcileWorkspaceSyncNow(): void {
+    if (!this.isRunning || this.workspaceSyncSignatures.size === 0) return;
+    const next = snapshotWorkspaceSyncMetadata(this.workspaceDir);
+    for (const [area, signature] of next) {
+      if (this.workspaceSyncSignatures.get(area) !== signature) {
+        if (area === 'labels') this.handleLabelConfigChange();
+        else if (area === 'statuses') this.handleStatusConfigChange();
+        else if (area === 'permissions') {
+          this.handleWorkspacePermissionsChange();
+          this.queueWorkspaceSyncChange(`@reconcile/${area}`, area);
+        }
+        else this.queueWorkspaceSyncChange(`@reconcile/${area}`, area);
+      }
+    }
+    this.workspaceSyncSignatures = next;
   }
 
   /**

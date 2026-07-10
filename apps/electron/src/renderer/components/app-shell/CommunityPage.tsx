@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { navigate, routes } from '@/lib/navigate'
+import { useWorkspaceSyncRefresh } from '@/hooks/useWorkspaceSyncRefresh'
 import type {
   CommunityContactRecord,
   CommunitySegment,
@@ -77,20 +78,21 @@ export function CommunityPage({ workspaceId }: CommunityPageProps) {
   const [draftingEmail, setDraftingEmail] = React.useState(false)
   const [importBasis, setImportBasis] = React.useState<ImportBasis>('unknown')
 
-  const refreshCommunity = React.useCallback(async () => {
-    setLoading(true)
+  const refreshCommunity = React.useCallback(async (foreground = true) => {
+    if (foreground) setLoading(true)
     try {
       setCommunity(await window.electronAPI.getCommunity(workspaceId))
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
-      setLoading(false)
+      if (foreground) setLoading(false)
     }
   }, [workspaceId])
 
   React.useEffect(() => {
     void refreshCommunity()
   }, [refreshCommunity])
+  useWorkspaceSyncRefresh(workspaceId, ['records'], () => refreshCommunity(false))
 
   const contacts = community?.contacts.filter((fan) => !fan.deletedAt) ?? []
   const emailJobs = community?.emailJobs.filter((job) => !job.deletedAt) ?? []
