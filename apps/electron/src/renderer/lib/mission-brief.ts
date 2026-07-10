@@ -126,7 +126,9 @@ function inferChannels(text: string): string[] | undefined {
 }
 
 export function calculateMissionCompleteness(brief: Partial<MissionBrief>): number {
-  const requiredScore = REQUIRED_FIELDS.filter((field) => Boolean(brief[field])).length / REQUIRED_FIELDS.length
+  const requiredScore = REQUIRED_FIELDS.filter((field) => (
+    field === 'timeline' ? Boolean(brief.timeline || brief.releaseDate) : Boolean(brief[field])
+  )).length / REQUIRED_FIELDS.length
   const recommendedScore = RECOMMENDED_FIELDS.filter((field) => {
     const value = brief[field]
     return Array.isArray(value) ? value.length > 0 : Boolean(value)
@@ -164,6 +166,7 @@ export function extractMissionBrief(text: string, existing: Partial<MissionBrief
   const status = getMissionStatus(extracted)
   const missing = [...REQUIRED_FIELDS, ...RECOMMENDED_FIELDS]
     .filter((field) => {
+      if (field === 'timeline') return !extracted.timeline && !extracted.releaseDate
       const value = extracted[field]
       return Array.isArray(value) ? value.length === 0 : !value
     })
@@ -249,6 +252,20 @@ export function missionBriefContentKey(brief: MissionBrief): string {
     openQuestions: brief.openQuestions ?? [],
     rawNotes: brief.rawNotes ?? null,
   })
+}
+
+export function missionReleaseDateKey(brief: Pick<MissionBrief, 'releaseDate' | 'timeline'>): string | undefined {
+  const value = clean(brief.releaseDate) ?? normalizeDeadline(brief.timeline)
+  if (!value) return undefined
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value
+  if (!/\b\d{4}\b/.test(value)) return undefined
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return undefined
+  return [
+    parsed.getFullYear(),
+    String(parsed.getMonth() + 1).padStart(2, '0'),
+    String(parsed.getDate()).padStart(2, '0'),
+  ].join('-')
 }
 
 export function parseMissionBriefDoc(doc: ContextDocDTO | undefined | null): MissionBrief | null {

@@ -11,6 +11,7 @@ import {
   type ScheduledWorkStatus,
 } from '@craft-agent/shared/scheduled-work'
 import { cn } from '@/lib/utils'
+import { MISSION_BRIEF_CONTEXT_SLUG, missionReleaseDateKey, parseMissionBriefDoc } from '@/lib/mission-brief'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
@@ -105,6 +106,11 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   const [optimisticScheduledWork, setOptimisticScheduledWork] = React.useState<ScheduledWorkDocument | null>(null)
   const scheduledWork = optimisticScheduledWork ?? savedScheduledWorkResult.work
   const campaignCalendar = optimisticCampaignCalendar ?? savedCampaignCalendarResult.calendar
+  const missionBrief = React.useMemo(
+    () => parseMissionBriefDoc(docs.find((item) => item.slug === MISSION_BRIEF_CONTEXT_SLUG)),
+    [docs],
+  )
+  const releaseDate = missionBrief ? missionReleaseDateKey(missionBrief) : undefined
   const storageError = !savedCampaignCalendarResult.ok
     ? savedCampaignCalendarResult.error
     : !savedScheduledWorkResult.ok
@@ -126,13 +132,17 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
     [activeCalendarItems, selectedCalendarDate],
   )
   const nextCalendarDate = React.useMemo(() => {
-    const nextItem = [...activeCalendarItems]
-      .filter((item) => item.date >= todayKey)
-      .sort((a, b) => `${a.date} ${a.time ?? ''}`.localeCompare(`${b.date} ${b.time ?? ''}`))[0]
-    return nextItem
-      ? parseDateKey(nextItem.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    const nextItemDate = [...activeCalendarItems]
+      .map((item) => item.date)
+      .filter((date) => date >= todayKey)
+      .sort()[0]
+    const nextDate = [nextItemDate, releaseDate && releaseDate >= todayKey ? releaseDate : undefined]
+      .filter((date): date is string => Boolean(date))
+      .sort()[0]
+    return nextDate
+      ? parseDateKey(nextDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       : 'No upcoming items'
-  }, [activeCalendarItems])
+  }, [activeCalendarItems, releaseDate])
 
   React.useEffect(() => {
     if (docs.some((item) => item.slug === CAMPAIGN_CALENDAR_CONTEXT_SLUG)) setOptimisticCampaignCalendar(null)
@@ -463,6 +473,7 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
 
         <CampaignCalendarSurface
           items={activeCalendarItems}
+          releaseDate={releaseDate}
           selectedDate={selectedCalendarDate}
           visibleMonth={visibleCalendarMonth}
           selectedDateItems={selectedDateCalendarItems}
@@ -517,6 +528,7 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
 
 function CampaignCalendarSurface({
   items,
+  releaseDate,
   selectedDate,
   visibleMonth,
   selectedDateItems,
@@ -546,6 +558,7 @@ function CampaignCalendarSurface({
   onOpenComposer,
 }: {
   items: CampaignCalendarItem[]
+  releaseDate?: string
   selectedDate: string
   visibleMonth: Date
   selectedDateItems: CampaignCalendarItem[]
@@ -588,8 +601,15 @@ function CampaignCalendarSurface({
         items: [...(current.items ?? []), { id: item.id, label: item.title, detail: `${item.time || 'All day'} - ${status.replace(/-/g, ' ')}`, markerClass: statusDotClass(status) }],
       })
     }
+    if (releaseDate) {
+      const current = metaByDate.get(releaseDate) ?? { count: 0, dots: [], items: [] }
+      metaByDate.set(releaseDate, {
+        ...current,
+        highlights: [{ id: 'campaign-release-day', label: 'Release day' }],
+      })
+    }
     return metaByDate
-  }, [items, workById])
+  }, [items, releaseDate, workById])
   const selectedLabel = parseDateKey(selectedDate).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',

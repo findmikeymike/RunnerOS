@@ -22,6 +22,7 @@ export interface CalendarMonthDayMeta {
   count?: number
   dots?: string[]
   items?: CalendarDayMenuItem[]
+  highlights?: Array<{ id: string; label: string; className?: string }>
 }
 
 export function CalendarMonthGrid({
@@ -106,6 +107,7 @@ export function CalendarMonthGrid({
           const count = meta?.count ?? 0
           const dots = meta?.dots ?? (count > 0 ? ['bg-orange-400/80'] : [])
           const items = meta?.items ?? []
+          const highlights = meta?.highlights ?? []
           const visibleItems = items.slice(0, MAX_VISIBLE_DAY_ITEMS)
           const hiddenItemCount = items.length - visibleItems.length
           const isSelected = key === selectedDate
@@ -139,8 +141,21 @@ export function CalendarMonthGrid({
               <span className={cn('text-xs font-medium', isToday ? 'text-orange-200' : 'text-white/65')}>
                 {day.getDate()}
               </span>
+              {highlights.length > 0 ? (
+                <div className="mt-auto min-w-0 space-y-1 pt-1">
+                  {highlights.map((highlight) => (
+                    <div
+                      key={highlight.id}
+                      title={highlight.label}
+                      className={cn('max-w-full truncate rounded-[3px] bg-emerald-400/18 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-200 ring-1 ring-emerald-300/20', highlight.className)}
+                    >
+                      {highlight.label}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               {items.length > 0 ? (
-                <div className="mt-auto flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden pt-1.5">
+                <div className={cn('flex min-w-0 flex-nowrap items-center gap-1.5 overflow-hidden pt-1.5', highlights.length === 0 && 'mt-auto')}>
                   {visibleItems.map((item, index) => (
                     <button
                       key={item.id}
