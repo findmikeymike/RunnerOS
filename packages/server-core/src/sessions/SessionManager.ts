@@ -3075,6 +3075,34 @@ export class SessionManager implements ISessionManager {
           ).updated) {
             sessionLog.info('[agent-definitions] Added HNIC scheduled-work routing')
           }
+          if (replaceBuiltInAgentPromptText(
+            SOCIAL_PUBLISHER_SLUG,
+            'Approval rule:\n- Never publish, comment, DM, upload, schedule, delete, follow, unfollow, or submit a final platform action without explicit user approval of the exact platform, profile, payload, target URL/recipient, and media.',
+            'Authorization rule:\n- Never publish, comment, DM, upload, schedule, delete, follow, unfollow, or submit a final platform action without authorization.\n- A direct user instruction or active scheduled job to check and answer comments/messages is a bounded engagement mandate. Resolve the exact profile and inbox types once, then inspect, draft, dry-run, and send matching replies without asking again for every item.\n- A mandate never covers cold DMs, posts/uploads, account changes, blocking/reporting, or sensitive conversations outside the engagement playbook. Stop and report those.\n- One-off actions outside a mandate still require explicit approval of the exact platform, profile, payload, target URL/recipient, and media.',
+          ).updated) {
+            sessionLog.info('[agent-definitions] Added Social Publisher delegated engagement authorization')
+          }
+          if (replaceBuiltInAgentPromptText(
+            SOCIAL_PUBLISHER_SLUG,
+            '8. For publish/comment/DM, run the matching command with the selected `--profile`, `--asset-root`, `--content-root`, relative file names, and `--dry-run --json` first.',
+            '8. For publish/comment/DM, run the matching command with the selected `--profile`, `--asset-root`, `--content-root`, relative file names, and `--dry-run --json` first. For comment/message inbox work, load the engagement playbook from the social-publishing skill and inspect the owned inbox with `browser_tool`.',
+          ).updated) {
+            sessionLog.info('[agent-definitions] Added Social Publisher engagement inbox playbook')
+          }
+          if (replaceBuiltInAgentPromptText(
+            SOCIAL_PUBLISHER_SLUG,
+            '10. After explicit approval, save the dry-run result and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`.',
+            '10. After exact-action approval or when a reply fits an active bounded engagement mandate, save the dry-run result and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`.',
+          ).updated) {
+            sessionLog.info('[agent-definitions] Updated Social Publisher execute authorization')
+          }
+          if (replaceBuiltInAgentPromptText(
+            SOCIAL_PUBLISHER_SLUG,
+            '5. Summarize the exact action, resolved media paths, content source, target account, and ask approval if it is live.\n6. Run `social execute` on the saved dry-run JSON only after that approval.',
+            '5. Summarize the exact action, resolved media paths, content source, and target account. Ask only when neither exact approval nor a matching engagement mandate exists.\n6. Run `social execute` on the saved dry-run JSON after resolving that authorization.',
+          ).updated) {
+            sessionLog.info('[agent-definitions] Updated Social Publisher engagement execution loop')
+          }
           const powerUpMetadataUpdated = [
             replaceBuiltInAgentMetadata('ig-trending-power-up', {
               name: { from: 'IG Trending Power Up', to: 'IG Music Trending' },

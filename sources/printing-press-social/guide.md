@@ -29,17 +29,17 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - Runner browser tools can complete delegated readiness checks by passing non-secret observed identity back with `node src/social.mjs profile status <platform> --profile <profile> --live --verification-result <json-file> --json`.
 - Profile status JSON includes UI-ready fields: `profileStatus`, `severity`, `message`, `nextAction`, `lastCheckedAt`, and redacted `evidence`.
 - Instagram dry-run post: `node src/social.mjs post instagram --profile <profile> --text "<caption>" --media <image> --dry-run --json`
-- Instagram dry-run comment: `node src/social.mjs comment instagram --profile <profile> --url "<url>" --text "<comment>" --dry-run --json`
-- Instagram dry-run DM: `node src/social.mjs dm instagram --profile <profile> --to <username> --text "<message>" --dry-run --json`
+- Instagram dry-run reply: `node src/social.mjs comment instagram --profile <profile> --url "<post-url>" --reply-to "<comment-id-or-permalink>" --text "<reply>" --dry-run --json`
+- Instagram dry-run DM reply: `node src/social.mjs dm instagram --profile <profile> --to <username> --thread-url "<thread-url>" --text "<message>" --dry-run --json`
 - TikTok dry-run post: `node src/social.mjs post tiktok --profile <profile> --text "<caption>" --media <video> --dry-run --json`
-- TikTok dry-run comment: `node src/social.mjs comment tiktok --profile <profile> --url "<url>" --text "<comment>" --dry-run --json`
-- TikTok dry-run DM: `node src/social.mjs dm tiktok --profile <profile> --to <username> --text "<message>" --dry-run --json`
+- TikTok dry-run reply: `node src/social.mjs comment tiktok --profile <profile> --url "<post-url>" --reply-to "<comment-id-or-permalink>" --text "<reply>" --dry-run --json`
+- TikTok dry-run DM reply: `node src/social.mjs dm tiktok --profile <profile> --to <username> --thread-url "<thread-url>" --text "<message>" --dry-run --json`
 - X dry-run post: `node src/social.mjs post x --profile <profile> --text "<post>" --dry-run --json`
-- X dry-run reply: `node src/social.mjs comment x --profile <profile> --url "<url>" --text "<reply>" --dry-run --json`
-- X dry-run DM: `node src/social.mjs dm x --profile <profile> --to <username> --text "<message>" --dry-run --json`
+- X dry-run reply: `node src/social.mjs comment x --profile <profile> --url "<post-url>" --reply-to "<reply-id-or-permalink>" --text "<reply>" --dry-run --json`
+- X dry-run DM reply: `node src/social.mjs dm x --profile <profile> --to <username> --thread-url "<thread-url>" --text "<message>" --dry-run --json`
 - YouTube dry-run video: `node src/social.mjs post youtube --profile <profile> --post-type video --text "<title>" --media <video> --visibility public --dry-run --json`
 - YouTube dry-run Short: `node src/social.mjs post youtube --profile <profile> --post-type short --text "<title>" --media <video> --visibility public --dry-run --json`
-- YouTube dry-run comment: `node src/social.mjs comment youtube --profile <profile> --url "<url>" --text "<comment>" --dry-run --json`
+- YouTube dry-run reply: `node src/social.mjs comment youtube --profile <profile> --url "<video-url>" --reply-to "<comment-id-or-permalink>" --text "<reply>" --dry-run --json`
 - Approved handoff: `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`
 
 ## Guidelines
@@ -51,9 +51,9 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - Use `node src/social.mjs doctor --live --json` before claiming a profile is ready for live execution.
 - Use `--json` and parse structured output instead of scraping text.
 - Dry-run every post, comment, or DM before live execution.
-- With `runner-cdp`, treat CLI output as the action contract/plan. After approval, run `social execute` on the saved dry-run result to re-check provenance and account-verification readiness, then execute the returned handoff through Runner's native browser tools. Do not ask for a second approval in the browser when the visible account and draft match the approved dry-run; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
+- With `runner-cdp`, treat CLI output as the action contract/plan. After exact approval or under a matching bounded engagement mandate, run `social execute` on the saved dry-run result to re-check provenance and account-verification readiness, then execute the returned handoff through Runner's native browser tools. Do not ask again when the visible account, exact reply/thread target, and draft match the authorization.
 - Verification result files must contain only non-secret evidence, for example `{ "loggedIn": true, "visibleIdentity": { "handle": "@artist" } }`. Never write cookies, tokens, passwords, or 2FA codes.
-- Do not run a live post, comment, or DM unless the user has explicitly approved the exact platform, profile, payload, and target URL/recipient.
+- Do not run a live action without authorization. A direct instruction or active schedule to answer comments/messages authorizes matching inbound replies on the exact profile and inbox scope; it does not authorize cold DMs, posts/uploads, account changes, blocking/reporting, or sensitive conversations.
 - Do not default to Computer Use. In RunnerOS, use the guarded CLI handoff plus native `browser_tool`; standalone fallback engines are optional.
 - Use Playwright only when explicitly running the standalone fallback engine outside Runner.
 

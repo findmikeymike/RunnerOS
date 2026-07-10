@@ -36840,6 +36840,84 @@ See \`examples/\` for before/after threshold reconstructions across all media (t
     slug: "social-publishing",
     files: [
       {
+        path: "references/engagement-playbook.md",
+        content: `# Engagement Playbook
+
+Use this playbook when the user asks Social Publisher to inspect or answer comments, mentions, or DMs now or on a schedule.
+
+## Authorization
+
+A direct user instruction or an active scheduled job is a bounded engagement mandate. Resolve the exact profile and inbox types once. Do not ask for approval on every reply that remains inside the mandate.
+
+If multiple profiles could match, ask once before opening an inbox. A schedule must name an exact profile or account set that resolves unambiguously.
+
+## Run Loop
+
+1. Read Artist Voice, especially \`commentReplyExamples\`, speaking style, vocabulary, and avoid rules.
+2. Resolve the exact saved profile and run live readiness/account verification.
+3. Open the platform's comments, mentions, or message inbox with \`browser_tool\`.
+4. Inspect unread/recent items. Keep private message text inside the active session only.
+5. Skip items already answered by the artist unless the thread clearly needs another response.
+6. Draft a native response using the incoming message, thread context, campaign context, and Artist Voice. Do not copy examples verbatim.
+7. Verify the visible account plus exact comment/thread/recipient before sending.
+8. Create a dry-run action for the exact response and target. Public replies must include \`--reply-to <comment-id-or-permalink>\`; DM replies should include \`--thread-url <thread-url>\` when the platform exposes one. Under an active mandate, execute it without another approval prompt.
+9. Confirm visible success and record a receipt. Re-snapshot before moving to the next item.
+10. Stop at the run limit or when no eligible unread/recent items remain.
+
+## Default Limits
+
+- Public comments/mentions: 20 sent replies per run.
+- DMs: 10 sent replies per run.
+- Failed attempts: stop after 3 ambiguous or broken target states on one platform.
+
+The user may set lower or higher limits in the direct instruction or schedule.
+
+## Response Rules
+
+- Compliments: warm, short, specific when context supports it.
+- Questions about the music/release: answer from verified Artist/Campaign context; do not invent dates, credits, lyrics, links, or availability.
+- Jokes and casual conversation: match the artist's demonstrated humor without escalating hostility.
+- Constructive criticism: acknowledge without arguing; answer only when useful.
+- Harassment/spam: skip. Blocking/reporting requires separate authorization.
+- Collaboration, press, booking, licensing, label, management, or paid requests: acknowledge only if Artist Voice contains an approved holding response; otherwise leave for the user.
+- DMs: respond only to inbound threads under a DM mandate. Starting a cold DM requires separate explicit direction.
+
+## Mandatory Escalation
+
+Do not send a response involving:
+
+- payments, refunds, pricing commitments, contracts, rights, or legal claims
+- passwords, codes, account recovery, identity verification, or credential requests
+- threats, stalking, credible safety concerns, self-harm, or medical emergencies
+- sexual content involving minors or age ambiguity
+- press statements, public controversy, takedowns, or business commitments
+- uncertain sender, comment, thread, profile, or logged-in account identity
+
+Leave these unanswered and report a short private summary to the user. Never copy full private threads into global memory, Workspace Context, shared Outputs, or public receipts.
+
+## Platform Entry Points
+
+- X: mentions/notifications for public replies; Messages for DMs.
+- Instagram: post/reel comments and Direct inbox.
+- TikTok: Inbox/comments and Messages when available for the account.
+- YouTube: YouTube Studio comments. YouTube has no general DM send lane.
+
+Platform UI is allowed to change. Use snapshots and visible labels rather than fixed coordinates. Stop on login, CAPTCHA, 2FA, account switch, missing thread identity, or unsupported UI state.
+
+## Run Receipt
+
+Return:
+
+- mandate source: direct or scheduled
+- platform/profile
+- inbox types inspected
+- inspected, replied, skipped, escalated, and failed counts
+- one concise line per public reply with target URL when available
+- private DM receipts with recipient and status, but without copying full private message bodies
+- blockers or login/account issues
+`,
+      },
+      {
         path: "references/platform-playbooks.md",
         content: `# Social Platform Playbooks
 
@@ -36980,8 +37058,8 @@ name: social-publishing
 description: "Use when operating social publishing workflows for Instagram, TikTok, X, or YouTube: cross-posting campaigns, posting videos/images/text, replying/commenting, sending DMs, checking channel readiness, or preparing browser-executed social posts through RunnerOS. Built for the @social-publisher agent and Printing Press Social CLI."
 tags: [social, publishing, instagram, tiktok, x, youtube]
 metadata:
-  version: 1.0.0
-  last_verified: 2026-05-26
+  version: 1.1.0
+  last_verified: 2026-07-10
 ---
 
 # Social Publishing
@@ -36995,8 +37073,9 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 3. Resolve the exact \`platform/profile\` first. Users can name an account set from Settings -> Social Accounts, such as \`MikeyReal\`, or an exact reference like \`instagram/brand-main\`.
 4. If a campaign/release/client folder is involved, list candidate media with \`node src/social.mjs assets --asset-root <dir> --platform <platform> --json\` and copy with \`node src/social.mjs content --content-root <dir> --json\`.
 5. For post/comment/DM, run the exact CLI action with the selected \`--profile\`, \`--asset-root\`, \`--content-root\`, relative file names, and \`--dry-run --json\`.
+   - For inbox work, first load \`references/engagement-playbook.md\` and inspect the owned profile through \`browser_tool\`.
 6. Validate the payload against the platform checklist below.
-7. Ask for explicit approval before any live publish/send action.
+7. Resolve authorization before any live action. A direct instruction or active scheduled job to handle comments/messages is a bounded engagement mandate and does not require approval for every matching reply. One-off posts, comments, or DMs outside that mandate still require exact approval.
 8. Save the full dry-run result JSON and run \`node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json\`.
 9. Execute through Runner \`browser_tool\` using the returned \`RUNNER_CDP_DELEGATED\` handoff and browser plan.
 10. Treat \`browserPlan.accountVerification\` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before submit. If \`verificationTargetKnown\` is false, stop and add a profile \`--handle\` or \`--account-url\`.
@@ -37010,7 +37089,7 @@ Use \`chrome-cdp\` when the user explicitly wants the agent to inspect or operat
 - First list open tabs and select the matching target.
 - If Chrome is not reachable, tell the user to enable remote debugging from \`chrome://inspect/#remote-debugging\`.
 - Use CDP for inspection, screenshots, snapshots, navigation, typing, clicking, and evidence capture.
-- Keep the approval gate exactly the same: no live publish/send/comment/DM/upload/schedule action without explicit approval of the final details.
+- Keep the authorization gate exactly the same: require exact-action approval or an active bounded engagement mandate before live work.
 - Prefer Runner \`browser_tool\` for normal fresh sessions; prefer \`chrome-cdp\` only for existing Chrome context.
 
 ## Profile Sessions
@@ -37046,24 +37125,36 @@ Use one execution agent for all platforms: \`@social-publisher\`.
 
 Do not split posting into one agent per platform by default. Keep platform differences in the playbook. Use other agents only for separate roles, such as writing, creative review, research, or asset generation.
 
-## Approval Gate
+## Authorization Gate
 
-Never perform these without approval of exact details:
+Never perform these without either exact-action approval or an active bounded mandate:
 
 - publish, schedule, upload, comment, reply, DM
 - delete, edit after publish, follow/unfollow, block/report
 - credential entry, account switch, billing/payment, age-gated or sensitive submission
 
-Approval must name the platform, profile, target URL or recipient when relevant, final copy, media path, visibility, and whether it is live now or draft/scheduled.
+Exact-action approval must name the platform, profile, target URL or recipient when relevant, final copy, media path, visibility, and whether it is live now or draft/scheduled.
+
+A bounded engagement mandate is created when the user directly says to check/respond to comments or messages, or approves a schedule/automation that says so. It must resolve:
+
+- exact platform/profile or one unambiguous saved default
+- allowed inbox types: comments, mentions, and/or DMs
+- run boundary: this run or the active schedule
+- response rules from Artist Voice plus any instruction in the mandate
+
+Within that mandate, inspect, draft, verify the exact target, dry-run, and send matching replies without pausing for per-item approval. Default run limits are 20 public replies and 10 DM replies unless the user sets another limit. Stop rather than send when content involves money, contracts, credentials, account recovery, threats, self-harm, medical/legal claims, sexual content involving minors, press/business commitments, or an identity/target mismatch.
+
+The mandate does not authorize new cold DMs, deleting content, blocking/reporting, account changes, posts, uploads, or replies outside the named inbox/profile scope.
 
 CLI safety behavior:
 
 - New Printing Press Social profiles default to \`require-confirm\`.
 - The \`smoke\` profile is dry-run only; never use it for live actions.
-- After explicit user approval, pass \`--confirm yes\` only for the exact approved live action. Do not use \`--autorun\` for write actions.
+- Pass \`--confirm yes\` only for an exact approved action or a reply that fits an active bounded engagement mandate. Do not use \`--autorun\` for write actions.
 - Reuse a stable \`--idempotency-key\` for retried live actions so the CLI can dedupe accidental repeats.
 - Use \`--asset-root\` and \`--content-root\` so receipts and dry-runs preserve exact source folders and resolved files.
-- When using \`runner-cdp\`, \`social execute\` validates the approved dry-run result and returns a Runner browser handoff. Prior chat approval plus the matching \`--expected-action-id\` is the final approval. The agent should submit without asking again when the visible account and draft match approval; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
+- When using \`runner-cdp\`, \`social execute\` validates the authorized dry-run result and returns a Runner browser handoff. Exact approval or a matching mandate plus the \`--expected-action-id\` is the authorization basis. The agent should submit without asking again when the visible account and draft match it; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
+- For delegated engagement, the mandate plus the matching dry-run action id is the approval basis for \`--confirm yes\`. Record the mandate source in the run summary.
 
 ## Universal Payload Rules
 

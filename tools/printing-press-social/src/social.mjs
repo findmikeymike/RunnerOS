@@ -589,11 +589,13 @@ function addPostPayloadArgs(out, platform, payload) {
 
 function addCommentPayloadArgs(out, payload) {
   if (payload.targetUrl) out.push('--url', payload.targetUrl);
+  if (payload.replyTo) out.push('--reply-to', payload.replyTo);
   if (payload.text) out.push('--text', payload.text);
 }
 
 function addDmPayloadArgs(out, payload) {
   if (payload.recipient) out.push('--to', payload.recipient);
+  if (payload.threadUrl) out.push('--thread-url', payload.threadUrl);
   if (payload.text) out.push('--text', payload.text);
 }
 

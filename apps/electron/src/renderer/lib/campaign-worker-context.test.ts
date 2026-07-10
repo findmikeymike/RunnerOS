@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { MissionAssetManifest } from '../../shared/types'
 import type { ArtistProfile } from './artist-profile'
+import type { ArtistVoice } from './artist-voice'
 import { buildMissionBrief } from './mission-brief'
 import {
   campaignWorkerContextMetadata,
@@ -13,6 +14,15 @@ const artistProfile: ArtistProfile = {
   artistName: 'HNlC',
   sound: 'Dark pop with cinematic hooks.',
   audience: 'Heartbroken city kids who live on TikTok.',
+  updatedAt: '2026-06-30T00:00:00.000Z',
+}
+
+const artistVoice: ArtistVoice = {
+  version: 1,
+  summary: 'Plainspoken and dry.',
+  speakingStyle: 'Short, warm, never corporate.',
+  avoid: 'No fake hype.',
+  commentReplyExamples: 'appreciate you. this one felt different.',
   updatedAt: '2026-06-30T00:00:00.000Z',
 }
 
@@ -76,6 +86,7 @@ describe('campaign worker context', () => {
     const body = serializeCampaignWorkerContext({
       mission,
       artistProfile,
+      artistVoice,
       assetManifest: manifest(['master', 'approved-lyrics', 'cover-art']),
     })
     const readiness = getCampaignWorkerReadiness({
@@ -90,6 +101,7 @@ describe('campaign worker context', () => {
     expect(body).toContain('Next move: Ready to launch workers from this campaign context.')
     expect(body).toContain('"title": "Night Drive"')
     expect(body).toContain('"name": "HNlC"')
+    expect(body).toContain('"commentReplyExamples": "appreciate you. this one felt different."')
     expect(body).toContain('"master": "assets/master.txt"')
   })
 

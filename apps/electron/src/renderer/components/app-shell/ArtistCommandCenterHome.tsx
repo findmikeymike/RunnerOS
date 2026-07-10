@@ -33,6 +33,10 @@ import {
   parseArtistProfileDocResult,
 } from '@/lib/artist-profile'
 import {
+  ARTIST_VOICE_CONTEXT_SLUG,
+  parseArtistVoiceDocResult,
+} from '@/lib/artist-voice'
+import {
   ARTIST_NETWORK_CONTEXT_SLUG,
   artistNetworkMetadata,
   linkNetworkPersonToWorkspace,
@@ -150,6 +154,10 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     () => parseArtistProfileDocResult(artistProfileDocs.find((item) => item.slug === ARTIST_PROFILE_CONTEXT_SLUG)).profile,
     [artistProfileDocs],
   )
+  const artistVoice = React.useMemo(
+    () => parseArtistVoiceDocResult(artistProfileDocs.find((item) => item.slug === ARTIST_VOICE_CONTEXT_SLUG)).voice,
+    [artistProfileDocs],
+  )
   const artistNetworkResult = React.useMemo(
     () => parseArtistNetworkDocResult(artistProfileDocs.find((item) => item.slug === ARTIST_NETWORK_CONTEXT_SLUG)),
     [artistProfileDocs],
@@ -207,8 +215,8 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     [artistProfile, assetManifest, mission],
   )
   const workerContextBody = React.useMemo(
-    () => serializeCampaignWorkerContext({ mission, artistProfile, assetManifest }),
-    [artistProfile, assetManifest, mission],
+    () => serializeCampaignWorkerContext({ mission, artistProfile, artistVoice, assetManifest }),
+    [artistProfile, artistVoice, assetManifest, mission],
   )
   const title = mission.title || 'Untitled Campaign'
   const subtitle = hasMission

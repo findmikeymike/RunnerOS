@@ -1,5 +1,6 @@
 import type { ContextDocMetadata, MissionAssetManifest, MissionAssetRecord } from '../../shared/types'
 import type { ArtistProfile } from './artist-profile'
+import type { ArtistVoice } from './artist-voice'
 import type { MissionBrief } from './mission-brief'
 
 export const CAMPAIGN_WORKER_CONTEXT_SLUG = 'campaign-worker-context'
@@ -20,6 +21,7 @@ export interface CampaignWorkerReadiness {
 export interface CampaignWorkerContextInput {
   mission: MissionBrief
   artistProfile?: ArtistProfile | null
+  artistVoice?: ArtistVoice | null
   assetManifest?: MissionAssetManifest | null
 }
 
@@ -87,6 +89,13 @@ export function serializeCampaignWorkerContext(input: CampaignWorkerContextInput
       similarArtists: input.artistProfile?.similarArtists ?? null,
       priorityMarkets: input.artistProfile?.priorityMarkets ?? null,
       rules: input.artistProfile?.rules ?? null,
+      voice: {
+        summary: input.artistVoice?.summary ?? null,
+        speakingStyle: input.artistVoice?.speakingStyle ?? null,
+        vocabulary: input.artistVoice?.vocabulary ?? null,
+        avoid: input.artistVoice?.avoid ?? null,
+        commentReplyExamples: input.artistVoice?.commentReplyExamples ?? null,
+      },
     },
     assets: {
       master: firstPath(files, ['master', 'demo']),

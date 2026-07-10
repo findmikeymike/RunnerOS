@@ -3,8 +3,8 @@ name: social-publishing
 description: "Use when operating social publishing workflows for Instagram, TikTok, X, or YouTube: cross-posting campaigns, posting videos/images/text, replying/commenting, sending DMs, checking channel readiness, or preparing browser-executed social posts through RunnerOS. Built for the @social-publisher agent and Printing Press Social CLI."
 tags: [social, publishing, instagram, tiktok, x, youtube]
 metadata:
-  version: 1.0.0
-  last_verified: 2026-05-26
+  version: 1.1.0
+  last_verified: 2026-07-10
 ---
 
 # Social Publishing
@@ -18,8 +18,9 @@ Use this skill to run social channel work through RunnerOS with the bundled Prin
 3. Resolve the exact `platform/profile` first. Users can name an account set from Settings -> Social Accounts, such as `MikeyReal`, or an exact reference like `instagram/brand-main`.
 4. If a campaign/release/client folder is involved, list candidate media with `node src/social.mjs assets --asset-root <dir> --platform <platform> --json` and copy with `node src/social.mjs content --content-root <dir> --json`.
 5. For post/comment/DM, run the exact CLI action with the selected `--profile`, `--asset-root`, `--content-root`, relative file names, and `--dry-run --json`.
+   - For inbox work, first load `references/engagement-playbook.md` and inspect the owned profile through `browser_tool`.
 6. Validate the payload against the platform checklist below.
-7. Ask for explicit approval before any live publish/send action.
+7. Resolve authorization before any live action. A direct instruction or active scheduled job to handle comments/messages is a bounded engagement mandate and does not require approval for every matching reply. One-off posts, comments, or DMs outside that mandate still require exact approval.
 8. Save the full dry-run result JSON and run `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`.
 9. Execute through Runner `browser_tool` using the returned `RUNNER_CDP_DELEGATED` handoff and browser plan.
 10. Treat `browserPlan.accountVerification` as mandatory: verify the visible logged-in account/channel matches the expected handle or account URL before submit. If `verificationTargetKnown` is false, stop and add a profile `--handle` or `--account-url`.
@@ -33,7 +34,7 @@ Use `chrome-cdp` when the user explicitly wants the agent to inspect or operate 
 - First list open tabs and select the matching target.
 - If Chrome is not reachable, tell the user to enable remote debugging from `chrome://inspect/#remote-debugging`.
 - Use CDP for inspection, screenshots, snapshots, navigation, typing, clicking, and evidence capture.
-- Keep the approval gate exactly the same: no live publish/send/comment/DM/upload/schedule action without explicit approval of the final details.
+- Keep the authorization gate exactly the same: require exact-action approval or an active bounded engagement mandate before live work.
 - Prefer Runner `browser_tool` for normal fresh sessions; prefer `chrome-cdp` only for existing Chrome context.
 
 ## Profile Sessions
@@ -69,24 +70,36 @@ Use one execution agent for all platforms: `@social-publisher`.
 
 Do not split posting into one agent per platform by default. Keep platform differences in the playbook. Use other agents only for separate roles, such as writing, creative review, research, or asset generation.
 
-## Approval Gate
+## Authorization Gate
 
-Never perform these without approval of exact details:
+Never perform these without either exact-action approval or an active bounded mandate:
 
 - publish, schedule, upload, comment, reply, DM
 - delete, edit after publish, follow/unfollow, block/report
 - credential entry, account switch, billing/payment, age-gated or sensitive submission
 
-Approval must name the platform, profile, target URL or recipient when relevant, final copy, media path, visibility, and whether it is live now or draft/scheduled.
+Exact-action approval must name the platform, profile, target URL or recipient when relevant, final copy, media path, visibility, and whether it is live now or draft/scheduled.
+
+A bounded engagement mandate is created when the user directly says to check/respond to comments or messages, or approves a schedule/automation that says so. It must resolve:
+
+- exact platform/profile or one unambiguous saved default
+- allowed inbox types: comments, mentions, and/or DMs
+- run boundary: this run or the active schedule
+- response rules from Artist Voice plus any instruction in the mandate
+
+Within that mandate, inspect, draft, verify the exact target, dry-run, and send matching replies without pausing for per-item approval. Default run limits are 20 public replies and 10 DM replies unless the user sets another limit. Stop rather than send when content involves money, contracts, credentials, account recovery, threats, self-harm, medical/legal claims, sexual content involving minors, press/business commitments, or an identity/target mismatch.
+
+The mandate does not authorize new cold DMs, deleting content, blocking/reporting, account changes, posts, uploads, or replies outside the named inbox/profile scope.
 
 CLI safety behavior:
 
 - New Printing Press Social profiles default to `require-confirm`.
 - The `smoke` profile is dry-run only; never use it for live actions.
-- After explicit user approval, pass `--confirm yes` only for the exact approved live action. Do not use `--autorun` for write actions.
+- Pass `--confirm yes` only for an exact approved action or a reply that fits an active bounded engagement mandate. Do not use `--autorun` for write actions.
 - Reuse a stable `--idempotency-key` for retried live actions so the CLI can dedupe accidental repeats.
 - Use `--asset-root` and `--content-root` so receipts and dry-runs preserve exact source folders and resolved files.
-- When using `runner-cdp`, `social execute` validates the approved dry-run result and returns a Runner browser handoff. Prior chat approval plus the matching `--expected-action-id` is the final approval. The agent should submit without asking again when the visible account and draft match approval; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
+- When using `runner-cdp`, `social execute` validates the authorized dry-run result and returns a Runner browser handoff. Exact approval or a matching mandate plus the `--expected-action-id` is the authorization basis. The agent should submit without asking again when the visible account and draft match it; stop only on mismatch, ambiguity, unexpected platform choices, or upload/UI failure.
+- For delegated engagement, the mandate plus the matching dry-run action id is the approval basis for `--confirm yes`. Record the mandate source in the run summary.
 
 ## Universal Payload Rules
 
