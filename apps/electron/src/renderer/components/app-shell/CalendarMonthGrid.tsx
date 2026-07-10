@@ -7,6 +7,7 @@ export interface CalendarDayMenuItem {
   id: string
   label: string
   detail?: string
+  markerClass?: string
 }
 
 export interface CalendarDayAction {
@@ -71,8 +72,8 @@ export function CalendarMonthGrid({
   }, [dayActions.length, onSelectDate])
 
   return (
-    <div className="rounded-[16px] border border-white/[0.05] bg-black/20 p-3">
-      <div className="mb-3 flex items-center justify-between">
+    <div className="rounded-[16px] border border-white/[0.05] bg-black/20 p-2.5">
+      <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
           onClick={() => onChangeMonth(addMonths(visibleMonth, -1))}
@@ -93,7 +94,7 @@ export function CalendarMonthGrid({
       </div>
       <div className="grid grid-cols-7 gap-1">
         {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-          <div key={day} className="py-2 text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-white/28">
+          <div key={day} className="py-1 text-center text-[9px] font-semibold uppercase tracking-[0.14em] text-white/28">
             {day}
           </div>
         ))}
@@ -102,41 +103,63 @@ export function CalendarMonthGrid({
           const meta = dayMetaByDate.get(key)
           const count = meta?.count ?? 0
           const dots = meta?.dots ?? (count > 0 ? ['bg-orange-400/80'] : [])
+          const items = meta?.items ?? []
           const isSelected = key === selectedDate
           const isToday = key === todayKey
           const isCurrentMonth = day.getMonth() === visibleMonth.getMonth()
           return (
-            <button
+            <div
               key={key}
-              type="button"
+              role="button"
+              tabIndex={0}
               onClick={(event) => openMenu(key, event.clientX, event.clientY)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return
+                event.preventDefault()
+                const bounds = event.currentTarget.getBoundingClientRect()
+                openMenu(key, bounds.left + 16, bounds.top + 32)
+              }}
               onContextMenu={(event) => {
                 event.preventDefault()
                 openMenu(key, event.clientX, event.clientY)
               }}
               aria-haspopup={dayActions.length > 0 ? 'menu' : undefined}
               className={cn(
-                'flex min-h-[72px] flex-col rounded-[12px] border p-2 text-left transition-colors',
+                'flex min-h-[56px] flex-col rounded-[10px] border p-1.5 text-left transition-colors',
                 isSelected
                   ? 'border-orange-400/40 bg-orange-500/12'
                   : 'border-white/[0.045] bg-white/[0.015] hover:bg-white/[0.035]',
                 !isCurrentMonth && 'opacity-35',
               )}
             >
-              <div className="flex items-start justify-between">
-                <span className={cn('text-xs font-medium', isToday ? 'text-orange-200' : 'text-white/65')}>
-                  {day.getDate()}
-                </span>
-                {count > 0 ? <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-white/55">{count}</span> : null}
-              </div>
-              {dots.length > 0 ? (
-                <div className="mt-auto flex gap-1 pt-3">
-                  {dots.slice(0, 4).map((dotClass, index) => (
-                    <span key={`${dotClass}-${index}`} className={cn('h-1.5 w-1.5 rounded-full', dotClass)} />
+              <span className={cn('text-xs font-medium', isToday ? 'text-orange-200' : 'text-white/65')}>
+                {day.getDate()}
+              </span>
+              {items.length > 0 ? (
+                <div className="mt-auto flex flex-wrap gap-1.5 pt-1.5">
+                  {items.map((item, index) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      title={item.label}
+                      aria-label={`Open ${item.label}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onSelectDate(key)
+                        onSelectItem?.(key, item.id)
+                      }}
+                      className={cn('size-2.5 rounded-[2px] ring-1 ring-white/15 transition-transform hover:scale-125', item.markerClass ?? dots[index % Math.max(dots.length, 1)] ?? 'bg-orange-400/85')}
+                    />
+                  ))}
+                </div>
+              ) : dots.length > 0 ? (
+                <div className="mt-auto flex gap-1.5 pt-1.5">
+                  {dots.map((dotClass, index) => (
+                    <span key={`${dotClass}-${index}`} className={cn('size-2.5 rounded-[2px] ring-1 ring-white/15', dotClass)} />
                   ))}
                 </div>
               ) : null}
-            </button>
+            </div>
           )
         })}
       </div>
@@ -177,28 +200,28 @@ function CalendarDayMenu({ date, x, y, actions, items, onAction, onItem }: {
       data-calendar-day-menu
       role="menu"
       aria-label={`Calendar actions for ${label}`}
-      className="popover-styled fixed z-dropdown w-60 overflow-hidden p-1.5 shadow-strong"
+      className="fixed z-dropdown w-60 overflow-hidden rounded-[8px] border border-white/15 bg-[#0b0b0c] p-1.5 text-white shadow-strong"
       style={{ left: x, top: y }}
     >
-      <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/45">{label}</div>
+      <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55">{label}</div>
       {actions.map((action) => {
         const Icon = action.icon
         return (
-          <button key={action.id} type="button" role="menuitem" onClick={() => onAction(action.id)} className="flex min-h-8 w-full items-center gap-2 rounded-[5px] px-2 text-left text-xs text-foreground/75 hover:bg-foreground/[0.06]">
-            <Icon className="h-3.5 w-3.5 text-foreground/45" />
+          <button key={action.id} type="button" role="menuitem" onClick={() => onAction(action.id)} className="flex min-h-8 w-full items-center gap-2 rounded-[5px] px-2 text-left text-xs font-medium text-white/85 hover:bg-white/[0.07] hover:text-white">
+            <Icon className="h-3.5 w-3.5 text-white/58" />
             {action.label}
           </button>
         )
       })}
       {items.length > 0 ? (
         <>
-          <div className="my-1 h-px bg-foreground/[0.06]" />
-          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-foreground/35">Scheduled</div>
+          <div className="my-1 h-px bg-white/[0.08]" />
+          <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">Scheduled</div>
           <div className="max-h-36 overflow-y-auto">
             {items.map((item) => (
-              <button key={item.id} type="button" role="menuitem" onClick={() => onItem(item.id)} className="block min-h-8 w-full rounded-[5px] px-2 py-1.5 text-left hover:bg-foreground/[0.06]">
-                <span className="block truncate text-xs text-foreground/72">{item.label}</span>
-                {item.detail ? <span className="mt-0.5 block truncate text-[10px] text-foreground/35">{item.detail}</span> : null}
+              <button key={item.id} type="button" role="menuitem" onClick={() => onItem(item.id)} className="block min-h-8 w-full rounded-[5px] px-2 py-1.5 text-left hover:bg-white/[0.07]">
+                <span className="block truncate text-xs text-white/82">{item.label}</span>
+                {item.detail ? <span className="mt-0.5 block truncate text-[10px] text-white/42">{item.detail}</span> : null}
               </button>
             ))}
           </div>

@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { Bot, CalendarDays, CheckCircle2, ExternalLink, FileText, Pencil, ReceiptText, RotateCcw, Send, ShieldCheck, Trash2, Workflow, X } from 'lucide-react'
+import { Bot, CalendarDays, CheckCircle2, ExternalLink, FileText, Pencil, ReceiptText, RotateCcw, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../../shared/routes'
@@ -70,11 +70,8 @@ type CalendarSocialProfile = { platform: string; profile: string; accountGroup: 
 
 const todayKey = toDateKey(new Date())
 const CAMPAIGN_DAY_ACTIONS: CalendarDayAction[] = [
-  { id: 'event', label: 'Event / reminder', icon: FileText },
-  { id: 'agent-task', label: 'Agent job', icon: Bot },
-  { id: 'workflow-run', label: 'Workflow run', icon: Workflow },
-  { id: 'review', label: 'Review / approval', icon: ShieldCheck },
-  { id: 'social-publish', label: 'Social publish', icon: Send },
+  { id: 'event', label: 'Add event', icon: FileText },
+  { id: 'job', label: 'Add job', icon: Bot },
 ]
 
 const emptyCampaignCalendarDraft = (date = todayKey): CampaignCalendarDraft => ({
@@ -122,7 +119,7 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   const [calendarEditId, setCalendarEditId] = React.useState<string | null>(null)
   const [calendarEditDraft, setCalendarEditDraft] = React.useState<CampaignCalendarDraft>(() => emptyCampaignCalendarDraft(todayKey))
   const [composerOpen, setComposerOpen] = React.useState(false)
-  const [composerPrefill, setComposerPrefill] = React.useState<Pick<ScheduledWorkComposerEntry, 'title' | 'inputRefs' | 'suggestedType'> | null>(null)
+  const [composerPrefill, setComposerPrefill] = React.useState<Pick<ScheduledWorkComposerEntry, 'mode' | 'title' | 'inputRefs' | 'suggestedType'> | null>(null)
   const [socialProfiles, setSocialProfiles] = React.useState<CalendarSocialProfile[]>([])
   const selectedDateCalendarItems = React.useMemo(
     () => activeCalendarItems.filter((item) => item.date === selectedCalendarDate),
@@ -159,6 +156,7 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   const composerEntry = React.useMemo<ScheduledWorkComposerEntry>(() => ({
     owner: { scope: 'campaign', workspaceId: workspaceId || 'workspace', campaignId: workspaceId || 'workspace' },
     date: selectedCalendarDate,
+    mode: composerPrefill?.mode,
     title: composerPrefill?.title,
     inputRefs: composerPrefill?.inputRefs,
     suggestedType: composerPrefill?.suggestedType,
@@ -501,7 +499,7 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
           }}
           onOpenSocialSettings={() => navigate(routes.view.settings('social-accounts'))}
           onOpenComposer={(type) => {
-            setComposerPrefill({ suggestedType: type })
+            setComposerPrefill(type ? { mode: 'event', suggestedType: type } : { mode: 'job' })
             setComposerOpen(true)
           }}
         />
@@ -574,7 +572,7 @@ function CampaignCalendarSurface({
   onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
   onQueueReplacement: (order: ScheduledWorkOrder) => void
   onOpenSocialSettings: () => void
-  onOpenComposer: (type: ScheduledWorkComposerEntry['suggestedType']) => void
+  onOpenComposer: (type?: ScheduledWorkComposerEntry['suggestedType']) => void
 }) {
   const [detailItemId, setDetailItemId] = React.useState<string | null>(null)
   const dayMetaByDate = React.useMemo(() => {
@@ -587,7 +585,7 @@ function CampaignCalendarSurface({
       metaByDate.set(item.date, {
         count: (current.count ?? 0) + 1,
         dots: [...new Set([...(current.dots ?? []), statusDotClass(status)])],
-        items: [...(current.items ?? []), { id: item.id, label: item.title, detail: `${item.time || 'All day'} - ${status.replace(/-/g, ' ')}` }],
+        items: [...(current.items ?? []), { id: item.id, label: item.title, detail: `${item.time || 'All day'} - ${status.replace(/-/g, ' ')}`, markerClass: statusDotClass(status) }],
       })
     }
     return metaByDate
@@ -616,7 +614,7 @@ function CampaignCalendarSurface({
           onChangeMonth={onChangeMonth}
           onDayAction={(date, actionId) => {
             onSelectDate(date)
-            onOpenComposer(actionId as ScheduledWorkComposerEntry['suggestedType'])
+            onOpenComposer(actionId === 'event' ? 'event' : undefined)
           }}
           onSelectItem={(date, itemId) => {
             onSelectDate(date)

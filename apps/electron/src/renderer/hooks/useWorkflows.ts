@@ -31,7 +31,6 @@ export interface UseWorkflowsResult {
 }
 
 const NULL_WORKSPACE_KEY = '__no_workspace__'
-const loadedWorkspaceKeys = new Set<string>()
 const inFlightRefreshes = new Map<string, Promise<void>>()
 const mountedWorkspaceKeys = new Map<string, number>()
 let globalWorkflowsCleanup: (() => void) | null = null
@@ -69,7 +68,6 @@ export function useWorkflows(activeWorkspaceId: string | null | undefined): UseW
           error: null,
         }
         setState(next)
-        loadedWorkspaceKeys.add(workspaceKey)
       } catch (err) {
         setState((prev) => ({
           ...prev,
@@ -95,9 +93,7 @@ export function useWorkflows(activeWorkspaceId: string | null | undefined): UseW
   }, [refresh, workspaceKey])
 
   useEffect(() => {
-    if (!loadedWorkspaceKeys.has(workspaceKey)) {
-      refresh()
-    }
+    void refresh()
   }, [refresh, workspaceKey])
 
   useEffect(() => {

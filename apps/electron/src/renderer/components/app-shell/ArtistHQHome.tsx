@@ -19,7 +19,6 @@ import {
   Trash2,
   UserRound,
   Users,
-  Workflow,
   X,
 } from 'lucide-react'
 import { useAtomValue } from 'jotai'
@@ -290,7 +289,7 @@ export function ArtistHQHome({
   const [calendarEditId, setCalendarEditId] = React.useState<string | null>(null)
   const [calendarEditDraft, setCalendarEditDraft] = React.useState<CalendarEditDraft>(emptyCalendarEditDraft)
   const [calendarComposerTarget, setCalendarComposerTarget] = React.useState<'hq' | 'campaign' | null>(null)
-  const [calendarComposerType, setCalendarComposerType] = React.useState<ScheduledWorkComposerEntry['suggestedType']>('agent-task')
+  const [calendarComposerType, setCalendarComposerType] = React.useState<ScheduledWorkComposerEntry['suggestedType']>()
   const [profileDraft, setProfileDraft] = React.useState<ProfileDraft>(emptyProfileDraft)
   const [brandingDraft, setBrandingDraft] = React.useState<BrandingDraft>(emptyBrandingDraft)
   const [voiceDraft, setVoiceDraft] = React.useState<VoiceDraft>(emptyVoiceDraft)
@@ -398,6 +397,7 @@ export function ArtistHQHome({
       ? { scope: 'campaign', workspaceId: primaryCampaignWorkspaceId, campaignId: primaryCampaignWorkspaceId }
       : { scope: 'hq', workspaceId },
     date: selectedDate,
+    mode: calendarComposerType === 'event' ? 'event' : 'job',
     suggestedType: calendarComposerType,
   }), [calendarComposerTarget, calendarComposerType, primaryCampaignWorkspaceId, selectedDate, workspaceId])
   const selectedPerson = React.useMemo(
@@ -1311,10 +1311,6 @@ export function ArtistHQHome({
                 setCalendarComposerType(type)
                 setCalendarComposerTarget('hq')
               }}
-              onQueueCampaignWork={primaryCampaignWorkspaceId ? () => {
-                setCalendarComposerType('agent-task')
-                setCalendarComposerTarget('campaign')
-              } : undefined}
               selectedDateEvents={selectedDateEvents}
               workById={scheduledWorkById}
               workspaceId={workspaceId}
@@ -2194,10 +2190,8 @@ function ProfileField({
 }
 
 const HQ_DAY_ACTIONS: CalendarDayAction[] = [
-  { id: 'event', label: 'Event / reminder', icon: FileText },
-  { id: 'agent-task', label: 'Agent job', icon: Bot },
-  { id: 'workflow-run', label: 'Workflow run', icon: Workflow },
-  { id: 'campaign-work', label: 'Campaign work', icon: FolderKanban },
+  { id: 'event', label: 'Add event', icon: FileText },
+  { id: 'job', label: 'Add job', icon: Bot },
 ]
 
 function ArtistCalendarView({
@@ -2222,7 +2216,6 @@ function ArtistCalendarView({
   onConnectGoogle,
   onSyncGoogle,
   onQueueHqWork,
-  onQueueCampaignWork,
 }: {
   events: ArtistCalendarEvent[]
   selectedDate: string
@@ -2244,8 +2237,7 @@ function ArtistCalendarView({
   onDeleteEvent: (eventId: string) => void
   onConnectGoogle: () => void
   onSyncGoogle: () => void
-  onQueueHqWork: (type: NonNullable<ScheduledWorkComposerEntry['suggestedType']>) => void
-  onQueueCampaignWork?: () => void
+  onQueueHqWork: (type?: ScheduledWorkComposerEntry['suggestedType']) => void
 }) {
   const [detailEventId, setDetailEventId] = React.useState<string | null>(null)
   const dayMetaByDate = React.useMemo(() => {
@@ -2291,13 +2283,12 @@ function ArtistCalendarView({
         visibleMonth={visibleMonth}
         selectedDate={selectedDate}
         dayMetaByDate={dayMetaByDate}
-        dayActions={HQ_DAY_ACTIONS.filter((action) => action.id !== 'campaign-work' || onQueueCampaignWork)}
+        dayActions={HQ_DAY_ACTIONS}
         onSelectDate={onSelectDate}
         onChangeMonth={onChangeMonth}
         onDayAction={(date, actionId) => {
           onSelectDate(date)
-          if (actionId === 'campaign-work') onQueueCampaignWork?.()
-          else onQueueHqWork(actionId as NonNullable<ScheduledWorkComposerEntry['suggestedType']>)
+          onQueueHqWork(actionId === 'event' ? 'event' : undefined)
         }}
         onSelectItem={(date, itemId) => {
           onSelectDate(date)
