@@ -42,6 +42,14 @@ export function AutomationTestPanel({ result, className }: AutomationTestPanelPr
             </span>
           )}
         </Info_Alert.Title>
+        {result.workOrderIds?.length ? (
+          <Info_Alert.Description>
+            <p className="mt-1 text-xs">This test queued real tracked work:</p>
+            <div className="mt-1 flex flex-col gap-0.5">
+              {result.workOrderIds.map((id) => <code key={id} className="break-all text-[11px]">{id}</code>)}
+            </div>
+          </Info_Alert.Description>
+        ) : null}
       </Info_Alert>
     )
   }

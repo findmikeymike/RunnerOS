@@ -10,6 +10,7 @@ import type {
 import type { OutputKind } from '@craft-agent/shared/outputs'
 import { scheduledWorkDefinitionDigest } from '@craft-agent/shared/scheduled-work'
 import { createCampaignCalendarItem } from '@craft-agent/shared/campaign-calendar'
+import type { QueueWorkAction } from '@craft-agent/shared/automations'
 
 export type ScheduledWorkComposerType = 'event' | 'agent-task' | 'workflow-run' | 'social-publish' | 'review'
 
@@ -171,6 +172,26 @@ export function validateComposerDraft(draft: ScheduledWorkComposerDraft): string
 
 export function composerDefinitionDigest(value: unknown): string {
   return scheduledWorkDefinitionDigest(value)
+}
+
+export function buildAutomationQueueWorkAction(
+  draft: Exclude<ScheduledWorkComposerDraft, EventComposerDraft>,
+): QueueWorkAction {
+  const action: QueueWorkAction = {
+    type: 'queue-work',
+    ownerScope: draft.owner.scope,
+    title: draft.title.trim(),
+    execution: executionFromDraft(draft),
+    inputRefs: draft.inputRefs.filter((ref): ref is Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }> => ref.kind !== 'produced-output'),
+  }
+  if (draft.followUp.type !== 'none') {
+    action.followUp = {
+      execution: executionFromFollowUp(draft.followUp, '', ''),
+      outputKind: 'outputKind' in draft.followUp ? draft.followUp.outputKind : undefined,
+      outputInput: draft.followUp.type === 'workflow-run' ? draft.followUp.outputInput : undefined,
+    }
+  }
+  return action
 }
 
 export function buildCampaignScheduleFromComposer(

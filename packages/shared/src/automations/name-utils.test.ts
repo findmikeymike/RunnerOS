@@ -61,4 +61,22 @@ describe('deriveAutomationName', () => {
     };
     expect(deriveAutomationName('LabelAdd', matcher)).toBe('Custom Name');
   });
+
+  it('should describe tracked work by title', () => {
+    const matcher: AutomationMatcher = {
+      actions: [{
+        type: 'queue-work',
+        ownerScope: 'campaign',
+        title: 'Draft launch post',
+        execution: {
+          type: 'agent-task',
+          agentSlug: 'content-agent',
+          brief: 'Draft one launch post.',
+          permissionMode: 'safe',
+          expectedOutput: { requirement: 'required', kind: 'social-post' },
+        },
+      }],
+    };
+    expect(deriveAutomationName('SchedulerTick', matcher)).toBe('Tracked work: Draft launch post');
+  });
 });

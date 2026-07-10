@@ -151,6 +151,12 @@ export function AutomationEventTimeline({ entries, className, onReplay }: Automa
                 </button>
               )}
 
+              {entry.workOrderIds?.length ? (
+                <span className="shrink-0 text-[11px] text-foreground/45">
+                  {entry.workOrderIds.length} work {entry.workOrderIds.length === 1 ? 'order' : 'orders'}
+                </span>
+              ) : null}
+
               {/* Retry button for failed webhook entries */}
               {entry.status === 'error' && isWebhook && onReplay && (
                 <button

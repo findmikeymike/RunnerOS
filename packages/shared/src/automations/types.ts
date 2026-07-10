@@ -7,6 +7,8 @@
 import type { PermissionMode } from '../agent/mode-types.ts';
 import type { ThinkingLevel } from '../agent/thinking-levels.ts';
 import type { PulseAction } from '../pulses/types.ts';
+import type { OutputKind } from '../outputs/types.ts';
+import type { ScheduledWorkExecution, ScheduledWorkInputRef } from '../scheduled-work/index.ts';
 
 // ============================================================================
 // Event Types
@@ -109,7 +111,20 @@ export interface WebhookAction {
   auth?: WebhookAuth;
 }
 
-export type AutomationAction = PromptAction | WebhookAction | PulseAction;
+export interface QueueWorkAction {
+  type: 'queue-work';
+  ownerScope: 'hq' | 'campaign';
+  title: string;
+  execution: ScheduledWorkExecution;
+  inputRefs?: Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }>[];
+  followUp?: {
+    execution: ScheduledWorkExecution;
+    outputKind?: OutputKind;
+    outputInput?: string;
+  };
+}
+
+export type AutomationAction = PromptAction | WebhookAction | PulseAction | QueueWorkAction;
 
 export type { PulseAction };
 
@@ -378,6 +393,18 @@ export interface PendingPrompt {
   model?: string;
   /** Thinking level for the created session (falls back to workspace default when omitted) */
   thinkingLevel?: ThinkingLevel;
+}
+
+export interface PendingQueuedWork {
+  matcherId: string;
+  automationName: string;
+  event: AppEvent;
+  eventTimestamp: number;
+  /** Stable source identity used to collapse redeliveries of the same external event. */
+  eventKey: string;
+  /** Calendar timezone selected by the trigger, when it has one. */
+  timezone?: string;
+  action: QueueWorkAction;
 }
 
 export interface AutomationResult {

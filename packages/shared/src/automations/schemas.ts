@@ -91,12 +91,96 @@ export const PulseActionSchema = z.object({
     .optional(),
 });
 
-/** Accepts prompt, webhook, and pulse actions strictly; passes through legacy/unknown action types without erroring */
+const ExpectedOutputSchema = z.object({
+  requirement: z.enum(['none', 'optional', 'required']),
+  kind: z.string().min(1).optional(),
+  title: z.string().min(1).optional(),
+  minimumCount: z.number().int().positive().optional(),
+  reviewRequired: z.boolean().optional(),
+});
+
+const ScheduledExecutionSchema = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('agent-task'),
+    agentSlug: z.string().min(1),
+    brief: z.string().min(1),
+    permissionMode: z.enum(['safe', 'ask']),
+    expectedOutput: ExpectedOutputSchema,
+  }),
+  z.object({
+    type: z.literal('workflow-run'),
+    workflowSlug: z.string().min(1),
+    workflowDigest: z.string().min(1),
+    triggerInputs: z.record(z.string(), z.unknown()),
+  }),
+  z.object({
+    type: z.literal('social-publish'),
+    platform: z.string().min(1),
+    profileId: z.string().min(1),
+    accountSetId: z.string().min(1).optional(),
+    caption: z.string().min(1),
+    platformOptions: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    type: z.literal('review'),
+    reviewerType: z.enum(['person', 'agent', 'user']),
+    reviewerId: z.string().min(1).optional(),
+  }),
+]);
+
+const WorkInputRefSchema = z.union([
+  z.object({ kind: z.literal('final'), outputId: z.string().min(1), assetId: z.string().min(1).optional(), slot: z.string().min(1).optional(), label: z.string().min(1).optional() }),
+  z.object({ kind: z.literal('output'), outputId: z.string().min(1), title: z.string().min(1).optional(), outputKind: z.string().min(1).optional() }),
+  z.object({ kind: z.literal('vault'), assetId: z.string().min(1), label: z.string().min(1).optional(), assetKind: z.string().min(1).optional() }),
+]);
+
+export const QueueWorkActionSchema = z.object({
+  type: z.literal('queue-work'),
+  ownerScope: z.enum(['hq', 'campaign']),
+  title: z.string().min(1),
+  execution: ScheduledExecutionSchema,
+  inputRefs: z.array(WorkInputRefSchema).optional(),
+  followUp: z.object({
+    execution: ScheduledExecutionSchema,
+    outputKind: z.string().min(1).optional(),
+    outputInput: z.string().min(1).optional(),
+  }).optional(),
+}).superRefine((action, ctx) => {
+  const rootType = action.execution.type;
+  const childType = action.followUp?.execution.type;
+  if (action.ownerScope === 'hq' && (action.followUp || (rootType !== 'agent-task' && rootType !== 'workflow-run'))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'HQ tracked work supports standalone agent and workflow work only' });
+  }
+  if (childType) {
+    const supported = (rootType === 'agent-task' && (childType === 'review' || childType === 'workflow-run'))
+      || (rootType === 'workflow-run' && childType === 'review')
+      || (rootType === 'review' && childType === 'social-publish');
+    if (!supported) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Unsupported tracked-work chain: ${rootType} -> ${childType}`, path: ['followUp'] });
+  }
+  const refs = action.inputRefs ?? [];
+  if (rootType === 'review' && (refs.length === 0 || refs.some((ref) => ref.kind !== 'final' && ref.kind !== 'output'))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Review tracked work requires an Output or Final', path: ['inputRefs'] });
+  }
+  if (rootType === 'social-publish' && (refs.length !== 1 || (refs[0]?.kind !== 'final' && refs[0]?.kind !== 'output'))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Social tracked work requires exactly one Output or Final', path: ['inputRefs'] });
+  }
+  if (childType === 'social-publish' && (refs.length !== 1 || (refs[0]?.kind !== 'final' && refs[0]?.kind !== 'output'))) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Review to Social tracked work requires exactly one Output or Final', path: ['inputRefs'] });
+  }
+});
+
+const KNOWN_ACTION_TYPES = new Set(['prompt', 'webhook', 'pulse', 'queue-work']);
+const LegacyActionSchema = z.object({
+  type: z.string().refine((type) => !KNOWN_ACTION_TYPES.has(type), 'Known action type has an invalid definition'),
+}).passthrough();
+
+/** Accepts known actions strictly; passes through genuinely unknown legacy action types. */
 export const ActionDefinitionSchema = z.union([
   PromptActionSchema,
   WebhookActionSchema,
   PulseActionSchema,
-  z.object({ type: z.string() }).passthrough(),
+  QueueWorkActionSchema,
+  LegacyActionSchema,
 ]);
 
 // ============================================================================

@@ -98,14 +98,65 @@ describe('validation', () => {
     });
 
     it('PromptActionSchema rejects invalid thinkingLevel values', () => {
-      // ActionDefinitionSchema has a passthrough fallback that absorbs malformed
-      // actions (so old configs with unknown action types don't crash). To verify
-      // the schema's own contract for thinkingLevel, parse with PromptActionSchema
-      // directly — that's the strict path.
       const result = PromptActionSchema.safeParse({
         type: 'prompt', prompt: 'echo', thinkingLevel: 'extreme',
       });
       expect(result.success).toBe(false);
+    });
+
+    it('rejects malformed known actions through the full config schema', () => {
+      const result = validateAutomationsConfig({
+        automations: {
+          SchedulerTick: [{
+            cron: '0 9 * * *',
+            actions: [{ type: 'queue-work', ownerScope: 'campaign', title: 'Missing execution' }],
+          }],
+        },
+      });
+      expect(result.valid).toBe(false);
+    });
+
+    it('accepts a typed queue-work action', () => {
+      const result = validateAutomationsConfig({
+        automations: {
+          SchedulerTick: [{
+            id: 'abc123',
+            cron: '0 9 * * *',
+            actions: [{
+              type: 'queue-work',
+              ownerScope: 'campaign',
+              title: 'Draft the campaign post',
+              execution: {
+                type: 'agent-task',
+                agentSlug: 'content-agent',
+                brief: 'Draft one campaign post.',
+                permissionMode: 'safe',
+                expectedOutput: { requirement: 'required', kind: 'social-post' },
+              },
+            }],
+          }],
+        },
+      });
+      expect(result.valid).toBe(true);
+    });
+
+    it('rejects unsupported tracked-work topology before runtime', () => {
+      const result = validateAutomationsConfig({
+        automations: {
+          SchedulerTick: [{
+            cron: '0 9 * * *',
+            actions: [{
+              type: 'queue-work',
+              ownerScope: 'hq',
+              title: 'Invalid review',
+              execution: { type: 'review', reviewerType: 'user' },
+              inputRefs: [{ kind: 'output', outputId: 'output-1' }],
+            }],
+          }],
+        },
+      });
+      expect(result.valid).toBe(false);
+      expect(result.errors.length).toBeGreaterThan(0);
     });
 
     it('should migrate legacy thinkingLevel "think" to "medium"', () => {

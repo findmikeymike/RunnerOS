@@ -3,13 +3,14 @@ import { join } from 'path'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { appendAutomationHistoryEntry } from '@craft-agent/shared/automations/history-store'
+import { validateAutomationsConfig } from '@craft-agent/shared/automations'
 import { AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER } from '@craft-agent/shared/automations/constants'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
 // History file name — matches AUTOMATIONS_HISTORY_FILE from @craft-agent/shared/automations/constants
 const HISTORY_FILE = 'automations-history.jsonl'
-interface HistoryEntry { id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }
+interface HistoryEntry { id: string; ts: number; ok: boolean; sessionId?: string; prompt?: string; workOrderIds?: string[]; workTitle?: string; error?: string; webhook?: { method: string; url: string; statusCode: number; durationMs: number; attempts?: number; error?: string; responseBody?: string } }
 
 // Per-workspace config mutex: serializes read-modify-write cycles on automations.json
 // to prevent concurrent IPC calls from clobbering each other's changes.
@@ -19,6 +20,21 @@ function withConfigMutex<T>(workspaceRoot: string, fn: () => Promise<T>): Promis
   const next = prev.then(fn, fn) // run fn regardless of previous result
   configMutexes.set(workspaceRoot, next.then(() => {}, () => {}))
   return next
+}
+
+export function uniqueWebhookSlug(base: string, matchers: Record<string, unknown>[], duplicate = false): string {
+  const existing = new Set(matchers.flatMap((matcher) => typeof matcher.slug === 'string' ? [matcher.slug] : []))
+  if (!duplicate && !existing.has(base)) return base
+  let attempt = duplicate ? 1 : 2
+  while (true) {
+    const suffix = duplicate
+      ? attempt === 1 ? '-copy' : `-copy-${attempt}`
+      : `-${attempt}`
+    const stem = base.slice(0, 64 - suffix.length).replace(/-+$/, '') || 'webhook'
+    const candidate = `${stem}${suffix}`
+    if (!existing.has(candidate)) return candidate
+    attempt += 1
+  }
 }
 
 // Shared helper: resolve workspace, read automations.json, validate matcher, mutate, write back
@@ -49,6 +65,9 @@ async function withAutomationMatcher(workspaceId: string, eventName: string, mat
         if (!m.id) m.id = generateShortId()
       }
     }
+
+    const validation = validateAutomationsConfig(config)
+    if (!validation.valid) throw new Error(`Invalid automation: ${validation.errors.join('; ')}`)
 
     await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
   })
@@ -134,6 +153,54 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
             await appendAutomationHistoryEntry(workspace.rootPath, entry)
           } catch (e) {
             log.warn('[Automations] Failed to write history:', e)
+          }
+        }
+        continue
+      }
+
+      if (action.type === 'queue-work') {
+        try {
+          const queued = await deps.sessionManager.queueTrackedWorkAutomation({
+            workspaceId: payload.workspaceId,
+            workspaceRootPath: workspace.rootPath,
+            matcherId: payload.automationId ?? `test-${Date.now()}`,
+            automationName: payload.automationName ?? action.title,
+            action,
+          })
+          results.push({
+            type: 'queue-work',
+            success: true,
+            workOrderIds: queued.orderIds,
+            duration: Date.now() - start,
+          })
+          if (payload.automationId) {
+            try {
+              await appendAutomationHistoryEntry(workspace.rootPath, {
+                id: payload.automationId,
+                ts: Date.now(),
+                ok: true,
+                workOrderIds: queued.orderIds,
+                workTitle: action.title,
+              })
+            } catch (historyError) {
+              log.warn('[Automations] Failed to write tracked-work test history:', historyError)
+            }
+          }
+        } catch (err) {
+          const error = err instanceof Error ? err.message : String(err)
+          results.push({ type: 'queue-work', success: false, error, duration: Date.now() - start })
+          if (payload.automationId) {
+            try {
+              await appendAutomationHistoryEntry(workspace.rootPath, {
+                id: payload.automationId,
+                ts: Date.now(),
+                ok: false,
+                workTitle: action.title,
+                error,
+              })
+            } catch (historyError) {
+              log.warn('[Automations] Failed to write tracked-work test history:', historyError)
+            }
           }
         }
         continue
@@ -247,18 +314,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       cloned.id = generateShortId()
       // For WebhookReceive, ensure the slug is unique within the event group
       if (eventName === 'WebhookReceive' && typeof cloned.slug === 'string') {
-        const existingSlugs = new Set(
-          matchers
-            .map((m) => (typeof (m as { slug?: unknown }).slug === 'string' ? (m as { slug: string }).slug : null))
-            .filter((s): s is string => s !== null)
-        )
-        let candidate = cloned.slug
-        let n = 2
-        while (existingSlugs.has(candidate)) {
-          candidate = `${cloned.slug}-${n}`
-          n += 1
-        }
-        cloned.slug = candidate
+        cloned.slug = uniqueWebhookSlug(cloned.slug, matchers)
       }
       matchers.push(cloned)
 
@@ -268,6 +324,11 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
         for (const m of e as Record<string, unknown>[]) {
           if (!m.id) m.id = generateShortId()
         }
+      }
+
+      const validation = validateAutomationsConfig(config)
+      if (!validation.valid) {
+        throw new Error(`Invalid automation: ${validation.errors.join('; ')}`)
       }
 
       await writeFile(configPath, JSON.stringify(config, null, 2) + '\n', 'utf-8')
@@ -280,6 +341,9 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
       const clone = JSON.parse(JSON.stringify(matchers[idx]))
       clone.id = genId()
       clone.name = clone.name ? `${clone.name} Copy` : 'Untitled Copy'
+      if (eventName === 'WebhookReceive' && typeof clone.slug === 'string') {
+        clone.slug = uniqueWebhookSlug(clone.slug, matchers, true)
+      }
       matchers.splice(idx + 1, 0, clone)
     })
   })

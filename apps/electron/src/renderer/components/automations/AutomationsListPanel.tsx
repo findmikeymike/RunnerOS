@@ -12,7 +12,7 @@
 import * as React from 'react'
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Webhook, Sparkles } from 'lucide-react'
+import { CalendarClock, Webhook, Sparkles } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@craft-agent/ui'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
@@ -23,6 +23,7 @@ import { AutomationMenu } from './AutomationMenu'
 import { BatchAutomationMenu } from './BatchAutomationMenu'
 import { TemplatesGalleryDialog } from './TemplatesGalleryDialog'
 import { AutomationAvatar } from './AutomationAvatar'
+import { AutomationWorkDialog } from './AutomationWorkDialog'
 import { SendResourceToWorkspaceDialog } from '@/components/app-shell/SendResourceToWorkspaceDialog'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { cn } from '@/lib/utils'
@@ -123,6 +124,11 @@ function AutomationItem({
           {automation.actions.some(a => a.type === 'webhook') && (
             <MicroBadge colorClass="bg-orange-500/10 text-orange-600 dark:text-orange-400">
               {t('automations.badgeWebhook')}
+            </MicroBadge>
+          )}
+          {automation.actions.some(a => a.type === 'queue-work') && (
+            <MicroBadge colorClass="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              Tracked work
             </MicroBadge>
           )}
         </>
@@ -281,6 +287,14 @@ export function AutomationsListPanel({
           docKey="automations"
         >
           <div className="flex min-w-0 flex-wrap items-center justify-center gap-2">
+            <AutomationWorkDialog
+              trigger={
+                <button className="inline-flex min-h-7 items-center justify-center gap-1.5 rounded-[8px] bg-foreground px-2.5 py-1 text-xs font-medium text-background transition-opacity hover:opacity-90">
+                  <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+                  <span>Queue tracked work</span>
+                </button>
+              }
+            />
             <TemplatesGalleryDialog
               trigger={
                 <button className="inline-flex min-h-7 max-w-[88px] items-center justify-center gap-1.5 rounded-[8px] bg-background px-2.5 py-1 text-center text-xs font-medium leading-tight shadow-minimal transition-colors hover:bg-foreground/[0.03]">
@@ -337,18 +351,32 @@ export function AutomationsListPanel({
           >
             {t('automationsList.filterPulses')}
           </button>
-          <TemplatesGalleryDialog
-            trigger={
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-md text-foreground/70 hover:text-foreground hover:bg-foreground/5"
-                title="Add automation from template"
-              >
-                <Sparkles className="h-3 w-3" />
-                From template
-              </button>
-            }
-          />
+          <div className="flex items-center gap-1">
+            <AutomationWorkDialog
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-md text-foreground/70 hover:text-foreground hover:bg-foreground/5"
+                  title="Queue tracked work"
+                >
+                  <CalendarClock className="h-3 w-3" />
+                  Queue work
+                </button>
+              }
+            />
+            <TemplatesGalleryDialog
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 px-2 py-1 text-[11px] rounded-md text-foreground/70 hover:text-foreground hover:bg-foreground/5"
+                  title="Add automation from template"
+                >
+                  <Sparkles className="h-3 w-3" />
+                  From template
+                </button>
+              }
+            />
+          </div>
         </div>
       )}
 

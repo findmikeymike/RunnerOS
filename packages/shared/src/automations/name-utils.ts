@@ -33,6 +33,10 @@ export function deriveAutomationName(event: string, matcher: AutomationMatcher):
     return `Pulse ${firstAction.driverAgentSlug ?? 'orchestrator'}`;
   }
 
+  if (firstAction.type === 'queue-work') {
+    return `Tracked work: ${firstAction.title}`;
+  }
+
   // Extract @skill/@source mention
   const mentionMatch = firstAction.prompt.match(/@(\S+)/);
   if (mentionMatch) return `${mentionMatch[1]} prompt`;

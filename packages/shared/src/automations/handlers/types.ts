@@ -9,7 +9,7 @@
  */
 
 import type { EventBus, BaseEventPayload } from '../event-bus.ts';
-import type { AutomationEvent, AutomationsConfig, AutomationMatcher, PendingPrompt } from '../types.ts';
+import type { AutomationEvent, AutomationsConfig, AutomationMatcher, PendingPrompt, PendingQueuedWork } from '../types.ts';
 
 // ============================================================================
 // Handler Interface
@@ -42,6 +42,13 @@ export interface PromptHandlerOptions {
   /** Called when prompts are ready to be executed */
   onPromptsReady?: (prompts: PendingPrompt[]) => void;
   /** Called when a prompt execution fails */
+  onError?: (event: AutomationEvent, error: Error) => void;
+}
+
+export interface QueueWorkHandlerOptions {
+  workspaceId: string;
+  workspaceRootPath: string;
+  onWorkReady?: (work: PendingQueuedWork[]) => Promise<void> | void;
   onError?: (event: AutomationEvent, error: Error) => void;
 }
 

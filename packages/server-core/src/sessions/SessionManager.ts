@@ -115,6 +115,7 @@ import {
   type CampaignExternalJobPreparer,
 } from '../campaign-calendar/CampaignScheduledJobRunner'
 import { ScheduledWorkRunner, type ScheduledSocialExecutor, type ScheduledSocialPreparer } from '../scheduled-work/ScheduledWorkRunner'
+import { queueAutomationWork } from '../scheduled-work/AutomationWorkQueue'
 import { withWorkspaceContextLock } from '../scheduled-work/workspace-context-lock'
 import { DeepResearchRunner, type DeepResearchRunnerEvent } from '../deep-research/DeepResearchRunner'
 import { AgentMessageService } from '../agent-messaging/AgentMessageService'
@@ -1958,6 +1959,39 @@ export class SessionManager implements ISessionManager {
             }
           }
         },
+        onWorkReady: async (pendingWork) => {
+          for (const pending of pendingWork) {
+            try {
+              const queued = await queueAutomationWork(workspaceId, workspaceRootPath, pending, {
+                emitContextChanged: (changedWorkspaceId, docs) => {
+                  this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, changedWorkspaceId, docs)
+                },
+              })
+              appendAutomationHistoryEntry(workspaceRootPath, {
+                id: pending.matcherId,
+                ts: Date.now(),
+                ok: true,
+                workOrderIds: queued.orderIds,
+                workTitle: pending.action.title,
+              }).catch((historyError) => sessionLog.warn('[Automations] Failed to write tracked-work history:', historyError))
+              this.getScheduledWorkRunner().scanWorkspace(
+                workspaceId,
+                workspaceRootPath,
+                new Date(pending.eventTimestamp),
+              ).catch((scanError) => sessionLog.warn('[Automations] Tracked work was queued but immediate scan failed:', scanError))
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              appendAutomationHistoryEntry(workspaceRootPath, {
+                id: pending.matcherId,
+                ts: Date.now(),
+                ok: false,
+                workTitle: pending.action.title,
+                error: message,
+              }).catch((historyError) => sessionLog.warn('[Automations] Failed to write tracked-work failure history:', historyError))
+              sessionLog.error(`[Automations] Failed to queue tracked work for ${pending.matcherId}:`, error)
+            }
+          }
+        },
         onError: (event, error) => {
           sessionLog.error(`Automation failed for ${event}:`, error.message)
         },
@@ -2393,6 +2427,35 @@ export class SessionManager implements ISessionManager {
   /** Expose the workflow runner so RPC handlers can reach it via HandlerDeps. */
   getWorkflowRunner(): WorkflowRunner {
     return this.workflowRunner
+  }
+
+  async queueTrackedWorkAutomation(input: {
+    workspaceId: string
+    workspaceRootPath: string
+    matcherId: string
+    automationName: string
+    action: import('@craft-agent/shared/automations').QueueWorkAction
+    eventTimestamp?: number
+  }): Promise<{ orderIds: string[] }> {
+    const eventTimestamp = input.eventTimestamp ?? Date.now()
+    const queued = await queueAutomationWork(input.workspaceId, input.workspaceRootPath, {
+      matcherId: input.matcherId,
+      automationName: input.automationName,
+      event: 'SchedulerTick',
+      eventTimestamp,
+      eventKey: `test:${eventTimestamp}`,
+      action: input.action,
+    }, {
+      emitContextChanged: (workspaceId, docs) => {
+        this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
+      },
+    })
+    this.getScheduledWorkRunner().scanWorkspace(
+      input.workspaceId,
+      input.workspaceRootPath,
+      new Date(eventTimestamp),
+    ).catch((scanError) => sessionLog.warn('[Automations] Tracked work was queued but immediate test scan failed:', scanError))
+    return { orderIds: queued.orderIds }
   }
 
   private getScheduledWorkRunner(): ScheduledWorkRunner {

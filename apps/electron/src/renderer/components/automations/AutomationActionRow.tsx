@@ -54,6 +54,17 @@ function WebhookText({ action }: { action: Extract<AutomationAction, { type: 'we
   )
 }
 
+function QueueWorkText({ action }: { action: Extract<AutomationAction, { type: 'queue-work' }> }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-sm break-words">{action.title}</p>
+      <p className="mt-0.5 text-xs text-foreground/50">
+        {action.execution.type}{action.followUp ? `, then ${action.followUp.execution.type}` : ''}
+      </p>
+    </div>
+  )
+}
+
 /**
  * Render the per-action override chips (connection / model / thinking level).
  * Each chip is conditional on its field being set on the action.
@@ -105,8 +116,6 @@ function PromptActionBadges({ action, t }: { action: PromptAction; t: (key: stri
 
 export function AutomationActionRow({ action, index, className }: AutomationActionRowProps) {
   const { t } = useTranslation()
-  const isWebhook = action.type === 'webhook'
-
   return (
     <div className={cn('flex items-start gap-3 px-4 py-3', className)}>
       {/* Index + icon — h-5 matches the first line height of text-sm content */}
@@ -119,8 +128,10 @@ export function AutomationActionRow({ action, index, className }: AutomationActi
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        {isWebhook ? (
+        {action.type === 'webhook' ? (
           <WebhookText action={action} />
+        ) : action.type === 'queue-work' ? (
+          <QueueWorkText action={action} />
         ) : (
           <>
             <PromptText text={action.prompt} t={t} />

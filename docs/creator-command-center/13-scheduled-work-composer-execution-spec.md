@@ -1153,6 +1153,29 @@ The feature is implementation-complete when:
 - explicit one-shot jobs, not recurring calendar rules
 - no automatic Final promotion
 
+## Automations Hub Integration
+
+Automations extends this system with event-driven timing. It does not introduce a second work runner.
+
+- Automations owns **when** work is requested: recurring schedule, file change, signed webhook, URL change, or inbound message.
+- Scheduled Work owns **execution and lifecycle**: target validation, idempotency, chaining, approvals, retries, recovery, Outputs, workflow runs, sessions, and external receipts.
+- Calendar owns **visibility**: every triggered run receives an HQ or Campaign Calendar shell linked to its Scheduled Work order.
+- One automation definition may create many deterministic work runs. Redelivery uses a stable source key when available: signed webhook delivery, messaging platform/channel/message id, URL fingerprint transition, or scheduler tick. The same matcher, source key, and action resolve to the same work-order ids even when receipt time changes.
+- Trigger variables may populate titles, briefs, workflow inputs, and captions, but the expanded action is validated again before any work is written.
+- Workflow definitions and active agent/workflow status are revalidated at trigger time. A stale target fails visibly in automation history and creates no partial work.
+- Social work never inherits approval from the automation. Exact-asset approval remains bound to the resulting Scheduled Work payload and is required near execution.
+- Supported Campaign chains remain deliberately narrow: Agent -> Review, Agent -> Workflow, Workflow -> Review, and Review -> Social Publish.
+- HQ automations may queue standalone agent or workflow work only in V1. Campaign work must be created in the campaign workspace so ownership stays singular.
+
+The Hub creation flow is progressive:
+
+1. Choose and configure the trigger.
+2. Reuse the Scheduled Work composer to choose the agent, workflow, review, social target, inputs, follow-up, and safeguards.
+3. Save one typed `queue-work` action in `automations.json`.
+4. On each match, create the Scheduled Work order and calendar shell under one workspace context lock, record order ids in automation history, then scan the existing runner immediately.
+
+Automations integration is complete when malformed definitions fail before config write, manual Test uses the same queue path, duplicate deliveries do not duplicate work, and the Hub exposes both the configured action and resulting work-order count.
+
 ## Open Questions
 
 These do not block Phases 1-3:

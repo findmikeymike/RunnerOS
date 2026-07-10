@@ -22,8 +22,8 @@ import { compactAutomationHistorySync } from './history-store.ts';
 import { compactWebhookDeliveryHistorySync } from './delivery-history.ts';
 import { createLogger } from '../utils/debug.ts';
 import { WorkspaceEventBus, type EventPayloadMap, type EventDeliveryResult } from './event-bus.ts';
-import { PromptHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
-import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
+import { PromptHandler, QueueWorkHandler, EventLogHandler, WebhookHandler, type AutomationsConfigProvider } from './handlers/index.ts';
+import { type AutomationsConfig, type AutomationEvent, type AutomationMatcher, type PendingPrompt, type PendingQueuedWork, type WebhookActionResult, type AppEvent, type AgentEvent, type SdkAutomationCallbackMatcher, type SdkAutomationInput } from './types.ts';
 import { validateAutomationsConfig } from './validation.ts';
 import { matcherMatchesSdk } from './utils.ts';
 import { SchedulerService, type SchedulerTickPayload } from '../scheduler/scheduler-service.ts';
@@ -53,6 +53,8 @@ export interface AutomationSystemOptions {
   enableScheduler?: boolean;
   /** Called when prompts are ready to be executed */
   onPromptsReady?: (prompts: PendingPrompt[]) => void;
+  /** Called when a matched trigger queues durable Scheduled Work. */
+  onWorkReady?: (work: PendingQueuedWork[]) => Promise<void> | void;
   /** Called when webhook results are available */
   onWebhookResults?: (results: WebhookActionResult[]) => void;
   /** Called when an error occurs during automation execution */
@@ -71,6 +73,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
   private readonly options: AutomationSystemOptions;
   private config: AutomationsConfig | null = null;
   private promptHandler: PromptHandler | null = null;
+  private queueWorkHandler: QueueWorkHandler | null = null;
   private webhookHandler: WebhookHandler | null = null;
   private eventLogHandler: EventLogHandler | null = null;
   private scheduler: SchedulerService | null = null;
@@ -366,6 +369,17 @@ export class AutomationSystem implements AutomationsConfigProvider {
       this
     );
     this.promptHandler.subscribe(this.eventBus);
+
+    this.queueWorkHandler = new QueueWorkHandler(
+      {
+        workspaceId: this.options.workspaceId,
+        workspaceRootPath: this.options.workspaceRootPath,
+        onWorkReady: this.options.onWorkReady,
+        onError: this.options.onError,
+      },
+      this,
+    );
+    this.queueWorkHandler.subscribe(this.eventBus);
 
     // Webhook handler
     this.webhookHandler = new WebhookHandler(
@@ -694,6 +708,7 @@ export class AutomationSystem implements AutomationsConfigProvider {
 
     // Dispose handlers
     this.promptHandler?.dispose();
+    this.queueWorkHandler?.dispose();
     this.webhookHandler?.dispose();
     await this.eventLogHandler?.dispose();
 

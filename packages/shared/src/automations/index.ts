@@ -21,6 +21,7 @@ export type {
   AutomationEvent,
   PromptAction,
   WebhookAction,
+  QueueWorkAction,
   WebhookHttpMethod,
   WebhookBodyFormat,
   WebhookAuth,
@@ -32,6 +33,7 @@ export type {
   WebhookActionResult,
   ActionExecutionResult,
   PendingPrompt,
+  PendingQueuedWork,
   AutomationResult,
   AutomationsValidationResult,
   SdkAutomationInput,
@@ -76,7 +78,7 @@ export { parsePromptReferences, matcherMatches } from './utils.ts';
 export { AutomationEventLogger, type LoggedAutomationEvent, type LoggedAutomationEventInput } from './event-logger.ts';
 
 // Schemas
-export { AutomationsConfigSchema, AutomationConditionSchema, TimeConditionSchema, StateConditionSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
+export { AutomationsConfigSchema, AutomationConditionSchema, TimeConditionSchema, StateConditionSchema, QueueWorkActionSchema, zodErrorToIssues, VALID_EVENTS } from './schemas.ts';
 
 // Condition evaluator
 export { evaluateConditions, type ConditionContext } from './conditions.ts';
@@ -141,10 +143,12 @@ export {
 // Handlers
 export {
   PromptHandler,
+  QueueWorkHandler,
   EventLogHandler,
   WebhookHandler,
   type AutomationHandler,
   type PromptHandlerOptions,
+  type QueueWorkHandlerOptions,
   type EventLogHandlerOptions,
   type WebhookHandlerOptions,
   type AutomationsConfigProvider,

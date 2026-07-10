@@ -13,6 +13,8 @@
 import { computeNextRuns } from './utils'
 import type { PermissionMode } from '../../../shared/types'
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels'
+import type { OutputKind } from '@craft-agent/shared/outputs'
+import type { ScheduledWorkExecution, ScheduledWorkInputRef } from '@craft-agent/shared/scheduled-work'
 import { DEFAULT_WEBHOOK_METHOD } from './constants'
 
 // ============================================================================
@@ -97,7 +99,20 @@ export interface WebhookAction {
   auth?: { type: 'basic'; username: string; password: string } | { type: 'bearer'; token: string }
 }
 
-export type AutomationAction = PromptAction | WebhookAction
+export interface QueueWorkAction {
+  type: 'queue-work'
+  ownerScope: 'hq' | 'campaign'
+  title: string
+  execution: ScheduledWorkExecution
+  inputRefs?: Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }>[]
+  followUp?: {
+    execution: ScheduledWorkExecution
+    outputKind?: OutputKind
+    outputInput?: string
+  }
+}
+
+export type AutomationAction = PromptAction | WebhookAction | QueueWorkAction
 
 // ============================================================================
 // Conditions (mirrored from packages/shared/src/automations/types.ts)
@@ -331,6 +346,8 @@ export interface ExecutionEntry {
   actionSummary?: string
   /** Session ID created by this execution (for deep linking) */
   sessionId?: string
+  /** Scheduled Work orders created by this execution. */
+  workOrderIds?: string[]
   /** Structured webhook execution details (expandable in timeline) */
   webhookDetails?: WebhookDetails
 }
@@ -345,6 +362,8 @@ export interface TestResult {
   state: TestState
   stderr?: string
   duration?: number
+  /** Real Scheduled Work orders created by a queue-work test. */
+  workOrderIds?: string[]
 }
 
 // ============================================================================
@@ -427,7 +446,8 @@ interface AutomationsConfigFile {
 
 type RawAction =
   | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
-  | { type: 'webhook'; url: string; method?: string; headers?: Record<string, string>; bodyFormat?: 'json' | 'form' | 'raw'; body?: unknown; captureResponse?: boolean; auth?: WebhookAction['auth'] }
+  | WebhookAction
+  | QueueWorkAction
 
 interface AutomationsConfigMatcher {
   id?: string
@@ -469,6 +489,8 @@ function deriveAutomationName(event: string, matcher: AutomationsConfigMatcher):
     const label = `Webhook ${firstAction.method ?? DEFAULT_WEBHOOK_METHOD} ${firstAction.url}`
     return label.length > 40 ? label.slice(0, 40) + '...' : label
   }
+
+  if (firstAction.type === 'queue-work') return `Tracked work: ${firstAction.title}`
 
   // Extract @skill mentions or use first ~40 chars
   const mentionMatch = firstAction.prompt.match(/@(\S+)/)
@@ -550,7 +572,7 @@ export function parseAutomationsConfig(json: unknown): AutomationListItem[] {
       if (!rawActions || !Array.isArray(rawActions) || rawActions.length === 0) continue
 
       const actions: AutomationAction[] = rawActions
-        .filter((a): a is AutomationAction => a.type === 'prompt' || a.type === 'webhook')
+        .filter((a): a is AutomationAction => a.type === 'prompt' || a.type === 'webhook' || a.type === 'queue-work')
       if (actions.length === 0) continue
 
       items.push({

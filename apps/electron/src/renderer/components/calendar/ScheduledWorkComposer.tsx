@@ -48,6 +48,7 @@ export interface ScheduledWorkComposerProps {
   onSubmit: (draft: ScheduledWorkComposerDraft) => Promise<void> | void
   allowedTypes?: ScheduledWorkComposerType[]
   allowFollowUps?: boolean
+  timingMode?: 'scheduled' | 'triggered'
 }
 
 type ComposerSection = 'what' | 'runner' | 'inputs' | 'timing' | 'then' | 'safeguards'
@@ -68,7 +69,7 @@ const QUEUE_OPTIONS: Array<{
 
 const INPUT_CLASS = 'h-10 w-full rounded-[6px] border border-white/[0.08] bg-white/[0.025] px-3 text-sm text-white/80 outline-none placeholder:text-white/28 focus:border-white/20'
 
-export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onSubmit, allowedTypes, allowFollowUps = true }: ScheduledWorkComposerProps) {
+export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onSubmit, allowedTypes, allowFollowUps = true, timingMode = 'scheduled' }: ScheduledWorkComposerProps) {
   const [draft, setDraft] = React.useState(() => createScheduledWorkComposerDraft(entry))
   const [section, setSection] = React.useState<ComposerSection>('what')
   const [busy, setBusy] = React.useState(false)
@@ -125,8 +126,11 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
   }, [])
 
   const submit = React.useCallback(async () => {
-    const validationError = validateComposerDraft(draft)
-      ?? validateLiveTarget(draft, activeAgents, activeWorkflows, profiles)
+    const submittedDraft = timingMode === 'triggered' && draft.type !== 'event'
+      ? withCurrentTiming(draft)
+      : draft
+    const validationError = validateComposerDraft(submittedDraft)
+      ?? validateLiveTarget(submittedDraft, activeAgents, activeWorkflows, profiles)
     if (validationError) {
       setError(validationError)
       return
@@ -134,17 +138,17 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
     setBusy(true)
     setError(null)
     try {
-      await onSubmit(draft)
+      await onSubmit(submittedDraft)
       onOpenChange(false)
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : String(submitError))
     } finally {
       setBusy(false)
     }
-  }, [activeAgents, activeWorkflows, draft, onOpenChange, onSubmit, profiles])
+  }, [activeAgents, activeWorkflows, draft, onOpenChange, onSubmit, profiles, timingMode])
 
   const queueOptions = allowedTypes ? QUEUE_OPTIONS.filter((option) => allowedTypes.includes(option.type)) : QUEUE_OPTIONS
-  const sections = visibleSections(draft, allowFollowUps)
+  const sections = visibleSections(draft, allowFollowUps, timingMode)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,8 +156,8 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
         className="flex max-h-[80vh] w-[min(620px,calc(100vw-24px))] max-w-none flex-col gap-0 overflow-hidden border-white/[0.08] bg-[#090909] p-0 text-white shadow-modal-small max-sm:h-[100dvh] max-sm:max-h-none max-sm:w-screen max-sm:rounded-none"
       >
         <DialogHeader className="shrink-0 border-b border-white/[0.07] px-5 py-4 pr-12">
-          <DialogTitle className="text-base font-semibold tracking-normal">Schedule</DialogTitle>
-          <DialogDescription className="sr-only">Create a calendar event or queue executable work.</DialogDescription>
+          <DialogTitle className="text-base font-semibold tracking-normal">{timingMode === 'triggered' ? 'Queue tracked work' : 'Schedule'}</DialogTitle>
+          <DialogDescription className="sr-only">{timingMode === 'triggered' ? 'Choose work to run whenever this automation fires.' : 'Create a calendar event or queue executable work.'}</DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5">
@@ -196,7 +200,7 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
         </div>
 
         <div className="shrink-0 border-t border-white/[0.07] bg-[#0b0b0b] px-5 py-4">
-          <p className="mb-3 text-xs leading-5 text-white/48">{composerReviewSentence(draft)}</p>
+          <p className="mb-3 text-xs leading-5 text-white/48">{composerReviewSentence(timingMode === 'triggered' ? { ...draft, date: '', time: '' } : draft)}</p>
           {error ? <p className="mb-3 text-xs text-red-300/80">{error}</p> : null}
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>Cancel</Button>
@@ -206,6 +210,13 @@ export function ScheduledWorkComposer({ open, entry, disabled, onOpenChange, onS
       </DialogContent>
     </Dialog>
   )
+}
+
+function withCurrentTiming<T extends Exclude<ScheduledWorkComposerDraft, { type: 'event' }>>(draft: T): T {
+  const now = new Date()
+  const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-')
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  return { ...draft, date, time }
 }
 
 function ComposerSectionRow({ section, active, title, summary, onOpen, children }: {
@@ -634,9 +645,10 @@ function EmptyLine({ icon: Icon = FileOutput, children }: { icon?: React.Compone
   return <div className="flex min-h-12 items-center gap-2 border-y border-white/[0.06] px-2 text-xs text-white/38"><Icon className="h-4 w-4" />{children}</div>
 }
 
-function visibleSections(draft: ScheduledWorkComposerDraft, allowFollowUps: boolean): ComposerSection[] {
-  if (draft.type === 'event') return ['what', 'inputs', 'timing']
-  const sections: ComposerSection[] = ['what', 'runner', 'inputs', 'timing']
+function visibleSections(draft: ScheduledWorkComposerDraft, allowFollowUps: boolean, timingMode: 'scheduled' | 'triggered'): ComposerSection[] {
+  if (draft.type === 'event') return timingMode === 'triggered' ? ['what', 'inputs'] : ['what', 'inputs', 'timing']
+  const sections: ComposerSection[] = ['what', 'runner', 'inputs']
+  if (timingMode === 'scheduled') sections.push('timing')
   if (allowFollowUps && draft.type !== 'social-publish') sections.push('then')
   sections.push('safeguards')
   return sections

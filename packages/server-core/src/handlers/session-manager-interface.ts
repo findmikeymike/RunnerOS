@@ -26,6 +26,7 @@ import type {
 import type { SessionBundle, DispatchMode } from '@craft-agent/shared/sessions'
 import type { EventSink } from '../transport/types.ts'
 import type { LoadedSkill } from '@craft-agent/shared/skills'
+import type { QueueWorkAction } from '@craft-agent/shared/automations'
 
 export interface ISessionManager {
   // ---------------------------------------------------------------------------
@@ -240,6 +241,14 @@ export interface ISessionManager {
   reinitializeAuth(connectionSlug?: string): Promise<void>
   completeAuthRequest(sessionId: string, result: AuthResult): Promise<void>
   executePromptAutomation(input: ExecutePromptAutomationInput): Promise<{ sessionId: string }>
+  queueTrackedWorkAutomation(input: {
+    workspaceId: string
+    workspaceRootPath: string
+    matcherId: string
+    automationName: string
+    action: QueueWorkAction
+    eventTimestamp?: number
+  }): Promise<{ orderIds: string[] }>
 }
 
 /**

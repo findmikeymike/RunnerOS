@@ -27,6 +27,8 @@ export function AutomationActionPreview({ actions, className }: AutomationAction
           <span className="text-foreground/70 break-words line-clamp-2">
             {action.type === 'webhook'
               ? `${action.method ?? DEFAULT_WEBHOOK_METHOD} ${action.url}`
+              : action.type === 'queue-work'
+                ? `${action.title}${action.followUp ? `, then ${action.followUp.execution.type}` : ''}`
               : action.prompt}
           </span>
         </div>

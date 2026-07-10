@@ -4,6 +4,7 @@ import {
   composerDefinitionDigest,
   buildCampaignScheduleFromComposer,
   buildCampaignSchedulePlanFromComposer,
+  buildAutomationQueueWorkAction,
   createScheduledWorkComposerDraft,
   selectScheduledWorkComposerType,
   validateComposerDraft,
@@ -184,5 +185,28 @@ describe('scheduled work composer drafts', () => {
       inputRefs: [{ kind: 'produced-output', selector: { kind: 'document' }, bindTo: { kind: 'review-target' } }],
     })
     expect(plan.calendarItems.map((item) => item.status)).toEqual(['scheduled', 'draft'])
+  })
+
+  test('converts the composer draft into a trigger-owned queue-work action', () => {
+    const initial = createScheduledWorkComposerDraft({ ...defaults, suggestedType: 'agent-task' })
+    if (initial.type !== 'agent-task') throw new Error('Expected agent draft')
+    const action = buildAutomationQueueWorkAction({
+      ...initial,
+      title: 'Draft launch copy',
+      time: '10:00',
+      agentSlug: 'content-genius',
+      brief: 'Draft the launch copy.',
+      followUp: { type: 'review', reviewerType: 'user', reviewerId: '', reviewerName: 'You', outputKind: 'document' },
+    })
+
+    expect(action).toMatchObject({
+      type: 'queue-work',
+      ownerScope: 'campaign',
+      title: 'Draft launch copy',
+      execution: { type: 'agent-task', agentSlug: 'content-genius' },
+      followUp: { execution: { type: 'review', reviewerType: 'user' }, outputKind: 'document' },
+    })
+    expect(action).not.toHaveProperty('date')
+    expect(action).not.toHaveProperty('time')
   })
 })

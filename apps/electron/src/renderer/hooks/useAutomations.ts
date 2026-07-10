@@ -109,12 +109,14 @@ export function useAutomations(
       const state = hasError ? 'error' : 'success'
       const stderr = actions.map(a => ('stderr' in a ? a.stderr : 'error' in a ? a.error : undefined)).filter(Boolean).join('\n')
       const duration = actions.reduce((sum, a) => sum + (a.duration ?? 0), 0)
+      const workOrderIds = actions.flatMap((action) => 'workOrderIds' in action ? action.workOrderIds ?? [] : [])
       setAutomationTestResults(prev => ({
         ...prev,
         [automationId]: {
           state,
           stderr: stderr || undefined,
           duration: duration || undefined,
+          workOrderIds: workOrderIds.length ? workOrderIds : undefined,
         },
       }))
     }).catch((err: Error) => {
@@ -170,9 +172,10 @@ export function useAutomations(
         duration: e.webhook?.durationMs ?? 0,
         timestamp: e.ts,
         sessionId: e.sessionId,
+        workOrderIds: e.workOrderIds,
         actionSummary: e.webhook
           ? `Webhook ${e.webhook.method} ${e.webhook.url}${e.webhook.attempts && e.webhook.attempts > 1 ? ` (${e.webhook.attempts} attempts)` : ''}`
-          : e.prompt,
+          : e.workTitle ? `Queued ${e.workTitle}` : e.prompt,
         error: e.webhook?.error ?? e.error,
         webhookDetails: e.webhook ? {
           method: e.webhook.method,
