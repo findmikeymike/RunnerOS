@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CalendarClock, CalendarDays, CheckCircle2, ExternalLink, Pencil, ReceiptText, RotateCcw, Trash2, X } from 'lucide-react'
+import { Bot, CalendarDays, CheckCircle2, ExternalLink, FileText, Pencil, ReceiptText, RotateCcw, Send, ShieldCheck, Trash2, Workflow, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { routes } from '../../../shared/routes'
@@ -17,7 +17,6 @@ import {
   activeCampaignCalendarItems,
   approveCampaignCalendarItem,
   createCampaignCalendarItem,
-  createCampaignCalendarDraftItem,
   formatCampaignExternalReceiptLabel,
   isLiveExternalActionType,
   parseCampaignCalendarDocResult,
@@ -39,7 +38,9 @@ import {
   parseDateKey,
   toDateKey,
   type CalendarMonthDayMeta,
+  type CalendarDayAction,
 } from './CalendarMonthGrid'
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import {
   ScheduledWorkComposer,
   type ScheduledWorkComposerEntry,
@@ -68,6 +69,13 @@ type CampaignCalendarDraft = {
 type CalendarSocialProfile = { platform: string; profile: string; accountGroup: string | null; ready: boolean }
 
 const todayKey = toDateKey(new Date())
+const CAMPAIGN_DAY_ACTIONS: CalendarDayAction[] = [
+  { id: 'event', label: 'Event / reminder', icon: FileText },
+  { id: 'agent-task', label: 'Agent job', icon: Bot },
+  { id: 'workflow-run', label: 'Workflow run', icon: Workflow },
+  { id: 'review', label: 'Review / approval', icon: ShieldCheck },
+  { id: 'social-publish', label: 'Social publish', icon: Send },
+]
 
 const emptyCampaignCalendarDraft = (date = todayKey): CampaignCalendarDraft => ({
   title: '',
@@ -111,7 +119,6 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
   )
   const [selectedCalendarDate, setSelectedCalendarDate] = React.useState(todayKey)
   const [visibleCalendarMonth, setVisibleCalendarMonth] = React.useState(() => parseDateKey(todayKey))
-  const [calendarDraft, setCalendarDraft] = React.useState<CampaignCalendarDraft>(() => emptyCampaignCalendarDraft(todayKey))
   const [calendarEditId, setCalendarEditId] = React.useState<string | null>(null)
   const [calendarEditDraft, setCalendarEditDraft] = React.useState<CampaignCalendarDraft>(() => emptyCampaignCalendarDraft(todayKey))
   const [composerOpen, setComposerOpen] = React.useState(false)
@@ -198,43 +205,6 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
     },
     [campaignCalendar, refresh, upsert, workspaceId],
   )
-
-  const addCampaignCalendarItem = React.useCallback(async () => {
-    if (!calendarDraft.title.trim()) {
-      toast.error('Add a title first.')
-      return
-    }
-    const result = createCampaignCalendarDraftItem({
-      campaignId: workspaceId || 'workspace',
-      date: calendarDraft.date || selectedCalendarDate,
-      time: calendarDraft.time,
-      title: calendarDraft.title,
-      notes: calendarDraft.notes,
-      kind: calendarDraft.kind,
-      status: calendarDraft.status,
-      actionType: calendarDraft.actionType,
-      actionInput: calendarDraft.actionInput,
-      accountSetId: calendarDraft.accountSetId || undefined,
-      socialProfileRefs: calendarDraft.socialPlatform && calendarDraft.socialProfileId
-        ? [{ platform: calendarDraft.socialPlatform, profileId: calendarDraft.socialProfileId }]
-        : undefined,
-      finalRefs: calendarDraft.finalRefs,
-      outputRefs: calendarDraft.outputRefs,
-    })
-    if (!result.ok) {
-      toast.error(result.error)
-      return
-    }
-    const item = result.item
-    const saved = await saveCampaignCalendar((latest) => ({
-      ...latest,
-      items: [...latest.items, item],
-      updatedAt: new Date().toISOString(),
-    }))
-    if (!saved) return
-    setSelectedCalendarDate(item.date)
-    setCalendarDraft(emptyCampaignCalendarDraft(item.date))
-  }, [calendarDraft, saveCampaignCalendar, selectedCalendarDate, workspaceId])
 
   const submitScheduledWork = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
     if (draft.type === 'event') {
@@ -497,7 +467,6 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
           items={activeCalendarItems}
           selectedDate={selectedCalendarDate}
           visibleMonth={visibleCalendarMonth}
-          draft={calendarDraft}
           selectedDateItems={selectedDateCalendarItems}
           editingItemId={calendarEditId}
           editDraft={calendarEditDraft}
@@ -505,15 +474,12 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
           parseError={storageError}
           onSelectDate={(date) => {
             setSelectedCalendarDate(date)
-            setCalendarDraft((current) => ({ ...current, date }))
           }}
           onChangeMonth={setVisibleCalendarMonth}
-          onChangeDraft={setCalendarDraft}
           onChangeEditDraft={setCalendarEditDraft}
           onEditItem={openCampaignCalendarItemEdit}
           onCancelEditItem={cancelCampaignCalendarItemEdit}
           onSaveEditItem={saveCampaignCalendarItemEdit}
-          onAddItem={addCampaignCalendarItem}
           onApproveItem={approveCampaignCalendarJob}
           onRequeueItem={requeueCampaignCalendarJob}
           onDeleteItem={deleteCampaignCalendarItem}
@@ -534,8 +500,8 @@ export function CampaignCalendarPage({ workspaceId }: { workspaceId: string }) {
             setComposerOpen(true)
           }}
           onOpenSocialSettings={() => navigate(routes.view.settings('social-accounts'))}
-          onOpenComposer={() => {
-            setComposerPrefill(null)
+          onOpenComposer={(type) => {
+            setComposerPrefill({ suggestedType: type })
             setComposerOpen(true)
           }}
         />
@@ -555,7 +521,6 @@ function CampaignCalendarSurface({
   items,
   selectedDate,
   visibleMonth,
-  draft,
   selectedDateItems,
   editingItemId,
   editDraft,
@@ -563,12 +528,10 @@ function CampaignCalendarSurface({
   parseError,
   onSelectDate,
   onChangeMonth,
-  onChangeDraft,
   onChangeEditDraft,
   onEditItem,
   onCancelEditItem,
   onSaveEditItem,
-  onAddItem,
   onApproveItem,
   onRequeueItem,
   onDeleteItem,
@@ -587,7 +550,6 @@ function CampaignCalendarSurface({
   items: CampaignCalendarItem[]
   selectedDate: string
   visibleMonth: Date
-  draft: CampaignCalendarDraft
   selectedDateItems: CampaignCalendarItem[]
   editingItemId: string | null
   editDraft: CampaignCalendarDraft
@@ -595,12 +557,10 @@ function CampaignCalendarSurface({
   parseError?: string
   onSelectDate: (date: string) => void
   onChangeMonth: (month: Date) => void
-  onChangeDraft: (draft: CampaignCalendarDraft) => void
   onChangeEditDraft: (draft: CampaignCalendarDraft) => void
   onEditItem: (item: CampaignCalendarItem) => void
   onCancelEditItem: () => void
   onSaveEditItem: (itemId: string) => void
-  onAddItem: () => void
   onApproveItem: (itemId: string) => void
   onRequeueItem: (itemId: string) => void
   onDeleteItem: (itemId: string) => void
@@ -614,22 +574,22 @@ function CampaignCalendarSurface({
   onApproveSocial: (order: ScheduledWorkOrder) => Promise<void>
   onQueueReplacement: (order: ScheduledWorkOrder) => void
   onOpenSocialSettings: () => void
-  onOpenComposer: () => void
+  onOpenComposer: (type: ScheduledWorkComposerEntry['suggestedType']) => void
 }) {
+  const [detailItemId, setDetailItemId] = React.useState<string | null>(null)
   const dayMetaByDate = React.useMemo(() => {
-    const statusesByDate = new Map<string, CampaignCalendarItemStatus[]>()
+    const metaByDate = new Map<string, CalendarMonthDayMeta>()
     for (const item of items) {
       const linkedWork = item.scheduledWorkId ? workById.get(item.scheduledWorkId) : undefined
       const work = linkedWork?.legacyRef ? undefined : linkedWork
-      statusesByDate.set(item.date, [...(statusesByDate.get(item.date) ?? []), campaignStatusForWork(work?.status) ?? item.status])
-    }
-    const metaByDate = new Map<string, CalendarMonthDayMeta>()
-    statusesByDate.forEach((statuses, date) => {
-      metaByDate.set(date, {
-        count: statuses.length,
-        dots: [...new Set(statuses)].map(statusDotClass),
+      const status = campaignStatusForWork(work?.status) ?? item.status
+      const current = metaByDate.get(item.date) ?? { count: 0, dots: [], items: [] }
+      metaByDate.set(item.date, {
+        count: (current.count ?? 0) + 1,
+        dots: [...new Set([...(current.dots ?? []), statusDotClass(status)])],
+        items: [...(current.items ?? []), { id: item.id, label: item.title, detail: `${item.time || 'All day'} - ${status.replace(/-/g, ' ')}` }],
       })
-    })
+    }
     return metaByDate
   }, [items, workById])
   const selectedLabel = parseDateKey(selectedDate).toLocaleDateString('en-US', {
@@ -646,27 +606,37 @@ function CampaignCalendarSurface({
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <>
         <CalendarMonthGrid
           visibleMonth={visibleMonth}
           selectedDate={selectedDate}
           dayMetaByDate={dayMetaByDate}
+          dayActions={CAMPAIGN_DAY_ACTIONS}
           onSelectDate={onSelectDate}
           onChangeMonth={onChangeMonth}
+          onDayAction={(date, actionId) => {
+            onSelectDate(date)
+            onOpenComposer(actionId as ScheduledWorkComposerEntry['suggestedType'])
+          }}
+          onSelectItem={(date, itemId) => {
+            onSelectDate(date)
+            setDetailItemId(itemId)
+          }}
         />
 
-        <div className="rounded-[16px] border border-white/[0.05] bg-black/20 p-3">
-          <div className="mb-3">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Selected Date</div>
-            <div className="mt-1 text-base font-semibold text-white/80">{selectedLabel}</div>
-          </div>
+        <Drawer direction="right" open={detailItemId !== null} onOpenChange={(open) => { if (!open) setDetailItemId(null) }}>
+          <DrawerContent className="w-[min(440px,92vw)] border-white/[0.07] bg-[#090909] sm:max-w-[440px]">
+            <DrawerHeader className="border-b border-white/[0.06]">
+              <DrawerTitle className="text-base text-white/82">{selectedLabel}</DrawerTitle>
+              <DrawerDescription>Scheduled item details and controls</DrawerDescription>
+            </DrawerHeader>
 
-          <div className="space-y-2">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
             {selectedDateItems.length === 0 ? (
               <div className="rounded-[12px] border border-white/[0.045] bg-white/[0.016] p-3 text-xs text-white/36">
                 Nothing scheduled.
               </div>
-            ) : selectedDateItems.map((item) => {
+            ) : selectedDateItems.filter((item) => !detailItemId || item.id === detailItemId).map((item) => {
               const linkedWork = item.scheduledWorkId ? workById.get(item.scheduledWorkId) : undefined
               const work = linkedWork?.legacyRef ? undefined : linkedWork
               const predecessor = work?.chain?.predecessor ? workById.get(work.chain.predecessor.orderId) : undefined
@@ -738,7 +708,7 @@ function CampaignCalendarSurface({
                       ) : null}
                       <button
                         type="button"
-                        onClick={() => onDeleteItem(item.id)}
+                        onClick={() => { onDeleteItem(item.id); setDetailItemId(null) }}
                         disabled={disabled}
                         className="rounded-full p-1.5 text-white/28 hover:bg-white/[0.05] hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
                         aria-label="Delete calendar item"
@@ -751,27 +721,9 @@ function CampaignCalendarSurface({
               </div>
             })}
           </div>
-
-          <div className="mt-4 rounded-[14px] border border-white/[0.05] bg-white/[0.018] p-3">
-            <div className="mb-2 flex items-center justify-between gap-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Add event</div>
-              <button type="button" onClick={onOpenComposer} disabled={disabled} className="inline-flex h-8 items-center gap-1.5 rounded-[6px] border border-white/[0.08] px-2.5 text-[11px] font-medium text-white/62 hover:bg-white/[0.04] disabled:opacity-40">
-                <CalendarClock className="h-3.5 w-3.5" />
-                Queue work
-              </button>
-            </div>
-            <CampaignCalendarForm
-              draft={draft}
-              disabled={disabled}
-              submitLabel="Add Item"
-              onChange={onChangeDraft}
-              onSubmit={onAddItem}
-              socialProfiles={socialProfiles}
-              showJobConfig={false}
-            />
-          </div>
-        </div>
-      </div>
+          </DrawerContent>
+        </Drawer>
+      </>
     </section>
   )
 }

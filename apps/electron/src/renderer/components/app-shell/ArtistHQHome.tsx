@@ -19,6 +19,7 @@ import {
   Trash2,
   UserRound,
   Users,
+  Workflow,
   X,
 } from 'lucide-react'
 import { useAtomValue } from 'jotai'
@@ -42,6 +43,7 @@ import {
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Switch } from '@/components/ui/switch'
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
 import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
@@ -50,6 +52,7 @@ import {
   parseDateKey,
   toDateKey,
   type CalendarMonthDayMeta,
+  type CalendarDayAction,
 } from './CalendarMonthGrid'
 import {
   HQ_STATE_CONTEXT_SLUG,
@@ -180,11 +183,6 @@ const emptyNetworkDraft: NetworkDraft = {
   tags: '',
   notes: '',
 }
-const emptyCalendarDraft: CalendarDraft = {
-  title: '',
-  time: '',
-  notes: '',
-}
 const emptyCalendarEditDraft: CalendarEditDraft = {
   date: '',
   title: '',
@@ -289,10 +287,10 @@ export function ArtistHQHome({
   const [visibleMonth, setVisibleMonth] = React.useState(() => parseDateKey(todayKey))
   const [draft, setDraft] = React.useState<NetworkDraft>(emptyNetworkDraft)
   const [editDraft, setEditDraft] = React.useState<NetworkDraft>(emptyNetworkDraft)
-  const [calendarDraft, setCalendarDraft] = React.useState<CalendarDraft>(emptyCalendarDraft)
   const [calendarEditId, setCalendarEditId] = React.useState<string | null>(null)
   const [calendarEditDraft, setCalendarEditDraft] = React.useState<CalendarEditDraft>(emptyCalendarEditDraft)
   const [calendarComposerTarget, setCalendarComposerTarget] = React.useState<'hq' | 'campaign' | null>(null)
+  const [calendarComposerType, setCalendarComposerType] = React.useState<ScheduledWorkComposerEntry['suggestedType']>('agent-task')
   const [profileDraft, setProfileDraft] = React.useState<ProfileDraft>(emptyProfileDraft)
   const [brandingDraft, setBrandingDraft] = React.useState<BrandingDraft>(emptyBrandingDraft)
   const [voiceDraft, setVoiceDraft] = React.useState<VoiceDraft>(emptyVoiceDraft)
@@ -400,8 +398,8 @@ export function ArtistHQHome({
       ? { scope: 'campaign', workspaceId: primaryCampaignWorkspaceId, campaignId: primaryCampaignWorkspaceId }
       : { scope: 'hq', workspaceId },
     date: selectedDate,
-    suggestedType: 'agent-task',
-  }), [calendarComposerTarget, primaryCampaignWorkspaceId, selectedDate, workspaceId])
+    suggestedType: calendarComposerType,
+  }), [calendarComposerTarget, calendarComposerType, primaryCampaignWorkspaceId, selectedDate, workspaceId])
   const selectedPerson = React.useMemo(
     () => network.people.find((person) => person.id === selectedPersonId) ?? null,
     [network.people, selectedPersonId],
@@ -806,31 +804,6 @@ export function ArtistHQHome({
       setSpotifySyncBusy(false)
     }
   }, [refreshAutomations, spotifySyncAutomation, workspaceId])
-
-  const addCalendarEvent = React.useCallback(async () => {
-    if (!calendarDraft.title.trim()) {
-      toast.error('Add an event title first.')
-      return
-    }
-    const event = createCalendarEvent({
-      date: selectedDate,
-      title: calendarDraft.title,
-      time: calendarDraft.time,
-      notes: calendarDraft.notes,
-    })
-    const nextCalendar: ArtistCalendar = {
-      version: 1,
-      events: [...calendar.events, event],
-      updatedAt: new Date().toISOString(),
-    }
-    try {
-      await saveCalendar(nextCalendar)
-      setCalendarDraft(emptyCalendarDraft)
-      toast.success('Event added')
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err))
-    }
-  }, [calendar.events, calendarDraft, saveCalendar, selectedDate])
 
   const submitCalendarWork = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
     if (draft.type === 'event') {
@@ -1320,25 +1293,28 @@ export function ArtistHQHome({
               events={activeCalendarEvents}
               selectedDate={selectedDate}
               visibleMonth={visibleMonth}
-              draft={calendarDraft}
               disabled={!calendarResult.ok || !scheduledWorkResult.ok}
               googleConnected={googleCalendarConnected}
               googleBusy={googleCalendarBusy}
               onSelectDate={setSelectedDate}
               onChangeMonth={setVisibleMonth}
-              onChangeDraft={setCalendarDraft}
               editingEventId={calendarEditId}
               editDraft={calendarEditDraft}
               onChangeEditDraft={setCalendarEditDraft}
               onEditEvent={openCalendarEventEdit}
               onCancelEditEvent={cancelCalendarEventEdit}
               onSaveEditEvent={saveCalendarEventEdit}
-              onAddEvent={addCalendarEvent}
               onDeleteEvent={deleteCalendarEvent}
               onConnectGoogle={connectGoogleCalendar}
               onSyncGoogle={syncGoogleCalendar}
-              onQueueHqWork={() => setCalendarComposerTarget('hq')}
-              onQueueCampaignWork={primaryCampaignWorkspaceId ? () => setCalendarComposerTarget('campaign') : undefined}
+              onQueueHqWork={(type) => {
+                setCalendarComposerType(type)
+                setCalendarComposerTarget('hq')
+              }}
+              onQueueCampaignWork={primaryCampaignWorkspaceId ? () => {
+                setCalendarComposerType('agent-task')
+                setCalendarComposerTarget('campaign')
+              } : undefined}
               selectedDateEvents={selectedDateEvents}
               workById={scheduledWorkById}
               workspaceId={workspaceId}
@@ -2217,11 +2193,17 @@ function ProfileField({
   )
 }
 
+const HQ_DAY_ACTIONS: CalendarDayAction[] = [
+  { id: 'event', label: 'Event / reminder', icon: FileText },
+  { id: 'agent-task', label: 'Agent job', icon: Bot },
+  { id: 'workflow-run', label: 'Workflow run', icon: Workflow },
+  { id: 'campaign-work', label: 'Campaign work', icon: FolderKanban },
+]
+
 function ArtistCalendarView({
   events,
   selectedDate,
   visibleMonth,
-  draft,
   disabled,
   googleConnected,
   googleBusy,
@@ -2232,12 +2214,10 @@ function ArtistCalendarView({
   editDraft,
   onSelectDate,
   onChangeMonth,
-  onChangeDraft,
   onChangeEditDraft,
   onEditEvent,
   onCancelEditEvent,
   onSaveEditEvent,
-  onAddEvent,
   onDeleteEvent,
   onConnectGoogle,
   onSyncGoogle,
@@ -2247,7 +2227,6 @@ function ArtistCalendarView({
   events: ArtistCalendarEvent[]
   selectedDate: string
   visibleMonth: Date
-  draft: CalendarDraft
   disabled?: boolean
   googleConnected?: boolean
   googleBusy?: boolean
@@ -2258,26 +2237,29 @@ function ArtistCalendarView({
   editDraft: CalendarEditDraft
   onSelectDate: (date: string) => void
   onChangeMonth: (month: Date) => void
-  onChangeDraft: (draft: CalendarDraft) => void
   onChangeEditDraft: (draft: CalendarEditDraft) => void
   onEditEvent: (event: ArtistCalendarEvent) => void
   onCancelEditEvent: () => void
   onSaveEditEvent: (eventId: string) => void
-  onAddEvent: () => void
   onDeleteEvent: (eventId: string) => void
   onConnectGoogle: () => void
   onSyncGoogle: () => void
-  onQueueHqWork: () => void
+  onQueueHqWork: (type: NonNullable<ScheduledWorkComposerEntry['suggestedType']>) => void
   onQueueCampaignWork?: () => void
 }) {
+  const [detailEventId, setDetailEventId] = React.useState<string | null>(null)
   const dayMetaByDate = React.useMemo(() => {
     const metaByDate = new Map<string, CalendarMonthDayMeta>()
     for (const event of events) {
-      const count = (metaByDate.get(event.date)?.count ?? 0) + 1
-      metaByDate.set(event.date, { count })
+      const work = event.scheduledWorkId ? workById.get(event.scheduledWorkId) : undefined
+      const current = metaByDate.get(event.date) ?? { count: 0, items: [] }
+      metaByDate.set(event.date, {
+        count: (current.count ?? 0) + 1,
+        items: [...(current.items ?? []), { id: event.id, label: event.title, detail: `${event.time || 'All day'}${work ? ` - ${work.status.replace(/-/g, ' ')}` : ''}` }],
+      })
     }
     return metaByDate
-  }, [events])
+  }, [events, workById])
   const selectedLabel = parseDateKey(selectedDate).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'long',
@@ -2285,48 +2267,57 @@ function ArtistCalendarView({
   })
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <div>
+      <div className="mb-3 flex justify-end gap-1.5">
+        <button
+          type="button"
+          onClick={onConnectGoogle}
+          disabled={googleBusy}
+          className="h-8 rounded-[6px] border border-white/[0.07] px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {googleConnected ? 'Reconnect Google' : 'Connect Google'}
+        </button>
+        <button
+          type="button"
+          onClick={onSyncGoogle}
+          disabled={disabled || googleBusy}
+          className="inline-flex h-8 items-center gap-1.5 rounded-[6px] bg-white/90 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <RefreshCw className={cn('h-3.5 w-3.5', googleBusy && 'animate-spin')} />
+          Sync
+        </button>
+      </div>
       <CalendarMonthGrid
         visibleMonth={visibleMonth}
         selectedDate={selectedDate}
         dayMetaByDate={dayMetaByDate}
+        dayActions={HQ_DAY_ACTIONS.filter((action) => action.id !== 'campaign-work' || onQueueCampaignWork)}
         onSelectDate={onSelectDate}
         onChangeMonth={onChangeMonth}
+        onDayAction={(date, actionId) => {
+          onSelectDate(date)
+          if (actionId === 'campaign-work') onQueueCampaignWork?.()
+          else onQueueHqWork(actionId as NonNullable<ScheduledWorkComposerEntry['suggestedType']>)
+        }}
+        onSelectItem={(date, itemId) => {
+          onSelectDate(date)
+          setDetailEventId(itemId)
+        }}
       />
 
-      <div className="rounded-[16px] border border-white/[0.05] bg-black/20 p-3">
-        <div className="mb-3 flex items-start justify-between gap-3">
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Selected Date</div>
-            <div className="mt-1 text-base font-semibold text-white/80">{selectedLabel}</div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <button
-              type="button"
-              onClick={onConnectGoogle}
-              disabled={googleBusy}
-              className="h-8 rounded-full border border-white/[0.07] px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {googleConnected ? 'Reconnect' : 'Connect'}
-            </button>
-            <button
-              type="button"
-              onClick={onSyncGoogle}
-              disabled={disabled || googleBusy}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-white/90 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <RefreshCw className={cn('h-3.5 w-3.5', googleBusy && 'animate-spin')} />
-              Sync
-            </button>
-          </div>
-        </div>
+      <Drawer direction="right" open={detailEventId !== null} onOpenChange={(open) => { if (!open) setDetailEventId(null) }}>
+        <DrawerContent className="w-[min(420px,92vw)] border-white/[0.07] bg-[#090909] sm:max-w-[420px]">
+          <DrawerHeader className="border-b border-white/[0.06]">
+            <DrawerTitle className="text-base text-white/82">{selectedLabel}</DrawerTitle>
+            <DrawerDescription>Calendar item details and controls</DrawerDescription>
+          </DrawerHeader>
 
-        <div className="space-y-2">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
           {selectedDateEvents.length === 0 ? (
             <div className="rounded-[12px] border border-white/[0.045] bg-white/[0.016] p-3 text-xs text-white/36">
               No events yet.
             </div>
-          ) : selectedDateEvents.map((event) => {
+          ) : selectedDateEvents.filter((event) => !detailEventId || event.id === detailEventId).map((event) => {
             const work = event.scheduledWorkId ? workById.get(event.scheduledWorkId) : undefined
             const agentResult = work?.result?.type === 'agent-task' ? work.result : undefined
             const workflowResult = work?.result?.type === 'workflow-run' ? work.result : undefined
@@ -2407,7 +2398,7 @@ function ArtistCalendarView({
                     </button> : null}
                     {!work ? <button
                       type="button"
-                      onClick={() => onDeleteEvent(event.id)}
+                      onClick={() => { onDeleteEvent(event.id); setDetailEventId(null) }}
                       disabled={disabled}
                       className="rounded-full p-1.5 text-white/28 hover:bg-white/[0.05] hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Delete event"
@@ -2420,35 +2411,8 @@ function ArtistCalendarView({
             </div>
           )})}
         </div>
-
-        <div className="mt-4 rounded-[14px] border border-white/[0.05] bg-white/[0.018] p-3">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Add Event</div>
-            <div className="flex flex-wrap gap-1.5">
-              <button type="button" onClick={onQueueHqWork} disabled={disabled} className="h-8 rounded-[6px] border border-white/[0.08] px-2.5 text-[10px] font-medium text-white/58 disabled:opacity-40">Queue HQ work</button>
-              {onQueueCampaignWork ? <button type="button" onClick={onQueueCampaignWork} disabled={disabled} className="h-8 rounded-[6px] border border-orange-200/15 px-2.5 text-[10px] font-medium text-orange-100/65 disabled:opacity-40">Queue campaign work</button> : null}
-            </div>
-          </div>
-          <div className="grid grid-cols-1 gap-2">
-            <Input value={draft.title} onChange={(title) => onChangeDraft({ ...draft, title })} placeholder="Title" />
-            <Input value={draft.time} onChange={(time) => onChangeDraft({ ...draft, time })} placeholder="Time, optional" />
-            <textarea
-              value={draft.notes}
-              onChange={(event) => onChangeDraft({ ...draft, notes: event.target.value })}
-              placeholder="Notes, optional"
-              className="min-h-[74px] w-full rounded-[10px] border border-white/[0.06] bg-black/25 px-3 py-2 text-xs leading-5 text-white/75 outline-none placeholder:text-white/28 focus:border-white/16"
-            />
-            <button
-              type="button"
-              onClick={onAddEvent}
-              disabled={disabled}
-              className="h-9 rounded-full bg-white/90 px-4 text-xs font-semibold text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Add Event
-            </button>
-          </div>
-        </div>
-      </div>
+        </DrawerContent>
+      </Drawer>
     </div>
   )
 }
