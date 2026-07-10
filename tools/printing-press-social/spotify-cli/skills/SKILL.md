@@ -40,6 +40,15 @@ Rules:
 
 ## Playlist create (Spotify web player)
 
+Use bounded discovery when the user has not supplied enough verified tracks:
+
+```bash
+node src/social.mjs playlist spotify discover --profile <id> --theme "<theme>" \
+  --seed "<artist-or-track>" --mode growth --workspace "$CRAFT_WORKSPACE_PATH" --json
+```
+
+The first call returns a capped browser plan. Save one compact capture and rerun with `--capture-file`. It inspects no more than four seeds and three source pages per seed, ingests at most 100 rows, and gives the agent a cached 25-track shortlist.
+
 ```bash
 # Plan first (always dry-run and show the track order for approval):
 node src/social.mjs playlist spotify create --profile <id> --name "<mood/scene name>" \

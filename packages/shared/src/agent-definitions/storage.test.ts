@@ -653,6 +653,8 @@ body
     expect(spotifyPlaylistCreator?.metadata.tags).toContain('promotion')
     expect(spotifyPlaylistCreator?.metadata.permissionMode).toBe('ask')
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('Strategy and deterministic plan')
+    expect(spotifyPlaylistCreator?.systemPrompt).toContain('playlist spotify discover')
+    expect(spotifyPlaylistCreator?.systemPrompt).toContain('cached 25-track shortlist')
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('approval digest')
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('playlist spotify receipt')
     expect(spotifyPlaylistCreator?.systemPrompt).toContain('explicit approval')

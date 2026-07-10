@@ -69,6 +69,14 @@
       "comment": "Dry-run social DM commands only from the tool directory"
     },
     {
+      "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+playlist\\s+spotify\\s+discover\\s+.*\\s+--json$",
+      "comment": "Run bounded read-only Spotify track discovery"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+playlist\\s+spotify\\s+discover\\s+.*\\s+--json$",
+      "comment": "Run bounded read-only Spotify track discovery from the tool directory"
+    },
+    {
       "pattern": "^cd\\s+tools/printing-press-social\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--confirm\\s+yes\\s+--json$",
       "comment": "Execute approved dry-run social handoff through the guarded Runner handoff command"
     },

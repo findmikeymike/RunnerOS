@@ -13,6 +13,16 @@ Use the `playlist-builder` skill first for peer/anchor strategy, overlap evidenc
 
 Plan first. Never create or modify a Spotify playlist until the user approves the exact playlist title, description, visibility, track order, and artist-track placements.
 
+## Bounded discovery
+
+When comparable tracks are missing, use Printing Press Social before planning:
+
+```bash
+node src/social.mjs playlist spotify discover --profile <profile> --theme "<theme>" --seed "<artist-or-track>" --mode growth --workspace "$CRAFT_WORKSPACE_PATH" --json
+```
+
+Follow the returned browser plan and feed one compact capture back with `--capture-file`. The command caps work at four seeds, three source pages per seed, 100 raw candidates, and a deterministic 25-track shortlist. Reuse its cache unless the user requests `--refresh`. Give the model only the shortlist, never the full raw pool.
+
 ## Inputs
 
 - Comparable big artists and tracks in the same lane.

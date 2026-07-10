@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -28,6 +28,7 @@ const SUPPORTED_PLATFORMS = new Set([PLATFORM]);
 const VISIBILITIES = new Set(['public', 'private']);
 const OPEN_SPOTIFY_HOME = 'https://open.spotify.com/';
 const S4A_HOME = 'https://artists.spotify.com/';
+const DISCOVERY_LIMITS = Object.freeze({ seeds: 4, sourcesPerSeed: 3, rawCandidates: 100, shortlist: 25 });
 
 class CliError extends Error {
   constructor(message, code) {
@@ -595,12 +596,16 @@ function assertPathInsideWorkspace(workspace, resolved, label) {
 
 async function handlePlaylist(flags) {
   const sub = flags._[0];
+  if (sub === 'discover') {
+    handlePlaylistDiscovery(flags);
+    return;
+  }
   if (sub === 'receipt') {
     handlePlaylistReceipt(flags);
     return;
   }
   if (sub !== 'create') {
-    throw new CliError(`Unknown playlist subcommand: ${sub || '(missing)'} (supported: create, receipt)`, 'UNKNOWN_PLAYLIST_COMMAND');
+    throw new CliError(`Unknown playlist subcommand: ${sub || '(missing)'} (supported: discover, create, receipt)`, 'UNKNOWN_PLAYLIST_COMMAND');
   }
 
   const profileId = requireFlag(flags, 'profile');
@@ -665,6 +670,152 @@ async function handlePlaylist(flags) {
       'Execute the approved browserPlan steps and return the observed playlist URL as the receipt.',
     ],
   }, flags.json);
+}
+
+function handlePlaylistDiscovery(flags) {
+  const profileId = requireFlag(flags, 'profile');
+  const profile = getProfile(PLATFORM, profileId, { allowSmoke: smokeProfileAllowed(flags) });
+  const workspace = resolveWorkspace(flags);
+  const theme = requireFlag(flags, 'theme').trim();
+  if (!theme) throw new CliError('Discovery needs a non-empty --theme.', 'DISCOVERY_THEME_REQUIRED');
+  const mode = normalizeDiscoveryMode(flags.mode);
+  const seeds = normalizeListFlag(flags.seed || flags.seeds).slice(0, DISCOVERY_LIMITS.seeds);
+  if (seeds.length === 0) throw new CliError('Discovery needs at least one --seed artist or track.', 'DISCOVERY_SEED_REQUIRED');
+  const request = { version: 1, profile: profileId, theme, mode, seeds, limits: DISCOVERY_LIMITS };
+  const cacheKey = createHash('sha256').update(JSON.stringify(request)).digest('hex').slice(0, 20);
+  const cachePath = path.join(workspace, 'data', 'spotify', 'discovery', `${cacheKey}.json`);
+  assertPathInsideWorkspace(workspace, cachePath, 'Discovery cache');
+  const captured = readCaptureInput(flags);
+
+  if (!captured && fs.existsSync(cachePath) && !flags.refresh) {
+    const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    writeResult({ ok: true, status: 'succeeded', command: 'playlist.discover.spotify', profile: profileId, cacheHit: true, cachePath, ...cached }, flags.json);
+    return;
+  }
+
+  if (!captured) {
+    const sourcePages = mode === 'tight'
+      ? ['Fans also like', 'artist radio', 'one relevant playlist']
+      : mode === 'growth'
+        ? ['Fans also like', 'artist radio', 'up to three relevant playlists']
+        : ['Fans also like', 'artist radio', 'emerging and independent playlists'];
+    writeResult({
+      ok: true,
+      status: 'dry_run',
+      command: 'playlist.discover.spotify',
+      platform: PLATFORM,
+      profile: profileId,
+      mode: 'browser',
+      request,
+      cacheKey,
+      capture: discoveryCaptureContract(),
+      browserPlan: buildBrowserPlan({
+        profile,
+        sessionPath: sessionDir(profile),
+        steps: [
+          `open the Spotify web player (${OPEN_SPOTIFY_HOME})`,
+          'verify visible account matches profile',
+          `search only these ${seeds.length} seeds: ${seeds.join(', ')}`,
+          `for each seed inspect at most ${DISCOVERY_LIMITS.sourcesPerSeed} source pages: ${sourcePages.join(', ')}`,
+          `collect compact track rows only and stop at ${DISCOVERY_LIMITS.rawCandidates} total candidates`,
+          'do not open or analyze every track page; return one JSON capture using the supplied contract',
+        ],
+      }),
+      next: [`Re-run with --capture-file <file> to locally deduplicate, filter, score, and cache at most ${DISCOVERY_LIMITS.shortlist} tracks.`],
+    }, flags.json);
+    return;
+  }
+
+  const result = rankDiscoveryCapture(captured, request);
+  const cached = { request, generatedAt: new Date().toISOString(), rawCount: result.rawCount, validCount: result.validCount, shortlist: result.shortlist, warnings: result.warnings };
+  ensureDir(path.dirname(cachePath));
+  fs.writeFileSync(cachePath, `${JSON.stringify(cached, null, 2)}\n`, { encoding: 'utf8', flag: 'w', mode: 0o600 });
+  writeResult({ ok: true, status: 'succeeded', command: 'playlist.discover.spotify', profile: profileId, cacheHit: false, cachePath, ...cached }, flags.json);
+}
+
+function discoveryCaptureContract() {
+  return {
+    candidates: `[up to ${DISCOVERY_LIMITS.rawCandidates} objects]`,
+    fields: {
+      spotifyUrl: 'required open.spotify.com/track URL or spotify:track URI',
+      name: 'required track name',
+      artist: 'required primary artist',
+      source: 'fans-also-like|radio|playlist|search',
+      sourceName: 'visible artist, radio, or playlist name',
+      popularity: 'optional visible integer 0-100',
+      freshness: 'optional integer 0-100; include only when grounded in visible release evidence',
+      seedMatches: 'optional list of supplied seeds this candidate came from',
+    },
+    rule: 'Collect compact visible metadata only. Never estimate audio features, popularity, freshness, or audience overlap.',
+  };
+}
+
+function rankDiscoveryCapture(captured, request) {
+  if (!isPlainObject(captured) || !Array.isArray(captured.candidates)) {
+    throw new CliError('Discovery capture must contain a candidates array.', 'INVALID_DISCOVERY_CAPTURE');
+  }
+  const warnings = [];
+  const raw = captured.candidates.slice(0, DISCOVERY_LIMITS.rawCandidates);
+  if (captured.candidates.length > DISCOVERY_LIMITS.rawCandidates) warnings.push(`Ignored candidates beyond the ${DISCOVERY_LIMITS.rawCandidates}-track cap.`);
+  const unique = new Map();
+  for (const [index, item] of raw.entries()) {
+    if (!isPlainObject(item)) { warnings.push(`Ignored candidates[${index}]: expected an object.`); continue; }
+    const id = spotifyTrackId(item.spotifyUrl || item.uri || item.id);
+    const name = cleanString(item.name);
+    const artist = cleanString(item.artist);
+    if (!id || !name || !artist) { warnings.push(`Ignored candidates[${index}]: valid Spotify track, name, and artist are required.`); continue; }
+    const source = ['fans-also-like', 'radio', 'playlist', 'search'].includes(item.source) ? item.source : 'search';
+    const popularity = boundedInteger(item.popularity, 0, 100);
+    const freshness = boundedInteger(item.freshness, 0, 100);
+    const seedMatches = Array.isArray(item.seedMatches)
+      ? [...new Set(item.seedMatches.map(cleanString).filter(Boolean).filter(seed => request.seeds.includes(seed)))].slice(0, DISCOVERY_LIMITS.seeds)
+      : [];
+    const candidate = { id, uri: `spotify:track:${id}`, spotifyUrl: `https://open.spotify.com/track/${id}`, name, artist, source, sourceName: cleanString(item.sourceName), popularity, freshness, seedMatches };
+    candidate.score = scoreDiscoveryCandidate(candidate, request.mode);
+    const previous = unique.get(id);
+    if (!previous || candidate.score > previous.score) unique.set(id, candidate);
+  }
+  const ordered = [...unique.values()].sort((a, b) => b.score - a.score || a.artist.localeCompare(b.artist) || a.name.localeCompare(b.name));
+  const shortlist = [];
+  const artistCounts = new Map();
+  for (const candidate of ordered) {
+    const count = artistCounts.get(candidate.artist.toLowerCase()) || 0;
+    if (count >= 2) continue;
+    shortlist.push(candidate);
+    artistCounts.set(candidate.artist.toLowerCase(), count + 1);
+    if (shortlist.length === DISCOVERY_LIMITS.shortlist) break;
+  }
+  return { rawCount: captured.candidates.length, validCount: unique.size, shortlist, warnings };
+}
+
+function scoreDiscoveryCandidate(candidate, mode) {
+  const sourceScore = { 'fans-also-like': 34, radio: 30, playlist: 24, search: 12 }[candidate.source];
+  const overlap = candidate.seedMatches.length * 12;
+  const popularity = candidate.popularity == null ? 0 : mode === 'deep' ? Math.max(0, 18 - Math.abs(candidate.popularity - 35) / 3) : candidate.popularity / 5;
+  const freshness = candidate.freshness == null ? 0 : candidate.freshness / (mode === 'deep' ? 4 : 8);
+  return Math.round((sourceScore + overlap + popularity + freshness) * 100) / 100;
+}
+
+function normalizeDiscoveryMode(value) {
+  const mode = value && value !== true ? String(value) : 'growth';
+  if (!['tight', 'growth', 'deep'].includes(mode)) throw new CliError('--mode must be tight, growth, or deep.', 'INVALID_DISCOVERY_MODE');
+  return mode;
+}
+
+function normalizeListFlag(value) {
+  const values = Array.isArray(value) ? value : value == null ? [] : [value];
+  return [...new Set(values.flatMap(item => String(item).split(',')).map(item => item.trim()).filter(Boolean))];
+}
+
+function spotifyTrackId(value) {
+  const clean = cleanString(value);
+  if (!clean) return null;
+  const match = clean.match(/^(?:spotify:track:|https?:\/\/open\.spotify\.com\/track\/)?([A-Za-z0-9]{22})(?:[/?#].*)?$/);
+  return match?.[1] || null;
+}
+
+function boundedInteger(value, min, max) {
+  return Number.isSafeInteger(value) && value >= min && value <= max ? value : null;
 }
 
 function handlePlaylistReceipt(flags) {
@@ -945,6 +1096,8 @@ Analyst snapshot (Spotify for Artists, browser capture):
   social snapshot spotify --profile artist01 --capture-file <capture.json> --out <new-snapshot.json> --json
 
 Playlist create (Spotify web player, approval-gated):
+  social playlist spotify discover --profile artist01 --theme "Late night alternative" --seed "Artist A" --seed "Artist B" --mode growth --workspace <path> --json
+  social playlist spotify discover --profile artist01 --theme "Late night alternative" --seed "Artist A" --capture-file <capture.json> --workspace <path> --json
   social playlist spotify create --profile artist01 --name "Late Night Drive" --tracks "spotify:track:...,spotify:track:..." --visibility public --dry-run --json
   social execute --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --confirm yes --json
   social playlist spotify receipt --profile artist01 --action-file <dry-run-result.json> --expected-action-id <act_...> --expected-action-digest <sha256:...> --playlist-url <url> --verification-result <json-file> --json

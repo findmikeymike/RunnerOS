@@ -8,7 +8,7 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - RunnerOS exposes this source through source context plus Bash permissions. Use the Bash tool for documented `social` commands; do not expect an `mcp__printing-press-social__...` tool.
 - Primary command from the repo: `node src/social.mjs`
 - Preferred working directory: `tools/printing-press-social`
-- Supported platforms: `instagram`, `tiktok`, `x`, `youtube`
+- Supported platforms: `instagram`, `tiktok`, `x`, `youtube`, `spotify`
 - Default browser engine inside RunnerOS: `runner-cdp`
 - Optional engines: `chrome-devtools`, `stagehand`, `cloakbrowser`, `playwright`
 - Browser sessions live under `~/.config/printing-press-clis/<platform>/`.
@@ -40,6 +40,8 @@ Printing Press Social is bundled with RunnerOS at `tools/printing-press-social` 
 - YouTube dry-run video: `node src/social.mjs post youtube --profile <profile> --post-type video --text "<title>" --media <video> --visibility public --dry-run --json`
 - YouTube dry-run Short: `node src/social.mjs post youtube --profile <profile> --post-type short --text "<title>" --media <video> --visibility public --dry-run --json`
 - YouTube dry-run reply: `node src/social.mjs comment youtube --profile <profile> --url "<video-url>" --reply-to "<comment-id-or-permalink>" --text "<reply>" --dry-run --json`
+- Spotify bounded track discovery: `node src/social.mjs playlist spotify discover --profile <profile> --theme "<theme>" --seed "<artist-or-track>" --mode growth --workspace "$CRAFT_WORKSPACE_PATH" --json`
+- Spotify playlist dry-run: `node src/social.mjs playlist spotify create --profile <profile> --name "<name>" --tracks "spotify:track:..." --visibility private --dry-run --json`
 - Approved handoff: `node src/social.mjs execute --action-file <dry-run-result.json> --expected-action-id <act_...> --confirm yes --json`
 
 ## Guidelines

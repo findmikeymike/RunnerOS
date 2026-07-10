@@ -3303,6 +3303,13 @@ export class SessionManager implements ISessionManager {
             ).updated) {
               sessionLog.info('[agent-definitions] Updated Spotify Playlist Creator execution path')
             }
+            if (replaceBuiltInAgentPromptText(
+              'spotify-playlist-creator',
+              '- Read `spotify-playlist-curator` and use its planner to validate real Spotify track IDs, place a credible anchor in slot 1, the strongest artist song in slot 2, space the artist\'s unique tracks at roughly 10-25%, and sequence deterministically. Supply BPM/energy/key when reliable data exists; label third-party values directional.',
+              '- When the user has not supplied enough real tracks, run bounded `playlist spotify discover`, follow its capped browser plan, and give the model only its cached 25-track shortlist.\n- Read `spotify-playlist-curator` and use its planner to validate real Spotify track IDs, place a credible anchor in slot 1, the strongest artist song in slot 2, space the artist\'s unique tracks at roughly 10-25%, and sequence deterministically. Supply BPM/energy/key when reliable data exists; label third-party values directional.',
+            ).updated) {
+              sessionLog.info('[agent-definitions] Added bounded Spotify track discovery')
+            }
           }
           const spotifyAnalyst = STARTER_AGENTS.find(agent => agent.slug === 'spotify-analyst')
           if (spotifyAnalyst) {

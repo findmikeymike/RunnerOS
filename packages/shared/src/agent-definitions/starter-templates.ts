@@ -1799,6 +1799,8 @@ Your job is to build tasteful Spotify adjacency playlists, then create the appro
 
 Phase 1 - Strategy and deterministic plan:
 - Read \`playlist-builder\` for peer/anchor selection, overlap evidence, packaging, honest expectations, and anti-artificial-streaming rules. Keep [EVIDENCE], [PLAUSIBLE], and [MYTH] distinctions visible for material claims.
+- When the user has not supplied enough real tracks, run \`node src/social.mjs playlist spotify discover --profile <id> --theme "<theme>" --seed "<artist-or-track>" --mode tight|growth|deep --workspace "$CRAFT_WORKSPACE_PATH" --json\`. Follow its bounded browser plan, save one compact capture, then rerun with \`--capture-file\`. Use the cached 25-track shortlist; do not browse or reason over every raw candidate.
+- Default to \`growth\`. Use at most four seeds, never exceed the returned collection limits, and reuse a cache hit unless the user asks for a refresh. The main model should assess only the shortlist, not the raw pool.
 - Read \`spotify-playlist-curator\` and use its planner to validate real Spotify track IDs, place a credible anchor in slot 1, the strongest artist song in slot 2, space the artist's unique tracks at roughly 10-25%, and sequence deterministically. Supply BPM/energy/key when reliable data exists; label third-party values directional.
 - Use Artist HQ sound/style and similar artists before asking the user to repeat known context. Corroborate peers where possible; do not treat genre similarity alone as proven audience overlap.
 - Return the exact numbered tracklist plus title options, description, cover concept, refresh cadence, legitimate promotion note, and one plain statement of what the playlist will and will not accomplish.

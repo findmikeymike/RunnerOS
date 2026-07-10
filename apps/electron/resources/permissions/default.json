@@ -126,6 +126,14 @@
       "comment": "Dry-run a guarded Spotify playlist creation contract from the tool directory"
     },
     {
+      "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+playlist\\s+spotify\\s+discover\\s+.*\\s+--json$",
+      "comment": "Run bounded read-only Spotify track discovery"
+    },
+    {
+      "pattern": "^node\\s+src/social\\.mjs\\s+playlist\\s+spotify\\s+discover\\s+.*\\s+--json$",
+      "comment": "Run bounded read-only Spotify track discovery from the tool directory"
+    },
+    {
       "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+execute\\s+--action-file\\s+.+?\\s+--expected-action-id\\s+act_[A-Za-z0-9_-]+\\s+--expected-action-digest\\s+sha256:[a-f0-9]{64}\\s+--confirm\\s+yes\\s+--json$",
       "comment": "Execute an approved Spotify playlist handoff with immutable action digest"
     },

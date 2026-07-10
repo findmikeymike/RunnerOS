@@ -210,6 +210,79 @@ test('playlist create dry-run normalizes URLs to URIs and keeps order', () => {
   assert.equal(result.browserPlan.accountVerification.requiredBeforeLiveSubmit, true);
 });
 
+test('playlist discovery returns a bounded browser plan before capture', () => {
+  const env = home();
+  const workspace = mkdtempSync(path.join(tmpdir(), 'spotify-discovery-'));
+  addProfile(env);
+  const result = JSON.parse(run([
+    'playlist', 'spotify', 'discover', '--profile', 'artist01',
+    '--theme', 'Late night alternative', '--seed', 'Artist A', '--seed', 'Artist B',
+    '--workspace', workspace, '--json',
+  ], env));
+  assert.equal(result.status, 'dry_run');
+  assert.equal(result.request.limits.rawCandidates, 100);
+  assert.equal(result.request.limits.shortlist, 25);
+  assert.match(result.browserPlan.steps.join(' '), /do not open or analyze every track page/i);
+});
+
+test('playlist discovery filters, ranks, diversifies, and reuses its cache', () => {
+  const env = home();
+  const workspace = mkdtempSync(path.join(tmpdir(), 'spotify-discovery-'));
+  addProfile(env);
+  const ids = Array.from({ length: 30 }, (_, index) => String(index).padStart(22, '0'));
+  const capture = {
+    candidates: [
+      ...ids.map((id, index) => ({
+        spotifyUrl: `https://open.spotify.com/track/${id}`,
+        name: `Track ${index}`,
+        artist: index < 4 ? 'Repeated Artist' : `Artist ${index}`,
+        source: index % 2 === 0 ? 'fans-also-like' : 'playlist',
+        popularity: 50,
+        seedMatches: index === 0 ? ['Artist A', 'not-a-seed'] : [],
+      })),
+      { spotifyUrl: `spotify:track:${ids[0]}`, name: 'Duplicate', artist: 'Repeated Artist', source: 'search' },
+      { spotifyUrl: 'bad', name: 'Bad', artist: 'Bad Artist' },
+    ],
+  };
+  const captureFile = path.join(workspace, 'capture.json');
+  writeFileSync(captureFile, JSON.stringify(capture));
+  const args = [
+    'playlist', 'spotify', 'discover', '--profile', 'artist01', '--theme', 'Late night alternative',
+    '--seed', 'Artist A', '--workspace', workspace, '--capture-file', captureFile, '--json',
+  ];
+  const first = JSON.parse(run(args, env));
+  assert.equal(first.cacheHit, false);
+  assert.equal(first.shortlist.length, 25);
+  assert.equal(first.shortlist.filter((track) => track.artist === 'Repeated Artist').length, 2);
+  assert.equal(first.shortlist[0].seedMatches.includes('not-a-seed'), false);
+  assert.ok(first.warnings.some((warning) => /valid Spotify track/i.test(warning)));
+
+  const cached = JSON.parse(run(args.filter((arg) => arg !== '--capture-file' && arg !== captureFile), env));
+  assert.equal(cached.cacheHit, true);
+  assert.deepEqual(cached.shortlist, first.shortlist);
+});
+
+test('playlist discovery caps seeds and raw candidate ingestion', () => {
+  const env = home();
+  const workspace = mkdtempSync(path.join(tmpdir(), 'spotify-discovery-'));
+  addProfile(env);
+  const candidates = Array.from({ length: 105 }, (_, index) => ({
+    spotifyUrl: `spotify:track:${String(index).padStart(22, '0')}`,
+    name: `Track ${index}`,
+    artist: `Artist ${index}`,
+    source: 'radio',
+  }));
+  const result = JSON.parse(run([
+    'playlist', 'spotify', 'discover', '--profile', 'artist01', '--theme', 'Focused',
+    '--seeds', 'A,B,C,D,E,F', '--workspace', workspace,
+    '--capture-json', JSON.stringify({ candidates }), '--json',
+  ], env));
+  assert.deepEqual(result.request.seeds, ['A', 'B', 'C', 'D']);
+  assert.equal(result.validCount, 100);
+  assert.equal(result.shortlist.length, 25);
+  assert.match(result.warnings.join(' '), /100-track cap/);
+});
+
 test('playlist create refuses live execution without --confirm yes', () => {
   const env = home();
   addProfile(env);
