@@ -21,13 +21,19 @@ flowchart LR
   FinalsService --> FinalsLock["context/.locks/output-finals.lock"]
   FinalsRegistry --> HQFinals["HQ / Campaign Finals Widgets"]
   CampaignCalendar["Campaign Calendar"] --> WorkComposer["Scheduled Work Composer"]
+  HQCalendar["HQ Calendar"] --> WorkComposer
+  Automations["Automations Hub"] --> WorkComposer
+  HNIC["HNIC schedule_work"] --> WorkRpc
   WorkComposer --> WorkRpc["Schedule / Cancel / Review RPC"]
+  Automations --> AutomationQueue["queue-work"]
+  AutomationQueue --> WorkRpc
   WorkRpc --> WorkContext["scheduled-work context doc"]
   WorkContext --> WorkRunner["ScheduledWorkRunner"]
   WorkRunner --> AgentSessions["Agent Sessions"]
   WorkRunner --> WorkflowRuns["Workflow Runs"]
   WorkRunner --> Attention["Done / Review / Needs Attention"]
-  WorkRunner -. approval gate .-> SocialExecution["Social Publish"]
+  WorkRunner -. needs approval .-> SocialExecution["Guarded Social Executor"]
+  SocialExecution --> SocialReceipt["External Receipt"]
   Registry --> A_concierge["HNIC\nsafe\nCommand"]
   Chat --> A_concierge
   A_concierge --> S_agent_creator["skill:agent-creator"]
@@ -198,6 +204,14 @@ flowchart LR
   A_spotify_analyst --> S_spotify_analytics_snapshot["skill:spotify-analytics-snapshot"]
   A_spotify_analyst --> S_spotify_anomaly_watch["skill:spotify-anomaly-watch"]
   A_spotify_analyst --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
+  Registry --> A_youtube_intelligence_agent["YouTube Intelligence Agent\nsafe\nResearch"]
+  Workers --> A_youtube_intelligence_agent
+  A_youtube_intelligence_agent --> S_youtube_intelligence["skill:youtube-intelligence"]
+  A_youtube_intelligence_agent --> S_youtube_research["skill:youtube-research"]
+  A_youtube_intelligence_agent --> S_customer_research["skill:customer-research"]
+  A_youtube_intelligence_agent --> S_content_strategy["skill:content-strategy"]
+  A_youtube_intelligence_agent --> T_youtube_intelligence["source:youtube-intelligence"]
+  A_youtube_intelligence_agent --> T_youtube_research["source:youtube-research"]
   Registry --> A_youtube_research_agent["YouTube Research Agent\nsafe\nResearch"]
   Workers --> A_youtube_research_agent
   A_youtube_research_agent --> S_youtube_research["skill:youtube-research"]

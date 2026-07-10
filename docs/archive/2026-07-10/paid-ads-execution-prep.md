@@ -1,13 +1,15 @@
 ---
-status: current
+status: archived
 owner: agent
-last_verified: 2026-07-07
-source_of_truth: true
+last_verified: 2026-07-10
+source_of_truth: false
 ---
+
+> Archived 2026-07-10. Reason: the preparation map was executed and now points at an old worktree. Remaining Ads Operator work is tracked in `docs/backlog/paid-ads-browser-cli-operator.md`; live account proof is tracked in `external-integration-live-verification.md`.
 
 # Paid Ads Execution Prep
 
-Prep target: execute [Paid Ads Browser + CLI Operator](./paid-ads-browser-cli-operator.md) at a high level without guessing.
+Prep target: execute [Paid Ads Browser + CLI Operator](../../backlog/paid-ads-browser-cli-operator.md) at a high level without guessing.
 
 ## Current Repo State
 

@@ -1,3 +1,10 @@
+---
+status: backlog
+owner: product
+last_verified: 2026-07-10
+source_of_truth: true
+---
+
 # Global Update Agent Backlog
 
 ## Idea

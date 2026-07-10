@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-09",
+  "generatedAt": "2026-07-10",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -25,10 +25,17 @@
     "scheduledWorkHandler": "packages/server-core/src/handlers/rpc/scheduled-work.ts",
     "scheduledWorkRunner": "packages/server-core/src/scheduled-work/ScheduledWorkRunner.ts",
     "scheduledWorkComposer": "apps/electron/src/renderer/components/calendar/ScheduledWorkComposer.tsx",
-    "campaignCalendarPage": "apps/electron/src/renderer/components/app-shell/CampaignCalendarPage.tsx"
+    "campaignCalendarPage": "apps/electron/src/renderer/components/app-shell/CampaignCalendarPage.tsx",
+    "hqCalendar": "apps/electron/src/renderer/components/app-shell/ArtistHQHome.tsx",
+    "automationWorkDialog": "apps/electron/src/renderer/components/automations/AutomationWorkDialog.tsx",
+    "automationWorkQueue": "packages/server-core/src/scheduled-work/AutomationWorkQueue.ts",
+    "automationQueueHandler": "packages/shared/src/automations/handlers/queue-work-handler.ts",
+    "hnicScheduledWork": "packages/server-core/src/scheduled-work/HnicScheduledWork.ts",
+    "socialBrowserExecutor": "apps/electron/src/main/scheduled-social-browser-executor.ts",
+    "missionBrief": "apps/electron/src/renderer/lib/mission-brief.ts"
   },
   "summary": {
-    "agentCount": 39,
+    "agentCount": 40,
     "domains": {
       "Command": 3,
       "Content Creation": 6,
@@ -38,12 +45,12 @@
       "Other Workers": 2,
       "Outreach": 5,
       "Promotion": 9,
-      "Research": 3,
+      "Research": 4,
       "Socials": 2
     },
     "permissionModes": {
       "ask": 32,
-      "safe": 7
+      "safe": 8
     },
     "hiddenWorkerHomeCount": 5,
     "hqDefaultWorkerSlugs": [
@@ -76,10 +83,10 @@
   },
   "referenceHealth": {
     "knownSkillCount": 121,
-    "bundledSkillCount": 78,
+    "bundledSkillCount": 79,
     "systemSkillCount": 6,
     "userGlobalSkillCount": 121,
-    "knownSourceCount": 25,
+    "knownSourceCount": 26,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
     "missingSources": [],
@@ -150,11 +157,17 @@
       "social-publish",
       "review"
     ],
-    "composerWired": true,
+    "campaignComposerWired": true,
+    "hqComposerWired": true,
     "backendMutationsWired": true,
     "runnerWired": true,
     "workspaceLockWired": true,
-    "socialApprovalBlocked": true
+    "socialApprovalGateWired": true,
+    "liveSocialExecutorWired": true,
+    "automationsQueueWired": true,
+    "hiddenCalendarRunsWired": true,
+    "hnicSchedulingWired": true,
+    "releaseDateMarkersWired": true
   },
   "inferredRuntimeRules": [
     "Saved agents live in the global library and are activated per workspace.",
@@ -169,7 +182,10 @@
     "Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.",
     "Campaign Scheduled Work separates calendar shells from executable work orders and uses backend-owned schedule/cancel/review mutations.",
     "Agent/workflow scheduled work completes only after terminal child state; required Outputs, missed windows, stale runs, and failures become visible attention states.",
-    "Scheduled social work remains blocked at needs-approval until a verified live executor path runs the exact approved action.",
+    "Scheduled social publishing waits at needs-approval, then the guarded native browser executor may run only the exact approved profile, payload, media bytes, and browser partition and must return a durable receipt.",
+    "Automations can queue the same typed Scheduled Work lifecycle from recurring, file, webhook, URL, or inbound-message triggers; standalone background agent/workflow runs may opt out of Calendar display.",
+    "HNIC alone receives schedule_work and can create Calendar work or queue-work Automations for agent tasks and workflow runs after confirmation.",
+    "A direct instruction or active schedule to answer comments/messages is a bounded Social Publisher engagement mandate; it does not authorize cold DMs, posts/uploads, account changes, or sensitive replies.",
     "message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.",
     "trustedWorkerTools are for bounded internal work only, not sends/posts/publishing."
   ],
@@ -1467,6 +1483,49 @@
       "outputs": "Spotify public API snapshots, optional S4A snapshot normalization, delta briefs, anomaly alerts, and growth handoff notes."
     },
     {
+      "slug": "youtube-intelligence-agent",
+      "name": "YouTube Intelligence Agent",
+      "description": "Turns trusted YouTube channels and transcripts into weekly, evidence-backed artist intelligence.",
+      "domain": "Research",
+      "permissionMode": "safe",
+      "thinkingLevel": "high",
+      "skills": [
+        "youtube-intelligence",
+        "youtube-research",
+        "customer-research",
+        "content-strategy"
+      ],
+      "sources": [
+        "youtube-intelligence",
+        "youtube-research"
+      ],
+      "optionalSources": [],
+      "trustedWorkerTools": [
+        "create_output"
+      ],
+      "visualAgent": false,
+      "tags": [
+        "youtube",
+        "intelligence",
+        "transcripts",
+        "research",
+        "reports",
+        "agents"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "artifact-output-aware",
+        "external-action-boundary",
+        "requires-source-activation",
+        "safe-default",
+        "trusted-worker-tools"
+      ],
+      "inputs": "YouTube channels, videos, transcripts, or a weekly intelligence brief with configured trusted channels.",
+      "outputs": "A report Output with timestamped findings and categorized machine-readable intelligence nuggets."
+    },
+    {
       "slug": "youtube-research-agent",
       "name": "YouTube Research Agent",
       "description": "Find YouTube videos, comments, transcripts, and ideas for a campaign.",
@@ -1507,7 +1566,7 @@
     {
       "slug": "social-publisher",
       "name": "Social Publisher",
-      "description": "Post or schedule content on Instagram, TikTok, X, and YouTube.",
+      "description": "Post content and handle authorized comments or messages on Instagram, TikTok, X, and YouTube.",
       "domain": "Socials",
       "permissionMode": "ask",
       "thinkingLevel": "high",
@@ -1532,6 +1591,7 @@
       "riskSignals": [
         "approval-capable",
         "artifact-output-aware",
+        "bounded-engagement-mandate",
         "explicit-approval-required",
         "external-action-boundary",
         "requires-source-activation"

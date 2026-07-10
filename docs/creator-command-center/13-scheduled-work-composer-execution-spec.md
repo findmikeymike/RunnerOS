@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-09
+last_verified: 2026-07-10
 source_of_truth: true
 extends: ./12-campaign-calendar-scheduled-jobs-spec.md
 ---
@@ -65,6 +65,12 @@ Verified implementation now includes:
 - social dry-run preparation, exact approval binding, approval invalidation, and media-byte fingerprinting
 - native live social execution with exact account, browser partition, draft, media, and success-proof checks
 - per-profile social serialization plus persisted running claims that stop duplicate scheduler execution
+- Automations Hub `queue-work` actions that reuse the same work-order lifecycle across schedule, file, webhook, URL, and inbound-message triggers
+- optional hidden Calendar shells for standalone background agent/workflow Automations
+- HNIC-only `schedule_work` creation for confirmed Calendar jobs and Automations
+- contextual Calendar day menus with individually selectable item markers
+- campaign release-date `Release day` highlights sourced from Mission Brief context
+- delegated Social Publisher comment/DM engagement under a bounded direct or scheduled mandate, with exact reply/thread targets and Artist Voice examples in campaign context
 - durable review decisions with approve and changes-requested states
 - Agent -> Review, Agent -> Workflow, Workflow -> Review, and Review -> Social follow-up chains
 - exact produced-Output resolution with visible recovery when zero or multiple Outputs match
@@ -75,6 +81,7 @@ Remaining gaps:
 - the shipped UI and runner still need full real-app smoke across every queue type
 - each supported social platform needs a live-account publish smoke; selector drift fails closed and must never create a receipt
 - YouTube Shorts remain deliberately blocked until media classification can be proven before submit
+- delegated comment/DM engagement still needs real-account smoke on each supported platform
 - HQ review and social work remain intentionally routed to Campaign Calendar, where their decision and recovery controls live
 
 ## Product Decisions
@@ -1164,6 +1171,7 @@ Automations extends this system with event-driven timing. It does not introduce 
 - Trigger variables may populate titles, briefs, workflow inputs, and captions, but the expanded action is validated again before any work is written.
 - Workflow definitions and active agent/workflow status are revalidated at trigger time. A stale target fails visibly in automation history and creates no partial work.
 - Social work never inherits approval from the automation. Exact-asset approval remains bound to the resulting Scheduled Work payload and is required near execution.
+- A scheduled `agent-task` that explicitly tells Social Publisher to inspect and answer inbound comments/messages is different from a `social-publish` action: the active job is a bounded engagement mandate for matching inbound replies, subject to the engagement playbook limits and escalation rules. It does not preapprove posts, uploads, cold DMs, account changes, or unrelated replies.
 - Supported Campaign chains remain deliberately narrow: Agent -> Review, Agent -> Workflow, Workflow -> Review, and Review -> Social Publish.
 - HQ automations may queue standalone agent or workflow work only in V1. Campaign work must be created in the campaign workspace so ownership stays singular.
 - Hidden-from-Calendar runs are limited to standalone agent or workflow work in V1. Reviews, social publishing, and chains stay visible because their approval and recovery controls live on Calendar.

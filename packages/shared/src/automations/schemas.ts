@@ -106,6 +106,7 @@ const ScheduledExecutionSchema = z.discriminatedUnion('type', [
     brief: z.string().min(1),
     permissionMode: z.enum(['safe', 'ask']),
     expectedOutput: ExpectedOutputSchema,
+    postProcess: z.literal('youtube-intelligence').optional(),
   }),
   z.object({
     type: z.literal('workflow-run'),

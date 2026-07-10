@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-09
+last_verified: 2026-07-10
 source_of_truth: true
 ---
 
@@ -9,57 +9,82 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-09
-- Active worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
+- Date: 2026-07-10
+- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
 - Branch: `codex/creator-social-integration`
-- State: active running app tree for Artist HQ, Campaigns, workers, social integration, and scheduled campaign execution.
-- Remote: local branch is ahead of origin and has not been pushed in this pass.
+- Implementation head: `bfc184cd Enable delegated social engagement`
+- Remote: local branch was ahead 38 commits before this docs refresh and remains intentionally unpushed.
+- Unrelated local work: preserve `docs/pitch/README.md` and `docs/pitch/packets/`.
 
 ## Recently Completed
 
-- Shipped the Campaign Scheduled Work composer and backend-owned schedule/cancel/review RPC flow.
-- Added the durable Scheduled Work runner for real agent/workflow completion, Output contracts, missed windows, retries, and visible attention states.
-- Added Campaign Calendar status/receipt/review controls and Output/Final/Vault input selection.
-- Added College Radio as a default HQ/Campaign worker with a personal station/tastemaker directory, live-verification rules, and durable Outreach packets.
-- Wired College Radio to Outreach Agent for approval-gated Gmail drafts/sends.
-- Made Spotify Playlist Creator default-visible and activated its curator skill bundle.
-- Regenerated the Runner system map from current code.
+- Completed the shared progressive Scheduled Work composer across HQ and Campaign calendars.
+- Replaced persistent Calendar side panels with contextual day menus and individually selectable work markers.
+- Added typed `queue-work` actions to Automations, including optional hidden Calendar display for background agent/workflow runs.
+- Added HNIC-only `schedule_work` for confirmed Calendar jobs and Automations.
+- Hardened restart recovery, idempotency, workspace ownership, chain completion, and required-Output enforcement.
+- Added guarded approved social execution with account/payload/media verification, per-profile serialization, and durable receipts.
+- Added campaign release-date `Release day` Calendar highlights.
+- Extended Social Publisher with bounded authorized comment/DM engagement and exact reply/thread targeting.
+- Added the default weekly YouTube Intel Pulse: five preloaded channels, API-backed transcript packets, a required HQ report Output, deterministic categorized Shared Intel routing, and an easy dashboard toggle/manual run.
+- Added Artist Voice reply examples to campaign worker context.
+- Updated the system-map generator to include HQ scheduling, Automations, HNIC scheduling, live social execution, and release markers.
+- Preserved active Outputs/Finals, Shared Intel, College Radio/Outreach, Spotify Playlist Creator, and paid-ads worker wiring documented in the generated map and root README.
 
-## Current Product Boundaries
+## Current Boundaries
 
-- Scheduled Social Publish remains blocked at approval until a verified live executor completes it.
-- HQ Calendar does not yet expose Campaign’s executable work composer.
-- College Radio contacts are not assumed current; send-first targets require live evidence and timestamps.
-- Gmail is Outreach Agent’s current delivery path. Resend remains Community-only and is not yet a general agent source.
+- HQ Calendar and Campaign Calendar are separate stores and pages.
+- Scheduled publishing pauses at `needs-approval`; an approved exact action may then execute through the native guarded executor.
+- A direct/scheduled inbox-reply mandate authorizes bounded matching inbound replies without per-item approval. It does not authorize cold DMs, posts/uploads, account changes, or sensitive replies.
+- HNIC V1 schedules agent tasks and workflow runs. Complex review/social chains remain Campaign UI-owned.
+- Hidden Calendar runs are limited to standalone agent/workflow Automations.
+- YouTube supports comment replies, not general DMs; Shorts remain blocked pending media classification proof.
+- YouTube Intelligence reuses the API key saved on YouTube Research. A weekly run fails visibly if transcripts, its report Output, or its structured `youtube-intel` nugget block are missing.
 
 ## Verification State
 
-Passed:
+Passed for the latest social-engagement and YouTube Intelligence slices:
 
 ```bash
-bun test packages/server-core/src/handlers/rpc/scheduled-work.test.ts packages/server-core/src/scheduled-work/ScheduledWorkRunner.test.ts apps/electron/src/renderer/lib/scheduled-work-composer.test.ts apps/electron/src/shared/__tests__/ipc-channels.test.ts
-# 36 pass, 0 fail
+cd tools/printing-press-social && npm test
+# 64 pass, 0 fail
 
-bun test apps/electron/src/renderer/lib/worker-defaults.test.ts packages/shared/src/agent-definitions/storage.test.ts
-# 79 pass, 0 fail
+cd packages/shared && bun run tsc --noEmit
+cd packages/shared && bun test src/skills/__tests__/starter-templates.test.ts
+# 25 pass, 0 fail
 
-bun run typecheck:all
-bun run docs:system-map
-git diff --check
+cd apps/electron && bun run typecheck
+cd apps/electron && bun test src/renderer/lib/campaign-worker-context.test.ts src/renderer/lib/artist-voice.test.ts
+# 5 pass, 0 fail
+
+cd packages/server-core && bun run typecheck
+cd packages/server-core && bun test src/scheduled-work/ScheduledWorkRunner.test.ts
+# 21 pass, 0 fail
+
+cd tools/youtube-intelligence && npm test
+# 8 pass, 0 fail
+
+cd packages/shared && bun test src/shared-intel/youtube-intel.test.ts src/scheduled-work/index.test.ts src/automations/validation.test.ts src/sources/__tests__/storage.test.ts
+# 136 pass, 0 fail
+
+cd apps/electron && bun test src/renderer/lib/artist-intel.test.ts
+# 7 pass, 0 fail
 ```
 
-Runtime startup also confirmed College Radio and Spotify Playlist Creator were activated in all three local workspaces.
+One known unrelated failure remains in the full shared storage suite: a stale HNIC prompt wording assertion expects `suggest an automation`. The focused Social Publisher storage test passes.
 
 ## Next Actions
 
-1. Smoke all five Campaign Scheduled Work types in the running app.
-2. Smoke agent/workflow terminal polling and missing-required-Output behavior.
-3. Smoke College Radio through Outreach Gmail draft/send approval and receipt.
-4. Decide on Resend only after Gmail and durable outreach history are proven.
-5. Review and push the full local integration stack when ready.
+1. Smoke HQ/Campaign Calendar creation and item-detail flows in the running app.
+2. Smoke the Intel Pulse against all five preloaded channels in the packaged app.
+3. Smoke HNIC Calendar scheduling and hidden background Automations.
+4. Live-account smoke scheduled publishing and delegated inbox replies platform by platform.
+5. Fix the stale HNIC storage assertion and run the complete shared suite.
+6. Review the full local stack before pushing or merging.
 
 ## Notes For Next Agent
 
-- Start with `../HANDOFF.md`, then `creator-command-center/13-scheduled-work-composer-execution-spec.md`, then `system-map/runner-system-map.md`.
-- Preserve the local commit stack; do not squash, rebase, push, or merge held branches without Michael’s direction.
-- Regenerate `docs/system-map/` after changing starter agents, worker defaults, session routing, Scheduled Work, Finals, or approval boundaries.
+- Start with `../HANDOFF.md`, then spec 13, then the generated system map.
+- Regenerate maps with `bun run docs:system-map`; never hand-edit generated map outputs.
+- Preserve unrelated pitch docs and the stacked branch history.
+- Treat real-account smoke as unfinished even though focused automated checks pass.

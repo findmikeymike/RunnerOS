@@ -1,17 +1,17 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-09
+last_verified: 2026-07-10
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-07-09
+Generated: 2026-07-10
 
 ## Why This Exists
 
-This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, Outputs/Finals, Scheduled Work, and launch surfaces.
+This map captures Runner-specific wiring that future agents often miss: worker visibility, skill/source bundles, approval mode, trusted tools, Canvas awareness, context injection, Outputs/Finals, Scheduled Work, Automations, HNIC scheduling, social execution, and launch surfaces.
 
 ## Source Files
 
@@ -40,20 +40,27 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - scheduledWorkRunner: `packages/server-core/src/scheduled-work/ScheduledWorkRunner.ts`
 - scheduledWorkComposer: `apps/electron/src/renderer/components/calendar/ScheduledWorkComposer.tsx`
 - campaignCalendarPage: `apps/electron/src/renderer/components/app-shell/CampaignCalendarPage.tsx`
+- hqCalendar: `apps/electron/src/renderer/components/app-shell/ArtistHQHome.tsx`
+- automationWorkDialog: `apps/electron/src/renderer/components/automations/AutomationWorkDialog.tsx`
+- automationWorkQueue: `packages/server-core/src/scheduled-work/AutomationWorkQueue.ts`
+- automationQueueHandler: `packages/shared/src/automations/handlers/queue-work-handler.ts`
+- hnicScheduledWork: `packages/server-core/src/scheduled-work/HnicScheduledWork.ts`
+- socialBrowserExecutor: `apps/electron/src/main/scheduled-social-browser-executor.ts`
+- missionBrief: `apps/electron/src/renderer/lib/mission-brief.ts`
 
 ## Summary
 
-- Agents mapped: 39
+- Agents mapped: 40
 - Hidden from Workers home: 5
 - Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `spotify-playlist-creator`, `content-genius`, `scroll-stopper`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
 - Scheduled Work execution: wired
-- Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 3, Socials 2
-- Permission modes: ask 32, safe 7
-- Known skills: 121 (78 bundled, 6 system, 121 user-global on this machine)
-- Known builtin sources: 25
+- Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 4, Socials 2
+- Permission modes: ask 32, safe 8
+- Known skills: 121 (79 bundled, 6 system, 121 user-global on this machine)
+- Known builtin sources: 26
 
 ## Reference Health
 
@@ -73,7 +80,10 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Finals writes use a workspace filesystem lock under context/.locks/output-finals.lock; campaign Finals require campaignId and source Outputs cannot be deleted while still referenced.
 - Campaign Scheduled Work separates calendar shells from executable work orders and uses backend-owned schedule/cancel/review mutations.
 - Agent/workflow scheduled work completes only after terminal child state; required Outputs, missed windows, stale runs, and failures become visible attention states.
-- Scheduled social work remains blocked at needs-approval until a verified live executor path runs the exact approved action.
+- Scheduled social publishing waits at needs-approval, then the guarded native browser executor may run only the exact approved profile, payload, media bytes, and browser partition and must return a durable receipt.
+- Automations can queue the same typed Scheduled Work lifecycle from recurring, file, webhook, URL, or inbound-message triggers; standalone background agent/workflow runs may opt out of Calendar display.
+- HNIC alone receives schedule_work and can create Calendar work or queue-work Automations for agent tasks and workflow runs after confirmation.
+- A direct instruction or active schedule to answer comments/messages is a bounded Social Publisher engagement mandate; it does not authorize cold DMs, posts/uploads, account changes, or sensitive replies.
 - message_agent/spawn_session cannot exceed parent permission mode; external actions still need user approval.
 - trustedWorkerTools are for bounded internal work only, not sends/posts/publishing.
 
@@ -98,14 +108,22 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 ## Campaign Scheduled Work
 
 - Queue types: `event`, `agent-task`, `workflow-run`, `social-publish`, `review`
-- Composer + Campaign Calendar entry: wired
+- Campaign Calendar composer: wired
+- HQ Calendar composer and Campaign routing: wired
 - Backend-owned schedule/cancel/review mutations: wired
 - Terminal-state runner + attention handling: wired
 - Workspace-context write lock: wired
-- Social approval stop: wired
+- Social approval gate: wired
+- Guarded native social executor + receipt: wired
+- Automations queue-work integration: wired
+- Optional hidden Calendar runs: wired
+- HNIC-only schedule_work tool: wired
+- Campaign release-date marker: wired
 - Calendar items are visible shells; executable state, runs, results, review decisions, and attention reasons live in the Scheduled Work context document.
 - Agent and workflow starts are non-terminal. The runner polls child state and enforces required-Output contracts before marking work done.
-- Social Publish intentionally stops at approval in the current runner; do not document it as live autopublish.
+- Social Publish waits at needs-approval. After an exact approval is bound, the native executor revalidates profile, browser partition, payload, and media bytes before submitting once and recording a receipt.
+- Automations reuse this lifecycle. Background standalone agent/workflow runs may hide their Calendar shell; review, social, and chained work stay visible.
+- HNIC can schedule confirmed agent/workflow work through schedule_work. Other agents do not receive this tool.
 
 ## Starter Workflows
 
@@ -650,6 +668,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Inputs: Artist HQ Profile, Spotify client credentials, Spotify artist ID or URL, existing Spotify snapshots, and campaign context.
 - Outputs: Spotify public API snapshots, optional S4A snapshot normalization, delta briefs, anomaly alerts, and growth handoff notes.
 
+#### YouTube Intelligence Agent (`youtube-intelligence-agent`)
+
+- Description: Turns trusted YouTube channels and transcripts into weekly, evidence-backed artist intelligence.
+- Permission: `safe`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `youtube-intelligence`, `youtube-research`, `customer-research`, `content-strategy`
+- Sources: `youtube-intelligence`, `youtube-research`
+- Optional sources: none
+- Trusted tools: `create_output`
+- Tags: `youtube`, `intelligence`, `transcripts`, `research`, `reports`, `agents`
+- Signals: `artifact-output-aware`, `external-action-boundary`, `requires-source-activation`, `safe-default`, `trusted-worker-tools`
+- Inputs: YouTube channels, videos, transcripts, or a weekly intelligence brief with configured trusted channels.
+- Outputs: A report Output with timestamped findings and categorized machine-readable intelligence nuggets.
+
 #### YouTube Research Agent (`youtube-research-agent`)
 
 - Description: Find YouTube videos, comments, transcripts, and ideas for a campaign.
@@ -668,7 +700,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Social Publisher (`social-publisher`)
 
-- Description: Post or schedule content on Instagram, TikTok, X, and YouTube.
+- Description: Post content and handle authorized comments or messages on Instagram, TikTok, X, and YouTube.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
 - Skills: `social-publishing`
@@ -676,7 +708,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Optional sources: none
 - Trusted tools: none
 - Tags: `social`, `posting`, `browser`, `marketing`
-- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
+- Signals: `approval-capable`, `artifact-output-aware`, `bounded-engagement-mandate`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
 - Inputs: A social action request: post, reply/comment, DM, profile login, or channel readiness check.
 - Outputs: A dry-run plan, browser execution, and a publish/send receipt when approved.
 
@@ -697,7 +729,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 ## Manual Follow-Up Map Gaps
 
 - IPC channel to UI route mapping is not yet generated.
-- Automation template wiring is not yet merged into this map.
+- Individual Automation trigger definitions are summarized, not enumerated one by one.
 - Context-doc routing is summarized from launch/runtime code, not enumerated per workspace doc.
 - Live user/global agent overrides in `~/.agents/agents` are not included; this maps starter code, not machine-local mutations.
 - If Reference Health flags a missing skill/source that intentionally lives only in a user workspace, document that exception here.

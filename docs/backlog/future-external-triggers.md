@@ -1,3 +1,10 @@
+---
+status: backlog
+owner: product
+last_verified: 2026-07-10
+source_of_truth: true
+---
+
 # Future External Triggers
 
 A backlog of ideas for new automation event types — things that could fire a Craft automation from *outside* the app. Use this as both a roadmap and a brainstorm pool.

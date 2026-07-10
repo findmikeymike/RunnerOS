@@ -1,24 +1,44 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-08
+last_verified: 2026-07-10
 source_of_truth: true
 ---
 
 # Backlog
 
-Deferred work, future integrations, cleanup ideas, and feature candidates live here.
+This folder contains only unfinished work, partial implementations, and release gates. Completed or superseded proposals belong in `docs/archive/<date>/`.
 
-Keep backlog docs scoped and actionable. If a backlog item becomes active, move or copy the accepted spec into the matching feature folder.
+## Release Gates
 
-## Backlog Items
+- [External Integration Live Verification](./external-integration-live-verification.md) - real-account/API smoke queue for commerce, ads, Social Publisher, research, visual tools, Canvas, and Secrets. This is the main end-to-end proof list.
+- [Google OAuth Production App](./google-oauth-production-app.md) - Runner-owned verified OAuth app so users can connect Gmail, Calendar, and Drive without creating a Google Cloud project.
+- [Tool Licensing + Packaging Audit](./tool-licensing-packaging-audit.md) - commercial-license, binary, model, checksum, provenance, and clean-machine packaging gate.
+- [Windows Version](./windows-version.md) - Windows binaries, packaged runtime behavior, browser automation, and cross-platform agent/tool QA.
+- [Spotify Fix](./spotify-fix.md) - packaged Spotify Analyst reliability plus the decision to add a real playlist actuator or make Playlist Creator explicitly plan-only.
 
-- [Google OAuth Production App](./google-oauth-production-app.md) - submit and verify a Runner-owned Google OAuth app so users can connect Gmail/Calendar/Drive without creating their own Google Cloud project.
-- [Connected Accounts + Credential Vault](./connected-accounts-credential-vault.md) - shared Settings surface for OAuth/API/browser-session credentials used by Ads, Social Publisher, Gmail/outreach, Shopify, Printify, and future browser-operated agents.
-- [Social Accounts + Operations](./social-accounts-and-operations.md) - Settings-managed social profiles, per-account browser sessions, agent profile context, posting/comment/DM workflows, approval rules, receipts, and implementation phases for Social Publisher.
-- [Multi-World Artist Spaces](./multi-world-artist-spaces.md) - future architecture for multiple artist/client/side-project worlds after the single-world HQ/campaign system is fully fleshed out.
-- [Paid Ads Execution Prep](./paid-ads-execution-prep.md) - current code map, source/tooling map, test impact, build architecture, and external research for the paid ads operator.
-- [Paid Ads Browser + CLI Operator](./paid-ads-browser-cli-operator.md) - hybrid browser/CDP plus CLI system so Ads Agent can inspect, draft, analyze, and approval-gate Meta/Google campaigns even when API approval is missing.
-- [Tool Licensing + Packaging Audit](./tool-licensing-packaging-audit.md) - release gate for commercially safe tool licenses and packaged/auto-installed FFmpeg, Whisper, Python/runtime, model, browser, and CLI dependencies.
-- [Windows Version](./windows-version.md) - PC readiness backlog for bundled binaries, local tool paths, browser automation, secrets, and cross-platform agent/tool QA.
-- [Spotify Fix](./spotify-fix.md) - make Spotify Analyst reliable in packaged builds (self-contained snapshot script + materialized skill paths) and give the Playlist Creator a real Spotify write actuator or reposition it as plan-only.
+## Partially Shipped
+
+- [Global Sources Finish](./global-sources-finish.md) - foundation and renderer V1 shipped; deeper CRUD, credential override UI, polish, audit, and smoke work remain.
+- [Paid Ads Browser + CLI Operator](./paid-ads-browser-cli-operator.md) - core skill/source/CLI, parsers, audit engine, plans, packets, and receipts shipped; browser fixtures, user/setup docs, and live verification remain.
+- [Auto-memory Sidecar](./auto-memory-sidecar.md) - implemented on `codex/memory-os-hardening`; Electron smoke, review-queue proof, and merge remain.
+
+## Product Backlog
+
+- [Connected Accounts + Credential Vault](./connected-accounts-credential-vault.md) - shared Settings control plane for OAuth/API credentials and browser sessions across Ads, Social, Gmail, commerce, and future tools.
+- [Multi-World Artist Spaces](./multi-world-artist-spaces.md) - future multi-artist/client/side-project architecture after the single-world system is proven.
+- [Future External Triggers](./future-external-triggers.md) - candidate automation triggers including email, Slack/Discord/Teams, MCP inbound, Shortcuts, browser extension, Git, calendar, RSS, database, cloud storage, and more.
+- [Global Update Agent](./global-update-agent.md) - system-wide doctor/update auditor for agents, skills, sources, MCP servers, tools, packages, and unresolved live-verification gates.
+
+## Archived On 2026-07-10
+
+- [Workflow Outputs](../archive/2026-07-10/workflow-outputs.md) - superseded by shipped Outputs/Finals specs 10 and 11.
+- [Social Accounts + Operations](../archive/2026-07-10/social-accounts-and-operations.md) - V1 shipped; remaining proof moved to live verification and Connected Accounts.
+- [Paid Ads Execution Prep](../archive/2026-07-10/paid-ads-execution-prep.md) - preparation completed; remaining work stays in the Ads Operator backlog.
+
+## Maintenance Rule
+
+- Mark branch-only work and its merge status explicitly.
+- Keep release proof separate from feature implementation.
+- When most of a spec ships, archive the proposal and move only concrete remaining work into an active backlog item.
+- Update this index whenever a backlog document is added, archived, or activated.

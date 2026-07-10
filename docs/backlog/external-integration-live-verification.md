@@ -1,3 +1,10 @@
+---
+status: active
+owner: agent
+last_verified: 2026-07-10
+source_of_truth: true
+---
+
 # External Integration Live Verification Backlog
 
 ## Status
@@ -85,9 +92,14 @@ No integration is marked "fully end-to-end verified" until it passes:
 
 - [ ] Validate each supported platform profile setup: Instagram, TikTok, X, YouTube.
 - [ ] Run `doctor --json` and `doctor --live --json`.
-- [ ] Confirm dry-run post/comment/DM flows produce usable plans.
-- [ ] Confirm live posting/commenting/DM requires explicit approval.
-- [ ] Confirm browser/CDP fallback behavior is clear when sessions are missing.
+- [ ] Confirm dry-run post, exact `--reply-to` comment reply, and existing `--thread-url` DM reply flows produce usable guarded plans.
+- [ ] Confirm scheduled publishing waits at `needs-approval`, rejects changed account/payload/media bindings, executes once after exact approval, and records a durable receipt.
+- [ ] Give Social Publisher a direct bounded mandate to answer inbound comments/messages and confirm eligible replies send without per-item approval while run limits are enforced.
+- [ ] Schedule the same bounded inbox task and confirm the schedule resolves one exact profile, inbox scope, and run boundary.
+- [ ] Confirm cold DMs, posts/uploads, account changes, block/report actions, and sensitive/business/legal/safety replies remain outside the mandate and stop or escalate.
+- [ ] Confirm private DM bodies do not enter global memory, Workspace Context, shared Outputs, or public receipts.
+- [ ] Confirm exact-target fallback guards prevent a reply from becoming a top-level comment or new DM thread.
+- [ ] Confirm browser/CDP recovery is clear for missing sessions, expired login, CAPTCHA/2FA, account mismatch, and selector drift.
 
 ### Hypermotion / Remotion / HyperFrames
 

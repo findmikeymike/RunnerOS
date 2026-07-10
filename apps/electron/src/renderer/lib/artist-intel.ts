@@ -1,7 +1,9 @@
 import type { ContextDocDTO, ContextDocMetadata } from '../../shared/types'
+import type { QueueWorkAction } from '@craft-agent/shared/automations'
 
 export const ARTIST_INTEL_CONFIG_CONTEXT_SLUG = 'artist-intel-config'
 export const ARTIST_INTEL_REPORT_CONTEXT_SLUG = 'artist-intel-report'
+export const YOUTUBE_INTELLIGENCE_AGENT_SLUG = 'youtube-intelligence-agent'
 
 export interface ArtistIntelSource {
   id: string
@@ -25,10 +27,13 @@ export interface ArtistIntelRun {
   id: string
   status: 'queued' | 'ready' | 'failed'
   sessionId?: string
+  workOrderId?: string
+  outputId?: string
   title?: string
   summary?: string
   generatedAt: string
   videoCount?: number
+  nuggetCount?: number
 }
 
 export interface ArtistIntelReport {
@@ -37,9 +42,11 @@ export interface ArtistIntelReport {
   title?: string
   summary?: string
   sessionId?: string
+  outputId?: string
   generatedAt?: string
   sourceCount: number
   videoCount?: number
+  nuggetCount?: number
   runs: ArtistIntelRun[]
   updatedAt: string
 }
@@ -80,6 +87,13 @@ export const DEFAULT_ARTIST_INTEL_SOURCES: ArtistIntelSource[] = [
     url: 'https://www.youtube.com/@NeighborhoodArtSupply',
     priority: 'high',
     notes: 'Artist branding and creative identity signals.',
+  },
+  {
+    id: 'its21master',
+    name: 'Its21Master',
+    url: 'https://www.youtube.com/@its21master',
+    priority: 'high',
+    notes: 'Independent music marketing, paid social strategy, ad formats, and campaign execution.',
   },
 ]
 
@@ -215,8 +229,8 @@ export function createIntelRunPrompt(config: ArtistIntelConfig, artistName: stri
     '',
     `Scan window: last ${config.sinceDays} days. Max videos per channel: ${config.maxPerChannel}.`,
     '',
-    'Use the YouTube Research tool in read-only mode.',
-    'For each configured channel, check recent uploads, pull transcripts where available, and write a concise artist-facing intel report.',
+    'Use YouTube Intelligence with the connected YouTube Research API source.',
+    'For each configured channel, check recent uploads, pull transcripts, and create the required weekly report Output.',
     '',
     'Report shape:',
     '1. What changed or is worth noticing',
@@ -225,10 +239,7 @@ export function createIntelRunPrompt(config: ArtistIntelConfig, artistName: stri
     '4. Suggested campaign/content/brand moves',
     '5. Confidence and missing data',
     '',
-    ...reportWritebackInstructions(),
-    '',
-    'If the run fails, still update the report doc with status "failed", a short summary, and missing setup.',
-    '',
+    'End the Output with the required fenced youtube-intel JSON block of categorized nuggets.',
     'Reject generic music-business filler. Do not publish, comment, upload, or modify any YouTube account.',
   ].join('\n')
 }
@@ -239,10 +250,10 @@ export function createScheduledIntelRunPrompt(artistName: string): string {
     '',
     `First read the current workspace context doc at context/${ARTIST_INTEL_CONFIG_CONTEXT_SLUG}/CONTEXT.md.`,
     'Use its JSON config as the source of truth for enabled, cadence, scan window, max videos per channel, and source URLs.',
-    'If enabled is false, stop and update the report doc with status "failed" and summary "Intel Pulse is disabled."',
+    'If enabled is false, stop and report that Intel Pulse was disabled before execution.',
     '',
-    'Use the YouTube Research tool in read-only mode.',
-    'For each configured YouTube channel, check recent uploads, pull transcripts where available, and write a concise artist-facing intel report.',
+    'Use YouTube Intelligence with the connected YouTube Research API source.',
+    'For each configured YouTube channel, check recent uploads, pull transcripts, and create exactly one HQ report Output titled "Weekly YouTube Intelligence Report".',
     '',
     'Report shape:',
     '1. What changed or is worth noticing',
@@ -251,22 +262,41 @@ export function createScheduledIntelRunPrompt(artistName: string): string {
     '4. Suggested campaign/content/brand moves',
     '5. Confidence and missing data',
     '',
-    ...reportWritebackInstructions(),
+    'End the Output with the required fenced youtube-intel JSON block of categorized nuggets. The scheduler handles dashboard and agent-context routing.',
     '',
     'Reject generic music-business filler. Do not publish, comment, upload, or modify any YouTube account.',
   ].join('\n')
 }
 
+export function createIntelQueueWorkAction(workspaceName: string, brief: string): QueueWorkAction {
+  return {
+    type: 'queue-work',
+    ownerScope: 'hq',
+    calendarVisibility: 'hidden',
+    title: `Weekly YouTube Intelligence - ${workspaceName}`,
+    execution: {
+      type: 'agent-task',
+      agentSlug: YOUTUBE_INTELLIGENCE_AGENT_SLUG,
+      brief,
+      permissionMode: 'safe',
+      expectedOutput: { requirement: 'required', kind: 'report', title: 'Weekly YouTube Intelligence Report' },
+      postProcess: 'youtube-intelligence',
+    },
+  }
+}
+
 export function createQueuedIntelRun(report: ArtistIntelReport, input: {
-  sessionId: string
+  sessionId?: string
+  workOrderId?: string
   sourceCount: number
   generatedAt?: string
 }): ArtistIntelReport {
   const generatedAt = input.generatedAt ?? new Date().toISOString()
   const run: ArtistIntelRun = {
-    id: slugify(`run-${generatedAt}-${input.sessionId}`),
+    id: slugify(`run-${generatedAt}-${input.sessionId ?? input.workOrderId ?? 'manual'}`),
     status: 'queued',
     sessionId: input.sessionId,
+    workOrderId: input.workOrderId,
     title: 'YouTube Intel Pulse queued',
     summary: `Watching ${input.sourceCount} configured channel${input.sourceCount === 1 ? '' : 's'}.`,
     generatedAt,
@@ -323,9 +353,11 @@ function normalizeIntelReport(report: Partial<ArtistIntelReport>): ArtistIntelRe
     title: clean(report.title),
     summary: clean(report.summary),
     sessionId: clean(report.sessionId),
+    outputId: clean(report.outputId),
     generatedAt: clean(report.generatedAt),
     sourceCount: Number.isInteger(report.sourceCount) ? Math.max(0, Number(report.sourceCount)) : 0,
     videoCount: Number.isInteger(report.videoCount) ? Math.max(0, Number(report.videoCount)) : undefined,
+    nuggetCount: Number.isInteger(report.nuggetCount) ? Math.max(0, Number(report.nuggetCount)) : undefined,
     runs: normalizeRuns(report.runs),
     updatedAt: clean(report.updatedAt) || new Date().toISOString(),
   }
@@ -345,10 +377,13 @@ function normalizeRun(run: Partial<ArtistIntelRun>, index: number): ArtistIntelR
     id: clean(run.id) || `run-${index + 1}`,
     status,
     sessionId: clean(run.sessionId),
+    workOrderId: clean(run.workOrderId),
+    outputId: clean(run.outputId),
     title: clean(run.title),
     summary: clean(run.summary),
     generatedAt: clean(run.generatedAt) || new Date().toISOString(),
     videoCount: Number.isInteger(run.videoCount) ? Math.max(0, Number(run.videoCount)) : undefined,
+    nuggetCount: Number.isInteger(run.nuggetCount) ? Math.max(0, Number(run.nuggetCount)) : undefined,
   }
 }
 
@@ -388,13 +423,4 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     || 'source'
-}
-
-function reportWritebackInstructions(): string[] {
-  return [
-    `When finished, update context/${ARTIST_INTEL_REPORT_CONTEXT_SLUG}/CONTEXT.md so HQ can show completion.`,
-    'Keep the markdown frontmatter name "Artist Intel Report", agents "all", and write a fenced JSON block with:',
-    '{ "version": 1, "status": "ready", "title": "...", "summary": "...", "sessionId": "<this session id if known>", "sourceCount": N, "videoCount": N, "generatedAt": "<ISO time>", "updatedAt": "<ISO time>", "runs": [{ "id": "run-<ISO-or-slug>", "status": "ready", "title": "...", "summary": "...", "generatedAt": "<ISO time>", "videoCount": N }] }',
-    'Preserve up to 10 newest runs if an older runs array exists.',
-  ]
 }

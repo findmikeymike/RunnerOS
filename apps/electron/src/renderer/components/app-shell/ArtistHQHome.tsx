@@ -116,6 +116,7 @@ import {
   artistIntelReportMetadata,
   createQueuedIntelRun,
   createIntelRunPrompt,
+  createIntelQueueWorkAction,
   createScheduledIntelRunPrompt,
   isValidYouTubeChannelUrl,
   parseArtistIntelConfigDocResult,
@@ -124,6 +125,7 @@ import {
   serializeArtistIntelReportBody,
   type ArtistIntelConfig,
   type ArtistIntelSource,
+  YOUTUBE_INTELLIGENCE_AGENT_SLUG,
 } from '@/lib/artist-intel'
 
 interface ArtistHQHomeProps {
@@ -367,9 +369,9 @@ export function ArtistHQHome({
     [docs],
   )
   const intelReport = intelReportResult.report
-  const youtubeResearchAgent = React.useMemo(
+  const youtubeIntelligenceAgent = React.useMemo(
     () => [...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]
-      .find((agent) => agent.slug === YOUTUBE_RESEARCH_AGENT_SLUG),
+      .find((agent) => agent.slug === YOUTUBE_INTELLIGENCE_AGENT_SLUG),
     [allAgents, shellActiveAgents, workspaceActiveAgents],
   )
   const availableAgents = React.useMemo(
@@ -648,7 +650,16 @@ export function ArtistHQHome({
         ...intelConfig,
         enabled: nextEnabled,
       })
-      if (intelSyncAutomation) {
+      if (intelSyncAutomation && nextEnabled && isLegacyIntelSyncAutomation(intelSyncAutomation)) {
+        await window.electronAPI.deleteAutomation(workspaceId, intelSyncAutomation.event, intelSyncAutomation.matcherIndex)
+        if (intelConfig.cadence === 'weekly') {
+          await window.electronAPI.createAutomationFromTemplate(
+            workspaceId,
+            'SchedulerTick',
+            createIntelSyncMatcher(workspaceName || 'Artist HQ'),
+          )
+        }
+      } else if (intelSyncAutomation) {
         await window.electronAPI.setAutomationEnabled(
           workspaceId,
           intelSyncAutomation.event,
@@ -673,8 +684,8 @@ export function ArtistHQHome({
 
   const runIntelPulse = React.useCallback(async () => {
     if (!workspaceId || !intelConfigResult.ok) return
-    if (!youtubeResearchAgent) {
-      toast.error('YouTube Research Agent is not installed in this workspace')
+    if (!youtubeIntelligenceAgent) {
+      toast.error('YouTube Intelligence Agent is not installed in this workspace')
       return
     }
     setIntelBusy(true)
@@ -683,24 +694,21 @@ export function ArtistHQHome({
       if (!intelConfig.enabled) {
         await saveIntelConfig(config)
       }
-      const contextDocs = await window.electronAPI
-        .listWorkspaceContextDocsForAgent(workspaceId, youtubeResearchAgent.slug)
       const generatedAt = new Date().toISOString()
-      const session = await openAgentSessionComposer({
-        agent: youtubeResearchAgent,
+      const result = await window.electronAPI.testAutomation({
         workspaceId,
-        onCreateSession,
-        onInputChange,
-        skills,
-        sources,
-        contextDocs,
+        automationName: 'Manual YouTube Intel Pulse',
+        actions: [createIntelQueueWorkAction(workspaceName || 'Artist HQ', createIntelRunPrompt(config, workspaceName || 'Artist HQ'))],
+        permissionMode: 'safe',
+        labels: ['youtube', 'intel', 'artist-hq', 'manual'],
       })
-      await Promise.resolve(onSendMessage(session.id, createIntelRunPrompt(config, workspaceName || 'Artist HQ')))
+      const queued = result.actions.find((action) => action.type === 'queue-work')
+      if (!queued || !queued.success || !queued.workOrderIds?.[0]) throw new Error(queued?.error || 'Intel work was not queued.')
       await upsert({
         slug: ARTIST_INTEL_REPORT_CONTEXT_SLUG,
         metadata: artistIntelReportMetadata(),
         body: serializeArtistIntelReportBody(createQueuedIntelRun(intelReport, {
-          sessionId: session.id,
+          workOrderId: queued.workOrderIds[0],
           sourceCount: config.sources.length,
           generatedAt,
         })),
@@ -717,16 +725,11 @@ export function ArtistHQHome({
     intelConfig,
     intelConfigResult,
     intelReport,
-    onCreateSession,
-    onInputChange,
-    onSendMessage,
     saveIntelConfig,
-    skills,
-    sources,
     upsert,
     workspaceId,
     workspaceName,
-    youtubeResearchAgent,
+    youtubeIntelligenceAgent,
   ])
 
   const launchHqRoute = React.useCallback(async (route: HqStateRouteHint) => {
@@ -1181,7 +1184,7 @@ export function ArtistHQHome({
                 configError={intelConfigResult.ok ? null : intelConfigResult.error}
                 reportError={intelReportResult.ok ? null : intelReportResult.error}
                 busy={intelBusy}
-                agentReady={Boolean(youtubeResearchAgent)}
+                agentReady={Boolean(youtubeIntelligenceAgent)}
                 scheduled={intelSyncActive}
                 onToggle={toggleIntelPulse}
                 onRun={runIntelPulse}
@@ -1799,13 +1802,15 @@ function IntelPulseCard({
         >
           {busy ? 'Starting...' : running ? 'Running' : 'Run'}
         </button>
-        {report.sessionId ? (
+        {report.outputId || report.sessionId ? (
           <button
             type="button"
-            onClick={() => navigate(routes.view.allSessions(report.sessionId))}
+            onClick={() => report.outputId
+              ? navigate(routes.view.output(report.outputId))
+              : navigate(routes.view.allSessions(report.sessionId!))}
             className="h-8 rounded-full border border-white/[0.08] px-3 text-xs font-medium text-white/55 hover:bg-white/[0.04]"
           >
-            Open
+            Open report
           </button>
         ) : null}
       </div>
@@ -1825,7 +1830,7 @@ function IntelPulseCard({
         </div>
       ) : null}
       {!agentReady ? (
-        <p className="mt-2 text-xs leading-5 text-yellow-100/65">YouTube Research Agent is not active in this workspace.</p>
+        <p className="mt-2 text-xs leading-5 text-yellow-100/65">YouTube Intelligence Agent is not active in this workspace.</p>
       ) : null}
       {configError || reportError ? (
         <p className="mt-2 text-xs leading-5 text-red-100/65">{configError || reportError}</p>
@@ -2807,14 +2812,10 @@ function createIntelSyncMatcher(workspaceName: string): Record<string, unknown> 
     name: INTEL_SYNC_AUTOMATION_NAME,
     cron: INTEL_SYNC_CRON,
     timezone: getLocalTimezone(),
-    permissionMode: 'ask',
+    permissionMode: 'safe',
     labels: ['youtube', 'intel', 'artist-hq', 'scheduled'],
     actions: [
-      {
-        type: 'prompt',
-        agentSlug: YOUTUBE_RESEARCH_AGENT_SLUG,
-        prompt: createScheduledIntelRunPrompt(workspaceName),
-      },
+      createIntelQueueWorkAction(workspaceName, createScheduledIntelRunPrompt(workspaceName)),
     ],
   }
 }
@@ -2833,10 +2834,17 @@ function isIntelSyncAutomation(automation: AutomationListItem): boolean {
   if (automation.event !== 'SchedulerTick') return false
   if (automation.name === INTEL_SYNC_AUTOMATION_NAME) return true
   return automation.actions.some((action) => (
-    action.type === 'prompt'
-    && action.agentSlug === YOUTUBE_RESEARCH_AGENT_SLUG
-    && /artist-intel-config|youtube intel pulse/i.test(action.prompt)
+    (action.type === 'queue-work'
+      && action.execution.type === 'agent-task'
+      && action.execution.agentSlug === YOUTUBE_INTELLIGENCE_AGENT_SLUG)
+    || (action.type === 'prompt'
+      && action.agentSlug === YOUTUBE_RESEARCH_AGENT_SLUG
+      && /artist-intel-config|youtube intel pulse/i.test(action.prompt))
   ))
+}
+
+function isLegacyIntelSyncAutomation(automation: AutomationListItem): boolean {
+  return automation.actions.some((action) => action.type === 'prompt' && action.agentSlug === YOUTUBE_RESEARCH_AGENT_SLUG)
 }
 
 function getLocalTimezone(): string {

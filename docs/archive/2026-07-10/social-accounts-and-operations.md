@@ -1,9 +1,11 @@
 ---
-status: backlog
+status: archived
 owner: product
-last_verified: 2026-07-08
-source_of_truth: true
+last_verified: 2026-07-10
+source_of_truth: false
 ---
+
+> Archived 2026-07-10. Reason: Social Accounts Settings, profile/session management, account sets, guarded publishing, and delegated engagement shipped. Remaining live-account proof is tracked in `docs/backlog/external-integration-live-verification.md`; shared credential unification remains in `connected-accounts-credential-vault.md`.
 
 # Social Accounts + Operations
 

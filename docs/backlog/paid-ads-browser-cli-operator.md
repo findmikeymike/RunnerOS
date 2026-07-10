@@ -1,7 +1,7 @@
 ---
 status: backlog
 owner: product
-last_verified: 2026-07-06
+last_verified: 2026-07-10
 source_of_truth: true
 ---
 
@@ -1140,7 +1140,7 @@ Use the existing approval model where possible, but paid ads should show spend i
 
 Phase 1 execution note, 2026-07-07:
 
-- Existing Ads Agent, `google-ads`, `meta-ads`, `browser_tool`, `computer-use`, and Outputs paths were audited in [Paid Ads Execution Prep](./paid-ads-execution-prep.md).
+- Existing Ads Agent, `google-ads`, `meta-ads`, `browser_tool`, `computer-use`, and Outputs paths were audited in [Paid Ads Execution Prep](../archive/2026-07-10/paid-ads-execution-prep.md).
 - Decision: do not bundle Meta Printing Press CLI in V1 Phase 1. Keep Meta's official Ads MCP as the connected API path, and make browser dashboard/export mode the normal fallback when Meta API/MCP access is missing or blocked.
 - Ads Agent now keeps `google-ads` required and `meta-ads` optional, and its prompt no longer blocks Meta work on OAuth setup. It routes through CLI/API/MCP when connected, browser dashboard/export when not, user-provided exports when automation is blocked, and Computer Use only as a narrow fallback.
 
@@ -1346,10 +1346,10 @@ V1 is acceptable when:
 - [x] Add audit engine V1.
 - [x] Add approval packet schema.
 - [x] Add receipt schema.
-- [ ] Update Ads Agent prompt/source/skill wiring.
-- [ ] Add browser flowbook docs.
+- [x] Update Ads Agent prompt/source/skill wiring.
+- [x] Add browser flowbook docs.
 - [ ] Add browser fixture tests.
-- [ ] Add live verification checklist entries.
+- [x] Add live verification checklist entries.
 - [ ] Add user docs for "Ads without API approval".
 - [ ] Add setup UI copy explaining CLI/API vs browser modes.
 

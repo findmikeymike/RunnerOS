@@ -47,6 +47,13 @@ export interface ScheduledWorkRunnerDeps {
   }): Promise<{ runId: string }>
   readWorkflowRun(workspaceRootPath: string, runId: string): WorkflowRunSnapshot | null | undefined
   listOutputManifests(workspaceRootPath: string): OutputManifest[]
+  postProcessAgentTask?(input: {
+    workspaceId: string
+    workspaceRootPath: string
+    order: ScheduledWorkOrder
+    sessionId: string
+    outputs: OutputManifest[]
+  }): Promise<{ sharedIntelContextSlugs?: string[] }>
   readAgentSession?(sessionId: string): Promise<'running' | 'completed' | 'interrupted' | 'missing'>
   prepareSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder }): Promise<ScheduledSocialActionPreview>
   executeSocial?(input: { workspaceId: string; workspaceRootPath: string; order: ScheduledWorkOrder; preview: ScheduledSocialActionPreview; approval: ScheduledSocialApproval }): Promise<{ receiptId: string; externalUrl?: string; summary: string }>
@@ -331,7 +338,8 @@ export class ScheduledWorkRunner {
         )
         return 'failed'
       }
-      await this.finishAgentDone(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id))
+      const processed = await this.postProcessAgentTask(workspaceId, workspaceRootPath, order, sessionId, outputs.matched)
+      await this.finishAgentDone(workspaceId, workspaceRootPath, order.id, sessionId, outputs.matched.map((output) => output.id), processed.sharedIntelContextSlugs)
       return 'done'
     } catch (error) {
       await this.finishWithAttention(
@@ -390,12 +398,25 @@ export class ScheduledWorkRunner {
       )
       return persisted.updated ? 'failed' : 'running'
     }
+    let processed: { sharedIntelContextSlugs?: string[] }
+    try {
+      processed = await this.postProcessAgentTask(workspaceId, workspaceRootPath, order, sessionId, outputs.matched)
+    } catch (error) {
+      const persisted = await this.finishWithAttention(
+        workspaceId,
+        workspaceRootPath,
+        order.id,
+        this.buildAttention('execution-failed', errorMessage(error)),
+      )
+      return persisted.updated ? 'failed' : 'running'
+    }
     const persisted = await this.finishAgentDone(
       workspaceId,
       workspaceRootPath,
       order.id,
       sessionId,
       outputs.matched.map((output) => output.id),
+      processed.sharedIntelContextSlugs,
     )
     return persisted.updated ? 'done' : 'running'
   }
@@ -598,6 +619,7 @@ export class ScheduledWorkRunner {
     orderId: string,
     sessionId: string,
     outputIds: string[],
+    sharedIntelContextSlugs?: string[],
   ): Promise<PersistResult> {
     return this.updateOrder(workspaceId, workspaceRootPath, orderId, (order, nowIso) => {
       if (order.status !== 'running' || order.execution.type !== 'agent-task') return null
@@ -606,7 +628,7 @@ export class ScheduledWorkRunner {
         status: order.execution.expectedOutput.reviewRequired ? 'awaiting-review' : 'done',
         attention: undefined,
         updatedAt: nowIso,
-        result: { type: 'agent-task', sessionId, outputIds },
+        result: { type: 'agent-task', sessionId, outputIds, ...(sharedIntelContextSlugs?.length ? { sharedIntelContextSlugs } : {}) },
         runs: updateLatestRun(order.runs, order.id, {
           status: 'done',
           sessionId,
@@ -617,6 +639,20 @@ export class ScheduledWorkRunner {
         }),
       }
     })
+  }
+
+  private async postProcessAgentTask(
+    workspaceId: string,
+    workspaceRootPath: string,
+    order: ScheduledWorkOrder,
+    sessionId: string,
+    outputs: OutputManifest[],
+  ): Promise<{ sharedIntelContextSlugs?: string[] }> {
+    if (order.execution.type !== 'agent-task' || !order.execution.postProcess) return {}
+    if (!this.deps.postProcessAgentTask) {
+      throw new Error(`Scheduled work postprocessor is unavailable: ${order.execution.postProcess}`)
+    }
+    return this.deps.postProcessAgentTask({ workspaceId, workspaceRootPath, order, sessionId, outputs })
   }
 
   private async finishWorkflowDone(

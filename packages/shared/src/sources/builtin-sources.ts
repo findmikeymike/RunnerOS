@@ -29,6 +29,7 @@ const META_ADS_SLUG = 'meta-ads';
 const TRYPOST_SLUG = 'trypost';
 const NOTEBOOKLM_SLUG = 'notebooklm';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
+const YOUTUBE_INTELLIGENCE_SLUG = 'youtube-intelligence';
 const OPEN_SLIDE_SLUG = 'open-slide';
 const ZERO_SLUG = 'zero';
 const SHOPIFY_SLUG = 'shopify';
@@ -286,6 +287,21 @@ function getYouTubeResearchPath(): string {
   );
 }
 
+function getYouTubeIntelligencePath(): string {
+  const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
+  const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
+
+  return firstExistingPath(
+    [
+      resourcesBase ? join(resourcesBase, 'tools', 'youtube-intelligence') : '',
+      join(appRoot, 'tools', 'youtube-intelligence'),
+      join(REPO_ROOT, 'tools', 'youtube-intelligence'),
+      join(process.cwd(), 'tools', 'youtube-intelligence'),
+    ],
+    join('tools', 'youtube-intelligence')
+  );
+}
+
 function getShopifyPath(): string {
   const resourcesBase = process.env.CRAFT_RESOURCES_BASE;
   const appRoot = process.env.CRAFT_APP_ROOT || process.cwd();
@@ -463,6 +479,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getTryPostSource(workspaceId, workspaceRootPath),
     getNotebookLmSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
+    getYouTubeIntelligenceSource(workspaceId, workspaceRootPath),
     getOpenSlideSource(workspaceId, workspaceRootPath),
     getZeroSource(workspaceId, workspaceRootPath),
     getMediaGenerationSource(workspaceId, workspaceRootPath),
@@ -1466,6 +1483,53 @@ export function getYouTubeResearchSource(workspaceId: string, workspaceRootPath:
   };
 }
 
+/** Built-in transcript packet and intelligence extraction pipeline. */
+export function getYouTubeIntelligenceSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const toolPath = getYouTubeIntelligencePath();
+  const researchPath = getYouTubeResearchPath();
+  const toolReady = existsSync(toolPath);
+  const transcriptProviderReady = existsSync(researchPath);
+  const config: FolderSourceConfig = {
+    id: 'builtin-youtube-intelligence',
+    name: 'YouTube Intelligence',
+    slug: YOUTUBE_INTELLIGENCE_SLUG,
+    enabled: true,
+    provider: 'runneros-youtube-intelligence',
+    type: 'local',
+    local: { path: toolPath, format: 'cli-tool' },
+    tagline: 'Turns YouTube transcripts into timestamped intel, weekly reports, and agent context.',
+    icon: 'Y',
+    isAuthenticated: transcriptProviderReady,
+    connectionStatus: !toolReady ? 'failed' : transcriptProviderReady ? 'untested' : 'needs_auth',
+    connectionError: !toolReady
+      ? 'Bundled YouTube Intelligence tool folder not found.'
+      : transcriptProviderReady
+        ? 'Uses the YouTube Data API key saved on YouTube Research. Run doctor before research.'
+        : 'YouTube Intelligence needs the bundled YouTube Research source for transcript fetches.',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: toolPath,
+    config,
+    guide: {
+      raw: [
+        '# YouTube Intelligence',
+        '',
+        'Turns trusted YouTube channels and transcripts into source-backed intelligence.',
+        '',
+        'This source reuses the YouTube Data API key saved on YouTube Research.',
+        'Run `node bin/youtube-intelligence.mjs doctor` before research.',
+        'Use `batch-prepare` for configured channel scans and `prepare` for one video.',
+        'Default transcript order is cache first, then local YouTube Research.',
+        'Never pass `--allow-paid` unless the user explicitly approves paid transcript credits.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
 /**
  * Built-in source for the open-slide deck framework.
  *
@@ -1942,6 +2006,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === TRYPOST_SLUG
     || slug === NOTEBOOKLM_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
+    || slug === YOUTUBE_INTELLIGENCE_SLUG
     || slug === OPEN_SLIDE_SLUG
     || slug === ZERO_SLUG
     || slug === MEDIA_GENERATION_SLUG

@@ -4,6 +4,7 @@ import {
   artistIntelConfigMetadata,
   createQueuedIntelRun,
   createIntelRunPrompt,
+  createIntelQueueWorkAction,
   createScheduledIntelRunPrompt,
   emptyArtistIntelConfig,
   emptyArtistIntelReport,
@@ -31,6 +32,7 @@ describe('artist-intel', () => {
       'Viral VSN',
       'No Labels Necessary',
       'Neighborhood Art Supply',
+      'Its21Master',
     ])
   })
 
@@ -58,7 +60,8 @@ describe('artist-intel', () => {
     expect(prompt).toContain('Run the HQ YouTube Intel Pulse')
     expect(prompt).toContain('Managers Playbook')
     expect(prompt).toContain('No Labels Necessary')
-    expect(prompt).toContain('context/artist-intel-report/CONTEXT.md')
+    expect(prompt).toContain('required weekly report Output')
+    expect(prompt).toContain('youtube-intel JSON block')
     expect(prompt).toContain('Do not publish, comment, upload')
   })
 
@@ -66,8 +69,22 @@ describe('artist-intel', () => {
     const prompt = createScheduledIntelRunPrompt('Artist HQ')
 
     expect(prompt).toContain('context/artist-intel-config/CONTEXT.md')
-    expect(prompt).toContain('context/artist-intel-report/CONTEXT.md')
+    expect(prompt).toContain('exactly one HQ report Output')
+    expect(prompt).toContain('scheduler handles dashboard and agent-context routing')
     expect(prompt).toContain('enabled is false')
+  })
+
+  test('builds hidden weekly work with a required report and routing postprocessor', () => {
+    const action = createIntelQueueWorkAction('Artist HQ', createScheduledIntelRunPrompt('Artist HQ'))
+
+    expect(action.calendarVisibility).toBe('hidden')
+    expect(action.execution).toMatchObject({
+      type: 'agent-task',
+      agentSlug: 'youtube-intelligence-agent',
+      permissionMode: 'safe',
+      expectedOutput: { requirement: 'required', kind: 'report', title: 'Weekly YouTube Intelligence Report' },
+      postProcess: 'youtube-intelligence',
+    })
   })
 
   test('validates YouTube channel URLs', () => {

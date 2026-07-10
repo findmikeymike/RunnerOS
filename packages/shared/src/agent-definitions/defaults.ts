@@ -10,4 +10,5 @@ export const DEFAULT_ACTIVATED_AGENT_SLUGS = [
   'record-doctor',
   'college-radio-agent',
   'spotify-playlist-creator',
+  'youtube-intelligence-agent',
 ] as const

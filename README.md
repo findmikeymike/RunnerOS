@@ -7,9 +7,15 @@
 
 Active worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
 
-Current focus: Artist HQ and Campaign execution, including scheduled work, social publishing, and release-promotion workers.
+Current focus: Artist HQ and Campaign execution, including Calendar/Automations scheduling, guarded social publishing, and delegated community engagement.
 
-- Scheduled Work: Campaign Calendar can create typed Event, Agent Task, Workflow Run, Social Publish, and Review work; the runner tracks real completion, required Outputs, missed windows, attention states, approvals, and receipts.
+- Calendars: Calendar is a first-class Plan page above Agenda. HQ owns global/HQ work; each campaign owns its execution calendar. Contextual day menus open a progressive Event or Job flow, and campaign release dates appear as `Release day` highlights.
+- Scheduled Work: HQ and Campaign calendars create typed Event, Agent Task, Workflow Run, Social Publish, and Review work; the runner tracks real completion, required Outputs, missed windows, attention states, approvals, and receipts.
+- Automations: schedule/file/webhook/URL/message triggers can queue the same tracked work. Background standalone agent/workflow jobs may stay off Calendar.
+- HNIC scheduling: HNIC alone can use `schedule_work` to create confirmed Calendar work or queue-work Automations for agent tasks and workflow runs.
+- Scheduled publishing: exact social actions wait for bound approval, then a native guarded executor verifies account, browser partition, payload, and media bytes before submitting once and recording a receipt.
+- Social Publisher: can handle authorized Instagram/TikTok/X comments and DMs plus YouTube comments. A direct or scheduled inbox mandate permits bounded inbound replies without per-item approval while cold DMs, posts, account changes, and sensitive conversations remain excluded.
+- YouTube Intel Pulse: five trusted channels are preloaded; a one-click weekly job uses the saved YouTube Research API key to pull transcripts, create an HQ report Output, and route categorized nuggets into targeted Shared Intel context for the proper agents.
 - College Radio (`college-radio-agent`): uses Artist HQ/campaign context plus a bundled personal directory to build verified station targets and an Outreach-ready campaign packet.
 - Spotify Playlist Creator (`spotify-playlist-creator`): default-visible in both Artist HQ and Campaigns, distinct from the separate Playlisting service handoff.
 - Outreach Agent (`outreach-agent`): accepts verified College Radio packets and owns approval-gated Gmail drafts/sends.
@@ -27,7 +33,7 @@ Current packaging truth:
 - Mac arm64 transcription has bundled `whisper-cli` and LGPL FFmpeg with provenance under `tools/lyrics-transcriber/bin/darwin/arm64`.
 - Windows/Linux transcription builds are intentionally blocked until their platform binaries and provenance are added and smoked on those platforms.
 
-Start from [HANDOFF.md](./HANDOFF.md), [docs/CURRENT.md](./docs/CURRENT.md), and [docs/system-map](./docs/system-map/) before continuing this branch.
+Start from [HANDOFF.md](./HANDOFF.md), [docs/CURRENT.md](./docs/CURRENT.md), [Scheduled Work spec 13](./docs/creator-command-center/13-scheduled-work-composer-execution-spec.md), and [docs/system-map](./docs/system-map/) before continuing this branch.
 
 ## How it Works (Video)
 To understand what Runner does and how it works watch this video.

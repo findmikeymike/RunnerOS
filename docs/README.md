@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-09
+last_verified: 2026-07-10
 source_of_truth: true
 ---
 
@@ -22,7 +22,13 @@ Start here when you need project context without reading the whole repo.
 
 Current active work:
 
+- HQ and Campaign calendars share a progressive Event/Job composer while keeping global and campaign ownership separate.
 - Campaign Scheduled Work is implemented for Event, Agent Task, Workflow Run, Social Publish, and Review / Approval, with backend-owned writes and durable completion tracking.
+- Automations can queue the same typed work from schedule/file/webhook/URL/message triggers; standalone background agent/workflow runs may hide their Calendar shell.
+- HNIC alone has the `schedule_work` tool for confirmed Calendar or Automation agent/workflow work.
+- Scheduled social publishing has a guarded native executor after exact approval, with account/payload/media verification and durable receipts.
+- Social Publisher supports bounded authorized inbound comment/DM replies using Artist Voice; direct or scheduled engagement mandates do not cover cold DMs, posts, account changes, or sensitive conversations.
+- Campaign release dates appear on Calendar as green `Release day` highlights.
 - College Radio and Spotify Playlist Creator are default-visible in both Artist HQ and Campaign workers.
 - College Radio produces verified Outreach packets; Outreach Agent owns approval-gated Gmail delivery.
 - Paid-ads worker chain is active: Ad Creative (`ad-creative-agent`) -> Ad Strategy (`ads-strategist`) -> Ad Runner (`ads-agent`).

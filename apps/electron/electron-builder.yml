@@ -155,6 +155,10 @@ mac:
       to: app/tools/youtube-research
       filter:
         - "**/*"
+    - from: ../../tools/youtube-intelligence
+      to: app/tools/youtube-intelligence
+      filter:
+        - "**/*"
     # Managed local Shopify Admin GraphQL wrapper.
     - from: ../../tools/shopify
       to: app/tools/shopify
@@ -286,6 +290,10 @@ win:
       to: app/tools/youtube-research
       filter:
         - "**/*"
+    - from: ../../tools/youtube-intelligence
+      to: app/tools/youtube-intelligence
+      filter:
+        - "**/*"
     # Managed local Shopify Admin GraphQL wrapper.
     - from: ../../tools/shopify
       to: app/tools/shopify
@@ -378,6 +386,10 @@ linux:
     # Managed local YouTube Research CLI wrapper and bundled platform binary.
     - from: ../../tools/youtube-research
       to: app/tools/youtube-research
+      filter:
+        - "**/*"
+    - from: ../../tools/youtube-intelligence
+      to: app/tools/youtube-intelligence
       filter:
         - "**/*"
     # Managed local Shopify Admin GraphQL wrapper.

@@ -208,6 +208,60 @@ describe('ScheduledWorkRunner', () => {
     expect(saved.runs.at(-1)?.status).toBe('failed')
   })
 
+  test('postprocesses a required intelligence report before marking the work done', async () => {
+    const root = makeRoot()
+    const manifest = buildManifest('intel-report', 'session-intel')
+    writeWork(root, [buildOrder({
+      execution: {
+        type: 'agent-task',
+        agentSlug: 'youtube-intelligence-agent',
+        brief: 'Scan configured channels.',
+        permissionMode: 'safe',
+        expectedOutput: { requirement: 'required', kind: 'report' },
+        postProcess: 'youtube-intelligence',
+      },
+    })])
+    const processed: string[] = []
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => { await onStarted('session-intel'); return { sessionId: 'session-intel' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [manifest],
+      postProcessAgentTask: async ({ outputs }) => {
+        processed.push(...outputs.map((output) => output.id))
+        return { sharedIntelContextSlugs: ['shared-intel-content'] }
+      },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'done')
+    expect(processed).toEqual(['intel-report'])
+    expect(readWork(root).items[0]?.result).toEqual({
+      type: 'agent-task', sessionId: 'session-intel', outputIds: ['intel-report'], sharedIntelContextSlugs: ['shared-intel-content'],
+    })
+  })
+
+  test('does not mark intelligence work done when report postprocessing fails', async () => {
+    const root = makeRoot()
+    writeWork(root, [buildOrder({ execution: {
+      type: 'agent-task', agentSlug: 'youtube-intelligence-agent', brief: 'Scan channels.', permissionMode: 'safe',
+      expectedOutput: { requirement: 'required', kind: 'report' }, postProcess: 'youtube-intelligence',
+    } })])
+    const runner = new ScheduledWorkRunner({
+      withLock: createLock(),
+      executeAgentTask: async ({ onStarted }) => { await onStarted('session-bad-intel'); return { sessionId: 'session-bad-intel' } },
+      startWorkflow: async () => ({ runId: 'unused' }),
+      readWorkflowRun: () => null,
+      listOutputManifests: () => [buildManifest('bad-intel-report', 'session-bad-intel')],
+      postProcessAgentTask: async () => { throw new Error('Structured nuggets are missing.') },
+    })
+
+    await runner.scanWorkspace(workspaceId, root, new Date('2026-07-10T14:01:00.000Z'))
+    await waitFor(() => readWork(root).items[0]?.status === 'needs-attention')
+    expect(readWork(root).items[0]?.attention).toMatchObject({ reason: 'execution-failed', message: 'Structured nuggets are missing.' })
+  })
+
   test('does not let an ask-mode agent block later due work in the workspace', async () => {
     const root = makeRoot()
     const ask = buildOrder({ id: 'ask-1', calendarLink: { calendar: 'campaign', itemId: 'calendar-ask' }, execution: {

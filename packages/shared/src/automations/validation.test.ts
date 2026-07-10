@@ -133,6 +133,7 @@ describe('validation', () => {
                 brief: 'Draft one campaign post.',
                 permissionMode: 'safe',
                 expectedOutput: { requirement: 'required', kind: 'social-post' },
+                postProcess: 'youtube-intelligence',
               },
             }],
           }],

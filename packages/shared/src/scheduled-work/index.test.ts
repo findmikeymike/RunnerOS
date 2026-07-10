@@ -43,6 +43,35 @@ function calendarWithJob(actionType: 'ask-agent' | 'run-workflow' | 'post-asset'
 }
 
 describe('scheduled work documents', () => {
+  test('accepts the YouTube Intelligence report postprocessor contract', () => {
+    const work = emptyScheduledWorkDocument('workspace-1')
+    work.items.push({
+      version: 1,
+      id: 'weekly-youtube-intel',
+      owner: { scope: 'hq', workspaceId: 'workspace-1' },
+      calendarLink: { calendar: 'hq', itemId: 'hidden-weekly-youtube-intel' },
+      calendarVisibility: 'hidden',
+      title: 'Weekly YouTube Intelligence Report',
+      type: 'agent-task',
+      status: 'scheduled',
+      startAt: '2026-07-13T10:00:00.000Z',
+      timezone: 'America/Chicago',
+      execution: {
+        type: 'agent-task',
+        agentSlug: 'youtube-intelligence-agent',
+        brief: 'Scan configured trusted channels.',
+        permissionMode: 'safe',
+        expectedOutput: { requirement: 'required', kind: 'report' },
+        postProcess: 'youtube-intelligence',
+      },
+      inputRefs: [], approvals: [], runs: [],
+      executionKey: { payloadDigest: 'digest', idempotencyKey: 'weekly-key' },
+      createdAt: '2026-07-10T00:00:00.000Z', updatedAt: '2026-07-10T00:00:00.000Z',
+    })
+
+    expect(parseScheduledWorkDocResult({ body: serializeScheduledWorkBody(work) }, 'workspace-1').ok).toBe(true)
+  })
+
   test('round-trips a migrated agent task without removing the embedded job', () => {
     const calendar = calendarWithJob()
     const originalJobId = calendar.items[0]!.job!.id

@@ -675,6 +675,18 @@ body
     expect(youtubeAgent?.systemPrompt).toContain('You do not publish')
   })
 
+  test('starter library includes the YouTube Intelligence Agent with report output access', () => {
+    const agent = STARTER_AGENTS.find((item) => item.slug === 'youtube-intelligence-agent')
+
+    expect(agent?.metadata.skills).toContain('youtube-intelligence')
+    expect(agent?.metadata.sources).toEqual(expect.arrayContaining(['youtube-intelligence', 'youtube-research']))
+    expect(agent?.metadata.trustedWorkerTools).toEqual(['create_output'])
+    expect(agent?.systemPrompt).toContain('artist-intel-config')
+    expect(agent?.systemPrompt).toContain('```youtube-intel')
+    expect(agent?.systemPrompt).toContain('exactly one HQ report Output')
+    expect(DEFAULT_ACTIVATED_AGENT_SLUGS).toContain('youtube-intelligence-agent')
+  })
+
   test('starter library includes College Radio as an approval-gated campaign and HQ worker', () => {
     const collegeRadio = STARTER_AGENTS.find((agent) => agent.slug === 'college-radio-agent')
 

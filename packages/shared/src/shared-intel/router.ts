@@ -14,6 +14,7 @@ import {
 } from './types.ts';
 
 const MAX_NOTES_PER_SHARE = 3;
+const MAX_STRUCTURED_NOTES_PER_SHARE = 8;
 const MAX_TARGET_AGENTS = 5;
 const RECENT_MESSAGE_LIMIT = 20;
 const MAX_SUMMARY_CHARS = 520;
@@ -96,7 +97,9 @@ const TARGET_HINTS: Record<string, string[]> = {
 };
 
 export function buildSharedIntelDocs(input: BuildSharedIntelInput): BuiltSharedIntelDoc[] {
-  const candidates = extractSharedIntelCandidates(input).slice(0, MAX_NOTES_PER_SHARE);
+  const candidates = input.candidates
+    ? input.candidates.slice(0, MAX_STRUCTURED_NOTES_PER_SHARE)
+    : extractSharedIntelCandidates(input).slice(0, MAX_NOTES_PER_SHARE);
   const now = (input.now ?? new Date()).toISOString();
   const docs: BuiltSharedIntelDoc[] = [];
 

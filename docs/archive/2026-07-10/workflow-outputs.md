@@ -1,8 +1,17 @@
+---
+status: archived
+owner: agent
+last_verified: 2026-07-10
+source_of_truth: false
+---
+
+> Archived 2026-07-10. Reason: the first-class Outputs and Finals architecture shipped. Superseded by: `docs/creator-command-center/10-work-products-output-architecture-spec.md` and `11-outputs-finals-asset-promotion-spec.md`.
+
 # Workflow Outputs
 
 ## Status
 
-Backlog proposal.
+Archived proposal retained for implementation history.
 
 ## Problem
 

@@ -158,7 +158,17 @@ import {
   type UpdateMemoryInput,
 } from '@craft-agent/shared/memory'
 import { buildCanvasGuidanceSection } from '@craft-agent/shared/agent-definitions/canvas-guidance'
-import { buildSharedIntelPromptSection, isSharedIntelContextSlug } from '@craft-agent/shared/shared-intel'
+import {
+  buildSharedIntelDocs,
+  buildSharedIntelPromptSection,
+  buildYouTubeIntelCandidates,
+  isSharedIntelContextSlug,
+  parseSharedIntelNote,
+  parseYouTubeIntelNuggets,
+  type ExistingSharedIntelDoc,
+  type SharedIntelAgentCatalogEntry,
+} from '@craft-agent/shared/shared-intel'
+import { resolveOutputAssetPath, type OutputManifest } from '@craft-agent/shared/outputs'
 import { evaluateAutoLabels } from '@craft-agent/shared/labels/auto'
 import { listLabels, loadLabelConfig } from '@craft-agent/shared/labels/storage'
 import { extractLabelId, resolveSessionLabels } from '@craft-agent/shared/labels'
@@ -207,6 +217,61 @@ function buildScheduledWorkAgentPrompt(
     outputRequirement,
     'Report blockers honestly. Do not claim completion when required evidence or Outputs are missing.',
   ].join('\n')
+}
+
+function buildArtistIntelReportContext(input: {
+  reportOutput: OutputManifest
+  sessionId: string
+  nuggetCount: number
+  sourceCount: number
+  existing: ReturnType<typeof loadContextDoc>
+}) {
+  const now = new Date().toISOString()
+  const previous = parseFencedJson(input.existing?.body) as { runs?: unknown[]; sourceCount?: number } | null
+  const run = {
+    id: `run-${input.reportOutput.id}`,
+    status: 'ready',
+    sessionId: input.sessionId,
+    outputId: input.reportOutput.id,
+    title: input.reportOutput.title,
+    summary: input.reportOutput.summary,
+    generatedAt: input.reportOutput.completedAt ?? input.reportOutput.updatedAt,
+    nuggetCount: input.nuggetCount,
+  }
+  const report = {
+    version: 1,
+    status: 'ready',
+    title: input.reportOutput.title,
+    summary: input.reportOutput.summary,
+    sessionId: input.sessionId,
+    outputId: input.reportOutput.id,
+    sourceCount: input.sourceCount || (Number.isInteger(previous?.sourceCount) ? Number(previous?.sourceCount) : 0),
+    nuggetCount: input.nuggetCount,
+    generatedAt: run.generatedAt,
+    updatedAt: now,
+    runs: [run, ...(Array.isArray(previous?.runs) ? previous.runs : []).filter((item) => (item as { outputId?: unknown })?.outputId !== input.reportOutput.id)].slice(0, 10),
+  }
+  return {
+    slug: 'artist-intel-report',
+    metadata: {
+      name: 'Artist Intel Report',
+      description: 'Latest HQ YouTube Intel Pulse run status and report summary.',
+      routing: { mode: 'broadcast' as const },
+      enabled: true,
+    },
+    body: ['Latest HQ Intel Pulse report and reusable Output.', '', '```json', JSON.stringify(report, null, 2), '```'].join('\n'),
+  }
+}
+
+function parseFencedJson(body: string | undefined): unknown {
+  const match = body?.match(/```json\s*([\s\S]*?)```/i)
+  if (!match?.[1]) return null
+  try { return JSON.parse(match[1]) } catch { return null }
+}
+
+function artistIntelSourceCount(body: string | undefined): number {
+  const config = parseFencedJson(body) as { sources?: unknown[] } | null
+  return Array.isArray(config?.sources) ? config.sources.length : 0
 }
 
 function isTransientCodexSseHeaderTimeout(message: string): boolean {
@@ -2499,6 +2564,7 @@ export class SessionManager implements ISessionManager {
         },
         readWorkflowRun: readWorkflowRun,
         listOutputManifests,
+        postProcessAgentTask: (input) => this.postProcessScheduledAgentTask(input),
         readAgentSession: async (sessionId) => {
           const session = await this.getSession(sessionId)
           if (!session) return 'missing'
@@ -2515,6 +2581,75 @@ export class SessionManager implements ISessionManager {
       })
     }
     return this.scheduledWorkRunner
+  }
+
+  private async postProcessScheduledAgentTask(input: {
+    workspaceId: string
+    workspaceRootPath: string
+    order: import('@craft-agent/shared/scheduled-work').ScheduledWorkOrder
+    sessionId: string
+    outputs: OutputManifest[]
+  }): Promise<{ sharedIntelContextSlugs?: string[] }> {
+    if (input.order.execution.type !== 'agent-task' || input.order.execution.postProcess !== 'youtube-intelligence') return {}
+    const reportOutput = input.outputs.find((output) => output.kind === 'report')
+    if (!reportOutput?.primary) throw new Error('YouTube Intelligence completed without a readable report Output.')
+    const reportPath = resolveOutputAssetPath(input.workspaceRootPath, reportOutput.id, reportOutput.primary.path)
+    if (!reportPath) throw new Error('YouTube Intelligence report Output path is invalid.')
+    const markdown = await readFile(reportPath, 'utf8')
+    const nuggets = parseYouTubeIntelNuggets(markdown)
+    if (nuggets.length === 0) throw new Error('YouTube Intelligence report did not contain valid categorized nuggets.')
+
+    return withWorkspaceContextLock(input.workspaceRootPath, async () => {
+      const activeAgents = loadActivatedAgents(input.workspaceRootPath)
+      const agentCatalog: SharedIntelAgentCatalogEntry[] = activeAgents.map((agent) => ({
+        slug: agent.slug,
+        name: agent.metadata.name,
+        description: agent.metadata.description,
+        inputs: agent.metadata.inputs,
+        outputs: agent.metadata.outputs,
+        tags: agent.metadata.tags ?? [],
+        visualAgent: agent.metadata.visualAgent,
+        active: true,
+      }))
+      const candidates = buildYouTubeIntelCandidates(nuggets, agentCatalog)
+      if (candidates.length === 0) throw new Error('YouTube Intelligence found nuggets, but none matched active destination agents.')
+      const existingNotes: ExistingSharedIntelDoc[] = loadAllContextDocs(input.workspaceRootPath)
+        .filter((doc) => isSharedIntelContextSlug(doc.slug))
+        .flatMap((doc) => {
+          const note = parseSharedIntelNote(doc.body)
+          return note ? [{ slug: doc.slug, note }] : []
+        })
+      const docs = buildSharedIntelDocs({
+        sessionId: input.sessionId,
+        sourceAgentSlug: 'youtube-intelligence-agent',
+        sourceAgentName: 'YouTube Intelligence Agent',
+        messages: [],
+        candidates,
+        agentCatalog,
+        existingNotes,
+      })
+      for (const doc of docs) {
+        upsertContextDoc(input.workspaceRootPath, {
+          slug: doc.slug,
+          metadata: {
+            name: `Shared Intel - ${doc.note.title}`,
+            description: `Weekly YouTube intelligence for ${doc.targetAgents.map((agent) => agent.name).join(', ')}.`,
+            routing: { mode: 'targeted', agents: doc.note.targetAgents },
+            enabled: true,
+          },
+          body: doc.body,
+        })
+      }
+      upsertContextDoc(input.workspaceRootPath, buildArtistIntelReportContext({
+        reportOutput,
+        sessionId: input.sessionId,
+        nuggetCount: docs.length,
+        sourceCount: artistIntelSourceCount(loadContextDoc(input.workspaceRootPath, 'artist-intel-config')?.body),
+        existing: loadContextDoc(input.workspaceRootPath, 'artist-intel-report'),
+      }))
+      this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, input.workspaceId, loadAllContextDocs(input.workspaceRootPath))
+      return { sharedIntelContextSlugs: docs.map((doc) => doc.slug) }
+    })
   }
 
   private getCampaignScheduledJobRunner(): CampaignScheduledJobRunner {
@@ -2768,6 +2903,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'playlisting-power-up'
             || a.slug === 'spotify-analyst'
             || a.slug === 'spotify-playlist-creator'
+            || a.slug === 'youtube-intelligence-agent'
             || a.slug === 'shopify-agent'
             || a.slug === 'print-agent'
             || a.slug === 'branding-agent'

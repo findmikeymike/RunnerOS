@@ -110,6 +110,8 @@ export interface BuildSharedIntelInput {
   sourceAgentSlug?: string;
   sourceAgentName?: string;
   messages: Message[];
+  /** Prevalidated candidates from a structured source such as a report Output. */
+  candidates?: SharedIntelCandidate[];
   agentCatalog: SharedIntelAgentCatalogEntry[];
   existingNotes?: ExistingSharedIntelDoc[];
   forceNew?: boolean;

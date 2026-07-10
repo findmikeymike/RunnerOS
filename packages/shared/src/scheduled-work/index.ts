@@ -101,6 +101,7 @@ export type ScheduledWorkExecution =
       brief: string
       permissionMode: 'safe' | 'ask'
       expectedOutput: ExpectedOutputContract
+      postProcess?: 'youtube-intelligence'
     }
   | {
       type: 'workflow-run'
@@ -124,7 +125,7 @@ export type ScheduledWorkExecution =
     }
 
 export type ScheduledWorkResult =
-  | { type: 'agent-task'; sessionId: string; outputIds: string[] }
+  | { type: 'agent-task'; sessionId: string; outputIds: string[]; sharedIntelContextSlugs?: string[] }
   | { type: 'workflow-run'; workflowRunId: string; outputIds: string[] }
   | { type: 'social-publish'; receipt: CampaignExternalExecutionReceipt }
   | { type: 'review'; decision: 'approved' | 'changes-requested'; notes?: string }
@@ -641,6 +642,7 @@ function isScheduledWorkExecution(value: unknown, type: ScheduledWorkType): valu
     return Boolean(clean(execution.agentSlug))
       && Boolean(clean(execution.brief))
       && (execution.permissionMode === 'safe' || execution.permissionMode === 'ask')
+      && (execution.postProcess === undefined || execution.postProcess === 'youtube-intelligence')
       && Boolean(execution.expectedOutput
         && (execution.expectedOutput.requirement === 'none'
           || execution.expectedOutput.requirement === 'optional'
@@ -698,7 +700,9 @@ function isScheduledWorkResult(value: unknown, type: ScheduledWorkType): value i
   if (!value || typeof value !== 'object') return false
   const result = value as Partial<ScheduledWorkResult>
   if (result.type !== type) return false
-  if (result.type === 'agent-task') return Boolean(clean(result.sessionId)) && Array.isArray(result.outputIds)
+  if (result.type === 'agent-task') return Boolean(clean(result.sessionId))
+    && Array.isArray(result.outputIds)
+    && (result.sharedIntelContextSlugs === undefined || (Array.isArray(result.sharedIntelContextSlugs) && result.sharedIntelContextSlugs.every((slug) => Boolean(clean(slug)))))
   if (result.type === 'workflow-run') return Boolean(clean(result.workflowRunId)) && Array.isArray(result.outputIds)
   if (result.type === 'social-publish') return Boolean(result.receipt && typeof result.receipt === 'object')
   return result.type === 'review' && (result.decision === 'approved' || result.decision === 'changes-requested')
