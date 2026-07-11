@@ -88,6 +88,16 @@ A lower rung does not prove a higher rung.
 - Architectural effect: agents and UI now have one supported capability seam and do not need direct sidecar/provider imports.
 - Not proven: process transport implementation inside the client, deadline enforcement against a stalled process, Electron supervision, restart, IPC, or renderer behavior.
 
+## Phase 0 Slice 4 — Electron Sidecar Supervision
+
+- Method: red-green TDD; three supervision tests failed on the deliberate unimplemented stub before implementation.
+- Supervisor suite: 5 passed with 12 expectations.
+- Complete fast Phase 0 suite: 29 passed, 0 failed, 56 expectations across six files.
+- Proven: Electron-main-compatible child spawning, constrained environment, lazy startup, real health/analysis round trip, request correlation, deadline timeout, silent-child termination, pending-request rejection on crash, bounded stderr capture, oversized-line fail-closed behavior, and graceful shutdown with forced fallback.
+- A clock mismatch was caught during green verification: the fixed historical client clock produced an honestly expired deadline against the real sidecar clock. The test clock was aligned; deadline enforcement was preserved.
+- Oversized stdout and bounded stderr were added through their own red-green cycle after removing the initially untested implementation.
+- Not proven: packaged Electron path resolution, automatic restart policy, IPC registration, renderer behavior, or real Electron smoke.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.
