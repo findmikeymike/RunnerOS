@@ -31,7 +31,7 @@ function InfoExplainer({ text }: { text: string }) {
   )
 }
 
-type SecretPreset = {
+export type SecretPreset = {
   group: string
   name: string
   label: string
@@ -46,7 +46,7 @@ type SecretPreset = {
   setupLabel?: string
 }
 
-type SecretService = {
+export type SecretService = {
   id: string
   group: string
   title: string
@@ -58,7 +58,7 @@ type SecretService = {
 
 type ServiceStatus = 'ready' | 'needs' | 'optional'
 
-const SECRET_PRESETS: SecretPreset[] = [
+export const SECRET_PRESETS: SecretPreset[] = [
   {
     group: 'Ads',
     name: 'META_ADS_OAUTH',
@@ -126,24 +126,24 @@ const SECRET_PRESETS: SecretPreset[] = [
   {
     group: 'Promotion',
     name: 'SPOTIFY_CLIENT_ID',
-    label: 'Spotify client ID',
-    description: 'Used by Spotify public API workflows for artist profile, followers, popularity, top tracks, and playlist setup.',
+    label: 'Spotify client ID (legacy)',
+    description: 'Legacy public Web API credential. Current Spotify Analyst and Playlist Creator use the connected Spotify browser session instead.',
     placeholder: 'Spotify client ID',
     storage: 'env',
   },
   {
     group: 'Promotion',
     name: 'SPOTIFY_CLIENT_SECRET',
-    label: 'Spotify client secret',
-    description: 'Used with the Spotify client ID for public Spotify API access.',
+    label: 'Spotify client secret (legacy)',
+    description: 'Legacy public Web API credential. It is not required by the current browser-based Spotify agents.',
     placeholder: 'Spotify client secret',
     storage: 'env',
   },
   {
     group: 'Promotion',
     name: 'SPOTIFY_REDIRECT_URI',
-    label: 'Spotify redirect URI',
-    description: 'Optional callback URL for Spotify OAuth apps.',
+    label: 'Spotify redirect URI (legacy)',
+    description: 'Optional callback URL for legacy Spotify OAuth tooling, not the current browser-based Spotify agents.',
     placeholder: 'http://127.0.0.1:53682/callback',
     storage: 'env',
   },
@@ -598,7 +598,7 @@ const SECRET_PRESETS: SecretPreset[] = [
   },
 ]
 
-const SERVICES: SecretService[] = [
+export const SERVICES: SecretService[] = [
   {
     id: 'meta-ads',
     group: 'Promotion',
@@ -928,7 +928,7 @@ export default function SecretsSettingsPage() {
     }
   }
 
-  const testService = (service: SecretService) => {
+  const testService = async (service: SecretService) => {
     const missing = missingRequiredPresets(service, savedByName, sourceBySlug, draftValues)
     if (missing.length > 0) {
       toast.error(`${service.title} is missing ${missing[0]!.label}`)
@@ -938,8 +938,31 @@ export default function SecretsSettingsPage() {
       toast.info(`${service.title} is optional. Add a key when a workflow needs it.`)
       return
     }
+    const managedPreset = service.presetNames
+      .map((name) => PRESET_BY_NAME.get(name))
+      .find((preset) => preset?.storage === 'managed-source')
+    if (managedPreset?.sourceSlug) {
+      if (!activeWorkspaceId) {
+        toast.error('Select an active workspace before testing this connection')
+        return
+      }
+      setBusyServiceId(service.id)
+      try {
+        const result = await window.electronAPI.getMcpTools(activeWorkspaceId, managedPreset.sourceSlug)
+        if (!result.success) {
+          toast.error(result.error || `${service.title} connection failed`)
+          return
+        }
+        toast.success(`${service.title} connected · ${result.tools?.length ?? 0} tools available`)
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : `${service.title} connection failed`)
+      } finally {
+        setBusyServiceId(null)
+      }
+      return
+    }
     if (service.id === 'google-workspace') {
-      toast.info('Google Workspace keys are saved. Google account connection is not built yet.')
+      toast.info('Google OAuth app keys are saved. Verify the signed-in Google account from its connected source or Calendar settings.')
       return
     }
     toast.success(`${service.title} setup looks ready`)
@@ -1019,21 +1042,32 @@ export default function SecretsSettingsPage() {
                             <p className="mt-1 line-clamp-1 max-w-3xl text-xs leading-4 text-white/38">{service.description}</p>
                           </div>
                           {managedPreset ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  onClick={() => openSource(managedPreset)}
-                                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76"
-                                >
-                                  <ExternalLink className="h-3.5 w-3.5" />
-                                  {managedPreset.setupLabel ?? 'Open source'}
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-[260px] text-xs">
-                                {managedPreset.description}
-                              </TooltipContent>
-                            </Tooltip>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => void testService(service)}
+                                disabled={busy || status !== 'ready'}
+                                className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.025] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76 disabled:cursor-not-allowed disabled:opacity-35"
+                              >
+                                {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCcw className="h-3.5 w-3.5" />}
+                                Test
+                              </button>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button
+                                    type="button"
+                                    onClick={() => openSource(managedPreset)}
+                                    className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76"
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                    {managedPreset.setupLabel ?? 'Open source'}
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-[260px] text-xs">
+                                  {managedPreset.description}
+                                </TooltipContent>
+                              </Tooltip>
+                            </div>
                           ) : service.id !== 'zero' ? (
                             <button
                               type="button"
@@ -1220,7 +1254,7 @@ export default function SecretsSettingsPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => testService(service)}
+                                onClick={() => void testService(service)}
                                 className="inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.06] bg-white/[0.025] px-3 text-xs font-medium text-white/48 transition-colors hover:bg-white/[0.045] hover:text-white/70"
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5" />

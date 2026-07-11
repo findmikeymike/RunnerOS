@@ -2781,12 +2781,11 @@ function createSpotifySyncMatcher(): Record<string, unknown> {
         agentSlug: 'spotify-analyst',
         prompt: `Run the weekly Spotify snapshot for this Artist HQ workspace.
 
-Use Artist Profile first for the Spotify artist URL or ID. If SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET is missing, stop and say to add them in Settings > Secrets > Spotify.
+Use Artist Profile first, then resolve the exact connected Spotify profile with Printing Press Social. Verify the live account, request the bounded Spotify for Artists snapshot browser plan, capture only visible values, and normalize the capture through \`snapshot spotify\` into this workspace.
 
-Run:
-bun "$CRAFT_APP_ROOT/packages/shared/src/skills/bundled/spotify-analytics-snapshot/scripts/api-snapshot.ts" --workspace "$CRAFT_WORKSPACE_PATH"
+If the Spotify browser profile is missing, logged out, or points at the wrong account, stop with that exact setup issue. Do not ask for Spotify client credentials and do not fabricate unavailable metrics.
 
-This writes data/spotify/snapshots/<date>-web-api.json and updates Artist HQ workspace context slug ${ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG} so Spotify Pulse turns current.
+Write the returned context payload to Artist HQ workspace context slug ${ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG} so Spotify Pulse turns current.
 
 Keep the final note short: snapshot date, key movement, any missing setup.`,
       },
