@@ -9,6 +9,17 @@ source_of_truth: true
 
 Start here when you need project context without reading the whole repo.
 
+## Trade God Foundation
+
+Trade God development is isolated on `codex/trade-god-foundation`. Its canonical route is:
+
+1. [trading/CURRENT.md](./trading/CURRENT.md) - live Trade God build truth and next action.
+2. [trading/README.md](./trading/README.md) - Trade God documentation map.
+3. [trading/foundation/BASELINE.md](./trading/foundation/BASELINE.md) - protected-worktree safety ledger and frozen base.
+4. [trading/specs/foundation/phase-0-contract-kernel.md](./trading/specs/foundation/phase-0-contract-kernel.md) - first implementation spec.
+
+Trade God work must remain inside its dedicated worktree. The creator-social integration tree is an architectural donor, not its branch base.
+
 ## Read First
 
 1. [CURRENT.md](./CURRENT.md) - live branch/status notes.
