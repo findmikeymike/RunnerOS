@@ -7,6 +7,8 @@ source_of_truth: false
 
 # Windows Version
 
+> Execution now follows [Windows Reliability Audit Plan](./windows-reliability-audit-plan.md). Keep this document as the earlier tool-specific backlog and risk inventory.
+
 Backlog for making RunnerOS agents, tools, and packaged desktop builds work cleanly on Windows/PC.
 
 ## Goal

@@ -17,6 +17,7 @@ Living priority queue: [TO DO](./TO-DO.md).
 - [Google OAuth Production App](./google-oauth-production-app.md) - Runner-owned verified OAuth app so users can connect Gmail, Calendar, and Drive without creating a Google Cloud project.
 - [Tool Licensing + Packaging Audit](./tool-licensing-packaging-audit.md) - commercial-license, binary, model, checksum, provenance, and clean-machine packaging gate.
 - [Windows Version](./windows-version.md) - Windows binaries, packaged runtime behavior, browser automation, and cross-platform agent/tool QA.
+- [Windows Reliability Audit Plan](./windows-reliability-audit-plan.md) - source-of-truth execution plan for generated compatibility inventory, portability scanning, packaged artifact proof, Windows CI, clean-machine smoke, and diagnostics.
 
 ## Partially Shipped
 
