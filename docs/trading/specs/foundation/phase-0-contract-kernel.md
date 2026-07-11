@@ -160,4 +160,6 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - Complete fast Phase 0 suite after client: 24 passed, 0 failed, 44 expectations.
 - 2026-07-11: Electron-compatible process supervisor added and verified against the real sidecar plus silent/crashing fixtures.
 - Complete fast Phase 0 suite after supervision safety gates: 29 passed, 0 failed, 56 expectations.
-- Still open: IPC/view, packaged path resolution, restart policy, active-computation cancellation, partial-frame/oversized-line tests, and real Electron smoke.
+- 2026-07-11: narrow local IPC registration added for health and fixture analysis with idempotent lifecycle disposal.
+- Complete fast Phase 0 suite after IPC contract: 31 passed, 0 failed, 62 expectations.
+- Still open: real bootstrap/preload/view wiring, packaged path resolution, restart policy, active-computation cancellation, partial-frame tests, and real Electron smoke.

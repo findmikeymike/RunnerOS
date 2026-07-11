@@ -98,6 +98,15 @@ A lower rung does not prove a higher rung.
 - Oversized stdout and bounded stderr were added through their own red-green cycle after removing the initially untested implementation.
 - Not proven: packaged Electron path resolution, automatic restart policy, IPC registration, renderer behavior, or real Electron smoke.
 
+## Phase 0 Slice 5 — Narrow Local IPC Contract
+
+- Method: red-green TDD; two IPC tests failed on the deliberate unimplemented stub before implementation.
+- IPC suite: 2 passed with 6 expectations.
+- Complete fast Phase 0 suite: 31 passed, 0 failed, 62 expectations across seven files.
+- Proven: only health and fixture-analysis handlers are registered, calls delegate to the supervised typed boundary, disposal removes both handlers, and repeated disposal stops the manager exactly once.
+- Boundary decision: Trade God remains a local desktop capability rather than entering RunnerOS remote workspace RPC routing.
+- Not proven: registration from the real Electron bootstrap, preload exposure, app-termination lifecycle, renderer behavior, or real Electron smoke.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.
