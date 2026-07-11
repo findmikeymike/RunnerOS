@@ -114,6 +114,7 @@ import {
 } from './campaign-social-job-preparer'
 import { executeScheduledSocialBrowser } from './scheduled-social-browser-executor'
 import { runSocialJson } from './social-cli'
+import { createTradeGodRuntime } from './trading/trading-runtime'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -201,6 +202,7 @@ let browserPaneManager: BrowserPaneManager | null = null
 let oauthFlowStore: OAuthFlowStore | null = null
 let moduleSink: EventSink | null = null
 let moduleClientResolver: ((webContentsId: number) => string | undefined) | null = null
+let tradeGodRuntime: ReturnType<typeof createTradeGodRuntime> | null = null
 
 // Messaging gateway: the bootstrap handle is created once sessionManager is
 // available (inside createHandlerDeps) and populated with the WS publisher
@@ -555,6 +557,26 @@ app.whenReady().then(async () => {
         height: image.getSize().height,
       }
     })
+
+    // Trade God Phase 0 is dev-only until its sidecar is copied into packaged resources.
+    if (!isClientOnly && !app.isPackaged) {
+      try {
+        tradeGodRuntime = createTradeGodRuntime({
+          ipcMain,
+          rootCandidates: [
+            process.env.RUNNEROS_ROOT,
+            process.cwd(),
+            app.getAppPath(),
+            join(app.getAppPath(), '..', '..'),
+          ].filter((candidate): candidate is string => Boolean(candidate)),
+          runtimeExecutable: process.env.TRADE_GOD_RUNTIME_EXECUTABLE || join(homedir(), '.bun', 'bin', 'bun'),
+          now: () => new Date().toISOString(),
+        })
+        mainLog.info('[trade-god] local runtime registered')
+      } catch (error) {
+        mainLog.warn('[trade-god] local runtime unavailable:', error instanceof Error ? error.message : String(error))
+      }
+    }
 
     if (!isClientOnly) {
       // Restore persisted Git Bash path on Windows (must happen before any SDK subprocess spawn)
@@ -1255,6 +1277,16 @@ app.on('before-quit', async (event) => {
       lastFocusedWorkspaceId,
     })
     mainLog.info('Saved window state:', windows.length, 'windows')
+  }
+
+  if (tradeGodRuntime) {
+    try {
+      await tradeGodRuntime.dispose()
+    } catch (error) {
+      mainLog.error('[trade-god] dispose failed:', error)
+    } finally {
+      tradeGodRuntime = null
+    }
   }
 
   // Flush all pending session writes before quitting

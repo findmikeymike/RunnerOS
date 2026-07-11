@@ -460,6 +460,10 @@ export interface CommunityEmailSendResult {
 }
 
 export interface ElectronAPI {
+  // Trade God local desktop runtime (never routed to remote workspace servers)
+  getTradeGodHealth(): Promise<import('@trade-god/contracts').HealthResponse>
+  analyzeTradeGodFixture(input: import('@trade-god/client').AnalyzeFixtureInput): Promise<import('@trade-god/contracts').AnalysisArtifact>
+
   // Session management
   getSessions(): Promise<Session[]>
   getUnreadSummary(): Promise<UnreadSummary>

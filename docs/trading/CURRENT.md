@@ -11,8 +11,8 @@ source_of_truth: true
 
 - Date: 2026-07-11
 - Stage: Phase 0 contract kernel in progress
-- Current goal: connect the verified runtime factory to Electron main/preload and render the minimal workbench
-- Overall state: contracts, fixture analysis, sidecar, typed client, Electron supervisor, IPC, and runtime/path-resolution factory are implemented; main/preload exposure and renderer workbench remain unbuilt
+- Current goal: render the minimal health and artifact workbench through the verified Electron API
+- Overall state: contracts through real Electron main/preload wiring are implemented for development; renderer workbench and packaged sidecar asset remain unbuilt
 - Host worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -40,6 +40,8 @@ source_of_truth: true
 - Expanded fast Phase 0 proof to 31 passing tests across seven files.
 - Added a tested runtime factory that resolves the sidecar from explicit RunnerOS roots, registers IPC, performs a real health call, disposes cleanly, and fails clearly when the entrypoint is absent.
 - Expanded fast Phase 0 proof to 33 passing tests across eight files.
+- Wired development-only runtime registration into Electron main, exposed exactly two typed preload methods, and added quit-time disposal.
+- Electron main and preload bundles build successfully; complete fast Phase 0 proof is 34 passing tests across nine files.
 
 ## Active Build Target
 
@@ -51,10 +53,10 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 
 ## Next Actions
 
-1. Call the runtime factory during Electron startup with explicit dev/package root candidates.
-2. Expose the two methods through preload and call runtime disposal on app termination.
-3. Render service health and one validated artifact in a thin Electron route.
-4. Extend conformance tests for partial frames and explicit restart policy.
+1. Render service health and one validated artifact in a thin Electron route.
+2. Add a build step that bundles/copies the sidecar into packaged resources, then enable packaged resolution.
+3. Extend conformance tests for partial frames and explicit restart policy.
+4. Run a real Electron smoke from this exact worktree.
 5. Review the 15 upstream-only v0.11.1 commits separately; do not merge them during Phase 0.
 
 ## Explicitly Not In Scope Yet
@@ -80,9 +82,10 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 - Full monorepo typecheck has a recorded pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - All 23 pre-existing RunnerOS worktrees were verified unchanged after setup.
 - Contract and deterministic fixture code are verified by the focused suite; Electron/runtime integration is not.
-- Trade God focused suite: 33 passed, 0 failed across contracts, deterministic fixture analysis, typed client safety, JSON-RPC behavior, spawned stdio, Electron supervision, IPC registration, and runtime resolution.
+- Trade God focused suite: 34 passed, 0 failed across contracts through preload wiring.
+- Electron `build:main` and `build:preload` passed.
 - Package TypeScript checking is not yet verified: two attempted invocations hung in the command/tool layer and were stopped rather than allowed to block progress.
-- Standalone sidecar, Electron supervision, and IPC registration module are verified; real bootstrap/preload and renderer paths are not.
+- Development main/preload wiring is build-verified; renderer and real Electron smoke are not.
 - Every future completion claim must name the command, fixture, result, and artifact/receipt.
 
 ## Notes for the Next Agent

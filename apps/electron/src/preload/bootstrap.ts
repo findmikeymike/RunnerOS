@@ -36,6 +36,7 @@ import type { ConfirmDialogSpec, FileDialogSpec } from '@craft-agent/server-core
 import type { RpcClient } from '@craft-agent/server-core/transport'
 import type { RemoteServerConfig } from '@craft-agent/core/types'
 import type { ElectronAPI } from '../shared/types'
+import { createTradingPreloadApi } from '../main/trading/trading-preload'
 
 // ---------------------------------------------------------------------------
 // Client interface — common surface for both RoutedClient and WsRpcClient
@@ -191,6 +192,8 @@ client.handleCapability(CLIENT_OPEN_FILE_DIALOG, async (spec: FileDialogSpec) =>
 // ---------------------------------------------------------------------------
 
 const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
+
+Object.assign(api, createTradingPreloadApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)))
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
 

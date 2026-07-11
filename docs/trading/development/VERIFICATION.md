@@ -115,6 +115,16 @@ A lower rung does not prove a higher rung.
 - Proven: explicit RunnerOS root resolution, real sidecar launch and health through registered IPC, disposal cleanup, and clear failure when no entrypoint exists.
 - Not proven: packaged asset copy/bundle, real main-index invocation, preload exposure, app termination, renderer behavior, or Electron smoke.
 
+## Phase 0 Slice 7 — Electron Main and Preload Wiring
+
+- Method: preload adapter was added through red-green TDD; main-index startup/quit edits are thin configuration wiring around already-tested runtime/disposal behavior.
+- Complete fast Phase 0 suite: 34 passed, 0 failed, 69 expectations across nine files.
+- `apps/electron` `build:preload`: passed; generated bundle 842.9 KB.
+- `apps/electron` `build:main`: passed; generated bundle 23.1 MB.
+- Proven: development-only runtime registration, explicit root/runtime selection, exactly two preload methods, and quit-time disposal wiring compile into Electron bundles.
+- Safety: packaged initialization is disabled until a packaged sidecar asset exists.
+- Not proven: renderer behavior, packaged sidecar, automatic restart, or real Electron smoke.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.
