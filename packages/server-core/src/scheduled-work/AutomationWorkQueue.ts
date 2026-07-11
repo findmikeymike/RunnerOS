@@ -21,6 +21,7 @@ import {
   type ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
 import { loadGlobalWorkflow, readActivatedWorkflows } from '@craft-agent/shared/workflows'
+import { hqSemanticIntentId } from '@craft-agent/shared/hq-state'
 import { loadAllContextDocs, loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import { withWorkspaceContextLock } from './workspace-context-lock'
 
@@ -188,7 +189,7 @@ function buildOrder(
     calendarLink: { calendar: action.ownerScope, itemId: `${id}-calendar` },
     calendarVisibility: action.calendarVisibility ?? 'visible',
     title: action.title,
-    intentId: action.intentId ?? `automation:${scheduledWorkDefinitionDigest({ ownerScope: action.ownerScope, title: action.title, execution: action.execution, inputRefs, ordinal })}`,
+    intentId: action.intentId ?? hqSemanticIntentId({ title: action.title, intent: JSON.stringify(action.execution) }),
     type: action.execution.type,
     status: 'scheduled',
     startAt: now,

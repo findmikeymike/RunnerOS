@@ -239,14 +239,16 @@ describe('HQ State of Play composer', () => {
       ],
       operational: operational({
         active: [{
-          ...operationalItem('work-1', 'Finish single cover art', 'scheduled-work', 'running'),
+          ...operationalItem('work-1', 'Close release asset gaps', 'scheduled-work', 'running'),
           worker: 'art-director',
-          intent: 'Create final cover art for the single release.',
+          intent: 'Organize the missing release assets.',
+          semanticIntentId: 'release-assets-general',
+          fingerprint: 'v2:hq:art-director:release-assets-general',
         }],
       }),
     });
 
-    expect(state.nextMove.title).toBe('Track Finish single cover art');
+    expect(state.nextMove.title).toBe('Track Close release asset gaps');
     expect(state.nextMove.title).not.toContain('Close asset gaps');
     expect(state.nextMove.route?.target).toBe('manual');
   });

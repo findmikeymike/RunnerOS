@@ -508,6 +508,7 @@ Implemented in the foundational slice:
 - source-specific stale-evidence windows for Outputs, Scheduled Work, workflow runs, and automation history
 - producer semantic intent IDs from Output tags, Scheduled Work producers, workflow trigger inputs, and automation IDs
 - Scheduled Work `intentId` separated from execution idempotency and populated by HNIC, automation, and calendar-composer producers
+- canonical semantic intent generation shared by recommendation candidates and Scheduled Work producers for exact V2 duplicate matching
 
 Still required before declaring Phase 1 complete:
 
@@ -565,6 +566,7 @@ Implemented:
 - resolved observed obligations retire as superseded without falsely claiming State of Play launched them
 - compact lifecycle history disclosure in Artist HQ
 - explicit useful/not-useful feedback persisted independently from lifecycle status
+- recent resolved-outcome projection keeps feedback reachable after the next recommendation is promoted
 - terminal-outcome self-repair after an interrupted lifecycle/outcome write
 - stale/mismatched outcome correction after a later successful retry
 - strict outcome-store validation with last-known-good recovery and fail-closed diagnostics

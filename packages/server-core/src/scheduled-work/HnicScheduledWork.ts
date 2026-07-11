@@ -22,6 +22,7 @@ import {
   type ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
 import { validateAutomationsConfig } from '@craft-agent/shared/automations'
+import { hqSemanticIntentId } from '@craft-agent/shared/hq-state'
 import { generateShortId, resolveAutomationsConfigPath } from '@craft-agent/shared/automations/resolve-config-path'
 import { loadAllContextDocs, loadContextDoc, upsertContextDoc, type LoadedContextDoc } from '@craft-agent/shared/workspace-context'
 import { withWorkspaceContextLock } from './workspace-context-lock'
@@ -114,7 +115,7 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
       : { scope: 'campaign', workspaceId: options.workspaceId, campaignId: options.workspaceId },
     calendarLink: { calendar: options.scope, itemId: calendarItemId },
     title: options.input.title.trim(),
-    intentId: options.input.idempotencyKey,
+    intentId: hqSemanticIntentId({ title: options.input.title, intent: JSON.stringify(execution) }),
     type: execution.type,
     status: 'scheduled',
     startAt,

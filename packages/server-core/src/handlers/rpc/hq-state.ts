@@ -42,7 +42,7 @@ export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): v
       const candidate = readHqRecommendationStore(rootPath).candidates.find((item) => item.id === input.recommendationId)
       if (!candidate) throw new Error(`Recommendation not found: ${input.recommendationId}`)
       const prior = readHqRecommendationOutcomes(rootPath).find((item) => item.recommendationId === candidate.id)
-      return upsertHqRecommendationOutcome(rootPath, {
+      const outcome = upsertHqRecommendationOutcome(rootPath, {
         version: 1,
         recommendationId: candidate.id,
         status: prior?.status ?? 'unknown',
@@ -51,6 +51,8 @@ export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): v
         userUsefulness: input.usefulness,
         notes: input.notes?.trim() || prior?.notes,
       })
+      refreshAndBroadcast(deps, workspaceId, rootPath)
+      return outcome
     })
   })
 

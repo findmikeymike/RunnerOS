@@ -1621,6 +1621,7 @@ function StateOfPlayPanel({
   const alternatives = state.alternatives.slice(0, 3)
   const missing = state.missing.slice(0, 5)
   const unhealthySources = state.sourceHealth.filter((source) => source.status !== 'fresh')
+  const recentOutcome = state.recentOutcome
   const generatedLabel = formatShortDate(state.generatedAt)
   const route = state.nextMove.route
   const recommendationStatus = state.nextMove.recommendationStatus ?? 'proposed'
@@ -1796,7 +1797,7 @@ function StateOfPlayPanel({
                       ))}
                     </div>
                   ) : null}
-                  {(recommendationStatus === 'completed' || recommendationStatus === 'failed' || recommendationStatus === 'superseded') ? (
+                  {(recommendationStatus === 'completed' || recommendationStatus === 'failed') ? (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="mr-auto text-[10px] uppercase tracking-[0.12em] text-white/30">Was this useful?</span>
                       {(['useful', 'not_useful'] as const).map((usefulness) => (
@@ -1858,6 +1859,39 @@ function StateOfPlayPanel({
                 <p className="mt-2 text-xs text-white/40">Operational sources are healthy.</p>
               )}
             </div>
+            {recentOutcome ? (
+              <div className="mt-4 border-t border-white/[0.05] pt-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">Recent Outcome</div>
+                <p className="mt-2 truncate text-xs text-white/58">{recentOutcome.title}</p>
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="mr-auto text-[10px] uppercase tracking-[0.12em] text-white/30">Was this useful?</span>
+                  {(['useful', 'not_useful'] as const).map((usefulness) => (
+                    <button
+                      key={usefulness}
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await window.electronAPI.setHqRecommendationUsefulness(workspaceId, {
+                            recommendationId: recentOutcome.recommendationId,
+                            usefulness,
+                          })
+                        } catch (error) {
+                          toast.error('Could not save recommendation feedback', { description: error instanceof Error ? error.message : String(error) })
+                        }
+                      }}
+                      className={cn(
+                        'h-7 rounded-[8px] border px-2 text-[10px] transition-colors',
+                        recentOutcome.userUsefulness === usefulness
+                          ? 'border-orange-300/25 bg-orange-300/10 text-orange-100/80'
+                          : 'border-white/[0.06] text-white/42 hover:bg-white/[0.04]',
+                      )}
+                    >
+                      {usefulness === 'useful' ? 'Useful' : 'Not useful'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

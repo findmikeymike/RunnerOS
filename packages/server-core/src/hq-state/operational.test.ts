@@ -224,7 +224,7 @@ function order(id: string, title: string, status: ScheduledWorkOrder['status']):
     owner: { scope: 'hq', workspaceId: 'ws-1' },
     calendarLink: { calendar: 'hq', itemId: `calendar-${id}` },
     title,
-    intentId: 'release-cover-art',
+    intentId: 'cover-art',
     type: 'agent-task',
     status,
     startAt: '2026-07-10T10:00:00.000Z',

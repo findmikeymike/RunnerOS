@@ -11,6 +11,7 @@ import type { OutputKind } from '@craft-agent/shared/outputs'
 import { scheduledWorkDefinitionDigest } from '@craft-agent/shared/scheduled-work'
 import { createCampaignCalendarItem } from '@craft-agent/shared/campaign-calendar'
 import type { QueueWorkAction } from '@craft-agent/shared/automations'
+import { hqSemanticIntentId } from '@craft-agent/shared/hq-state'
 
 export type ScheduledWorkComposerType = 'event' | 'agent-task' | 'workflow-run' | 'social-publish' | 'review'
 export type ScheduledWorkComposerSection = 'what' | 'runner' | 'inputs' | 'timing' | 'then' | 'safeguards'
@@ -223,7 +224,7 @@ export function buildAutomationQueueWorkAction(
     ownerScope: draft.owner.scope,
     calendarVisibility: options.calendarVisibility,
     title: draft.title.trim(),
-    intentId: `composer:${composerDefinitionDigest({ owner: draft.owner, title: draft.title.trim(), type: draft.type, execution, inputRefs: draft.inputRefs })}`,
+    intentId: hqSemanticIntentId({ title: draft.title.trim(), intent: JSON.stringify(execution) }),
     execution,
     inputRefs: draft.inputRefs.filter((ref): ref is Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }> => ref.kind !== 'produced-output'),
   }
@@ -261,7 +262,7 @@ export function buildCampaignScheduleFromComposer(
     owner: draft.owner,
     calendarLink: { calendar: 'campaign', itemId: calendarItemId },
     title: draft.title.trim(),
-    intentId: `composer:${composerDefinitionDigest({ owner: draft.owner, title: draft.title.trim(), type: draft.type, execution, inputRefs: draft.inputRefs })}`,
+    intentId: hqSemanticIntentId({ title: draft.title.trim(), intent: JSON.stringify(execution) }),
     type: draft.type,
     status,
     startAt,
@@ -343,7 +344,7 @@ export function buildCampaignSchedulePlanFromComposer(
     owner: draft.owner,
     calendarLink: { calendar: 'campaign', itemId: childCalendarId },
     title: childTitle,
-    intentId: `composer:${composerDefinitionDigest({ owner: draft.owner, title: childTitle, type: draft.followUp.type, execution: childExecution, inputRefs: childInputRefs })}`,
+    intentId: hqSemanticIntentId({ title: childTitle, intent: JSON.stringify(childExecution) }),
     type: draft.followUp.type,
     status: 'waiting',
     startAt: single.order.startAt,

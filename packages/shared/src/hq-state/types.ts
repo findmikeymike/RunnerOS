@@ -124,6 +124,7 @@ export interface HqStateOfPlay {
   generatedAt: string;
   sources: Record<string, string>;
   sourceHealth: HqOperationalSourceHealth[];
+  recentOutcome?: HqStateRecentOutcome;
   headline: string;
   nextMove: HqStateNextMove;
   alternatives: HqStateNextMove[];
@@ -134,6 +135,15 @@ export interface HqStateOfPlay {
   };
   missing: string[];
   goalProgress: HqStateGoalProgress[];
+}
+
+export interface HqStateRecentOutcome {
+  recommendationId: string;
+  title: string;
+  recommendationStatus: Extract<HqRecommendationStatus, 'completed' | 'failed' | 'superseded'>;
+  outcomeStatus: 'successful' | 'partial' | 'unsuccessful' | 'unknown';
+  evaluatedAt: string;
+  userUsefulness?: 'useful' | 'neutral' | 'not_useful';
 }
 
 export interface BuiltHqStateContextDoc {

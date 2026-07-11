@@ -1,7 +1,7 @@
 import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/types.ts';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
-import { hqIntentFingerprint, hqIntentTokens } from './intent.ts';
+import { hqIntentFingerprint, hqIntentTokens, hqSemanticIntentId } from './intent.ts';
 import {
   HQ_SOURCE_CONTEXT_SLUGS,
   HQ_STATE_CONTEXT_FENCE,
@@ -213,6 +213,7 @@ export function parseHqStateOfPlay(body: string): HqStateOfPlay | null {
       generatedAt: String(parsed.generatedAt),
       sources: isPlainObject(parsed.sources) ? parsed.sources as Record<string, string> : {},
       sourceHealth: Array.isArray(parsed.sourceHealth) ? parsed.sourceHealth : [],
+      recentOutcome: normalizeRecentOutcome(parsed.recentOutcome),
       headline: String(parsed.headline),
       nextMove: normalizeNextMove(parsed.nextMove),
       alternatives: Array.isArray(parsed.alternatives) ? parsed.alternatives.map(normalizeNextMove) : [],
@@ -227,6 +228,25 @@ export function parseHqStateOfPlay(body: string): HqStateOfPlay | null {
   } catch {
     return null;
   }
+}
+
+function normalizeRecentOutcome(value: unknown): HqStateOfPlay['recentOutcome'] {
+  if (!isPlainObject(value)) return undefined;
+  const recommendationStatus = value.recommendationStatus;
+  const outcomeStatus = value.outcomeStatus;
+  if (!['completed', 'failed', 'superseded'].includes(String(recommendationStatus))) return undefined;
+  if (!['successful', 'partial', 'unsuccessful', 'unknown'].includes(String(outcomeStatus))) return undefined;
+  if (!clean(String(value.recommendationId ?? '')) || !clean(String(value.title ?? '')) || !clean(String(value.evaluatedAt ?? ''))) return undefined;
+  return {
+    recommendationId: String(value.recommendationId),
+    title: String(value.title),
+    recommendationStatus: recommendationStatus as 'completed' | 'failed' | 'superseded',
+    outcomeStatus: outcomeStatus as 'successful' | 'partial' | 'unsuccessful' | 'unknown',
+    evaluatedAt: String(value.evaluatedAt),
+    userUsefulness: ['useful', 'neutral', 'not_useful'].includes(String(value.userUsefulness))
+      ? value.userUsefulness as 'useful' | 'neutral' | 'not_useful'
+      : undefined,
+  };
 }
 
 function buildRankedMoves(input: HqInputState, missing: string[]): HqStateNextMove[] {
@@ -635,11 +655,16 @@ function findActiveDuplicate(
   candidate: { worker?: string; terms: string[] },
 ): HqOperationalItem | null {
   const terms = candidate.terms.flatMap(hqIntentTokens);
+  const semanticIntentId = hqSemanticIntentId({
+    title: candidate.terms[0] ?? '',
+    intent: candidate.terms.slice(1).join(' '),
+  });
   const fingerprint = hqIntentFingerprint({
     scope: { type: 'hq' },
     worker: candidate.worker,
     title: candidate.terms[0] ?? '',
     intent: candidate.terms.slice(1).join(' '),
+    semanticIntentId,
   });
   return visibleOperationalItems(input, input.operational?.active).find((item) => {
     if (item.fingerprint === fingerprint) return true;

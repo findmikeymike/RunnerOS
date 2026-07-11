@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseHqStateOfPlay, HQ_STATE_CONTEXT_SLUG } from '@craft-agent/shared/hq-state'
-import { readHqRecommendationStore } from '@craft-agent/shared/hq-state/recommendation-storage'
+import { readHqRecommendationStore, upsertHqRecommendationOutcome } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { transitionHqRecommendation } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { createOutputBundle } from '@craft-agent/shared/outputs'
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
@@ -133,6 +133,22 @@ describe('HQ state refresh', () => {
     expect(refreshed.nextMove.recommendationId).not.toBe(dismissedId)
     expect(refreshed.nextMove.recommendationStatus).toBe('proposed')
     expect(refreshed.alternatives.every((move) => move.recommendationId !== dismissedId)).toBe(true)
+  })
+
+  test('projects a resolved recommendation for feedback after promoting the next move', () => {
+    const workspace = tempWorkspace()
+    const first = parseHqStateOfPlay(refreshHqStateContextDoc(workspace).body)!
+    const recommendationId = first.nextMove.recommendationId!
+    transitionHqRecommendation(workspace, recommendationId, 'accepted', { actor: { type: 'user' } })
+    transitionHqRecommendation(workspace, recommendationId, 'launched', { actor: { type: 'system' } })
+    transitionHqRecommendation(workspace, recommendationId, 'completed', { actor: { type: 'system' } })
+    upsertHqRecommendationOutcome(workspace, {
+      version: 1, recommendationId, status: 'successful', evaluatedAt: '2026-07-11T00:00:00.000Z', evidence: [],
+    })
+
+    const refreshed = parseHqStateOfPlay(refreshHqStateContextDoc(workspace).body)!
+
+    expect(refreshed.recentOutcome).toEqual(expect.objectContaining({ recommendationId, outcomeStatus: 'successful' }))
   })
 })
 

@@ -10,6 +10,7 @@ import {
 } from '@craft-agent/shared/workspace-context'
 import { buildHqOperationalSnapshot } from './operational'
 import { persistHqRecommendations, reconcileHqRecommendationOutcomes } from './recommendations'
+import { readHqRecommendationOutcomes, readHqRecommendationStore } from '@craft-agent/shared/hq-state/recommendation-storage'
 
 const scheduledRefreshes = new Map<string, ReturnType<typeof setTimeout>>()
 const REFRESH_DEBOUNCE_MS = 100
@@ -23,6 +24,7 @@ export function refreshHqStateContextDoc(workspaceRootPath: string): LoadedConte
   const operational = buildHqOperationalSnapshot(workspaceRootPath)
   reconcileHqRecommendationOutcomes(workspaceRootPath)
   const built = buildHqStateContextDoc({ docs, operational })
+  applyRecentOutcome(built.state, workspaceRootPath)
   const recommendations = persistHqRecommendations(workspaceRootPath, built.state, operational.scope)
   applyRecommendationState(built.state.nextMove, recommendations[0])
   built.state.alternatives.forEach((move, index) => applyRecommendationState(move, recommendations[index + 1]))
@@ -40,6 +42,23 @@ export function refreshHqStateContextDoc(workspaceRootPath: string): LoadedConte
       : built.metadata,
     body: built.body,
   })
+}
+
+function applyRecentOutcome(state: import('@craft-agent/shared/hq-state').HqStateOfPlay, workspaceRootPath: string): void {
+  const outcomes = new Map(readHqRecommendationOutcomes(workspaceRootPath).map((outcome) => [outcome.recommendationId, outcome]))
+  const candidate = readHqRecommendationStore(workspaceRootPath).candidates
+    .filter((item) => ['completed', 'failed', 'superseded'].includes(item.status) && outcomes.has(item.id))
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+  if (!candidate) return
+  const outcome = outcomes.get(candidate.id)!
+  state.recentOutcome = {
+    recommendationId: candidate.id,
+    title: candidate.title,
+    recommendationStatus: candidate.status as 'completed' | 'failed' | 'superseded',
+    outcomeStatus: outcome.status,
+    evaluatedAt: outcome.evaluatedAt,
+    userUsefulness: outcome.userUsefulness,
+  }
 }
 
 function promoteActiveRecommendation(state: import('@craft-agent/shared/hq-state').HqStateOfPlay): void {
