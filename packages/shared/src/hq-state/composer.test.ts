@@ -168,7 +168,90 @@ describe('HQ State of Play composer', () => {
     expect(state.headline).not.toContain('Private Artist');
     expect(state.nextMove.title).toBe('Complete Artist Profile');
   });
+
+  test('puts a pending approval ahead of active goal work', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        profileDoc(),
+        textDoc('growth-goal', 'Grow the audience', 'Active growth goal.', { status: 'active', priority: 'high' }),
+      ],
+      operational: operational({
+        approvals: [operationalItem('output-1', 'Approve teaser cut', 'output', 'pending')],
+      }),
+    });
+
+    expect(state.nextMove.title).toBe('Review Approve teaser cut');
+    expect(state.nextMove.worker).toBeUndefined();
+    expect(state.nextMove.route?.target).toBe('manual');
+    expect(state.attention[0]?.kind).toBe('approval');
+  });
+
+  test('puts failed operational work ahead of speculative next moves', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [profileDoc()],
+      operational: operational({
+        failures: [operationalItem('automation-1', 'Weekly intel gatherer', 'automation-run', 'failed')],
+      }),
+    });
+
+    expect(state.nextMove.title).toBe('Recover Weekly intel gatherer');
+    expect(state.nextMove.why).toContain('Automation');
+    expect(state.attention[0]?.kind).toBe('failure');
+  });
+
+  test('does not recommend duplicate asset work when Art Director is already running it', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        profileDoc(),
+        doc('artist-calendar', 'Artist Calendar', {
+          version: 1,
+          events: [{ title: 'Single release', date: '2026-07-10' }],
+        }),
+        doc('artist-vault', 'Artist Vault', {
+          version: 1,
+          workspaceId: 'artist-hq',
+          vaultRoot: 'vault',
+          storageMode: 'copied',
+          assets: [],
+        }),
+      ],
+      operational: operational({
+        active: [{
+          ...operationalItem('work-1', 'Finish single cover art', 'scheduled-work', 'running'),
+          worker: 'art-director',
+          intent: 'Create final cover art for the single release.',
+        }],
+      }),
+    });
+
+    expect(state.nextMove.title).toBe('Track Finish single cover art');
+    expect(state.nextMove.title).not.toContain('Close asset gaps');
+    expect(state.nextMove.route?.target).toBe('manual');
+  });
 });
+
+function operational(overrides: Partial<import('./types.ts').HqOperationalSnapshot> = {}): import('./types.ts').HqOperationalSnapshot {
+  return {
+    generatedAt: now.toISOString(),
+    active: [],
+    approvals: [],
+    failures: [],
+    recentOutputs: [],
+    ...overrides,
+  };
+}
+
+function operationalItem(
+  id: string,
+  title: string,
+  kind: import('./types.ts').HqOperationalItemKind,
+  status: string,
+): import('./types.ts').HqOperationalItem {
+  return { id, title, kind, status, updatedAt: now.toISOString(), source: `${kind}:${id}` };
+}
 
 function profileDoc(): LoadedContextDoc {
   return doc('artist-profile', 'Artist Profile', {

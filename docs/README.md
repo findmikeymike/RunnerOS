@@ -14,11 +14,12 @@ Start here when you need project context without reading the whole repo.
 1. [CURRENT.md](./CURRENT.md) - live branch/status notes.
 2. [../HANDOFF.md](../HANDOFF.md) - zero-context takeover brief for the current build.
 3. [creator-command-center/13-scheduled-work-composer-execution-spec.md](./creator-command-center/13-scheduled-work-composer-execution-spec.md) - current Scheduled Work product/runtime contract.
-4. [system-map](./system-map/) - generated map of workers, skills, sources, Scheduled Work, launch surfaces, and approval boundaries.
-5. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
-6. [user](./user/) - concise user-facing guides for surfaces, advanced abilities, and service keys.
-7. [backlog/tool-licensing-packaging-audit.md](./backlog/tool-licensing-packaging-audit.md) - release gate for bundled/downloaded local runtimes.
-8. [backlog/windows-version.md](./backlog/windows-version.md) - Windows parity/runtime backlog.
+4. [creator-command-center/14-state-of-play-opportunity-engine-spec.md](./creator-command-center/14-state-of-play-opportunity-engine-spec.md) - approved evolution contract for State of Play V2.
+5. [system-map](./system-map/) - generated map of workers, skills, sources, Scheduled Work, launch surfaces, and approval boundaries.
+6. [creator-command-center](./creator-command-center/) - Artist HQ / campaign workspace specs.
+7. [user](./user/) - concise user-facing guides for surfaces, advanced abilities, and service keys.
+8. [backlog/tool-licensing-packaging-audit.md](./backlog/tool-licensing-packaging-audit.md) - release gate for bundled/downloaded local runtimes.
+9. [backlog/windows-version.md](./backlog/windows-version.md) - Windows parity/runtime backlog.
 
 Current active work:
 
@@ -40,7 +41,7 @@ Current active work:
 - `tools/genesis-lyric` is the local single-song lyric-video renderer/storyboard helper.
 - `tools/lyrics-transcriber` is the local Whisper/FFmpeg wrapper for Vault song transcription and timed lyric review.
 - Mac arm64 transcription has bundled app-owned binaries; Windows/Linux runtime parity is tracked in backlog and intentionally blocked until verified.
-- Active Creator Command specs: [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md), [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md), [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md), [Campaign Calendar And Scheduled Jobs](./creator-command-center/12-campaign-calendar-scheduled-jobs-spec.md), and [Scheduled Work Composer And Execution](./creator-command-center/13-scheduled-work-composer-execution-spec.md).
+- Active Creator Command specs: [HQ State Of Play / Proactive Routing](./creator-command-center/09-hq-state-of-play-proactive-routing.md), [Work Products / Output Architecture](./creator-command-center/10-work-products-output-architecture-spec.md), [Outputs, Finals, And Asset Promotion](./creator-command-center/11-outputs-finals-asset-promotion-spec.md), [Campaign Calendar And Scheduled Jobs](./creator-command-center/12-campaign-calendar-scheduled-jobs-spec.md), [Scheduled Work Composer And Execution](./creator-command-center/13-scheduled-work-composer-execution-spec.md), and [State Of Play Opportunity Engine](./creator-command-center/14-state-of-play-opportunity-engine-spec.md).
 
 ## Main Areas
 

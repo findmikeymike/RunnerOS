@@ -7,6 +7,7 @@ import {
   upsertContextDoc,
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
+import { buildHqOperationalSnapshot } from './operational'
 
 export function shouldRefreshHqStateForContextSlug(slug: string): boolean {
   return slug !== HQ_STATE_CONTEXT_SLUG
@@ -14,7 +15,8 @@ export function shouldRefreshHqStateForContextSlug(slug: string): boolean {
 
 export function refreshHqStateContextDoc(workspaceRootPath: string): LoadedContextDoc {
   const docs = loadAllContextDocs(workspaceRootPath)
-  const built = buildHqStateContextDoc({ docs })
+  const operational = buildHqOperationalSnapshot(workspaceRootPath)
+  const built = buildHqStateContextDoc({ docs, operational })
   const existing = docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG)
   return upsertContextDoc(workspaceRootPath, {
     slug: built.slug,

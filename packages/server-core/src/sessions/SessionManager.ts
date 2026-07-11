@@ -128,6 +128,7 @@ import {
 } from '../memory/MemorySidecarService'
 import { listDeepResearchRuns, readDeepResearchRun, profileDeepResearchSource } from '@craft-agent/shared/deep-research'
 import { OutputService } from '../outputs/OutputService'
+import { refreshHqStateContextDocBestEffort } from '../hq-state/refresh'
 import {
   loadAllGlobalWorkflows,
   loadGlobalWorkflow,
@@ -2041,7 +2042,7 @@ export class SessionManager implements ISessionManager {
               error: result.status === 'rejected' ? String(result.reason) : undefined,
             })
 
-            appendAutomationHistoryEntry(workspaceRootPath, entry).catch(e => sessionLog.warn('[Automations] Failed to write history:', e))
+            await appendAutomationHistoryEntry(workspaceRootPath, entry).catch(e => sessionLog.warn('[Automations] Failed to write history:', e))
 
             if (result.status === 'rejected') {
               sessionLog.error(`[Automations] Failed to execute prompt action ${idx + 1}:`, result.reason)
@@ -2049,22 +2050,25 @@ export class SessionManager implements ISessionManager {
               sessionLog.info(`[Automations] Created session ${result.value.sessionId} from prompt action`)
             }
           }
+          refreshHqStateContextDocBestEffort(workspaceRootPath)
         },
         onWorkReady: async (pendingWork) => {
           for (const pending of pendingWork) {
             try {
               const queued = await queueAutomationWork(workspaceId, workspaceRootPath, pending, {
                 emitContextChanged: (changedWorkspaceId, docs) => {
+                  refreshHqStateContextDocBestEffort(workspaceRootPath)
                   this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, changedWorkspaceId, docs)
                 },
               })
-              appendAutomationHistoryEntry(workspaceRootPath, {
+              await appendAutomationHistoryEntry(workspaceRootPath, {
                 id: pending.matcherId,
                 ts: Date.now(),
                 ok: true,
                 workOrderIds: queued.orderIds,
                 workTitle: pending.action.title,
               }).catch((historyError) => sessionLog.warn('[Automations] Failed to write tracked-work history:', historyError))
+              refreshHqStateContextDocBestEffort(workspaceRootPath)
               this.getScheduledWorkRunner().scanWorkspace(
                 workspaceId,
                 workspaceRootPath,
@@ -2072,19 +2076,23 @@ export class SessionManager implements ISessionManager {
               ).catch((scanError) => sessionLog.warn('[Automations] Tracked work was queued but immediate scan failed:', scanError))
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error)
-              appendAutomationHistoryEntry(workspaceRootPath, {
+              await appendAutomationHistoryEntry(workspaceRootPath, {
                 id: pending.matcherId,
                 ts: Date.now(),
                 ok: false,
                 workTitle: pending.action.title,
                 error: message,
               }).catch((historyError) => sessionLog.warn('[Automations] Failed to write tracked-work failure history:', historyError))
+              refreshHqStateContextDocBestEffort(workspaceRootPath)
               sessionLog.error(`[Automations] Failed to queue tracked work for ${pending.matcherId}:`, error)
             }
           }
         },
         onError: (event, error) => {
           sessionLog.error(`Automation failed for ${event}:`, error.message)
+        },
+        onWebhookResults: () => {
+          refreshHqStateContextDocBestEffort(workspaceRootPath)
         },
       })
       this.automationSystems.set(workspaceRootPath, automationSystem)
@@ -2495,6 +2503,9 @@ export class SessionManager implements ISessionManager {
   }
 
   private broadcastWorkflowRunUpdated(event: WorkflowRunEvent): void {
+    const workspaceId = event.type === 'outputs.updated' ? event.workspaceId : event.run.workspaceId
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (workspace) refreshHqStateContextDocBestEffort(workspace.rootPath)
     if (!this.eventSink) return
     if (event.type === 'outputs.updated') {
       this.eventSink(
@@ -2538,6 +2549,7 @@ export class SessionManager implements ISessionManager {
       action: input.action,
     }, {
       emitContextChanged: (workspaceId, docs) => {
+        refreshHqStateContextDocBestEffort(input.workspaceRootPath)
         this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
       },
     })
@@ -2595,6 +2607,8 @@ export class SessionManager implements ISessionManager {
         prepareSocial: this.scheduledSocialPreparer,
         executeSocial: this.scheduledSocialExecutor,
         emitContextChanged: (workspaceId, docs) => {
+          const workspace = getWorkspaceByNameOrId(workspaceId)
+          if (workspace) refreshHqStateContextDocBestEffort(workspace.rootPath)
           this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
         },
         log: sessionLog,
@@ -2705,6 +2719,8 @@ export class SessionManager implements ISessionManager {
         },
         prepareExternalJob: this.campaignExternalJobPreparer,
         emitContextChanged: (workspaceId, docs) => {
+          const workspace = getWorkspaceByNameOrId(workspaceId)
+          if (workspace) refreshHqStateContextDocBestEffort(workspace.rootPath)
           this.eventSink?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
         },
         log: sessionLog,

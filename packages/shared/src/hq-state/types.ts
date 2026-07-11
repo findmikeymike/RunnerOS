@@ -54,6 +54,27 @@ export interface HqStateGoalProgress {
   deadline?: string;
 }
 
+export type HqOperationalItemKind = 'output' | 'scheduled-work' | 'workflow-run' | 'automation-run';
+
+export interface HqOperationalItem {
+  id: string;
+  kind: HqOperationalItemKind;
+  title: string;
+  status: string;
+  updatedAt: string;
+  worker?: string;
+  intent?: string;
+  source: string;
+}
+
+export interface HqOperationalSnapshot {
+  generatedAt: string;
+  active: HqOperationalItem[];
+  approvals: HqOperationalItem[];
+  failures: HqOperationalItem[];
+  recentOutputs: HqOperationalItem[];
+}
+
 export interface HqStateOfPlay {
   version: 1;
   generatedAt: string;

@@ -4,6 +4,7 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { loadGlobalAgent, readActivatedAgents } from '@craft-agent/shared/agent-definitions'
 import { loadGlobalWorkflow, readActivatedWorkflows } from '@craft-agent/shared/workflows'
 import { listOutputManifests, readOutputFinalsRegistry } from '@craft-agent/shared/outputs'
+import { refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
 import { loadArtistVaultManifest } from '@craft-agent/shared/artist-vault'
 import {
   CAMPAIGN_CALENDAR_CONTEXT_SLUG,
@@ -45,7 +46,6 @@ import {
   loadAllContextDocs,
   loadContextDoc,
   upsertContextDoc,
-  type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
@@ -77,9 +77,10 @@ function resolveRootPath(workspaceId: string): string {
   return workspace.rootPath
 }
 
-function broadcastChanged(deps: HandlerDeps, workspaceId: string, docs: LoadedContextDoc[]): void {
+function broadcastChanged(deps: HandlerDeps, workspaceId: string, rootPath: string): void {
+  refreshHqStateContextDocBestEffort(rootPath)
   const wsServerLike = (deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } })
-  wsServerLike.wsServer?.push?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, docs)
+  wsServerLike.wsServer?.push?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, loadAllContextDocs(rootPath))
 }
 
 function readScheduledWork(rootPath: string, workspaceId: string): ScheduledWorkParseResult {
@@ -137,7 +138,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         const result = applyScheduledWorkMutation(parsed.work, mutation)
         if (!result.ok) return result
         writeScheduledWork(rootPath, result.work)
-        broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+        broadcastChanged(deps, workspaceId, rootPath)
         return result
       })
     },
@@ -183,7 +184,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         if (existingOrder.status !== 'canceled') writeScheduledWork(rootPath, workResult.work)
         if (!existingCalendarItem.deletedAt) writeCampaignCalendar(rootPath, calendar)
         if (existingOrder.status !== 'canceled' || !existingCalendarItem.deletedAt) {
-          broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+          broadcastChanged(deps, workspaceId, rootPath)
         }
         return {
           updated: existingOrder.status !== 'canceled' || !existingCalendarItem.deletedAt,
@@ -283,7 +284,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         if (!alreadyDecided) writeScheduledWork(rootPath, nextWork)
         if (!calendarAlreadyUpdated) writeCampaignCalendar(rootPath, calendar)
         if (!alreadyDecided || !calendarAlreadyUpdated) {
-          broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+          broadcastChanged(deps, workspaceId, rootPath)
         }
         return { work: nextWork, order: nextOrder, calendar, calendarItem }
       })
@@ -332,7 +333,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         const calendar = { ...parsedCalendar.calendar, items: parsedCalendar.calendar.items.map((candidate) => candidate.id === nextCalendarItem.id ? nextCalendarItem : candidate), updatedAt: now }
         writeScheduledWork(rootPath, work)
         writeCampaignCalendar(rootPath, calendar)
-        broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+        broadcastChanged(deps, workspaceId, rootPath)
         return { work, order: nextOrder, calendar, calendarItem: nextCalendarItem }
       })
     },
@@ -382,7 +383,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         const nextOrder = { ...order, socialApproval: approval, updatedAt: now.toISOString() }
         const work = { ...scheduled.work, items: scheduled.work.items.map((candidate) => candidate.id === nextOrder.id ? nextOrder : candidate), updatedAt: now.toISOString() }
         writeScheduledWork(rootPath, work)
-        broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+        broadcastChanged(deps, workspaceId, rootPath)
         return { work, order: nextOrder, calendar: parsedCalendar.calendar, calendarItem }
       })
     },
@@ -442,7 +443,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         if (!existingOrder) writeScheduledWork(rootPath, workResult.work)
         if (!existingCalendarItem) writeCampaignCalendar(rootPath, calendar)
         if (!existingOrder || !existingCalendarItem) {
-          broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+          broadcastChanged(deps, workspaceId, rootPath)
         }
 
         return {
@@ -508,7 +509,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         if (missingOrders.length > 0) writeScheduledWork(rootPath, work)
         if (missingShells.length > 0) writeCampaignCalendar(rootPath, calendar)
         if (missingOrders.length > 0 || missingShells.length > 0) {
-          broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+          broadcastChanged(deps, workspaceId, rootPath)
         }
         return {
           updated: missingOrders.length > 0 || missingShells.length > 0,
@@ -555,7 +556,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         const missingEvents = resolvedOrders.filter((order) => !artistCalendar.events.some((event) => event.id === order.calendarLink.itemId)).map(hqEventFromOrder)
         if (missingOrders.length) writeScheduledWork(rootPath, work)
         if (missingEvents.length) writeArtistCalendar(rootPath, { ...artistCalendar, events: [...artistCalendar.events, ...missingEvents], updatedAt: new Date().toISOString() })
-        if (missingOrders.length || missingEvents.length) broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+        if (missingOrders.length || missingEvents.length) broadcastChanged(deps, workspaceId, rootPath)
         return { updated: Boolean(missingOrders.length || missingEvents.length), work, orders: resolvedOrders }
       })
     },
@@ -578,7 +579,7 @@ export function registerScheduledWorkHandlers(server: RpcServer, deps: HandlerDe
         if (workChanged) writeScheduledWork(rootPath, migrated.work)
         if (calendarChanged) writeCampaignCalendar(rootPath, migrated.calendar)
         if (workChanged || calendarChanged) {
-          broadcastChanged(deps, workspaceId, loadAllContextDocs(rootPath))
+          broadcastChanged(deps, workspaceId, rootPath)
         }
 
         return {

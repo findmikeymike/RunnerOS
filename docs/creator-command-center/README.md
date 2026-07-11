@@ -22,8 +22,11 @@ Core Artist HQ and campaign workspace specs live here.
 - [11 Outputs, Finals, And Asset Promotion](./11-outputs-finals-asset-promotion-spec.md)
 - [12 Campaign Calendar And Scheduled Jobs](./12-campaign-calendar-scheduled-jobs-spec.md)
 - [13 Scheduled Work Composer And Execution](./13-scheduled-work-composer-execution-spec.md)
+- [14 State Of Play Opportunity Engine](./14-state-of-play-opportunity-engine-spec.md)
 
 Current V1 implementation notes:
+
+- State of Play V2 is specified as a phased opportunity engine; V1 remains the shipped implementation until each phase is verified.
 
 - Outputs -> Finals is wired through UI list/detail actions and the `promote_output_to_final` session tool. Finals are pointers stored in workspace context; campaign promotion uses the active campaign workspace id.
 - Campaign Scheduled Work now has a guided composer, backend-owned atomic mutations, durable agent/workflow completion polling, review decisions, attention states, and approval-blocked social work.

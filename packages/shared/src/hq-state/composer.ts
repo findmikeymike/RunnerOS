@@ -11,6 +11,8 @@ import {
   type HqStateGoalProgress,
   type HqStateNextMove,
   type HqStateOfPlay,
+  type HqOperationalItem,
+  type HqOperationalSnapshot,
   type HqStateRouteHint,
 } from './types.ts';
 
@@ -88,6 +90,7 @@ interface HqInputState {
   vault: VaultManifest | null;
   sharedIntel: NonNullable<ReturnType<typeof parseSharedIntelNote>>[];
   goals: LoadedContextDoc[];
+  operational?: HqOperationalSnapshot;
 }
 
 const SOURCE_SLUGS = new Set<string>([
@@ -107,7 +110,7 @@ export function hqStateContextMetadata(): ContextDocMetadata {
   };
 }
 
-export function buildHqStateContextDoc(args: { docs: LoadedContextDoc[]; now?: Date }): BuiltHqStateContextDoc {
+export function buildHqStateContextDoc(args: { docs: LoadedContextDoc[]; now?: Date; operational?: HqOperationalSnapshot }): BuiltHqStateContextDoc {
   const state = buildHqStateOfPlay(args);
   return {
     slug: HQ_STATE_CONTEXT_SLUG,
@@ -117,7 +120,7 @@ export function buildHqStateContextDoc(args: { docs: LoadedContextDoc[]; now?: D
   };
 }
 
-export function buildHqStateOfPlay(args: { docs: LoadedContextDoc[]; now?: Date }): HqStateOfPlay {
+export function buildHqStateOfPlay(args: { docs: LoadedContextDoc[]; now?: Date; operational?: HqOperationalSnapshot }): HqStateOfPlay {
   const now = args.now ?? new Date();
   const docs = args.docs.filter((doc) => doc.slug !== HQ_STATE_CONTEXT_SLUG && doc.metadata.enabled !== false);
   const docBySlug = new Map(docs.map((doc) => [doc.slug, doc]));
@@ -136,6 +139,7 @@ export function buildHqStateOfPlay(args: { docs: LoadedContextDoc[]; now?: Date 
       .map((doc) => parseSharedIntelNote(doc.body))
       .filter((note): note is NonNullable<ReturnType<typeof parseSharedIntelNote>> => Boolean(note && !note.superseded)),
     goals: docs.filter(isGoalContextDoc),
+    operational: args.operational,
   };
 
   const missing = buildMissing(input);
@@ -222,6 +226,45 @@ export function parseHqStateOfPlay(body: string): HqStateOfPlay | null {
 }
 
 function buildNextMove(input: HqInputState, missing: string[]): HqStateNextMove {
+  const approval = newestOperationalItem(input.operational?.approvals);
+  if (approval) {
+    return {
+      title: `Review ${approval.title}`,
+      why: `${operationalKindLabel(approval)} is waiting for approval before work can continue.`,
+      action: 'review',
+      oneClick: false,
+    };
+  }
+
+  const failure = newestOperationalItem(input.operational?.failures);
+  if (failure) {
+    return {
+      title: `Recover ${failure.title}`,
+      why: `${operationalKindLabel(failure)} needs attention after ending in ${failure.status}.`,
+      worker: 'concierge',
+      action: 'review',
+      oneClick: false,
+    };
+  }
+
+  const candidate = buildContextNextMove(input, missing);
+  const duplicate = findActiveDuplicate(input, {
+    worker: candidate.worker,
+    terms: [candidate.title, candidate.why],
+  });
+  if (duplicate) {
+    return {
+      title: `Track ${duplicate.title}`,
+      why: `${operationalKindLabel(duplicate)} is already ${duplicate.status} and appears to cover this next move.`,
+      action: 'review',
+      oneClick: false,
+    };
+  }
+  return candidate;
+}
+
+function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNextMove {
+
   const urgentEvent = nextUpcomingEvent(input, 14);
   const vault = summarizeVault(input.vault);
   const stalePerson = mostActionableStalePerson(input);
@@ -392,6 +435,24 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
   const latestIntel = [...input.sharedIntel].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
   const community = summarizeCommunity(input.community);
 
+  const approval = newestOperationalItem(input.operational?.approvals);
+  if (approval) {
+    items.push({
+      kind: 'approval',
+      text: `${approval.title} is waiting for approval.`,
+      source: approval.source,
+    });
+  }
+
+  const failure = newestOperationalItem(input.operational?.failures);
+  if (failure) {
+    items.push({
+      kind: 'failure',
+      text: `${failure.title} needs attention after ${failure.status}.`,
+      source: failure.source,
+    });
+  }
+
   if (urgentEvent) {
     items.push({
       kind: 'calendar',
@@ -513,7 +574,36 @@ function buildSources(input: HqInputState): Record<string, string> {
       ?? 'present';
     sources[doc.slug] = updatedAt;
   }
+  if (input.operational) sources['hq-operational-snapshot'] = input.operational.generatedAt;
   return sources;
+}
+
+function newestOperationalItem(items: HqOperationalItem[] | undefined): HqOperationalItem | null {
+  return [...(items ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+}
+
+function operationalKindLabel(item: HqOperationalItem): string {
+  if (item.kind === 'workflow-run') return 'Workflow';
+  if (item.kind === 'automation-run') return 'Automation';
+  if (item.kind === 'scheduled-work') return 'Scheduled work';
+  return 'Output';
+}
+
+function findActiveDuplicate(
+  input: HqInputState,
+  candidate: { worker?: string; terms: string[] },
+): HqOperationalItem | null {
+  const terms = candidate.terms.flatMap(intentTokens);
+  return (input.operational?.active ?? []).find((item) => {
+    const itemTokens = new Set(intentTokens(`${item.title} ${item.intent ?? ''}`));
+    const overlap = terms.filter((term) => itemTokens.has(term)).length;
+    return candidate.worker && item.worker === candidate.worker ? overlap >= 1 : overlap >= 2;
+  }) ?? null;
+}
+
+function intentTokens(value: string): string[] {
+  const ignored = new Set(['and', 'for', 'the', 'this', 'with', 'work', 'task', 'run']);
+  return value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3 && !ignored.has(token));
 }
 
 function buildHeadline(artistName: string, nextMove: HqStateNextMove, missing: string[]): string {

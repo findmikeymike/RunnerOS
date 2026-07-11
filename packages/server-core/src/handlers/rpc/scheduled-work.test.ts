@@ -305,11 +305,11 @@ describe('scheduled-work RPC handler', () => {
     })
 
     expect(result).toMatchObject({ ok: true, item: { id: 'scheduled-work-1' } })
-    expect(upsertCalls).toEqual([SCHEDULED_WORK_CONTEXT_SLUG])
+    expect(upsertCalls).toEqual([SCHEDULED_WORK_CONTEXT_SLUG, 'hq-state-of-play'])
     expect(pushCalls).toHaveLength(1)
     expect(pushCalls[0]).toMatchObject({ channel: RPC_CHANNELS.workspaceContext.CHANGED })
     expect(pushCalls[0]?.args[0]).toBe(workspace.id)
-    expect((pushCalls[0]?.args[1] as LoadedContextDoc[]).map((doc) => doc.slug)).toEqual([SCHEDULED_WORK_CONTEXT_SLUG])
+    expect((pushCalls[0]?.args[1] as LoadedContextDoc[]).map((doc) => doc.slug)).toEqual([SCHEDULED_WORK_CONTEXT_SLUG, 'hq-state-of-play'])
 
     const getResult = await invoke(RPC_CHANNELS.scheduledWork.GET, workspace.id)
     expect(getResult).toMatchObject({
@@ -347,7 +347,7 @@ describe('scheduled-work RPC handler', () => {
     const first = await invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN, workspace.id, input)
 
     expect(first).toMatchObject({ updated: true, order: { id: 'scheduled-work-1' }, calendarItem: { id: 'campaign-item-1' } })
-    expect(upsertCalls).toEqual([SCHEDULED_WORK_CONTEXT_SLUG, CAMPAIGN_CALENDAR_CONTEXT_SLUG])
+    expect(upsertCalls).toEqual([SCHEDULED_WORK_CONTEXT_SLUG, CAMPAIGN_CALENDAR_CONTEXT_SLUG, 'hq-state-of-play'])
     expect(readScheduledWork().items).toHaveLength(1)
     expect(readCampaignCalendar().items).toHaveLength(1)
     expect(readCampaignCalendar().items[0]?.job).toBeUndefined()
@@ -526,7 +526,7 @@ describe('scheduled-work RPC handler', () => {
     const recovered = await invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN, workspace.id, input)
 
     expect(recovered).toMatchObject({ updated: true })
-    expect(upsertCalls).toEqual([CAMPAIGN_CALENDAR_CONTEXT_SLUG])
+    expect(upsertCalls).toEqual([CAMPAIGN_CALENDAR_CONTEXT_SLUG, 'hq-state-of-play'])
     expect(readScheduledWork().items).toHaveLength(1)
     expect(readCampaignCalendar().items).toHaveLength(1)
   })
@@ -556,7 +556,7 @@ describe('scheduled-work RPC handler', () => {
     })
 
     expect(recovered).toMatchObject({ updated: true, order: { status: 'canceled' } })
-    expect(upsertCalls).toEqual([CAMPAIGN_CALENDAR_CONTEXT_SLUG])
+    expect(upsertCalls).toEqual([CAMPAIGN_CALENDAR_CONTEXT_SLUG, 'hq-state-of-play'])
     expect(readCampaignCalendar().items[0]?.deletedAt).toBeTruthy()
   })
 
@@ -625,7 +625,7 @@ describe('scheduled-work RPC handler', () => {
     const first = await invoke(RPC_CHANNELS.scheduledWork.MIGRATE_CAMPAIGN, workspace.id)
 
     expect(first).toMatchObject({ updated: true, migrated: 1 })
-    expect(upsertCalls).toEqual([SCHEDULED_WORK_CONTEXT_SLUG, CAMPAIGN_CALENDAR_CONTEXT_SLUG])
+    expect(upsertCalls).toEqual([SCHEDULED_WORK_CONTEXT_SLUG, CAMPAIGN_CALENDAR_CONTEXT_SLUG, 'hq-state-of-play'])
     expect(pushCalls).toHaveLength(1)
 
     const scheduled = readScheduledWork()
@@ -667,7 +667,7 @@ describe('scheduled-work RPC handler', () => {
     const recovery = await invoke(RPC_CHANNELS.scheduledWork.MIGRATE_CAMPAIGN, workspace.id)
 
     expect(recovery).toMatchObject({ updated: true, migrated: 0 })
-    expect(upsertCalls).toEqual([CAMPAIGN_CALENDAR_CONTEXT_SLUG])
+    expect(upsertCalls).toEqual([CAMPAIGN_CALENDAR_CONTEXT_SLUG, 'hq-state-of-play'])
     expect(pushCalls).toHaveLength(1)
     expect(readScheduledWork().items).toHaveLength(1)
     expect(readCampaignCalendar().items[0]?.scheduledWorkId).toBe(readScheduledWork().items[0]?.id)
