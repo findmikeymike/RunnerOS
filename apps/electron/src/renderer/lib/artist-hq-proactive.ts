@@ -1,4 +1,4 @@
-import type { HqStateRouteHint } from '@craft-agent/shared/hq-state'
+import type { HqOperationalSourceHealth, HqRecommendationStatus, HqStateRouteHint } from '@craft-agent/shared/hq-state'
 import type { AgentDefinitionDTO, ContextDocDTO } from '../../shared/types'
 
 const PROACTIVE_HQ_MODE_STORAGE_PREFIX = 'artist-hq:proactive-mode'
@@ -13,6 +13,39 @@ export interface HqRouteContextSelection {
   contextDocs: ContextDocDTO[]
   missingSlugs: string[]
   disabledSlugs: string[]
+}
+
+export interface HqRecommendationActionState {
+  canLaunch: boolean
+  canDefer: boolean
+  canRate: boolean
+  label: string
+}
+
+export function resolveHqRecommendationActionState(
+  status: HqRecommendationStatus,
+  readiness: HqRouteReadiness,
+  proactiveMode: boolean,
+  busy: boolean,
+): HqRecommendationActionState {
+  const launchable = status === 'proposed' || status === 'viewed' || status === 'accepted' || status === 'failed'
+  const canDefer = launchable
+  const label = busy ? 'Starting...'
+    : status === 'failed' ? 'Retry Route'
+      : status === 'awaiting_approval' ? 'Awaiting Approval'
+        : status === 'launched' || status === 'in_progress' ? 'Work in Progress'
+          : status === 'completed' ? 'Completed'
+            : proactiveMode ? (readiness.blockedReason ? 'Start Review' : 'Start Route') : 'Proactive Off'
+  return {
+    canLaunch: readiness.canLaunch && launchable && !busy,
+    canDefer,
+    canRate: status === 'completed' || status === 'failed',
+    label,
+  }
+}
+
+export function unhealthyHqSources(sources: HqOperationalSourceHealth[]): HqOperationalSourceHealth[] {
+  return sources.filter((source) => source.status !== 'fresh')
 }
 
 export function proactiveHqModeStorageKey(workspaceId: string): string {

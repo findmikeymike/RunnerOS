@@ -36,7 +36,9 @@ import { sourcesAtom } from '@/atoms/sources'
 import {
   dedupeAgentsBySlug,
   proactiveHqModeStorageKey,
+  resolveHqRecommendationActionState,
   resolveHqRouteReadiness,
+  unhealthyHqSources,
 } from '@/lib/artist-hq-proactive'
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -1620,15 +1622,14 @@ function StateOfPlayPanel({
   const attention = state.attention.slice(0, 3)
   const alternatives = state.alternatives.slice(0, 3)
   const missing = state.missing.slice(0, 5)
-  const unhealthySources = state.sourceHealth.filter((source) => source.status !== 'fresh')
+  const unhealthySources = unhealthyHqSources(state.sourceHealth)
   const recentOutcome = state.recentOutcome
   const generatedLabel = formatShortDate(state.generatedAt)
   const route = state.nextMove.route
   const recommendationStatus = state.nextMove.recommendationStatus ?? 'proposed'
-  const launchableStatus = ['proposed', 'viewed', 'accepted', 'failed'].includes(recommendationStatus)
-  const canDeferRecommendation = ['proposed', 'viewed', 'accepted', 'failed'].includes(recommendationStatus)
   const routeReadiness = resolveHqRouteReadiness(route, availableAgentSlugs, proactiveMode)
-  const canLaunchRoute = routeReadiness.canLaunch && launchableStatus
+  const actionState = resolveHqRecommendationActionState(recommendationStatus, routeReadiness, proactiveMode, routeBusy)
+  const canLaunchRoute = actionState.canLaunch
 
   return (
     <HQCard>
@@ -1744,19 +1745,9 @@ function StateOfPlayPanel({
                   routeBusy && 'cursor-wait opacity-70',
                 )}
               >
-                {routeBusy
-                  ? 'Starting...'
-                  : recommendationStatus === 'failed'
-                    ? 'Retry Route'
-                    : recommendationStatus === 'awaiting_approval'
-                      ? 'Awaiting Approval'
-                      : recommendationStatus === 'launched' || recommendationStatus === 'in_progress'
-                        ? 'Work in Progress'
-                        : recommendationStatus === 'completed'
-                          ? 'Completed'
-                          : proactiveMode ? (routeReadiness.blockedReason ? 'Start Review' : 'Start Route') : 'Proactive Off'}
+                {actionState.label}
               </button>
-              {state.nextMove.recommendationId && canDeferRecommendation ? (
+              {state.nextMove.recommendationId && actionState.canDefer ? (
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -1797,7 +1788,7 @@ function StateOfPlayPanel({
                       ))}
                     </div>
                   ) : null}
-                  {(recommendationStatus === 'completed' || recommendationStatus === 'failed') ? (
+                  {actionState.canRate ? (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="mr-auto text-[10px] uppercase tracking-[0.12em] text-white/30">Was this useful?</span>
                       {(['useful', 'not_useful'] as const).map((usefulness) => (

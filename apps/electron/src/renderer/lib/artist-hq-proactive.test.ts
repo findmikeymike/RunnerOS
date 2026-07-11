@@ -4,8 +4,10 @@ import type { AgentDefinitionDTO, ContextDocDTO } from '../../shared/types'
 import {
   dedupeAgentsBySlug,
   proactiveHqModeStorageKey,
+  resolveHqRecommendationActionState,
   resolveHqRouteReadiness,
   selectHqRouteContextDocs,
+  unhealthyHqSources,
 } from './artist-hq-proactive'
 
 describe('artist HQ proactive helpers', () => {
@@ -69,6 +71,23 @@ describe('artist HQ proactive helpers', () => {
       disabledSlugs: ['artist-vault'],
       missingSlugs: ['artist-network'],
     })
+  })
+
+  test('maps recommendation lifecycle to safe card actions', () => {
+    const ready = { canLaunch: true, agentAvailable: true }
+    expect(resolveHqRecommendationActionState('proposed', ready, true, false)).toEqual(expect.objectContaining({ canLaunch: true, canDefer: true, label: 'Start Route' }))
+    expect(resolveHqRecommendationActionState('launched', ready, true, false)).toEqual(expect.objectContaining({ canLaunch: false, canDefer: false, label: 'Work in Progress' }))
+    expect(resolveHqRecommendationActionState('awaiting_approval', ready, true, false)).toEqual(expect.objectContaining({ canLaunch: false, label: 'Awaiting Approval' }))
+    expect(resolveHqRecommendationActionState('completed', ready, true, false)).toEqual(expect.objectContaining({ canLaunch: false, canRate: true, label: 'Completed' }))
+    expect(resolveHqRecommendationActionState('failed', ready, true, false)).toEqual(expect.objectContaining({ canLaunch: true, canRate: true, label: 'Retry Route' }))
+  })
+
+  test('returns only degraded and unavailable source health', () => {
+    expect(unhealthyHqSources([
+      { source: 'outputs', status: 'fresh', checkedAt: '2026-07-11T00:00:00.000Z', itemCount: 1 },
+      { source: 'scheduled-work', status: 'degraded', checkedAt: '2026-07-11T00:00:00.000Z', itemCount: 0 },
+      { source: 'workflow-runs', status: 'unavailable', checkedAt: '2026-07-11T00:00:00.000Z', itemCount: 0 },
+    ]).map((source) => source.source)).toEqual(['scheduled-work', 'workflow-runs'])
   })
 })
 

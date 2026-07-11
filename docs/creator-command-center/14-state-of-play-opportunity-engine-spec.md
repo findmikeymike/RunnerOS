@@ -580,11 +580,13 @@ Implemented:
 - strict outcome-store validation with last-known-good recovery and fail-closed diagnostics
 - fail-soft automation outcome reads that preserve the rest of reconciliation
 - lifecycle detail refresh while the same recommendation remains visible
+- same-server launch serialization verified to create exactly one session under concurrent requests
+- renderer decision coverage for lifecycle actions, retry/defer/rating states, and degraded source health
 
 Still required before declaring Phase 2 complete:
 
 - criterion generators for additional domain-specific recommendation types
-- Team Mode transport/locking beyond workspace-local atomic files
+- distributed Team Mode lease/locking beyond the verified same-server workspace lock
 
 - add candidate, fingerprint, lifecycle event, and outcome storage
 - persist ranked candidates

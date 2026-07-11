@@ -109,6 +109,21 @@ describe('HQ state RPC handlers', () => {
     expect(deletedSessions).toContain(linkedSessionId!)
   })
 
+  test('serializes concurrent launch attempts into exactly one session', async () => {
+    upsertHqRecommendation(rootPath, launchCandidate('sop_concurrent_launch'))
+    const sessionsBefore = sessionCounter
+
+    const results = await Promise.allSettled([
+      invoke(RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION, workspace.id, { recommendationId: 'sop_concurrent_launch' }),
+      invoke(RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION, workspace.id, { recommendationId: 'sop_concurrent_launch' }),
+    ])
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+    expect(results.filter((result) => result.status === 'rejected')).toHaveLength(1)
+    expect(sessionCounter - sessionsBefore).toBe(1)
+    expect(readHqRecommendationStore(rootPath).candidates.find((item) => item.id === 'sop_concurrent_launch')?.status).toBe('launched')
+  })
+
   test('returns lifecycle history and stores usefulness without changing status', async () => {
     upsertHqRecommendation(rootPath, launchCandidate('sop_feedback'))
     const outcome = await invoke(RPC_CHANNELS.hqState.SET_RECOMMENDATION_USEFULNESS, workspace.id, {
