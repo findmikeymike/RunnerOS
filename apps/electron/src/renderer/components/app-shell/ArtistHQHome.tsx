@@ -1796,7 +1796,7 @@ function StateOfPlayPanel({
                       ))}
                     </div>
                   ) : null}
-                  {(recommendationStatus === 'completed' || recommendationStatus === 'failed') ? (
+                  {(recommendationStatus === 'completed' || recommendationStatus === 'failed' || recommendationStatus === 'superseded') ? (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="mr-auto text-[10px] uppercase tracking-[0.12em] text-white/30">Was this useful?</span>
                       {(['useful', 'not_useful'] as const).map((usefulness) => (

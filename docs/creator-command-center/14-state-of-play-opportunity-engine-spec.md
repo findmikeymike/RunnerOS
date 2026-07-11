@@ -506,12 +506,13 @@ Implemented in the foundational slice:
 - source-health projection into the generated brief and Artist HQ card
 - automation schema and semantic configuration validation, including before first run
 - source-specific stale-evidence windows for Outputs, Scheduled Work, workflow runs, and automation history
-- producer semantic intent IDs from Output tags, Scheduled Work idempotency keys, workflow trigger inputs, and automation IDs
+- producer semantic intent IDs from Output tags, Scheduled Work producers, workflow trigger inputs, and automation IDs
+- Scheduled Work `intentId` separated from execution idempotency and populated by HNIC, automation, and calendar-composer producers
 
 Still required before declaring Phase 1 complete:
 
 - campaign-scoped source-health presentation when Campaign State of Play gets its own rendered surface
-- producer migration coverage sufficient to remove legacy token-overlap duplicate matching
+- producer migration coverage for legacy Scheduled Work and older Output/workflow producers before token-overlap fallback can be removed
 
 Rival hardening completed 2026-07-10:
 

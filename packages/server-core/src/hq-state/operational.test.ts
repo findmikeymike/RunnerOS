@@ -71,6 +71,21 @@ describe('HQ operational snapshot', () => {
     expect(snapshot.active[0]?.fingerprint).toStartWith('v2:')
   })
 
+  test('uses producer intent instead of execution idempotency for equivalent scheduled work', () => {
+    const workspace = tempWorkspace()
+    const first = order('work-one', 'Create cover art', 'running')
+    const second = { ...order('work-two', 'Create cover art', 'scheduled'), executionKey: { ...first.executionKey, idempotencyKey: 'different-run-key' } }
+    upsertContextDoc(workspace, {
+      slug: 'scheduled-work', metadata: scheduledWorkMetadata(), body: serializeScheduledWorkBody({ version: 1, workspaceId: 'ws-1', items: [first, second], updatedAt: second.updatedAt }),
+    })
+
+    const snapshot = buildHqOperationalSnapshot(workspace)
+
+    expect(snapshot.active).toHaveLength(2)
+    expect(new Set(snapshot.active.map((item) => item.fingerprint)).size).toBe(1)
+    expect(snapshot.active[0]?.fingerprint).toStartWith('v2:')
+  })
+
   test('preserves campaign scope and reports malformed Scheduled Work as degraded', () => {
     const workspace = tempWorkspace()
     const campaign = {
@@ -209,6 +224,7 @@ function order(id: string, title: string, status: ScheduledWorkOrder['status']):
     owner: { scope: 'hq', workspaceId: 'ws-1' },
     calendarLink: { calendar: 'hq', itemId: `calendar-${id}` },
     title,
+    intentId: 'release-cover-art',
     type: 'agent-task',
     status,
     startAt: '2026-07-10T10:00:00.000Z',

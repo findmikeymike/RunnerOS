@@ -116,6 +116,8 @@ export interface QueueWorkAction {
   ownerScope: 'hq' | 'campaign';
   calendarVisibility?: 'visible' | 'hidden';
   title: string;
+  /** Stable semantic identity used to suppress equivalent active work across trigger events. */
+  intentId?: string;
   execution: ScheduledWorkExecution;
   inputRefs?: Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }>[];
   followUp?: {

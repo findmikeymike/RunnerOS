@@ -188,6 +188,7 @@ function buildOrder(
     calendarLink: { calendar: action.ownerScope, itemId: `${id}-calendar` },
     calendarVisibility: action.calendarVisibility ?? 'visible',
     title: action.title,
+    intentId: action.intentId ?? `automation:${scheduledWorkDefinitionDigest({ ownerScope: action.ownerScope, title: action.title, execution: action.execution, inputRefs, ordinal })}`,
     type: action.execution.type,
     status: 'scheduled',
     startAt: now,

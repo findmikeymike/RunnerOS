@@ -114,6 +114,7 @@ async function persistCalendarWork(options: ScheduleWorkPersistenceOptions, exec
       : { scope: 'campaign', workspaceId: options.workspaceId, campaignId: options.workspaceId },
     calendarLink: { calendar: options.scope, itemId: calendarItemId },
     title: options.input.title.trim(),
+    intentId: options.input.idempotencyKey,
     type: execution.type,
     status: 'scheduled',
     startAt,

@@ -217,12 +217,14 @@ export function buildAutomationQueueWorkAction(
   draft: Exclude<ScheduledWorkComposerDraft, EventComposerDraft>,
   options: { calendarVisibility?: 'visible' | 'hidden' } = {},
 ): QueueWorkAction {
+  const execution = executionFromDraft(draft)
   const action: QueueWorkAction = {
     type: 'queue-work',
     ownerScope: draft.owner.scope,
     calendarVisibility: options.calendarVisibility,
     title: draft.title.trim(),
-    execution: executionFromDraft(draft),
+    intentId: `composer:${composerDefinitionDigest({ owner: draft.owner, title: draft.title.trim(), type: draft.type, execution, inputRefs: draft.inputRefs })}`,
+    execution,
     inputRefs: draft.inputRefs.filter((ref): ref is Exclude<ScheduledWorkInputRef, { kind: 'produced-output' }> => ref.kind !== 'produced-output'),
   }
   if (draft.followUp.type !== 'none') {
@@ -259,6 +261,7 @@ export function buildCampaignScheduleFromComposer(
     owner: draft.owner,
     calendarLink: { calendar: 'campaign', itemId: calendarItemId },
     title: draft.title.trim(),
+    intentId: `composer:${composerDefinitionDigest({ owner: draft.owner, title: draft.title.trim(), type: draft.type, execution, inputRefs: draft.inputRefs })}`,
     type: draft.type,
     status,
     startAt,
@@ -340,6 +343,7 @@ export function buildCampaignSchedulePlanFromComposer(
     owner: draft.owner,
     calendarLink: { calendar: 'campaign', itemId: childCalendarId },
     title: childTitle,
+    intentId: `composer:${composerDefinitionDigest({ owner: draft.owner, title: childTitle, type: draft.followUp.type, execution: childExecution, inputRefs: childInputRefs })}`,
     type: draft.followUp.type,
     status: 'waiting',
     startAt: single.order.startAt,

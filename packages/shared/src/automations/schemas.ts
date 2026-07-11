@@ -140,6 +140,7 @@ export const QueueWorkActionSchema = z.object({
   ownerScope: z.enum(['hq', 'campaign']),
   calendarVisibility: z.enum(['visible', 'hidden']).optional(),
   title: z.string().min(1),
+  intentId: z.string().min(1).optional(),
   execution: ScheduledExecutionSchema,
   inputRefs: z.array(WorkInputRefSchema).optional(),
   followUp: z.object({

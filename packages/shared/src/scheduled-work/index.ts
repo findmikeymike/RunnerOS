@@ -171,6 +171,8 @@ export interface ScheduledWorkOrder {
   /** Hidden automation work keeps a reserved link id but creates no calendar shell. */
   calendarVisibility?: 'visible' | 'hidden'
   title: string
+  /** Stable semantic identity shared by equivalent work across separate runs. */
+  intentId?: string
   type: ScheduledWorkType
   status: ScheduledWorkStatus
   startAt: string
@@ -564,6 +566,7 @@ function normalizeScheduledWorkOrder(value: ScheduledWorkOrder): ScheduledWorkOr
     ...value,
     version: 1,
     title: clean(value.title) ?? 'Untitled work',
+    intentId: clean(value.intentId),
     startAt: cleanIso(value.startAt) ?? now,
     dueAt: cleanIso(value.dueAt),
     timezone: clean(value.timezone) ?? 'UTC',
@@ -582,6 +585,7 @@ function isScheduledWorkOrder(value: unknown): value is ScheduledWorkOrder {
   return order.version === 1
     && Boolean(clean(order.id))
     && Boolean(clean(order.title))
+    && (order.intentId === undefined || Boolean(clean(order.intentId)))
     && Boolean(cleanIso(order.startAt))
     && (order.dueAt === undefined || Boolean(cleanIso(order.dueAt)))
     && Boolean(clean(order.timezone))
