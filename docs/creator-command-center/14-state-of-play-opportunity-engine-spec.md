@@ -510,6 +510,17 @@ Still required before declaring Phase 1 complete:
 - producer-supplied semantic intent metadata so fallback token matching can be removed
 - time-based freshness rules for externally synced evidence
 
+Rival hardening completed 2026-07-10:
+
+- split release deliverable fingerprints so cover, master, press photo, and EPK work do not suppress each other
+- expire automation failures after 14 days and workflow failures after 30 days unless newer state resolves them first
+- filter primary approvals, failures, and duplicate checks to the current HQ/campaign scope
+- recover campaign scope for Scheduled Work-linked workflow runs
+- preserve exact Output, Scheduled Work, workflow-run, or automation entity references in the generated next move
+- route referenced Outputs and workflow runs directly, Scheduled Work to Calendar, and automation failures to Automations
+- removed manual-to-agent route promotion in the UI
+- debounce Output, workflow, and automation refresh storms while keeping direct user mutations immediate
+
 - define signals, entity references, source health, and compact indexes
 - add Outputs, Scheduled Work, workflow, automation, and approval adapters
 - add active-work and decision-waiting summaries

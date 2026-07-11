@@ -16,7 +16,15 @@ describe('HQ intent fingerprints', () => {
     })
 
     expect(first).toBe(second)
-    expect(first).toBe('v1:hq:art-director:release-assets')
+    expect(first).toBe('v1:hq:art-director:cover-art')
+  })
+
+  test('does not collapse different release deliverables into one intent', () => {
+    const cover = hqIntentFingerprint({ scope: { type: 'hq' }, worker: 'art-director', title: 'Finish cover art' })
+    const photo = hqIntentFingerprint({ scope: { type: 'hq' }, worker: 'art-director', title: 'Select press photo' })
+    const master = hqIntentFingerprint({ scope: { type: 'hq' }, worker: 'art-director', title: 'Deliver final master' })
+
+    expect(new Set([cover, photo, master]).size).toBe(3)
   })
 
   test('keeps campaign intent isolated from HQ and other campaigns', () => {

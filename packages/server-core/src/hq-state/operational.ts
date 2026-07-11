@@ -16,6 +16,7 @@ import {
 } from '@craft-agent/shared/scheduled-work'
 import { loadContextDoc } from '@craft-agent/shared/workspace-context'
 import { listRuns } from '@craft-agent/shared/workflows'
+import type { WorkflowRunSnapshot } from '@craft-agent/shared/workflows'
 
 const ACTIVE_SCHEDULED = new Set(['waiting', 'scheduled', 'running'])
 const APPROVAL_SCHEDULED = new Set(['needs-approval', 'awaiting-review'])
@@ -50,8 +51,9 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
   const scheduledDoc = loadContextDoc(workspaceRootPath, SCHEDULED_WORK_CONTEXT_SLUG)
   const workspaceId = outputs[0]?.workspaceId ?? readScheduledWorkspaceId(scheduledDoc?.body) ?? 'workspace'
   const scheduled = parseScheduledWorkDocResult(scheduledDoc ?? undefined, workspaceId)
+  const scheduledOrders = scheduled.ok ? scheduled.work.items.filter((item) => !item.deletedAt) : []
   if (scheduled.ok) {
-    for (const order of scheduled.work.items.filter((item) => !item.deletedAt)) {
+    for (const order of scheduledOrders) {
       const item = scheduledItem(order)
       if (ACTIVE_SCHEDULED.has(order.status)) active.push(item)
       if (APPROVAL_SCHEDULED.has(order.status)) approvals.push(item)
@@ -63,14 +65,17 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
   }
 
   const workflowRuns = listRuns(workspaceRootPath)
+  const workflowScopes: HqOperationalScope[] = []
   for (const run of workflowRuns) {
-    const scope = { type: 'hq' as const }
+    const scope = workflowScope(run, scheduledOrders)
+    workflowScopes.push(scope)
     const item: HqOperationalItem = {
       id: run.id,
       kind: 'workflow-run',
       title: run.workflowSnapshot.metadata.name ?? run.workflowSlug,
       status: run.state,
       updatedAt: run.updatedAt,
+      expiresAt: run.state === 'failed' || run.state === 'interrupted' ? addDays(run.updatedAt, 30) : undefined,
       scope,
       fingerprint: hqIntentFingerprint({ scope, title: run.workflowSnapshot.metadata.name ?? run.workflowSlug, intent: run.workflowSlug }),
       intent: run.workflowSlug,
@@ -82,12 +87,18 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
   }
   sourceHealth.push(health('workflow-runs', generatedAt, workflowRuns.map((item) => item.updatedAt)))
 
-  const automationFailures = latestAutomationFailures(workspaceRootPath)
+  const snapshotScope = inferSnapshotScope(
+    outputs.map((output) => outputScope(output.context)),
+    scheduledOrders.map(orderScope),
+    workflowScopes,
+  )
+  const automationFailures = latestAutomationFailures(workspaceRootPath, snapshotScope)
   failures.push(...automationFailures.items)
   sourceHealth.push(health('automation-history', generatedAt, automationFailures.timestamps, automationFailures.status, automationFailures.message))
 
   return {
     generatedAt,
+    scope: snapshotScope,
     active: newestFirst(active),
     approvals: newestFirst(approvals),
     failures: newestFirst(failures),
@@ -113,9 +124,7 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
 }
 
 function scheduledItem(order: ScheduledWorkOrder): HqOperationalItem {
-  const scope: HqOperationalScope = order.owner.scope === 'campaign'
-    ? { type: 'campaign', campaignId: order.owner.campaignId ?? order.owner.workspaceId }
-    : { type: 'hq' }
+  const scope = orderScope(order)
   const worker = order.execution.type === 'agent-task' ? order.execution.agentSlug : undefined
   const intent = order.execution.type === 'agent-task'
     ? order.execution.brief
@@ -136,7 +145,7 @@ function scheduledItem(order: ScheduledWorkOrder): HqOperationalItem {
   }
 }
 
-function latestAutomationFailures(workspaceRootPath: string): {
+function latestAutomationFailures(workspaceRootPath: string, scope: HqOperationalScope): {
   items: HqOperationalItem[]
   timestamps: string[]
   status: HqOperationalSourceHealth['status']
@@ -168,7 +177,6 @@ function latestAutomationFailures(workspaceRootPath: string): {
   }
   const entries = [...latest.values()]
   const names = readAutomationNames(workspaceRootPath)
-  const scope = { type: 'hq' as const }
   return {
     items: entries.filter((entry) => !entry.ok).map((entry) => ({
     id: entry.id,
@@ -176,6 +184,7 @@ function latestAutomationFailures(workspaceRootPath: string): {
     title: names.get(entry.id) ?? `Automation ${entry.id}`,
     status: 'failed',
     updatedAt: new Date(entry.ts).toISOString(),
+    expiresAt: addDays(new Date(entry.ts).toISOString(), 14),
     scope,
     fingerprint: hqIntentFingerprint({ scope, title: names.get(entry.id) ?? `Automation ${entry.id}`, intent: entry.error }),
     intent: entry.error,
@@ -213,6 +222,38 @@ function outputScope(context: { scope: 'hq' | 'campaign'; campaignId?: string } 
   return context?.scope === 'campaign' && context.campaignId
     ? { type: 'campaign', campaignId: context.campaignId }
     : { type: 'hq' }
+}
+
+function orderScope(order: ScheduledWorkOrder): HqOperationalScope {
+  return order.owner.scope === 'campaign'
+    ? { type: 'campaign', campaignId: order.owner.campaignId ?? order.owner.workspaceId }
+    : { type: 'hq' }
+}
+
+function workflowScope(run: WorkflowRunSnapshot, orders: ScheduledWorkOrder[]): HqOperationalScope {
+  const linkedOrder = orders.find((order) => (
+    (order.result?.type === 'workflow-run' && order.result.workflowRunId === run.id)
+    || order.runs.some((jobRun) => jobRun.workflowRunId === run.id)
+  ))
+  if (linkedOrder) return orderScope(linkedOrder)
+  const campaignId = typeof run.trigger.inputs.campaignId === 'string' ? run.trigger.inputs.campaignId : undefined
+  return campaignId ? { type: 'campaign', campaignId } : { type: 'hq' }
+}
+
+function inferSnapshotScope(
+  outputScopes: HqOperationalScope[],
+  scheduledScopes: HqOperationalScope[],
+  workflowScopes: HqOperationalScope[],
+): HqOperationalScope {
+  const scopes = [...scheduledScopes, ...outputScopes, ...workflowScopes]
+  if (scopes.some((scope) => scope.type === 'hq')) return { type: 'hq' }
+  const campaigns = new Set(scopes.flatMap((scope) => scope.type === 'campaign' ? [scope.campaignId] : []))
+  return campaigns.size === 1 ? { type: 'campaign', campaignId: [...campaigns][0]! } : { type: 'hq' }
+}
+
+function addDays(value: string, days: number): string | undefined {
+  const timestamp = Date.parse(value)
+  return Number.isNaN(timestamp) ? undefined : new Date(timestamp + days * 24 * 60 * 60 * 1000).toISOString()
 }
 
 function health(

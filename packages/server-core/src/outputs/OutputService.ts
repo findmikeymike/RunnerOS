@@ -30,7 +30,7 @@ import {
   type OutputOrigin,
 } from '@craft-agent/shared/outputs';
 import { OUTPUT_SHOW_IN_CANVAS_TAG } from '@craft-agent/shared/outputs/constants';
-import { refreshHqStateContextDocBestEffort } from '../hq-state/refresh';
+import { scheduleHqStateContextRefresh } from '../hq-state/refresh';
 import {
   VISUAL_BOARD_ASSET_ID,
   VISUAL_BOARD_ASSET_PATH,
@@ -907,7 +907,7 @@ export class OutputService {
   }
 
   private emitUpdated(workspaceId: string): void {
-    refreshHqStateContextDocBestEffort(this.deps.getWorkspaceRootPath(workspaceId));
+    scheduleHqStateContextRefresh(this.deps.getWorkspaceRootPath(workspaceId));
     this.deps.emitOutputsUpdated?.(workspaceId);
   }
 

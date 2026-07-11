@@ -11,6 +11,7 @@ import {
   type ScheduledWorkOrder,
 } from '@craft-agent/shared/scheduled-work'
 import { upsertContextDoc } from '@craft-agent/shared/workspace-context'
+import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows'
 import { buildHqOperationalSnapshot } from './operational'
 
 const workspaces: string[] = []
@@ -100,6 +101,46 @@ describe('HQ operational snapshot', () => {
     expect(degraded.sourceHealth).toContainEqual(expect.objectContaining({ source: 'scheduled-work', status: 'degraded' }))
   })
 
+  test('recovers campaign scope for a workflow linked from Scheduled Work', () => {
+    const workspace = tempWorkspace()
+    const runId = '12345678-1234-4123-8123-123456789012'
+    const linked = workflowOrder('campaign-workflow', 'Run campaign workflow', runId)
+    upsertContextDoc(workspace, {
+      slug: 'scheduled-work',
+      metadata: scheduledWorkMetadata(),
+      body: serializeScheduledWorkBody({
+        version: 1,
+        workspaceId: 'campaign-1',
+        items: [linked],
+        updatedAt: '2026-07-10T00:00:00.000Z',
+      }),
+    })
+    writeRun(workspace, workflowRun(runId))
+
+    const snapshot = buildHqOperationalSnapshot(workspace)
+
+    expect(snapshot.scope).toEqual({ type: 'campaign', campaignId: 'campaign-1' })
+    expect(snapshot.active.find((item) => item.id === runId)?.scope).toEqual({ type: 'campaign', campaignId: 'campaign-1' })
+  })
+
+  test('infers campaign snapshot scope from workflow trigger evidence alone', () => {
+    const workspace = tempWorkspace()
+    const runId = '22345678-1234-4123-8123-123456789012'
+    writeRun(workspace, {
+      ...workflowRun(runId),
+      trigger: {
+        type: 'automation',
+        inputs: { campaignId: 'campaign-only' },
+        firedAt: '2026-07-10T00:00:00.000Z',
+      },
+    })
+
+    const snapshot = buildHqOperationalSnapshot(workspace)
+
+    expect(snapshot.scope).toEqual({ type: 'campaign', campaignId: 'campaign-only' })
+    expect(snapshot.active[0]?.scope).toEqual(snapshot.scope)
+  })
+
   test('only reports the latest automation result for each matcher', () => {
     const workspace = tempWorkspace()
     writeFileSync(join(workspace, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
@@ -154,6 +195,56 @@ function order(id: string, title: string, status: ScheduledWorkOrder['status']):
       payloadDigest: scheduledWorkDefinitionDigest(execution),
       idempotencyKey: `scheduled-work:${id}`,
     },
+    createdAt: '2026-07-10T00:00:00.000Z',
+    updatedAt: '2026-07-10T00:00:00.000Z',
+  }
+}
+
+function workflowOrder(id: string, title: string, runId: string): ScheduledWorkOrder {
+  const execution = {
+    type: 'workflow-run' as const,
+    workflowSlug: 'campaign-workflow',
+    workflowDigest: 'sha256:workflow',
+    triggerInputs: {},
+  }
+  return {
+    version: 1,
+    id,
+    owner: { scope: 'campaign', workspaceId: 'campaign-1', campaignId: 'campaign-1' },
+    calendarLink: { calendar: 'campaign', itemId: `calendar-${id}` },
+    title,
+    type: 'workflow-run',
+    status: 'running',
+    startAt: '2026-07-10T10:00:00.000Z',
+    timezone: 'America/Chicago',
+    execution,
+    inputRefs: [],
+    approvals: [],
+    runs: [],
+    result: { type: 'workflow-run', workflowRunId: runId, outputIds: [] },
+    executionKey: { payloadDigest: scheduledWorkDefinitionDigest(execution), idempotencyKey: `scheduled-work:${id}` },
+    createdAt: '2026-07-10T00:00:00.000Z',
+    updatedAt: '2026-07-10T00:00:00.000Z',
+  }
+}
+
+function workflowRun(id: string): WorkflowRunSnapshot {
+  return {
+    id,
+    workflowSlug: 'campaign-workflow',
+    workspaceId: 'campaign-1',
+    state: 'running',
+    trigger: { type: 'scheduled-work', inputs: {}, firedAt: '2026-07-10T00:00:00.000Z' },
+    workflowSnapshot: {
+      metadata: {
+        name: 'Campaign workflow',
+        description: 'Campaign workflow fixture.',
+        trigger: { type: 'manual' },
+        steps: [{ id: 'step-1', agent: 'concierge', input: 'Do work.' }],
+      },
+      body: '',
+    },
+    steps: [{ id: 'step-1', state: 'running', attempts: 1 }],
     createdAt: '2026-07-10T00:00:00.000Z',
     updatedAt: '2026-07-10T00:00:00.000Z',
   }

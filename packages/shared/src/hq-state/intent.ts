@@ -22,7 +22,11 @@ export function hqIntentTokens(value: string): string[] {
 
 function intentCategory(tokens: string[]): string | undefined {
   const set = new Set(tokens)
-  if (hasAny(set, ['cover', 'artwork', 'master', 'photo', 'asset', 'epk'])) return 'release-assets'
+  if (hasAny(set, ['cover', 'artwork'])) return 'cover-art'
+  if (set.has('master')) return 'final-master'
+  if (set.has('photo')) return 'press-photo'
+  if (set.has('epk')) return 'epk'
+  if (set.has('asset')) return 'release-assets-general'
   if (hasAny(set, ['approve', 'approval', 'review'])) return 'approval'
   if (hasAny(set, ['spotify', 'streaming', 'listeners'])) return 'spotify-intel'
   if (hasAny(set, ['outreach', 'contact', 'relationship', 'email'])) return 'outreach'

@@ -38,6 +38,14 @@ export interface HqStateNextMove {
   action?: HqStateAction;
   oneClick?: boolean;
   route?: HqStateRouteHint;
+  entityRef?: HqStateEntityRef;
+}
+
+export interface HqStateEntityRef {
+  kind: HqOperationalItemKind;
+  id: string;
+  source: string;
+  scope: HqOperationalScope;
 }
 
 export interface HqStateAttentionItem {
@@ -75,6 +83,7 @@ export interface HqOperationalItem {
   title: string;
   status: string;
   updatedAt: string;
+  expiresAt?: string;
   scope: HqOperationalScope;
   fingerprint: string;
   worker?: string;
@@ -84,6 +93,7 @@ export interface HqOperationalItem {
 
 export interface HqOperationalSnapshot {
   generatedAt: string;
+  scope: HqOperationalScope;
   active: HqOperationalItem[];
   approvals: HqOperationalItem[];
   failures: HqOperationalItem[];

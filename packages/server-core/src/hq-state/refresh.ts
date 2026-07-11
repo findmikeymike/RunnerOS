@@ -9,6 +9,9 @@ import {
 } from '@craft-agent/shared/workspace-context'
 import { buildHqOperationalSnapshot } from './operational'
 
+const scheduledRefreshes = new Map<string, ReturnType<typeof setTimeout>>()
+const REFRESH_DEBOUNCE_MS = 100
+
 export function shouldRefreshHqStateForContextSlug(slug: string): boolean {
   return slug !== HQ_STATE_CONTEXT_SLUG
 }
@@ -38,4 +41,22 @@ export function refreshHqStateContextDocBestEffort(workspaceRootPath: string): L
     console.warn('[hq-state] Failed to refresh State of Play context doc:', error instanceof Error ? error.message : error)
     return null
   }
+}
+
+export function scheduleHqStateContextRefresh(workspaceRootPath: string): void {
+  const pending = scheduledRefreshes.get(workspaceRootPath)
+  if (pending) clearTimeout(pending)
+  const timer = setTimeout(() => {
+    scheduledRefreshes.delete(workspaceRootPath)
+    refreshHqStateContextDocBestEffort(workspaceRootPath)
+  }, REFRESH_DEBOUNCE_MS)
+  timer.unref?.()
+  scheduledRefreshes.set(workspaceRootPath, timer)
+}
+
+export function cancelScheduledHqStateContextRefresh(workspaceRootPath: string): void {
+  const pending = scheduledRefreshes.get(workspaceRootPath)
+  if (!pending) return
+  clearTimeout(pending)
+  scheduledRefreshes.delete(workspaceRootPath)
 }

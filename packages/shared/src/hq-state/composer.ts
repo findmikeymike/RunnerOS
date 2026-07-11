@@ -10,6 +10,7 @@ import {
   type HqStateAction,
   type HqStateAttentionItem,
   type HqStateGoalProgress,
+  type HqStateEntityRef,
   type HqStateNextMove,
   type HqStateOfPlay,
   type HqOperationalItem,
@@ -227,17 +228,18 @@ export function parseHqStateOfPlay(body: string): HqStateOfPlay | null {
 }
 
 function buildNextMove(input: HqInputState, missing: string[]): HqStateNextMove {
-  const approval = newestOperationalItem(input.operational?.approvals);
+  const approval = newestOperationalItem(input, input.operational?.approvals);
   if (approval) {
     return {
       title: `Review ${approval.title}`,
       why: `${operationalKindLabel(approval)} is waiting for approval before work can continue.`,
       action: 'review',
       oneClick: false,
+      entityRef: operationalEntityRef(approval),
     };
   }
 
-  const failure = newestOperationalItem(input.operational?.failures);
+  const failure = newestOperationalItem(input, input.operational?.failures);
   if (failure) {
     return {
       title: `Recover ${failure.title}`,
@@ -245,6 +247,7 @@ function buildNextMove(input: HqInputState, missing: string[]): HqStateNextMove 
       worker: 'concierge',
       action: 'review',
       oneClick: false,
+      entityRef: operationalEntityRef(failure),
     };
   }
 
@@ -259,6 +262,7 @@ function buildNextMove(input: HqInputState, missing: string[]): HqStateNextMove 
       why: `${operationalKindLabel(duplicate)} is already ${duplicate.status} and appears to cover this next move.`,
       action: 'review',
       oneClick: false,
+      entityRef: operationalEntityRef(duplicate),
     };
   }
   return candidate;
@@ -445,7 +449,7 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
     });
   }
 
-  const approval = newestOperationalItem(input.operational?.approvals);
+  const approval = newestOperationalItem(input, input.operational?.approvals);
   if (approval) {
     items.push({
       kind: 'approval',
@@ -454,7 +458,7 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
     });
   }
 
-  const failure = newestOperationalItem(input.operational?.failures);
+  const failure = newestOperationalItem(input, input.operational?.failures);
   if (failure) {
     items.push({
       kind: 'failure',
@@ -588,8 +592,8 @@ function buildSources(input: HqInputState): Record<string, string> {
   return sources;
 }
 
-function newestOperationalItem(items: HqOperationalItem[] | undefined): HqOperationalItem | null {
-  return [...(items ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+function newestOperationalItem(input: HqInputState, items: HqOperationalItem[] | undefined): HqOperationalItem | null {
+  return visibleOperationalItems(input, items).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
 }
 
 function operationalKindLabel(item: HqOperationalItem): string {
@@ -610,12 +614,31 @@ function findActiveDuplicate(
     title: candidate.terms[0] ?? '',
     intent: candidate.terms.slice(1).join(' '),
   });
-  return (input.operational?.active ?? []).find((item) => {
+  return visibleOperationalItems(input, input.operational?.active).find((item) => {
     if (item.fingerprint === fingerprint) return true;
     const itemTokens = new Set(hqIntentTokens(`${item.title} ${item.intent ?? ''}`));
     const overlap = terms.filter((term) => itemTokens.has(term)).length;
-    return candidate.worker && item.worker === candidate.worker ? overlap >= 1 : overlap >= 2;
+    return overlap >= 2;
   }) ?? null;
+}
+
+function visibleOperationalItems(input: HqInputState, items: HqOperationalItem[] | undefined): HqOperationalItem[] {
+  const scope = input.operational?.scope ?? { type: 'hq' as const };
+  return (items ?? []).filter((item) => sameOperationalScope(item.scope, scope) && !isExpired(item.expiresAt, input.now));
+}
+
+function sameOperationalScope(left: HqOperationalItem['scope'], right: HqOperationalItem['scope']): boolean {
+  return left.type === right.type && (left.type === 'hq' || left.campaignId === (right.type === 'campaign' ? right.campaignId : undefined));
+}
+
+function isExpired(expiresAt: string | undefined, now: Date): boolean {
+  if (!expiresAt) return false;
+  const timestamp = Date.parse(expiresAt);
+  return !Number.isNaN(timestamp) && timestamp <= now.getTime();
+}
+
+function operationalEntityRef(item: HqOperationalItem): HqStateEntityRef {
+  return { kind: item.kind, id: item.id, source: item.source, scope: item.scope };
 }
 
 function buildHeadline(artistName: string, nextMove: HqStateNextMove, missing: string[]): string {
@@ -776,7 +799,22 @@ function normalizeNextMove(value: unknown): HqStateNextMove {
     action: normalizeAction(candidate.action),
     oneClick: typeof candidate.oneClick === 'boolean' ? candidate.oneClick : undefined,
     route: normalizeRouteHint(candidate.route),
+    entityRef: normalizeEntityRef(candidate.entityRef),
   };
+}
+
+function normalizeEntityRef(value: unknown): HqStateEntityRef | undefined {
+  if (!isPlainObject(value)) return undefined;
+  const kind = value.kind;
+  const id = clean(value.id);
+  const source = clean(value.source);
+  const rawScope = value.scope;
+  if (!id || !source || !isPlainObject(rawScope)) return undefined;
+  if (kind !== 'output' && kind !== 'scheduled-work' && kind !== 'workflow-run' && kind !== 'automation-run') return undefined;
+  const scope = rawScope.type === 'campaign' && clean(rawScope.campaignId)
+    ? { type: 'campaign' as const, campaignId: clean(rawScope.campaignId)! }
+    : rawScope.type === 'hq' ? { type: 'hq' as const } : undefined;
+  return scope ? { kind, id, source, scope } : undefined;
 }
 
 function normalizeRouteHint(value: unknown): HqStateRouteHint | undefined {

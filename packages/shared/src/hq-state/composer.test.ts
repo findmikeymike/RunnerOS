@@ -6,6 +6,7 @@ import {
   buildHqStateOfPlay,
   HQ_STATE_CONTEXT_SLUG,
   parseHqStateOfPlay,
+  serializeHqStateOfPlay,
 } from './index.ts';
 
 const now = new Date('2026-07-04T12:00:00.000Z');
@@ -232,6 +233,36 @@ describe('HQ State of Play composer', () => {
     expect(state.nextMove.route?.target).toBe('manual');
   });
 
+  test('does not treat a different release deliverable as duplicate work', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [
+        profileDoc(),
+        doc('artist-calendar', 'Artist Calendar', {
+          version: 1,
+          events: [{ title: 'Single release', date: '2026-07-10' }],
+        }),
+        doc('artist-vault', 'Artist Vault', {
+          version: 1,
+          workspaceId: 'artist-hq',
+          vaultRoot: 'vault',
+          storageMode: 'copied',
+          assets: [vaultAsset('artist-photo')],
+        }),
+      ],
+      operational: operational({
+        active: [{
+          ...operationalItem('photo-work', 'Select press photo', 'scheduled-work', 'running'),
+          worker: 'art-director',
+          intent: 'Select the final press photo.',
+          fingerprint: 'v1:hq:art-director:press-photo',
+        }],
+      }),
+    });
+
+    expect(state.nextMove.title).toBe('Close asset gaps before Single release');
+  });
+
   test('surfaces degraded operational sources instead of treating them as empty', () => {
     const state = buildHqStateOfPlay({
       now,
@@ -250,11 +281,49 @@ describe('HQ State of Play composer', () => {
     expect(state.attention[0]).toEqual(expect.objectContaining({ kind: 'source-health' }));
     expect(state.attention[0]?.text).toContain('malformed');
   });
+
+  test('ignores expired failures and failures from another scope', () => {
+    const expired = {
+      ...operationalItem('old-automation', 'Old automation failure', 'automation-run', 'failed'),
+      expiresAt: '2026-07-01T00:00:00.000Z',
+    };
+    const otherCampaign = {
+      ...operationalItem('campaign-failure', 'Other campaign failure', 'workflow-run', 'failed'),
+      scope: { type: 'campaign' as const, campaignId: 'other' },
+    };
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [profileDoc()],
+      operational: operational({ failures: [expired, otherCampaign] }),
+    });
+
+    expect(state.nextMove.title).not.toContain('Old automation failure');
+    expect(state.nextMove.title).not.toContain('Other campaign failure');
+  });
+
+  test('retains an exact entity reference for actionable operational work', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [profileDoc()],
+      operational: operational({
+        approvals: [operationalItem('output-approval', 'Approve final teaser', 'output', 'pending')],
+      }),
+    });
+
+    expect(state.nextMove.entityRef).toEqual({
+      kind: 'output',
+      id: 'output-approval',
+      source: 'output:output-approval',
+      scope: { type: 'hq' },
+    });
+    expect(parseHqStateOfPlay(serializeHqStateOfPlay(state))?.nextMove.entityRef).toEqual(state.nextMove.entityRef);
+  });
 });
 
 function operational(overrides: Partial<import('./types.ts').HqOperationalSnapshot> = {}): import('./types.ts').HqOperationalSnapshot {
   return {
     generatedAt: now.toISOString(),
+    scope: { type: 'hq' },
     active: [],
     approvals: [],
     failures: [],

@@ -7,6 +7,8 @@ import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-
 import {
   refreshHqStateContextDocBestEffort,
   refreshHqStateContextDoc,
+  scheduleHqStateContextRefresh,
+  cancelScheduledHqStateContextRefresh,
   shouldRefreshHqStateForContextSlug,
 } from './refresh'
 
@@ -86,6 +88,23 @@ describe('HQ state refresh', () => {
     } finally {
       console.warn = originalWarn
     }
+  })
+
+  test('coalesces high-frequency refresh requests by workspace', async () => {
+    const workspace = tempWorkspace()
+    upsertContextDoc(workspace, {
+      slug: 'artist-profile',
+      metadata: { name: 'Artist Profile', routing: { mode: 'broadcast' }, enabled: true },
+      body: jsonBody({ version: 1, artistName: 'Mikey Mike' }),
+    })
+
+    scheduleHqStateContextRefresh(workspace)
+    scheduleHqStateContextRefresh(workspace)
+    scheduleHqStateContextRefresh(workspace)
+    await Bun.sleep(150)
+
+    expect(loadContextDoc(workspace, HQ_STATE_CONTEXT_SLUG)).not.toBeNull()
+    cancelScheduledHqStateContextRefresh(workspace)
   })
 })
 

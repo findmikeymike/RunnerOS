@@ -57,6 +57,7 @@ import {
   HQ_STATE_CONTEXT_SLUG,
   parseHqStateOfPlay,
   type HqStateOfPlay,
+  type HqStateEntityRef,
   type HqStateRouteHint,
 } from '@craft-agent/shared/hq-state'
 import {
@@ -1115,6 +1116,7 @@ export function ArtistHQHome({
               availableAgentSlugs={new Set(availableAgents.map((agent) => agent.slug))}
               onToggleProactiveMode={setProactiveMode}
               onLaunchRoute={launchHqRoute}
+              onOpenEntity={openHqStateEntity}
             />
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
@@ -1558,6 +1560,7 @@ function StateOfPlayPanel({
   availableAgentSlugs,
   onToggleProactiveMode,
   onLaunchRoute,
+  onOpenEntity,
 }: {
   state: HqStateOfPlay | null
   proactiveMode: boolean
@@ -1565,6 +1568,7 @@ function StateOfPlayPanel({
   availableAgentSlugs: Set<string>
   onToggleProactiveMode: (enabled: boolean) => void
   onLaunchRoute: (route: HqStateRouteHint) => void
+  onOpenEntity: (entity: HqStateEntityRef) => void
 }) {
   if (!state) {
     return (
@@ -1593,10 +1597,7 @@ function StateOfPlayPanel({
   const missing = state.missing.slice(0, 5)
   const generatedLabel = formatShortDate(state.generatedAt)
   const route = state.nextMove.route
-  const launchableRoute = route?.target === 'manual' && state.nextMove.worker
-    ? { ...route, target: 'agent' as const, agentSlug: state.nextMove.worker }
-    : route
-  const routeReadiness = resolveHqRouteReadiness(launchableRoute, availableAgentSlugs, proactiveMode)
+  const routeReadiness = resolveHqRouteReadiness(route, availableAgentSlugs, proactiveMode)
   const canLaunchRoute = routeReadiness.canLaunch
 
   return (
@@ -1660,9 +1661,19 @@ function StateOfPlayPanel({
               <p className="mt-3 line-clamp-3 text-xs leading-5 text-white/44">
                 {routeReadiness.blockedReason ?? route.prompt}
               </p>
+              {state.nextMove.entityRef ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenEntity(state.nextMove.entityRef!)}
+                  className="mt-3 inline-flex h-8 w-full items-center justify-center gap-2 rounded-[10px] border border-white/[0.08] bg-white/[0.035] px-3 text-xs font-medium text-white/72 transition-colors hover:bg-white/[0.07]"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Open item
+                </button>
+              ) : null}
               <button
                 type="button"
-                onClick={() => launchableRoute ? onLaunchRoute(launchableRoute) : undefined}
+                onClick={() => route ? onLaunchRoute(route) : undefined}
                 disabled={!canLaunchRoute || routeBusy}
                 className={cn(
                   'mt-3 inline-flex h-8 w-full items-center justify-center rounded-[10px] border px-3 text-xs font-medium transition-colors',
@@ -1697,6 +1708,22 @@ function StateOfPlayPanel({
       </div>
     </HQCard>
   )
+}
+
+function openHqStateEntity(entity: HqStateEntityRef): void {
+  if (entity.kind === 'output') {
+    navigate(routes.view.output(entity.id))
+    return
+  }
+  if (entity.kind === 'workflow-run') {
+    navigate(routes.view.workflowRun(entity.id))
+    return
+  }
+  if (entity.kind === 'automation-run') {
+    navigate(routes.view.automations())
+    return
+  }
+  window.location.hash = '#artist-hq/calendar'
 }
 
 function Pill({ label, muted }: { label: string; muted?: boolean }) {
