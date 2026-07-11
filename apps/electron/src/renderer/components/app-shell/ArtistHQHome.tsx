@@ -7,7 +7,6 @@ import {
   ExternalLink,
   FileText,
   FolderKanban,
-  History,
   MessageSquareText,
   Music2,
   Pencil,
@@ -45,6 +44,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from '@/components/ui/switch'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
+import { StateOfPlayHistory, StateOfPlayOutcomeFeedback } from './StateOfPlayControls'
 import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
@@ -1769,51 +1769,19 @@ function StateOfPlayPanel({
               ) : null}
               {detail ? (
                 <div className="mt-2 border-t border-white/[0.05] pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setHistoryOpen((open) => !open)}
-                    className="flex h-8 w-full items-center justify-between text-xs text-white/48 hover:text-white/72"
-                  >
-                    <span className="inline-flex items-center gap-2"><History className="h-3.5 w-3.5" />History</span>
-                    <span>{detail.events.length}</span>
-                  </button>
-                  {historyOpen ? (
-                    <div className="mt-1 space-y-2 border-l border-white/[0.06] pl-3">
-                      {detail.events.slice(0, 6).map((event) => (
-                        <div key={event.id} className="text-[11px] leading-4 text-white/42">
-                          <span className="font-medium text-white/62">{event.to.replaceAll('_', ' ')}</span>
-                          <span> / {formatShortDate(event.createdAt)}</span>
-                          {event.reason ? <div className="line-clamp-2 text-white/32">{event.reason}</div> : null}
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
+                  <StateOfPlayHistory events={detail.events} open={historyOpen} onToggle={() => setHistoryOpen((open) => !open)} formatDate={formatShortDate} />
                   {actionState.canRate ? (
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="mr-auto text-[10px] uppercase tracking-[0.12em] text-white/30">Was this useful?</span>
-                      {(['useful', 'not_useful'] as const).map((usefulness) => (
-                        <button
-                          key={usefulness}
-                          type="button"
-                          onClick={async () => {
+                    <StateOfPlayOutcomeFeedback
+                      selected={detail.outcome?.userUsefulness}
+                      onRate={async (usefulness) => {
                             try {
                               const outcome = await window.electronAPI.setHqRecommendationUsefulness(workspaceId, { recommendationId: detail.candidate.id, usefulness })
                               setDetail((current) => current ? { ...current, outcome } : current)
                             } catch (error) {
                               toast.error('Could not save recommendation feedback', { description: error instanceof Error ? error.message : String(error) })
                             }
-                          }}
-                          className={cn(
-                            'h-7 rounded-[8px] border px-2 text-[10px] transition-colors',
-                            detail.outcome?.userUsefulness === usefulness
-                              ? 'border-orange-300/25 bg-orange-300/10 text-orange-100/80'
-                              : 'border-white/[0.06] text-white/42 hover:bg-white/[0.04]',
-                          )}
-                        >
-                          {usefulness === 'useful' ? 'Useful' : 'Not useful'}
-                        </button>
-                      ))}
-                    </div>
+                      }}
+                    />
                   ) : null}
                 </div>
               ) : null}
@@ -1854,13 +1822,9 @@ function StateOfPlayPanel({
               <div className="mt-4 border-t border-white/[0.05] pt-3">
                 <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">Recent Outcome</div>
                 <p className="mt-2 truncate text-xs text-white/58">{recentOutcome.title}</p>
-                <div className="mt-2 flex items-center gap-2">
-                  <span className="mr-auto text-[10px] uppercase tracking-[0.12em] text-white/30">Was this useful?</span>
-                  {(['useful', 'not_useful'] as const).map((usefulness) => (
-                    <button
-                      key={usefulness}
-                      type="button"
-                      onClick={async () => {
+                <StateOfPlayOutcomeFeedback
+                  selected={recentOutcome.userUsefulness}
+                  onRate={async (usefulness) => {
                         try {
                           await window.electronAPI.setHqRecommendationUsefulness(workspaceId, {
                             recommendationId: recentOutcome.recommendationId,
@@ -1869,18 +1833,8 @@ function StateOfPlayPanel({
                         } catch (error) {
                           toast.error('Could not save recommendation feedback', { description: error instanceof Error ? error.message : String(error) })
                         }
-                      }}
-                      className={cn(
-                        'h-7 rounded-[8px] border px-2 text-[10px] transition-colors',
-                        recentOutcome.userUsefulness === usefulness
-                          ? 'border-orange-300/25 bg-orange-300/10 text-orange-100/80'
-                          : 'border-white/[0.06] text-white/42 hover:bg-white/[0.04]',
-                      )}
-                    >
-                      {usefulness === 'useful' ? 'Useful' : 'Not useful'}
-                    </button>
-                  ))}
-                </div>
+                  }}
+                />
               </div>
             ) : null}
           </div>
