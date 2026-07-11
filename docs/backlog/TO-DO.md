@@ -67,6 +67,15 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 - [ ] **Make reconnect paths actionable.** One clear reconnect/setup action should replace agent-specific credential guesswork. Source: [Connected Accounts + Credential Vault](./connected-accounts-credential-vault.md).
 - [ ] **Keep secrets private and machine-local.** Verify exports, Team Mode, logs, outputs, context, and receipts never leak tokens, cookies, passwords, or private message bodies.
 
+### Windows Workability Vetting
+
+- [ ] **Prove RunnerOS is workable on Windows.** Build and install on a clean supported Windows machine, launch without developer tooling, create/open a workspace, restart safely, and verify updates/uninstall behavior. Source: [Windows Version](./windows-version.md).
+- [ ] **Vet bundled runtimes and paths.** Verify Bun/Node helpers, FFmpeg, transcription, creative tools, subprocesses, file URLs, long paths, spaces, drive letters, path separators, executable permissions, and temp/cache locations.
+- [ ] **Vet browser-operated integrations.** Confirm browser sessions, CDP handoffs, login persistence, account verification, downloads/uploads, CAPTCHA/2FA recovery, and guarded receipts on Windows.
+- [ ] **Run representative Windows workflows.** Smoke HNIC, Setup Concierge, Artist HQ, Campaigns, Calendar, Automations, Outputs/Finals, Vault, Spotify, Social Publisher, YouTube Intelligence, Paid Ads, and at least one visual/video render.
+- [ ] **Verify Windows security and credentials.** Confirm secret storage, logs, crash reports, Team Mode exclusions, antivirus/SmartScreen behavior, installer signing, and that no cookies or tokens enter synced workspaces.
+- [ ] **Publish a Windows compatibility report.** Clearly mark working, degraded, blocked, and unsupported features; do not call Windows supported until the clean-machine matrix passes.
+
 ## LATER
 
 ### Reliability And Product Truth
