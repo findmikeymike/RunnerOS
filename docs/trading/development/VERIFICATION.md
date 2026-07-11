@@ -107,6 +107,14 @@ A lower rung does not prove a higher rung.
 - Boundary decision: Trade God remains a local desktop capability rather than entering RunnerOS remote workspace RPC routing.
 - Not proven: registration from the real Electron bootstrap, preload exposure, app-termination lifecycle, renderer behavior, or real Electron smoke.
 
+## Phase 0 Slice 6 — Runtime and Path Resolution
+
+- Method: red-green TDD; runtime tests failed on the missing module before implementation.
+- Runtime suite: 2 passed with 4 expectations.
+- Complete fast Phase 0 suite: 33 passed, 0 failed, 66 expectations across eight files.
+- Proven: explicit RunnerOS root resolution, real sidecar launch and health through registered IPC, disposal cleanup, and clear failure when no entrypoint exists.
+- Not proven: packaged asset copy/bundle, real main-index invocation, preload exposure, app termination, renderer behavior, or Electron smoke.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

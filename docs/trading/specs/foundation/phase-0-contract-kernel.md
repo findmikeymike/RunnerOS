@@ -162,4 +162,6 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - Complete fast Phase 0 suite after supervision safety gates: 29 passed, 0 failed, 56 expectations.
 - 2026-07-11: narrow local IPC registration added for health and fixture analysis with idempotent lifecycle disposal.
 - Complete fast Phase 0 suite after IPC contract: 31 passed, 0 failed, 62 expectations.
+- 2026-07-11: runtime factory added for explicit RunnerOS root resolution, real IPC health, cleanup, and missing-entrypoint failure.
+- Complete fast Phase 0 suite after runtime resolution: 33 passed, 0 failed, 66 expectations.
 - Still open: real bootstrap/preload/view wiring, packaged path resolution, restart policy, active-computation cancellation, partial-frame tests, and real Electron smoke.

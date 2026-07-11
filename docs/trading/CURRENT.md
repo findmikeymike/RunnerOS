@@ -11,8 +11,8 @@ source_of_truth: true
 
 - Date: 2026-07-11
 - Stage: Phase 0 contract kernel in progress
-- Current goal: wire the verified local IPC registration into Electron bootstrap/preload and render the minimal workbench
-- Overall state: neutral contracts, deterministic fixture analysis, standalone sidecar, typed client, Electron supervisor, and narrow IPC registration are implemented; bootstrap/preload exposure and renderer workbench remain unbuilt
+- Current goal: connect the verified runtime factory to Electron main/preload and render the minimal workbench
+- Overall state: contracts, fixture analysis, sidecar, typed client, Electron supervisor, IPC, and runtime/path-resolution factory are implemented; main/preload exposure and renderer workbench remain unbuilt
 - Host worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -38,6 +38,8 @@ source_of_truth: true
 - Expanded fast Phase 0 proof to 29 passing tests across six files, including the real child-process boundary and stdout/stderr safety limits.
 - Added a local-only IPC registration surface with exactly two capabilities—health and fixture analysis—and idempotent disposal that removes handlers and stops the supervisor.
 - Expanded fast Phase 0 proof to 31 passing tests across seven files.
+- Added a tested runtime factory that resolves the sidecar from explicit RunnerOS roots, registers IPC, performs a real health call, disposes cleanly, and fails clearly when the entrypoint is absent.
+- Expanded fast Phase 0 proof to 33 passing tests across eight files.
 
 ## Active Build Target
 
@@ -49,8 +51,8 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 
 ## Next Actions
 
-1. Instantiate the supervisor and register the local IPC handlers during Electron startup.
-2. Expose the two methods through preload and add lifecycle shutdown on app termination.
+1. Call the runtime factory during Electron startup with explicit dev/package root candidates.
+2. Expose the two methods through preload and call runtime disposal on app termination.
 3. Render service health and one validated artifact in a thin Electron route.
 4. Extend conformance tests for partial frames and explicit restart policy.
 5. Review the 15 upstream-only v0.11.1 commits separately; do not merge them during Phase 0.
@@ -78,7 +80,7 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 - Full monorepo typecheck has a recorded pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - All 23 pre-existing RunnerOS worktrees were verified unchanged after setup.
 - Contract and deterministic fixture code are verified by the focused suite; Electron/runtime integration is not.
-- Trade God focused suite: 31 passed, 0 failed across contracts, deterministic fixture analysis, typed client safety, JSON-RPC behavior, spawned stdio, Electron supervision, and IPC registration.
+- Trade God focused suite: 33 passed, 0 failed across contracts, deterministic fixture analysis, typed client safety, JSON-RPC behavior, spawned stdio, Electron supervision, IPC registration, and runtime resolution.
 - Package TypeScript checking is not yet verified: two attempted invocations hung in the command/tool layer and were stopped rather than allowed to block progress.
 - Standalone sidecar, Electron supervision, and IPC registration module are verified; real bootstrap/preload and renderer paths are not.
 - Every future completion claim must name the command, fixture, result, and artifact/receipt.
