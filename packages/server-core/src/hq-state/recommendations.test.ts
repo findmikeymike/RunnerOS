@@ -8,7 +8,7 @@ import { scheduledWorkDefinitionDigest, scheduledWorkMetadata, serializeSchedule
 import { upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows'
 import { AUTOMATIONS_HISTORY_FILE } from '@craft-agent/shared/automations'
-import { readHqRecommendationOutcomes } from '@craft-agent/shared/hq-state/recommendation-storage'
+import { readHqRecommendationOutcomes, upsertHqRecommendationOutcome } from '@craft-agent/shared/hq-state/recommendation-storage'
 import {
   readHqRecommendationStore,
   transitionHqRecommendation,
@@ -140,6 +140,23 @@ describe('HQ recommendation outcome reconciliation', () => {
     reconcileHqRecommendationOutcomes(workspace, new Date('2026-07-10T02:00:00.000Z'))
 
     expect(readHqRecommendationOutcomes(workspace)[0]).toEqual(expect.objectContaining({ status: 'successful' }))
+  })
+
+  test('repairs a stale outcome after a failed recommendation succeeds on retry', () => {
+    const workspace = tempWorkspace()
+    upsertHqRecommendation(workspace, candidate())
+    transitionHqRecommendation(workspace, 'sop_outcome', 'accepted', { actor: { type: 'user' } })
+    transitionHqRecommendation(workspace, 'sop_outcome', 'failed', { actor: { type: 'system' } })
+    upsertHqRecommendationOutcome(workspace, {
+      version: 1, recommendationId: 'sop_outcome', status: 'unsuccessful', evaluatedAt: '2026-07-10T01:00:00.000Z', evidence: [], userUsefulness: 'useful',
+    })
+    transitionHqRecommendation(workspace, 'sop_outcome', 'accepted', { actor: { type: 'user' } })
+    transitionHqRecommendation(workspace, 'sop_outcome', 'launched', { actor: { type: 'system' } })
+    transitionHqRecommendation(workspace, 'sop_outcome', 'completed', { actor: { type: 'system' } })
+
+    reconcileHqRecommendationOutcomes(workspace, new Date('2026-07-10T02:00:00.000Z'))
+
+    expect(readHqRecommendationOutcomes(workspace)[0]).toEqual(expect.objectContaining({ status: 'successful', userUsefulness: 'useful' }))
   })
 
   test('does not break reconciliation when automation history is unreadable', () => {

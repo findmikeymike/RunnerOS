@@ -14,6 +14,7 @@ export const HQ_RECOMMENDATIONS_FILE = 'recommendations.json'
 export const HQ_RECOMMENDATION_EVENTS_FILE = 'events.jsonl'
 export const HQ_RECOMMENDATIONS_BACKUP_FILE = 'recommendations.backup.json'
 export const HQ_RECOMMENDATION_OUTCOMES_FILE = 'outcomes.json'
+export const HQ_RECOMMENDATION_OUTCOMES_BACKUP_FILE = 'outcomes.backup.json'
 
 const ALLOWED_TRANSITIONS: Record<HqRecommendationStatus, ReadonlySet<HqRecommendationStatus>> = {
   proposed: new Set(['viewed', 'accepted', 'dismissed', 'snoozed', 'expired', 'superseded']),
@@ -188,12 +189,18 @@ export function readHqRecommendationEvents(workspaceRootPath: string, recommenda
 export function readHqRecommendationOutcomes(workspaceRootPath: string): HqRecommendationOutcome[] {
   const file = outcomesFile(workspaceRootPath)
   if (!existsSync(file)) return []
-  try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { version?: number; outcomes?: HqRecommendationOutcome[] }
-    return parsed.version === 1 && Array.isArray(parsed.outcomes) ? parsed.outcomes : []
-  } catch {
-    throw new Error(`State of Play outcome store is corrupt: ${file}`)
+  const primary = parseOutcomeFile(file)
+  if (primary) return primary
+  const backupFile = outcomesBackupFile(workspaceRootPath)
+  const backup = existsSync(backupFile) ? parseOutcomeFile(backupFile) : null
+  const corruptFile = `${file}.corrupt-${Date.now()}`
+  if (backup) {
+    renameSync(file, corruptFile)
+    copyFileSync(backupFile, file)
+    return backup
   }
+  copyFileSync(file, corruptFile)
+  throw new Error(`State of Play outcome store is corrupt and was preserved at ${corruptFile}.`)
 }
 
 export function upsertHqRecommendationOutcome(workspaceRootPath: string, outcome: HqRecommendationOutcome): HqRecommendationOutcome {
@@ -206,8 +213,14 @@ export function upsertHqRecommendationOutcome(workspaceRootPath: string, outcome
   mkdirSync(recommendationDir(workspaceRootPath), { recursive: true })
   const file = outcomesFile(workspaceRootPath)
   const tmp = `${file}.${process.pid}.tmp`
-  writeFileSync(tmp, JSON.stringify({ version: 1, outcomes }, null, 2), 'utf8')
-  renameSync(tmp, file)
+  try {
+    writeFileSync(tmp, JSON.stringify({ version: 1, outcomes }, null, 2), 'utf8')
+    if (existsSync(file) && parseOutcomeFile(file)) copyFileSync(file, outcomesBackupFile(workspaceRootPath))
+    renameSync(tmp, file)
+  } catch (error) {
+    try { rmSync(tmp, { force: true }) } catch { /* best effort */ }
+    throw error
+  }
   return next
 }
 
@@ -216,6 +229,7 @@ function storeFile(root: string): string { return join(recommendationDir(root), 
 function backupStoreFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATIONS_BACKUP_FILE) }
 function eventsFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATION_EVENTS_FILE) }
 function outcomesFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATION_OUTCOMES_FILE) }
+function outcomesBackupFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATION_OUTCOMES_BACKUP_FILE) }
 function emptyStore(): HqRecommendationStore { return { version: 1, candidates: [], updatedAt: '' } }
 
 function parseStoreFile(file: string): HqRecommendationStore | null {
@@ -227,4 +241,26 @@ function parseStoreFile(file: string): HqRecommendationStore | null {
   } catch {
     return null
   }
+}
+
+function parseOutcomeFile(file: string): HqRecommendationOutcome[] | null {
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { version?: number; outcomes?: unknown[] }
+    if (parsed.version !== 1 || !Array.isArray(parsed.outcomes)) return null
+    if (!parsed.outcomes.every(isHqRecommendationOutcome)) return null
+    return parsed.outcomes
+  } catch {
+    return null
+  }
+}
+
+function isHqRecommendationOutcome(value: unknown): value is HqRecommendationOutcome {
+  if (!value || typeof value !== 'object') return false
+  const outcome = value as Partial<HqRecommendationOutcome>
+  return outcome.version === 1
+    && typeof outcome.recommendationId === 'string'
+    && ['successful', 'partial', 'unsuccessful', 'unknown'].includes(outcome.status ?? '')
+    && typeof outcome.evaluatedAt === 'string'
+    && Array.isArray(outcome.evidence)
+    && (!outcome.userUsefulness || ['useful', 'neutral', 'not_useful'].includes(outcome.userUsefulness))
 }

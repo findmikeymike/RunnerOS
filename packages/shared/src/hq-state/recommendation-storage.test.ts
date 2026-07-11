@@ -127,6 +127,33 @@ describe('HQ recommendation storage', () => {
 
     expect(readHqRecommendationOutcomes(workspace)[0]).toEqual(expect.objectContaining({ status: 'successful', userUsefulness: 'useful' }))
   })
+
+  test('restores structurally corrupt outcomes from the last known good backup', () => {
+    const workspace = tempWorkspace()
+    upsertHqRecommendationOutcome(workspace, {
+      version: 1, recommendationId: 'sop_test', status: 'unknown', evaluatedAt: '2026-07-10T00:00:00.000Z', evidence: [], userUsefulness: 'useful',
+    })
+    upsertHqRecommendationOutcome(workspace, {
+      version: 1, recommendationId: 'sop_test', status: 'successful', evaluatedAt: '2026-07-10T01:00:00.000Z', evidence: [],
+    })
+    const dir = join(workspace, '.state-of-play')
+    writeFileSync(join(dir, 'outcomes.json'), JSON.stringify({ version: 1, outcomes: [{}] }))
+
+    const recovered = readHqRecommendationOutcomes(workspace)
+
+    expect(recovered[0]).toEqual(expect.objectContaining({ status: 'unknown', userUsefulness: 'useful' }))
+    expect(readdirSync(dir).some((name) => name.startsWith('outcomes.json.corrupt-'))).toBe(true)
+  })
+
+  test('fails closed on structurally corrupt outcomes without a backup', () => {
+    const workspace = tempWorkspace()
+    const dir = join(workspace, '.state-of-play')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'outcomes.json'), JSON.stringify({ version: 1, outcomes: [{}] }))
+
+    expect(() => readHqRecommendationOutcomes(workspace)).toThrow('is corrupt')
+    expect(readdirSync(dir)).toContain('outcomes.json')
+  })
 })
 
 function candidate(): HqRecommendationCandidate {

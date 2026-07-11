@@ -565,6 +565,8 @@ Implemented:
 - compact lifecycle history disclosure in Artist HQ
 - explicit useful/not-useful feedback persisted independently from lifecycle status
 - terminal-outcome self-repair after an interrupted lifecycle/outcome write
+- stale/mismatched outcome correction after a later successful retry
+- strict outcome-store validation with last-known-good recovery and fail-closed diagnostics
 - fail-soft automation outcome reads that preserve the rest of reconciliation
 - lifecycle detail refresh while the same recommendation remains visible
 

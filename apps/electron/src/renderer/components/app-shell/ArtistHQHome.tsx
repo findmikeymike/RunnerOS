@@ -1576,20 +1576,23 @@ function StateOfPlayPanel({
   onTransitionRecommendation: (recommendationId: string, to: 'dismissed' | 'snoozed') => void
 }) {
   const recommendationId = state?.nextMove.recommendationId
-  const recommendationRevision = `${state?.nextMove.recommendationStatus ?? ''}:${state?.generatedAt ?? ''}`
+  const recommendationStatusRevision = state?.nextMove.recommendationStatus ?? ''
   const [detail, setDetail] = React.useState<HqRecommendationDetail | null>(null)
   const [historyOpen, setHistoryOpen] = React.useState(false)
 
   React.useEffect(() => {
     setDetail(null)
     setHistoryOpen(false)
+  }, [recommendationId, workspaceId])
+
+  React.useEffect(() => {
     if (!recommendationId) return
     let cancelled = false
     window.electronAPI.getHqRecommendationDetail(workspaceId, recommendationId)
       .then((value) => { if (!cancelled) setDetail(value) })
       .catch(() => undefined)
     return () => { cancelled = true }
-  }, [recommendationId, recommendationRevision, workspaceId])
+  }, [recommendationId, recommendationStatusRevision, workspaceId])
 
   if (!state) {
     return (

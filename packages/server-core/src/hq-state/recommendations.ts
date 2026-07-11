@@ -106,17 +106,19 @@ function repairMissingTerminalOutcome(
   now: Date,
 ): boolean {
   if (!['completed', 'failed', 'superseded'].includes(candidate.status)) return false
-  if (outcomes.has(candidate.id)) return true
   const outputRef = [...candidate.executionRefs].reverse().find((ref) => ref.kind === 'output')
   const entity = candidate.completionContract.type === 'entity-resolution'
     ? candidate.completionContract.entity
     : outputRef
       ? { kind: 'output' as const, id: outputRef.id, source: `output:${outputRef.id}`, scope: candidate.scope }
       : undefined
+  const expectedStatus = candidate.status === 'failed' ? 'unsuccessful' : 'successful'
+  const existing = outcomes.get(candidate.id)
+  if (existing?.status === expectedStatus && (!entity || existing.evidence.some((evidence) => evidence.kind === entity.kind && evidence.id === entity.id))) return true
   const outcome = upsertHqRecommendationOutcome(workspaceRootPath, {
     version: 1,
     recommendationId: candidate.id,
-    status: candidate.status === 'failed' ? 'unsuccessful' : 'successful',
+    status: expectedStatus,
     evaluatedAt: now.toISOString(),
     evidence: entity ? [entity] : [],
     notes: 'Recovered from terminal recommendation state after a missing outcome write.',
