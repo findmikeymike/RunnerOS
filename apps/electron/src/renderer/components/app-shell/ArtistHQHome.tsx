@@ -733,7 +733,28 @@ export function ArtistHQHome({
     youtubeIntelligenceAgent,
   ])
 
-  const launchHqRoute = React.useCallback(async (route: HqStateRouteHint) => {
+  const transitionHqRecommendation = React.useCallback(async (
+    recommendationId: string,
+    to: 'dismissed' | 'snoozed',
+  ) => {
+    setHqRouteBusy(true)
+    try {
+      const snoozedUntil = to === 'snoozed' ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined
+      await window.electronAPI.transitionHqRecommendation(workspaceId, {
+        recommendationId,
+        to,
+        snoozedUntil,
+        reason: to === 'snoozed' ? 'Snoozed for seven days.' : 'Dismissed from State of Play.',
+      })
+      toast.success(to === 'snoozed' ? 'Recommendation snoozed' : 'Recommendation dismissed')
+    } catch (error) {
+      toast.error('Could not update recommendation', { description: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setHqRouteBusy(false)
+    }
+  }, [workspaceId])
+
+  const launchHqRoute = React.useCallback(async (route: HqStateRouteHint, recommendationId?: string) => {
     if (route.target !== 'agent' || !route.agentSlug) {
       toast.error(route.blockedReason ?? 'This recommendation needs review first.')
       return
@@ -752,6 +773,13 @@ export function ArtistHQHome({
       const contextDocs = contextSelection.contextDocs.length > 0
         ? contextSelection.contextDocs
         : await window.electronAPI.listWorkspaceContextDocsForAgent(workspaceId, agent.slug)
+      if (recommendationId) {
+        await window.electronAPI.transitionHqRecommendation(workspaceId, {
+          recommendationId,
+          to: 'accepted',
+          reason: `Accepted route to @${agent.slug}.`,
+        })
+      }
       const session = await openAgentSessionComposer({
         agent,
         workspaceId,
@@ -763,6 +791,13 @@ export function ArtistHQHome({
         agentCatalog: availableAgents,
       })
       await Promise.resolve(onSendMessage(session.id, route.prompt))
+      if (recommendationId) {
+        await window.electronAPI.transitionHqRecommendation(workspaceId, {
+          recommendationId,
+          to: 'launched',
+          executionRef: { kind: 'session', id: session.id, linkedAt: new Date().toISOString() },
+        })
+      }
       toast.success(`Started @${agent.slug}`)
     } catch (error) {
       toast.error('Failed to launch HQ route', {
@@ -1117,6 +1152,7 @@ export function ArtistHQHome({
               onToggleProactiveMode={setProactiveMode}
               onLaunchRoute={launchHqRoute}
               onOpenEntity={openHqStateEntity}
+              onTransitionRecommendation={transitionHqRecommendation}
             />
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
@@ -1561,14 +1597,16 @@ function StateOfPlayPanel({
   onToggleProactiveMode,
   onLaunchRoute,
   onOpenEntity,
+  onTransitionRecommendation,
 }: {
   state: HqStateOfPlay | null
   proactiveMode: boolean
   routeBusy: boolean
   availableAgentSlugs: Set<string>
   onToggleProactiveMode: (enabled: boolean) => void
-  onLaunchRoute: (route: HqStateRouteHint) => void
+  onLaunchRoute: (route: HqStateRouteHint, recommendationId?: string) => void
   onOpenEntity: (entity: HqStateEntityRef) => void
+  onTransitionRecommendation: (recommendationId: string, to: 'dismissed' | 'snoozed') => void
 }) {
   if (!state) {
     return (
@@ -1597,8 +1635,9 @@ function StateOfPlayPanel({
   const missing = state.missing.slice(0, 5)
   const generatedLabel = formatShortDate(state.generatedAt)
   const route = state.nextMove.route
+  const recommendationInactive = state.nextMove.recommendationStatus === 'dismissed' || state.nextMove.recommendationStatus === 'snoozed'
   const routeReadiness = resolveHqRouteReadiness(route, availableAgentSlugs, proactiveMode)
-  const canLaunchRoute = routeReadiness.canLaunch
+  const canLaunchRoute = routeReadiness.canLaunch && !recommendationInactive
 
   return (
     <HQCard>
@@ -1617,6 +1656,7 @@ function StateOfPlayPanel({
           {state.nextMove.worker ? <Pill label={`@${state.nextMove.worker}`} /> : null}
           {state.nextMove.action ? <Pill label={state.nextMove.action} /> : null}
           {route ? <Pill label={canLaunchRoute ? `${route.confidence} route` : 'review needed'} muted={!canLaunchRoute} /> : null}
+          {state.nextMove.recommendationStatus ? <Pill label={state.nextMove.recommendationStatus} muted={state.nextMove.recommendationStatus !== 'proposed'} /> : null}
           <Pill label={generatedLabel} muted />
         </div>
       </div>
@@ -1673,7 +1713,7 @@ function StateOfPlayPanel({
               ) : null}
               <button
                 type="button"
-                onClick={() => route ? onLaunchRoute(route) : undefined}
+                onClick={() => route ? onLaunchRoute(route, state.nextMove.recommendationId) : undefined}
                 disabled={!canLaunchRoute || routeBusy}
                 className={cn(
                   'mt-3 inline-flex h-8 w-full items-center justify-center rounded-[10px] border px-3 text-xs font-medium transition-colors',
@@ -1685,6 +1725,26 @@ function StateOfPlayPanel({
               >
                 {routeBusy ? 'Starting...' : proactiveMode ? (routeReadiness.blockedReason ? 'Start Review' : 'Start Route') : 'Proactive Off'}
               </button>
+              {state.nextMove.recommendationId && !recommendationInactive ? (
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onTransitionRecommendation(state.nextMove.recommendationId!, 'snoozed')}
+                    disabled={routeBusy}
+                    className="h-8 rounded-[10px] border border-white/[0.06] bg-white/[0.02] text-xs text-white/48 transition-colors hover:bg-white/[0.05] hover:text-white/70 disabled:opacity-40"
+                  >
+                    Snooze 7 days
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onTransitionRecommendation(state.nextMove.recommendationId!, 'dismissed')}
+                    disabled={routeBusy}
+                    className="h-8 rounded-[10px] border border-white/[0.06] bg-white/[0.02] text-xs text-white/48 transition-colors hover:bg-white/[0.05] hover:text-white/70 disabled:opacity-40"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              ) : null}
             </div>
           ) : null}
 

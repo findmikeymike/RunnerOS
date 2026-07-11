@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseHqStateOfPlay, HQ_STATE_CONTEXT_SLUG } from '@craft-agent/shared/hq-state'
+import { readHqRecommendationStore } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import {
   refreshHqStateContextDocBestEffort,
@@ -43,6 +44,8 @@ describe('HQ state refresh', () => {
     expect(loaded?.metadata.name).toBe('HQ State of Play')
     expect(state?.sources['artist-profile']).toBe('2026-07-04T00:00:00.000Z')
     expect(state?.nextMove.title).toBeTruthy()
+    expect(state?.nextMove.recommendationId).toMatch(/^sop_[a-f0-9]{20}$/)
+    expect(readHqRecommendationStore(workspace).candidates[0]?.id).toBe(state!.nextMove.recommendationId!)
   })
 
   test('does not refresh recursively for the derived doc itself', () => {

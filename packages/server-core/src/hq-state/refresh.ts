@@ -1,6 +1,7 @@
 import {
   buildHqStateContextDoc,
   HQ_STATE_CONTEXT_SLUG,
+  serializeHqStateOfPlay,
 } from '@craft-agent/shared/hq-state'
 import {
   loadAllContextDocs,
@@ -8,6 +9,7 @@ import {
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import { buildHqOperationalSnapshot } from './operational'
+import { persistPrimaryHqRecommendation } from './recommendations'
 
 const scheduledRefreshes = new Map<string, ReturnType<typeof setTimeout>>()
 const REFRESH_DEBOUNCE_MS = 100
@@ -20,6 +22,11 @@ export function refreshHqStateContextDoc(workspaceRootPath: string): LoadedConte
   const docs = loadAllContextDocs(workspaceRootPath)
   const operational = buildHqOperationalSnapshot(workspaceRootPath)
   const built = buildHqStateContextDoc({ docs, operational })
+  const recommendation = persistPrimaryHqRecommendation(workspaceRootPath, built.state, operational.scope)
+  built.state.nextMove.recommendationId = recommendation.id
+  built.state.nextMove.recommendationStatus = recommendation.status
+  built.state.nextMove.snoozedUntil = recommendation.snoozedUntil
+  built.body = serializeHqStateOfPlay(built.state)
   const existing = docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG)
   return upsertContextDoc(workspaceRootPath, {
     slug: built.slug,

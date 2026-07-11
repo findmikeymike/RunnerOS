@@ -794,6 +794,9 @@ function normalizeNextMove(value: unknown): HqStateNextMove {
   const candidate = isPlainObject(value) ? value as Partial<HqStateNextMove> : {};
   return {
     title: clean(candidate.title) ?? 'Run the weekly HQ review',
+    recommendationId: clean(candidate.recommendationId),
+    recommendationStatus: normalizeRecommendationStatus(candidate.recommendationStatus),
+    snoozedUntil: clean(candidate.snoozedUntil),
     why: clean(candidate.why) ?? 'No reason was recorded.',
     worker: clean(candidate.worker),
     action: normalizeAction(candidate.action),
@@ -801,6 +804,13 @@ function normalizeNextMove(value: unknown): HqStateNextMove {
     route: normalizeRouteHint(candidate.route),
     entityRef: normalizeEntityRef(candidate.entityRef),
   };
+}
+
+function normalizeRecommendationStatus(value: unknown): HqStateNextMove['recommendationStatus'] {
+  return value === 'proposed' || value === 'viewed' || value === 'accepted' || value === 'launched'
+    || value === 'in_progress' || value === 'awaiting_approval' || value === 'completed'
+    || value === 'failed' || value === 'dismissed' || value === 'snoozed'
+    || value === 'expired' || value === 'superseded' ? value : undefined;
 }
 
 function normalizeEntityRef(value: unknown): HqStateEntityRef | undefined {

@@ -421,6 +421,12 @@ export const RPC_CHANNELS = {
     /** Push event when a workspace's context docs changed. */
     CHANGED: 'workspaceContext:changed',
   },
+  hqState: {
+    /** Read durable State of Play recommendation records. */
+    LIST_RECOMMENDATIONS: 'hqState:listRecommendations',
+    /** Apply one validated lifecycle transition. */
+    TRANSITION_RECOMMENDATION: 'hqState:transitionRecommendation',
+  },
   scheduledWork: {
     /** Read the parsed scheduled-work document for a workspace. */
     GET: 'scheduledWork:get',

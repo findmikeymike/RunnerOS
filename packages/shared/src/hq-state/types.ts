@@ -32,6 +32,9 @@ export interface HqStateRouteHint {
 }
 
 export interface HqStateNextMove {
+  recommendationId?: string;
+  recommendationStatus?: HqRecommendationStatus;
+  snoozedUntil?: string;
   title: string;
   why: string;
   worker?: string;
@@ -40,6 +43,20 @@ export interface HqStateNextMove {
   route?: HqStateRouteHint;
   entityRef?: HqStateEntityRef;
 }
+
+export type HqRecommendationStatus =
+  | 'proposed'
+  | 'viewed'
+  | 'accepted'
+  | 'launched'
+  | 'in_progress'
+  | 'awaiting_approval'
+  | 'completed'
+  | 'failed'
+  | 'dismissed'
+  | 'snoozed'
+  | 'expired'
+  | 'superseded';
 
 export interface HqStateEntityRef {
   kind: HqOperationalItemKind;

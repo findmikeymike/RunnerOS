@@ -29,6 +29,7 @@ export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
 // Thinking level types
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
+import type { HqRecommendationCandidate, HqRecommendationStore, HqRecommendationTransitionInput } from '@craft-agent/shared/hq-state';
 export type { ThinkingLevel };
 export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels';
 
@@ -962,6 +963,8 @@ export interface ElectronAPI {
   }): Promise<ContextDocDTO>
   deleteWorkspaceContextDoc(workspaceId: string, slug: string): Promise<boolean>
   onWorkspaceContextChanged(callback: (workspaceId: string, docs: ContextDocDTO[]) => void): () => void
+  listHqRecommendations(workspaceId: string): Promise<HqRecommendationStore>
+  transitionHqRecommendation(workspaceId: string, input: HqRecommendationTransitionInput): Promise<HqRecommendationCandidate>
   getScheduledWork(workspaceId: string): Promise<ScheduledWorkParseResult>
   mutateScheduledWork(workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult>
   scheduleCampaignWork(workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult>

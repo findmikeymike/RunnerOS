@@ -531,6 +531,29 @@ Exit gate: State of Play avoids equivalent active jobs and reliably surfaces pen
 
 ### Phase 2: Durable candidates
 
+Implementation status: foundational lifecycle slice implemented 2026-07-10.
+
+Implemented:
+
+- atomic workspace-local recommendation store under `.state-of-play/recommendations.json`
+- append-only lifecycle events under `.state-of-play/events.jsonl`
+- deterministic recommendation IDs reused across refreshes
+- lifecycle state preserved while display evidence refreshes
+- validated lifecycle transitions, snooze deadlines, and execution-reference deduplication
+- automatic snooze revival with an explicit system event
+- recommendation ID/status projection into the generated context document
+- backend-owned list/transition RPC handlers
+- persistent seven-day snooze and dismiss controls in the State of Play card
+- exact session linkage after a successful route launch
+
+Still required before declaring Phase 2 complete:
+
+- ranked candidate set rather than only the projected V1 primary move
+- persisted completion criteria and outcome evaluation
+- automatic session/work-order/output status reconciliation
+- lifecycle history UI and explicit usefulness feedback
+- Team Mode transport/locking beyond workspace-local atomic files
+
 - add candidate, fingerprint, lifecycle event, and outcome storage
 - persist ranked candidates
 - atomically link launches to executions
