@@ -22,6 +22,7 @@ source_of_truth: true
 - Added a required Postiz agent and official hosted Postiz MCP source, with schema-first account/media validation, exact approval boundaries, provider receipt requirements, and an honest no-comments/DM boundary.
 - Hardened TryPost's built-in agent around platform content types, media compatibility, drafts, exact approvals, and provider receipts; existing shipped prompts migrate conservatively.
 - Clarified that app-level Postiz environment fields remain for bundled local/Squad workflows. The Postiz agent uses its encrypted source connection; self-hosted provider-agent users create a custom MCP source for their backend.
+- Added TryPost Agent and Postiz Agent connection cards to Keys/Settings; each reports the real source credential status and opens the encrypted provider source connection.
 - Completed the shared progressive Scheduled Work composer across HQ and Campaign calendars.
 - Replaced persistent Calendar side panels with contextual day menus and individually selectable work markers.
 - Added typed `queue-work` actions to Automations, including optional hidden Calendar display for background agent/workflow runs.
