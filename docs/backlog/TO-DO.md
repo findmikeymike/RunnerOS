@@ -1,7 +1,7 @@
 ---
 status: current
 owner: unassigned
-last_verified: 2026-07-10
+last_verified: 2026-07-11
 source_of_truth: true
 ---
 
@@ -28,8 +28,7 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### Product Intelligence
 
-- [ ] **Update State of Play.** Review the implemented V1 against current agents, workflows, outputs, campaign context, shared intel, calendar, and social/commerce capabilities. Add useful route history, explicit refresh, stale-input visibility, and clearer reasons when a recommended route cannot launch. Source: [HQ State of Play](../creator-command-center/09-hq-state-of-play-proactive-routing.md).
-- [ ] **Make State of Play output-aware.** Prefer unfinished approved work, recent outputs, failed runs, campaign deadlines, and missing release-critical assets instead of relying mainly on context presence.
+- [ ] **Finish the State of Play V2 release gate.** Implemented: operational adapters for Outputs, Scheduled Work, workflows, automations, approvals, campaign deadlines, and release-critical asset gaps; source health and stale-evidence windows; durable ranked recommendations and lifecycle history; guarded launch/retry/defer actions; objective outcome evidence and usefulness feedback; exact semantic-intent duplicate suppression with legacy migration; same-server launch serialization; rendered control coverage; and explicit regeneration. Remaining: live Electron smoke, campaign-scoped source-health UI, additional domain-specific completion-criterion generators, and a distributed Team Mode lease. Source: [State of Play Opportunity Engine](../creator-command-center/14-state-of-play-opportunity-engine-spec.md).
 - [ ] **Add cost budgets to research-heavy agents.** Standardize caps, cache reuse, early-stop rules, cheap-model funnels, and concise evidence packets for YouTube Intelligence, Spotify discovery, deep research, ads research, and similar browser jobs.
 
 ### System Awareness
