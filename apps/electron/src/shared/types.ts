@@ -1440,6 +1440,11 @@ export interface VaultNavigationState {
   rightSidebar?: RightSidebarPanel
 }
 
+export interface TradeGodNavigationState {
+  navigator: 'tradeGod'
+  rightSidebar?: RightSidebarPanel
+}
+
 /**
  * Workflows navigator. Hosts the list, detail, editor, and recent-runs
  * pages. The Run page (per-run pipeline view) is its own navigator below
@@ -1496,6 +1501,7 @@ export type NavigationState =
   | AgendaNavigationState
   | CommunityNavigationState
   | VaultNavigationState
+  | TradeGodNavigationState
   | WorkflowsNavigationState
   | WorkflowRunNavigationState
   | DeepResearchRunNavigationState
@@ -1545,6 +1551,10 @@ export const isCommunityNavigation = (
 export const isVaultNavigation = (
   state: NavigationState
 ): state is VaultNavigationState => state.navigator === 'vault'
+
+export const isTradeGodNavigation = (
+  state: NavigationState
+): state is TradeGodNavigationState => state.navigator === 'tradeGod'
 
 export const isWorkflowsNavigation = (
   state: NavigationState

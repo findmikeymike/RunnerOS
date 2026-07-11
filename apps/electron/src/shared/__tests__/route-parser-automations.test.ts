@@ -123,8 +123,10 @@ describe('route-parser: library routes', () => {
   it('parses creator HQ utility routes', () => {
     expect(parseRouteToNavigationState('agenda')).toEqual({ navigator: 'agenda' })
     expect(parseRouteToNavigationState('vault')).toEqual({ navigator: 'vault' })
+    expect(parseRouteToNavigationState('trade-god')).toEqual({ navigator: 'tradeGod' })
     expect(buildCompoundRoute(parseCompoundRoute('agenda')!)).toBe('agenda')
     expect(buildCompoundRoute(parseCompoundRoute('vault')!)).toBe('vault')
+    expect(buildCompoundRoute(parseCompoundRoute('trade-god')!)).toBe('trade-god')
   })
 
   it('parses video studio output routes', () => {

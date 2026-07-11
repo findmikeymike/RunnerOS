@@ -35,7 +35,7 @@ export interface ParsedRoute {
 // Compound Route Types (new format)
 // =============================================================================
 
-export type NavigatorType = 'campaign' | 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'community' | 'vault' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
+export type NavigatorType = 'campaign' | 'sessions' | 'sources' | 'skills' | 'agents' | 'automations' | 'workspaceContext' | 'agenda' | 'community' | 'vault' | 'tradeGod' | 'workflows' | 'workflowRun' | 'deepResearchRun' | 'outputs' | 'videoStudio' | 'settings'
 
 export interface ParsedCompoundRoute {
   /** The navigator type */
@@ -71,7 +71,7 @@ export interface ParsedCompoundRoute {
  * Known prefixes that indicate a compound route
  */
 export const COMPOUND_ROUTE_PREFIXES = [
-  'campaign', 'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'agenda', 'community', 'vault', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
+  'campaign', 'allSessions', 'flagged', 'archived', 'state', 'label', 'view', 'sources', 'skills', 'agents', 'automations', 'workspace-context', 'agenda', 'community', 'vault', 'trade-god', 'workflows', 'runs', 'deep-research', 'outputs', 'video-studio', 'settings'
 ] as const
 
 /**
@@ -239,6 +239,10 @@ export function parseCompoundRoute(route: string): ParsedCompoundRoute | null {
 
   if (first === 'vault') {
     return { navigator: 'vault', details: null }
+  }
+
+  if (first === 'trade-god') {
+    return { navigator: 'tradeGod', details: null }
   }
 
   // Workflows navigator
@@ -419,6 +423,10 @@ export function buildCompoundRoute(parsed: ParsedCompoundRoute): string {
     return 'vault'
   }
 
+  if (parsed.navigator === 'tradeGod') {
+    return 'trade-god'
+  }
+
   if (parsed.navigator === 'workflows') {
     switch (parsed.workflowsKind) {
       case 'recent-runs': return 'workflows/runs'
@@ -592,6 +600,9 @@ function convertCompoundToViewRoute(compound: ParsedCompoundRoute): ParsedRoute 
   }
   if (compound.navigator === 'vault') {
     return { type: 'view', name: 'vault', params: {} }
+  }
+  if (compound.navigator === 'tradeGod') {
+    return { type: 'view', name: 'trade-god', params: {} }
   }
 
   if (compound.navigator === 'workflows') {
@@ -793,6 +804,10 @@ function convertCompoundToNavigationState(compound: ParsedCompoundRoute): Naviga
     return { navigator: 'vault' }
   }
 
+  if (compound.navigator === 'tradeGod') {
+    return { navigator: 'tradeGod' }
+  }
+
   if (compound.navigator === 'workflows') {
     if (compound.workflowsKind === 'recent-runs') {
       return { navigator: 'workflows', details: { type: 'recent-runs' } }
@@ -926,6 +941,8 @@ function convertParsedRouteToNavigationState(parsed: ParsedRoute): NavigationSta
       return { navigator: 'community' }
     case 'vault':
       return { navigator: 'vault' }
+    case 'trade-god':
+      return { navigator: 'tradeGod' }
     case 'workflows':
       return { navigator: 'workflows', details: { type: 'list' } }
     case 'workflows-recent-runs':
@@ -1127,6 +1144,12 @@ function navigationStateToCompoundRoute(state: NavigationState): ParsedCompoundR
   if (state.navigator === 'vault') {
     return {
       navigator: 'vault',
+      details: null,
+    }
+  }
+  if (state.navigator === 'tradeGod') {
+    return {
+      navigator: 'tradeGod',
       details: null,
     }
   }

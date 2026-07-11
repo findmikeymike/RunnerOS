@@ -38,6 +38,7 @@ import {
   isAgendaNavigation,
   isCommunityNavigation,
   isVaultNavigation,
+  isTradeGodNavigation,
   isOutputsNavigation,
 } from '@/contexts/NavigationContext'
 import { isDeepResearchRunNavigation, isVideoStudioNavigation, isWorkflowsNavigation, isWorkflowRunNavigation } from '../../../shared/types'
@@ -67,6 +68,7 @@ import { AgendaPage } from './AgendaPage'
 import { AGENDA_LABEL } from './agenda-utils'
 import { CommunityPage } from './CommunityPage'
 import { VaultPage } from './VaultPage'
+import TradeGodWorkbenchPage from '@/features/trading/TradeGodWorkbenchPage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
 import {
@@ -286,6 +288,14 @@ export function MainContentPanel({
             artistProfileWorkspaceId={artistHQWorkspace?.id}
           />
         )}
+      </Panel>
+    )
+  }
+
+  if (isTradeGodNavigation(navState)) {
+    return wrapWithStoplight(
+      <Panel variant="grow" className={className}>
+        <TradeGodWorkbenchPage />
       </Panel>
     )
   }

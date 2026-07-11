@@ -2130,6 +2130,7 @@ function AppShellContent({
       if (workExpanded) {
         result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
         result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
+        result.push({ id: 'nav:trade-god', type: 'nav', action: () => navigate(routes.view.tradeGod()) })
         result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
       }
       return result

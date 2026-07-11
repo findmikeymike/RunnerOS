@@ -74,6 +74,7 @@ import {
   isAgendaNavigation,
   isCommunityNavigation,
   isVaultNavigation,
+  isTradeGodNavigation,
   isOutputsNavigation,
   DEFAULT_NAVIGATION_STATE,
 } from '../../shared/types'
@@ -97,7 +98,7 @@ export type { Route }
 
 // Re-export navigation state types for consumers
 export type { NavigationState, SessionFilter }
-export { isCampaignNavigation, isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAgentsNavigation, isAutomationsNavigation, isWorkspaceContextNavigation, isAgendaNavigation, isCommunityNavigation, isVaultNavigation, isOutputsNavigation }
+export { isCampaignNavigation, isSessionsNavigation, isSourcesNavigation, isSettingsNavigation, isSkillsNavigation, isAgentsNavigation, isAutomationsNavigation, isWorkspaceContextNavigation, isAgendaNavigation, isCommunityNavigation, isVaultNavigation, isTradeGodNavigation, isOutputsNavigation }
 
 // =============================================================================
 // Context

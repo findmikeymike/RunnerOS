@@ -202,6 +202,9 @@ export const routes = {
     /** Creator asset vault */
     vault: () => 'vault' as const,
 
+    /** Trade God diagnostic workbench */
+    tradeGod: () => 'trade-god' as const,
+
     /** Workflows list (Phase 1: manual triggers only) */
     workflows: () => 'workflows' as const,
 
