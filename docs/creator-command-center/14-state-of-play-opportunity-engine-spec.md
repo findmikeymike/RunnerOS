@@ -567,6 +567,8 @@ Implemented:
 - compact lifecycle history disclosure in Artist HQ
 - explicit useful/not-useful feedback persisted independently from lifecycle status
 - recent resolved-outcome projection keeps feedback reachable after the next recommendation is promoted
+- typed Output criteria for completion, approval resolution, Final promotion, and execution receipts
+- per-criterion outcome evidence with deterministic successful versus partial classification
 - terminal-outcome self-repair after an interrupted lifecycle/outcome write
 - stale/mismatched outcome correction after a later successful retry
 - strict outcome-store validation with last-known-good recovery and fail-closed diagnostics
@@ -575,7 +577,7 @@ Implemented:
 
 Still required before declaring Phase 2 complete:
 
-- richer partial-outcome criteria beyond terminal entity status
+- criterion generators for additional domain-specific recommendation types
 - Team Mode transport/locking beyond workspace-local atomic files
 
 - add candidate, fingerprint, lifecycle event, and outcome storage

@@ -27,7 +27,7 @@ export interface HqRecommendationCandidate {
 }
 
 export type HqRecommendationCompletionContract =
-  | { type: 'output'; requiredTag: string; expectedAgentSlug?: string }
+  | { type: 'output'; requiredTag: string; expectedAgentSlug?: string; criteria?: HqRecommendationCriterion[] }
   | { type: 'entity-resolution'; entity: HqStateEntityRef }
   | { type: 'manual-review' }
 
@@ -55,8 +55,22 @@ export interface HqRecommendationOutcome {
   status: 'successful' | 'partial' | 'unsuccessful' | 'unknown'
   evaluatedAt: string
   evidence: HqStateEntityRef[]
+  criteria?: HqRecommendationCriterionResult[]
   userUsefulness?: 'useful' | 'neutral' | 'not_useful'
   notes?: string
+}
+
+export type HqRecommendationCriterion =
+  | { type: 'output-completed' }
+  | { type: 'approval-resolved' }
+  | { type: 'final-promoted' }
+  | { type: 'receipt-recorded' }
+
+export interface HqRecommendationCriterionResult {
+  criterion: HqRecommendationCriterion
+  satisfied: boolean
+  evidence?: HqStateEntityRef
+  note: string
 }
 
 export interface HqRecommendationDetail {

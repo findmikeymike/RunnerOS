@@ -3,6 +3,8 @@ import {
   hqIntentFingerprint,
   type HqOperationalScope,
   type HqRecommendationCandidate,
+  type HqRecommendationCriterion,
+  type HqRecommendationCriterionResult,
   type HqRecommendationOutcome,
   type HqStateEntityRef,
   type HqStateOfPlay,
@@ -36,7 +38,7 @@ export function reconcileHqRecommendationOutcomes(workspaceRootPath: string, now
   const candidates = readHqRecommendationStore(workspaceRootPath).candidates
   const outcomes = new Map(readHqRecommendationOutcomes(workspaceRootPath).map((outcome) => [outcome.recommendationId, outcome]))
   for (const candidate of candidates) {
-    if (repairMissingTerminalOutcome(workspaceRootPath, candidate, outcomes, now)) continue
+    if (repairMissingTerminalOutcome(workspaceRootPath, candidate, outcomes, outputs, now)) continue
     const completionContract = candidate.completionContract
     if (completionContract?.type === 'entity-resolution') {
       const resolution = resolveEntityOutcome(workspaceRootPath, completionContract.entity)
@@ -87,12 +89,14 @@ export function reconcileHqRecommendationOutcomes(workspaceRootPath: string, now
       createdAt: now.toISOString(),
     })
     if (to === 'completed' || to === 'failed') {
+      const criteria = evaluateOutputCriteria(output, completionContract.criteria)
       const outcome = upsertHqRecommendationOutcome(workspaceRootPath, {
       version: 1,
       recommendationId: candidate.id,
-      status: to === 'completed' ? 'successful' : 'unsuccessful',
+      status: to === 'completed' ? (criteria.every((result) => result.satisfied) ? 'successful' : 'partial') : 'unsuccessful',
       evaluatedAt: now.toISOString(),
       evidence: [{ kind: 'output', id: output.id, source: `output:${output.id}`, scope: candidate.scope }],
+      criteria,
       })
       outcomes.set(candidate.id, outcome)
     }
@@ -103,6 +107,7 @@ function repairMissingTerminalOutcome(
   workspaceRootPath: string,
   candidate: HqRecommendationCandidate,
   outcomes: Map<string, HqRecommendationOutcome>,
+  outputs: ReturnType<typeof listOutputManifests>,
   now: Date,
 ): boolean {
   if (!['completed', 'failed', 'superseded'].includes(candidate.status)) return false
@@ -112,7 +117,13 @@ function repairMissingTerminalOutcome(
     : outputRef
       ? { kind: 'output' as const, id: outputRef.id, source: `output:${outputRef.id}`, scope: candidate.scope }
       : undefined
-  const expectedStatus = candidate.status === 'failed' ? 'unsuccessful' : 'successful'
+  const output = outputRef ? outputs.find((item) => item.id === outputRef.id) : undefined
+  const criteria = output && candidate.completionContract.type === 'output'
+    ? evaluateOutputCriteria(output, candidate.completionContract.criteria)
+    : undefined
+  const expectedStatus = candidate.status === 'failed'
+    ? 'unsuccessful'
+    : criteria && !criteria.every((result) => result.satisfied) ? 'partial' : 'successful'
   const existing = outcomes.get(candidate.id)
   if (existing?.status === expectedStatus && (!entity || existing.evidence.some((evidence) => evidence.kind === entity.kind && evidence.id === entity.id))) return true
   const outcome = upsertHqRecommendationOutcome(workspaceRootPath, {
@@ -121,10 +132,41 @@ function repairMissingTerminalOutcome(
     status: expectedStatus,
     evaluatedAt: now.toISOString(),
     evidence: entity ? [entity] : [],
+    criteria,
     notes: 'Recovered from terminal recommendation state after a missing outcome write.',
   })
   outcomes.set(candidate.id, outcome)
   return true
+}
+
+function evaluateOutputCriteria(
+  output: ReturnType<typeof listOutputManifests>[number],
+  configured: HqRecommendationCriterion[] | undefined,
+): HqRecommendationCriterionResult[] {
+  const criteria = configured?.length ? configured : [{ type: 'output-completed' as const }]
+  const evidence = { kind: 'output' as const, id: output.id, source: `output:${output.id}`, scope: outputScope(output) }
+  return criteria.map((criterion) => {
+    if (criterion.type === 'output-completed') {
+      const satisfied = output.status === 'published' || Boolean(output.completedAt)
+      return { criterion, satisfied, evidence: satisfied ? evidence : undefined, note: satisfied ? 'Output completed.' : 'Output is not complete.' }
+    }
+    if (criterion.type === 'approval-resolved') {
+      const satisfied = output.approval?.state === 'approved'
+      return { criterion, satisfied, evidence: satisfied ? evidence : undefined, note: satisfied ? 'Output approval is resolved.' : 'Output approval is not approved.' }
+    }
+    if (criterion.type === 'final-promoted') {
+      const satisfied = Boolean(output.finals?.length)
+      return { criterion, satisfied, evidence: satisfied ? evidence : undefined, note: satisfied ? 'A Final pointer exists.' : 'No Final pointer exists.' }
+    }
+    const satisfied = output.receipts.length > 0
+    return { criterion, satisfied, evidence: satisfied ? evidence : undefined, note: satisfied ? 'An execution receipt exists.' : 'No execution receipt exists.' }
+  })
+}
+
+function outputScope(output: ReturnType<typeof listOutputManifests>[number]): HqOperationalScope {
+  return output.context?.scope === 'campaign' && output.context.campaignId
+    ? { type: 'campaign', campaignId: output.context.campaignId }
+    : { type: 'hq' }
 }
 
 function resolveEntityOutcome(workspaceRootPath: string, entity: HqStateEntityRef): {
@@ -231,7 +273,12 @@ function persistMove(
 function completionContract(id: string, move: HqStateNextMove): HqRecommendationCandidate['completionContract'] {
   if (move.entityRef) return { type: 'entity-resolution', entity: move.entityRef }
   if (move.route?.target === 'agent' && move.route.agentSlug) {
-    return { type: 'output', requiredTag: `hq-recommendation:${id}`, expectedAgentSlug: move.route.agentSlug }
+    return {
+      type: 'output',
+      requiredTag: `hq-recommendation:${id}`,
+      expectedAgentSlug: move.route.agentSlug,
+      criteria: [{ type: 'output-completed' }],
+    }
   }
   return { type: 'manual-review' }
 }

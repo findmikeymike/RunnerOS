@@ -262,5 +262,8 @@ function isHqRecommendationOutcome(value: unknown): value is HqRecommendationOut
     && ['successful', 'partial', 'unsuccessful', 'unknown'].includes(outcome.status ?? '')
     && typeof outcome.evaluatedAt === 'string'
     && Array.isArray(outcome.evidence)
+    && (outcome.criteria === undefined || (Array.isArray(outcome.criteria) && outcome.criteria.every((result) => (
+      result && typeof result === 'object' && typeof result.satisfied === 'boolean' && typeof result.note === 'string'
+    ))))
     && (!outcome.userUsefulness || ['useful', 'neutral', 'not_useful'].includes(outcome.userUsefulness))
 }

@@ -88,6 +88,34 @@ describe('HQ recommendation outcome reconciliation', () => {
     expect(readHqRecommendationStore(workspace).candidates[0]?.status).toBe('launched')
   })
 
+  test('records partial and successful outcomes from explicit Output criteria', () => {
+    for (const withReceipt of [false, true]) {
+      const workspace = tempWorkspace()
+      upsertHqRecommendation(workspace, {
+        ...candidate(),
+        completionContract: {
+          type: 'output', requiredTag: 'hq-recommendation:sop_outcome', expectedAgentSlug: 'concierge',
+          criteria: [{ type: 'output-completed' }, { type: 'receipt-recorded' }],
+        },
+      })
+      transitionHqRecommendation(workspace, 'sop_outcome', 'accepted', { actor: { type: 'user' } })
+      transitionHqRecommendation(workspace, 'sop_outcome', 'launched', {
+        actor: { type: 'system' }, executionRef: { kind: 'session', id: 'criteria-session', linkedAt: new Date().toISOString() },
+      })
+      createOutputBundle(workspace, {
+        workspaceId: 'ws-1', title: 'Criteria output', kind: 'document', status: 'draft', completedAt: '2026-07-10T00:05:00.000Z',
+        origin: { source: 'session', sessionId: 'criteria-session', agentSlug: 'concierge' }, tags: ['hq-recommendation:sop_outcome'],
+        receipts: withReceipt ? [{ id: 'receipt-1', provider: 'test', action: 'publish', status: 'succeeded', occurredAt: '2026-07-10T00:05:00.000Z' }] : [],
+      })
+
+      reconcileHqRecommendationOutcomes(workspace)
+
+      const outcome = readHqRecommendationOutcomes(workspace)[0]!
+      expect(outcome.status).toBe(withReceipt ? 'successful' : 'partial')
+      expect(outcome.criteria?.map((result) => result.satisfied)).toEqual(withReceipt ? [true, true] : [true, false])
+    }
+  })
+
   test('reconciles linked Scheduled Work to an evidenced outcome', () => {
     const workspace = tempWorkspace()
     const order = completedOrder('work-1')
