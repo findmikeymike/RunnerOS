@@ -429,6 +429,14 @@
         "jotai",
       ],
     },
+    "sidecars/order-flow-engine": {
+      "name": "@trade-god/order-flow-engine",
+      "version": "0.0.1",
+      "dependencies": {
+        "@trade-god/contracts": "workspace:*",
+        "@trade-god/testkit": "workspace:*",
+      },
+    },
   },
   "trustedDependencies": [
     "esbuild",
@@ -1518,6 +1526,8 @@
     "@tokenizer/token": ["@tokenizer/token@0.3.0", "", {}, "sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A=="],
 
     "@trade-god/contracts": ["@trade-god/contracts@workspace:packages/trading-contracts"],
+
+    "@trade-god/order-flow-engine": ["@trade-god/order-flow-engine@workspace:sidecars/order-flow-engine"],
 
     "@trade-god/testkit": ["@trade-god/testkit@workspace:packages/trading-testkit"],
 

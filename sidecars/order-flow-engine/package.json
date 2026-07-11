@@ -1,0 +1,14 @@
+{
+  "name": "@trade-god/order-flow-engine",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "bun src/cli.ts",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@trade-god/contracts": "workspace:*",
+    "@trade-god/testkit": "workspace:*"
+  }
+}

@@ -11,8 +11,8 @@ source_of_truth: true
 
 - Date: 2026-07-11
 - Stage: Phase 0 contract kernel in progress
-- Current goal: extend the proven contracts/fixture seam into an independently runnable Order Flow sidecar
-- Overall state: neutral trading contracts and deterministic fixture analysis are implemented; sidecar, client, and Electron path remain unbuilt
+- Current goal: connect the independently verified Order Flow sidecar through a typed client and supervised Electron process boundary
+- Overall state: neutral trading contracts, deterministic fixture analysis, and a standalone JSON-RPC sidecar are implemented; client/supervisor and Electron workbench remain unbuilt
 - Host worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -30,6 +30,8 @@ source_of_truth: true
 - Added neutral `@trade-god/contracts` package with versioned metadata, health/capability, fixture request, artifact, and typed-error schemas.
 - Added `@trade-god/testkit` with a project-owned synthetic ES fixture, checksum validation, deterministic volume/delta/POC analysis, and stable content hashing.
 - TDD proof: tests were observed failing before implementation, then 12 focused tests passed.
+- Added standalone Order Flow engine with newline-delimited JSON-RPC over stdio, fixture-only capabilities, duplicate-ID protection, cancellation-before-start, typed failures, parse recovery, and clean shutdown.
+- Expanded fast Phase 0 proof to 20 passing tests across contracts, fixture analysis, handler behavior, and a spawned stdio process.
 
 ## Active Build Target
 
@@ -41,12 +43,11 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 
 ## Next Actions
 
-1. Commit the proven contract/testkit slice.
-2. Build the Order Flow sidecar skeleton with JSON-RPC `health`, `capabilities`, `analyze_fixture`, cancellation, and shutdown.
-3. Add conformance tests for stdout framing, invalid requests, duplicate IDs, timeout, cancellation, and partial frames.
-4. Add the typed client/supervisor only after the sidecar passes independently.
-5. Render service health and one validated artifact in a thin Electron route.
-6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them during Phase 0.
+1. Add a typed client with trace matching, response validation, deadlines, cancellation, and normalized sidecar errors.
+2. Add Electron main-process supervision with constrained environment, lifecycle health, restart policy, and stderr capture limits.
+3. Extend conformance tests for timeout, partial frames, oversized lines, trace mismatch, and mid-request exit.
+4. Render service health and one validated artifact in a thin Electron route.
+5. Review the 15 upstream-only v0.11.1 commits separately; do not merge them during Phase 0.
 
 ## Explicitly Not In Scope Yet
 
@@ -71,9 +72,9 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 - Full monorepo typecheck has a recorded pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - All 23 pre-existing RunnerOS worktrees were verified unchanged after setup.
 - Contract and deterministic fixture code are verified by the focused suite; Electron/runtime integration is not.
-- Trade God focused suite: 12 passed, 0 failed across contracts and deterministic fixture analysis.
+- Trade God focused suite: 20 passed, 0 failed across contracts, deterministic fixture analysis, JSON-RPC handler behavior, and the spawned stdio process.
 - Package TypeScript checking is not yet verified: two attempted invocations hung in the command/tool layer and were stopped rather than allowed to block progress.
-- No sidecar process or Electron runtime path has yet been verified.
+- Standalone sidecar process is verified; Electron supervision and renderer paths are not.
 - Every future completion claim must name the command, fixture, result, and artifact/receipt.
 
 ## Notes for the Next Agent

@@ -68,7 +68,16 @@ A lower rung does not prove a higher rung.
 - Combined focused run: 12 passed, 0 failed, 22 expectations.
 - Proven: same-major protocol compatibility, health/capability validation, no live-order capability, decimal-string market metadata, artifact provenance/quality/content hash, typed errors, project-owned fixture checksum, altered-byte rejection, deterministic volume/delta/POC summary, repeatability.
 - Not proven: standalone package TypeScript check. Two invocations hung in the command/tool layer and were interrupted; do not report typecheck success.
-- Not built: JSON-RPC sidecar, process supervision, typed client, Electron IPC/UI.
+- At this slice boundary the JSON-RPC sidecar was not built; see Slice 2. Process supervision, typed client, and Electron IPC/UI remain unbuilt.
+
+## Phase 0 Slice 2 — Standalone Order Flow Sidecar
+
+- Method: red-green TDD; handler and stdio suites failed on missing/unimplemented behavior before implementation.
+- Handler suite: 7 passed.
+- Spawned stdio process suite: 1 passed with 6 expectations.
+- Complete fast Phase 0 suite after implementation: 20 passed, 0 failed, 39 expectations.
+- Proven: ready fixture-only health, explicit capability list without execution, schema-valid analysis artifact, trace propagation, identical duplicate response caching, conflicting duplicate-ID rejection, cancellation-before-start, method-not-found isolation, parse-error recovery, stdout-only protocol framing, clean stderr, and graceful shutdown.
+- Not proven: cancellation during active computation, deadline timeout behavior through the process, oversized/partial frames, process crash/restart, trace mismatch rejection by a client, Electron supervision, or UI.
 
 ## Trading-Specific Integrity Tests
 

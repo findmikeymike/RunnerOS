@@ -1,5 +1,5 @@
 ---
-status: draft
+status: active
 owner: team
 last_verified: 2026-07-11
 source_of_truth: true
@@ -153,4 +153,7 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 
 ## Evidence Log
 
-No implementation evidence yet.
+- 2026-07-11: `@trade-god/contracts` and `@trade-god/testkit` implemented through red-green TDD; 12 focused tests passed.
+- 2026-07-11: standalone Order Flow JSON-RPC handler and spawned newline-delimited stdio CLI implemented through red-green TDD.
+- Complete fast Phase 0 suite: 20 passed, 0 failed, 39 expectations.
+- Still open: typed client, Electron supervisor/IPC/view, active-computation cancellation, timeout/partial-frame/crash tests, and runtime smoke.
