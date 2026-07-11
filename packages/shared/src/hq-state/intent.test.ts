@@ -34,4 +34,9 @@ describe('HQ intent fingerprints', () => {
 
     expect(new Set([hq, campaignA, campaignB]).size).toBe(3)
   })
+
+  test('keeps canonical V2 intent stable when ownership changes', () => {
+    const base = { scope: { type: 'hq' as const }, title: 'Create cover art', semanticIntentId: 'cover-art' }
+    expect(hqIntentFingerprint({ ...base, worker: 'art-director' })).toBe(hqIntentFingerprint({ ...base, worker: 'backup-designer' }))
+  })
 })

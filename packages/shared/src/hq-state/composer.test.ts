@@ -243,7 +243,7 @@ describe('HQ State of Play composer', () => {
           worker: 'art-director',
           intent: 'Organize the missing release assets.',
           semanticIntentId: 'release-assets-general',
-          fingerprint: 'v2:hq:art-director:release-assets-general',
+          fingerprint: 'v2:hq:release-assets-general',
         }],
       }),
     });

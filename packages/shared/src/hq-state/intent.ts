@@ -13,7 +13,7 @@ export function hqIntentFingerprint(input: HqIntentFingerprintInput): string {
   const scope = input.scope.type === 'campaign' ? `campaign:${input.scope.campaignId ?? 'unknown'}` : 'hq'
   const worker = cleanToken(input.worker) ?? 'unassigned'
   const intent = hqSemanticIntentId(input)
-  return semanticIntentId ? `v2:${scope}:${worker}:${semanticIntentId}` : `v1:${scope}:${worker}:${intent}`
+  return semanticIntentId ? `v2:${scope}:${semanticIntentId}` : `v1:${scope}:${worker}:${intent}`
 }
 
 export function hqSemanticIntentId(input: Pick<HqIntentFingerprintInput, 'title' | 'intent'>): string {

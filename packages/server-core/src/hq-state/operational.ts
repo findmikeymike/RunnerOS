@@ -32,8 +32,7 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedS
   const outputs = listOutputManifests(workspaceRootPath)
   for (const output of outputs) {
     const scope = outputScope(output.context)
-    const semanticIntentId = output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length)
-      ?? hqSemanticIntentId({ title: output.title, intent: output.summary })
+    const semanticIntentId = outputSemanticIntentId(output)
     const item: HqOperationalItem = {
       id: output.id,
       kind: 'output',
@@ -73,9 +72,10 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedS
   for (const run of workflowRuns) {
     const scope = workflowScope(run, scheduledOrders)
     workflowScopes.push(scope)
-    const semanticIntentId = typeof run.trigger.inputs.intentId === 'string'
-      ? run.trigger.inputs.intentId
-      : hqSemanticIntentId({ title: run.workflowSnapshot.metadata.name ?? run.workflowSlug, intent: run.workflowSlug })
+    const semanticIntentId = hqSemanticIntentId({
+      title: typeof run.trigger.inputs.intentId === 'string' ? run.trigger.inputs.intentId : run.workflowSnapshot.metadata.name ?? run.workflowSlug,
+      intent: typeof run.trigger.inputs.intentId === 'string' ? undefined : run.workflowSlug,
+    })
     const item: HqOperationalItem = {
       id: run.id,
       kind: 'workflow-run',
@@ -122,15 +122,20 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedS
         worker: output.origin.agentSlug,
         title: output.title,
         intent: output.summary,
-        semanticIntentId: output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length) ?? hqSemanticIntentId({ title: output.title, intent: output.summary }),
+        semanticIntentId: outputSemanticIntentId(output),
       }),
-      semanticIntentId: output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length) ?? hqSemanticIntentId({ title: output.title, intent: output.summary }),
+      semanticIntentId: outputSemanticIntentId(output),
       worker: output.origin.agentSlug,
       intent: output.summary,
       source: `output:${output.id}`,
     })).filter((item) => sameScope(item.scope, snapshotScope))),
     sourceHealth,
   }
+}
+
+function outputSemanticIntentId(output: ReturnType<typeof listOutputManifests>[number]): string {
+  const tagged = output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length)
+  return hqSemanticIntentId({ title: tagged ?? output.title, intent: tagged ? undefined : output.summary })
 }
 
 function sameScope(left: HqOperationalScope, right: HqOperationalScope): boolean {
