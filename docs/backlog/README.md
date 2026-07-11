@@ -9,6 +9,8 @@ source_of_truth: true
 
 This folder contains only unfinished work, partial implementations, and release gates. Completed or superseded proposals belong in `docs/archive/<date>/`.
 
+Living priority queue: [TO DO](./TO-DO.md).
+
 ## Release Gates
 
 - [External Integration Live Verification](./external-integration-live-verification.md) - real-account/API smoke queue for commerce, ads, Social Publisher, research, visual tools, Canvas, and Secrets. This is the main end-to-end proof list.
