@@ -1,7 +1,7 @@
 import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/types.ts';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
-import { hqIntentFingerprint, hqIntentTokens, hqSemanticIntentId } from './intent.ts';
+import { hqIntentFingerprint, hqSemanticIntentId } from './intent.ts';
 import {
   HQ_SOURCE_CONTEXT_SLUGS,
   HQ_STATE_CONTEXT_FENCE,
@@ -276,6 +276,7 @@ function buildRankedMoves(input: HqInputState, missing: string[]): HqStateNextMo
   const duplicate = findActiveDuplicate(input, {
     worker: candidate.worker,
     terms: [candidate.title, candidate.why],
+    semanticIntentId: candidate.semanticIntentId,
   });
   if (duplicate) {
     moves.push({
@@ -314,12 +315,16 @@ function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNe
   }
 
   if (urgentEvent && (!vault.finalMaster || !vault.coverArt || !vault.pressPhoto)) {
+    const missingAssets = missingVaultLabels(vault);
     return {
       title: `Close asset gaps before ${urgentEvent.title}`,
       why: `Calendar shows "${urgentEvent.title}" on ${urgentEvent.date}, but Vault is missing ${missingVaultLabels(vault).join(', ')}.`,
       worker: 'art-director',
       action: 'organize',
       oneClick: false,
+      semanticIntentId: missingAssets.length === 1
+        ? hqSemanticIntentId({ title: missingAssets[0] ?? '' })
+        : 'release-assets-general',
     };
   }
 
@@ -652,10 +657,9 @@ function operationalKindLabel(item: HqOperationalItem): string {
 
 function findActiveDuplicate(
   input: HqInputState,
-  candidate: { worker?: string; terms: string[] },
+  candidate: { worker?: string; terms: string[]; semanticIntentId?: string },
 ): HqOperationalItem | null {
-  const terms = candidate.terms.flatMap(hqIntentTokens);
-  const semanticIntentId = hqSemanticIntentId({
+  const semanticIntentId = candidate.semanticIntentId ?? hqSemanticIntentId({
     title: candidate.terms[0] ?? '',
     intent: candidate.terms.slice(1).join(' '),
   });
@@ -667,10 +671,7 @@ function findActiveDuplicate(
     semanticIntentId,
   });
   return visibleOperationalItems(input, input.operational?.active).find((item) => {
-    if (item.fingerprint === fingerprint) return true;
-    const itemTokens = new Set(hqIntentTokens(`${item.title} ${item.intent ?? ''}`));
-    const overlap = terms.filter((term) => itemTokens.has(term)).length;
-    return overlap >= 2;
+    return item.fingerprint === fingerprint;
   }) ?? null;
 }
 
@@ -855,6 +856,7 @@ function normalizeNextMove(value: unknown): HqStateNextMove {
     oneClick: typeof candidate.oneClick === 'boolean' ? candidate.oneClick : undefined,
     route: normalizeRouteHint(candidate.route),
     entityRef: normalizeEntityRef(candidate.entityRef),
+    semanticIntentId: clean(candidate.semanticIntentId),
   };
 }
 

@@ -513,7 +513,13 @@ Implemented in the foundational slice:
 Still required before declaring Phase 1 complete:
 
 - campaign-scoped source-health presentation when Campaign State of Play gets its own rendered surface
-- producer migration coverage for legacy Scheduled Work and older Output/workflow producers before token-overlap fallback can be removed
+
+Legacy intent migration completed 2026-07-11:
+
+- legacy Scheduled Work derives canonical intent during normalization and persists it on the next write
+- legacy Outputs and workflow runs derive canonical intent in the operational adapter
+- contextual generators declare explicit intent where broad titles would otherwise collapse distinct deliverables
+- token-overlap duplicate suppression was removed; active-work suppression now requires exact scoped V2 fingerprints
 
 Rival hardening completed 2026-07-10:
 

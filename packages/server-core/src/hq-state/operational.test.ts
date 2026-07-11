@@ -46,7 +46,7 @@ describe('HQ operational snapshot', () => {
     expect(snapshot.failures.map((item) => item.title)).toContain('Broken report')
     expect(snapshot.recentOutputs).toHaveLength(2)
     expect(snapshot.sourceHealth).toContainEqual(expect.objectContaining({ source: 'outputs', status: 'fresh', itemCount: 2 }))
-    expect(snapshot.recentOutputs.every((item) => item.fingerprint.startsWith('v1:'))).toBe(true)
+    expect(snapshot.recentOutputs.every((item) => item.fingerprint.startsWith('v2:'))).toBe(true)
   })
 
   test('summarizes active and approval-blocked scheduled work', () => {

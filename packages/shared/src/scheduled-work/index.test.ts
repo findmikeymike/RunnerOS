@@ -13,6 +13,7 @@ import {
   parseScheduledWorkDocResult,
   serializeScheduledWorkBody,
 } from './index.ts'
+import { hqSemanticIntentId } from '../hq-state/intent.ts'
 
 function calendarWithJob(actionType: 'ask-agent' | 'run-workflow' | 'post-asset' | 'outreach-batch' = 'ask-agent'): CampaignCalendar {
   const payload = actionType === 'run-workflow'
@@ -106,6 +107,7 @@ describe('scheduled work documents', () => {
 
     expect(parsed.ok).toBe(true)
     expect(parsed.work.items).toHaveLength(1)
+    expect(parsed.work.items[0]?.intentId).toBe(hqSemanticIntentId({ title: 'Launch work', intent: JSON.stringify(parsed.work.items[0]?.execution) }))
   })
 
   test('is idempotent when migration runs repeatedly', () => {

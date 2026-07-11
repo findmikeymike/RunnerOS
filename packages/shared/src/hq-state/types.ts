@@ -42,6 +42,7 @@ export interface HqStateNextMove {
   oneClick?: boolean;
   route?: HqStateRouteHint;
   entityRef?: HqStateEntityRef;
+  semanticIntentId?: string;
 }
 
 export type HqRecommendationStatus =

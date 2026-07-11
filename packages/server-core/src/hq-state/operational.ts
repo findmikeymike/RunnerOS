@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE, validateAutomationsConfig } from '@craft-agent/shared/automations'
 import {
   hqIntentFingerprint,
+  hqSemanticIntentId,
   type HqOperationalItem,
   type HqOperationalScope,
   type HqOperationalSnapshot,
@@ -32,6 +33,7 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedS
   for (const output of outputs) {
     const scope = outputScope(output.context)
     const semanticIntentId = output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length)
+      ?? hqSemanticIntentId({ title: output.title, intent: output.summary })
     const item: HqOperationalItem = {
       id: output.id,
       kind: 'output',
@@ -71,6 +73,9 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedS
   for (const run of workflowRuns) {
     const scope = workflowScope(run, scheduledOrders)
     workflowScopes.push(scope)
+    const semanticIntentId = typeof run.trigger.inputs.intentId === 'string'
+      ? run.trigger.inputs.intentId
+      : hqSemanticIntentId({ title: run.workflowSnapshot.metadata.name ?? run.workflowSlug, intent: run.workflowSlug })
     const item: HqOperationalItem = {
       id: run.id,
       kind: 'workflow-run',
@@ -79,8 +84,8 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedS
       updatedAt: run.updatedAt,
       expiresAt: run.state === 'failed' || run.state === 'interrupted' ? addDays(run.updatedAt, 30) : undefined,
       scope,
-      fingerprint: hqIntentFingerprint({ scope, title: run.workflowSnapshot.metadata.name ?? run.workflowSlug, intent: run.workflowSlug, semanticIntentId: typeof run.trigger.inputs.intentId === 'string' ? run.trigger.inputs.intentId : undefined }),
-      semanticIntentId: typeof run.trigger.inputs.intentId === 'string' ? run.trigger.inputs.intentId : undefined,
+      fingerprint: hqIntentFingerprint({ scope, title: run.workflowSnapshot.metadata.name ?? run.workflowSlug, intent: run.workflowSlug, semanticIntentId }),
+      semanticIntentId,
       intent: run.workflowSlug,
       source: `workflow-run:${run.id}`,
     }
@@ -117,9 +122,9 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedS
         worker: output.origin.agentSlug,
         title: output.title,
         intent: output.summary,
-        semanticIntentId: output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length),
+        semanticIntentId: output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length) ?? hqSemanticIntentId({ title: output.title, intent: output.summary }),
       }),
-      semanticIntentId: output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length),
+      semanticIntentId: output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length) ?? hqSemanticIntentId({ title: output.title, intent: output.summary }),
       worker: output.origin.agentSlug,
       intent: output.summary,
       source: `output:${output.id}`,
