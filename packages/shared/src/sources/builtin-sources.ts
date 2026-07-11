@@ -27,6 +27,7 @@ const GMAIL_SLUG = 'gmail';
 const GOOGLE_DRIVE_SLUG = 'google-drive';
 const META_ADS_SLUG = 'meta-ads';
 const TRYPOST_SLUG = 'trypost';
+const POSTIZ_SLUG = 'postiz';
 const NOTEBOOKLM_SLUG = 'notebooklm';
 const YOUTUBE_RESEARCH_SLUG = 'youtube-research';
 const YOUTUBE_INTELLIGENCE_SLUG = 'youtube-intelligence';
@@ -477,6 +478,7 @@ export function getBuiltinSources(workspaceId: string, workspaceRootPath: string
     getGoogleDriveSource(workspaceId, workspaceRootPath),
     getMetaAdsSource(workspaceId, workspaceRootPath),
     getTryPostSource(workspaceId, workspaceRootPath),
+    getPostizSource(workspaceId, workspaceRootPath),
     getNotebookLmSource(workspaceId, workspaceRootPath),
     getYouTubeResearchSource(workspaceId, workspaceRootPath),
     getYouTubeIntelligenceSource(workspaceId, workspaceRootPath),
@@ -1377,6 +1379,55 @@ export function getTryPostSource(workspaceId: string, workspaceRootPath: string)
   };
 }
 
+/** Built-in source for Postiz's official hosted MCP. */
+export function getPostizSource(workspaceId: string, workspaceRootPath: string): LoadedSource {
+  const config: FolderSourceConfig = {
+    id: 'builtin-postiz',
+    name: 'Postiz',
+    slug: POSTIZ_SLUG,
+    enabled: true,
+    provider: 'postiz',
+    type: 'mcp',
+    mcp: {
+      transport: 'http',
+      url: 'https://api.postiz.com/mcp',
+      authType: 'bearer',
+    },
+    tagline: 'Draft, schedule, and publish through connected Postiz channels using the official MCP.',
+    icon: '📬',
+    isAuthenticated: false,
+    connectionStatus: 'needs_auth',
+  };
+
+  return {
+    workspaceId,
+    workspaceRootPath,
+    folderPath: '',
+    config,
+    guide: {
+      raw: [
+        '# Postiz',
+        '',
+        "This source connects RunnerOS to Postiz's official hosted MCP at `https://api.postiz.com/mcp`.",
+        '',
+        'Auth:',
+        '- Create an API key in Postiz Settings > Developers > Public API, then connect this source and paste the key. RunnerOS sends it as a Bearer token.',
+        '- For self-hosted Postiz, create a custom MCP source pointed at `https://<your-backend>/mcp`; do not put a custom URL or key in workspace files.',
+        '',
+        'Tools cover connected integration discovery, platform-specific posting schemas, dynamic integration helpers, and draft/schedule/publish operations. Postiz MCP does not currently read or reply to comments or DMs.',
+        '',
+        'Rules:',
+        '- Call integrationList first and resolve the exact connected account. Never guess an integration ID.',
+        '- Call integrationSchema for every target platform before building the post. Reject unsupported media or missing required settings before any write.',
+        '- Create a draft by default. Schedule, publish-now, delete, and media-generation actions require explicit user approval of the exact account, content, media, settings, and timing.',
+        '- Do not claim success without the returned Postiz post ID/integration receipt.',
+        '- Route comments and DMs to Social Publisher; Postiz MCP has no comment-reply tools.',
+      ].join('\n'),
+    },
+    isBuiltin: true,
+  };
+}
+
 /**
  * Built-in source for the local NotebookLM MCP server.
  */
@@ -2004,6 +2055,7 @@ export function isBuiltinSource(slug: string): boolean {
     || slug === GOOGLE_DRIVE_SLUG
     || slug === META_ADS_SLUG
     || slug === TRYPOST_SLUG
+    || slug === POSTIZ_SLUG
     || slug === NOTEBOOKLM_SLUG
     || slug === YOUTUBE_RESEARCH_SLUG
     || slug === YOUTUBE_INTELLIGENCE_SLUG

@@ -72,6 +72,11 @@ flowchart LR
   Workers --> A_scroll_stopper
   A_scroll_stopper --> S_scroll_stopper["skill:scroll-stopper"]
   Campaign["Campaign Workspace"] --> A_scroll_stopper
+  Registry --> A_video_director["Video Director\nask\nContent Creation"]
+  Workers --> A_video_director
+  A_video_director --> S_squad["skill:squad"]
+  A_video_director --> S_spotify_canvas_video["skill:spotify-canvas-video"]
+  A_video_director --> T_squad["source:squad"]
   Registry --> A_video_editor_agent["Video Editor Agent\nask\nContent Creation"]
   Workers --> A_video_editor_agent
   A_video_editor_agent --> T_video_studio["source:video-studio"]
@@ -194,7 +199,9 @@ flowchart LR
   Campaign["Campaign Workspace"] --> A_playlisting_power_up
   Registry --> A_spotify_playlist_creator["Spotify Playlist Creator\nask\nPromotion"]
   Workers --> A_spotify_playlist_creator
+  A_spotify_playlist_creator --> S_playlist_builder["skill:playlist-builder"]
   A_spotify_playlist_creator --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
+  A_spotify_playlist_creator --> T_printing_press_social["source:printing-press-social"]
   Campaign["Campaign Workspace"] --> A_spotify_playlist_creator
   Registry --> A_researcher["Researcher\nsafe\nResearch"]
   A_researcher -. hidden .-> Workers
@@ -203,7 +210,7 @@ flowchart LR
   A_spotify_analyst --> S_spotify_growth_intake["skill:spotify-growth-intake"]
   A_spotify_analyst --> S_spotify_analytics_snapshot["skill:spotify-analytics-snapshot"]
   A_spotify_analyst --> S_spotify_anomaly_watch["skill:spotify-anomaly-watch"]
-  A_spotify_analyst --> S_spotify_playlist_curator["skill:spotify-playlist-curator"]
+  A_spotify_analyst --> T_printing_press_social["source:printing-press-social"]
   Registry --> A_youtube_intelligence_agent["YouTube Intelligence Agent\nsafe\nResearch"]
   Workers --> A_youtube_intelligence_agent
   A_youtube_intelligence_agent --> S_youtube_intelligence["skill:youtube-intelligence"]
@@ -217,6 +224,9 @@ flowchart LR
   A_youtube_research_agent --> S_youtube_research["skill:youtube-research"]
   A_youtube_research_agent --> S_create_viral_content["skill:create-viral-content"]
   A_youtube_research_agent --> T_youtube_research["source:youtube-research"]
+  Registry --> A_postiz_agent["Postiz\nask\nSocials"]
+  Workers --> A_postiz_agent
+  A_postiz_agent --> T_postiz["source:postiz"]
   Registry --> A_social_publisher["Social Publisher\nask\nSocials"]
   Workers --> A_social_publisher
   A_social_publisher --> S_social_publishing["skill:social-publishing"]

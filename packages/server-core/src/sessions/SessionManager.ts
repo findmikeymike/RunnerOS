@@ -2903,7 +2903,7 @@ export class SessionManager implements ISessionManager {
         }
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
-        // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Hypermotion, Video Director, Lottie Animation,
+        // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Postiz, Hypermotion, Video Director, Lottie Animation,
         // Video Editor, Lyric Video, Content Genius, Scroll Stopper, promotion helpers, Shopify, Print Agent,
         // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
         // and Update System Agent.
@@ -2913,6 +2913,7 @@ export class SessionManager implements ISessionManager {
             || a.slug === SETUP_CONCIERGE_SLUG
             || a.slug === SOCIAL_PUBLISHER_SLUG
             || a.slug === 'trypost-agent'
+            || a.slug === 'postiz-agent'
             || a.slug === 'hypermotion-agent'
             || a.slug === 'video-director'
             || a.slug === 'lottie-animation-agent'
@@ -3267,6 +3268,29 @@ export class SessionManager implements ISessionManager {
               '- RunnerOS ships Squad as a built-in source. If it is missing, report a packaging or installation problem; do not ask for `SQUAD_HOME`.',
             ).updated) {
               sessionLog.info('[agent-definitions] Removed Video Director external Squad dependency')
+            }
+          }
+          const tryPostAgent = STARTER_AGENTS.find(agent => agent.slug === 'trypost-agent')
+          if (tryPostAgent) {
+            if (ensureBuiltInAgentMetadataSlugs('trypost-agent', {
+              sources: tryPostAgent.metadata.sources,
+            }).updated) {
+              sessionLog.info('[agent-definitions] Ensured TryPost official MCP routing')
+            }
+            if (replaceBuiltInAgentMetadata('trypost-agent', {
+              outputs: {
+                from: 'TryPost-ready draft, missing-fields checklist, approval packet, and publish/schedule receipt once wired and approved.',
+                to: tryPostAgent.metadata.outputs,
+              },
+            }).updated) {
+              sessionLog.info('[agent-definitions] Updated TryPost provider receipt contract')
+            }
+            if (replaceBuiltInAgentPromptText(
+              'trypost-agent',
+              '2. Gather platform, account, copy, media, link, campaign context, timing, and draft-vs-live intent.\n3. Create the post as a draft in TryPost, then use Preview to check per-platform length and format.',
+              '2. List the platform content types/limits, then gather platform, exact account, copy, media kind, link, campaign context, timing, and draft-vs-live intent.\n3. Reject unsupported platform/media combinations before creating anything. Create the post as a draft in TryPost, attach media through the provider tool, then use Preview to check per-platform length and format.',
+            ).updated) {
+              sessionLog.info('[agent-definitions] Added TryPost media-aware validation')
             }
           }
           const spotifyPlaylistCreator = STARTER_AGENTS.find(agent => agent.slug === 'spotify-playlist-creator')

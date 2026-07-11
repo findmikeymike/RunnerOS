@@ -5,6 +5,7 @@ export const ARTIST_VOICE_CONTEXT_SLUG = 'artist-voice'
 export const ARTIST_VOICE_TARGET_AGENT_SLUGS = [
   'social-publisher',
   'trypost-agent',
+  'postiz-agent',
   'content-genius',
   'video-director',
   'video-editor-agent',

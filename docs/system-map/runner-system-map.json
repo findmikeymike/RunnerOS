@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-10",
+  "generatedAt": "2026-07-11",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -35,10 +35,10 @@
     "missionBrief": "apps/electron/src/renderer/lib/mission-brief.ts"
   },
   "summary": {
-    "agentCount": 40,
+    "agentCount": 42,
     "domains": {
       "Command": 3,
-      "Content Creation": 6,
+      "Content Creation": 7,
       "Creative": 5,
       "Merch": 2,
       "Operators": 2,
@@ -46,10 +46,10 @@
       "Outreach": 5,
       "Promotion": 9,
       "Research": 4,
-      "Socials": 2
+      "Socials": 3
     },
     "permissionModes": {
-      "ask": 32,
+      "ask": 34,
       "safe": 8
     },
     "hiddenWorkerHomeCount": 5,
@@ -82,11 +82,11 @@
     "scheduledWorkWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 121,
-    "bundledSkillCount": 79,
+    "knownSkillCount": 122,
+    "bundledSkillCount": 81,
     "systemSkillCount": 6,
     "userGlobalSkillCount": 121,
-    "knownSourceCount": 26,
+    "knownSourceCount": 27,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
     "missingSources": [],
@@ -490,6 +490,50 @@
       ],
       "inputs": "Campaign context, artist world, content lane, platform, niche, vibe, constraints, reference ideas, or a rough premise that needs to become a vertical AI-video concept.",
       "outputs": "Scroll-stopping short-form concepts with loglines, lever/setting/character/trigger tags, cover-shot art direction, safety notes, and ready-to-paste 9:16 AI-video prompts."
+    },
+    {
+      "slug": "video-director",
+      "name": "Video Director",
+      "description": "Plan, storyboard, and produce approval-gated generative videos with Squad.",
+      "domain": "Content Creation",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "squad",
+        "spotify-canvas-video"
+      ],
+      "sources": [
+        "squad"
+      ],
+      "optionalSources": [
+        "media-generation",
+        "video-studio",
+        "hypermotion"
+      ],
+      "trustedWorkerTools": [],
+      "visualAgent": true,
+      "tags": [
+        "creative",
+        "video",
+        "squad",
+        "storyboard",
+        "ugc",
+        "production"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "canvas-visual-agent",
+        "explicit-approval-required",
+        "external-action-boundary",
+        "optional-source-aware",
+        "requires-source-activation"
+      ],
+      "inputs": "Video briefs, UGC/ad/app-demo/music/faceless narrative ideas, local assets, creative direction, platform requirements, and approval-gated production requests.",
+      "outputs": "No-spend storyboard boards, recipe recommendations, preflight reports, production plans, staged MP4 outputs, manifests, review packets, and Canvas previews."
     },
     {
       "slug": "video-editor-agent",
@@ -1394,9 +1438,12 @@
       "permissionMode": "ask",
       "thinkingLevel": "high",
       "skills": [
+        "playlist-builder",
         "spotify-playlist-curator"
       ],
-      "sources": [],
+      "sources": [
+        "printing-press-social"
+      ],
       "optionalSources": [],
       "trustedWorkerTools": [],
       "visualAgent": false,
@@ -1413,12 +1460,12 @@
       ],
       "riskSignals": [
         "approval-capable",
-        "artifact-output-aware",
         "explicit-approval-required",
-        "external-action-boundary"
+        "external-action-boundary",
+        "requires-source-activation"
       ],
-      "inputs": "Playlist theme, comparable artists/tracks, artist Spotify tracks, target length, feature ratio, visibility, and Spotify account/tool readiness.",
-      "outputs": "A Spotify playlist plan, approval checklist, and creation payload or receipt when approved and Spotify tooling is connected."
+      "inputs": "Artist context, playlist theme, comparable artists/tracks, real Spotify track URLs or IDs, optional BPM/energy/key data, target length, feature ratio, visibility, and connected Spotify profile.",
+      "outputs": "Evidence-labeled strategy, deterministic playlist plan, title/description/cover package, approval contract, and verified Spotify playlist URL receipt."
     },
     {
       "slug": "researcher",
@@ -1458,10 +1505,11 @@
       "skills": [
         "spotify-growth-intake",
         "spotify-analytics-snapshot",
-        "spotify-anomaly-watch",
-        "spotify-playlist-curator"
+        "spotify-anomaly-watch"
       ],
-      "sources": [],
+      "sources": [
+        "printing-press-social"
+      ],
       "optionalSources": [],
       "trustedWorkerTools": [],
       "visualAgent": false,
@@ -1477,10 +1525,11 @@
       ],
       "riskSignals": [
         "approval-capable",
-        "explicit-approval-required"
+        "explicit-approval-required",
+        "requires-source-activation"
       ],
-      "inputs": "Artist HQ Profile, Spotify client credentials, Spotify artist ID or URL, existing Spotify snapshots, and campaign context.",
-      "outputs": "Spotify public API snapshots, optional S4A snapshot normalization, delta briefs, anomaly alerts, and growth handoff notes."
+      "inputs": "Artist HQ Profile, connected Spotify for Artists browser session, existing Spotify snapshots, and campaign context.",
+      "outputs": "Spotify for Artists snapshots, compatible delta briefs, anomaly alerts, Artist HQ context updates, and growth handoff notes."
     },
     {
       "slug": "youtube-intelligence-agent",
@@ -1564,6 +1613,41 @@
       "outputs": "Ranked video candidates, transcript summaries, top comments, channel scans, related-video lists, campaign-adjacent cultural notes, and embed-ready recommendations."
     },
     {
+      "slug": "postiz-agent",
+      "name": "Postiz",
+      "description": "Draft, schedule, and publish social content through Postiz.",
+      "domain": "Socials",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [],
+      "sources": [
+        "postiz"
+      ],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "social",
+        "socials",
+        "posting",
+        "postiz",
+        "api",
+        "mcp"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware",
+        "explicit-approval-required",
+        "external-action-boundary",
+        "requires-source-activation"
+      ],
+      "inputs": "Social post request, target Postiz integration, platform, copy, media, platform settings, schedule target, campaign context, and approval status.",
+      "outputs": "Validated Postiz draft, exact approval packet, and provider post ID/integration receipt after approved scheduling or publishing."
+    },
+    {
       "slug": "social-publisher",
       "name": "Social Publisher",
       "description": "Post content and handle authorized comments or messages on Instagram, TikTok, X, and YouTube.",
@@ -1632,7 +1716,7 @@
         "requires-source-activation"
       ],
       "inputs": "Social post request, platform, account/profile, copy, media paths, schedule target, campaign context, and approval status.",
-      "outputs": "TryPost-ready draft, missing-fields checklist, approval packet, and publish/schedule receipt once wired and approved."
+      "outputs": "Validated TryPost draft, approval packet, and provider post ID/status receipt after approved scheduling or publishing."
     }
   ]
 }

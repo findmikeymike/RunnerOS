@@ -60,6 +60,7 @@ const BUILTIN_VISIBLE_AGENT_SLUGS = [
   'ad-creative-agent',
   'ads-agent',
   'trypost-agent',
+  'postiz-agent',
   'spotify-analyst',
   'spotify-playlist-creator',
   'shopify-agent',

@@ -563,6 +563,21 @@ body
     expect(tryPost?.metadata.permissionMode).toBe('ask')
     expect(tryPost?.systemPrompt).toContain('TryPost API/MCP')
     expect(tryPost?.systemPrompt).toContain('explicit approval')
+    expect(tryPost?.systemPrompt).toContain('unsupported platform/media combinations')
+    expect(tryPost?.metadata.outputs).not.toContain('once wired')
+  })
+
+  test('starter library includes Postiz with schema-first guarded publishing', () => {
+    const postiz = STARTER_AGENTS.find((agent) => agent.slug === 'postiz-agent')
+
+    expect(postiz).toBeDefined()
+    expect(postiz?.metadata.name).toBe('Postiz')
+    expect(postiz?.metadata.sources).toContain('postiz')
+    expect(postiz?.metadata.permissionMode).toBe('ask')
+    expect(postiz?.systemPrompt).toContain('integrationList')
+    expect(postiz?.systemPrompt).toContain('integrationSchema')
+    expect(postiz?.systemPrompt).toContain('explicit approval')
+    expect(postiz?.systemPrompt).toContain('does not expose comment tools')
   })
 
   test('starter library includes the Ads Agent with paid ads source routing', () => {

@@ -1390,6 +1390,7 @@ function launchpadAgentRank(slug: string): number {
     '3d-agent',
     'social-publisher',
     'trypost-agent',
+    'postiz-agent',
     'shopify-agent',
     'print-agent',
     'gaygent-master',

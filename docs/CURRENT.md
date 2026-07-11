@@ -12,12 +12,16 @@ source_of_truth: true
 - Date: 2026-07-10
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
 - Branch: `codex/creator-social-integration`
-- Implementation head: `bfc184cd Enable delegated social engagement`
-- Remote: local branch was ahead 38 commits before this docs refresh and remains intentionally unpushed.
+- Implementation head: current `codex/creator-social-integration` HEAD; use `git log -1 --oneline` for the exact commit.
+- Remote: the local integration branch remains intentionally ahead and unpushed.
 - Unrelated local work: preserve `docs/pitch/README.md` and `docs/pitch/packets/`.
 
 ## Recently Completed
 
+- Recovered prior TryPost/Postiz work across RunnerOS worktrees and MikeyOS. RunnerOS retains its official TryPost MCP source; the provider-neutral media/account lessons were carried forward without importing MikeyOS's Supabase scheduler.
+- Added a required Postiz agent and official hosted Postiz MCP source, with schema-first account/media validation, exact approval boundaries, provider receipt requirements, and an honest no-comments/DM boundary.
+- Hardened TryPost's built-in agent around platform content types, media compatibility, drafts, exact approvals, and provider receipts; existing shipped prompts migrate conservatively.
+- Clarified that app-level Postiz environment fields remain for bundled local/Squad workflows. The Postiz agent uses its encrypted source connection; self-hosted provider-agent users create a custom MCP source for their backend.
 - Completed the shared progressive Scheduled Work composer across HQ and Campaign calendars.
 - Replaced persistent Calendar side panels with contextual day menus and individually selectable work markers.
 - Added typed `queue-work` actions to Automations, including optional hidden Calendar display for background agent/workflow runs.
@@ -33,6 +37,8 @@ source_of_truth: true
 
 ## Current Boundaries
 
+- TryPost and Postiz provider work is implemented but not live-account verified. TryPost uses `https://app.trypost.it/mcp/trypost`; Postiz Cloud uses `https://api.postiz.com/mcp`.
+- Provider agents own drafts, schedules, and publishing on their connected services. Direct-browser Social Publisher remains the comment/DM and platform-native fallback path; Postiz MCP does not expose comment tools.
 - HQ Calendar and Campaign Calendar are separate stores and pages.
 - Scheduled publishing pauses at `needs-approval`; an approved exact action may then execute through the native guarded executor.
 - A direct/scheduled inbox-reply mandate authorizes bounded matching inbound replies without per-item approval. It does not authorize cold DMs, posts/uploads, account changes, or sensitive replies.

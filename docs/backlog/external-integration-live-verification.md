@@ -101,6 +101,17 @@ No integration is marked "fully end-to-end verified" until it passes:
 - [ ] Confirm exact-target fallback guards prevent a reply from becoming a top-level comment or new DM thread.
 - [ ] Confirm browser/CDP recovery is clear for missing sessions, expired login, CAPTCHA/2FA, account mismatch, and selector drift.
 
+### TryPost / Postiz Provider Publishing
+
+- [ ] Connect TryPost with a real Personal Access Token through its source and verify account/content-type discovery.
+- [ ] Create and preview a TryPost draft with a known-compatible video, then schedule/publish only after exact approval and verify the returned post ID/status.
+- [ ] Connect Postiz Cloud with a real API key through its source and verify `integrationList` plus the target `integrationSchema`.
+- [ ] Create a Postiz draft, then schedule/publish only after exact approval and verify the returned post ID/integration receipt.
+- [ ] Confirm unsupported media/platform combinations stop before writes and ambiguous connected accounts are never guessed.
+- [ ] Confirm disconnected, expired/rotated credential, wrong account, provider quota/subscription, rate-limit, and provider failure states are actionable.
+- [ ] Confirm Postiz comment/DM requests route to Social Publisher instead of claiming unsupported provider capability.
+- [ ] Smoke one self-hosted Postiz custom MCP source without storing its URL or key in workspace files.
+
 ### Spotify Analyst / Playlist Creator
 
 - [ ] Connect a real Spotify browser profile through Settings -> Social Accounts and confirm live status.

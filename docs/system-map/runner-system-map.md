@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-10
+last_verified: 2026-07-11
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-07-10
+Generated: 2026-07-11
 
 ## Why This Exists
 
@@ -50,17 +50,17 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Summary
 
-- Agents mapped: 40
+- Agents mapped: 42
 - Hidden from Workers home: 5
 - Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `spotify-playlist-creator`, `content-genius`, `scroll-stopper`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
 - Starter workflows mapped: 2
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
 - Scheduled Work execution: wired
-- Domains: Command 3, Content Creation 6, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 4, Socials 2
-- Permission modes: ask 32, safe 8
-- Known skills: 121 (79 bundled, 6 system, 121 user-global on this machine)
-- Known builtin sources: 26
+- Domains: Command 3, Content Creation 7, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 4, Socials 3
+- Permission modes: ask 34, safe 8
+- Known skills: 122 (81 bundled, 6 system, 121 user-global on this machine)
+- Known builtin sources: 27
 
 ## Reference Health
 
@@ -261,6 +261,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Signals: `approval-capable`, `artifact-output-aware`, `external-action-boundary`
 - Inputs: Campaign context, artist world, content lane, platform, niche, vibe, constraints, reference ideas, or a rough premise that needs to become a vertical AI-video concept.
 - Outputs: Scroll-stopping short-form concepts with loglines, lever/setting/character/trigger tags, cover-shot art direction, safety notes, and ready-to-paste 9:16 AI-video prompts.
+
+#### Video Director (`video-director`)
+
+- Description: Plan, storyboard, and produce approval-gated generative videos with Squad.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: `squad`, `spotify-canvas-video`
+- Sources: `squad`
+- Optional sources: `media-generation`, `video-studio`, `hypermotion`
+- Trusted tools: none
+- Tags: `creative`, `video`, `squad`, `storyboard`, `ugc`, `production`
+- Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`
+- Inputs: Video briefs, UGC/ad/app-demo/music/faceless narrative ideas, local assets, creative direction, platform requirements, and approval-gated production requests.
+- Outputs: No-spend storyboard boards, recipe recommendations, preflight reports, production plans, staged MP4 outputs, manifests, review packets, and Canvas previews.
 
 #### Video Editor Agent (`video-editor-agent`)
 
@@ -629,14 +643,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Create Spotify playlists that place your songs beside bigger artists.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`, `hq-workers-default-visible`, `campaign-workers-default-visible`
-- Skills: `spotify-playlist-curator`
-- Sources: none
+- Skills: `playlist-builder`, `spotify-playlist-curator`
+- Sources: `printing-press-social`
 - Optional sources: none
 - Trusted tools: none
 - Tags: `spotify`, `playlist`, `promotion`, `music-marketing`
-- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`
-- Inputs: Playlist theme, comparable artists/tracks, artist Spotify tracks, target length, feature ratio, visibility, and Spotify account/tool readiness.
-- Outputs: A Spotify playlist plan, approval checklist, and creation payload or receipt when approved and Spotify tooling is connected.
+- Signals: `approval-capable`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
+- Inputs: Artist context, playlist theme, comparable artists/tracks, real Spotify track URLs or IDs, optional BPM/energy/key data, target length, feature ratio, visibility, and connected Spotify profile.
+- Outputs: Evidence-labeled strategy, deterministic playlist plan, title/description/cover package, approval contract, and verified Spotify playlist URL receipt.
 
 ### Research
 
@@ -659,14 +673,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Pulls Spotify artist data and turns it into useful growth signal.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `spotify-growth-intake`, `spotify-analytics-snapshot`, `spotify-anomaly-watch`, `spotify-playlist-curator`
-- Sources: none
+- Skills: `spotify-growth-intake`, `spotify-analytics-snapshot`, `spotify-anomaly-watch`
+- Sources: `printing-press-social`
 - Optional sources: none
 - Trusted tools: none
 - Tags: `spotify`, `analytics`, `research`, `audience`, `music-marketing`
-- Signals: `approval-capable`, `explicit-approval-required`
-- Inputs: Artist HQ Profile, Spotify client credentials, Spotify artist ID or URL, existing Spotify snapshots, and campaign context.
-- Outputs: Spotify public API snapshots, optional S4A snapshot normalization, delta briefs, anomaly alerts, and growth handoff notes.
+- Signals: `approval-capable`, `explicit-approval-required`, `requires-source-activation`
+- Inputs: Artist HQ Profile, connected Spotify for Artists browser session, existing Spotify snapshots, and campaign context.
+- Outputs: Spotify for Artists snapshots, compatible delta briefs, anomaly alerts, Artist HQ context updates, and growth handoff notes.
 
 #### YouTube Intelligence Agent (`youtube-intelligence-agent`)
 
@@ -698,6 +712,20 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ### Socials
 
+#### Postiz (`postiz-agent`)
+
+- Description: Draft, schedule, and publish social content through Postiz.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`
+- Skills: none
+- Sources: `postiz`
+- Optional sources: none
+- Trusted tools: none
+- Tags: `social`, `socials`, `posting`, `postiz`, `api`, `mcp`
+- Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
+- Inputs: Social post request, target Postiz integration, platform, copy, media, platform settings, schedule target, campaign context, and approval status.
+- Outputs: Validated Postiz draft, exact approval packet, and provider post ID/integration receipt after approved scheduling or publishing.
+
 #### Social Publisher (`social-publisher`)
 
 - Description: Post content and handle authorized comments or messages on Instagram, TikTok, X, and YouTube.
@@ -724,7 +752,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Tags: `social`, `socials`, `posting`, `trypost`, `api`, `mcp`
 - Signals: `approval-capable`, `artifact-output-aware`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
 - Inputs: Social post request, platform, account/profile, copy, media paths, schedule target, campaign context, and approval status.
-- Outputs: TryPost-ready draft, missing-fields checklist, approval packet, and publish/schedule receipt once wired and approved.
+- Outputs: Validated TryPost draft, approval packet, and provider post ID/status receipt after approved scheduling or publishing.
 
 ## Manual Follow-Up Map Gaps
 

@@ -27,6 +27,7 @@ Current active work:
 - Automations can queue the same typed work from schedule/file/webhook/URL/message triggers; standalone background agent/workflow runs may hide their Calendar shell.
 - HNIC alone has the `schedule_work` tool for confirmed Calendar or Automation agent/workflow work.
 - Scheduled social publishing has a guarded native executor after exact approval, with account/payload/media verification and durable receipts.
+- Provider publishing has two optional MCP lanes: TryPost and Postiz. Both discover exact connected accounts and platform rules before writing; Social Publisher remains the direct-browser lane and owns comment/DM replies.
 - Social Publisher supports bounded authorized inbound comment/DM replies using Artist Voice; direct or scheduled engagement mandates do not cover cold DMs, posts, account changes, or sensitive conversations.
 - Campaign release dates appear on Calendar as green `Release day` highlights.
 - College Radio and Spotify Playlist Creator are default-visible in both Artist HQ and Campaign workers.

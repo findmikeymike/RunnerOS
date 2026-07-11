@@ -21,9 +21,9 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### Social Publishing Providers
 
-- [ ] **Finish TryPost end to end.** Verify its real MCP/API tools, account discovery, media handling, drafts, previews, scheduling, publishing, approval binding, receipts, failure recovery, and UI connection state. Remove any promise the actual provider cannot fulfill.
-- [ ] **Add a Postiz Agent.** Use the existing `POSTIZ_API_KEY` and optional `POSTIZ_BASE_URL` settings, but first decide whether Postiz is a separate provider agent or a provider lane behind one Social Publisher. Support account discovery, draft/preview, schedule/publish approval, media, receipts, idempotency, and honest connection errors.
-- [ ] **Prevent TryPost/Postiz product duplication.** Define the chooser and routing rules so HNIC selects the connected provider or asks once when both are available.
+- [ ] **Finish TryPost end to end.** Built-in MCP source, hardened agent contract, media-aware validation, migration, and tests are implemented. Remaining: real credentials, account discovery, media/draft/preview/schedule/publish smoke, provider receipt proof, failure recovery, and UI connection-state verification.
+- [ ] **Finish Postiz end to end.** Required agent, official cloud MCP source, schema-first flow, approval boundaries, receipt contract, Artist Voice routing, and tests are implemented. Remaining: real credentials, integration/schema discovery, media/draft/schedule/publish smoke, provider receipt proof, self-hosted custom-source smoke, and UI connection-state verification.
+- [ ] **Verify TryPost/Postiz provider choice.** HNIC receives both through the live capability catalog. Smoke routing when neither, one, or both providers are connected and ensure it asks once instead of guessing.
 - [ ] **Harden Social Publisher.** Live-smoke posts, exact comment replies, bounded inbound comment/DM work, account mismatch, expired login, CAPTCHA/2FA, selector drift, private-data handling, and durable receipts. Track proof in [External Integration Live Verification](./external-integration-live-verification.md).
 
 ### Product Intelligence
