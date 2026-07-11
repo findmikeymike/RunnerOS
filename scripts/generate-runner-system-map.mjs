@@ -186,6 +186,7 @@ function classifyDomain(agent) {
 
   if (['industry-hunter', 'comms-agent', 'outreach-agent', 'college-radio-agent'].includes(slug)) return 'Outreach';
   if (['persona-agent', 'content-genius', 'record-doctor', 'art-director', 'world-builder'].includes(slug)) return 'Creative';
+  if (['anticipation-director', 'content-director'].includes(slug)) return 'Content Creation';
   if (['youtube-research-agent', 'youtube-intelligence-agent', 'spotify-analyst'].includes(slug)) return 'Research';
   if (['ig-trending-power-up', 'influencer-campaign-power-up', 'playlisting-power-up', 'spotify-playlist-creator'].includes(slug)) return 'Promotion';
 

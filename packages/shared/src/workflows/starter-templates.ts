@@ -11,6 +11,7 @@ import type { WorkflowMetadata } from './types.ts';
 
 export const WEEKLY_CONTENT_PIPELINE_SLUG = 'weekly-content-pipeline';
 export const EMAIL_TRIAGE_SLUG = 'email-triage';
+export const CONTENT_MASTERMIND_SLUG = 'content-mastermind';
 
 const weeklyContentPipeline = {
   slug: WEEKLY_CONTENT_PIPELINE_SLUG,
@@ -126,10 +127,156 @@ const emailTriage = {
     'Until then, paste an email manually to test the routing logic.\n',
 };
 
+const contentMastermind = {
+  slug: CONTENT_MASTERMIND_SLUG,
+  metadata: {
+    name: 'Content Mastermind',
+    description: 'Three distinct creative engines generate independently, then Content Director selects, fuses, and packages the strongest campaign portfolio.',
+    avatar: '🧠',
+    trigger: {
+      type: 'manual' as const,
+      inputs: [
+        {
+          name: 'campaign_brief',
+          type: 'string' as const,
+          required: true,
+          description: 'Song, release, artist, goal, audience, and relevant context',
+        },
+        {
+          name: 'locked_elements',
+          type: 'string' as const,
+          default: 'None',
+          description: 'Elements that must survive, such as location, chorus, artist appearance, CTA, or asset',
+        },
+        {
+          name: 'production_context',
+          type: 'string' as const,
+          default: 'One creator, one phone, minimal budget, but preserve one unconstrained Big Swing',
+          description: 'Available assets, people, locations, budget, timing, and production capabilities',
+        },
+      ],
+    },
+    steps: [
+      {
+        id: 'native-ideas',
+        agent: 'content-genius',
+        description: 'Generate human, native, personality-driven concepts.',
+        input: `Independently generate 4–6 strong content concepts.
+
+Do not optimize around what another agent may produce. Focus on human truth, personality, native platform behavior, dialogue, performance, participation, and repeatable formats.
+
+Campaign:
+{{trigger.campaign_brief}}
+
+Locked elements:
+{{trigger.locked_elements}}
+
+Production context:
+{{trigger.production_context}}`,
+        timeout: 600,
+        onFailure: 'stop' as const,
+        completion: { requireNonEmptyOutput: true, minOutputChars: 500 },
+      },
+      {
+        id: 'anticipation-ideas',
+        agent: 'anticipation-director',
+        description: 'Generate concepts powered by visible inevitability and payoff.',
+        input: `Independently generate 4–6 powerful anticipation concepts.
+
+Follow your engine fully. Concepts may have zero thematic relationship to the song when the attention mechanic is stronger. Preserve only the campaign intent and explicitly locked elements. Include at least one fearless concept unconstrained by convenience or budget.
+
+Campaign:
+{{trigger.campaign_brief}}
+
+Locked elements:
+{{trigger.locked_elements}}
+
+Production context:
+{{trigger.production_context}}`,
+        timeout: 600,
+        onFailure: 'stop' as const,
+        completion: { requireNonEmptyOutput: true, minOutputChars: 500 },
+      },
+      {
+        id: 'absurd-ideas',
+        agent: 'scroll-stopper',
+        description: 'Generate absurd, polarizing, visually immediate concepts.',
+        input: `Independently generate 4–6 absurd, highly retellable video concepts.
+
+Follow the Scroll Stopper engine fully. Do not weaken ideas to force lyrical, thematic, or brand symbolism. Preserve the campaign’s intended presence and explicitly locked elements. Include commanding opening frames and clear payoffs.
+
+Campaign:
+{{trigger.campaign_brief}}
+
+Locked elements:
+{{trigger.locked_elements}}
+
+Production context:
+{{trigger.production_context}}`,
+        timeout: 600,
+        onFailure: 'stop' as const,
+        completion: { requireNonEmptyOutput: true, minOutputChars: 500 },
+      },
+      {
+        id: 'direct-portfolio',
+        agent: 'content-director',
+        description: 'Select, fuse, reject, prioritize, and package the final slate.',
+        input: `Act as final Content Director. Apply your ruthless audience-first concept, packaging, and retention judgment to this independent idea pool without role-playing another person.
+
+Campaign:
+{{trigger.campaign_brief}}
+
+Locked elements:
+{{trigger.locked_elements}}
+
+Production context:
+{{trigger.production_context}}
+
+CONTENT GENIUS:
+{{steps.native-ideas.output}}
+
+ANTICIPATION DIRECTOR:
+{{steps.anticipation-ideas.output}}
+
+SCROLL STOPPER:
+{{steps.absurd-ideas.output}}
+
+Build one decisive Content Portfolio. Do not score thematic alignment. Campaign intent and locked elements are constraints, not taste points. Preserve one genuinely ambitious Big Swing even if it needs ten people, $300+, a special location, practical effects, or AI/VFX.
+
+Select and fuse by strength—not quotas. Portfolio labels may overlap; never pad the document with weaker ideas just to fill a section.
+
+Deliver:
+- Creative verdict
+- One Big Swing
+- Three flagship ideas
+- Strong supporting ideas
+- Repeatable formats
+- Fast wins
+- Strongest legitimate fusions
+- Start Now / Build Next / Invest for Impact
+- First three to execute
+- Rejected or merged ideas with blunt reasons
+
+Produce the complete polished document, not a summary.`,
+        timeout: 900,
+        onFailure: 'stop' as const,
+        completion: { requireNonEmptyOutput: true, minOutputChars: 1800 },
+      },
+    ],
+    outputs: {
+      mode: 'final-step' as const,
+      kind: 'document' as const,
+      title: 'Campaign Content Mastermind',
+      primary: { from: 'step-output' as const, step: 'direct-portfolio' },
+    },
+  } satisfies WorkflowMetadata,
+  body: '# Content Mastermind\n\nRun this when a campaign needs a high-quality creative slate rather than a generic idea list.\n',
+};
+
 export const STARTER_WORKFLOWS: ReadonlyArray<{
   slug: string;
   metadata: WorkflowMetadata;
   body: string;
-}> = [weeklyContentPipeline, emailTriage];
+}> = [weeklyContentPipeline, emailTriage, contentMastermind];
 
 export const STARTER_WORKFLOW_SLUGS: readonly string[] = STARTER_WORKFLOWS.map((w) => w.slug);

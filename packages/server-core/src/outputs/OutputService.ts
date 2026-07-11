@@ -830,7 +830,7 @@ export class OutputService {
     const manifest = createOutputBundle(this.deps.getWorkspaceRootPath(run.workspaceId), {
       id: randomUUID(),
       workspaceId: run.workspaceId,
-      title: `${workflowName} output`,
+      title: run.workflowSnapshot.metadata.outputs?.title?.trim() || `${workflowName} output`,
       kind: this.defaultKind(run),
       summary: normalized.summary,
       origin: {
@@ -845,6 +845,7 @@ export class OutputService {
       },
       content: normalized.content,
       contentMimeType: normalized.mimeType,
+      tags: [OUTPUT_SHOW_IN_CANVAS_TAG],
       completedAt: run.completedAt,
     });
 

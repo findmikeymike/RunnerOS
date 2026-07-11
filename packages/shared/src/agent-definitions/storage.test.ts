@@ -508,7 +508,7 @@ body
     expect(hnic?.metadata.skills).toContain('automation-creator')
     expect(hnic?.systemPrompt).toContain('current active-agent capability catalog')
     expect(hnic?.systemPrompt).toContain('@setup-concierge')
-    expect(hnic?.systemPrompt).toContain('suggest an automation')
+    expect(hnic?.systemPrompt).toContain('design it as an automation')
     expect(hnic?.systemPrompt).toContain('suggest a workflow')
     expect(hnic?.systemPrompt).toContain('Handoff target')
   })
@@ -872,6 +872,65 @@ body
     expect(scrollStopper?.systemPrompt).toContain('cover frame is the main product')
     expect(scrollStopper?.systemPrompt).toContain('No real named people, deepfakes')
     expect(scrollStopper?.systemPrompt).toContain('hand off to the appropriate video, social, or ads worker')
+  })
+
+  test('starter library includes Anticipation Director with its dedicated engine', () => {
+    const anticipationDirector = STARTER_AGENTS.find((agent) => agent.slug === 'anticipation-director')
+
+    expect(anticipationDirector).toBeDefined()
+    expect(anticipationDirector?.metadata.name).toBe('Anticipation Director')
+    expect(anticipationDirector?.metadata.permissionMode).toBe('ask')
+    expect(anticipationDirector?.metadata.thinkingLevel).toBe('high')
+    expect(anticipationDirector?.metadata.skills).toEqual(['anticipation-engine'])
+    expect(anticipationDirector?.metadata.tags).toContain('anticipation')
+    expect(anticipationDirector?.systemPrompt).toContain('Originate, Integrate, or Inject/Morph')
+    expect(anticipationDirector?.systemPrompt).toContain('kinetic visible clock')
+    expect(anticipationDirector?.systemPrompt).toContain('one fearless reconceived version')
+  })
+
+  test('starter library includes Content Director as the portfolio finalizer', () => {
+    const contentDirector = STARTER_AGENTS.find((agent) => agent.slug === 'content-director')
+
+    expect(contentDirector).toBeDefined()
+    expect(contentDirector?.metadata.name).toBe('Content Director')
+    expect(contentDirector?.metadata.permissionMode).toBe('ask')
+    expect(contentDirector?.metadata.thinkingLevel).toBe('high')
+    expect(contentDirector?.metadata.skills).toBeUndefined()
+    expect(contentDirector?.metadata.trustedWorkerTools).toBeUndefined()
+    expect(contentDirector?.systemPrompt).toContain('A powerful unrelated concept beats a weaker on-theme concept')
+    expect(contentDirector?.systemPrompt).toContain('one Big Swing')
+    expect(contentDirector?.systemPrompt).toContain('Start Now, Build Next, and Invest for Impact')
+    expect(DEFAULT_ACTIVATED_AGENT_SLUGS).not.toContain('anticipation-director')
+    expect(DEFAULT_ACTIVATED_AGENT_SLUGS).not.toContain('content-director')
+  })
+
+  test('built-in migration removes only the shipped Content Director persona and output tool wiring', () => {
+    const contentDirector = STARTER_AGENTS.find((agent) => agent.slug === 'content-director')!
+    writeGlobalAgent({
+      ...contentDirector,
+      metadata: {
+        ...contentDirector.metadata,
+        skills: ['mrbeast-perspective'],
+        trustedWorkerTools: ['create_output'],
+      },
+      systemPrompt: 'prefix\nUse the MrBeast perspective for ruthless concept, packaging, clarity, and retention judgment. Judge ideas by immediate stopping power, instant comprehension, need-to-see payoff, retellability, execution clarity, production reality, repeatability, and whether the song or campaign receives meaningful presence and attention.\nsuffix',
+    }, { globalAgentsDir })
+
+    expect(replaceBuiltInAgentMetadata('content-director', {
+      skills: { from: ['mrbeast-perspective'], to: undefined },
+      trustedWorkerTools: { from: ['create_output'], to: undefined },
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText(
+      'content-director',
+      'Use the MrBeast perspective for ruthless concept, packaging, clarity, and retention judgment. Judge ideas by immediate stopping power, instant comprehension, need-to-see payoff, retellability, execution clarity, production reality, repeatability, and whether the song or campaign receives meaningful presence and attention.',
+      'Apply the compact audience-first rubric.',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+
+    const migrated = loadGlobalAgent('content-director', { globalAgentsDir })
+    expect(migrated?.metadata.skills).toBeUndefined()
+    expect(migrated?.metadata.trustedWorkerTools).toBeUndefined()
+    expect(migrated?.systemPrompt).toBe('prefix\nApply the compact audience-first rubric.\nsuffix')
   })
 
   test('starter library includes the Shopify Agent with bundled Shopify source', () => {

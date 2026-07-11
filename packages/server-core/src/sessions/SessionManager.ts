@@ -2920,7 +2920,7 @@ export class SessionManager implements ISessionManager {
         // Load-bearing agents must exist on every startup: Orchestrator
         // (sidebar pin + future Rooms coordinator), Concierge (top-level
         // Chat nav entry), Setup Concierge, Social Publisher, TryPost, Postiz, Hypermotion, Video Director, Lottie Animation,
-        // Video Editor, Lyric Video, Content Genius, Scroll Stopper, promotion helpers, Shopify, Print Agent,
+        // Video Editor, Lyric Video, Content Genius, Scroll Stopper, Anticipation Director, Content Director, promotion helpers, Shopify, Print Agent,
         // Outreach, Industry Hunter, Art Director, World Builder, Record Doctor,
         // and Update System Agent.
         const required = STARTER_AGENTS.filter(
@@ -2937,6 +2937,8 @@ export class SessionManager implements ISessionManager {
             || a.slug === 'lyric-video-agent'
             || a.slug === 'content-genius'
             || a.slug === 'scroll-stopper'
+            || a.slug === 'anticipation-director'
+            || a.slug === 'content-director'
             || a.slug === 'ads-strategist'
             || a.slug === 'ad-creative-agent'
             || a.slug === 'ads-agent'
@@ -2975,9 +2977,18 @@ export class SessionManager implements ISessionManager {
             STARTER_SKILLS,
             BUNDLED_STARTER_SKILLS,
           } = await import('@craft-agent/shared/skills')
+          const anticipationEngineWasMissing = !loadGlobalSkillBySlug('anticipation-engine')
           const { ensured: skillsEnsured } = ensureRequiredGlobalSkills([...STARTER_SKILLS, ...BUNDLED_STARTER_SKILLS])
           if (skillsEnsured > 0) {
             sessionLog.info(`[skills] Seeded ${skillsEnsured} built-in skill(s) into global library`)
+          }
+          if (anticipationEngineWasMissing && loadGlobalSkillBySlug('anticipation-engine')) {
+            const { getWorkspaces } = await import('@craft-agent/shared/config')
+            for (const ws of getWorkspaces()) {
+              if (ws.remoteServer) continue
+              setGlobalSkillEnabled(ws.rootPath, 'anticipation-engine', true)
+            }
+            sessionLog.info('[skills] Enabled Anticipation Engine for existing local workspaces')
           }
           const workflowCreatorSkillMd = STARTER_SKILLS
             .find(skill => skill.slug === 'workflow-creator')
@@ -3268,6 +3279,21 @@ export class SessionManager implements ISessionManager {
           }
           if (ensureBuiltInAgentSkillsForSlug(CONCIERGE_SLUG, CONCIERGE_SYSTEM_SKILL_SLUGS).updated) {
             sessionLog.info('[agent-definitions] Ensured Concierge has self-edit system skill')
+          }
+          const contentDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'content-director')
+          if (contentDirectorAgent) {
+            const contentDirectorMetadataUpdated = replaceBuiltInAgentMetadata('content-director', {
+              skills: { from: ['mrbeast-perspective'], to: contentDirectorAgent.metadata.skills },
+              trustedWorkerTools: { from: ['create_output'], to: contentDirectorAgent.metadata.trustedWorkerTools },
+            }).updated
+            const contentDirectorPromptUpdated = replaceBuiltInAgentPromptText(
+              'content-director',
+              'Use the MrBeast perspective for ruthless concept, packaging, clarity, and retention judgment. Judge ideas by immediate stopping power, instant comprehension, need-to-see payoff, retellability, execution clarity, production reality, repeatability, and whether the song or campaign receives meaningful presence and attention.',
+              'Apply a ruthless audience-first concept lens without role-playing another person: will someone stop, understand the premise instantly, need to see the payoff, and retell it in one sentence? Judge ideas by immediate stopping power, instant comprehension, need-to-see payoff, retellability, execution clarity, production reality, repeatability, and whether the song or campaign receives meaningful presence and attention.',
+            ).updated
+            if (contentDirectorMetadataUpdated || contentDirectorPromptUpdated) {
+              sessionLog.info('[agent-definitions] Removed Content Director persona/tool conflicts')
+            }
           }
           const videoDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'video-director')
           if (videoDirectorAgent) {
@@ -3886,14 +3912,19 @@ user a clickable link to where the thing now lives.`
         sessionLog.warn('[agent-definitions] Library seed skipped:', err as Error)
       }
 
-      // Seed starter workflows (idempotent; skipped after the first run).
-      // Starters are NOT load-bearing — if the user deletes one, the tombstone
-      // mechanism keeps it gone, so we don't call ensureRequiredWorkflows here.
+      // Seed starter workflows on first run. Content Mastermind is also added
+      // to existing libraries once; ensureRequiredWorkflows honors deletion
+      // tombstones and never overwrites a user-edited workflow.
       try {
-        const { seedGlobalWorkflowLibraryIfEmpty, STARTER_WORKFLOWS } = await import('@craft-agent/shared/workflows')
+        const { seedGlobalWorkflowLibraryIfEmpty, ensureRequiredWorkflows, STARTER_WORKFLOWS, CONTENT_MASTERMIND_SLUG } = await import('@craft-agent/shared/workflows')
         const { seeded: workflowsSeeded } = seedGlobalWorkflowLibraryIfEmpty(STARTER_WORKFLOWS)
         if (workflowsSeeded > 0) {
           sessionLog.info(`[workflows] Seeded ${workflowsSeeded} starter workflow(s) into global library`)
+        }
+        const contentMastermind = STARTER_WORKFLOWS.filter(workflow => workflow.slug === CONTENT_MASTERMIND_SLUG)
+        const { ensured: workflowsEnsured } = ensureRequiredWorkflows(contentMastermind)
+        if (workflowsEnsured > 0) {
+          sessionLog.info('[workflows] Added Content Mastermind to the global workflow library')
         }
       } catch (err) {
         sessionLog.warn('[workflows] Starter seed skipped:', err as Error)

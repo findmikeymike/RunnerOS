@@ -11,6 +11,7 @@ import {
   writeRun,
 } from './run-storage.ts';
 import type { WorkflowRunSnapshot, WorkflowRunState } from './run-types.ts';
+import { CONTENT_MASTERMIND_SLUG, STARTER_WORKFLOWS } from './starter-templates.ts';
 import {
   deleteGlobalWorkflow,
   ensureRequiredWorkflows,
@@ -829,6 +830,23 @@ describe('activation manifest', () => {
 // ---------------------------------------------------------------------------
 
 describe('seedGlobalWorkflowLibraryIfEmpty', () => {
+  test('Content Mastermind starter parses with the lean four-agent contract', () => {
+    const workflow = STARTER_WORKFLOWS.find((item) => item.slug === CONTENT_MASTERMIND_SLUG)
+
+    expect(workflow).toBeDefined()
+    const parsed = parseWorkflowFile(serializeWorkflow(workflow!.metadata, workflow!.body))
+    expect(parsed).not.toBeNull()
+    expect(parsed?.metadata.steps.map((step) => step.agent)).toEqual([
+      'content-genius',
+      'anticipation-director',
+      'scroll-stopper',
+      'content-director',
+    ])
+    expect(parsed?.metadata.steps.at(-1)?.completion?.minOutputChars).toBe(1800)
+    expect(parsed?.metadata.outputs?.primary?.step).toBe('direct-portfolio')
+    expect(parsed?.metadata.steps.every((step) => (step.retries ?? 0) === 0)).toBe(true)
+  })
+
   test('seeds starters on first run', () => {
     const res = seedGlobalWorkflowLibraryIfEmpty(
       [{ slug: 'starter', metadata: minimalMeta(), body: '' }],

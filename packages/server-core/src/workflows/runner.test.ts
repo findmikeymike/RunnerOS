@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   readRun,
+  STARTER_WORKFLOWS,
   writeRun,
   type LoadedWorkflow,
   type WorkflowMetadata,
@@ -217,6 +218,57 @@ function findUpdatedDetail(
 // ----------------------------------------------------------------------------
 
 describe('WorkflowRunner', () => {
+  test('Content Mastermind runs exactly four isolated characters and creates one canonical portfolio output', async () => {
+    const template = STARTER_WORKFLOWS.find((workflow) => workflow.slug === 'content-mastermind')!
+    const workflow: LoadedWorkflow = {
+      ...template,
+      path: '/tmp/content-mastermind',
+      source: 'global',
+    }
+    const nativeOutput = `NATIVE_KEEPER ${'n'.repeat(520)}`
+    const anticipationOutput = `ANTICIPATION_KEEPER ${'a'.repeat(520)}`
+    const absurdOutput = `ABSURD_KEEPER ${'z'.repeat(520)}`
+    const finalOutput = `# Campaign Content Portfolio\n\nBIG_SWING ${'f'.repeat(1900)}`
+    const h = makeHarness({
+      stepOutputs: [nativeOutput, anticipationOutput, absurdOutput, finalOutput],
+    })
+    const runner = new WorkflowRunner(h.deps)
+
+    await runner.start({
+      workflow,
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: {
+        campaign_brief: 'Launch the single',
+        locked_elements: 'Keep the chorus',
+        production_context: 'Phone shoot plus one ambitious concept',
+      },
+    })
+    await waitFor(() => lastCompleted(h.events) !== undefined)
+
+    const completed = lastCompleted(h.events)!
+    expect(completed.state).toBe('succeeded')
+    expect(h.sessions.size).toBe(4)
+    expect(completed.steps.map((step) => step.attempts)).toEqual([1, 1, 1, 1])
+    expect(h.promptsSent[0]?.prompt).not.toContain('ANTICIPATION_KEEPER')
+    expect(h.promptsSent[1]?.prompt).not.toContain('NATIVE_KEEPER')
+    expect(h.promptsSent[2]?.prompt).not.toContain('NATIVE_KEEPER')
+    expect(h.promptsSent[3]?.prompt).toContain('NATIVE_KEEPER')
+    expect(h.promptsSent[3]?.prompt).toContain('ANTICIPATION_KEEPER')
+    expect(h.promptsSent[3]?.prompt).toContain('ABSURD_KEEPER')
+    expect([...h.sessions.values()].map((session) => (session.options as { spawnedFromAgent?: { agentSlug?: string } }).spawnedFromAgent?.agentSlug)).toEqual([
+      'content-genius',
+      'anticipation-director',
+      'scroll-stopper',
+      'content-director',
+    ])
+    expect(completed.outputIds).toHaveLength(1)
+    const manifest = readOutput(workspaceRoot, completed.finalOutputId!)
+    expect(manifest?.title).toBe('Campaign Content Mastermind')
+    expect(manifest?.tags).toContain('show-in-canvas')
+    expect(manifest?.origin.agentSlug).toBe('content-director')
+    expect(manifest?.preview?.mode).toBe('markdown')
+  })
+
   test('happy path: 2-step workflow succeeds and threads outputs via templater', async () => {
     const h = makeHarness({ stepOutputs: ['STEP_ONE_OUT', 'STEP_TWO_OUT'] });
     const runner = new WorkflowRunner(h.deps);
@@ -264,7 +316,7 @@ describe('WorkflowRunner', () => {
     const runner = new WorkflowRunner(h.deps);
 
     await runner.start({
-      workflow: makeWorkflow(),
+      workflow: makeWorkflow({ outputs: { mode: 'final-step', kind: 'document', title: 'Configured portfolio title' } }),
       workspaceId: WORKSPACE_ID,
       triggerInputs: { topic: 'outputs' },
     });
@@ -282,8 +334,8 @@ describe('WorkflowRunner', () => {
     expect(manifest).toMatchObject({
       id: outputId,
       workspaceId: WORKSPACE_ID,
-      title: 'Test output',
-      kind: 'report',
+      title: 'Configured portfolio title',
+      kind: 'document',
       status: 'published',
       origin: {
         source: 'workflow',
@@ -297,6 +349,7 @@ describe('WorkflowRunner', () => {
         mode: 'markdown',
       },
     });
+    expect(manifest?.tags).toContain('show-in-canvas');
     expect(manifest!.summary).toContain('Final report');
     expect(h.events.some((event) => event.type === 'outputs.updated')).toBe(true);
   });

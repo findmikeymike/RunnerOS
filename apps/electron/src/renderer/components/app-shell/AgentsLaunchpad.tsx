@@ -1297,6 +1297,10 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
     return 'Creative'
   }
 
+  if (slug === 'anticipation-director' || slug === 'content-director') {
+    return 'Content Creation'
+  }
+
   if (slug === 'youtube-research-agent' || slug === 'youtube-intelligence-agent' || slug === 'spotify-analyst') {
     return 'Research'
   }

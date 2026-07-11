@@ -8,6 +8,8 @@ export const BASE_DEFAULT_WORKER_SLUGS = [
 export const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
   'content-genius',
   'scroll-stopper',
+  'anticipation-director',
+  'content-director',
   'art-director',
   'ad-creative-agent',
   'ads-strategist',

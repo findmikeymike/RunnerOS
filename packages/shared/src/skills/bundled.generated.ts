@@ -2406,6 +2406,416 @@ For implementation, see the [tools registry](../../tools/REGISTRY.md).
     ],
   },
   {
+    slug: "anticipation-engine",
+    files: [
+      {
+        path: "references/anatomy.md",
+        content: `# The Anatomy: The Five Load-Bearing Parts
+
+Every gripping anticipation moment has all five. When a concept feels soft, fake, or corny, one of these is missing or weak. Use this as both a build checklist and a diagnostic.
+
+## 1. A legible force closing
+
+Something clearly advancing toward a collision, visible to the viewer. The car speeding away (tension building in the rope). The truck approaching the tunnel. In social: the person walking toward the room where the secret is. In loss: the tower tipping, the liquid rising toward the rim.
+
+- **Legible** is the key word: the viewer must be able to *see the force and understand what it's heading toward*. A hidden or ambiguous force creates confusion, not dread.
+- The force should feel **unstoppable or hard-to-stop** — that's what makes the outcome feel inevitable. If the viewer thinks "they'll just stop the car," the tension leaks.
+
+**Fails when:** the force is invisible, unclear, or obviously easy to stop. No legible force = no "here it comes."
+
+## 2. A visible clock
+
+The approach must be *watchable* — the viewer can see time running out. The car getting smaller = distance = seconds until the rope goes taut. The truck's closing distance to the tunnel. The slowly tipping tower. The person getting closer to discovering the thing.
+
+- This is what converts a static threat into *rising* tension. The measurable, visible countdown is what makes the viewer lean in harder every second.
+- **The clock must be KINETIC.** It is not enough for danger to be *near* something — the progression must be visibly *in motion*: distance closing, flames climbing, water rising, slack paying out, a cascade underway, something slowly giving way. A hazard positioned next to a target with nothing moving (a candle sitting near fabric) has no clock at all — it's a still life, and still lifes don't grip. If you can't point at the thing that is *visibly advancing right now*, there is no clock.
+- The clock can be spatial (distance closing), physical (something slowly giving way), or social (a conversation heading somewhere). What matters is the viewer can *track the progress toward impact* — motion they can watch, not proximity they're told about.
+
+**Fails when:** there's a threat but no sense of *when* — no visible progression. Threat without a clock is dread without escalation; the viewer doesn't feel the tightening.
+
+## 3. A body in the blast radius
+
+A specific, identifiable person (or valued thing) that will bear the consequence. The guy with the rope on his leg. The truck driver / the truck. The person about to be humiliated. Stakes require a victim the viewer can attach to.
+
+- The viewer must **care about / identify with** the body in the path. Even two seconds of establishing "this is a person, and this is about to happen to THEM" is enough.
+- In social/loss domains the "body" is the person whose dignity, relationship, or valued object is at stake.
+
+**Fails when:** no one's in the path (abstract danger no one suffers), or the viewer has no reason to care about who is. Consequence with no victim = no stakes.
+
+## 4. A charged, knowable outcome
+
+The viewer can *simulate* the resolution ahead of time — and it's emotionally charged enough that they urgently need to see it land. Dread is the most visceral flavor (the yank of the rope, the roof peeling, the excruciating social fallout) but it is ONE flavor, not the whole spectrum. The charge can be: **dread** (oh god, the impact), **comedic anticipation** (when they notice, it's going to be incredible), **confrontation** (will they get pissed, will it kick off), **will-they-get-away-with-it**, **will-it-hold / will-it-complete** (the domino run, the one-take), or **triumph/relief** (the save at the last second). The engine's name is anticipation, not dread — any resolution the viewer *urgently wants to witness* qualifies.
+
+- **Knowable:** the viewer's mind runs the simulation ahead of time. "Oh god, when that rope goes tight—" or "when she turns around and sees her cart—". The anticipation IS that simulation.
+- **Charged:** the imagined resolution must matter enough to stay for. This is where "soft" lives — if the imagined outcome is mild on every axis (not scary, not funny, not confrontational, not triumphant), there's no pull. Push the imagined resolution to genuinely wince-worthy, laugh-loading, or fight-brewing.
+- Specific beats vague every time: not "something happens" but a precise, imaginable, charged resolution.
+
+**Fails when:** the outcome is mild on all axes (soft), unclear (viewer can't simulate it), or so extreme it's unbelievable (ridiculous). This part is the most common failure point — see credibility-filter.md.
+
+## 5. Binary, imminent resolution
+
+It happens, or it catastrophically doesn't — and *soon*. The viewer stays because the payoff is guaranteed and close. The rope goes taut (and then—). The truck hits the tunnel (or somehow clears it). The secret spills (or is saved at the last second).
+
+- **Binary:** a clear, decisive outcome — not a fade-out or ambiguity. The viewer needs to know a definite thing is coming.
+- **Imminent:** close enough that leaving means missing it. If resolution is far off or uncertain-when, the viewer bails.
+- The resolution can subvert (the expected catastrophe doesn't happen — the truck clears it by an inch) but it must *resolve*. Even a subversion is a payoff; no resolution is a betrayal.
+
+**Fails when:** the buildup has no clear payoff, the resolution is far away, or it fizzles instead of landing. See the anticlimax failure in credibility-filter.md.
+
+## Using the anatomy
+
+- **To build:** ensure all five are present and strong before anything else. A concept missing one part is not yet gripping — name and fix the gap.
+- **To diagnose (Sharpen mode):** run a weak concept against all five; the missing/weak part is almost always why it feels soft or corny. Usually it's #4 (outcome not dreadful/believable enough) or #2 (no visible clock, so no rising tension).
+- **The interplay:** the force (1) moves along the clock (2) toward a body (3) that faces a knowable charged outcome (4) in a binary imminent resolution (5). All five chain together. Break the chain anywhere and the grip loosens.
+`,
+      },
+      {
+        path: "references/credibility-filter.md",
+        content: `# The Credibility Filter (The Anti-Corny Soul)
+
+This is the skill's core intelligence. Generating dread scenarios is easy — 90% of them will be corny, soft, or dumb. This filter is the taste that rejects them. It exists because of one fact: **the dread lives entirely in the viewer's simulation of catastrophe, so the only unforgivable sin is breaking that simulation.**
+
+The research names the failures precisely — the visible crash mat in *The Fugitive*, the rubber knife in *Commando*. The instant the viewer's body stops believing, the whole machine collapses into corny. Corny is not a vibe; it is a **broken simulation**, and it breaks in exactly four ways. Run every concept against all four.
+
+## Failure 1: SOFT — the outcome isn't actually dreadful
+
+The viewer believes it, but doesn't care, because the imagined consequence is mild. A guy holding a water balloon over his head as it's about to pop. Believable — but who cares? Nothing is at stake.
+
+**Test:** simulate the outcome. Does it make you wince? Would a real person genuinely dread it? If the worst case is "mild inconvenience" or "slight mess," it's soft.
+
+**Fix:** raise the stakes of the *outcome*, not the theatrics. What would make the consequence genuinely bad? Escalate what's actually on the line — dignity, a valued object, real (apparent) bodily consequence — until the simulation produces a real wince. If you can't make the outcome genuinely dreadful, the concept is dead; don't dress a soft outcome in dramatic music.
+
+## Failure 2: FAKE — the viewer doesn't believe it
+
+The stakes would be dreadful IF real, but the viewer's body doesn't buy it. Looks staged, physics is wrong, the "danger" is visibly controlled, the acting telegraphs the outcome, the safety gear shows. The visible-crash-mat problem.
+
+**Test:** would a sharp viewer's gut say "that's fake" or "that wouldn't actually happen"? Is the physics believable? Does anything in frame betray the setup? Does the person's body language leak that they know the outcome is controlled?
+
+**Fix:** protect the illusion (see illusion-craft.md). The paradox: often the way to make it *safer* AND more believable is better craft — forced perspective, tighter framing, cut-before-impact, real-looking physics. Believability is not the same as real danger; a perfectly safe setup can be 100% believable if the craft hides the safety. And commit the performance — a body that reacts like the danger is real sells it; a body that knows it's fake kills it.
+
+## Failure 3: RIDICULOUS — it tips past belief into absurd
+
+The stakes are SO extreme or cartoonish that the viewer's body stops simulating and starts laughing (or scrolling). Over-the-top defeats itself: past a certain point the brain files it as "not real" and the dread evaporates. This is the overcorrection from soft — piling on so much that it becomes a cartoon.
+
+**Test:** is the scenario so extreme it reads as fantasy rather than a real thing that could happen to a real person? Has it crossed from "oh god" into "lol what"? Would the audience roll their eyes at the implausibility?
+
+**Fix:** pull back to the *credible* maximum. The most gripping stakes are often *mundane-but-real* — a truck that's genuinely slightly too tall for a real tunnel is scarier than an impossible Rube-Goldberg deathtrap, because the viewer believes the first. Grounded and believable beats spectacular and fake. Find the highest stakes that still live inside "this could actually happen."
+
+## Failure 4: ANTICLIMAX — the resolution betrays the buildup
+
+The dread was real, but the payoff fizzles. The rope goes taut and... nothing much. The truck reaches the tunnel and it cuts away with no real resolution. The viewer invested tension and got robbed. This teaches them never to trust your buildups again.
+
+**Test:** is the resolution as strong as the anticipation? Does it *pay off* the specific dread that was built? Does it actually resolve (binary), or fade/dodge?
+
+**Fix:** the payoff must deliver on the exact promise of the dread — either the feared thing happens (satisfying the simulation) or it's subverted in a way that's *itself* a strong beat (the last-inch near-miss, the unexpected save). Never build dread you don't cash. If you can't design a resolution worth the buildup, the buildup is a lie.
+
+## The combined credibility gate
+
+For any concept, all four must pass:
+1. **Believable?** (not fake) — viewer's body buys it.
+2. **Dreadful?** (not soft) — outcome genuinely makes them wince.
+3. **Grounded?** (not ridiculous) — stays inside "could really happen."
+4. **Paid off?** (not anticlimax) — resolution worth the wait.
+
+The sweet spot is the intersection: **grounded, believable, genuinely dreadful, and paid off.** That intersection is narrow — which is exactly why most attempts are corny and why this filter is the whole skill. When a concept fails a gate, name which one and fix that specific thing; don't just add more spectacle (which usually trades one failure for another).
+
+## The single most useful question
+For any concept, ask: **"Does the viewer's body believe a genuinely bad, specific thing is about to happen to someone they care about, soon?"** If yes on every word — *body believes, genuinely bad, specific, someone they care about, soon* — it grips. If any word is a no, that's the failure to fix.
+`,
+      },
+      {
+        path: "references/domains.md",
+        content: `# The Three Domains
+
+The five-part anatomy is domain-agnostic. The same machine runs in each domain on a different substrate — the viewer's body simulates physical harm, social harm, or loss. Proven by the psychology: secondhand embarrassment fires the *same* simulation mechanism as physical dread (the viewer "mentally takes the place of the person"), and it's explicitly anticipatory — "the anticipation of relational fallout." So these are one skill, three substrates.
+
+---
+
+## Domain 1: PHYSICAL (the visceral one)
+
+A body facing bodily consequence. The most visceral because the viewer's own body-model runs the simulation — they *feel* the yank/fall/impact in their own spine, pre-verbally.
+
+- **Force:** a physical object or energy closing in — a vehicle, a falling/swinging object, a collapsing structure, water, fire, a projectile, height.
+- **Clock:** spatial — distance closing, something slowly giving way, a fuse.
+- **Body:** a person (or animal/object we're attached to) in the physical path.
+- **Outcome:** impact, injury, destruction — the viewer simulates the specific bodily consequence.
+- **This is where illusion-craft matters MOST** (see illusion-craft.md). Physical dread is the hardest to fake convincingly, so it's where forced perspective, cut-before-impact, rigging, and AI-impact earn their keep. Real physical hazard is the lazy, one-take version — engineer the apparent version, which is repeatable and often looks *better*.
+- **Failure watch:** most likely to look FAKE (staged physics, visible rig/control) or RIDICULOUS (impossible deathtraps). Keep it grounded and hide the control mechanism.
+
+**Examples of the machine:** the rope-to-leg + speeding car. The truck at the too-low tunnel. Something heavy swinging toward a person who's focused elsewhere. A precarious tall stack above someone.
+
+---
+
+## Domain 2: SOCIAL (the one with no production ceiling)
+
+A person facing social catastrophe — humiliation, getting caught, rejection, the reveal. The force is the *truth or the moment* approaching. This domain is the skill's edge because **it needs nothing but a situation and a camera** — you can max social dread infinitely with no props, no rig, no build, and it's underexploited because most creators only think "danger = physical."
+
+- **Force:** an approaching social collision — the person walking toward the discovery, the conversation heading toward the landmine, the moment the lie must hold or break, the thing about to be seen/read/overheard.
+- **Clock:** the conversation/situation progressing toward the point of exposure. Watchable through proximity, dialogue, a countdown to a reveal.
+- **Body:** the person whose dignity/relationship/reputation is about to take the hit. Viewer identifies via empathy (the stronger the empathy, the stronger the cringe — this is documented).
+- **Outcome:** the excruciating fallout — the humiliation, the caught-in-the-act, the rejection, the secret out. The viewer simulates the social pain (their own face heats up).
+- **Failure watch:** most likely to be SOFT (merely awkward, not genuinely excruciating) — the fix is to raise what's socially at stake (bigger secret, worse audience, higher-status witness, more irreversible fallout). Also watch for FAKE (obviously scripted/acted social scenarios — real or real-feeling social dynamics sell it; theatrical ones don't).
+
+**Examples of the machine:** someone about to read aloud the message they don't know is on the screen. A person confidently doing the thing that's about to be exposed as wrong in front of everyone. The moment before someone walks in. A secret one word away from spilling to the exact wrong person.
+
+**Note:** social dread is often *stronger* than physical for many viewers because it's inescapably relatable — everyone has a social-catastrophe memory the video reactivates. Don't under-use this domain.
+
+---
+
+## Domain 3: IRREVERSIBLE-LOSS / TEMPORAL
+
+A valued thing about to be destroyed, spilled, broken, or lost forever — on a clock. No person in bodily danger, but the gut clenches at impending, permanent loss. The "Jenga tower tipping" dread.
+
+- **Force:** entropy closing in — the tower tipping, the liquid rising to the rim, the precious thing slipping, the deadline arriving, the one-shot chance about to pass.
+- **Clock:** the thing giving way in real time — the wobble, the drip, the slow slide, the ticking deadline.
+- **Body:** the valued object/opportunity itself, plus (often) the person who will lose it and whose face we can watch.
+- **Outcome:** permanent, irreversible loss — the thing shatters, spills, is gone, the moment passes. Dread comes from *irreversibility* — no undo.
+- **Failure watch:** most likely to be SOFT (the thing isn't valued enough — fix by establishing why it's precious/irreplaceable) or ANTICLIMAX (it needs to actually resolve — break or be saved, not just fade).
+
+**Examples of the machine:** something priceless balanced precariously as vibrations build. A one-take, one-chance moment where any error ruins it. A slow leak toward a point of no return. The last-second race to save the thing.
+
+**The accumulation pattern (a potent sub-shape):** visible invested effort on the line, then set into irreversible motion — a thousand dominoes toppling, an elaborate chain reaction underway, hours of setup cashing out in one cascade. This grips doubly: the kinetic clock (the cascade progressing) AND the stakes of the visible labor (all that effort, spent in one unstoppable run — will it complete or die midway?). No danger to anyone required; the invested effort IS the body in the blast radius. One of the most reliably watchable shapes in the domain.
+
+---
+
+## Sub-flavors (modifiers, not separate engines)
+
+Layer these onto the three core domains to sharpen a specific edge:
+- **Financial / gambling:** all-in, the wheel spinning, the bet placed — irreversible-loss with money as the valued thing, plus a binary reveal.
+- **Moral / transgression:** about to cross a line, do the forbidden thing — social + the dread of consequence.
+- **Relational:** about to be caught/rejected/betrayed — social, aimed at a specific relationship.
+
+Use them to flavor which outcome the viewer dreads, but the anatomy and filter are the same.
+
+## Cross-domain power move
+The strongest concepts sometimes run **two domains at once** — physical AND social (about to be physically hurt AND humiliated), or loss AND social (about to lose the thing AND be blamed). Stacked domains multiply the dread — but every stacked domain must independently pass the credibility filter, or the weak one drags down the strong one.
+`,
+      },
+      {
+        path: "references/illusion-craft.md",
+        content: `# Illusion Craft: Maximum Apparent Stakes, Controllable Real Stakes
+
+The engine's economic and creative core. Because the viewer only needs to *believe* the catastrophe to get the full neurochemical rush (suspense fires the same amygdala response as a real emergency, contained), the strongest and most repeatable version **engineers maximum apparent catastrophe through craft rather than real hazard.**
+
+This is not softening. Real danger is the *lazy, low-ceiling* version — anyone can point a camera at genuine danger. The craft is *manufacturing the feeling* of catastrophe. A century of filmmakers did exactly this on tiny budgets.
+
+## The illusion toolkit (all cheap, all century-proven)
+
+- **Forced perspective.** The single most powerful cheap tool. Harold Lloyd appeared to dangle hundreds of floors up — he was a few feet above a mat, camera angled to hide it. Chaplin skated toward a deadly drop that was a matte painting on glass near the lens. Angle and distance manipulation makes a safe setup look lethal. Use it to make a close, safe object look like it's on a collision course, or a small drop look enormous.
+- **Cut before impact.** The dread is the *approach*; the resolution can be implied or shown safely. Build the entire tension of the closing force, then cut at the peak — or cut to the aftermath. The viewer's mind completes the catastrophe (often more vividly than footage could). This alone makes most physical concepts safe.
+- **Hide the control.** Whatever keeps the person/object in check (rig, wire, stopping mechanism, off-frame spotter, the fact that the gap is actually fine) stays out of frame or is removed in post. The visible-crash-mat failure is the cardinal sin — anything that reveals the outcome is controlled breaks the illusion. Keep the mechanism invisible.
+- **Real-looking physics, controlled reality.** The force can be real but rigged to stop/miss (the car really speeds away but the rope detaches or the tension is capped; the truck really approaches but the tunnel gap is actually fine and the angle sells "too low"). Real motion sells belief; hidden control creates the gap between apparent and actual.
+- **AI-generated or composited impact.** In 2026, the *impact moment* can be AI-generated or composited — build the real, safe approach in-camera, generate the catastrophic payoff. Apparent stakes maxed, real stakes zero.
+- **Performance sells it.** A body that reacts as if the danger is real is the cheapest, most important effect. A performer who telegraphs that it's controlled kills the illusion; committed fear/tension sells it. Direct the reaction.
+- **Sound and slow-motion.** The approach in slow-mo with rising sound design multiplies dread for free. The "clock" (part 2 of the anatomy) is amplified enormously by sound.
+
+## When a concept needs real execution risk
+
+Some concepts only hit their full apparent stakes if some element is genuinely real (real speed, real height, real fragility). When that's the case, just name it as a *creative* fact — "the apparent stakes here lean on X being real" — the same way you'd note any other production requirement (a location, a prop, a second person). It's information for planning the shoot, not a verdict. The operator runs their own process on what to shoot; the skill's job is to make the concept as gripping as possible and be clear about what the concept requires to land.
+
+## Low-budget mode: two people, ~$30
+
+When requested, generate concepts executable by **two people for about thirty dollars**, with apparent stakes fully preserved. Constraints breed the best ideas here — the silent comedians had almost nothing and made immortal dread.
+
+Design rules for this mode:
+- **Use free forces.** Gravity, a bike/car the operator already owns, a slope, wind, a household object, a public setting. No pyrotechnics, no rentals.
+- **Lean on angle, cut, and performance** — the three free tools. Forced perspective + cut-before-impact + committed reaction can manufacture huge apparent stakes with a phone.
+- **Favor social and irreversible-loss domains** when budget is tightest — they often need *zero* props and zero physical risk, only a situation and a camera. A social-catastrophe setup can be $0.
+- **One real object, well-used.** A single believable prop (something that looks genuinely destructible/valuable/dangerous) beats an elaborate rig. Specificity of the one object sells the whole thing.
+- **The clock can be free.** Distance, a slow tip, a rising level, an approaching person — all free ways to make time visibly run out.
+
+Deliver low-budget concepts with the exact two-person staging and the specific free illusion method (which angle, where the cut lands, what the reaction sells), so it's genuinely executable — not a concept that secretly needs a film crew.
+
+## The test for illusion craft
+For any concept: **"What is the apparent stakes, what is the actual execution, and how does the craft create the gap?"** If apparent stakes are high and you can name the specific technique creating the gap (angle, cut, rig, AI, performance), it's a strong, repeatable, viral-capable concept. If the apparent stakes lean on a real element, name that element as a production requirement so it's clear what the concept needs to land.
+`,
+      },
+      {
+        path: "references/injection.md",
+        content: `# Inject / Morph: The Engine
+
+The most powerful mode. Take anything — nothing, a nugget, or a fully-formed idea — and morph it into a gripping anticipation concept. Imagination is unbounded; the ONLY fixed points are the sacred intent and any elements the operator explicitly locks. Everything else is clay.
+
+This is not garnish. "Add a countdown to your cooking video" is the weak version everyone does. This engine *diagnoses* the seed, finds the anticipation machine latent inside it, and morphs the concept — sometimes radically — while making sure the thing the video exists to *do* survives and, ideally, gets carried by the dread itself.
+
+## The governing law: serve the intent, free everything else
+
+Two kinds of constraints, and ONLY two:
+
+1. **The intent** — what the video exists to accomplish. Sell a song. Promote a world/brand/release. Drive to a link. Establish an artist's aesthetic. If there is an intent, it is **sacred** — it survives no matter how far the concept travels. A brilliant anticipation concept that buries the song it was meant to sell has *failed at its actual job*, not succeeded creatively.
+2. **Locked elements** — anything the operator explicitly says must be in it ("I want it shot in the desert," "the dog has to be in it," "keep the chorus drop"). Fixed points. Non-negotiable.
+
+**Everything outside those two is raw clay.** Setting, premise, characters, genre, tone, the entire literal situation — all free to be reshaped, exploded, reconceived. This is the inversion that makes the mode powerful: instead of "preserve the idea and carefully add stakes," it's *"identify what must stay true, then go as wild as you want with everything else."* Wild imagination in service of a fixed purpose.
+
+If there is **no** stated intent and **no** locked elements, then nothing is fixed and imagination is total — treat it as Originate seeded by whatever nugget exists.
+
+## The three questions (run in order)
+
+### Question 1: What must stay true?
+Establish the sacred frame before touching anything.
+- What is this video *for*? (the intent) If the operator hasn't said, and it's not obvious, ask — because the intent governs the entire morph. Don't guess a song-promo is just "a cool video"; the intent changes what survives.
+- What has the operator explicitly locked?
+- Everything not captured by those two is now clay. State plainly what's sacred and what's free, so the morph is transparent.
+
+### Question 2: What are the gnarliest scenes this setting allows?
+Lead with concrete scenes, not theme. Given the seed's *setting* (a house, a car, a stage, a kitchen), greedily list the most real, gripping anticipation scenes that can happen *there* — physical, social, or loss.
+- Ask first: **"what can go wrong, gnarly and real, in this place?"** House → stove fire behind him, tub overflowing, oven, gas, a flood. Generate the concrete list before thinking about meaning.
+- **The clock must be KINETIC — motion or growth already visibly underway.** A hazard sitting near something is NOT an anticipation scene; it's a still life. Flames climbing = kinetic. Water rising and sheeting over = kinetic. A car pulling rope-slack out = kinetic. Dominoes cascading = kinetic. A candle *near* a curtain = static — nothing is moving, there's no watchable progression, the viewer can't see time running out. Kill every static-proximity idea at generation; the danger must be *in motion and visibly progressing*, not merely positioned.
+- **The setup must be ORGANIC — the situation has to plausibly exist.** If the viewer's first thought is "why would that be there / someone would just stop it," the simulation is dead before it starts (this is the FAKE gate). But organic has MANY shapes — do not collapse to one template. **Awareness is a free variable:** the person can be oblivious OR fully aware, and both grip. Plausible origins include: the **accident + oblivious person** (towel drifts onto burner while he's absorbed); the **deliberate stunt** (the rope video — he tied it himself, fully aware, and his knowing makes it MORE gripping: "he knows what's coming and he's doing it anyway"); the **prank in progress** (openly the premise — sneaking an item out of a stranger's cart for every one they add: when will they notice, will it kick off?); the **bet / challenge / game**; the **brewing social collision**; the **race against a real deadline**. What killed the taped-candle idea wasn't the absence of an oblivious person — it was the absence of ANY plausible origin. Rotate across these premise-shapes; a skill that only outputs "person does X while danger grows behind them" has become a formula, and formulas produce sameness.
+- Then run the best scenes against the five-part anatomy (\`anatomy.md\`) — is there a legible force, a visible clock, a body, a charged knowable outcome, a binary resolution? Most simple house-dangers have all five for free.
+- Generate from the seed's setting AND from completely unrelated territory. A domino cascade, a public prank, a precarious build have nothing to do with any song's theme and grip completely — the intent is served by the song being *present* in a video people can't stop watching, not by the concept relating to the song's meaning. Do not filter toward on-theme scenes; a spread of unrelated and setting-adjacent candidates is mandatory. Rank purely on stakes, charge, payoff, and executability — thematic resonance is a tiebreaker between equals, never a filter.
+- Keep it cheap and believable (credibility filter, \`credibility-filter.md\`). Favor the version that needs the least setup and the least AI. Simple real fire > elaborate AI apocalypse.
+
+### Question 3: How far do we morph? (the altitude range)
+Offer a *range*, so the operator picks how much of the non-sacred seed survives. Both ends always honor the intent; they differ only in how much clay gets reshaped.
+
+- **Surgical** — keep the seed's shape mostly intact; thread the force and clock *through* the existing situation. "Same video, now with something closing in." Lowest distortion. Good when the operator loves the seed as-is and just wants it gripping.
+- **Reconceived** — keep the intent and locked elements, reshape much of the rest. The seed becomes a *starting point* the concept departs from. Higher distortion, usually higher ceiling.
+- **Fused** (the target — see below) — the concept where the dread and the intent are *the same thing*.
+
+Default to presenting **two options: a surgical version and a bolder reconceived/fused version**, both serving the intent, so the operator chooses the altitude. Don't default to timid; the reconceived version should be genuinely fearless. But don't discard the seed's shape *needlessly* either — if the surgical version is already gripping, say so.
+
+## Scene-first, and simple beats clever (read this before reaching for fusion)
+
+The most common failure of this engine — and it is a real trap — is getting too clever: leading with the song's *theme* and building an elaborate contraption to express it. That generates complex, AI-heavy, pretentious concepts when a simple, physical, gnarly scene would hit harder and cost nothing.
+
+**Lead with the scene, not the theme.** The first question is not "how do I make the dread symbolize the song's meaning" — it's **"what are the gnarliest, most real anticipation scenes that can happen in this setting?"** Generate those first, concretely, greedily. For a song set at home: a pan catches fire on the stove behind him while he sings, oblivious. The bathtub fills and starts pouring over the edge as he dozes. Something's in the oven. A candle by the curtains. A leak becoming a flood. These are simple, believable, one-take, ~$30, and *gripping* — and they connect to a homebody song plenty well just by being *in the house*, no symbolism required.
+
+**Simple beats clever, almost always.** The best anticipation ideas are usually simple in nature — a real thing going wrong in a real place, on a visible clock. They don't *have* to be simple, but complexity is a **tax** (more setup, more budget, more AI, more ways to look fake), and the engine must count that cost. A concept that needs an AI apocalypse or a marching band to work is almost always worse than a pan quietly catching fire. When you catch yourself building something elaborate to express a theme, stop and ask: what's the *simplest gnarly scene* that would work here?
+
+**The tie is optional; presence is the requirement.** The intent ("promote the song") is satisfied by the song playing or being performed inside a video people watch to the end — full stop. An artist singing a heartbreak song while a massive domino chain runs is a perfect promo with zero thematic connection: the machine holds the eyes, the song fills the ears. When a scene *happens* to resonate ("homebody at peace while his home becomes a catastrophe behind him") that's a pleasant extra — but it is arbitrary to the hook psychology, and a stronger unrelated concept always beats a weaker on-theme one. Never engineer a scene backward from the theme, and never rank a concept up for resonance or down for lacking it.
+
+## The ceiling: fuse the dread with the intent (a bonus, not a mandate)
+
+The floor is "the song/intent is present inside a video people watch to the end" — presence + attention, which any gripping concept delivers just by having the artist perform in or around it. Fusion — where the machine and the intent's meaning become inseparable — is a beautiful thing **when it comes cheaply and simply**: if a simple, gnarly scene *also* happens to land the song's climax on the resolution, take it, that's gold. But fusion never outranks grip. A more gripping concept with zero thematic relation beats a less gripping fused one, every time. Do NOT force fusion, and never let its pursuit push toward complexity or pretension — if you're building something complicated to achieve fusion, you've mispriced it. The gnarly simple scene is the cake; fusion is an occasional cherry.
+
+## Working from nothing / a nugget / a full idea
+
+- **Nothing (+ an intent):** originate against the intent. "Promote this moody nighttime track" → build an anticipation concept whose dread *is* moody and nocturnal, so the machine and the song's world are born fused.
+- **A nugget** ("guy on a rooftop," a lyric, a vibe, a single image): grow the nugget toward maximum dread while honoring intent. The nugget is a locked element unless the operator says otherwise — build the machine *around* it.
+- **A full idea:** diagnose it (Question 2), then offer the surgical and reconceived morphs (Question 3), protecting intent and locks throughout.
+
+Same engine at every input size. The only thing that scales is how much seed there is to protect vs. invent.
+
+## The one honesty gate (pure craft, not caution)
+
+The single failure this mode guards against: **a morph so drunk on its own anticipation machine that the intent gets buried.** If the dread swallows the song/world/purpose, the injection failed at its job. This is not timidity and not a safety concern — it's the intent being sacred. When a morph drifts from the intent, say so and pull it back toward serving (ideally fusing with) the intent. That is the *only* limit on the imagination here. Everything else is fair game — go as far as the idea wants to go.
+
+## Delivery for this mode
+- State the sacred frame first (intent + locked elements), so the morph is transparent.
+- Then the concept(s) — typically a surgical version and a bolder reconceived/fused version.
+- For each: the five-part breakdown, the peak-dread beat, the resolution, the illusion method, and — critically — **how the intent survives and (ideally) how the dread carries it.**
+- The honest note: which version fuses best with the intent, and where any version risks drifting from it.
+`,
+      },
+      {
+        path: "SKILL.md",
+        content: `---
+name: anticipation-engine
+description: Design short-form video moments built on dread and anticipation — the machine behind the biggest can't-look-away viral videos, where a visible force closes on someone and the viewer is locked in waiting to see what happens when it lands. Use when a creator, artist, or manager wants a video concept, a music-performance moment, or a hook built on suspense, impending consequence, rising stakes, or that feeling of watching something inevitable approach and being unable to look away until it resolves. Trigger on requests like give me a gripping high-stakes video idea, make this concept suspenseful, design a can't-look-away moment, add tension to this performance, or sharpen a scenario so people must watch to the end. Works across physical peril, social catastrophe, and irreversible-loss domains, includes a low-budget two-person mode, and engineers apparent stakes through craft rather than real hazard. Not for calm, aesthetic, or satisfying content, or standard hooks without a stakes-and-resolution structure.
+---
+
+# Anticipation Engine
+
+Design the moment a viewer physically cannot look away from — a visible force closing on visible stakes, on a watchable clock, with a charged outcome (dread, comedy brewing, a confrontation loading) that their own mind simulates before it lands. This is the machine behind the biggest suspense-driven viral videos (the rope tied to the leg as the car speeds away; the truck barreling at the too-low tunnel). The skill builds it, ports it into new domains, and — critically — knows why the great ones grip and the corny ones don't.
+
+## What this is, precisely (not vague "suspense")
+
+The engine is **inevitability + a legible charged outcome + a watchable wait.** The master principle, from suspense craft: the grip doesn't come from the act — it comes from *how long you make the audience wait for it*, and from the viewer *knowing what's coming*. This is the opposite of a curiosity gap. Curiosity asks "what's in the box?" This says: **"I can SEE what's about to happen and I can't look away."** Anticipated *known* outcome — catastrophe, comedy, confrontation — not mystery.
+
+Why it works neurologically (and why illusion is enough): suspense fires the same amygdala/adrenal response as a real emergency, but *contained* — the viewer micro-doses the neurotransmitters of an actual crisis. Their body needs to *believe* the catastrophe to get the rush. It does NOT need the catastrophe to be real. That single fact is the skill's whole economic and creative engine (below).
+
+## The five load-bearing parts (the anatomy)
+
+Every gripping anticipation moment has all five. Corny/soft/dumb is almost always one of these failing. Full detail in \`references/anatomy.md\`.
+
+1. **A legible force closing** — something clearly advancing toward a collision (a car, a truck, a lie about to surface, a tower about to tip). The viewer can see it coming.
+2. **A visible, KINETIC clock** — the approach is *in motion and watchable*: distance shrinking, flames climbing, water rising, slack paying out. You can see time running out because something is visibly advancing right now. A hazard merely *positioned near* something (a candle sitting by a curtain) has no clock — it's a still life, and still lifes don't grip.
+3. **A body in the blast radius** — a specific person who will bear the consequence. Physical: they get hurt. Social: they get humiliated/caught. Stakes need a body.
+4. **A charged, knowable outcome** — the viewer can *simulate* the resolution and urgently needs to see it land. Dread is one flavor; comedic anticipation, brewing confrontation, will-it-hold, will-they-get-away-with-it all qualify. The yank. The roof peeling. The moment she notices her cart. Specific and imaginable, not vague.
+5. **Binary, imminent resolution** — it happens or catastrophically doesn't, and *soon*. The payoff is guaranteed and close, so the viewer stays.
+
+## The governing law: protect the simulation
+
+The entire craft is **maximizing perceived stakes while keeping real stakes controllable.** The dread lives in the viewer's simulation of catastrophe — so the one unforgivable sin is *breaking that simulation.* The research names the failures precisely: the visible crash mat, the rubber knife — the instant the viewer's body stops believing, the whole thing collapses into corny.
+
+Corny / soft / dumb / ridiculous are not four problems. They are one problem — **a broken simulation** — in four flavors:
+- **Soft/low-stakes** = the outcome isn't actually charged (not scary, not funny-loading, not confrontational — viewer doesn't care what happens).
+- **Fake/dumb** = the viewer doesn't *believe* it (looks staged, physics is wrong, the mat is visible).
+- **Ridiculous** = it tips past belief into absurd (stakes so cartoonish the body stops simulating).
+- **Anticlimax** = the resolution betrays the buildup (the wait wasn't worth it).
+
+The skill's core intelligence is the credibility filter that catches all four. Building doom scenarios is easy; the taste that rejects the broken-simulation 90% is the skill. See \`references/credibility-filter.md\`.
+
+## Perceived vs. real stakes (this is the genius)
+
+Because the viewer only needs to *believe*, the strongest, most repeatable version engineers **maximum apparent catastrophe with controllable execution.** This isn't softening — genuine hazard is the *lazy, low-ceiling* version (anyone can point a camera at something dangerous, and you only get one take). The brilliance is *manufacturing the feeling*: forced perspective (Harold Lloyd "hundreds of floors up" was feet above a mat), cut-before-impact, off-frame control, AI-generated impact, camera angle, timing. Go all the way to the wall on *perceived* stakes; the craft is what makes the apparent catastrophe land without needing the real one. See \`references/illusion-craft.md\`.
+
+## The three domains (the machine ports across all of them)
+
+The anatomy is domain-agnostic. Physical is the most visceral, but the same five parts run in social and irreversible-loss — proven by the psychology (secondhand embarrassment fires the same simulation mechanism as physical dread; it's literally "the anticipation of relational fallout"). Full playbooks in \`references/domains.md\`.
+
+- **Physical** — a body facing bodily consequence. Force = a physical object/energy closing in. Most visceral; where illusion-craft matters most (it's how you get the visceral hit repeatably and in one controllable setup).
+- **Social** — a person facing social catastrophe (humiliation, getting caught, rejection, the reveal). Force = the truth/moment approaching. **No physical constraints at all** — you can max social dread infinitely with nothing but a situation and a camera. Underexploited; the skill's edge.
+- **Irreversible-loss / temporal** — a valued thing about to be destroyed, spilled, broken, or lost forever, on a clock. Force = entropy closing in (the tower tipping, the thing slipping). Gut-clench without a person in bodily danger.
+- **Sub-flavors** (financial/gambling, moral/transgression, relational) layer onto these three; treat as modifiers, not separate engines.
+
+## How to generate: scene-first, simple beats clever (ALL modes — read before generating anything)
+
+The most dangerous rabbit hole in this skill is over-cleverness: leading with a *theme* or a *symbolic idea* and building an elaborate contraption to express it. That path produces complex, AI-heavy, pretentious concepts every time. The corrective, which governs every mode:
+
+- **Lead with the scene, not the theme.** First question, always: **"what are the gnarliest, most real anticipation scenes we could actually create?"** — from the seed's setting AND from anywhere else (a domino chain, a public prank, a precarious build have nothing to do with any song and grip completely). Generate concretely and greedily — a pan catching fire behind the oblivious singer, the tub sheeting over, a stranger's cart emptied item by item, ten thousand dominoes mid-cascade. No thematic reasoning during generation. Never reverse this order.
+- **Simple beats clever, almost always.** The best concepts are usually simple: a real thing in motion in a real place. Complexity is a **tax** (setup, budget, AI, ways to look fake). If a concept needs an apocalypse or a contraption, find the simple gnarly version instead.
+- **Rotate premise-shapes — never collapse into one template.** Awareness is a free variable: the oblivious accident, the *deliberate stunt* (the rope guy tied it himself — his knowing makes it MORE gripping), the open prank, the bet/challenge, the brewing confrontation, the race against time. A skill that only outputs "person does X while danger grows behind them" has become a formula.
+- **The intent is served by PRESENCE + ATTENTION, not by symbolism.** "Promote the song" means the song plays or is performed inside a video people watch to the end — that's the whole requirement. An artist singing a heartbreak song while a massive domino chain topples is a perfect promo: the machine holds the eyes, the song fills the ears, and the dominoes have *nothing* to do with heartbreak. The thematic tie is arbitrary to the hook psychology. Always generate concepts that have **zero relation to the song's theme** alongside any that happen to resonate — and rank purely on stakes, charge, payoff, and realistic executability. Thematic resonance is a tiebreaker between otherwise-equal concepts, never a filter, never a reason to prefer a weaker on-theme idea over a stronger unrelated one.
+
+## The three modes
+
+1. **Originate** — generate fresh anticipation concepts from scratch, in a chosen domain or the best-fit one, at max perceived stakes. Operator gives a vibe, a domain, or nothing.
+2. **Integrate** — weld the machine into a music/performance context (e.g., the artist performing *as* the force closes in — the rope-video pattern: stakes-machine fused to a musical moment). Turns a performance into a can't-look-away event. (This is a special case of Mode 3 where the intent is a performance; use Mode 3's engine.)
+3. **Inject / Morph** — the most powerful mode. Take anything the operator has — nothing, a nugget, or a full idea — and morph it into a gripping anticipation concept, with imagination unbounded *except* for the sacred intent (what the video exists to do — sell a song, promote a world) and any elements the operator locks. Everything outside those is clay. The method: establish what's sacred → generate the gnarliest simple scenes available — from the setting AND from anywhere (scene-first, per above) → morph as far as needed while serving the intent. Fusion of dread and intent is a bonus when it comes cheap, never a mandate. Full engine in \`references/injection.md\`. **When the operator brings an existing idea or a seed, this is the default mode.**
+
+## The first frame: the whole machine in one glance
+
+The decision to stop scrolling happens in **13–200 milliseconds, pre-attentively** — before conscious thought, driven by faces, contrast, and motion. A brilliant anticipation concept whose opening frame doesn't make the machine legible dies at millisecond 80, unwatched. So every concept must be designed with its opening composition in mind:
+
+- **The first frame should contain the whole machine**: the force, the body, and the visible gap between them, readable in one glance. The rope video's opening frame is the masterclass — guy with guitar + rope on leg + car in the distance: the entire five-part anatomy in a single composition, no text needed. When delivering a concept, specify what the opening frame shows and confirm the machine is legible in it.
+- **One dominant element + one supporting element.** At mobile size, clutter reads as noise and gets scrolled. The eye's documented priority: faces first (especially eyes), then high contrast, then motion. If a person is in the concept, their face should be visible and readable in frame one — the viewer attaches to the body-in-the-blast-radius through the face.
+- **Motion in frame one is a double weapon**: the kinetic clock is also itself a scroll-stop trigger (brains are wired to flag movement as potential danger/importance). A first frame where something is already visibly moving toward something beats a static establishing shot every time.
+- **Contrast sells the gap**: the force and the body should be visually separable at a glance (light/dark, color, depth) so the "this is heading toward that" reads without parsing.
+
+## Workflow
+
+1. **Determine mode** (originate / integrate / inject-morph) and **domain** (or pick the best-fit one and say why). If the operator brings *any* existing material — a full idea, a nugget, or a stated intent like promoting a song — use **Inject / Morph** and follow \`references/injection.md\`, which governs how far to morph and what stays sacred.
+2. **Generate scene-first.** List the gnarliest real anticipation scenes available — from the setting/seed and from anywhere else entirely — concrete, simple, in motion, organically plausible — before any thematic reasoning. Then build or diagnose the best candidates against the five parts: is the force legible? is the clock visible and kinetic? is there a body in the blast radius? is the outcome charged and knowable? is resolution binary and imminent? A concept missing any part is not yet gripping — name the gap.
+3. **Run the credibility filter** (\`references/credibility-filter.md\`): does the viewer BELIEVE it (not fake), CARE about it (not soft), stay inside belief (not ridiculous), and get a worthy payoff (not anticlimax)? Kill or fix anything that breaks the simulation.
+4. **Engineer perceived vs. real stakes** (\`references/illusion-craft.md\`): max the apparent catastrophe; specify the technique that makes it land (forced perspective / cut / AI / rig / angle).
+5. **Apply the budget constraint if requested** (\`references/illusion-craft.md\` low-budget section): two people, ~$30, executable, apparent stakes preserved.
+6. **Deliver** the concept with: the five parts named, the domain, **the opening-frame composition (what's visible in frame one, and confirmation the machine is legible in it)**, the exact moment of peak dread, how resolution lands, the illusion method, and an honest note on what could make it tip into corny.
+
+## Output shape
+
+Lead with the concept itself — the moment, vividly, so the dread is legible in a sentence or two (if you can't make the operator feel it in the pitch, it won't work on video). Then: the five-part breakdown (brief), the peak-dread beat, the resolution, the illusion method, and a plain "here's what would make this fall flat" note. Prose, punchy, concrete. Never present a concept as guaranteed; the tip-into-corny note is mandatory.
+
+## Hard nevers
+
+- Never break the simulation. A concept the viewer won't believe is dead no matter how clever.
+- Never lead with theme or symbolism over scene. Scene first; resonance falls out for free.
+- Never build elaborate when simple grips. Complexity is a tax, not a virtue.
+- Never collapse into one premise template (e.g., always "oblivious person + danger behind them"). Rotate premise-shapes; formulas produce sameness.
+- Never confuse real stakes with perceived stakes. The goal is maximum *felt* dread; genuine hazard is the lazy, one-take version and craft beats it.
+- Never soften the dread — engineer the *illusion* instead. Soft is useless; illusion-craft is how you keep the dread at maximum.
+- Never let stakes tip into cartoonish/absurd — that breaks belief as surely as looking fake.
+- Never build anticipation with no resolution, or a resolution that betrays the buildup. The payoff must be worth the wait.
+
+## When this is the wrong tool
+
+If the content wants calm, beauty, satisfaction, or straightforward information, this is the wrong engine — say so. Anticipation/dread is a specific emotional machine; forcing it onto content that doesn't want stakes produces the try-hard version.
+`,
+      },
+    ],
+  },
+  {
     slug: "arc-her",
     files: [
       {

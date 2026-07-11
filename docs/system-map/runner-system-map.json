@@ -35,10 +35,10 @@
     "missionBrief": "apps/electron/src/renderer/lib/mission-brief.ts"
   },
   "summary": {
-    "agentCount": 42,
+    "agentCount": 44,
     "domains": {
       "Command": 3,
-      "Content Creation": 7,
+      "Content Creation": 9,
       "Creative": 5,
       "Merch": 2,
       "Operators": 2,
@@ -49,7 +49,7 @@
       "Socials": 3
     },
     "permissionModes": {
-      "ask": 34,
+      "ask": 36,
       "safe": 8
     },
     "hiddenWorkerHomeCount": 5,
@@ -66,6 +66,8 @@
       "spotify-playlist-creator",
       "content-genius",
       "scroll-stopper",
+      "anticipation-director",
+      "content-director",
       "art-director",
       "ad-creative-agent",
       "ads-strategist",
@@ -76,14 +78,14 @@
       "record-doctor",
       "industry-hunter"
     ],
-    "workflowCount": 2,
+    "workflowCount": 3,
     "sharedIntelPromptWired": true,
     "finalsPromotionWired": true,
     "scheduledWorkWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 122,
-    "bundledSkillCount": 81,
+    "knownSkillCount": 123,
+    "bundledSkillCount": 82,
     "systemSkillCount": 6,
     "userGlobalSkillCount": 121,
     "knownSourceCount": 27,
@@ -147,6 +149,39 @@
           "agent": "writer"
         }
       ]
+    },
+    {
+      "slug": "content-mastermind",
+      "name": "Content Mastermind",
+      "description": "Three distinct creative engines generate independently, then Content Director selects, fuses, and packages the strongest campaign portfolio.",
+      "triggerType": "manual",
+      "inputCount": 3,
+      "stepCount": 4,
+      "agentRefs": [
+        "anticipation-director",
+        "content-director",
+        "content-genius",
+        "scroll-stopper"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "native-ideas",
+          "agent": "content-genius"
+        },
+        {
+          "id": "anticipation-ideas",
+          "agent": "anticipation-director"
+        },
+        {
+          "id": "absurd-ideas",
+          "agent": "scroll-stopper"
+        },
+        {
+          "id": "direct-portfolio",
+          "agent": "content-director"
+        }
+      ]
     }
   ],
   "scheduledWork": {
@@ -173,7 +208,7 @@
     "Saved agents live in the global library and are activated per workspace.",
     "Workers page shows active agents, except system agents and hidden worker-home slugs.",
     "Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator.",
-    "Campaign default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator, content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
+    "Campaign default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator, content-genius, scroll-stopper, anticipation-director, content-director, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.",
     "run-agent drops missing skills/sources before session creation and includes a launch receipt.",
     "Concierge receives broad workspace context and an active-agent capability catalog for routing.",
     "Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.",
@@ -298,6 +333,65 @@
       ],
       "inputs": "A setup goal, pasted credential, app-feature question, broken connection, or “what do I do next?” request.",
       "outputs": "A guided setup step, saved-setting plan, connection test path, app explanation, or follow-up checklist."
+    },
+    {
+      "slug": "anticipation-director",
+      "name": "Anticipation Director",
+      "description": "Designs credible, can’t-look-away video concepts built around visible inevitability, rising stakes, and a decisive payoff.",
+      "domain": "Content Creation",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [
+        "anticipation-engine"
+      ],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "content",
+        "anticipation",
+        "short-form",
+        "creative-direction"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable"
+      ],
+      "inputs": "Song, campaign, existing concept, setting, performance idea, production limits, locked elements, or desired emotional charge.",
+      "outputs": "Anticipation concepts with opening frame, kinetic clock, stakes, peak moment, resolution, execution illusion, and anti-corny diagnosis."
+    },
+    {
+      "slug": "content-director",
+      "name": "Content Director",
+      "description": "Selects, strengthens, and fuses creative concepts into a campaign-ready content portfolio.",
+      "domain": "Content Creation",
+      "permissionMode": "ask",
+      "thinkingLevel": "high",
+      "skills": [],
+      "sources": [],
+      "optionalSources": [],
+      "trustedWorkerTools": [],
+      "visualAgent": false,
+      "tags": [
+        "content",
+        "creative-direction",
+        "campaigns",
+        "curation"
+      ],
+      "launchSurfaces": [
+        "workspace-workers-when-active",
+        "campaign-workers-default-visible"
+      ],
+      "riskSignals": [
+        "approval-capable",
+        "artifact-output-aware"
+      ],
+      "inputs": "Campaign context plus concepts from creative agents, existing ideas, references, constraints, assets, budget, and release goals.",
+      "outputs": "A Canvas-ready Content Portfolio containing a Big Swing, flagship concepts, repeatable formats, supporting ideas, fast wins, production priorities, and campaign sequencing."
     },
     {
       "slug": "hypermotion-agent",

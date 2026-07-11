@@ -50,16 +50,16 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 ## Summary
 
-- Agents mapped: 42
+- Agents mapped: 44
 - Hidden from Workers home: 5
-- Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `spotify-playlist-creator`, `content-genius`, `scroll-stopper`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
-- Starter workflows mapped: 2
+- Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `spotify-playlist-creator`, `content-genius`, `scroll-stopper`, `anticipation-director`, `content-director`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
+- Starter workflows mapped: 3
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
 - Scheduled Work execution: wired
-- Domains: Command 3, Content Creation 7, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 4, Socials 3
-- Permission modes: ask 34, safe 8
-- Known skills: 122 (81 bundled, 6 system, 121 user-global on this machine)
+- Domains: Command 3, Content Creation 9, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 4, Socials 3
+- Permission modes: ask 36, safe 8
+- Known skills: 123 (82 bundled, 6 system, 121 user-global on this machine)
 - Known builtin sources: 27
 
 ## Reference Health
@@ -71,7 +71,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Saved agents live in the global library and are activated per workspace.
 - Workers page shows active agents, except system agents and hidden worker-home slugs.
 - Artist HQ default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator.
-- Campaign default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator, content-genius, scroll-stopper, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
+- Campaign default workers are currently branding-agent, world-builder, college-radio-agent, spotify-playlist-creator, content-genius, scroll-stopper, anticipation-director, content-director, art-director, ad-creative-agent, ads-strategist, ads-agent, ig-trending-power-up, influencer-campaign-power-up, playlisting-power-up, record-doctor, industry-hunter.
 - run-agent drops missing skills/sources before session creation and includes a launch receipt.
 - Concierge receives broad workspace context and an active-agent capability catalog for routing.
 - Share Intel writes targeted workspace context docs, then the central prompt composer injects them as a dedicated Shared Intel section at agent launch.
@@ -143,6 +143,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Missing agent refs: none
 - Step order: classify -> @triager; draft_reply -> @writer
 
+### Content Mastermind (`content-mastermind`)
+
+- Description: Three distinct creative engines generate independently, then Content Director selects, fuses, and packages the strongest campaign portfolio.
+- Trigger: `manual`; inputs: 3; steps: 4
+- Agent refs: `anticipation-director`, `content-director`, `content-genius`, `scroll-stopper`
+- Missing agent refs: none
+- Step order: native-ideas -> @content-genius; anticipation-ideas -> @anticipation-director; absurd-ideas -> @scroll-stopper; direct-portfolio -> @content-director
+
 
 ## Workers By Domain
 
@@ -191,6 +199,34 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Outputs: A guided setup step, saved-setting plan, connection test path, app explanation, or follow-up checklist.
 
 ### Content Creation
+
+#### Anticipation Director (`anticipation-director`)
+
+- Description: Designs credible, can’t-look-away video concepts built around visible inevitability, rising stakes, and a decisive payoff.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Skills: `anticipation-engine`
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `content`, `anticipation`, `short-form`, `creative-direction`
+- Signals: `approval-capable`
+- Inputs: Song, campaign, existing concept, setting, performance idea, production limits, locked elements, or desired emotional charge.
+- Outputs: Anticipation concepts with opening frame, kinetic clock, stakes, peak moment, resolution, execution illusion, and anti-corny diagnosis.
+
+#### Content Director (`content-director`)
+
+- Description: Selects, strengthens, and fuses creative concepts into a campaign-ready content portfolio.
+- Permission: `ask`; thinking: `high`
+- Launch surfaces: `workspace-workers-when-active`, `campaign-workers-default-visible`
+- Skills: none
+- Sources: none
+- Optional sources: none
+- Trusted tools: none
+- Tags: `content`, `creative-direction`, `campaigns`, `curation`
+- Signals: `approval-capable`, `artifact-output-aware`
+- Inputs: Campaign context plus concepts from creative agents, existing ideas, references, constraints, assets, budget, and release goals.
+- Outputs: A Canvas-ready Content Portfolio containing a Big Swing, flagship concepts, repeatable formats, supporting ideas, fast wins, production priorities, and campaign sequencing.
 
 #### Hypermotion Agent (`hypermotion-agent`)
 
