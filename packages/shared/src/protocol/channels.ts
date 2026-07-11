@@ -428,6 +428,10 @@ export const RPC_CHANNELS = {
     TRANSITION_RECOMMENDATION: 'hqState:transitionRecommendation',
     /** Validate, create, link, and dispatch one recommendation route. */
     LAUNCH_RECOMMENDATION: 'hqState:launchRecommendation',
+    /** Read one recommendation with lifecycle history and outcome. */
+    GET_RECOMMENDATION_DETAIL: 'hqState:getRecommendationDetail',
+    /** Record explicit user usefulness without altering lifecycle state. */
+    SET_RECOMMENDATION_USEFULNESS: 'hqState:setRecommendationUsefulness',
   },
   scheduledWork: {
     /** Read the parsed scheduled-work document for a workspace. */

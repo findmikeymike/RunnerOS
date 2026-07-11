@@ -2,8 +2,12 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { HqRecommendationCandidate } from '@craft-agent/shared/hq-state'
+import type { HqRecommendationCandidate, HqStateEntityRef } from '@craft-agent/shared/hq-state'
 import { createOutputBundle } from '@craft-agent/shared/outputs'
+import { scheduledWorkDefinitionDigest, scheduledWorkMetadata, serializeScheduledWorkBody, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
+import { upsertContextDoc } from '@craft-agent/shared/workspace-context'
+import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows'
+import { readHqRecommendationOutcomes } from '@craft-agent/shared/hq-state/recommendation-storage'
 import {
   readHqRecommendationStore,
   transitionHqRecommendation,
@@ -82,6 +86,47 @@ describe('HQ recommendation outcome reconciliation', () => {
 
     expect(readHqRecommendationStore(workspace).candidates[0]?.status).toBe('launched')
   })
+
+  test('reconciles linked Scheduled Work to an evidenced outcome', () => {
+    const workspace = tempWorkspace()
+    const order = completedOrder('work-1')
+    upsertContextDoc(workspace, {
+      slug: 'scheduled-work', metadata: scheduledWorkMetadata(), body: serializeScheduledWorkBody({ version: 1, workspaceId: 'ws-1', items: [order], updatedAt: order.updatedAt }),
+    })
+    launchEntity(workspace, { kind: 'scheduled-work', id: order.id, source: `scheduled-work:${order.id}`, scope: { type: 'hq' } })
+
+    reconcileHqRecommendationOutcomes(workspace)
+
+    expect(readHqRecommendationStore(workspace).candidates[0]?.status).toBe('completed')
+    expect(readHqRecommendationOutcomes(workspace)[0]).toEqual(expect.objectContaining({ status: 'successful' }))
+  })
+
+  test('reconciles a linked workflow run from its persisted terminal state', () => {
+    const workspace = tempWorkspace()
+    const run = workflowRun('12345678-1234-4123-8123-123456789012', 'succeeded')
+    writeRun(workspace, run)
+    launchEntity(workspace, { kind: 'workflow-run', id: run.id, source: `workflow-run:${run.id}`, scope: { type: 'hq' } })
+
+    reconcileHqRecommendationOutcomes(workspace)
+
+    expect(readHqRecommendationStore(workspace).candidates[0]?.status).toBe('completed')
+    expect(readHqRecommendationOutcomes(workspace)[0]?.evidence[0]?.id).toBe(run.id)
+  })
+
+  test('retires an observed obligation when its entity resolves without claiming launch credit', () => {
+    const workspace = tempWorkspace()
+    const order = completedOrder('observed-work')
+    upsertContextDoc(workspace, {
+      slug: 'scheduled-work', metadata: scheduledWorkMetadata(), body: serializeScheduledWorkBody({ version: 1, workspaceId: 'ws-1', items: [order], updatedAt: order.updatedAt }),
+    })
+    const entity = { kind: 'scheduled-work' as const, id: order.id, source: `scheduled-work:${order.id}`, scope: { type: 'hq' as const } }
+    upsertHqRecommendation(workspace, { ...candidate(), completionContract: { type: 'entity-resolution', entity } })
+
+    reconcileHqRecommendationOutcomes(workspace)
+
+    expect(readHqRecommendationStore(workspace).candidates[0]?.status).toBe('superseded')
+    expect(readHqRecommendationStore(workspace).candidates[0]?.executionRefs.some((ref) => ref.kind === 'session')).toBe(false)
+  })
 })
 
 function launch(workspace: string, sessionId: string): void {
@@ -91,6 +136,29 @@ function launch(workspace: string, sessionId: string): void {
     actor: { type: 'user' },
     executionRef: { kind: 'session', id: sessionId, linkedAt: new Date().toISOString() },
   })
+}
+
+function launchEntity(workspace: string, entity: HqStateEntityRef): void {
+  upsertHqRecommendation(workspace, { ...candidate(), completionContract: { type: 'entity-resolution', entity } })
+  transitionHqRecommendation(workspace, 'sop_outcome', 'accepted', { actor: { type: 'user' } })
+  transitionHqRecommendation(workspace, 'sop_outcome', 'launched', { actor: { type: 'system' } })
+}
+
+function completedOrder(id: string): ScheduledWorkOrder {
+  const execution = { type: 'agent-task' as const, agentSlug: 'concierge', brief: 'Do work', permissionMode: 'safe' as const, expectedOutput: { requirement: 'none' as const } }
+  return {
+    version: 1, id, owner: { scope: 'hq', workspaceId: 'ws-1' }, calendarLink: { calendar: 'hq', itemId: `calendar-${id}` }, title: 'Completed work', type: 'agent-task', status: 'done', startAt: '2026-07-10T00:00:00.000Z', timezone: 'America/Chicago', execution, inputRefs: [], approvals: [], runs: [], executionKey: { payloadDigest: scheduledWorkDefinitionDigest(execution), idempotencyKey: id }, createdAt: '2026-07-10T00:00:00.000Z', updatedAt: '2026-07-10T01:00:00.000Z',
+  }
+}
+
+function workflowRun(id: string, state: WorkflowRunSnapshot['state']): WorkflowRunSnapshot {
+  return {
+    id, workflowSlug: 'weekly-review', workspaceId: 'ws-1', state,
+    trigger: { type: 'manual', inputs: {}, firedAt: '2026-07-10T00:00:00.000Z' },
+    workflowSnapshot: { metadata: { name: 'Weekly review', description: 'Fixture', trigger: { type: 'manual' }, steps: [{ id: 'step-1', agent: 'concierge', input: 'Review.' }] }, body: '' },
+    steps: [{ id: 'step-1', state: state === 'succeeded' ? 'succeeded' : 'running', attempts: 1 }],
+    createdAt: '2026-07-10T00:00:00.000Z', updatedAt: '2026-07-10T01:00:00.000Z', completedAt: state === 'succeeded' ? '2026-07-10T01:00:00.000Z' : undefined,
+  }
 }
 
 function candidate(): HqRecommendationCandidate {

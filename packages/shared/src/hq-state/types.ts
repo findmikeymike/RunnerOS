@@ -103,6 +103,7 @@ export interface HqOperationalItem {
   expiresAt?: string;
   scope: HqOperationalScope;
   fingerprint: string;
+  semanticIntentId?: string;
   worker?: string;
   intent?: string;
   source: string;
@@ -122,6 +123,7 @@ export interface HqStateOfPlay {
   version: 1;
   generatedAt: string;
   sources: Record<string, string>;
+  sourceHealth: HqOperationalSourceHealth[];
   headline: string;
   nextMove: HqStateNextMove;
   alternatives: HqStateNextMove[];

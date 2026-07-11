@@ -29,7 +29,7 @@ export { PERMISSION_MODE_CONFIG } from '@craft-agent/shared/agent/modes';
 
 // Thinking level types
 import type { ThinkingLevel } from '@craft-agent/shared/agent/thinking-levels';
-import type { HqRecommendationCandidate, HqRecommendationLaunchInput, HqRecommendationLaunchResult, HqRecommendationStore, HqRecommendationTransitionInput } from '@craft-agent/shared/hq-state';
+import type { HqRecommendationCandidate, HqRecommendationDetail, HqRecommendationLaunchInput, HqRecommendationLaunchResult, HqRecommendationOutcome, HqRecommendationStore, HqRecommendationTransitionInput, HqRecommendationUsefulnessInput } from '@craft-agent/shared/hq-state';
 export type { ThinkingLevel };
 export { THINKING_LEVELS, DEFAULT_THINKING_LEVEL } from '@craft-agent/shared/agent/thinking-levels';
 
@@ -966,6 +966,8 @@ export interface ElectronAPI {
   listHqRecommendations(workspaceId: string): Promise<HqRecommendationStore>
   transitionHqRecommendation(workspaceId: string, input: HqRecommendationTransitionInput): Promise<HqRecommendationCandidate>
   launchHqRecommendation(workspaceId: string, input: HqRecommendationLaunchInput): Promise<HqRecommendationLaunchResult>
+  getHqRecommendationDetail(workspaceId: string, recommendationId: string): Promise<HqRecommendationDetail>
+  setHqRecommendationUsefulness(workspaceId: string, input: HqRecommendationUsefulnessInput): Promise<HqRecommendationOutcome>
   getScheduledWork(workspaceId: string): Promise<ScheduledWorkParseResult>
   mutateScheduledWork(workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult>
   scheduleCampaignWork(workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult>

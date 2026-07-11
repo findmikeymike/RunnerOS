@@ -502,13 +502,16 @@ Implemented in the foundational slice:
 - source-health reporting for fresh, degraded, and unavailable adapters
 - versioned intent fingerprints with migration fallback matching
 - configured automation names and malformed-history detection
+- explicit HQ/campaign snapshot filtering
+- source-health projection into the generated brief and Artist HQ card
+- automation schema and semantic configuration validation, including before first run
+- source-specific stale-evidence windows for Outputs, Scheduled Work, workflow runs, and automation history
+- producer semantic intent IDs from Output tags, Scheduled Work idempotency keys, workflow trigger inputs, and automation IDs
 
 Still required before declaring Phase 1 complete:
 
-- campaign-filtered snapshot queries and UI presentation of scope/source health
-- automation configuration-health validation beyond history readability
-- producer-supplied semantic intent metadata so fallback token matching can be removed
-- time-based freshness rules for externally synced evidence
+- campaign-scoped source-health presentation when Campaign State of Play gets its own rendered surface
+- producer migration coverage sufficient to remove legacy token-overlap duplicate matching
 
 Rival hardening completed 2026-07-10:
 
@@ -556,12 +559,15 @@ Implemented:
 - lifecycle-aware card actions for active, approval-waiting, completed, and retryable work
 - last-known-good storage backup with fail-closed corruption handling and diagnostic preservation
 - age-aware approval ranking so older unresolved decisions are not starved by newer ones
+- objective outcome ledger under `.state-of-play/outcomes.json`
+- direct completion reconciliation for linked Outputs, Scheduled Work, workflow runs, and automation runs
+- resolved observed obligations retire as superseded without falsely claiming State of Play launched them
+- compact lifecycle history disclosure in Artist HQ
+- explicit useful/not-useful feedback persisted independently from lifecycle status
 
 Still required before declaring Phase 2 complete:
 
-- automatic work-order/workflow status reconciliation beyond session Outputs
-- persisted completion criteria and outcome evaluation for non-Output routes
-- lifecycle history UI and explicit usefulness feedback
+- richer partial-outcome criteria beyond terminal entity status
 - Team Mode transport/locking beyond workspace-local atomic files
 
 - add candidate, fingerprint, lifecycle event, and outcome storage

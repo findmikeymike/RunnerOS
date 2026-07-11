@@ -108,6 +108,21 @@ describe('HQ state RPC handlers', () => {
     expect(linkedSessionId).toBeDefined()
     expect(deletedSessions).toContain(linkedSessionId!)
   })
+
+  test('returns lifecycle history and stores usefulness without changing status', async () => {
+    upsertHqRecommendation(rootPath, launchCandidate('sop_feedback'))
+    const outcome = await invoke(RPC_CHANNELS.hqState.SET_RECOMMENDATION_USEFULNESS, workspace.id, {
+      recommendationId: 'sop_feedback', usefulness: 'useful',
+    }) as { userUsefulness?: string }
+    const detail = await invoke(RPC_CHANNELS.hqState.GET_RECOMMENDATION_DETAIL, workspace.id, 'sop_feedback') as {
+      candidate: HqRecommendationCandidate; events: unknown[]; outcome?: { userUsefulness?: string }
+    }
+
+    expect(outcome.userUsefulness).toBe('useful')
+    expect(detail.candidate.status).toBe('proposed')
+    expect(detail.events).toHaveLength(1)
+    expect(detail.outcome?.userUsefulness).toBe('useful')
+  })
 })
 
 function invoke(channel: string, ...args: unknown[]): Promise<unknown> {

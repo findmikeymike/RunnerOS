@@ -68,6 +68,7 @@ describe('HQ operational snapshot', () => {
 
     expect(snapshot.active).toEqual([expect.objectContaining({ id: 'work-running', worker: 'art-director' })])
     expect(snapshot.approvals).toEqual([expect.objectContaining({ id: 'work-approval' })])
+    expect(snapshot.active[0]?.fingerprint).toStartWith('v2:')
   })
 
   test('preserves campaign scope and reports malformed Scheduled Work as degraded', () => {
@@ -99,6 +100,20 @@ describe('HQ operational snapshot', () => {
     })
     const degraded = buildHqOperationalSnapshot(workspace)
     expect(degraded.sourceHealth).toContainEqual(expect.objectContaining({ source: 'scheduled-work', status: 'degraded' }))
+  })
+
+  test('returns only the requested campaign scope', () => {
+    const workspace = tempWorkspace()
+    createOutputBundle(workspace, {
+      workspaceId: 'ws-1', title: 'HQ output', kind: 'document', status: 'draft', origin: { source: 'session' }, context: { scope: 'hq' },
+    })
+    const campaign = createOutputBundle(workspace, {
+      workspaceId: 'ws-1', title: 'Campaign output', kind: 'document', status: 'draft', origin: { source: 'session' }, context: { scope: 'campaign', campaignId: 'campaign-1' },
+    })
+
+    const snapshot = buildHqOperationalSnapshot(workspace, { type: 'campaign', campaignId: 'campaign-1' })
+
+    expect(snapshot.recentOutputs.map((item) => item.id)).toEqual([campaign.id])
   })
 
   test('recovers campaign scope for a workflow linked from Scheduled Work', () => {
@@ -160,6 +175,17 @@ describe('HQ operational snapshot', () => {
     expect(snapshot.failures.map((item) => item.id)).not.toContain('recovered')
     expect(snapshot.failures.find((item) => item.id === 'still-failing')?.title).toBe('Weekly intel gatherer')
     expect(snapshot.sourceHealth).toContainEqual(expect.objectContaining({ source: 'automation-history', status: 'degraded' }))
+  })
+
+  test('reports invalid automation configuration before the first run', () => {
+    const workspace = tempWorkspace()
+    writeFileSync(join(workspace, AUTOMATIONS_CONFIG_FILE), '{broken')
+
+    const snapshot = buildHqOperationalSnapshot(workspace)
+
+    expect(snapshot.sourceHealth).toContainEqual(expect.objectContaining({
+      source: 'automation-history', status: 'degraded', message: expect.stringContaining('could not be parsed'),
+    }))
   })
 })
 

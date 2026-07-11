@@ -1,12 +1,15 @@
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import {
   type HqRecommendationCandidate,
+  type HqRecommendationDetail,
   type HqRecommendationLaunchInput,
   type HqRecommendationLaunchResult,
   type HqRecommendationStore,
   type HqRecommendationTransitionInput,
+  type HqRecommendationUsefulnessInput,
+  type HqRecommendationOutcome,
 } from '@craft-agent/shared/hq-state'
-import { readHqRecommendationStore, transitionHqRecommendation } from '@craft-agent/shared/hq-state/recommendation-storage'
+import { readHqRecommendationEvents, readHqRecommendationOutcomes, readHqRecommendationStore, transitionHqRecommendation, upsertHqRecommendationOutcome } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { loadAllContextDocs } from '@craft-agent/shared/workspace-context'
 import type { RpcServer } from '@craft-agent/server-core/transport'
@@ -17,6 +20,38 @@ import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context
 export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): void {
   server.handle(RPC_CHANNELS.hqState.LIST_RECOMMENDATIONS, async (_ctx, workspaceId: string): Promise<HqRecommendationStore> => {
     return readHqRecommendationStore(resolveRootPath(workspaceId))
+  })
+
+  server.handle(RPC_CHANNELS.hqState.GET_RECOMMENDATION_DETAIL, async (_ctx, workspaceId: string, recommendationId: string): Promise<HqRecommendationDetail> => {
+    const rootPath = resolveRootPath(workspaceId)
+    validateRecommendationId(recommendationId)
+    const candidate = readHqRecommendationStore(rootPath).candidates.find((item) => item.id === recommendationId)
+    if (!candidate) throw new Error(`Recommendation not found: ${recommendationId}`)
+    return {
+      candidate,
+      events: readHqRecommendationEvents(rootPath, recommendationId),
+      outcome: readHqRecommendationOutcomes(rootPath).find((item) => item.recommendationId === recommendationId),
+    }
+  })
+
+  server.handle(RPC_CHANNELS.hqState.SET_RECOMMENDATION_USEFULNESS, async (_ctx, workspaceId: string, input: HqRecommendationUsefulnessInput): Promise<HqRecommendationOutcome> => {
+    const rootPath = resolveRootPath(workspaceId)
+    validateRecommendationId(input?.recommendationId)
+    if (!['useful', 'neutral', 'not_useful'].includes(input?.usefulness)) throw new Error('A valid usefulness value is required.')
+    return withWorkspaceContextLock(rootPath, async () => {
+      const candidate = readHqRecommendationStore(rootPath).candidates.find((item) => item.id === input.recommendationId)
+      if (!candidate) throw new Error(`Recommendation not found: ${input.recommendationId}`)
+      const prior = readHqRecommendationOutcomes(rootPath).find((item) => item.recommendationId === candidate.id)
+      return upsertHqRecommendationOutcome(rootPath, {
+        version: 1,
+        recommendationId: candidate.id,
+        status: prior?.status ?? 'unknown',
+        evaluatedAt: prior?.evaluatedAt ?? new Date().toISOString(),
+        evidence: prior?.evidence ?? [],
+        userUsefulness: input.usefulness,
+        notes: input.notes?.trim() || prior?.notes,
+      })
+    })
   })
 
   server.handle(RPC_CHANNELS.hqState.TRANSITION_RECOMMENDATION, async (
@@ -51,7 +86,7 @@ export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): v
     input: HqRecommendationLaunchInput,
   ): Promise<HqRecommendationLaunchResult> => {
     const rootPath = resolveRootPath(workspaceId)
-    if (!input?.recommendationId?.startsWith('sop_')) throw new Error('A valid recommendation ID is required.')
+    validateRecommendationId(input?.recommendationId)
     return withWorkspaceContextLock(rootPath, async () => {
       let candidate = readHqRecommendationStore(rootPath).candidates.find((item) => item.id === input.recommendationId)
       if (!candidate) throw new Error(`Recommendation not found: ${input.recommendationId}`)
@@ -98,6 +133,10 @@ export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): v
       return { recommendation: candidate, sessionId: sessionId! }
     })
   })
+}
+
+function validateRecommendationId(recommendationId: string | undefined): asserts recommendationId is string {
+  if (!recommendationId?.startsWith('sop_')) throw new Error('A valid recommendation ID is required.')
 }
 
 function launchPrompt(candidate: HqRecommendationCandidate, prompt: string): string {

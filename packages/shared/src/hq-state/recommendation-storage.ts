@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import type {
   HqRecommendationCandidate,
   HqRecommendationEvent,
+  HqRecommendationOutcome,
   HqRecommendationStore,
 } from './lifecycle.ts'
 import type { HqRecommendationStatus } from './types.ts'
@@ -12,6 +13,7 @@ export const HQ_RECOMMENDATIONS_DIR = '.state-of-play'
 export const HQ_RECOMMENDATIONS_FILE = 'recommendations.json'
 export const HQ_RECOMMENDATION_EVENTS_FILE = 'events.jsonl'
 export const HQ_RECOMMENDATIONS_BACKUP_FILE = 'recommendations.backup.json'
+export const HQ_RECOMMENDATION_OUTCOMES_FILE = 'outcomes.json'
 
 const ALLOWED_TRANSITIONS: Record<HqRecommendationStatus, ReadonlySet<HqRecommendationStatus>> = {
   proposed: new Set(['viewed', 'accepted', 'dismissed', 'snoozed', 'expired', 'superseded']),
@@ -170,10 +172,50 @@ function appendHqRecommendationEvent(workspaceRootPath: string, event: HqRecomme
   appendFileSync(eventsFile(workspaceRootPath), `${JSON.stringify(event)}\n`, 'utf8')
 }
 
+export function readHqRecommendationEvents(workspaceRootPath: string, recommendationId?: string): HqRecommendationEvent[] {
+  const file = eventsFile(workspaceRootPath)
+  if (!existsSync(file)) return []
+  return readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap((line) => {
+    try {
+      const event = JSON.parse(line) as HqRecommendationEvent
+      return event?.version === 1 && typeof event.recommendationId === 'string' && (!recommendationId || event.recommendationId === recommendationId) ? [event] : []
+    } catch {
+      return []
+    }
+  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+export function readHqRecommendationOutcomes(workspaceRootPath: string): HqRecommendationOutcome[] {
+  const file = outcomesFile(workspaceRootPath)
+  if (!existsSync(file)) return []
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { version?: number; outcomes?: HqRecommendationOutcome[] }
+    return parsed.version === 1 && Array.isArray(parsed.outcomes) ? parsed.outcomes : []
+  } catch {
+    throw new Error(`State of Play outcome store is corrupt: ${file}`)
+  }
+}
+
+export function upsertHqRecommendationOutcome(workspaceRootPath: string, outcome: HqRecommendationOutcome): HqRecommendationOutcome {
+  const current = readHqRecommendationOutcomes(workspaceRootPath)
+  const existing = current.find((item) => item.recommendationId === outcome.recommendationId)
+  const next = existing
+    ? { ...outcome, userUsefulness: outcome.userUsefulness ?? existing.userUsefulness, notes: outcome.notes ?? existing.notes }
+    : outcome
+  const outcomes = [...current.filter((item) => item.recommendationId !== outcome.recommendationId), next]
+  mkdirSync(recommendationDir(workspaceRootPath), { recursive: true })
+  const file = outcomesFile(workspaceRootPath)
+  const tmp = `${file}.${process.pid}.tmp`
+  writeFileSync(tmp, JSON.stringify({ version: 1, outcomes }, null, 2), 'utf8')
+  renameSync(tmp, file)
+  return next
+}
+
 function recommendationDir(root: string): string { return join(root, HQ_RECOMMENDATIONS_DIR) }
 function storeFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATIONS_FILE) }
 function backupStoreFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATIONS_BACKUP_FILE) }
 function eventsFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATION_EVENTS_FILE) }
+function outcomesFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATION_OUTCOMES_FILE) }
 function emptyStore(): HqRecommendationStore { return { version: 1, candidates: [], updatedAt: '' } }
 
 function parseStoreFile(file: string): HqRecommendationStore | null {

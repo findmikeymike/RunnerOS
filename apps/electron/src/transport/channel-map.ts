@@ -426,6 +426,8 @@ export const CHANNEL_MAP = {
   listHqRecommendations: invoke(RPC_CHANNELS.hqState.LIST_RECOMMENDATIONS),
   transitionHqRecommendation: invoke(RPC_CHANNELS.hqState.TRANSITION_RECOMMENDATION),
   launchHqRecommendation: invoke(RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION),
+  getHqRecommendationDetail: invoke(RPC_CHANNELS.hqState.GET_RECOMMENDATION_DETAIL),
+  setHqRecommendationUsefulness: invoke(RPC_CHANNELS.hqState.SET_RECOMMENDATION_USEFULNESS),
   getScheduledWork: invoke(RPC_CHANNELS.scheduledWork.GET),
   mutateScheduledWork: invoke(RPC_CHANNELS.scheduledWork.MUTATE),
   scheduleCampaignWork: invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN),

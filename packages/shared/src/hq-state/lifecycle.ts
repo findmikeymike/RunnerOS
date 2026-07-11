@@ -1,7 +1,7 @@
 import type { HqOperationalScope, HqRecommendationStatus, HqStateEntityRef, HqStateRouteHint } from './types.ts'
 
 export interface HqRecommendationExecutionRef {
-  kind: 'session' | 'scheduled-work' | 'workflow-run' | 'output'
+  kind: 'session' | 'scheduled-work' | 'workflow-run' | 'output' | 'automation-run'
   id: string
   linkedAt: string
 }
@@ -56,6 +56,18 @@ export interface HqRecommendationOutcome {
   evaluatedAt: string
   evidence: HqStateEntityRef[]
   userUsefulness?: 'useful' | 'neutral' | 'not_useful'
+  notes?: string
+}
+
+export interface HqRecommendationDetail {
+  candidate: HqRecommendationCandidate
+  events: HqRecommendationEvent[]
+  outcome?: HqRecommendationOutcome
+}
+
+export interface HqRecommendationUsefulnessInput {
+  recommendationId: string
+  usefulness: NonNullable<HqRecommendationOutcome['userUsefulness']>
   notes?: string
 }
 

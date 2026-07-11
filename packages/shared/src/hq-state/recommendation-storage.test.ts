@@ -6,8 +6,10 @@ import type { HqRecommendationCandidate } from './lifecycle'
 import {
   listHqRecommendationEvents,
   readHqRecommendationStore,
+  readHqRecommendationOutcomes,
   transitionHqRecommendation,
   upsertHqRecommendation,
+  upsertHqRecommendationOutcome,
 } from './recommendation-storage'
 
 const workspaces: string[] = []
@@ -112,6 +114,18 @@ describe('HQ recommendation storage', () => {
     expect(() => readHqRecommendationStore(workspace)).toThrow('is corrupt')
     expect(readdirSync(dir).some((name) => name.startsWith('recommendations.json.corrupt-'))).toBe(true)
     expect(readdirSync(dir)).toContain('recommendations.json')
+  })
+
+  test('persists objective outcomes and preserves usefulness on reevaluation', () => {
+    const workspace = tempWorkspace()
+    upsertHqRecommendationOutcome(workspace, {
+      version: 1, recommendationId: 'sop_test', status: 'unknown', evaluatedAt: '2026-07-10T00:00:00.000Z', evidence: [], userUsefulness: 'useful',
+    })
+    upsertHqRecommendationOutcome(workspace, {
+      version: 1, recommendationId: 'sop_test', status: 'successful', evaluatedAt: '2026-07-10T01:00:00.000Z', evidence: [],
+    })
+
+    expect(readHqRecommendationOutcomes(workspace)[0]).toEqual(expect.objectContaining({ status: 'successful', userUsefulness: 'useful' }))
   })
 })
 

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE } from '@craft-agent/shared/automations'
+import { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE, validateAutomationsConfig } from '@craft-agent/shared/automations'
 import {
   hqIntentFingerprint,
   type HqOperationalItem,
@@ -21,7 +21,7 @@ import type { WorkflowRunSnapshot } from '@craft-agent/shared/workflows'
 const ACTIVE_SCHEDULED = new Set(['waiting', 'scheduled', 'running'])
 const APPROVAL_SCHEDULED = new Set(['needs-approval', 'awaiting-review'])
 
-export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperationalSnapshot {
+export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedScope?: HqOperationalScope): HqOperationalSnapshot {
   const generatedAt = new Date().toISOString()
   const active: HqOperationalItem[] = []
   const approvals: HqOperationalItem[] = []
@@ -31,6 +31,7 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
   const outputs = listOutputManifests(workspaceRootPath)
   for (const output of outputs) {
     const scope = outputScope(output.context)
+    const semanticIntentId = output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length)
     const item: HqOperationalItem = {
       id: output.id,
       kind: 'output',
@@ -38,7 +39,8 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
       status: output.approval?.state ?? output.status,
       updatedAt: output.updatedAt,
       scope,
-      fingerprint: hqIntentFingerprint({ scope, worker: output.origin.agentSlug, title: output.title, intent: output.summary }),
+      fingerprint: hqIntentFingerprint({ scope, worker: output.origin.agentSlug, title: output.title, intent: output.summary, semanticIntentId }),
+      semanticIntentId,
       worker: output.origin.agentSlug,
       intent: output.summary,
       source: `output:${output.id}`,
@@ -77,7 +79,8 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
       updatedAt: run.updatedAt,
       expiresAt: run.state === 'failed' || run.state === 'interrupted' ? addDays(run.updatedAt, 30) : undefined,
       scope,
-      fingerprint: hqIntentFingerprint({ scope, title: run.workflowSnapshot.metadata.name ?? run.workflowSlug, intent: run.workflowSlug }),
+      fingerprint: hqIntentFingerprint({ scope, title: run.workflowSnapshot.metadata.name ?? run.workflowSlug, intent: run.workflowSlug, semanticIntentId: typeof run.trigger.inputs.intentId === 'string' ? run.trigger.inputs.intentId : undefined }),
+      semanticIntentId: typeof run.trigger.inputs.intentId === 'string' ? run.trigger.inputs.intentId : undefined,
       intent: run.workflowSlug,
       source: `workflow-run:${run.id}`,
     }
@@ -87,7 +90,7 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
   }
   sourceHealth.push(health('workflow-runs', generatedAt, workflowRuns.map((item) => item.updatedAt)))
 
-  const snapshotScope = inferSnapshotScope(
+  const snapshotScope = requestedScope ?? inferSnapshotScope(
     outputs.map((output) => outputScope(output.context)),
     scheduledOrders.map(orderScope),
     workflowScopes,
@@ -99,9 +102,9 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
   return {
     generatedAt,
     scope: snapshotScope,
-    active: newestFirst(active),
-    approvals: newestFirst(approvals),
-    failures: newestFirst(failures),
+    active: newestFirst(active.filter((item) => sameScope(item.scope, snapshotScope))),
+    approvals: newestFirst(approvals.filter((item) => sameScope(item.scope, snapshotScope))),
+    failures: newestFirst(failures.filter((item) => sameScope(item.scope, snapshotScope))),
     recentOutputs: newestFirst(outputs.slice(0, 10).map((output) => ({
       id: output.id,
       kind: 'output' as const,
@@ -114,13 +117,19 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
         worker: output.origin.agentSlug,
         title: output.title,
         intent: output.summary,
+        semanticIntentId: output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length),
       }),
+      semanticIntentId: output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length),
       worker: output.origin.agentSlug,
       intent: output.summary,
       source: `output:${output.id}`,
-    }))),
+    })).filter((item) => sameScope(item.scope, snapshotScope))),
     sourceHealth,
   }
+}
+
+function sameScope(left: HqOperationalScope, right: HqOperationalScope): boolean {
+  return left.type === right.type && (left.type === 'hq' || left.campaignId === (right.type === 'campaign' ? right.campaignId : undefined))
 }
 
 function scheduledItem(order: ScheduledWorkOrder): HqOperationalItem {
@@ -138,7 +147,8 @@ function scheduledItem(order: ScheduledWorkOrder): HqOperationalItem {
     status: order.status,
     updatedAt: order.updatedAt,
     scope,
-    fingerprint: hqIntentFingerprint({ scope, worker, title: order.title, intent }),
+    fingerprint: hqIntentFingerprint({ scope, worker, title: order.title, intent, semanticIntentId: order.executionKey.idempotencyKey }),
+    semanticIntentId: order.executionKey.idempotencyKey,
     worker,
     intent,
     source: `scheduled-work:${order.id}`,
@@ -151,13 +161,14 @@ function latestAutomationFailures(workspaceRootPath: string, scope: HqOperationa
   status: HqOperationalSourceHealth['status']
   message?: string
 } {
+  const config = readAutomationConfig(workspaceRootPath)
   const file = join(workspaceRootPath, AUTOMATIONS_HISTORY_FILE)
-  if (!existsSync(file)) return { items: [], timestamps: [], status: 'fresh' }
+  if (!existsSync(file)) return { items: [], timestamps: [], status: config.error ? 'degraded' : 'fresh', message: config.error }
   let lines: string[]
   try {
     lines = readFileSync(file, 'utf8').trim().split('\n').filter(Boolean)
   } catch {
-    return { items: [], timestamps: [], status: 'unavailable', message: 'Automation history could not be read.' }
+    return { items: [], timestamps: [], status: 'unavailable', message: ['Automation history could not be read.', config.error].filter(Boolean).join(' ') }
   }
   const latest = new Map<string, { id: string; ts: number; ok: boolean; error?: string }>()
   let malformedLines = 0
@@ -176,32 +187,34 @@ function latestAutomationFailures(workspaceRootPath: string, scope: HqOperationa
     }
   }
   const entries = [...latest.values()]
-  const names = readAutomationNames(workspaceRootPath)
   return {
     items: entries.filter((entry) => !entry.ok).map((entry) => ({
     id: entry.id,
     kind: 'automation-run',
-    title: names.get(entry.id) ?? `Automation ${entry.id}`,
+    title: config.names.get(entry.id) ?? `Automation ${entry.id}`,
     status: 'failed',
     updatedAt: new Date(entry.ts).toISOString(),
     expiresAt: addDays(new Date(entry.ts).toISOString(), 14),
     scope,
-    fingerprint: hqIntentFingerprint({ scope, title: names.get(entry.id) ?? `Automation ${entry.id}`, intent: entry.error }),
+    fingerprint: hqIntentFingerprint({ scope, title: config.names.get(entry.id) ?? `Automation ${entry.id}`, intent: entry.error, semanticIntentId: entry.id }),
+    semanticIntentId: entry.id,
     intent: entry.error,
     source: `automation:${entry.id}`,
     })),
     timestamps: entries.map((entry) => new Date(entry.ts).toISOString()),
-    status: malformedLines > 0 ? 'degraded' : 'fresh',
-    message: malformedLines > 0 ? `${malformedLines} malformed automation history ${malformedLines === 1 ? 'entry was' : 'entries were'} ignored.` : undefined,
+    status: malformedLines > 0 || config.error ? 'degraded' : 'fresh',
+    message: [malformedLines > 0 ? `${malformedLines} malformed automation history ${malformedLines === 1 ? 'entry was' : 'entries were'} ignored.` : '', config.error ?? ''].filter(Boolean).join(' ' ) || undefined,
   }
 }
 
-function readAutomationNames(workspaceRootPath: string): Map<string, string> {
+function readAutomationConfig(workspaceRootPath: string): { names: Map<string, string>; error?: string } {
   const names = new Map<string, string>()
   const file = join(workspaceRootPath, AUTOMATIONS_CONFIG_FILE)
-  if (!existsSync(file)) return names
+  if (!existsSync(file)) return { names }
   try {
     const parsed = JSON.parse(readFileSync(file, 'utf8')) as { automations?: Record<string, unknown> }
+    const validation = validateAutomationsConfig(parsed)
+    const error = validation.valid ? undefined : `Automation configuration is invalid: ${validation.errors.slice(0, 2).join('; ')}`
     for (const matchers of Object.values(parsed.automations ?? {})) {
       if (!Array.isArray(matchers)) continue
       for (const matcher of matchers) {
@@ -212,10 +225,10 @@ function readAutomationNames(workspaceRootPath: string): Map<string, string> {
         }
       }
     }
+    return { names, error }
   } catch {
-    return names
+    return { names, error: 'Automation configuration could not be parsed.' }
   }
-  return names
 }
 
 function outputScope(context: { scope: 'hq' | 'campaign'; campaignId?: string } | undefined): HqOperationalScope {
@@ -263,13 +276,21 @@ function health(
   status: HqOperationalSourceHealth['status'] = 'fresh',
   message?: string,
 ): HqOperationalSourceHealth {
+  const latestDataAt = [...timestamps].sort().at(-1)
+  const staleAfterMs: Record<HqOperationalSourceHealth['source'], number> = {
+    outputs: 30 * 24 * 60 * 60 * 1000,
+    'scheduled-work': 7 * 24 * 60 * 60 * 1000,
+    'workflow-runs': 7 * 24 * 60 * 60 * 1000,
+    'automation-history': 8 * 24 * 60 * 60 * 1000,
+  }
+  const stale = status === 'fresh' && latestDataAt && Date.parse(checkedAt) - Date.parse(latestDataAt) > staleAfterMs[source]
   return {
     source,
-    status,
+    status: stale ? 'degraded' : status,
     checkedAt,
-    latestDataAt: [...timestamps].sort().at(-1),
+    latestDataAt,
     itemCount: timestamps.length,
-    message,
+    message: stale ? `${source} has not produced fresh evidence within its expected window.` : message,
   }
 }
 

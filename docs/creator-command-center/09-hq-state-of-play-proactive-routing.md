@@ -39,6 +39,8 @@ The panel shows:
 - route readiness
 - proactive mode toggle
 - `Start Route` action when launch-safe
+- compact lifecycle history and terminal usefulness feedback
+- degraded or stale operational-source warnings
 
 `Start Route` is enabled only when:
 
@@ -154,6 +156,7 @@ Durable lifecycle and outcome reconciliation:
 - `packages/shared/src/hq-state/recommendation-storage.ts`
 - `packages/server-core/src/handlers/rpc/hq-state.ts`
 - `packages/server-core/src/hq-state/recommendations.ts`
+- `.state-of-play/outcomes.json` inside each workspace
 
 Tests:
 
@@ -195,10 +198,16 @@ Not yet verified in a live Electron window:
 Not yet implemented:
 
 - automatic background route execution
-- route history/audit trail in the UI
 - explicit "regenerate now" button for HQ State of Play
 - richer scoring/evaluation of competing next moves
-- completion evaluation for non-Output entities such as workflows and scheduled work
+- richer partial-outcome criteria beyond terminal entity status
 - Team Mode locking for concurrent launches across devices
+
+Implemented on 2026-07-10 after the original V1 record:
+
+- direct Output, Scheduled Work, workflow-run, and automation-run reconciliation
+- objective outcome persistence plus useful/not-useful feedback
+- compact lifecycle history in the State of Play card
+- visible source health, automation config validation, stale-evidence windows, campaign-filtered queries, and semantic producer intent IDs
 
 The next agent should not build automatic execution until the current user-controlled route path is visually smoked in the app.

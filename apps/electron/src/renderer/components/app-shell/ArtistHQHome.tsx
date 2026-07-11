@@ -7,6 +7,7 @@ import {
   ExternalLink,
   FileText,
   FolderKanban,
+  History,
   MessageSquareText,
   Music2,
   Pencil,
@@ -55,6 +56,7 @@ import {
   HQ_STATE_CONTEXT_SLUG,
   parseHqStateOfPlay,
   type HqStateOfPlay,
+  type HqRecommendationDetail,
   type HqStateEntityRef,
   type HqStateRouteHint,
 } from '@craft-agent/shared/hq-state'
@@ -1108,6 +1110,7 @@ export function ArtistHQHome({
           <>
             <StateOfPlayPanel
               state={hqState}
+              workspaceId={workspaceId}
               proactiveMode={proactiveMode}
               routeBusy={hqRouteBusy}
               availableAgentSlugs={new Set(availableAgents.map((agent) => agent.slug))}
@@ -1553,6 +1556,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function StateOfPlayPanel({
   state,
+  workspaceId,
   proactiveMode,
   routeBusy,
   availableAgentSlugs,
@@ -1562,6 +1566,7 @@ function StateOfPlayPanel({
   onTransitionRecommendation,
 }: {
   state: HqStateOfPlay | null
+  workspaceId: string
   proactiveMode: boolean
   routeBusy: boolean
   availableAgentSlugs: Set<string>
@@ -1570,6 +1575,21 @@ function StateOfPlayPanel({
   onOpenEntity: (entity: HqStateEntityRef) => void
   onTransitionRecommendation: (recommendationId: string, to: 'dismissed' | 'snoozed') => void
 }) {
+  const recommendationId = state?.nextMove.recommendationId
+  const [detail, setDetail] = React.useState<HqRecommendationDetail | null>(null)
+  const [historyOpen, setHistoryOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    setDetail(null)
+    setHistoryOpen(false)
+    if (!recommendationId) return
+    let cancelled = false
+    window.electronAPI.getHqRecommendationDetail(workspaceId, recommendationId)
+      .then((value) => { if (!cancelled) setDetail(value) })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [recommendationId, workspaceId])
+
   if (!state) {
     return (
       <HQCard>
@@ -1596,6 +1616,7 @@ function StateOfPlayPanel({
   const attention = state.attention.slice(0, 3)
   const alternatives = state.alternatives.slice(0, 3)
   const missing = state.missing.slice(0, 5)
+  const unhealthySources = state.sourceHealth.filter((source) => source.status !== 'fresh')
   const generatedLabel = formatShortDate(state.generatedAt)
   const route = state.nextMove.route
   const recommendationStatus = state.nextMove.recommendationStatus ?? 'proposed'
@@ -1750,6 +1771,56 @@ function StateOfPlayPanel({
                   </button>
                 </div>
               ) : null}
+              {detail ? (
+                <div className="mt-2 border-t border-white/[0.05] pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryOpen((open) => !open)}
+                    className="flex h-8 w-full items-center justify-between text-xs text-white/48 hover:text-white/72"
+                  >
+                    <span className="inline-flex items-center gap-2"><History className="h-3.5 w-3.5" />History</span>
+                    <span>{detail.events.length}</span>
+                  </button>
+                  {historyOpen ? (
+                    <div className="mt-1 space-y-2 border-l border-white/[0.06] pl-3">
+                      {detail.events.slice(0, 6).map((event) => (
+                        <div key={event.id} className="text-[11px] leading-4 text-white/42">
+                          <span className="font-medium text-white/62">{event.to.replaceAll('_', ' ')}</span>
+                          <span> / {formatShortDate(event.createdAt)}</span>
+                          {event.reason ? <div className="line-clamp-2 text-white/32">{event.reason}</div> : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {(recommendationStatus === 'completed' || recommendationStatus === 'failed') ? (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="mr-auto text-[10px] uppercase tracking-[0.12em] text-white/30">Was this useful?</span>
+                      {(['useful', 'not_useful'] as const).map((usefulness) => (
+                        <button
+                          key={usefulness}
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              const outcome = await window.electronAPI.setHqRecommendationUsefulness(workspaceId, { recommendationId: detail.candidate.id, usefulness })
+                              setDetail((current) => current ? { ...current, outcome } : current)
+                            } catch (error) {
+                              toast.error('Could not save recommendation feedback', { description: error instanceof Error ? error.message : String(error) })
+                            }
+                          }}
+                          className={cn(
+                            'h-7 rounded-[8px] border px-2 text-[10px] transition-colors',
+                            detail.outcome?.userUsefulness === usefulness
+                              ? 'border-orange-300/25 bg-orange-300/10 text-orange-100/80'
+                              : 'border-white/[0.06] text-white/42 hover:bg-white/[0.04]',
+                          )}
+                        >
+                          {usefulness === 'useful' ? 'Useful' : 'Not useful'}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -1768,6 +1839,21 @@ function StateOfPlayPanel({
                 <p className="mt-2 line-clamp-3 text-xs leading-5 text-white/44">{state.momentum.up.join(' ')}</p>
               </div>
             ) : null}
+            <div className="mt-4 border-t border-white/[0.05] pt-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">System Evidence</div>
+              {unhealthySources.length > 0 ? (
+                <div className="mt-2 space-y-2">
+                  {unhealthySources.map((source) => (
+                    <div key={source.source} className="text-xs leading-5 text-orange-100/62">
+                      <span className="font-medium capitalize">{source.source.replaceAll('-', ' ')}</span>
+                      <span className="text-white/38"> / {source.message ?? source.status}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-white/40">Operational sources are healthy.</p>
+              )}
+            </div>
           </div>
         </div>
       </div>

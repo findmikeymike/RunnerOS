@@ -5,15 +5,17 @@ export interface HqIntentFingerprintInput {
   worker?: string
   title: string
   intent?: string
+  semanticIntentId?: string
 }
 
 export function hqIntentFingerprint(input: HqIntentFingerprintInput): string {
+  const semanticIntentId = cleanToken(input.semanticIntentId)
   const tokens = intentTokens(`${input.title} ${input.intent ?? ''}`)
   const category = intentCategory(tokens)
   const scope = input.scope.type === 'campaign' ? `campaign:${input.scope.campaignId ?? 'unknown'}` : 'hq'
   const worker = cleanToken(input.worker) ?? 'unassigned'
   const intent = category ?? ([...new Set(tokens)].sort().slice(0, 6).join('-') || 'general')
-  return `v1:${scope}:${worker}:${intent}`
+  return semanticIntentId ? `v2:${scope}:${worker}:${semanticIntentId}` : `v1:${scope}:${worker}:${intent}`
 }
 
 export function hqIntentTokens(value: string): string[] {
