@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { HqRecommendationCandidate, HqStateEntityRef } from '@craft-agent/shared/hq-state'
+import type { HqRecommendationCandidate, HqStateEntityRef, HqStateOfPlay } from '@craft-agent/shared/hq-state'
 import { createOutputBundle } from '@craft-agent/shared/outputs'
 import { scheduledWorkDefinitionDigest, scheduledWorkMetadata, serializeScheduledWorkBody, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import { upsertContextDoc } from '@craft-agent/shared/workspace-context'
@@ -14,7 +14,7 @@ import {
   transitionHqRecommendation,
   upsertHqRecommendation,
 } from '@craft-agent/shared/hq-state/recommendation-storage'
-import { reconcileHqRecommendationOutcomes } from './recommendations'
+import { persistHqRecommendations, reconcileHqRecommendationOutcomes } from './recommendations'
 
 const workspaces: string[] = []
 
@@ -23,6 +23,17 @@ afterEach(() => {
 })
 
 describe('HQ recommendation outcome reconciliation', () => {
+  test('keeps durable recommendation identity when ownership changes', () => {
+    const workspace = tempWorkspace()
+    const state = stateWithMove('art-director')
+    const first = persistHqRecommendations(workspace, state, { type: 'hq' })[0]!
+    const second = persistHqRecommendations(workspace, stateWithMove('backup-designer'), { type: 'hq' })[0]!
+
+    expect(second.id).toBe(first.id)
+    expect(second.fingerprint).toBe('v2:hq:cover-art')
+    expect(readHqRecommendationStore(workspace).candidates).toHaveLength(1)
+  })
+
   test('moves a launched recommendation to completed from linked Output evidence', () => {
     const workspace = tempWorkspace()
     upsertHqRecommendation(workspace, candidate())
@@ -245,6 +256,28 @@ function candidate(): HqRecommendationCandidate {
     createdAt: '2026-07-10T00:00:00.000Z',
     updatedAt: '2026-07-10T00:00:00.000Z',
     lastProposedAt: '2026-07-10T00:00:00.000Z',
+  }
+}
+
+function stateWithMove(worker: string): HqStateOfPlay {
+  return {
+    version: 1,
+    generatedAt: '2026-07-10T00:00:00.000Z',
+    sources: {},
+    sourceHealth: [],
+    headline: 'Cover art is next.',
+    nextMove: {
+      title: 'Create cover art',
+      why: 'The release needs final artwork.',
+      worker,
+      semanticIntentId: 'cover-art',
+      route: { target: 'agent', action: 'draft', prompt: 'Create cover art.', confidence: 'high', agentSlug: worker, contextDocSlugs: [] },
+    },
+    alternatives: [],
+    attention: [],
+    momentum: { up: [], down: [] },
+    missing: [],
+    goalProgress: [],
   }
 }
 

@@ -52,6 +52,7 @@ describe('scheduled work documents', () => {
       owner: { scope: 'hq', workspaceId: 'workspace-1' },
       calendarLink: { calendar: 'hq', itemId: 'hidden-weekly-youtube-intel' },
       calendarVisibility: 'hidden',
+      intentId: 'weekly-youtube-intel',
       title: 'Weekly YouTube Intelligence Report',
       type: 'agent-task',
       status: 'scheduled',
@@ -70,7 +71,9 @@ describe('scheduled work documents', () => {
       createdAt: '2026-07-10T00:00:00.000Z', updatedAt: '2026-07-10T00:00:00.000Z',
     })
 
-    expect(parseScheduledWorkDocResult({ body: serializeScheduledWorkBody(work) }, 'workspace-1').ok).toBe(true)
+    const parsed = parseScheduledWorkDocResult({ body: serializeScheduledWorkBody(work) }, 'workspace-1')
+    expect(parsed.ok).toBe(true)
+    expect(parsed.work.items[0]?.intentId).toBe('weekly-youtube-intel')
   })
 
   test('round-trips a migrated agent task without removing the embedded job', () => {

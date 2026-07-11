@@ -249,6 +249,7 @@ function persistMove(
     worker: move.worker,
     title: move.title,
     intent: move.why,
+    semanticIntentId: move.semanticIntentId,
   })
   const id = recommendationId(intent, move.entityRef?.source)
   return upsertHqRecommendation(workspaceRootPath, {

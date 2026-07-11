@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { hqIntentFingerprint } from './intent'
+import { hqIntentFingerprint, hqNormalizeSemanticIntentId } from './intent'
 
 describe('HQ intent fingerprints', () => {
   test('normalizes equivalent release-asset intent across different wording', () => {
@@ -38,5 +38,11 @@ describe('HQ intent fingerprints', () => {
   test('keeps canonical V2 intent stable when ownership changes', () => {
     const base = { scope: { type: 'hq' as const }, title: 'Create cover art', semanticIntentId: 'cover-art' }
     expect(hqIntentFingerprint({ ...base, worker: 'art-director' })).toBe(hqIntentFingerprint({ ...base, worker: 'backup-designer' }))
+  })
+
+  test('preserves distinct explicit producer intents instead of recategorizing them', () => {
+    expect(hqNormalizeSemanticIntentId(' Weekly YouTube Intel ')).toBe('weekly-youtube-intel')
+    expect(hqIntentFingerprint({ scope: { type: 'hq' }, title: 'Research', semanticIntentId: 'weekly-youtube-intel' }))
+      .not.toBe(hqIntentFingerprint({ scope: { type: 'hq' }, title: 'Research', semanticIntentId: 'weekly-market-intel' }))
   })
 })

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE, validateAutomationsConfig } from '@craft-agent/shared/automations'
 import {
   hqIntentFingerprint,
+  hqNormalizeSemanticIntentId,
   hqSemanticIntentId,
   type HqOperationalItem,
   type HqOperationalScope,
@@ -72,10 +73,8 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedS
   for (const run of workflowRuns) {
     const scope = workflowScope(run, scheduledOrders)
     workflowScopes.push(scope)
-    const semanticIntentId = hqSemanticIntentId({
-      title: typeof run.trigger.inputs.intentId === 'string' ? run.trigger.inputs.intentId : run.workflowSnapshot.metadata.name ?? run.workflowSlug,
-      intent: typeof run.trigger.inputs.intentId === 'string' ? undefined : run.workflowSlug,
-    })
+    const semanticIntentId = hqNormalizeSemanticIntentId(typeof run.trigger.inputs.intentId === 'string' ? run.trigger.inputs.intentId : undefined)
+      ?? hqSemanticIntentId({ title: run.workflowSnapshot.metadata.name ?? run.workflowSlug, intent: run.workflowSlug })
     const item: HqOperationalItem = {
       id: run.id,
       kind: 'workflow-run',
@@ -135,7 +134,7 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string, requestedS
 
 function outputSemanticIntentId(output: ReturnType<typeof listOutputManifests>[number]): string {
   const tagged = output.tags?.find((tag) => tag.startsWith('intent:'))?.slice('intent:'.length)
-  return hqSemanticIntentId({ title: tagged ?? output.title, intent: tagged ? undefined : output.summary })
+  return hqNormalizeSemanticIntentId(tagged) ?? hqSemanticIntentId({ title: output.title, intent: output.summary })
 }
 
 function sameScope(left: HqOperationalScope, right: HqOperationalScope): boolean {

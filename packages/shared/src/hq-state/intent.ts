@@ -9,11 +9,15 @@ export interface HqIntentFingerprintInput {
 }
 
 export function hqIntentFingerprint(input: HqIntentFingerprintInput): string {
-  const semanticIntentId = cleanToken(input.semanticIntentId)
+  const semanticIntentId = hqNormalizeSemanticIntentId(input.semanticIntentId)
   const scope = input.scope.type === 'campaign' ? `campaign:${input.scope.campaignId ?? 'unknown'}` : 'hq'
   const worker = cleanToken(input.worker) ?? 'unassigned'
   const intent = hqSemanticIntentId(input)
   return semanticIntentId ? `v2:${scope}:${semanticIntentId}` : `v1:${scope}:${worker}:${intent}`
+}
+
+export function hqNormalizeSemanticIntentId(value: string | undefined): string | undefined {
+  return cleanToken(value)
 }
 
 export function hqSemanticIntentId(input: Pick<HqIntentFingerprintInput, 'title' | 'intent'>): string {

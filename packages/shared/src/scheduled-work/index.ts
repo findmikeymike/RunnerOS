@@ -1,5 +1,5 @@
 import type { OutputKind } from '../outputs/types.ts'
-import { hqSemanticIntentId } from '../hq-state/intent.ts'
+import { hqNormalizeSemanticIntentId, hqSemanticIntentId } from '../hq-state/intent.ts'
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts'
 import type {
   CampaignCalendar,
@@ -567,7 +567,7 @@ function normalizeScheduledWorkOrder(value: ScheduledWorkOrder): ScheduledWorkOr
     ...value,
     version: 1,
     title: clean(value.title) ?? 'Untitled work',
-    intentId: hqSemanticIntentId({ title: value.title, intent: JSON.stringify(value.execution) }),
+    intentId: hqNormalizeSemanticIntentId(value.intentId) ?? hqSemanticIntentId({ title: value.title, intent: JSON.stringify(value.execution) }),
     startAt: cleanIso(value.startAt) ?? now,
     dueAt: cleanIso(value.dueAt),
     timezone: clean(value.timezone) ?? 'UTC',
