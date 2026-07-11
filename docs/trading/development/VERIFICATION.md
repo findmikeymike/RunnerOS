@@ -79,6 +79,15 @@ A lower rung does not prove a higher rung.
 - Proven: ready fixture-only health, explicit capability list without execution, schema-valid analysis artifact, trace propagation, identical duplicate response caching, conflicting duplicate-ID rejection, cancellation-before-start, method-not-found isolation, parse-error recovery, stdout-only protocol framing, clean stderr, and graceful shutdown.
 - Not proven: cancellation during active computation, deadline timeout behavior through the process, oversized/partial frames, process crash/restart, trace mismatch rejection by a client, Electron supervision, or UI.
 
+## Phase 0 Slice 3 — Typed Trading Client
+
+- Method: red-green TDD; four client tests failed on the deliberate unimplemented stub before implementation.
+- Client suite: 4 passed.
+- Complete fast Phase 0 suite: 24 passed, 0 failed, 44 expectations across five files.
+- Proven: typed health and analysis through the client boundary, protocol validation, generated request/trace/cancellation IDs, deadline construction, result-schema validation, response-ID validation, trace-mismatch rejection, malformed-success rejection, and typed domain-error normalization.
+- Architectural effect: agents and UI now have one supported capability seam and do not need direct sidecar/provider imports.
+- Not proven: process transport implementation inside the client, deadline enforcement against a stalled process, Electron supervision, restart, IPC, or renderer behavior.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

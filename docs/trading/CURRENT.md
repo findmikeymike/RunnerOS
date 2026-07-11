@@ -11,8 +11,8 @@ source_of_truth: true
 
 - Date: 2026-07-11
 - Stage: Phase 0 contract kernel in progress
-- Current goal: connect the independently verified Order Flow sidecar through a typed client and supervised Electron process boundary
-- Overall state: neutral trading contracts, deterministic fixture analysis, and a standalone JSON-RPC sidecar are implemented; client/supervisor and Electron workbench remain unbuilt
+- Current goal: supervise the verified sidecar from Electron main and expose health/artifact results through a minimal IPC route
+- Overall state: neutral contracts, deterministic fixture analysis, standalone JSON-RPC sidecar, and sole typed client are implemented; Electron supervision/workbench remain unbuilt
 - Host worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -32,6 +32,8 @@ source_of_truth: true
 - TDD proof: tests were observed failing before implementation, then 12 focused tests passed.
 - Added standalone Order Flow engine with newline-delimited JSON-RPC over stdio, fixture-only capabilities, duplicate-ID protection, cancellation-before-start, typed failures, parse recovery, and clean shutdown.
 - Expanded fast Phase 0 proof to 20 passing tests across contracts, fixture analysis, handler behavior, and a spawned stdio process.
+- Added `@trade-god/client` as the sole typed access boundary for agents/UI, with response-schema validation, protocol checks, trace matching, generated deadlines/cancellation IDs, and normalized domain errors.
+- Expanded fast Phase 0 proof to 24 passing tests across five files.
 
 ## Active Build Target
 
@@ -43,9 +45,9 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 
 ## Next Actions
 
-1. Add a typed client with trace matching, response validation, deadlines, cancellation, and normalized sidecar errors.
-2. Add Electron main-process supervision with constrained environment, lifecycle health, restart policy, and stderr capture limits.
-3. Extend conformance tests for timeout, partial frames, oversized lines, trace mismatch, and mid-request exit.
+1. Add Electron main-process supervision with constrained environment, lifecycle health, restart policy, and stderr capture limits.
+2. Add a narrow IPC contract for health and fixture analysis through `@trade-god/client`.
+3. Extend conformance tests for timeout, partial frames, oversized lines, and mid-request exit.
 4. Render service health and one validated artifact in a thin Electron route.
 5. Review the 15 upstream-only v0.11.1 commits separately; do not merge them during Phase 0.
 
@@ -72,7 +74,7 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 - Full monorepo typecheck has a recorded pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - All 23 pre-existing RunnerOS worktrees were verified unchanged after setup.
 - Contract and deterministic fixture code are verified by the focused suite; Electron/runtime integration is not.
-- Trade God focused suite: 20 passed, 0 failed across contracts, deterministic fixture analysis, JSON-RPC handler behavior, and the spawned stdio process.
+- Trade God focused suite: 24 passed, 0 failed across contracts, deterministic fixture analysis, typed client safety, JSON-RPC handler behavior, and the spawned stdio process.
 - Package TypeScript checking is not yet verified: two attempted invocations hung in the command/tool layer and were stopped rather than allowed to block progress.
 - Standalone sidecar process is verified; Electron supervision and renderer paths are not.
 - Every future completion claim must name the command, fixture, result, and artifact/receipt.

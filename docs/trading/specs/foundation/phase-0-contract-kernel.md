@@ -156,4 +156,6 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - 2026-07-11: `@trade-god/contracts` and `@trade-god/testkit` implemented through red-green TDD; 12 focused tests passed.
 - 2026-07-11: standalone Order Flow JSON-RPC handler and spawned newline-delimited stdio CLI implemented through red-green TDD.
 - Complete fast Phase 0 suite: 20 passed, 0 failed, 39 expectations.
-- Still open: typed client, Electron supervisor/IPC/view, active-computation cancellation, timeout/partial-frame/crash tests, and runtime smoke.
+- 2026-07-11: typed client boundary added with response validation, trace enforcement, protocol checks, deadlines/cancellation IDs, and normalized domain errors.
+- Complete fast Phase 0 suite after client: 24 passed, 0 failed, 44 expectations.
+- Still open: Electron supervisor/IPC/view, active-computation cancellation, timeout/partial-frame/crash tests, and runtime smoke.
