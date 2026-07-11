@@ -146,11 +146,9 @@ export function buildHqStateOfPlay(args: { docs: LoadedContextDoc[]; now?: Date;
 
   const missing = buildMissing(input);
   const attention = buildAttention(input).slice(0, 3);
-  const baseNextMove = buildNextMove(input, missing);
-  const nextMove = {
-    ...baseNextMove,
-    route: buildRouteHint(input, baseNextMove),
-  };
+  const rankedMoves = buildRankedMoves(input, missing);
+  const nextMove = withRoute(input, rankedMoves[0]!);
+  const alternatives = rankedMoves.slice(1, 4).map((move) => withRoute(input, move));
   const momentum = buildMomentum(input);
   const goalProgress = buildGoalProgress(input);
   const artistName = clean(input.profile?.artistName) ?? 'Artist HQ';
@@ -161,6 +159,7 @@ export function buildHqStateOfPlay(args: { docs: LoadedContextDoc[]; now?: Date;
     sources: buildSources(input),
     headline: buildHeadline(artistName, nextMove, missing),
     nextMove,
+    alternatives,
     attention,
     momentum,
     missing,
@@ -214,6 +213,7 @@ export function parseHqStateOfPlay(body: string): HqStateOfPlay | null {
       sources: isPlainObject(parsed.sources) ? parsed.sources as Record<string, string> : {},
       headline: String(parsed.headline),
       nextMove: normalizeNextMove(parsed.nextMove),
+      alternatives: Array.isArray(parsed.alternatives) ? parsed.alternatives.map(normalizeNextMove) : [],
       attention: Array.isArray(parsed.attention) ? parsed.attention.map(normalizeAttention).filter(Boolean) as HqStateAttentionItem[] : [],
       momentum: {
         up: Array.isArray(parsed.momentum?.up) ? parsed.momentum.up.map(String) : [],
@@ -227,28 +227,27 @@ export function parseHqStateOfPlay(body: string): HqStateOfPlay | null {
   }
 }
 
-function buildNextMove(input: HqInputState, missing: string[]): HqStateNextMove {
-  const approval = newestOperationalItem(input, input.operational?.approvals);
-  if (approval) {
-    return {
+function buildRankedMoves(input: HqInputState, missing: string[]): HqStateNextMove[] {
+  const moves: HqStateNextMove[] = [];
+  for (const approval of sortedOperationalItems(input, input.operational?.approvals).slice(0, 3)) {
+    moves.push({
       title: `Review ${approval.title}`,
       why: `${operationalKindLabel(approval)} is waiting for approval before work can continue.`,
       action: 'review',
       oneClick: false,
       entityRef: operationalEntityRef(approval),
-    };
+    });
   }
 
-  const failure = newestOperationalItem(input, input.operational?.failures);
-  if (failure) {
-    return {
+  for (const failure of sortedOperationalItems(input, input.operational?.failures).slice(0, 3)) {
+    moves.push({
       title: `Recover ${failure.title}`,
       why: `${operationalKindLabel(failure)} needs attention after ending in ${failure.status}.`,
       worker: 'concierge',
       action: 'review',
       oneClick: false,
       entityRef: operationalEntityRef(failure),
-    };
+    });
   }
 
   const candidate = buildContextNextMove(input, missing);
@@ -257,15 +256,21 @@ function buildNextMove(input: HqInputState, missing: string[]): HqStateNextMove 
     terms: [candidate.title, candidate.why],
   });
   if (duplicate) {
-    return {
+    moves.push({
       title: `Track ${duplicate.title}`,
       why: `${operationalKindLabel(duplicate)} is already ${duplicate.status} and appears to cover this next move.`,
       action: 'review',
       oneClick: false,
       entityRef: operationalEntityRef(duplicate),
-    };
+    });
+  } else {
+    moves.push(candidate);
   }
-  return candidate;
+  return dedupeMoves(moves);
+}
+
+function withRoute(input: HqInputState, move: HqStateNextMove): HqStateNextMove {
+  return { ...move, route: buildRouteHint(input, move) };
 }
 
 function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNextMove {
@@ -593,7 +598,21 @@ function buildSources(input: HqInputState): Record<string, string> {
 }
 
 function newestOperationalItem(input: HqInputState, items: HqOperationalItem[] | undefined): HqOperationalItem | null {
-  return visibleOperationalItems(input, items).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+  return sortedOperationalItems(input, items)[0] ?? null;
+}
+
+function sortedOperationalItems(input: HqInputState, items: HqOperationalItem[] | undefined): HqOperationalItem[] {
+  return visibleOperationalItems(input, items).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+function dedupeMoves(moves: HqStateNextMove[]): HqStateNextMove[] {
+  const seen = new Set<string>();
+  return moves.filter((move) => {
+    const key = move.entityRef?.source ?? `${move.worker ?? 'manual'}:${move.title.toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function operationalKindLabel(item: HqOperationalItem): string {

@@ -9,7 +9,7 @@ import {
   type LoadedContextDoc,
 } from '@craft-agent/shared/workspace-context'
 import { buildHqOperationalSnapshot } from './operational'
-import { persistPrimaryHqRecommendation } from './recommendations'
+import { persistHqRecommendations, reconcileHqRecommendationOutcomes } from './recommendations'
 
 const scheduledRefreshes = new Map<string, ReturnType<typeof setTimeout>>()
 const REFRESH_DEBOUNCE_MS = 100
@@ -21,11 +21,12 @@ export function shouldRefreshHqStateForContextSlug(slug: string): boolean {
 export function refreshHqStateContextDoc(workspaceRootPath: string): LoadedContextDoc {
   const docs = loadAllContextDocs(workspaceRootPath)
   const operational = buildHqOperationalSnapshot(workspaceRootPath)
+  reconcileHqRecommendationOutcomes(workspaceRootPath)
   const built = buildHqStateContextDoc({ docs, operational })
-  const recommendation = persistPrimaryHqRecommendation(workspaceRootPath, built.state, operational.scope)
-  built.state.nextMove.recommendationId = recommendation.id
-  built.state.nextMove.recommendationStatus = recommendation.status
-  built.state.nextMove.snoozedUntil = recommendation.snoozedUntil
+  const recommendations = persistHqRecommendations(workspaceRootPath, built.state, operational.scope)
+  applyRecommendationState(built.state.nextMove, recommendations[0])
+  built.state.alternatives.forEach((move, index) => applyRecommendationState(move, recommendations[index + 1]))
+  promoteActiveRecommendation(built.state)
   built.body = serializeHqStateOfPlay(built.state)
   const existing = docs.find((doc) => doc.slug === HQ_STATE_CONTEXT_SLUG)
   return upsertContextDoc(workspaceRootPath, {
@@ -39,6 +40,24 @@ export function refreshHqStateContextDoc(workspaceRootPath: string): LoadedConte
       : built.metadata,
     body: built.body,
   })
+}
+
+function promoteActiveRecommendation(state: import('@craft-agent/shared/hq-state').HqStateOfPlay): void {
+  const moves = [state.nextMove, ...state.alternatives]
+  const active = moves.filter((move) => !['dismissed', 'snoozed', 'completed', 'expired', 'superseded'].includes(move.recommendationStatus ?? 'proposed'))
+  if (active.length === 0) return
+  state.nextMove = active[0]!
+  state.alternatives = active.slice(1, 4)
+}
+
+function applyRecommendationState(
+  move: import('@craft-agent/shared/hq-state').HqStateNextMove,
+  recommendation: import('@craft-agent/shared/hq-state').HqRecommendationCandidate | undefined,
+): void {
+  if (!recommendation) return
+  move.recommendationId = recommendation.id
+  move.recommendationStatus = recommendation.status
+  move.snoozedUntil = recommendation.snoozedUntil
 }
 
 export function refreshHqStateContextDocBestEffort(workspaceRootPath: string): LoadedContextDoc | null {

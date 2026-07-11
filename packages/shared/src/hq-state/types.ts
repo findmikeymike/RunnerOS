@@ -124,6 +124,7 @@ export interface HqStateOfPlay {
   sources: Record<string, string>;
   headline: string;
   nextMove: HqStateNextMove;
+  alternatives: HqStateNextMove[];
   attention: HqStateAttentionItem[];
   momentum: {
     up: string[];

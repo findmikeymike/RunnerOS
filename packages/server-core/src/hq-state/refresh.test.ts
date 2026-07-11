@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseHqStateOfPlay, HQ_STATE_CONTEXT_SLUG } from '@craft-agent/shared/hq-state'
 import { readHqRecommendationStore } from '@craft-agent/shared/hq-state/recommendation-storage'
+import { transitionHqRecommendation } from '@craft-agent/shared/hq-state/recommendation-storage'
+import { createOutputBundle } from '@craft-agent/shared/outputs'
 import { loadContextDoc, upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import {
   refreshHqStateContextDocBestEffort,
@@ -108,6 +110,29 @@ describe('HQ state refresh', () => {
 
     expect(loadContextDoc(workspace, HQ_STATE_CONTEXT_SLUG)).not.toBeNull()
     cancelScheduledHqStateContextRefresh(workspace)
+  })
+
+  test('promotes the next active alternative after dismissing the primary', () => {
+    const workspace = tempWorkspace()
+    for (const title of ['Approve teaser', 'Approve cover']) {
+      createOutputBundle(workspace, {
+        workspaceId: 'ws-1',
+        title,
+        kind: 'document',
+        status: 'draft',
+        origin: { source: 'session' },
+        approval: { state: 'pending' },
+      })
+    }
+    const first = parseHqStateOfPlay(refreshHqStateContextDoc(workspace).body)!
+    const dismissedId = first.nextMove.recommendationId!
+    transitionHqRecommendation(workspace, dismissedId, 'dismissed', { actor: { type: 'user' } })
+
+    const refreshed = parseHqStateOfPlay(refreshHqStateContextDoc(workspace).body)!
+
+    expect(refreshed.nextMove.recommendationId).not.toBe(dismissedId)
+    expect(refreshed.nextMove.recommendationStatus).toBe('proposed')
+    expect(refreshed.alternatives.every((move) => move.recommendationId !== dismissedId)).toBe(true)
   })
 })
 

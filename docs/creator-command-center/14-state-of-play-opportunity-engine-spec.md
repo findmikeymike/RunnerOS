@@ -545,12 +545,15 @@ Implemented:
 - backend-owned list/transition RPC handlers
 - persistent seven-day snooze and dismiss controls in the State of Play card
 - exact session linkage after a successful route launch
+- deterministic ranked set containing current-scope approvals, failures, and the best contextual opportunity
+- stable lifecycle persistence for primary and alternative recommendations
+- compact `Also Consider` alternatives in the State of Play card
+- Output-backed reconciliation from launched/in-progress to awaiting approval, completed, or failed
 
 Still required before declaring Phase 2 complete:
 
-- ranked candidate set rather than only the projected V1 primary move
 - persisted completion criteria and outcome evaluation
-- automatic session/work-order/output status reconciliation
+- automatic work-order/workflow status reconciliation beyond session Outputs
 - lifecycle history UI and explicit usefulness feedback
 - Team Mode transport/locking beyond workspace-local atomic files
 

@@ -4,33 +4,74 @@ import {
   type HqOperationalScope,
   type HqRecommendationCandidate,
   type HqStateOfPlay,
+  type HqStateNextMove,
 } from '@craft-agent/shared/hq-state'
-import { upsertHqRecommendation } from '@craft-agent/shared/hq-state/recommendation-storage'
+import { listOutputManifests } from '@craft-agent/shared/outputs'
+import {
+  readHqRecommendationStore,
+  transitionHqRecommendation,
+  upsertHqRecommendation,
+} from '@craft-agent/shared/hq-state/recommendation-storage'
 
-export function persistPrimaryHqRecommendation(
+export function persistHqRecommendations(
   workspaceRootPath: string,
   state: HqStateOfPlay,
   scope: HqOperationalScope,
+): HqRecommendationCandidate[] {
+  return [state.nextMove, ...state.alternatives].map((move) => persistMove(workspaceRootPath, state.generatedAt, scope, move))
+}
+
+export function reconcileHqRecommendationOutcomes(workspaceRootPath: string, now = new Date()): void {
+  const outputs = listOutputManifests(workspaceRootPath)
+  const candidates = readHqRecommendationStore(workspaceRootPath).candidates
+  for (const candidate of candidates) {
+    if (!['launched', 'in_progress', 'awaiting_approval'].includes(candidate.status)) continue
+    const sessionIds = new Set(candidate.executionRefs.filter((ref) => ref.kind === 'session').map((ref) => ref.id))
+    if (sessionIds.size === 0) continue
+    const output = outputs
+      .filter((item) => item.origin.sessionId && sessionIds.has(item.origin.sessionId))
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
+    if (!output) continue
+    const to = output.status === 'failed' || output.approval?.state === 'changes_requested'
+      ? 'failed'
+      : output.approval?.state === 'pending'
+        ? 'awaiting_approval'
+        : output.status === 'published' || Boolean(output.completedAt)
+          ? 'completed'
+          : 'in_progress'
+    transitionHqRecommendation(workspaceRootPath, candidate.id, to, {
+      actor: { type: 'system' },
+      reason: `Reconciled from Output ${output.id}.`,
+      executionRef: { kind: 'output', id: output.id, linkedAt: now.toISOString() },
+      createdAt: now.toISOString(),
+    })
+  }
+}
+
+function persistMove(
+  workspaceRootPath: string,
+  now: string,
+  scope: HqOperationalScope,
+  move: HqStateNextMove,
 ): HqRecommendationCandidate {
-  const now = state.generatedAt
   const intent = hqIntentFingerprint({
     scope,
-    worker: state.nextMove.worker,
-    title: state.nextMove.title,
-    intent: state.nextMove.why,
+    worker: move.worker,
+    title: move.title,
+    intent: move.why,
   })
-  const id = recommendationId(intent, state.nextMove.entityRef?.source)
+  const id = recommendationId(intent, move.entityRef?.source)
   return upsertHqRecommendation(workspaceRootPath, {
     version: 1,
     id,
     fingerprint: intent,
     scope,
-    title: state.nextMove.title,
-    reason: state.nextMove.why,
-    desiredOutcome: desiredOutcome(state),
+    title: move.title,
+    reason: move.why,
+    desiredOutcome: desiredOutcome(move),
     status: 'proposed',
-    route: state.nextMove.route,
-    entityRef: state.nextMove.entityRef,
+    route: move.route,
+    entityRef: move.entityRef,
     executionRefs: [],
     createdAt: now,
     updatedAt: now,
@@ -43,7 +84,7 @@ function recommendationId(fingerprint: string, source: string | undefined): stri
   return `sop_${digest}`
 }
 
-function desiredOutcome(state: HqStateOfPlay): string {
-  if (state.nextMove.entityRef) return `${state.nextMove.title} is resolved and no longer requires attention.`
-  return `${state.nextMove.title} produces a concrete artifact, decision, or verified state change.`
+function desiredOutcome(move: HqStateNextMove): string {
+  if (move.entityRef) return `${move.title} is resolved and no longer requires attention.`
+  return `${move.title} produces a concrete artifact, decision, or verified state change.`
 }

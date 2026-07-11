@@ -1632,6 +1632,7 @@ function StateOfPlayPanel({
   }
 
   const attention = state.attention.slice(0, 3)
+  const alternatives = state.alternatives.slice(0, 3)
   const missing = state.missing.slice(0, 5)
   const generatedLabel = formatShortDate(state.generatedAt)
   const route = state.nextMove.route
@@ -1679,6 +1680,36 @@ function StateOfPlayPanel({
           ) : (
             <EmptyLine title="No urgent attention items" detail="The generated brief did not flag immediate risks." />
           )}
+          {alternatives.length > 0 ? (
+            <div className="pt-2">
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">Also Consider</div>
+              <div className="space-y-1.5">
+                {alternatives.map((move) => {
+                  const content = (
+                    <>
+                      <span className="min-w-0 flex-1 truncate text-left text-xs text-white/62">{move.title}</span>
+                      {move.recommendationStatus ? <span className="text-[9px] uppercase tracking-[0.12em] text-white/28">{move.recommendationStatus}</span> : null}
+                    </>
+                  )
+                  return move.entityRef ? (
+                    <button
+                      key={move.recommendationId ?? move.title}
+                      type="button"
+                      onClick={() => onOpenEntity(move.entityRef!)}
+                      className="flex h-9 w-full items-center gap-2 rounded-[10px] border border-white/[0.045] bg-white/[0.018] px-3 transition-colors hover:bg-white/[0.045]"
+                    >
+                      {content}
+                      <ExternalLink className="h-3 w-3 shrink-0 text-white/28" />
+                    </button>
+                  ) : (
+                    <div key={move.recommendationId ?? move.title} className="flex h-9 items-center gap-2 rounded-[10px] border border-white/[0.045] bg-white/[0.018] px-3">
+                      {content}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="space-y-3">

@@ -188,6 +188,24 @@ describe('HQ State of Play composer', () => {
     expect(state.attention[0]?.kind).toBe('approval');
   });
 
+  test('keeps lower-ranked obligations as explicit alternatives', () => {
+    const newerApproval = operationalItem('approval-new', 'Approve teaser', 'output', 'pending');
+    const olderApproval = { ...operationalItem('approval-old', 'Approve cover', 'output', 'pending'), updatedAt: '2026-07-03T00:00:00.000Z' };
+    const failure = operationalItem('workflow-failure', 'Release workflow', 'workflow-run', 'failed');
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [profileDoc()],
+      operational: operational({ approvals: [olderApproval, newerApproval], failures: [failure] }),
+    });
+
+    expect(state.nextMove.title).toBe('Review Approve teaser');
+    expect(state.alternatives.map((move) => move.title)).toEqual([
+      'Review Approve cover',
+      'Recover Release workflow',
+      'Add a Spotify snapshot',
+    ]);
+  });
+
   test('puts failed operational work ahead of speculative next moves', () => {
     const state = buildHqStateOfPlay({
       now,
