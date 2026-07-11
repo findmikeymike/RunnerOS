@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-10
+last_verified: 2026-07-11
 source_of_truth: true
 ---
 
@@ -72,13 +72,17 @@ No integration is marked "fully end-to-end verified" until it passes:
 - [ ] Verify beta/access-denied states are clear and actionable.
 - [ ] If write tools are exposed, confirm approval-gated preview before any live mutation.
 
-### YouTube Research
+### YouTube Research / Weekly Intelligence
 
 - [ ] Save YouTube Data API key through RunnerOS settings/source flow.
 - [ ] Confirm key persists after restart.
 - [ ] Run `node tools/youtube-research/bin/youtube-research.mjs doctor`.
 - [ ] Smoke search, channel uploads, transcript, embed, and comments reads.
 - [ ] Verify read-only boundary is respected.
+- [ ] Run the default weekly Intelligence job against all configured channels and confirm only each channel's newest unseen upload is ingested.
+- [ ] Confirm a second unchanged run skips transcript ingestion and a newly published upload becomes eligible exactly once.
+- [ ] Confirm the required HQ report appears on the main dashboard and categorized `youtube-intel` nuggets route into Shared Intel.
+- [ ] Exercise missing transcript, provider timeout, malformed nugget block, and missing report Output failures without marking the job successful.
 
 ### Zero
 
@@ -128,6 +132,13 @@ No integration is marked "fully end-to-end verified" until it passes:
 - [ ] Render one short MP4.
 - [ ] Confirm preview HTML, poster frame, MP4, and receipt render in Canvas.
 - [ ] Confirm missing dependency/provider errors are actionable.
+
+### Squad Video Director
+
+- [ ] Run Squad `doctor` and modular preflight from both dev and packaged app contexts.
+- [ ] Generate one no-spend storyboard and confirm its Output is visible in Canvas.
+- [ ] Confirm a live provider run stops for explicit approval, uses the configured provider rather than assuming OpenAI, and records an honest pending/completed receipt.
+- [ ] Confirm missing provider keys, packaged runtime files, and failed generation return actionable errors without claiming a finished video.
 
 ### 3D Agent / 3DCellForge
 

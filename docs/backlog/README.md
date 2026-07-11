@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-10
+last_verified: 2026-07-11
 source_of_truth: true
 ---
 
@@ -37,6 +37,10 @@ Living priority queue: [TO DO](./TO-DO.md).
 - [Social Accounts + Operations](../archive/2026-07-10/social-accounts-and-operations.md) - V1 shipped; remaining proof moved to live verification and Connected Accounts.
 - [Paid Ads Execution Prep](../archive/2026-07-10/paid-ads-execution-prep.md) - preparation completed; remaining work stays in the Ads Operator backlog.
 - [Spotify Fix](../archive/2026-07-10/spotify-fix.md) - Analyst and Playlist Creator now use the built-in authenticated Spotify browser source; live-account proof remains in External Integration Live Verification.
+
+## Completed Foundations On 2026-07-11
+
+- [Creator Operations Foundations](../archive/2026-07-11/creator-operations-foundations.md) - implementation record for Calendar/Scheduled Work, delegated social engagement, YouTube Intelligence, Spotify, Squad video, TryPost/Postiz, Keys verification, and State of Play V2 foundations. Concrete smoke and release gates remain in [TO DO](./TO-DO.md).
 
 ## Maintenance Rule
 

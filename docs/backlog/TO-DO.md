@@ -29,14 +29,20 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 ### Product Intelligence
 
 - [ ] **Finish the State of Play V2 release gate.** Implemented: operational adapters for Outputs, Scheduled Work, workflows, automations, approvals, campaign deadlines, and release-critical asset gaps; source health and stale-evidence windows; durable ranked recommendations and lifecycle history; guarded launch/retry/defer actions; objective outcome evidence and usefulness feedback; exact semantic-intent duplicate suppression with legacy migration; same-server launch serialization; rendered control coverage; and explicit regeneration. Remaining: live Electron smoke, campaign-scoped source-health UI, additional domain-specific completion-criterion generators, and a distributed Team Mode lease. Source: [State of Play Opportunity Engine](../creator-command-center/14-state-of-play-opportunity-engine-spec.md).
-- [ ] **Add cost budgets to research-heavy agents.** Standardize caps, cache reuse, early-stop rules, cheap-model funnels, and concise evidence packets for YouTube Intelligence, Spotify discovery, deep research, ads research, and similar browser jobs.
+- [ ] **Live-smoke weekly YouTube Intelligence.** Implemented: preloaded channels including `@its21master`, newest-unseen-upload filtering, persisted processed IDs, transcript caching/provider flow, required HQ report Output, categorized Shared Intel routing, weekly default Automation, toggle, and manual run. Remaining: real-key packaged smoke across all channels, transcript failure/retry proof, dashboard report verification, and measured token/cost evidence.
+- [ ] **Live-smoke Spotify intelligence and playlist creation.** Implemented: authenticated browser-source Analyst, snapshots/deltas/anomaly handoff, evidence-backed playlist strategy, bounded cached track discovery, approval contract, playlist creation, account verification, and durable receipt shape. Remaining: real-account snapshot, discovery, create, dedupe, wrong-account, expired-login, and receipt proof. Track proof in [External Integration Live Verification](./external-integration-live-verification.md).
+- [ ] **Standardize research cost budgets.** YouTube now limits ingestion to each channel's newest unseen upload, and Spotify discovery has bounded seeds/candidates/cache reuse. Remaining: one shared cap, cheap-model funnel, early-stop, cache, and concise-evidence contract across deep research, ads research, and other browser-heavy agents.
+
+### Calendar And Scheduled Work
+
+- [ ] **Finish Calendar/Scheduled Work release proof.** Implemented: separate HQ/Campaign calendars, progressive Event/Agent/Workflow composer, contextual day actions, individually selectable markers, typed work orders, backend-owned mutations, restart recovery, idempotency, ownership checks, chains, required Outputs, approval-gated social execution, hidden background Automations, HNIC scheduling, release-day markers, and same-server concurrency protection. Remaining: live HQ/Campaign/HNIC/Automation smoke, packaged restart proof, and distributed Team Mode coordination. Scheduled-job expansion remains deferred.
 
 ### System Awareness
 
-- [ ] **Refresh HNIC awareness.** Ensure HNIC sees every active built-in and user agent, its real capabilities, required sources, approval boundaries, output types, and current readiness. It must route to shipped behavior, not stale prompt prose.
-- [ ] **Refresh Setup Concierge / Artist OS Guide awareness.** Cover all current agents, sources, browser accounts, API keys, workflows, outputs, Calendar, Automations, Team Mode, Creative Lab, failure recovery, and where users connect each dependency.
+- [ ] **Finish HNIC capability awareness.** Implemented: live built-in/user agent catalog routing, TryPost/Postiz visibility, and HNIC-only typed Calendar/Automation scheduling. Remaining: normalize readiness, required-source, approval, and output metadata for every agent; add drift tests; and smoke routing across unavailable/partially configured agents.
+- [ ] **Finish Setup Concierge / Artist OS Guide awareness.** Implemented: provider-agent connection paths, encrypted source guidance, Keys cards, and current service-key docs. Remaining: one verified walkthrough covering all agents, browser accounts, workflows, Outputs, Calendar, Automations, Team Mode, Creative Lab, recovery, and dependency locations.
 - [ ] **Automate capability-catalog freshness.** Derive HNIC and Setup guidance from agent/source metadata where practical, add drift tests, and avoid manually copying the roster into multiple prompts/docs.
-- [ ] **Verify existing-install migrations.** New built-in skills, sources, and prompt guidance must reach existing installs without overwriting user customizations.
+- [ ] **Finish existing-install migration proof.** Implemented migration coverage for new provider agents/sources, Social Publisher guidance, Scheduled Work ownership, HNIC prompts, and semantic intent. Remaining: packaged upgrade smoke from a representative older install without overwriting user customizations.
 
 ## NEXT
 
@@ -51,7 +57,7 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 - [ ] **Define Creative Lab as a real product surface.** Inventory the current visual/video/audio agents and tools, decide what belongs in Creative Lab, and write the minimal source-of-truth contract before adding navigation.
 - [ ] **Integrate creative briefs and assets.** Feed Artist HQ, campaign, brand, song, lyrics, Vault, and approved references into Creative Lab without forcing repeated setup.
-- [ ] **Route work to the right creator.** Connect Art Director, Branding, Content Genius, Hypermotion, Video Director, Lyric Video, image generation, raw-video editing, and future creative tools through one clear chooser.
+- [ ] **Route work to the right creator.** The built-in Squad/Video Director path, Canvas storyboard Output, lyric-video tooling, image routing, and raw-video tools now exist. Remaining: connect Art Director, Branding, Content Genius, Hypermotion, Video Director, Lyric Video, image generation, and raw-video editing through one clear Creative Lab chooser.
 - [ ] **Standardize creative outputs.** Every run should produce visible Outputs/Finals, source files, previews, provenance, approval state, and a clean path into Campaign/Vault/social publishing.
 - [ ] **Add review and iteration state.** Preserve versions, feedback, selected direction, approval, and final promotion instead of losing creative decisions in chat.
 
@@ -62,7 +68,7 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### Connected Accounts
 
-- [ ] **Unify connection status.** Give every external agent a consistent connected, expired, wrong-account, missing-secret, blocked, and ready state in Settings.
+- [ ] **Unify connection status.** Managed TryPost/Postiz Keys cards now report real encrypted-source credential state and provider tool tests distinguish credential/configuration failures. Remaining: apply consistent connected, expired, wrong-account, missing-secret, blocked, and ready states to every external agent.
 - [ ] **Make reconnect paths actionable.** One clear reconnect/setup action should replace agent-specific credential guesswork. Source: [Connected Accounts + Credential Vault](./connected-accounts-credential-vault.md).
 - [ ] **Keep secrets private and machine-local.** Verify exports, Team Mode, logs, outputs, context, and receipts never leak tokens, cookies, passwords, or private message bodies.
 
@@ -79,9 +85,9 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### Reliability And Product Truth
 
-- [ ] **Run a built-in agent truth audit.** For every visible worker, verify launch, required tools/sources, one representative task, output placement, approval behavior, and honest empty/error states.
+- [ ] **Finish the built-in agent truth audit.** Automated contracts now cover provider agents, YouTube Intelligence, Spotify Analyst/Playlist Creator, Squad Video Director, Social Publisher engagement, and Scheduled Work/HNIC. Remaining: real app launch and representative live task proof for every visible worker.
 - [ ] **Add an integration health dashboard.** Summarize source readiness, stale sessions, missing binaries, pending approvals, recent failures, and unresolved live-verification gates without exposing secrets.
-- [ ] **Complete Outputs/Finals adoption.** Agents that create meaningful work must publish it to the correct HQ or campaign surface instead of leaving the result only in chat or an obscure file.
+- [ ] **Complete Outputs/Finals adoption.** YouTube Intelligence requires an HQ report Output, Squad emits a Canvas-visible storyboard, scheduled agents can require Outputs, and Spotify playlist work has a receipt/output contract. Remaining: audit every meaningful agent and migrate any chat-only or obscure-file result.
 - [ ] **Keep docs, handoff, README, and system map current.** Regenerate maps where generators exist and update feature status after each meaningful integration milestone.
 - [ ] **Complete packaging and clean-machine proof.** Verify bundled tools, skills, migrations, permissions, platform binaries, and first-run behavior outside the development checkout.
 - [ ] **Add recovery-first browser contracts.** Standardize bounded retries, screenshots/evidence, selector-drift errors, account re-verification, and safe resume behavior across browser-operated agents.
