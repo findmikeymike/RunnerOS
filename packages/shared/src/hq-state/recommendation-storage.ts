@@ -262,8 +262,15 @@ function isHqRecommendationOutcome(value: unknown): value is HqRecommendationOut
     && ['successful', 'partial', 'unsuccessful', 'unknown'].includes(outcome.status ?? '')
     && typeof outcome.evaluatedAt === 'string'
     && Array.isArray(outcome.evidence)
-    && (outcome.criteria === undefined || (Array.isArray(outcome.criteria) && outcome.criteria.every((result) => (
-      result && typeof result === 'object' && typeof result.satisfied === 'boolean' && typeof result.note === 'string'
-    ))))
+    && (outcome.criteria === undefined || (Array.isArray(outcome.criteria) && outcome.criteria.every(isCriterionResult)))
     && (!outcome.userUsefulness || ['useful', 'neutral', 'not_useful'].includes(outcome.userUsefulness))
+}
+
+function isCriterionResult(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const result = value as Record<string, unknown>
+  if (typeof result.satisfied !== 'boolean' || typeof result.note !== 'string') return false
+  if (!result.criterion || typeof result.criterion !== 'object') return false
+  const type = (result.criterion as Record<string, unknown>).type
+  return type === 'output-completed' || type === 'approval-resolved' || type === 'final-promoted' || type === 'receipt-recorded'
 }

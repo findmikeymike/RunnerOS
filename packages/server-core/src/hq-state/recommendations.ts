@@ -158,8 +158,8 @@ function evaluateOutputCriteria(
       const satisfied = Boolean(output.finals?.length)
       return { criterion, satisfied, evidence: satisfied ? evidence : undefined, note: satisfied ? 'A Final pointer exists.' : 'No Final pointer exists.' }
     }
-    const satisfied = output.receipts.length > 0
-    return { criterion, satisfied, evidence: satisfied ? evidence : undefined, note: satisfied ? 'An execution receipt exists.' : 'No execution receipt exists.' }
+    const satisfied = output.receipts.some((receipt) => receipt.status === 'succeeded')
+    return { criterion, satisfied, evidence: satisfied ? evidence : undefined, note: satisfied ? 'A successful execution receipt exists.' : 'No successful execution receipt exists.' }
   })
 }
 

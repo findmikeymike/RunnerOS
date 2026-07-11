@@ -89,7 +89,7 @@ describe('HQ recommendation outcome reconciliation', () => {
   })
 
   test('records partial and successful outcomes from explicit Output criteria', () => {
-    for (const withReceipt of [false, true]) {
+    for (const receiptStatus of [undefined, 'pending', 'succeeded'] as const) {
       const workspace = tempWorkspace()
       upsertHqRecommendation(workspace, {
         ...candidate(),
@@ -105,14 +105,14 @@ describe('HQ recommendation outcome reconciliation', () => {
       createOutputBundle(workspace, {
         workspaceId: 'ws-1', title: 'Criteria output', kind: 'document', status: 'draft', completedAt: '2026-07-10T00:05:00.000Z',
         origin: { source: 'session', sessionId: 'criteria-session', agentSlug: 'concierge' }, tags: ['hq-recommendation:sop_outcome'],
-        receipts: withReceipt ? [{ id: 'receipt-1', provider: 'test', action: 'publish', status: 'succeeded', occurredAt: '2026-07-10T00:05:00.000Z' }] : [],
+        receipts: receiptStatus ? [{ id: 'receipt-1', provider: 'test', action: 'publish', status: receiptStatus, occurredAt: '2026-07-10T00:05:00.000Z' }] : [],
       })
 
       reconcileHqRecommendationOutcomes(workspace)
 
       const outcome = readHqRecommendationOutcomes(workspace)[0]!
-      expect(outcome.status).toBe(withReceipt ? 'successful' : 'partial')
-      expect(outcome.criteria?.map((result) => result.satisfied)).toEqual(withReceipt ? [true, true] : [true, false])
+      expect(outcome.status).toBe(receiptStatus === 'succeeded' ? 'successful' : 'partial')
+      expect(outcome.criteria?.map((result) => result.satisfied)).toEqual(receiptStatus === 'succeeded' ? [true, true] : [true, false])
     }
   })
 

@@ -154,6 +154,18 @@ describe('HQ recommendation storage', () => {
     expect(() => readHqRecommendationOutcomes(workspace)).toThrow('is corrupt')
     expect(readdirSync(dir)).toContain('outcomes.json')
   })
+
+  test('rejects outcomes with unknown completion criteria', () => {
+    const workspace = tempWorkspace()
+    const dir = join(workspace, '.state-of-play')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'outcomes.json'), JSON.stringify({
+      version: 1,
+      outcomes: [{ version: 1, recommendationId: 'sop_test', status: 'successful', evaluatedAt: '2026-07-10T00:00:00.000Z', evidence: [], criteria: [{ criterion: { type: 'invented' }, satisfied: true, note: 'bad' }] }],
+    }))
+
+    expect(() => readHqRecommendationOutcomes(workspace)).toThrow('is corrupt')
+  })
 })
 
 function candidate(): HqRecommendationCandidate {
