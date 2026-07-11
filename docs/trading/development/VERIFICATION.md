@@ -60,6 +60,16 @@ A lower rung does not prove a higher rung.
 - Isolation audit: all 23 protected pre-existing worktrees remained byte-identical in branch/status/HEAD output.
 - Runtime/Electron smoke: not yet run; no Trade God runtime exists.
 
+## Phase 0 Slice 1 — Contracts and Deterministic Fixture
+
+- Method: strict red-green TDD; both suites were observed failing on missing/unimplemented behavior before implementation.
+- `packages/trading-contracts/tests/contracts.test.ts`: 8 passed.
+- `packages/trading-testkit/tests/fixture-analysis.test.ts`: 4 passed.
+- Combined focused run: 12 passed, 0 failed, 22 expectations.
+- Proven: same-major protocol compatibility, health/capability validation, no live-order capability, decimal-string market metadata, artifact provenance/quality/content hash, typed errors, project-owned fixture checksum, altered-byte rejection, deterministic volume/delta/POC summary, repeatability.
+- Not proven: standalone package TypeScript check. Two invocations hung in the command/tool layer and were interrupted; do not report typecheck success.
+- Not built: JSON-RPC sidecar, process supervision, typed client, Electron IPC/UI.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

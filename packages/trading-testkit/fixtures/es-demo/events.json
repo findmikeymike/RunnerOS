@@ -1,0 +1,6 @@
+[
+  {"event_time":"2026-07-11T14:30:00.000Z","sequence":1,"price":"5592.00","size":"5","aggressor":"buy"},
+  {"event_time":"2026-07-11T14:30:10.000Z","sequence":2,"price":"5592.25","size":"12","aggressor":"buy"},
+  {"event_time":"2026-07-11T14:30:20.000Z","sequence":3,"price":"5592.25","size":"7","aggressor":"sell"},
+  {"event_time":"2026-07-11T14:30:30.000Z","sequence":4,"price":"5592.00","size":"4","aggressor":"sell"}
+]

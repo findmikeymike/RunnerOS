@@ -1,0 +1,23 @@
+{
+  "fixture_id": "es-demo-2026-07-11",
+  "kind": "synthetic-trades",
+  "source": "Trade God project-owned synthetic fixture",
+  "redistribution": "project-owned",
+  "transformations": ["none"],
+  "events_file": "events.json",
+  "events_sha256": "ccf7063cf2b19a0e876b3117860d823e55f06af683714f857633bf05f40cb774",
+  "event_count": 4,
+  "instrument": {
+    "id": "CME:ESU6",
+    "symbol": "ESU6",
+    "venue": "XCME",
+    "asset_class": "future",
+    "currency": "USD",
+    "tick_size": "0.25",
+    "multiplier": "50"
+  },
+  "session": {
+    "exchange_timezone": "America/Chicago",
+    "session_id": "2026-07-11-rth"
+  }
+}

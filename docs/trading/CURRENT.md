@@ -10,9 +10,9 @@ source_of_truth: true
 ## Snapshot
 
 - Date: 2026-07-11
-- Stage: isolated foundation established; baseline verification next
-- Current goal: verify the frozen RunnerOS base, then establish the contract kernel and first walking slice
-- Overall state: vision, integration research, docs system, and isolated implementation worktree exist; Trade God runtime implementation has not begun
+- Stage: Phase 0 contract kernel in progress
+- Current goal: extend the proven contracts/fixture seam into an independently runnable Order Flow sidecar
+- Overall state: neutral trading contracts and deterministic fixture analysis are implemented; sidecar, client, and Electron path remain unbuilt
 - Host worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -27,6 +27,9 @@ source_of_truth: true
 - Documentation and build-governance scaffold established.
 - Dedicated clean RunnerOS worktree created without switching or editing another checkout.
 - Pre-existing RunnerOS worktrees and commits captured in `foundation/BASELINE.md`.
+- Added neutral `@trade-god/contracts` package with versioned metadata, health/capability, fixture request, artifact, and typed-error schemas.
+- Added `@trade-god/testkit` with a project-owned synthetic ES fixture, checksum validation, deterministic volume/delta/POC analysis, and stable content hashing.
+- TDD proof: tests were observed failing before implementation, then 12 focused tests passed.
 
 ## Active Build Target
 
@@ -38,15 +41,12 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 
 ## Next Actions
 
-1. Install dependencies if the isolated worktree does not share a usable dependency state.
-2. Run baseline typecheck and focused core tests; record pre-existing failures without repairing unrelated systems.
-3. Review the 15 upstream-only v0.11.1 commits separately; do not merge them into the frozen foundation during Phase 0 setup.
-4. Approve `specs/foundation/phase-0-contract-kernel.md`.
-5. Add `packages/trading-contracts`, `packages/trading-domain`, and `packages/trading-testkit` only as their first real responsibilities are implemented.
-6. Add a small recorded ES fixture with provenance, timezone, session, schema, and checksum metadata.
-7. Build an Order Flow sidecar skeleton with `health`, `capabilities`, `analyze_fixture`, cancellation, timeout, and clean shutdown.
-8. Render service health and one validated artifact in a thin Electron route.
-9. Record commands and proof in `development/VERIFICATION.md` and update this file.
+1. Commit the proven contract/testkit slice.
+2. Build the Order Flow sidecar skeleton with JSON-RPC `health`, `capabilities`, `analyze_fixture`, cancellation, and shutdown.
+3. Add conformance tests for stdout framing, invalid requests, duplicate IDs, timeout, cancellation, and partial frames.
+4. Add the typed client/supervisor only after the sidecar passes independently.
+5. Render service health and one validated artifact in a thin Electron route.
+6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them during Phase 0.
 
 ## Explicitly Not In Scope Yet
 
@@ -70,7 +70,10 @@ This phase proves process isolation, contracts, replay determinism, validation, 
 - Frozen-lockfile install passed and focused control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck has a recorded pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - All 23 pre-existing RunnerOS worktrees were verified unchanged after setup.
-- No Trade God code, Electron smoke, or data fixture has yet been verified.
+- Contract and deterministic fixture code are verified by the focused suite; Electron/runtime integration is not.
+- Trade God focused suite: 12 passed, 0 failed across contracts and deterministic fixture analysis.
+- Package TypeScript checking is not yet verified: two attempted invocations hung in the command/tool layer and were stopped rather than allowed to block progress.
+- No sidecar process or Electron runtime path has yet been verified.
 - Every future completion claim must name the command, fixture, result, and artifact/receipt.
 
 ## Notes for the Next Agent
