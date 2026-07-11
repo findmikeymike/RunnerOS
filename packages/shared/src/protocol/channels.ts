@@ -432,6 +432,8 @@ export const RPC_CHANNELS = {
     GET_RECOMMENDATION_DETAIL: 'hqState:getRecommendationDetail',
     /** Record explicit user usefulness without altering lifecycle state. */
     SET_RECOMMENDATION_USEFULNESS: 'hqState:setRecommendationUsefulness',
+    /** Explicitly regenerate State of Play and broadcast the derived context. */
+    REFRESH: 'hqState:refresh',
   },
   scheduledWork: {
     /** Read the parsed scheduled-work document for a workspace. */

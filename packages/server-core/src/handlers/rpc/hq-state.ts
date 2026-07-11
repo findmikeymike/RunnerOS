@@ -8,16 +8,29 @@ import {
   type HqRecommendationTransitionInput,
   type HqRecommendationUsefulnessInput,
   type HqRecommendationOutcome,
+  parseHqStateOfPlay,
 } from '@craft-agent/shared/hq-state'
 import { readHqRecommendationEvents, readHqRecommendationOutcomes, readHqRecommendationStore, transitionHqRecommendation, upsertHqRecommendationOutcome } from '@craft-agent/shared/hq-state/recommendation-storage'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { loadAllContextDocs } from '@craft-agent/shared/workspace-context'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
-import { refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
+import { refreshHqStateContextDoc, refreshHqStateContextDocBestEffort } from '../../hq-state/refresh'
 import { withWorkspaceContextLock } from '../../scheduled-work/workspace-context-lock'
 
 export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): void {
+  server.handle(RPC_CHANNELS.hqState.REFRESH, async (_ctx, workspaceId: string): Promise<{ generatedAt: string }> => {
+    const rootPath = resolveRootPath(workspaceId)
+    return withWorkspaceContextLock(rootPath, async () => {
+      const refreshed = refreshHqStateContextDoc(rootPath)
+      const state = parseHqStateOfPlay(refreshed.body)
+      if (!state) throw new Error('Regenerated State of Play could not be read.')
+      const wsServerLike = deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } }
+      wsServerLike.wsServer?.push?.(RPC_CHANNELS.workspaceContext.CHANGED, { to: 'all' }, workspaceId, loadAllContextDocs(rootPath))
+      return { generatedAt: state.generatedAt }
+    })
+  })
+
   server.handle(RPC_CHANNELS.hqState.LIST_RECOMMENDATIONS, async (_ctx, workspaceId: string): Promise<HqRecommendationStore> => {
     return readHqRecommendationStore(resolveRootPath(workspaceId))
   })

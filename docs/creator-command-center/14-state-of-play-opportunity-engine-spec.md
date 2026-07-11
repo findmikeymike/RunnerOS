@@ -582,6 +582,7 @@ Implemented:
 - lifecycle detail refresh while the same recommendation remains visible
 - same-server launch serialization verified to create exactly one session under concurrent requests
 - renderer decision coverage for lifecycle actions, retry/defer/rating states, and degraded source health
+- explicit regenerate control backed by a serialized server refresh and workspace-context broadcast
 
 Still required before declaring Phase 2 complete:
 

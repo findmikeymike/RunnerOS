@@ -44,7 +44,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Switch } from '@/components/ui/switch'
 import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { ScheduledWorkComposer, type ScheduledWorkComposerEntry } from '@/components/calendar/ScheduledWorkComposer'
-import { StateOfPlayHistory, StateOfPlayOutcomeFeedback } from './StateOfPlayControls'
+import { StateOfPlayHistory, StateOfPlayOutcomeFeedback, StateOfPlayRefreshButton } from './StateOfPlayControls'
 import { buildCampaignSchedulePlanFromComposer, buildHqSchedulePlanFromComposer, type ScheduledWorkComposerDraft } from '@/lib/scheduled-work-composer'
 import { SCHEDULED_WORK_CONTEXT_SLUG, parseScheduledWorkDocResult, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import {
@@ -301,6 +301,7 @@ export function ArtistHQHome({
   const [googleCalendarConnected, setGoogleCalendarConnected] = React.useState(false)
   const [proactiveMode, setProactiveMode] = React.useState(() => readBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), false))
   const [hqRouteBusy, setHqRouteBusy] = React.useState(false)
+  const [hqRefreshBusy, setHqRefreshBusy] = React.useState(false)
   const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
   const { outputs, loading: outputsLoading } = useOutputs(workspaceId)
   const profileResult = React.useMemo(
@@ -753,6 +754,18 @@ export function ArtistHQHome({
     }
   }, [workspaceId])
 
+  const refreshHqState = React.useCallback(async () => {
+    setHqRefreshBusy(true)
+    try {
+      await window.electronAPI.refreshHqState(workspaceId)
+      toast.success('State of Play refreshed')
+    } catch (error) {
+      toast.error('Could not refresh State of Play', { description: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setHqRefreshBusy(false)
+    }
+  }, [workspaceId])
+
   const launchHqRoute = React.useCallback(async (route: HqStateRouteHint, recommendationId?: string) => {
     if (route.target !== 'agent' || !route.agentSlug) {
       toast.error(route.blockedReason ?? 'This recommendation needs review first.')
@@ -1115,11 +1128,13 @@ export function ArtistHQHome({
               workspaceId={workspaceId}
               proactiveMode={proactiveMode}
               routeBusy={hqRouteBusy}
+              refreshBusy={hqRefreshBusy}
               availableAgentSlugs={new Set(availableAgents.map((agent) => agent.slug))}
               onToggleProactiveMode={setProactiveMode}
               onLaunchRoute={launchHqRoute}
               onOpenEntity={openHqStateEntity}
               onTransitionRecommendation={transitionHqRecommendation}
+              onRefresh={refreshHqState}
             />
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
@@ -1561,21 +1576,25 @@ function StateOfPlayPanel({
   workspaceId,
   proactiveMode,
   routeBusy,
+  refreshBusy,
   availableAgentSlugs,
   onToggleProactiveMode,
   onLaunchRoute,
   onOpenEntity,
   onTransitionRecommendation,
+  onRefresh,
 }: {
   state: HqStateOfPlay | null
   workspaceId: string
   proactiveMode: boolean
   routeBusy: boolean
+  refreshBusy: boolean
   availableAgentSlugs: Set<string>
   onToggleProactiveMode: (enabled: boolean) => void
   onLaunchRoute: (route: HqStateRouteHint, recommendationId?: string) => void
   onOpenEntity: (entity: HqStateEntityRef) => void
   onTransitionRecommendation: (recommendationId: string, to: 'dismissed' | 'snoozed') => void
+  onRefresh: () => void
 }) {
   const recommendationId = state?.nextMove.recommendationId
   const recommendationStatusRevision = state?.nextMove.recommendationStatus ?? ''
@@ -1604,12 +1623,15 @@ function StateOfPlayPanel({
             <Sparkles className="h-3 w-3 text-white/40" />
             <h3 className="truncate text-[9px] font-medium uppercase tracking-[0.15em] text-white/60">State of Play</h3>
           </div>
-          <Switch
-            checked={proactiveMode}
-            onCheckedChange={onToggleProactiveMode}
-            aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
-            className="data-[state=checked]:bg-orange-300"
-          />
+          <div className="flex items-center gap-2">
+            <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} size="md" />
+            <Switch
+              checked={proactiveMode}
+              onCheckedChange={onToggleProactiveMode}
+              aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
+              className="data-[state=checked]:bg-orange-300"
+            />
+          </div>
         </div>
         <EmptyLine
           title="No HQ brief generated yet"
@@ -1645,6 +1667,7 @@ function StateOfPlayPanel({
           <p className="mt-2 max-w-3xl text-sm leading-6 text-white/48">{state.nextMove.why}</p>
         </div>
         <div className="flex shrink-0 flex-wrap gap-2 md:justify-end">
+          <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} />
           {state.nextMove.worker ? <Pill label={`@${state.nextMove.worker}`} /> : null}
           {state.nextMove.action ? <Pill label={state.nextMove.action} /> : null}
           {route ? <Pill label={canLaunchRoute ? `${route.confidence} route` : 'review needed'} muted={!canLaunchRoute} /> : null}

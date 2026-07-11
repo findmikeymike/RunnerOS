@@ -46,6 +46,17 @@ beforeAll(async () => {
 afterAll(() => rmSync(rootPath, { recursive: true, force: true }))
 
 describe('HQ state RPC handlers', () => {
+  test('explicitly regenerates and broadcasts State of Play context', async () => {
+    const pushesBefore = pushes.length
+
+    const result = await invoke(RPC_CHANNELS.hqState.REFRESH, workspace.id) as { generatedAt: string }
+
+    expect(Date.parse(result.generatedAt)).not.toBeNaN()
+    expect(pushes.length).toBe(pushesBefore + 1)
+    expect(pushes.at(-1)?.[0]).toBe(RPC_CHANNELS.workspaceContext.CHANGED)
+    expect(pushes.at(-1)?.[2]).toBe(workspace.id)
+  })
+
   test('lists and transitions a durable recommendation', async () => {
     const listed = await invoke(RPC_CHANNELS.hqState.LIST_RECOMMENDATIONS, workspace.id) as ReturnType<typeof readHqRecommendationStore>
     const recommendationId = listed.candidates[0]!.id

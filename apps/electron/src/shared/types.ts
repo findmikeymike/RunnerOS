@@ -968,6 +968,7 @@ export interface ElectronAPI {
   launchHqRecommendation(workspaceId: string, input: HqRecommendationLaunchInput): Promise<HqRecommendationLaunchResult>
   getHqRecommendationDetail(workspaceId: string, recommendationId: string): Promise<HqRecommendationDetail>
   setHqRecommendationUsefulness(workspaceId: string, input: HqRecommendationUsefulnessInput): Promise<HqRecommendationOutcome>
+  refreshHqState(workspaceId: string): Promise<{ generatedAt: string }>
   getScheduledWork(workspaceId: string): Promise<ScheduledWorkParseResult>
   mutateScheduledWork(workspaceId: string, mutation: ScheduledWorkMutation): Promise<ScheduledWorkMutationResult>
   scheduleCampaignWork(workspaceId: string, input: ScheduleCampaignWorkInput): Promise<ScheduleCampaignWorkResult>

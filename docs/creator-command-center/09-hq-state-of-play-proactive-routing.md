@@ -198,7 +198,6 @@ Not yet verified in a live Electron window:
 Not yet implemented:
 
 - automatic background route execution
-- explicit "regenerate now" button for HQ State of Play
 - richer scoring/evaluation of competing next moves
 - richer partial-outcome criteria beyond terminal entity status
 - Team Mode locking for concurrent launches across devices
@@ -209,5 +208,6 @@ Implemented on 2026-07-10 after the original V1 record:
 - objective outcome persistence plus useful/not-useful feedback
 - compact lifecycle history in the State of Play card
 - visible source health, automation config validation, stale-evidence windows, campaign-filtered queries, and semantic producer intent IDs
+- explicit user-controlled regeneration backed by a serialized server refresh and workspace-context broadcast
 
 The next agent should not build automatic execution until the current user-controlled route path is visually smoked in the app.

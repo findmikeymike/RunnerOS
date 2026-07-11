@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { StateOfPlayHistory, StateOfPlayOutcomeFeedback } from './StateOfPlayControls'
+import { StateOfPlayHistory, StateOfPlayOutcomeFeedback, StateOfPlayRefreshButton } from './StateOfPlayControls'
 
 describe('State of Play controls', () => {
   test('renders expanded lifecycle history with reason and count', () => {
@@ -27,5 +27,13 @@ describe('State of Play controls', () => {
     expect(html).toContain('Was this useful?')
     expect(html).toContain('aria-pressed="true"')
     expect(html).toContain('Not useful')
+  })
+
+  test('renders an accessible disabled regenerate control while refreshing', () => {
+    const html = renderToStaticMarkup(<StateOfPlayRefreshButton busy onRefresh={() => undefined} />)
+
+    expect(html).toContain('aria-label="Regenerate State of Play"')
+    expect(html).toContain('disabled=""')
+    expect(html).toContain('animate-spin')
   })
 })

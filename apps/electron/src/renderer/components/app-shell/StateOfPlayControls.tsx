@@ -1,7 +1,29 @@
 import * as React from 'react'
-import { History } from 'lucide-react'
+import { History, RefreshCw } from 'lucide-react'
 import type { HqRecommendationEvent, HqRecommendationOutcome } from '@craft-agent/shared/hq-state'
 import { cn } from '@/lib/utils'
+
+export function StateOfPlayRefreshButton({ busy, onRefresh, size = 'sm' }: {
+  busy: boolean
+  onRefresh: () => void
+  size?: 'sm' | 'md'
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onRefresh}
+      disabled={busy}
+      aria-label="Regenerate State of Play"
+      title="Regenerate State of Play"
+      className={cn(
+        'inline-flex items-center justify-center rounded-[8px] border border-white/[0.06] text-white/45 hover:bg-white/[0.04] disabled:opacity-40',
+        size === 'md' ? 'h-8 w-8' : 'h-7 w-7',
+      )}
+    >
+      <RefreshCw className={cn('h-3.5 w-3.5', busy && 'animate-spin')} />
+    </button>
+  )
+}
 
 export function StateOfPlayHistory({ events, open, onToggle, formatDate }: {
   events: HqRecommendationEvent[]
