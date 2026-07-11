@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { HqRecommendationCandidate, HqStateEntityRef } from '@craft-agent/shared/hq-state'
@@ -7,6 +7,7 @@ import { createOutputBundle } from '@craft-agent/shared/outputs'
 import { scheduledWorkDefinitionDigest, scheduledWorkMetadata, serializeScheduledWorkBody, type ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import { upsertContextDoc } from '@craft-agent/shared/workspace-context'
 import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows'
+import { AUTOMATIONS_HISTORY_FILE } from '@craft-agent/shared/automations'
 import { readHqRecommendationOutcomes } from '@craft-agent/shared/hq-state/recommendation-storage'
 import {
   readHqRecommendationStore,
@@ -126,6 +127,29 @@ describe('HQ recommendation outcome reconciliation', () => {
 
     expect(readHqRecommendationStore(workspace).candidates[0]?.status).toBe('superseded')
     expect(readHqRecommendationStore(workspace).candidates[0]?.executionRefs.some((ref) => ref.kind === 'session')).toBe(false)
+  })
+
+  test('repairs a missing outcome from terminal recommendation state', () => {
+    const workspace = tempWorkspace()
+    upsertHqRecommendation(workspace, candidate())
+    transitionHqRecommendation(workspace, 'sop_outcome', 'accepted', { actor: { type: 'user' } })
+    transitionHqRecommendation(workspace, 'sop_outcome', 'launched', { actor: { type: 'system' } })
+    transitionHqRecommendation(workspace, 'sop_outcome', 'completed', { actor: { type: 'system' } })
+    expect(readHqRecommendationOutcomes(workspace)).toEqual([])
+
+    reconcileHqRecommendationOutcomes(workspace, new Date('2026-07-10T02:00:00.000Z'))
+
+    expect(readHqRecommendationOutcomes(workspace)[0]).toEqual(expect.objectContaining({ status: 'successful' }))
+  })
+
+  test('does not break reconciliation when automation history is unreadable', () => {
+    const workspace = tempWorkspace()
+    mkdirSync(join(workspace, AUTOMATIONS_HISTORY_FILE))
+    const entity = { kind: 'automation-run' as const, id: 'weekly-intel', source: 'automation:weekly-intel', scope: { type: 'hq' as const } }
+    launchEntity(workspace, entity)
+
+    expect(() => reconcileHqRecommendationOutcomes(workspace)).not.toThrow()
+    expect(readHqRecommendationStore(workspace).candidates[0]?.status).toBe('launched')
   })
 })
 

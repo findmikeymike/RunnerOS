@@ -1576,6 +1576,7 @@ function StateOfPlayPanel({
   onTransitionRecommendation: (recommendationId: string, to: 'dismissed' | 'snoozed') => void
 }) {
   const recommendationId = state?.nextMove.recommendationId
+  const recommendationRevision = `${state?.nextMove.recommendationStatus ?? ''}:${state?.generatedAt ?? ''}`
   const [detail, setDetail] = React.useState<HqRecommendationDetail | null>(null)
   const [historyOpen, setHistoryOpen] = React.useState(false)
 
@@ -1588,7 +1589,7 @@ function StateOfPlayPanel({
       .then((value) => { if (!cancelled) setDetail(value) })
       .catch(() => undefined)
     return () => { cancelled = true }
-  }, [recommendationId, workspaceId])
+  }, [recommendationId, recommendationRevision, workspaceId])
 
   if (!state) {
     return (

@@ -564,6 +564,9 @@ Implemented:
 - resolved observed obligations retire as superseded without falsely claiming State of Play launched them
 - compact lifecycle history disclosure in Artist HQ
 - explicit useful/not-useful feedback persisted independently from lifecycle status
+- terminal-outcome self-repair after an interrupted lifecycle/outcome write
+- fail-soft automation outcome reads that preserve the rest of reconciliation
+- lifecycle detail refresh while the same recommendation remains visible
 
 Still required before declaring Phase 2 complete:
 

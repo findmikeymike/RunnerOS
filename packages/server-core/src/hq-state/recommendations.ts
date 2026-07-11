@@ -3,6 +3,7 @@ import {
   hqIntentFingerprint,
   type HqOperationalScope,
   type HqRecommendationCandidate,
+  type HqRecommendationOutcome,
   type HqStateEntityRef,
   type HqStateOfPlay,
   type HqStateNextMove,
@@ -16,6 +17,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   readHqRecommendationStore,
+  readHqRecommendationOutcomes,
   transitionHqRecommendation,
   upsertHqRecommendationOutcome,
   upsertHqRecommendation,
@@ -32,7 +34,9 @@ export function persistHqRecommendations(
 export function reconcileHqRecommendationOutcomes(workspaceRootPath: string, now = new Date()): void {
   const outputs = listOutputManifests(workspaceRootPath)
   const candidates = readHqRecommendationStore(workspaceRootPath).candidates
+  const outcomes = new Map(readHqRecommendationOutcomes(workspaceRootPath).map((outcome) => [outcome.recommendationId, outcome]))
   for (const candidate of candidates) {
+    if (repairMissingTerminalOutcome(workspaceRootPath, candidate, outcomes, now)) continue
     const completionContract = candidate.completionContract
     if (completionContract?.type === 'entity-resolution') {
       const resolution = resolveEntityOutcome(workspaceRootPath, completionContract.entity)
@@ -47,13 +51,16 @@ export function reconcileHqRecommendationOutcomes(workspaceRootPath: string, now
         executionRef: { kind: completionContract.entity.kind, id: completionContract.entity.id, linkedAt: now.toISOString() },
         createdAt: now.toISOString(),
       })
-      if (resolution.outcome) upsertHqRecommendationOutcome(workspaceRootPath, {
+      if (resolution.outcome) {
+        const outcome = upsertHqRecommendationOutcome(workspaceRootPath, {
         version: 1,
         recommendationId: candidate.id,
         status: resolution.outcome,
         evaluatedAt: now.toISOString(),
         evidence: [completionContract.entity],
-      })
+        })
+        outcomes.set(candidate.id, outcome)
+      }
       continue
     }
     if (!['launched', 'in_progress', 'awaiting_approval'].includes(candidate.status)) continue
@@ -79,14 +86,43 @@ export function reconcileHqRecommendationOutcomes(workspaceRootPath: string, now
       executionRef: { kind: 'output', id: output.id, linkedAt: now.toISOString() },
       createdAt: now.toISOString(),
     })
-    if (to === 'completed' || to === 'failed') upsertHqRecommendationOutcome(workspaceRootPath, {
+    if (to === 'completed' || to === 'failed') {
+      const outcome = upsertHqRecommendationOutcome(workspaceRootPath, {
       version: 1,
       recommendationId: candidate.id,
       status: to === 'completed' ? 'successful' : 'unsuccessful',
       evaluatedAt: now.toISOString(),
       evidence: [{ kind: 'output', id: output.id, source: `output:${output.id}`, scope: candidate.scope }],
-    })
+      })
+      outcomes.set(candidate.id, outcome)
+    }
   }
+}
+
+function repairMissingTerminalOutcome(
+  workspaceRootPath: string,
+  candidate: HqRecommendationCandidate,
+  outcomes: Map<string, HqRecommendationOutcome>,
+  now: Date,
+): boolean {
+  if (!['completed', 'failed', 'superseded'].includes(candidate.status)) return false
+  if (outcomes.has(candidate.id)) return true
+  const outputRef = [...candidate.executionRefs].reverse().find((ref) => ref.kind === 'output')
+  const entity = candidate.completionContract.type === 'entity-resolution'
+    ? candidate.completionContract.entity
+    : outputRef
+      ? { kind: 'output' as const, id: outputRef.id, source: `output:${outputRef.id}`, scope: candidate.scope }
+      : undefined
+  const outcome = upsertHqRecommendationOutcome(workspaceRootPath, {
+    version: 1,
+    recommendationId: candidate.id,
+    status: candidate.status === 'failed' ? 'unsuccessful' : 'successful',
+    evaluatedAt: now.toISOString(),
+    evidence: entity ? [entity] : [],
+    notes: 'Recovered from terminal recommendation state after a missing outcome write.',
+  })
+  outcomes.set(candidate.id, outcome)
+  return true
 }
 
 function resolveEntityOutcome(workspaceRootPath: string, entity: HqStateEntityRef): {
@@ -143,7 +179,13 @@ function latestAutomationResult(workspaceRootPath: string, automationId: string)
   const file = join(workspaceRootPath, AUTOMATIONS_HISTORY_FILE)
   if (!existsSync(file)) return null
   let latest: { ts: number; ok: boolean } | null = null
-  for (const line of readFileSync(file, 'utf8').split('\n').filter(Boolean)) {
+  let lines: string[]
+  try {
+    lines = readFileSync(file, 'utf8').split('\n').filter(Boolean)
+  } catch {
+    return null
+  }
+  for (const line of lines) {
     try {
       const value = JSON.parse(line) as { id?: string; ts?: number; ok?: boolean }
       if (value.id === automationId && typeof value.ts === 'number' && (!latest || value.ts > latest.ts)) latest = { ts: value.ts, ok: value.ok === true }
