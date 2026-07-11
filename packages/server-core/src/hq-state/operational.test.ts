@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { AUTOMATIONS_HISTORY_FILE } from '@craft-agent/shared/automations'
+import { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE } from '@craft-agent/shared/automations'
 import { createOutputBundle } from '@craft-agent/shared/outputs'
 import {
   scheduledWorkDefinitionDigest,
@@ -44,6 +44,8 @@ describe('HQ operational snapshot', () => {
     expect(snapshot.approvals.map((item) => item.title)).toContain('Approve teaser cut')
     expect(snapshot.failures.map((item) => item.title)).toContain('Broken report')
     expect(snapshot.recentOutputs).toHaveLength(2)
+    expect(snapshot.sourceHealth).toContainEqual(expect.objectContaining({ source: 'outputs', status: 'fresh', itemCount: 2 }))
+    expect(snapshot.recentOutputs.every((item) => item.fingerprint.startsWith('v1:'))).toBe(true)
   })
 
   test('summarizes active and approval-blocked scheduled work', () => {
@@ -67,8 +69,43 @@ describe('HQ operational snapshot', () => {
     expect(snapshot.approvals).toEqual([expect.objectContaining({ id: 'work-approval' })])
   })
 
+  test('preserves campaign scope and reports malformed Scheduled Work as degraded', () => {
+    const workspace = tempWorkspace()
+    const campaign = {
+      ...order('campaign-work', 'Create campaign cover art', 'running'),
+      owner: { scope: 'campaign' as const, workspaceId: 'campaign-1', campaignId: 'campaign-1' },
+      calendarLink: { calendar: 'campaign' as const, itemId: 'campaign-calendar-work' },
+    }
+    upsertContextDoc(workspace, {
+      slug: 'scheduled-work',
+      metadata: scheduledWorkMetadata(),
+      body: serializeScheduledWorkBody({
+        version: 1,
+        workspaceId: 'campaign-1',
+        items: [campaign],
+        updatedAt: '2026-07-10T00:00:00.000Z',
+      }),
+    })
+
+    const scoped = buildHqOperationalSnapshot(workspace)
+    expect(scoped.active[0]?.scope).toEqual({ type: 'campaign', campaignId: 'campaign-1' })
+    expect(scoped.active[0]?.fingerprint).toContain('campaign:campaign-1')
+
+    upsertContextDoc(workspace, {
+      slug: 'scheduled-work',
+      metadata: scheduledWorkMetadata(),
+      body: '```json\n{"version":1,"items":"broken"}\n```',
+    })
+    const degraded = buildHqOperationalSnapshot(workspace)
+    expect(degraded.sourceHealth).toContainEqual(expect.objectContaining({ source: 'scheduled-work', status: 'degraded' }))
+  })
+
   test('only reports the latest automation result for each matcher', () => {
     const workspace = tempWorkspace()
+    writeFileSync(join(workspace, AUTOMATIONS_CONFIG_FILE), JSON.stringify({
+      version: 1,
+      automations: { SchedulerTick: [{ id: 'still-failing', name: 'Weekly intel gatherer', actions: [] }] },
+    }))
     writeFileSync(join(workspace, AUTOMATIONS_HISTORY_FILE), [
       JSON.stringify({ id: 'recovered', ts: 1000, ok: false, error: 'old failure' }),
       JSON.stringify({ id: 'still-failing', ts: 1500, ok: false, error: 'current failure' }),
@@ -80,6 +117,8 @@ describe('HQ operational snapshot', () => {
 
     expect(snapshot.failures.map((item) => item.id)).toContain('still-failing')
     expect(snapshot.failures.map((item) => item.id)).not.toContain('recovered')
+    expect(snapshot.failures.find((item) => item.id === 'still-failing')?.title).toBe('Weekly intel gatherer')
+    expect(snapshot.sourceHealth).toContainEqual(expect.objectContaining({ source: 'automation-history', status: 'degraded' }))
   })
 })
 

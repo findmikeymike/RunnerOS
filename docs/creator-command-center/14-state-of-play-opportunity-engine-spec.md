@@ -498,13 +498,17 @@ Implemented in the foundational slice:
 - active-work duplicate suppression across existing V1 next moves
 - recomposition after Output, Scheduled Work, workflow, and automation execution changes
 - adapter, collision, priority, and regression coverage
+- typed HQ/campaign scope on every operational item
+- source-health reporting for fresh, degraded, and unavailable adapters
+- versioned intent fingerprints with migration fallback matching
+- configured automation names and malformed-history detection
 
 Still required before declaring Phase 1 complete:
 
-- typed campaign-level operational scopes instead of the current workspace-wide summary
-- richer automation names/config health and approval sources beyond Outputs/Scheduled Work
-- generalized duplicate fingerprints to replace intent-token matching
-- source freshness/degraded-state contracts and UI presentation
+- campaign-filtered snapshot queries and UI presentation of scope/source health
+- automation configuration-health validation beyond history readability
+- producer-supplied semantic intent metadata so fallback token matching can be removed
+- time-based freshness rules for externally synced evidence
 
 - define signals, entity references, source health, and compact indexes
 - add Outputs, Scheduled Work, workflow, automation, and approval adapters

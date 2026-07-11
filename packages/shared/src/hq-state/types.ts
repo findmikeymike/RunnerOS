@@ -56,12 +56,27 @@ export interface HqStateGoalProgress {
 
 export type HqOperationalItemKind = 'output' | 'scheduled-work' | 'workflow-run' | 'automation-run';
 
+export type HqOperationalScope =
+  | { type: 'hq' }
+  | { type: 'campaign'; campaignId: string };
+
+export interface HqOperationalSourceHealth {
+  source: 'outputs' | 'scheduled-work' | 'workflow-runs' | 'automation-history';
+  status: 'fresh' | 'degraded' | 'unavailable';
+  checkedAt: string;
+  latestDataAt?: string;
+  itemCount: number;
+  message?: string;
+}
+
 export interface HqOperationalItem {
   id: string;
   kind: HqOperationalItemKind;
   title: string;
   status: string;
   updatedAt: string;
+  scope: HqOperationalScope;
+  fingerprint: string;
   worker?: string;
   intent?: string;
   source: string;
@@ -73,6 +88,7 @@ export interface HqOperationalSnapshot {
   approvals: HqOperationalItem[];
   failures: HqOperationalItem[];
   recentOutputs: HqOperationalItem[];
+  sourceHealth: HqOperationalSourceHealth[];
 }
 
 export interface HqStateOfPlay {

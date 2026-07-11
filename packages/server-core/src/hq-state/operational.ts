@@ -1,7 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { AUTOMATIONS_HISTORY_FILE } from '@craft-agent/shared/automations'
-import type { HqOperationalItem, HqOperationalSnapshot } from '@craft-agent/shared/hq-state'
+import { AUTOMATIONS_CONFIG_FILE, AUTOMATIONS_HISTORY_FILE } from '@craft-agent/shared/automations'
+import {
+  hqIntentFingerprint,
+  type HqOperationalItem,
+  type HqOperationalScope,
+  type HqOperationalSnapshot,
+  type HqOperationalSourceHealth,
+} from '@craft-agent/shared/hq-state'
 import { listOutputManifests } from '@craft-agent/shared/outputs'
 import {
   parseScheduledWorkDocResult,
@@ -19,15 +25,19 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
   const active: HqOperationalItem[] = []
   const approvals: HqOperationalItem[] = []
   const failures: HqOperationalItem[] = []
+  const sourceHealth: HqOperationalSourceHealth[] = []
 
   const outputs = listOutputManifests(workspaceRootPath)
   for (const output of outputs) {
+    const scope = outputScope(output.context)
     const item: HqOperationalItem = {
       id: output.id,
       kind: 'output',
       title: output.title,
       status: output.approval?.state ?? output.status,
       updatedAt: output.updatedAt,
+      scope,
+      fingerprint: hqIntentFingerprint({ scope, worker: output.origin.agentSlug, title: output.title, intent: output.summary }),
       worker: output.origin.agentSlug,
       intent: output.summary,
       source: `output:${output.id}`,
@@ -35,6 +45,7 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
     if (output.approval?.state === 'pending') approvals.push(item)
     if (output.status === 'failed' || output.approval?.state === 'changes_requested') failures.push(item)
   }
+  sourceHealth.push(health('outputs', generatedAt, outputs.map((item) => item.updatedAt)))
 
   const scheduledDoc = loadContextDoc(workspaceRootPath, SCHEDULED_WORK_CONTEXT_SLUG)
   const workspaceId = outputs[0]?.workspaceId ?? readScheduledWorkspaceId(scheduledDoc?.body) ?? 'workspace'
@@ -46,15 +57,22 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
       if (APPROVAL_SCHEDULED.has(order.status)) approvals.push(item)
       if (order.status === 'needs-attention') failures.push(item)
     }
+    sourceHealth.push(health('scheduled-work', generatedAt, scheduled.work.items.map((item) => item.updatedAt)))
+  } else {
+    sourceHealth.push(health('scheduled-work', generatedAt, [], 'degraded', scheduled.error))
   }
 
-  for (const run of listRuns(workspaceRootPath)) {
+  const workflowRuns = listRuns(workspaceRootPath)
+  for (const run of workflowRuns) {
+    const scope = { type: 'hq' as const }
     const item: HqOperationalItem = {
       id: run.id,
       kind: 'workflow-run',
       title: run.workflowSnapshot.metadata.name ?? run.workflowSlug,
       status: run.state,
       updatedAt: run.updatedAt,
+      scope,
+      fingerprint: hqIntentFingerprint({ scope, title: run.workflowSnapshot.metadata.name ?? run.workflowSlug, intent: run.workflowSlug }),
       intent: run.workflowSlug,
       source: `workflow-run:${run.id}`,
     }
@@ -62,8 +80,11 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
     if (run.state === 'paused' || run.steps.some((step) => step.state === 'awaiting-human')) approvals.push(item)
     if (run.state === 'failed' || run.state === 'interrupted') failures.push(item)
   }
+  sourceHealth.push(health('workflow-runs', generatedAt, workflowRuns.map((item) => item.updatedAt)))
 
-  failures.push(...latestAutomationFailures(workspaceRootPath))
+  const automationFailures = latestAutomationFailures(workspaceRootPath)
+  failures.push(...automationFailures.items)
+  sourceHealth.push(health('automation-history', generatedAt, automationFailures.timestamps, automationFailures.status, automationFailures.message))
 
   return {
     generatedAt,
@@ -76,14 +97,25 @@ export function buildHqOperationalSnapshot(workspaceRootPath: string): HqOperati
       title: output.title,
       status: output.status,
       updatedAt: output.updatedAt,
+      scope: outputScope(output.context),
+      fingerprint: hqIntentFingerprint({
+        scope: outputScope(output.context),
+        worker: output.origin.agentSlug,
+        title: output.title,
+        intent: output.summary,
+      }),
       worker: output.origin.agentSlug,
       intent: output.summary,
       source: `output:${output.id}`,
     }))),
+    sourceHealth,
   }
 }
 
 function scheduledItem(order: ScheduledWorkOrder): HqOperationalItem {
+  const scope: HqOperationalScope = order.owner.scope === 'campaign'
+    ? { type: 'campaign', campaignId: order.owner.campaignId ?? order.owner.workspaceId }
+    : { type: 'hq' }
   const worker = order.execution.type === 'agent-task' ? order.execution.agentSlug : undefined
   const intent = order.execution.type === 'agent-task'
     ? order.execution.brief
@@ -96,22 +128,30 @@ function scheduledItem(order: ScheduledWorkOrder): HqOperationalItem {
     title: order.title,
     status: order.status,
     updatedAt: order.updatedAt,
+    scope,
+    fingerprint: hqIntentFingerprint({ scope, worker, title: order.title, intent }),
     worker,
     intent,
     source: `scheduled-work:${order.id}`,
   }
 }
 
-function latestAutomationFailures(workspaceRootPath: string): HqOperationalItem[] {
+function latestAutomationFailures(workspaceRootPath: string): {
+  items: HqOperationalItem[]
+  timestamps: string[]
+  status: HqOperationalSourceHealth['status']
+  message?: string
+} {
   const file = join(workspaceRootPath, AUTOMATIONS_HISTORY_FILE)
-  if (!existsSync(file)) return []
+  if (!existsSync(file)) return { items: [], timestamps: [], status: 'fresh' }
   let lines: string[]
   try {
     lines = readFileSync(file, 'utf8').trim().split('\n').filter(Boolean)
   } catch {
-    return []
+    return { items: [], timestamps: [], status: 'unavailable', message: 'Automation history could not be read.' }
   }
   const latest = new Map<string, { id: string; ts: number; ok: boolean; error?: string }>()
+  let malformedLines = 0
   for (const line of lines) {
     try {
       const value = JSON.parse(line) as Record<string, unknown>
@@ -123,18 +163,73 @@ function latestAutomationFailures(workspaceRootPath: string): HqOperationalItem[
       const prior = latest.get(id)
       if (!prior || ts > prior.ts) latest.set(id, { id, ts, ok: value.ok === true, error })
     } catch {
-      // Ignore malformed history lines; the automation store uses the same recovery behavior.
+      malformedLines += 1
     }
   }
-  return [...latest.values()].filter((entry) => !entry.ok).map((entry) => ({
+  const entries = [...latest.values()]
+  const names = readAutomationNames(workspaceRootPath)
+  const scope = { type: 'hq' as const }
+  return {
+    items: entries.filter((entry) => !entry.ok).map((entry) => ({
     id: entry.id,
     kind: 'automation-run',
-    title: `Automation ${entry.id}`,
+    title: names.get(entry.id) ?? `Automation ${entry.id}`,
     status: 'failed',
     updatedAt: new Date(entry.ts).toISOString(),
+    scope,
+    fingerprint: hqIntentFingerprint({ scope, title: names.get(entry.id) ?? `Automation ${entry.id}`, intent: entry.error }),
     intent: entry.error,
     source: `automation:${entry.id}`,
-  }))
+    })),
+    timestamps: entries.map((entry) => new Date(entry.ts).toISOString()),
+    status: malformedLines > 0 ? 'degraded' : 'fresh',
+    message: malformedLines > 0 ? `${malformedLines} malformed automation history ${malformedLines === 1 ? 'entry was' : 'entries were'} ignored.` : undefined,
+  }
+}
+
+function readAutomationNames(workspaceRootPath: string): Map<string, string> {
+  const names = new Map<string, string>()
+  const file = join(workspaceRootPath, AUTOMATIONS_CONFIG_FILE)
+  if (!existsSync(file)) return names
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as { automations?: Record<string, unknown> }
+    for (const matchers of Object.values(parsed.automations ?? {})) {
+      if (!Array.isArray(matchers)) continue
+      for (const matcher of matchers) {
+        if (!matcher || typeof matcher !== 'object') continue
+        const value = matcher as Record<string, unknown>
+        if (typeof value.id === 'string' && typeof value.name === 'string' && value.name.trim()) {
+          names.set(value.id, value.name.trim())
+        }
+      }
+    }
+  } catch {
+    return names
+  }
+  return names
+}
+
+function outputScope(context: { scope: 'hq' | 'campaign'; campaignId?: string } | undefined): HqOperationalScope {
+  return context?.scope === 'campaign' && context.campaignId
+    ? { type: 'campaign', campaignId: context.campaignId }
+    : { type: 'hq' }
+}
+
+function health(
+  source: HqOperationalSourceHealth['source'],
+  checkedAt: string,
+  timestamps: string[],
+  status: HqOperationalSourceHealth['status'] = 'fresh',
+  message?: string,
+): HqOperationalSourceHealth {
+  return {
+    source,
+    status,
+    checkedAt,
+    latestDataAt: [...timestamps].sort().at(-1),
+    itemCount: timestamps.length,
+    message,
+  }
 }
 
 function readScheduledWorkspaceId(body: string | undefined): string | undefined {

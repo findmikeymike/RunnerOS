@@ -1,6 +1,7 @@
 import { ARTIST_VAULT_CONTEXT_SLUG, type VaultManifest } from '../artist-vault/types.ts';
 import { isSharedIntelContextSlug, parseSharedIntelNote } from '../shared-intel/index.ts';
 import type { ContextDocMetadata, LoadedContextDoc } from '../workspace-context/types.ts';
+import { hqIntentFingerprint, hqIntentTokens } from './intent.ts';
 import {
   HQ_SOURCE_CONTEXT_SLUGS,
   HQ_STATE_CONTEXT_FENCE,
@@ -435,6 +436,15 @@ function buildAttention(input: HqInputState): HqStateAttentionItem[] {
   const latestIntel = [...input.sharedIntel].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
   const community = summarizeCommunity(input.community);
 
+  const degradedSource = input.operational?.sourceHealth.find((source) => source.status !== 'fresh');
+  if (degradedSource) {
+    items.push({
+      kind: 'source-health',
+      text: `${degradedSource.source} operational data is ${degradedSource.status}${degradedSource.message ? `: ${degradedSource.message}` : '.'}`,
+      source: `operational:${degradedSource.source}`,
+    });
+  }
+
   const approval = newestOperationalItem(input.operational?.approvals);
   if (approval) {
     items.push({
@@ -593,17 +603,19 @@ function findActiveDuplicate(
   input: HqInputState,
   candidate: { worker?: string; terms: string[] },
 ): HqOperationalItem | null {
-  const terms = candidate.terms.flatMap(intentTokens);
+  const terms = candidate.terms.flatMap(hqIntentTokens);
+  const fingerprint = hqIntentFingerprint({
+    scope: { type: 'hq' },
+    worker: candidate.worker,
+    title: candidate.terms[0] ?? '',
+    intent: candidate.terms.slice(1).join(' '),
+  });
   return (input.operational?.active ?? []).find((item) => {
-    const itemTokens = new Set(intentTokens(`${item.title} ${item.intent ?? ''}`));
+    if (item.fingerprint === fingerprint) return true;
+    const itemTokens = new Set(hqIntentTokens(`${item.title} ${item.intent ?? ''}`));
     const overlap = terms.filter((term) => itemTokens.has(term)).length;
     return candidate.worker && item.worker === candidate.worker ? overlap >= 1 : overlap >= 2;
   }) ?? null;
-}
-
-function intentTokens(value: string): string[] {
-  const ignored = new Set(['and', 'for', 'the', 'this', 'with', 'work', 'task', 'run']);
-  return value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3 && !ignored.has(token));
 }
 
 function buildHeadline(artistName: string, nextMove: HqStateNextMove, missing: string[]): string {

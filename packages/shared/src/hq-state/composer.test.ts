@@ -231,6 +231,25 @@ describe('HQ State of Play composer', () => {
     expect(state.nextMove.title).not.toContain('Close asset gaps');
     expect(state.nextMove.route?.target).toBe('manual');
   });
+
+  test('surfaces degraded operational sources instead of treating them as empty', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [profileDoc()],
+      operational: operational({
+        sourceHealth: [{
+          source: 'scheduled-work',
+          status: 'degraded',
+          checkedAt: now.toISOString(),
+          itemCount: 0,
+          message: 'Scheduled Work JSON is malformed.',
+        }],
+      }),
+    });
+
+    expect(state.attention[0]).toEqual(expect.objectContaining({ kind: 'source-health' }));
+    expect(state.attention[0]?.text).toContain('malformed');
+  });
 });
 
 function operational(overrides: Partial<import('./types.ts').HqOperationalSnapshot> = {}): import('./types.ts').HqOperationalSnapshot {
@@ -240,6 +259,7 @@ function operational(overrides: Partial<import('./types.ts').HqOperationalSnapsh
     approvals: [],
     failures: [],
     recentOutputs: [],
+    sourceHealth: [],
     ...overrides,
   };
 }
@@ -250,7 +270,17 @@ function operationalItem(
   kind: import('./types.ts').HqOperationalItemKind,
   status: string,
 ): import('./types.ts').HqOperationalItem {
-  return { id, title, kind, status, updatedAt: now.toISOString(), source: `${kind}:${id}` };
+  const scope = { type: 'hq' as const };
+  return {
+    id,
+    title,
+    kind,
+    status,
+    updatedAt: now.toISOString(),
+    scope,
+    fingerprint: `v1:hq:unassigned:${id}`,
+    source: `${kind}:${id}`,
+  };
 }
 
 function profileDoc(): LoadedContextDoc {
