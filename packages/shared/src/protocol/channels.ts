@@ -426,6 +426,8 @@ export const RPC_CHANNELS = {
     LIST_RECOMMENDATIONS: 'hqState:listRecommendations',
     /** Apply one validated lifecycle transition. */
     TRANSITION_RECOMMENDATION: 'hqState:transitionRecommendation',
+    /** Validate, create, link, and dispatch one recommendation route. */
+    LAUNCH_RECOMMENDATION: 'hqState:launchRecommendation',
   },
   scheduledWork: {
     /** Read the parsed scheduled-work document for a workspace. */

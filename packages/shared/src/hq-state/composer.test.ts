@@ -198,9 +198,9 @@ describe('HQ State of Play composer', () => {
       operational: operational({ approvals: [olderApproval, newerApproval], failures: [failure] }),
     });
 
-    expect(state.nextMove.title).toBe('Review Approve teaser');
+    expect(state.nextMove.title).toBe('Review Approve cover');
     expect(state.alternatives.map((move) => move.title)).toEqual([
-      'Review Approve cover',
+      'Review Approve teaser',
       'Recover Release workflow',
       'Add a Spotify snapshot',
     ]);

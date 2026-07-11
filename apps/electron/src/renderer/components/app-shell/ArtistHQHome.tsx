@@ -32,12 +32,10 @@ import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { FinalsWidget } from '@/components/outputs/FinalsWidget'
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
-import { openAgentSessionComposer } from '@/lib/run-agent'
 import {
   dedupeAgentsBySlug,
   proactiveHqModeStorageKey,
   resolveHqRouteReadiness,
-  selectHqRouteContextDocs,
 } from '@/lib/artist-hq-proactive'
 import { parseAutomationsConfig, type AutomationListItem } from '@/components/automations/types'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -271,9 +269,6 @@ export function ArtistHQHome({
 }: ArtistHQHomeProps) {
   const {
     activeAgents: shellActiveAgents = [],
-    onCreateSession,
-    onInputChange,
-    onSendMessage,
   } = useAppShellContext()
   const { activeAgents: workspaceActiveAgents, allAgents } = useAgents(workspaceId)
   const skills = useAtomValue(skillsAtom)
@@ -759,46 +754,19 @@ export function ArtistHQHome({
       toast.error(route.blockedReason ?? 'This recommendation needs review first.')
       return
     }
-    const agent = availableAgents.find((candidate) => candidate.slug === route.agentSlug)
-    if (!agent) {
+    if (!availableAgents.some((candidate) => candidate.slug === route.agentSlug)) {
       toast.error(`@${route.agentSlug} is not active in this workspace`)
+      return
+    }
+    if (!recommendationId) {
+      toast.error('This recommendation has no durable launch ID.')
       return
     }
     setHqRouteBusy(true)
     try {
-      const contextSelection = selectHqRouteContextDocs(route, docs)
-      if (contextSelection.missingSlugs.length > 0 || contextSelection.disabledSlugs.length > 0) {
-        throw new Error(formatRouteContextSelectionError(contextSelection.missingSlugs, contextSelection.disabledSlugs))
-      }
-      const contextDocs = contextSelection.contextDocs.length > 0
-        ? contextSelection.contextDocs
-        : await window.electronAPI.listWorkspaceContextDocsForAgent(workspaceId, agent.slug)
-      if (recommendationId) {
-        await window.electronAPI.transitionHqRecommendation(workspaceId, {
-          recommendationId,
-          to: 'accepted',
-          reason: `Accepted route to @${agent.slug}.`,
-        })
-      }
-      const session = await openAgentSessionComposer({
-        agent,
-        workspaceId,
-        onCreateSession,
-        onInputChange,
-        skills,
-        sources,
-        contextDocs,
-        agentCatalog: availableAgents,
-      })
-      await Promise.resolve(onSendMessage(session.id, route.prompt))
-      if (recommendationId) {
-        await window.electronAPI.transitionHqRecommendation(workspaceId, {
-          recommendationId,
-          to: 'launched',
-          executionRef: { kind: 'session', id: session.id, linkedAt: new Date().toISOString() },
-        })
-      }
-      toast.success(`Started @${agent.slug}`)
+      const result = await window.electronAPI.launchHqRecommendation(workspaceId, { recommendationId })
+      navigate(routes.view.allSessions(result.sessionId))
+      toast.success(`Started @${route.agentSlug}`)
     } catch (error) {
       toast.error('Failed to launch HQ route', {
         description: error instanceof Error ? error.message : String(error),
@@ -808,12 +776,6 @@ export function ArtistHQHome({
     }
   }, [
     availableAgents,
-    docs,
-    onCreateSession,
-    onInputChange,
-    onSendMessage,
-    skills,
-    sources,
     workspaceId,
   ])
 
@@ -1636,9 +1598,11 @@ function StateOfPlayPanel({
   const missing = state.missing.slice(0, 5)
   const generatedLabel = formatShortDate(state.generatedAt)
   const route = state.nextMove.route
-  const recommendationInactive = state.nextMove.recommendationStatus === 'dismissed' || state.nextMove.recommendationStatus === 'snoozed'
+  const recommendationStatus = state.nextMove.recommendationStatus ?? 'proposed'
+  const launchableStatus = ['proposed', 'viewed', 'accepted', 'failed'].includes(recommendationStatus)
+  const canDeferRecommendation = ['proposed', 'viewed', 'accepted', 'failed'].includes(recommendationStatus)
   const routeReadiness = resolveHqRouteReadiness(route, availableAgentSlugs, proactiveMode)
-  const canLaunchRoute = routeReadiness.canLaunch && !recommendationInactive
+  const canLaunchRoute = routeReadiness.canLaunch && launchableStatus
 
   return (
     <HQCard>
@@ -1754,9 +1718,19 @@ function StateOfPlayPanel({
                   routeBusy && 'cursor-wait opacity-70',
                 )}
               >
-                {routeBusy ? 'Starting...' : proactiveMode ? (routeReadiness.blockedReason ? 'Start Review' : 'Start Route') : 'Proactive Off'}
+                {routeBusy
+                  ? 'Starting...'
+                  : recommendationStatus === 'failed'
+                    ? 'Retry Route'
+                    : recommendationStatus === 'awaiting_approval'
+                      ? 'Awaiting Approval'
+                      : recommendationStatus === 'launched' || recommendationStatus === 'in_progress'
+                        ? 'Work in Progress'
+                        : recommendationStatus === 'completed'
+                          ? 'Completed'
+                          : proactiveMode ? (routeReadiness.blockedReason ? 'Start Review' : 'Start Route') : 'Proactive Off'}
               </button>
-              {state.nextMove.recommendationId && !recommendationInactive ? (
+              {state.nextMove.recommendationId && canDeferRecommendation ? (
                 <div className="mt-2 grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -2876,14 +2850,6 @@ function writeBooleanLocalStorage(key: string, value: boolean): void {
   } catch {
     // Non-critical preference; keep the UI usable if storage is unavailable.
   }
-}
-
-function formatRouteContextSelectionError(missingSlugs: string[], disabledSlugs: string[]): string {
-  const parts = [
-    missingSlugs.length > 0 ? `missing: ${missingSlugs.join(', ')}` : '',
-    disabledSlugs.length > 0 ? `disabled: ${disabledSlugs.join(', ')}` : '',
-  ].filter(Boolean)
-  return `Route context is stale (${parts.join('; ')}). Update HQ context and try again.`
 }
 
 function createSpotifySyncMatcher(): Record<string, unknown> {

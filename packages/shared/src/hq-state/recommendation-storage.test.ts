@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { HqRecommendationCandidate } from './lifecycle'
@@ -89,6 +89,30 @@ describe('HQ recommendation storage', () => {
     expect(revived.snoozedUntil).toBeUndefined()
     expect(listHqRecommendationEvents(workspace).map((event) => event.to)).toEqual(['proposed', 'snoozed', 'proposed'])
   })
+
+  test('restores a corrupt primary store from the last known good backup', () => {
+    const workspace = tempWorkspace()
+    upsertHqRecommendation(workspace, candidate())
+    upsertHqRecommendation(workspace, { ...candidate(), title: 'Updated recommendation' })
+    const dir = join(workspace, '.state-of-play')
+    writeFileSync(join(dir, 'recommendations.json'), '{broken')
+
+    const recovered = readHqRecommendationStore(workspace)
+
+    expect(recovered.candidates[0]?.id).toBe('sop_test')
+    expect(readdirSync(dir).some((name) => name.startsWith('recommendations.json.corrupt-'))).toBe(true)
+  })
+
+  test('fails closed and preserves corruption when no backup exists', () => {
+    const workspace = tempWorkspace()
+    const dir = join(workspace, '.state-of-play')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'recommendations.json'), '{broken')
+
+    expect(() => readHqRecommendationStore(workspace)).toThrow('is corrupt')
+    expect(readdirSync(dir).some((name) => name.startsWith('recommendations.json.corrupt-'))).toBe(true)
+    expect(readdirSync(dir)).toContain('recommendations.json')
+  })
 })
 
 function candidate(): HqRecommendationCandidate {
@@ -100,6 +124,7 @@ function candidate(): HqRecommendationCandidate {
     title: 'Run weekly review',
     reason: 'Core context is ready.',
     desiredOutcome: 'A concrete weekly decision.',
+    completionContract: { type: 'manual-review' },
     status: 'proposed',
     executionRefs: [],
     createdAt: '2026-07-10T00:00:00.000Z',

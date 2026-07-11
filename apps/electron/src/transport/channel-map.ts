@@ -425,6 +425,7 @@ export const CHANNEL_MAP = {
   onWorkspaceContextChanged: listener(RPC_CHANNELS.workspaceContext.CHANGED),
   listHqRecommendations: invoke(RPC_CHANNELS.hqState.LIST_RECOMMENDATIONS),
   transitionHqRecommendation: invoke(RPC_CHANNELS.hqState.TRANSITION_RECOMMENDATION),
+  launchHqRecommendation: invoke(RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION),
   getScheduledWork: invoke(RPC_CHANNELS.scheduledWork.GET),
   mutateScheduledWork: invoke(RPC_CHANNELS.scheduledWork.MUTATE),
   scheduleCampaignWork: invoke(RPC_CHANNELS.scheduledWork.SCHEDULE_CAMPAIGN),

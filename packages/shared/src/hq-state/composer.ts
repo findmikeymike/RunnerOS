@@ -229,7 +229,7 @@ export function parseHqStateOfPlay(body: string): HqStateOfPlay | null {
 
 function buildRankedMoves(input: HqInputState, missing: string[]): HqStateNextMove[] {
   const moves: HqStateNextMove[] = [];
-  for (const approval of sortedOperationalItems(input, input.operational?.approvals).slice(0, 3)) {
+  for (const approval of sortedOperationalItems(input, input.operational?.approvals, 'oldest').slice(0, 3)) {
     moves.push({
       title: `Review ${approval.title}`,
       why: `${operationalKindLabel(approval)} is waiting for approval before work can continue.`,
@@ -601,8 +601,14 @@ function newestOperationalItem(input: HqInputState, items: HqOperationalItem[] |
   return sortedOperationalItems(input, items)[0] ?? null;
 }
 
-function sortedOperationalItems(input: HqInputState, items: HqOperationalItem[] | undefined): HqOperationalItem[] {
-  return visibleOperationalItems(input, items).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+function sortedOperationalItems(
+  input: HqInputState,
+  items: HqOperationalItem[] | undefined,
+  order: 'newest' | 'oldest' = 'newest',
+): HqOperationalItem[] {
+  return visibleOperationalItems(input, items).sort((a, b) => (
+    order === 'oldest' ? a.updatedAt.localeCompare(b.updatedAt) : b.updatedAt.localeCompare(a.updatedAt)
+  ));
 }
 
 function dedupeMoves(moves: HqStateNextMove[]): HqStateNextMove[] {

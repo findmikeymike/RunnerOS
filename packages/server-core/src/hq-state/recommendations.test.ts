@@ -32,7 +32,8 @@ describe('HQ recommendation outcome reconciliation', () => {
       kind: 'document',
       status: 'draft',
       completedAt: '2026-07-10T00:05:00.000Z',
-      origin: { source: 'session', sessionId: 'session-1' },
+      origin: { source: 'session', sessionId: 'session-1', agentSlug: 'concierge' },
+      tags: ['hq-recommendation:sop_outcome'],
     })
 
     reconcileHqRecommendationOutcomes(workspace, new Date('2026-07-10T00:06:00.000Z'))
@@ -47,7 +48,8 @@ describe('HQ recommendation outcome reconciliation', () => {
     launch(pendingWorkspace, 'pending-session')
     createOutputBundle(pendingWorkspace, {
       workspaceId: 'ws-1', title: 'Review me', kind: 'document', status: 'draft',
-      origin: { source: 'session', sessionId: 'pending-session' }, approval: { state: 'pending' },
+      origin: { source: 'session', sessionId: 'pending-session', agentSlug: 'concierge' }, approval: { state: 'pending' },
+      tags: ['hq-recommendation:sop_outcome'],
     })
     reconcileHqRecommendationOutcomes(pendingWorkspace)
     expect(readHqRecommendationStore(pendingWorkspace).candidates[0]?.status).toBe('awaiting_approval')
@@ -56,10 +58,29 @@ describe('HQ recommendation outcome reconciliation', () => {
     launch(failedWorkspace, 'failed-session')
     createOutputBundle(failedWorkspace, {
       workspaceId: 'ws-1', title: 'Failed work', kind: 'document', status: 'failed',
-      origin: { source: 'session', sessionId: 'failed-session' },
+      origin: { source: 'session', sessionId: 'failed-session', agentSlug: 'concierge' },
+      tags: ['hq-recommendation:sop_outcome'],
     })
     reconcileHqRecommendationOutcomes(failedWorkspace)
     expect(readHqRecommendationStore(failedWorkspace).candidates[0]?.status).toBe('failed')
+  })
+
+  test('ignores unrelated Outputs from the same session', () => {
+    const workspace = tempWorkspace()
+    launch(workspace, 'session-1')
+    createOutputBundle(workspace, {
+      workspaceId: 'ws-1',
+      title: 'Incidental session board',
+      kind: 'other',
+      status: 'draft',
+      completedAt: '2026-07-10T00:05:00.000Z',
+      origin: { source: 'session', sessionId: 'session-1', agentSlug: 'concierge' },
+      tags: ['visual-board'],
+    })
+
+    reconcileHqRecommendationOutcomes(workspace)
+
+    expect(readHqRecommendationStore(workspace).candidates[0]?.status).toBe('launched')
   })
 })
 
@@ -81,6 +102,7 @@ function candidate(): HqRecommendationCandidate {
     title: 'Create campaign brief',
     reason: 'Campaign needs a brief.',
     desiredOutcome: 'A completed campaign brief.',
+    completionContract: { type: 'output', requiredTag: 'hq-recommendation:sop_outcome', expectedAgentSlug: 'concierge' },
     status: 'proposed',
     executionRefs: [],
     createdAt: '2026-07-10T00:00:00.000Z',

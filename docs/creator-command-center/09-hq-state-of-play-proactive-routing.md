@@ -58,7 +58,8 @@ Workspace context docs
   -> generated context doc: hq-state-of-play
   -> Artist HQ Home parses generated state
   -> proactive route helper validates readiness
-  -> Start Route opens/sends target agent session
+  -> backend revalidates the durable recommendation
+  -> backend creates, links, and dispatches the target agent session
 ```
 
 Refresh triggers:
@@ -120,7 +121,10 @@ The proactive route is deliberately conservative.
 - Missing target agent blocks launch.
 - Manual/review-needed recommendations block launch.
 - The proactive toggle is scoped per workspace in local storage.
-- `Start Route` sends the generated prompt only after opening the validated target agent session.
+- `Start Route` delegates launch to the backend; the renderer cannot supply or forge a session ID.
+- The backend records the session link before dispatch and moves the recommendation to `failed` if dispatch fails.
+- Agent routes complete only from a linked Output carrying the recommendation's exact completion tag and expected agent slug.
+- Corrupt lifecycle storage restores from the last known good backup or fails closed while preserving diagnostic evidence.
 - External actions still need explicit user approval through the normal agent/tool permission model.
 
 ## Key Files
@@ -145,6 +149,12 @@ UI and launch readiness:
 - `apps/electron/src/renderer/components/app-shell/ArtistHQHome.tsx`
 - `apps/electron/src/renderer/lib/artist-hq-proactive.ts`
 
+Durable lifecycle and outcome reconciliation:
+
+- `packages/shared/src/hq-state/recommendation-storage.ts`
+- `packages/server-core/src/handlers/rpc/hq-state.ts`
+- `packages/server-core/src/hq-state/recommendations.ts`
+
 Tests:
 
 - `packages/shared/src/hq-state/composer.test.ts`
@@ -153,6 +163,8 @@ Tests:
 - `apps/electron/src/renderer/lib/artist-hq-proactive.test.ts`
 
 ## Verification
+
+Lifecycle hardening was last verified on 2026-07-10 with focused storage, composer, refresh, reconciliation, RPC launch, package typecheck, and Electron typecheck coverage. The older V1 verification record remains below for historical context.
 
 Last verified on 2026-07-04 with:
 
@@ -186,5 +198,7 @@ Not yet implemented:
 - route history/audit trail in the UI
 - explicit "regenerate now" button for HQ State of Play
 - richer scoring/evaluation of competing next moves
+- completion evaluation for non-Output entities such as workflows and scheduled work
+- Team Mode locking for concurrent launches across devices
 
 The next agent should not build automatic execution until the current user-controlled route path is visually smoked in the app.

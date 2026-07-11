@@ -58,6 +58,8 @@ function applyRecommendationState(
   move.recommendationId = recommendation.id
   move.recommendationStatus = recommendation.status
   move.snoozedUntil = recommendation.snoozedUntil
+  const outputRef = [...recommendation.executionRefs].reverse().find((ref) => ref.kind === 'output')
+  if (outputRef) move.entityRef = { kind: 'output', id: outputRef.id, source: `output:${outputRef.id}`, scope: recommendation.scope }
 }
 
 export function refreshHqStateContextDocBestEffort(workspaceRootPath: string): LoadedContextDoc | null {

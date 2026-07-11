@@ -549,11 +549,18 @@ Implemented:
 - stable lifecycle persistence for primary and alternative recommendations
 - compact `Also Consider` alternatives in the State of Play card
 - Output-backed reconciliation from launched/in-progress to awaiting approval, completed, or failed
+- backend-owned agent launch with route/status revalidation and server-created session linkage
+- dispatch rollback that marks the recommendation failed and removes the orphan session
+- persisted Output completion contracts with exact recommendation tag and expected-agent matching
+- linked Output projection so completed recommendations open their concrete work product
+- lifecycle-aware card actions for active, approval-waiting, completed, and retryable work
+- last-known-good storage backup with fail-closed corruption handling and diagnostic preservation
+- age-aware approval ranking so older unresolved decisions are not starved by newer ones
 
 Still required before declaring Phase 2 complete:
 
-- persisted completion criteria and outcome evaluation
 - automatic work-order/workflow status reconciliation beyond session Outputs
+- persisted completion criteria and outcome evaluation for non-Output routes
 - lifecycle history UI and explicit usefulness feedback
 - Team Mode transport/locking beyond workspace-local atomic files
 

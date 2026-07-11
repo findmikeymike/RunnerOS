@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type {
@@ -11,11 +11,12 @@ import type { HqRecommendationStatus } from './types.ts'
 export const HQ_RECOMMENDATIONS_DIR = '.state-of-play'
 export const HQ_RECOMMENDATIONS_FILE = 'recommendations.json'
 export const HQ_RECOMMENDATION_EVENTS_FILE = 'events.jsonl'
+export const HQ_RECOMMENDATIONS_BACKUP_FILE = 'recommendations.backup.json'
 
 const ALLOWED_TRANSITIONS: Record<HqRecommendationStatus, ReadonlySet<HqRecommendationStatus>> = {
   proposed: new Set(['viewed', 'accepted', 'dismissed', 'snoozed', 'expired', 'superseded']),
   viewed: new Set(['accepted', 'dismissed', 'snoozed', 'expired', 'superseded']),
-  accepted: new Set(['launched', 'dismissed', 'snoozed', 'expired', 'superseded']),
+  accepted: new Set(['launched', 'failed', 'dismissed', 'snoozed', 'expired', 'superseded']),
   launched: new Set(['in_progress', 'awaiting_approval', 'completed', 'failed']),
   in_progress: new Set(['awaiting_approval', 'completed', 'failed']),
   awaiting_approval: new Set(['in_progress', 'completed', 'failed', 'dismissed']),
@@ -30,13 +31,18 @@ const ALLOWED_TRANSITIONS: Record<HqRecommendationStatus, ReadonlySet<HqRecommen
 export function readHqRecommendationStore(workspaceRootPath: string): HqRecommendationStore {
   const file = storeFile(workspaceRootPath)
   if (!existsSync(file)) return emptyStore()
-  try {
-    const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<HqRecommendationStore>
-    if (parsed.version !== 1 || !Array.isArray(parsed.candidates)) return emptyStore()
-    return { version: 1, candidates: parsed.candidates as HqRecommendationCandidate[], updatedAt: String(parsed.updatedAt ?? '') }
-  } catch {
-    return emptyStore()
+  const primary = parseStoreFile(file)
+  if (primary) return primary
+  const backupFile = backupStoreFile(workspaceRootPath)
+  const backup = existsSync(backupFile) ? parseStoreFile(backupFile) : null
+  const corruptFile = `${file}.corrupt-${Date.now()}`
+  if (backup) {
+    renameSync(file, corruptFile)
+    copyFileSync(backupFile, file)
+    return backup
   }
+  copyFileSync(file, corruptFile)
+  throw new Error(`State of Play recommendation store is corrupt and was preserved at ${corruptFile}.`)
 }
 
 export function writeHqRecommendationStore(workspaceRootPath: string, store: HqRecommendationStore): void {
@@ -46,6 +52,7 @@ export function writeHqRecommendationStore(workspaceRootPath: string, store: HqR
   const tmp = `${file}.${process.pid}.tmp`
   try {
     writeFileSync(tmp, JSON.stringify(store, null, 2), 'utf8')
+    if (existsSync(file) && parseStoreFile(file)) copyFileSync(file, backupStoreFile(workspaceRootPath))
     renameSync(tmp, file)
   } catch (error) {
     try { rmSync(tmp, { force: true }) } catch { /* best effort */ }
@@ -165,5 +172,17 @@ function appendHqRecommendationEvent(workspaceRootPath: string, event: HqRecomme
 
 function recommendationDir(root: string): string { return join(root, HQ_RECOMMENDATIONS_DIR) }
 function storeFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATIONS_FILE) }
+function backupStoreFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATIONS_BACKUP_FILE) }
 function eventsFile(root: string): string { return join(recommendationDir(root), HQ_RECOMMENDATION_EVENTS_FILE) }
 function emptyStore(): HqRecommendationStore { return { version: 1, candidates: [], updatedAt: '' } }
+
+function parseStoreFile(file: string): HqRecommendationStore | null {
+  try {
+    const parsed = JSON.parse(readFileSync(file, 'utf8')) as Partial<HqRecommendationStore>
+    if (parsed.version !== 1 || !Array.isArray(parsed.candidates)) return null
+    if (!parsed.candidates.every((candidate) => candidate && typeof candidate.id === 'string' && typeof candidate.status === 'string')) return null
+    return { version: 1, candidates: parsed.candidates as HqRecommendationCandidate[], updatedAt: String(parsed.updatedAt ?? '') }
+  } catch {
+    return null
+  }
+}

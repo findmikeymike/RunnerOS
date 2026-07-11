@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { readHqRecommendationStore } from '@craft-agent/shared/hq-state/recommendation-storage'
+import { readHqRecommendationStore, upsertHqRecommendation } from '@craft-agent/shared/hq-state/recommendation-storage'
+import type { HqRecommendationCandidate } from '@craft-agent/shared/hq-state'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 
 const rootPath = mkdtempSync(join(tmpdir(), 'runneros-hq-state-rpc-'))
@@ -15,6 +16,10 @@ mock.module('@craft-agent/shared/config', () => ({
 type Handler = (...args: unknown[]) => Promise<unknown>
 const handlers = new Map<string, Handler>()
 const pushes: unknown[][] = []
+const sentPrompts: string[] = []
+const deletedSessions: string[] = []
+let sendShouldFail = false
+let sessionCounter = 0
 
 beforeAll(async () => {
   const { registerHqStateHandlers } = await import('./hq-state')
@@ -22,6 +27,17 @@ beforeAll(async () => {
     handle: (channel: string, handler: Handler) => handlers.set(channel, handler),
   } as never, {
     wsServer: { push: (...args: unknown[]) => pushes.push(args) },
+    sessionManager: {
+      resolveAgentSessionOptions: async () => ({ permissionMode: 'safe' }),
+      createSession: async () => ({ id: `session-${++sessionCounter}` }),
+      sendMessage: async (_sessionId: string, prompt: string, ...args: unknown[]) => {
+        if (sendShouldFail) throw new Error('dispatch failed')
+        sentPrompts.push(prompt)
+        const onAck = args.at(-1)
+        if (typeof onAck === 'function') onAck('message-1')
+      },
+      deleteSession: async (sessionId: string) => { deletedSessions.push(sessionId) },
+    },
   } as never)
   const { refreshHqStateContextDoc } = await import('../../hq-state/refresh')
   refreshHqStateContextDoc(rootPath)
@@ -61,10 +77,67 @@ describe('HQ state RPC handlers', () => {
       to: 'completed',
     })).rejects.toThrow('not user-accessible')
   })
+
+  test('creates, links, and dispatches a recommendation entirely on the server', async () => {
+    upsertHqRecommendation(rootPath, launchCandidate('sop_launch'))
+
+    const result = await invoke(RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION, workspace.id, {
+      recommendationId: 'sop_launch',
+    }) as { sessionId: string; recommendation: HqRecommendationCandidate }
+
+    expect(result.sessionId).toStartWith('session-')
+    expect(result.recommendation.status).toBe('launched')
+    expect(result.recommendation.executionRefs).toContainEqual(expect.objectContaining({ kind: 'session', id: result.sessionId }))
+    expect(sentPrompts.at(-1)).toContain('hq-recommendation:sop_launch')
+  })
+
+  test('marks failed dispatch and removes the orphan session', async () => {
+    upsertHqRecommendation(rootPath, launchCandidate('sop_dispatch_failure'))
+    sendShouldFail = true
+    try {
+      await expect(invoke(RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION, workspace.id, {
+        recommendationId: 'sop_dispatch_failure',
+      })).rejects.toThrow('dispatch failed')
+    } finally {
+      sendShouldFail = false
+    }
+
+    const failed = readHqRecommendationStore(rootPath).candidates.find((item) => item.id === 'sop_dispatch_failure')
+    expect(failed?.status).toBe('failed')
+    const linkedSessionId = failed?.executionRefs.find((ref) => ref.kind === 'session')?.id
+    expect(linkedSessionId).toBeDefined()
+    expect(deletedSessions).toContain(linkedSessionId!)
+  })
 })
 
 function invoke(channel: string, ...args: unknown[]): Promise<unknown> {
   const handler = handlers.get(channel)
   if (!handler) throw new Error(`Missing handler: ${channel}`)
   return handler({}, ...args)
+}
+
+function launchCandidate(id: string): HqRecommendationCandidate {
+  return {
+    version: 1,
+    id,
+    fingerprint: `v1:hq:concierge:${id}`,
+    scope: { type: 'hq' },
+    title: 'Create campaign brief',
+    reason: 'Campaign needs a brief.',
+    desiredOutcome: 'A completed brief.',
+    completionContract: { type: 'output', requiredTag: `hq-recommendation:${id}`, expectedAgentSlug: 'concierge' },
+    status: 'proposed',
+    route: {
+      target: 'agent',
+      action: 'draft',
+      prompt: 'Create the campaign brief.',
+      confidence: 'high',
+      agentSlug: 'concierge',
+      contextDocSlugs: [],
+    },
+    executionRefs: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    lastProposedAt: new Date().toISOString(),
+  }
 }

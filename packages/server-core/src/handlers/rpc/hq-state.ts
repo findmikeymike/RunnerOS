@@ -1,6 +1,8 @@
 import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import {
   type HqRecommendationCandidate,
+  type HqRecommendationLaunchInput,
+  type HqRecommendationLaunchResult,
   type HqRecommendationStore,
   type HqRecommendationTransitionInput,
 } from '@craft-agent/shared/hq-state'
@@ -42,6 +44,99 @@ export function registerHqStateHandlers(server: RpcServer, deps: HandlerDeps): v
       return candidate
     })
   })
+
+  server.handle(RPC_CHANNELS.hqState.LAUNCH_RECOMMENDATION, async (
+    _ctx,
+    workspaceId: string,
+    input: HqRecommendationLaunchInput,
+  ): Promise<HqRecommendationLaunchResult> => {
+    const rootPath = resolveRootPath(workspaceId)
+    if (!input?.recommendationId?.startsWith('sop_')) throw new Error('A valid recommendation ID is required.')
+    return withWorkspaceContextLock(rootPath, async () => {
+      let candidate = readHqRecommendationStore(rootPath).candidates.find((item) => item.id === input.recommendationId)
+      if (!candidate) throw new Error(`Recommendation not found: ${input.recommendationId}`)
+      const route = candidate.route
+      if (route?.target !== 'agent' || !route.agentSlug || route.blockedReason) {
+        throw new Error(route?.blockedReason ?? 'Recommendation does not have a launchable agent route.')
+      }
+      if (!['proposed', 'viewed', 'accepted', 'failed'].includes(candidate.status)) {
+        throw new Error(`Recommendation cannot launch from status ${candidate.status}.`)
+      }
+      if (candidate.status !== 'accepted') {
+        candidate = transitionHqRecommendation(rootPath, candidate.id, 'accepted', {
+          actor: { type: 'user' },
+          reason: `Accepted route to @${route.agentSlug}.`,
+        })
+      }
+
+      const recommendationId = candidate.id
+      let sessionId: string | undefined
+      try {
+        const options = await deps.sessionManager.resolveAgentSessionOptions(workspaceId, route.agentSlug)
+        const session = await deps.sessionManager.createSession(workspaceId, options)
+        sessionId = session.id
+        candidate = transitionHqRecommendation(rootPath, candidate.id, 'launched', {
+          actor: { type: 'system' },
+          reason: `Created and linked @${route.agentSlug} session.`,
+          executionRef: { kind: 'session', id: session.id, linkedAt: new Date().toISOString() },
+        })
+        await sendPersistedMessage(deps, session.id, launchPrompt(candidate, route.prompt))
+      } catch (error) {
+        const current = readHqRecommendationStore(rootPath).candidates.find((item) => item.id === recommendationId)
+        if (current && (current.status === 'accepted' || current.status === 'launched')) {
+          transitionHqRecommendation(rootPath, current.id, 'failed', {
+            actor: { type: 'system' },
+            reason: error instanceof Error ? error.message : String(error),
+          })
+        }
+        if (sessionId) await deps.sessionManager.deleteSession(sessionId).catch(() => undefined)
+        refreshAndBroadcast(deps, workspaceId, rootPath)
+        throw error
+      }
+
+      refreshAndBroadcast(deps, workspaceId, rootPath)
+      return { recommendation: candidate, sessionId: sessionId! }
+    })
+  })
+}
+
+function launchPrompt(candidate: HqRecommendationCandidate, prompt: string): string {
+  if (candidate.completionContract.type !== 'output') return prompt
+  return [
+    prompt,
+    '',
+    'Completion contract:',
+    '- Produce the requested deliverable as a RunnerOS Output.',
+    `- Add the exact Output tag: ${candidate.completionContract.requiredTag}`,
+    '- Do not claim completion until that tagged Output exists.',
+  ].join('\n')
+}
+
+function sendPersistedMessage(deps: HandlerDeps, sessionId: string, prompt: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let acknowledged = false
+    const onAck = () => {
+      if (acknowledged) return
+      acknowledged = true
+      resolve()
+    }
+    deps.sessionManager.sendMessage(sessionId, prompt, undefined, undefined, undefined, undefined, undefined, onAck)
+      .then(() => {
+        if (!acknowledged) reject(new Error('Recommendation message was not persisted.'))
+      })
+      .catch(reject)
+  })
+}
+
+function refreshAndBroadcast(deps: HandlerDeps, workspaceId: string, rootPath: string): void {
+  refreshHqStateContextDocBestEffort(rootPath)
+  const wsServerLike = deps as unknown as { wsServer?: { push?: (...args: unknown[]) => void } }
+  wsServerLike.wsServer?.push?.(
+    RPC_CHANNELS.workspaceContext.CHANGED,
+    { to: 'all' },
+    workspaceId,
+    loadAllContextDocs(rootPath),
+  )
 }
 
 function validateTransitionInput(input: HqRecommendationTransitionInput): void {

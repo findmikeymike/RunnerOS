@@ -14,6 +14,7 @@ export interface HqRecommendationCandidate {
   title: string
   reason: string
   desiredOutcome: string
+  completionContract: HqRecommendationCompletionContract
   status: HqRecommendationStatus
   route?: HqStateRouteHint
   entityRef?: HqStateEntityRef
@@ -24,6 +25,11 @@ export interface HqRecommendationCandidate {
   snoozedUntil?: string
   statusReason?: string
 }
+
+export type HqRecommendationCompletionContract =
+  | { type: 'output'; requiredTag: string; expectedAgentSlug?: string }
+  | { type: 'entity-resolution'; entity: HqStateEntityRef }
+  | { type: 'manual-review' }
 
 export interface HqRecommendationEvent {
   version: 1
@@ -59,4 +65,13 @@ export interface HqRecommendationTransitionInput {
   reason?: string
   snoozedUntil?: string
   executionRef?: HqRecommendationExecutionRef
+}
+
+export interface HqRecommendationLaunchInput {
+  recommendationId: string
+}
+
+export interface HqRecommendationLaunchResult {
+  recommendation: HqRecommendationCandidate
+  sessionId: string
 }

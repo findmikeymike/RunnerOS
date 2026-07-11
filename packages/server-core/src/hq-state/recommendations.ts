@@ -26,10 +26,14 @@ export function reconcileHqRecommendationOutcomes(workspaceRootPath: string, now
   const candidates = readHqRecommendationStore(workspaceRootPath).candidates
   for (const candidate of candidates) {
     if (!['launched', 'in_progress', 'awaiting_approval'].includes(candidate.status)) continue
+    const completionContract = candidate.completionContract
+    if (completionContract?.type !== 'output') continue
     const sessionIds = new Set(candidate.executionRefs.filter((ref) => ref.kind === 'session').map((ref) => ref.id))
     if (sessionIds.size === 0) continue
     const output = outputs
       .filter((item) => item.origin.sessionId && sessionIds.has(item.origin.sessionId))
+      .filter((item) => item.tags?.includes(completionContract.requiredTag))
+      .filter((item) => !completionContract.expectedAgentSlug || item.origin.agentSlug === completionContract.expectedAgentSlug)
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]
     if (!output) continue
     const to = output.status === 'failed' || output.approval?.state === 'changes_requested'
@@ -69,6 +73,7 @@ function persistMove(
     title: move.title,
     reason: move.why,
     desiredOutcome: desiredOutcome(move),
+    completionContract: completionContract(id, move),
     status: 'proposed',
     route: move.route,
     entityRef: move.entityRef,
@@ -77,6 +82,14 @@ function persistMove(
     updatedAt: now,
     lastProposedAt: now,
   })
+}
+
+function completionContract(id: string, move: HqStateNextMove): HqRecommendationCandidate['completionContract'] {
+  if (move.entityRef) return { type: 'entity-resolution', entity: move.entityRef }
+  if (move.route?.target === 'agent' && move.route.agentSlug) {
+    return { type: 'output', requiredTag: `hq-recommendation:${id}`, expectedAgentSlug: move.route.agentSlug }
+  }
+  return { type: 'manual-review' }
 }
 
 function recommendationId(fingerprint: string, source: string | undefined): string {
