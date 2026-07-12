@@ -34,12 +34,12 @@ This is the routing table for humans and agents. Read only what the current job 
 
 ## Supporting Vision Library
 
-The root-level documents are deep reference material:
+These project-local documents are deep reference material:
 
-- `../01-overview-vision.md` — complete product vision.
-- `../02-agent-example-order-flow.md` — full Order Flow Agent example.
-- `../03-agent-core.md` — universal agent anatomy and checklist.
-- `../Integrations.md` — open-source harvest and integration map.
+- `vision/PRODUCT-VISION.md` — complete product vision and system thesis.
+- `agents/AGENT-CORE.md` — universal agent anatomy and build checklist.
+- `agents/ORDER-FLOW-AGENT.md` — full specialist-agent example.
+- `integrations/OPEN-SOURCE-HARVEST.md` — audited open-source harvest and integration map.
 
 They inform the system but do not replace the active spec or current status.
 
@@ -59,6 +59,9 @@ Code is evidence of current behavior, not automatic proof of intended behavior. 
 ## Where New Documents Go
 
 - Product requirement or user outcome: `product/`
+- Long-form product/system vision: `vision/`
+- Universal or specialist agent blueprint: `agents/`
+- Donor project audit or integration harvest plan: `integrations/`
 - Cross-system boundary or durable choice: `architecture/`
 - Build procedure, spec, test, or command guide: `development/`
 - Runbook, incident, release, security operation: `operations/`
