@@ -58,7 +58,7 @@ A lower rung does not prove a higher rung.
 - Focused control-plane tests: 232 passed, 0 failed.
 - Full typecheck: baseline failure in `packages/shared/src/campaign-calendar/index.ts:632` (`findLast` target library and implicit `any`).
 - Isolation audit: all 23 protected pre-existing worktrees remained byte-identical in branch/status/HEAD output.
-- Runtime/Electron smoke: not yet run; no Trade God runtime exists.
+- Runtime/Electron smoke: not yet run; a development runtime now exists but has not been exercised through the real Electron user path.
 
 ## Phase 0 Slice 1 — Contracts and Deterministic Fixture
 
@@ -124,6 +124,16 @@ A lower rung does not prove a higher rung.
 - Proven: development-only runtime registration, explicit root/runtime selection, exactly two preload methods, and quit-time disposal wiring compile into Electron bundles.
 - Safety: packaged initialization is disabled until a packaged sidecar asset exists.
 - Not proven: renderer behavior, packaged sidecar, automatic restart, or real Electron smoke.
+
+## Phase 0 Slice 8 — Diagnostic Workbench
+
+- Method: route and renderer shell were added through focused red-green tests.
+- Complete fast Trade God suite: 53 passed, 0 failed, 129 expectations across 11 files.
+- Route parser suite: 18 passed, 0 failed, 56 expectations.
+- Workbench static-render suite: 1 passed, 0 failed, 4 expectations.
+- `apps/electron` `build:renderer`: passed; warnings were limited to existing dependency/chunk notices.
+- Proven: typed `trade-god` route parsing, command navigation entry, diagnostic shell rendering, and production renderer compilation. The implemented page requests health, runs the known fixture, and renders summary, provenance, quality, trace, and failure state through the two preload methods.
+- Not proven: actual Electron launch, live click-path behavior, visual correctness, forced runtime failure behavior, packaged sidecar resolution, or restart policy.
 
 ## Trading-Specific Integrity Tests
 

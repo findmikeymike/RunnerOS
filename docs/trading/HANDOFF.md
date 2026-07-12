@@ -9,42 +9,73 @@ source_of_truth: false
 
 ## Mission
 
-Build a local-first desktop trading intelligence system where deterministic analytics produce traceable evidence, specialist agents interpret that evidence, a head agent coordinates disagreement and context, and all trading actions pass through explicit policy and execution boundaries.
+Build a local-first desktop trading intelligence system where deterministic analytics produce traceable evidence, specialist agents interpret it, a head agent coordinates context and disagreement, and all trading actions pass through explicit policy and execution boundaries.
 
-## Start Here
+## Exact Working Location
 
-1. `docs/CURRENT.md`
-2. `docs/architecture/OVERVIEW.md`
-3. Active spec named by `CURRENT.md`
-4. `docs/development/VERIFICATION.md`
+- Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
+- Branch: `codex/trade-god-foundation`
+- Frozen base: `origin/main` `e7e96be3`
+- Implementation head before this docs refresh: `d215ed7a`
+- Other RunnerOS worktrees: intentionally untouched
+
+## Read First
+
+1. `docs/trading/CURRENT.md`
+2. `docs/trading/specs/foundation/phase-0-contract-kernel.md`
+3. `docs/trading/development/VERIFICATION.md`
+4. `docs/trading/architecture/OVERVIEW.md`
 
 ## Current Truth
 
-The project has rich vision, agent, and integration documents. It does not yet have a Trade God runtime. RunnerOS is the proposed host, but the correct clean integration base must be confirmed before implementation.
+The Phase 0 development walking skeleton is implemented. A project-owned ES fixture travels through a standalone Order Flow sidecar, validated contracts, a typed client, Electron supervision, narrow IPC/preload methods, and a visible Trade God workbench.
+
+This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real Electron user path and packaged sidecar have not been proven.
 
 ## Immediate Assignment
 
-Create and execute the Phase 0 contract-kernel spec. The deliverable is one fixture-driven Order Flow sidecar response validated through typed contracts and displayed in Electron with health and failure state.
+Run the real Electron app from this worktree, open `trade-god`, verify health and the known artifact, force one visible failure state, and record the evidence. Then implement packaged-sidecar bundling/resolution.
+
+## Known Expected Artifact
+
+- Total volume: `28`
+- Buy volume: `17`
+- Sell volume: `11`
+- Delta: `6`
+- POC: `5592.25`
+
+The UI also exposes quality, trace ID, fixture checksum, content hash, and producer identity.
+
+## Verification Truth
+
+- Fast Trade God suite: 53 passed, 0 failed, 129 expectations across 11 files.
+- Electron main, preload, and renderer production builds passed.
+- Real Electron smoke: not run.
+- Packaged sidecar: not implemented.
+- Full monorepo typecheck: blocked by a pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
+- Standalone package typechecks: unverified after prior tool-layer hangs.
 
 ## Non-Negotiable Boundaries
 
-- Agents use the typed trading client; they do not directly call providers, brokers, or sidecars.
-- Contracts have no Electron, provider, broker, or LLM dependencies.
-- Domain calculations are deterministic and testable without an LLM.
-- UI does not own market truth or execution state.
-- Python analytics live in independent sidecars, not inside agent folders.
-- Every artifact records provenance, timestamps, schema version, producer version, and quality state.
-- Live execution remains impossible until separate risk, approval, idempotency, reconciliation, and kill-switch gates pass.
+- Agents and UI use the typed trading client, never providers, brokers, or sidecars directly.
+- Contracts remain independent of Electron, providers, brokers, and LLMs.
+- Deterministic calculations remain testable without an LLM.
+- UI never owns market truth or execution state.
+- Analytics engines remain independent sidecars, not code hidden inside agent folders.
+- Every artifact carries provenance, versions, timestamps, trace identity, and quality state.
+- Live execution stays impossible until risk, approval, idempotency, reconciliation, and kill-switch gates exist.
 
-## Definition of a Good Handoff
+## Next Smallest Actions
 
-Replace this section after implementation with:
+1. Real Electron success-path smoke.
+2. Real Electron failure-state smoke.
+3. Packaged-sidecar asset/copy/resolution path.
+4. Restart-policy and partial-frame tests.
+5. Active-computation cancellation.
 
-- exact worktree and branch;
-- dirty/ahead/behind state;
-- files changed;
-- behavior now working;
-- commands run and results;
-- runtime proof still missing;
-- next smallest action;
-- blockers requiring human choice.
+## Do Not Do Yet
+
+- Do not merge unrelated upstream changes.
+- Do not build dozens of agents or the final UI.
+- Do not add brokers or live execution.
+- Do not describe tests or builds as runtime verification.

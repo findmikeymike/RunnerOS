@@ -108,17 +108,17 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 
 ## Acceptance Criteria
 
-- [ ] A clean worktree can install/build using documented commands.
-- [ ] Health handshake detects compatible and incompatible versions.
-- [ ] Valid fixture returns a schema-valid artifact with full provenance.
-- [ ] Repeated runs produce canonical-equivalent output.
-- [ ] Altered checksum is rejected before analysis.
-- [ ] Invalid response payload never reaches UI as valid data.
-- [ ] Timeout, cancellation, and crash are distinguishable.
+- [x] A clean worktree can install/build using documented commands.
+- [x] Health handshake detects compatible and incompatible versions.
+- [x] Valid fixture returns a schema-valid artifact with full provenance.
+- [x] Repeated runs produce canonical-equivalent output.
+- [x] Altered checksum is rejected before analysis.
+- [x] Invalid response payload never reaches UI as valid data.
+- [x] Timeout, cancellation, and crash are distinguishable.
 - [ ] Sidecar restarts or remains stopped according to documented policy.
 - [ ] Electron real IPC path shows health, successful artifact, and error state.
 - [ ] Trace ID joins request, logs, artifact, and receipt.
-- [ ] No live/provider/broker capability is reachable.
+- [x] No live/provider/broker capability is reachable.
 
 ## Failure Cases to Force
 
@@ -146,10 +146,8 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 
 ## Open Questions
 
-- Correct RunnerOS integration base and dedicated worktree path.
-- Whether the first fixture can be committed or must be generated/downloaded locally.
-- Exact compatibility policy: strict major version plus negotiated minor capabilities is the current recommendation.
 - Exact sidecar restart policy during development versus packaged desktop runtime.
+- Packaged-sidecar asset location and build/copy convention.
 
 ## Evidence Log
 
@@ -166,4 +164,6 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - Complete fast Phase 0 suite after runtime resolution: 33 passed, 0 failed, 66 expectations.
 - 2026-07-11: real Electron development main/preload wiring added; main and preload bundles passed.
 - Complete fast Phase 0 suite after preload wiring: 34 passed, 0 failed, 69 expectations.
-- Still open: real bootstrap/preload/view wiring, packaged path resolution, restart policy, active-computation cancellation, partial-frame tests, and real Electron smoke.
+- 2026-07-11: typed Trade God route, command navigation, and diagnostic renderer workbench added; renderer production build passed.
+- Complete fast Phase 0 suite after the workbench: 53 passed, 0 failed, 129 expectations across 11 files.
+- Still open: real Electron smoke, packaged path resolution, restart policy, active-computation cancellation, partial-frame tests, and trace-to-persisted-receipt proof.
