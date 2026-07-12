@@ -22,6 +22,7 @@ function manager(
   limits: { maxLineBytes?: number; maxStderrBytes?: number } = {},
   env: Record<string, string> = {},
   receiptWriter?: { write(receipt: any): Promise<void> },
+  log?: (entry: any) => void,
 ) {
   return new OrderFlowSidecarManager({
     command: [process.execPath, script],
@@ -32,6 +33,7 @@ function manager(
     env: { TRADE_GOD_SIDECAR_INSTANCE_ID: 'electron-test-sidecar', ...env },
     now: () => new Date().toISOString(),
     receiptWriter,
+    log,
   })
 }
 
@@ -123,18 +125,24 @@ describe('OrderFlowSidecarManager', () => {
   test('persists a receipt joining the request trace and artifact', async () => {
     const fixture = await loadEsDemoFixture()
     const receipts: any[] = []
-    const sidecar = manager(orderFlowCli, 1_000, {}, {}, { write: async (receipt) => { receipts.push(receipt) } })
+    const logs: any[] = []
+    const sidecar = manager(orderFlowCli, 1_000, {}, {}, { write: async (receipt) => { receipts.push(receipt) } }, (entry) => logs.push(entry))
     try {
       const artifact = await sidecar.analyzeFixture({
         fixture: { id: fixture.manifest.fixture_id, sha256: fixture.manifest.events_sha256 },
         instrument: fixture.manifest.instrument, session: fixture.manifest.session,
         analysis: { name: 'order-flow-summary', version: '0.1.0', configuration_hash: 'b'.repeat(64) }, timeoutMs: 500,
+        traceId: 'trace-receipt-test',
       })
       expect(receipts[0]).toMatchObject({
         trace_id: artifact.meta.trace_id, status: 'succeeded',
         request: { fixture_id: fixture.manifest.fixture_id },
         artifact: { artifact_id: artifact.artifact_id, content_hash: artifact.content_hash },
       })
+      expect(logs).toEqual([
+        { event: 'analysis_started', traceId: artifact.meta.trace_id, receiptId: expect.any(String) },
+        { event: 'analysis_succeeded', traceId: artifact.meta.trace_id, receiptId: receipts[0].receipt_id, artifactId: artifact.artifact_id },
+      ])
     } finally { await sidecar.stop() }
   })
 })

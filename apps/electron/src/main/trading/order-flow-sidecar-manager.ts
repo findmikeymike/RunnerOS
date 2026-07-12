@@ -20,6 +20,7 @@ interface ManagerOptions {
   env?: Record<string, string>
   now: () => string
   receiptWriter?: { write(receipt: TradingRunReceipt): Promise<void> }
+  log?: (entry: { event: string; traceId: string; receiptId: string; artifactId?: string; errorCode?: string }) => void
 }
 
 interface PendingRequest {
@@ -72,12 +73,17 @@ export class OrderFlowSidecarManager implements RpcTransport {
   }
 
   async analyzeFixture(input: AnalyzeFixtureInput): Promise<AnalysisArtifact> {
+    const traceId = input.traceId ?? this.nextId('trace-run')
+    const receiptId = `receipt-${input.cancellationId ?? this.nextId('run')}`
+    const tracedInput = { ...input, traceId }
     const startedAt = this.options.now()
+    this.options.log?.({ event: 'analysis_started', traceId, receiptId })
     try {
-      const artifact = await this.client.analyzeFixture(input)
+      const artifact = await this.client.analyzeFixture(tracedInput)
+      const artifactReceiptId = `receipt-${artifact.artifact_id}`
       await this.options.receiptWriter?.write({
         receipt_schema_version: 'trade-run-receipt@1',
-        receipt_id: `receipt-${artifact.artifact_id}`,
+        receipt_id: artifactReceiptId,
         trace_id: artifact.meta.trace_id,
         status: 'succeeded',
         started_at: startedAt,
@@ -85,20 +91,24 @@ export class OrderFlowSidecarManager implements RpcTransport {
         request: { fixture_id: input.fixture.id, fixture_sha256: input.fixture.sha256 },
         artifact: { artifact_id: artifact.artifact_id, content_hash: artifact.content_hash },
       })
+      this.options.log?.({ event: 'analysis_succeeded', traceId, receiptId: artifactReceiptId, artifactId: artifact.artifact_id })
       return artifact
     } catch (error) {
-      const traceId = error instanceof TradingClientError
-        ? error.traceId
-        : `trace-${input.cancellationId ?? this.nextId('failed')}`
       await this.options.receiptWriter?.write({
         receipt_schema_version: 'trade-run-receipt@1',
-        receipt_id: `receipt-${input.cancellationId ?? this.nextId('failed')}`,
+        receipt_id: receiptId,
         trace_id: traceId,
         status: error instanceof TradingClientError && error.category === 'canceled' ? 'canceled' : 'failed',
         started_at: startedAt,
         completed_at: this.options.now(),
         request: { fixture_id: input.fixture.id, fixture_sha256: input.fixture.sha256 },
         error: { code: error instanceof TradingClientError ? error.code : 'INTERNAL_ERROR', message: error instanceof Error ? error.message : String(error) },
+      })
+      this.options.log?.({
+        event: error instanceof TradingClientError && error.category === 'canceled' ? 'analysis_canceled' : 'analysis_failed',
+        traceId,
+        receiptId,
+        errorCode: error instanceof TradingClientError ? error.code : 'INTERNAL_ERROR',
       })
       throw error
     }

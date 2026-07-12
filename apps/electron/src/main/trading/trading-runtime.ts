@@ -14,6 +14,7 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   ipcMain: IpcMainLike
   now: () => string
   receiptDirectory?: string
+  log?: (entry: { event: string; traceId: string; receiptId: string; artifactId?: string; errorCode?: string }) => void
 }
 
 interface HostConfigOptions {
@@ -80,6 +81,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     env: { TRADE_GOD_SIDECAR_INSTANCE_ID: 'electron-order-flow-1' },
     now: options.now,
     ...(options.receiptDirectory ? { receiptWriter: new TradingRunReceiptStore(options.receiptDirectory) } : {}),
+    ...(options.log ? { log: options.log } : {}),
   })
   return { manager, dispose: registerTradingIpc(options.ipcMain, manager) }
 }

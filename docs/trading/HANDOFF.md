@@ -55,6 +55,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Crash policy: failed work is not replayed; the sidecar restarts only on the next explicit request.
 - Active cancellation: proven through typed client, handler, and real stdio; workbench control compiles but is not visually smoked.
 - Run receipts: atomic validated JSON receipts persist request, trace, artifact identity/hash, timing, and outcome under `<userData>/trade-god/run-receipts/`.
+- Audit chain: the supervisor owns the trace before work starts; structured main logs, request, artifact, and receipt share it.
 - Receipt-focused verification: 23 passed, 0 failed. Latest complete suite remains 62 passed; the attempted combined rerun hung in the tool layer and was stopped.
 - Full monorepo typecheck: blocked by a pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package typechecks: unverified after prior tool-layer hangs.
@@ -74,7 +75,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 1. Real Electron success-path smoke.
 2. Real Electron failure-state smoke.
 3. Actual packaged-app build/resource-layout smoke.
-4. Trace-correlated logging to complete request/log/artifact/receipt joining.
+4. Real visual success/cancel/failure smoke and packaged-installer smoke.
 
 ## Do Not Do Yet
 

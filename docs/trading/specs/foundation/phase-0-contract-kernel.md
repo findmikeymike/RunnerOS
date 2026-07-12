@@ -117,7 +117,7 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - [x] Timeout, cancellation, and crash are distinguishable.
 - [x] Sidecar restarts or remains stopped according to documented policy.
 - [ ] Electron real IPC path shows health, successful artifact, and error state.
-- [ ] Trace ID joins request, logs, artifact, and receipt.
+- [x] Trace ID joins request, logs, artifact, and receipt.
 - [x] No live/provider/broker capability is reachable.
 
 ## Failure Cases to Force
@@ -174,5 +174,6 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - Complete fast Phase 0 suite after typed cancellation control: 62 passed, 0 failed, 150 expectations across 12 files.
 - 2026-07-12: atomic versioned run receipts added under Runner user data, joining fixture request, trace, artifact identity/hash, timestamps, and outcome.
 - Receipt-focused verification: 23 passed, 0 failed, 37 expectations. The combined closure rerun hung in the tool layer and was stopped; the latest complete-suite claim remains 62 passed.
+- 2026-07-12: supervisor-owned trace and structured run logging completed request/log/artifact/receipt joining; focused audit-chain suite passed 17 tests with 31 expectations and Electron main built successfully.
 - **Required at first possible desktop opportunity:** real visual Electron smoke of Ready, fixture result (`28`, `6`, `5592.25`), and one forced visible failure.
-- Still open: actual packaged-installer smoke, real visual Electron smoke including cancellation, trace-correlated logging, and end-to-end failure/cancellation receipt proof.
+- Still open: actual packaged-installer smoke, real visual Electron smoke including cancellation, and end-to-end spawned failure/cancellation receipt proof.

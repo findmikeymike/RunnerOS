@@ -170,6 +170,13 @@ A lower rung does not prove a higher rung.
 - The attempted combined full-suite/main-build closure command hung in the tool layer and was stopped. Do not infer a new full-suite count or main-build result from this slice.
 - Not proven: trace-correlated log record, visual receipt display, retention/indexing policy, or failure/cancellation persistence through a spawned end-to-end runtime.
 
+## Phase 0 Slice 13 — Trace-Correlated Audit Logging
+
+- Focused suite: 17 passed, 0 failed, 31 expectations across client, supervisor, and runtime tests.
+- Electron `build:main`: passed.
+- Proven: supervisor-owned trace before analysis starts; caller trace propagation through the typed client; structured start/success/failure/canceled log events; matching artifact and receipt trace; receipt/artifact identifiers in success logs.
+- Not proven: visual user path, packaged installer, log retention/search UX, or a spawned failure/cancellation receipt audit.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

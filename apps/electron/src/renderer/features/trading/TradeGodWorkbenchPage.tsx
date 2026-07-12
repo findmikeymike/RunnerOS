@@ -45,11 +45,12 @@ const TradeGodWorkbenchPage: React.FC = () => {
 
   const runFixture = useCallback(async () => {
     const runCancellationId = `workbench-${crypto.randomUUID()}`
+    const runTraceId = `trace-workbench-${crypto.randomUUID()}`
     setRunning(true)
     setCancellationId(runCancellationId)
     setError(null)
     try {
-      setArtifact(await window.electronAPI.analyzeTradeGodFixture({ ...fixtureInput, cancellationId: runCancellationId }))
+      setArtifact(await window.electronAPI.analyzeTradeGodFixture({ ...fixtureInput, cancellationId: runCancellationId, traceId: runTraceId }))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {

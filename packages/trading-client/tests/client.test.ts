@@ -130,10 +130,12 @@ describe('TradingClient', () => {
       analysis: { name: 'order-flow-summary', version: '0.1.0', configuration_hash: 'b'.repeat(64) },
       timeoutMs: 5_000,
       cancellationId: 'cancel-from-workbench',
+      traceId: 'trace-from-workbench',
     })
     const canceled = await trading.cancelAnalysis('cancel-from-workbench')
 
     expect(requests[0].params.cancellation_id).toBe('cancel-from-workbench')
+    expect(requests[0].params.meta.trace_id).toBe('trace-from-workbench')
     expect(canceled).toMatchObject({ cancellation_id: 'cancel-from-workbench', state: 'canceled' })
   })
 })

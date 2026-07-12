@@ -41,6 +41,7 @@ export interface AnalyzeFixtureInput {
   analysis: AnalyzeFixtureRequest['analysis']
   timeoutMs: number
   cancellationId?: string
+  traceId?: string
 }
 
 export class TradingClientError extends Error {
@@ -88,7 +89,7 @@ export class TradingClient {
       throw new TypeError('timeoutMs must be a positive finite number.')
     }
 
-    const traceId = this.options.nextId('trace')
+    const traceId = input.traceId ?? this.options.nextId('trace')
     const now = this.options.now()
     const params = analyzeFixtureRequestSchema.parse({
       meta: this.meta(traceId),
