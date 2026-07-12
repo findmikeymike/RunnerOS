@@ -172,5 +172,7 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - Complete fast Phase 0 suite after active sidecar cancellation: 60 passed, 0 failed, 145 expectations across 12 files.
 - 2026-07-11: caller-owned cancellation IDs and a typed cancel command were wired through client, supervisor, IPC/preload, and the workbench control.
 - Complete fast Phase 0 suite after typed cancellation control: 62 passed, 0 failed, 150 expectations across 12 files.
+- 2026-07-12: atomic versioned run receipts added under Runner user data, joining fixture request, trace, artifact identity/hash, timestamps, and outcome.
+- Receipt-focused verification: 23 passed, 0 failed, 37 expectations. The combined closure rerun hung in the tool layer and was stopped; the latest complete-suite claim remains 62 passed.
 - **Required at first possible desktop opportunity:** real visual Electron smoke of Ready, fixture result (`28`, `6`, `5592.25`), and one forced visible failure.
-- Still open: actual packaged-installer smoke, real visual Electron smoke including cancellation, and trace-to-persisted-receipt proof.
+- Still open: actual packaged-installer smoke, real visual Electron smoke including cancellation, trace-correlated logging, and end-to-end failure/cancellation receipt proof.

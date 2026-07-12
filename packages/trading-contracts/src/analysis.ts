@@ -53,6 +53,18 @@ export const cancelAnalysisResponseSchema = z.object({
   state: z.literal('canceled'),
 }).passthrough()
 
+export const tradingRunReceiptSchema = z.object({
+  receipt_schema_version: z.literal('trade-run-receipt@1'),
+  receipt_id: identifierSchema,
+  trace_id: identifierSchema,
+  status: z.enum(['succeeded', 'failed', 'canceled']),
+  started_at: utcTimestampSchema,
+  completed_at: utcTimestampSchema,
+  request: z.object({ fixture_id: identifierSchema, fixture_sha256: sha256Schema }).passthrough(),
+  artifact: z.object({ artifact_id: identifierSchema, content_hash: sha256Schema }).passthrough().optional(),
+  error: z.object({ code: z.string().min(1), message: z.string().min(1) }).passthrough().optional(),
+}).passthrough()
+
 export const qualitySchema = z.object({
   state: z.enum(['valid', 'degraded', 'invalid']),
   flags: z.array(identifierSchema),
@@ -92,3 +104,4 @@ export const analysisArtifactSchema = z.object({
 export type AnalyzeFixtureRequest = z.infer<typeof analyzeFixtureRequestSchema>
 export type AnalysisArtifact = z.infer<typeof analysisArtifactSchema>
 export type CancelAnalysisResponse = z.infer<typeof cancelAnalysisResponseSchema>
+export type TradingRunReceipt = z.infer<typeof tradingRunReceiptSchema>

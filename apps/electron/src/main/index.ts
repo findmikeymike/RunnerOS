@@ -572,6 +572,7 @@ app.whenReady().then(async () => {
         tradeGodRuntime = createTradeGodRuntime({
           ipcMain,
           ...tradeGodHost,
+          receiptDirectory: join(app.getPath('userData'), 'trade-god', 'run-receipts'),
           now: () => new Date().toISOString(),
         })
         mainLog.info(`[trade-god] local runtime registered (${app.isPackaged ? 'packaged' : 'development'})`)

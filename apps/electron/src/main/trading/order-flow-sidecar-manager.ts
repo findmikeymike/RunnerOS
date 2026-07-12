@@ -2,11 +2,12 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 
 import {
   TradingClient,
+  TradingClientError,
   type AnalyzeFixtureInput,
   type RpcRequest,
   type RpcTransport,
 } from '@trade-god/client'
-import { PROTOCOL_VERSION, type AnalysisArtifact, type CancelAnalysisResponse, type HealthResponse } from '@trade-god/contracts'
+import { PROTOCOL_VERSION, type AnalysisArtifact, type CancelAnalysisResponse, type HealthResponse, type TradingRunReceipt } from '@trade-god/contracts'
 
 type ManagerState = 'stopped' | 'starting' | 'ready' | 'stopping' | 'failed'
 
@@ -18,6 +19,7 @@ interface ManagerOptions {
   maxStderrBytes: number
   env?: Record<string, string>
   now: () => string
+  receiptWriter?: { write(receipt: TradingRunReceipt): Promise<void> }
 }
 
 interface PendingRequest {
@@ -69,8 +71,37 @@ export class OrderFlowSidecarManager implements RpcTransport {
     return this.client.health()
   }
 
-  analyzeFixture(input: AnalyzeFixtureInput): Promise<AnalysisArtifact> {
-    return this.client.analyzeFixture(input)
+  async analyzeFixture(input: AnalyzeFixtureInput): Promise<AnalysisArtifact> {
+    const startedAt = this.options.now()
+    try {
+      const artifact = await this.client.analyzeFixture(input)
+      await this.options.receiptWriter?.write({
+        receipt_schema_version: 'trade-run-receipt@1',
+        receipt_id: `receipt-${artifact.artifact_id}`,
+        trace_id: artifact.meta.trace_id,
+        status: 'succeeded',
+        started_at: startedAt,
+        completed_at: this.options.now(),
+        request: { fixture_id: input.fixture.id, fixture_sha256: input.fixture.sha256 },
+        artifact: { artifact_id: artifact.artifact_id, content_hash: artifact.content_hash },
+      })
+      return artifact
+    } catch (error) {
+      const traceId = error instanceof TradingClientError
+        ? error.traceId
+        : `trace-${input.cancellationId ?? this.nextId('failed')}`
+      await this.options.receiptWriter?.write({
+        receipt_schema_version: 'trade-run-receipt@1',
+        receipt_id: `receipt-${input.cancellationId ?? this.nextId('failed')}`,
+        trace_id: traceId,
+        status: error instanceof TradingClientError && error.category === 'canceled' ? 'canceled' : 'failed',
+        started_at: startedAt,
+        completed_at: this.options.now(),
+        request: { fixture_id: input.fixture.id, fixture_sha256: input.fixture.sha256 },
+        error: { code: error instanceof TradingClientError ? error.code : 'INTERNAL_ERROR', message: error instanceof Error ? error.message : String(error) },
+      })
+      throw error
+    }
   }
 
   cancelAnalysis(cancellationId: string): Promise<CancelAnalysisResponse> {

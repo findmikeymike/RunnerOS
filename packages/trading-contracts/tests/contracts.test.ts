@@ -6,6 +6,7 @@ import {
   analyzeFixtureRequestSchema,
   analysisArtifactSchema,
   cancelAnalysisResponseSchema,
+  tradingRunReceiptSchema,
   assertCompatibleProtocol,
   healthResponseSchema,
   tradingErrorSchema,
@@ -71,6 +72,14 @@ describe('fixture analysis contracts', () => {
       cancellation_id: 'cancel-active-analysis',
       state: 'canceled',
     })).toMatchObject({ cancellation_id: 'cancel-active-analysis', state: 'canceled' })
+  })
+  test('accepts a receipt joining request, trace, and artifact', () => {
+    expect(tradingRunReceiptSchema.parse({
+      receipt_schema_version: 'trade-run-receipt@1', receipt_id: 'receipt-1', trace_id: meta.trace_id,
+      status: 'succeeded', started_at: meta.created_at, completed_at: meta.created_at,
+      request: { fixture_id: 'es-demo', fixture_sha256: 'a'.repeat(64) },
+      artifact: { artifact_id: 'artifact-1', content_hash: 'b'.repeat(64) },
+    }).status).toBe('succeeded')
   })
   test('accepts a fully bounded fixture request', () => {
     const result = analyzeFixtureRequestSchema.parse({

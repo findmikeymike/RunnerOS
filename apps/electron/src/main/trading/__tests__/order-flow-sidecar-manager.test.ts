@@ -21,6 +21,7 @@ function manager(
   requestTimeoutMs = 1_000,
   limits: { maxLineBytes?: number; maxStderrBytes?: number } = {},
   env: Record<string, string> = {},
+  receiptWriter?: { write(receipt: any): Promise<void> },
 ) {
   return new OrderFlowSidecarManager({
     command: [process.execPath, script],
@@ -30,6 +31,7 @@ function manager(
     maxStderrBytes: limits.maxStderrBytes ?? 4_096,
     env: { TRADE_GOD_SIDECAR_INSTANCE_ID: 'electron-test-sidecar', ...env },
     now: () => new Date().toISOString(),
+    receiptWriter,
   })
 }
 
@@ -116,5 +118,23 @@ describe('OrderFlowSidecarManager', () => {
       await sidecar.stop()
       rmSync(marker, { force: true })
     }
+  })
+
+  test('persists a receipt joining the request trace and artifact', async () => {
+    const fixture = await loadEsDemoFixture()
+    const receipts: any[] = []
+    const sidecar = manager(orderFlowCli, 1_000, {}, {}, { write: async (receipt) => { receipts.push(receipt) } })
+    try {
+      const artifact = await sidecar.analyzeFixture({
+        fixture: { id: fixture.manifest.fixture_id, sha256: fixture.manifest.events_sha256 },
+        instrument: fixture.manifest.instrument, session: fixture.manifest.session,
+        analysis: { name: 'order-flow-summary', version: '0.1.0', configuration_hash: 'b'.repeat(64) }, timeoutMs: 500,
+      })
+      expect(receipts[0]).toMatchObject({
+        trace_id: artifact.meta.trace_id, status: 'succeeded',
+        request: { fixture_id: fixture.manifest.fixture_id },
+        artifact: { artifact_id: artifact.artifact_id, content_hash: artifact.content_hash },
+      })
+    } finally { await sidecar.stop() }
   })
 })

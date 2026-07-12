@@ -163,6 +163,13 @@ A lower rung does not prove a higher rung.
 - Proven: traceable cancellation acknowledgement schema, caller-owned cancellation ID, typed client cancel command, supervisor delegation, exactly three local IPC/preload capabilities, shared Electron API typing, and compiled Run-to-Cancel workbench state.
 - Not proven: visual click-path cancellation in real Electron or forced cancellation of non-cooperative synchronous donor algorithms.
 
+## Phase 0 Slice 12 — Persistent Run Receipts
+
+- Receipt-focused suite: 23 passed, 0 failed, 37 expectations across four files.
+- Proven: versioned receipt schema; atomic restrictive-permission JSON persistence; successful receipt joining fixture request, trace ID, artifact ID/content hash, timestamps, and outcome; runtime storage under `<userData>/trade-god/run-receipts/`.
+- The attempted combined full-suite/main-build closure command hung in the tool layer and was stopped. Do not infer a new full-suite count or main-build result from this slice.
+- Not proven: trace-correlated log record, visual receipt display, retention/indexing policy, or failure/cancellation persistence through a spawned end-to-end runtime.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import { OrderFlowSidecarManager } from './order-flow-sidecar-manager.ts'
 import { registerTradingIpc, type IpcMainLike } from './trading-ipc.ts'
+import { TradingRunReceiptStore } from './run-receipt-store.ts'
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
@@ -12,6 +13,7 @@ interface ResolveLaunchOptions {
 interface RuntimeOptions extends ResolveLaunchOptions {
   ipcMain: IpcMainLike
   now: () => string
+  receiptDirectory?: string
 }
 
 interface HostConfigOptions {
@@ -77,6 +79,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     maxStderrBytes: 16_384,
     env: { TRADE_GOD_SIDECAR_INSTANCE_ID: 'electron-order-flow-1' },
     now: options.now,
+    ...(options.receiptDirectory ? { receiptWriter: new TradingRunReceiptStore(options.receiptDirectory) } : {}),
   })
   return { manager, dispose: registerTradingIpc(options.ipcMain, manager) }
 }

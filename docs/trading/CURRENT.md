@@ -36,6 +36,7 @@ The workbench can request engine health, run the known fixture, and display tota
 - Verified partial stdout-frame assembly.
 - Added cooperative active cancellation inside the Order Flow handler and concurrent stdio request processing so cancel commands are not blocked behind running analysis.
 - Exposed caller-owned cancellation IDs through the typed client, supervisor, narrow IPC/preload contract, shared Electron API, and workbench Run-to-Cancel control.
+- Added atomic local run receipts joining fixture request, trace ID, artifact ID/content hash, timestamps, and outcome under Runner's user-data directory.
 - Audited 42 starred trading repositories and documented the integration strategy.
 
 ## Next Actions
@@ -44,7 +45,7 @@ The workbench can request engine health, run the known fixture, and display tota
 2. Verify Ready state, run the fixture, and confirm total volume `28`, delta `6`, and POC `5592.25`.
 3. Exercise a visible runtime failure state and record the proof.
 4. Build and inspect an actual packaged app/installer so the resource layout is proven beyond unit/integration tests.
-5. Add trace-to-persisted-receipt proof.
+5. Add trace-correlated logging so request, logs, artifact, and receipt form one complete audit chain.
 6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them into Phase 0 blindly.
 
 ## Blockers / Decisions Needed
@@ -60,6 +61,8 @@ The fixture, transport, contract, worktree, and initial compatibility policy are
 - The generated packaged sidecar bundle launched independently and answered a schema-valid health request.
 - Packaged root selection, bundled-Bun selection, partial frames, and next-request restart behavior passed focused tests.
 - Active cancellation passed from typed client through sidecar boundaries; the workbench control is build-verified but not visually smoked.
+- Receipt-focused verification: 23 passed, 0 failed across contract, atomic store, supervisor, and runtime tests.
+- The prior complete 62-test suite remains the latest full-suite result; a new combined closure command hung in the tool layer and was stopped, so no larger full-suite count is claimed.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.
