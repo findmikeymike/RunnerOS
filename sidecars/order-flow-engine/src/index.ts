@@ -7,6 +7,7 @@ import {
   tradingErrorSchema,
   wireMetaSchema,
   type TradingError,
+  type AnalysisArtifact,
   type WireMeta,
 } from '@trade-god/contracts'
 import {
@@ -41,6 +42,10 @@ export type RpcResponse = RpcSuccess | RpcFailure
 export interface OrderFlowRpcHandlerOptions {
   now: () => string
   instanceId: string
+  analyzeFixture?: (
+    fixture: Awaited<ReturnType<typeof loadEsDemoFixture>>,
+    context: { signal: AbortSignal; meta: WireMeta; artifactId: string },
+  ) => AnalysisArtifact | Promise<AnalysisArtifact>
 }
 
 export interface OrderFlowRpcHandler {
@@ -53,7 +58,12 @@ const commands = ['health', 'capabilities', 'analyze_fixture', 'cancel', 'shutdo
 export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): OrderFlowRpcHandler {
   let lifecycle: 'ready' | 'stopped' = 'ready'
   const canceled = new Set<string>()
+  const active = new Map<string, AbortController>()
   const handled = new Map<string, { digest: string; response: RpcResponse }>()
+  const runAnalysis = options.analyzeFixture ?? ((fixture, context) => analyzeOrderFlowFixture(fixture, {
+    meta: context.meta,
+    artifact_id: context.artifactId,
+  }))
 
   const serverMeta = (traceId: string): WireMeta => wireMetaSchema.parse({
     schema_version: PROTOCOL_VERSION,
@@ -122,6 +132,7 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
         }, -32600)
       }
       canceled.add(cancellationId)
+      active.get(cancellationId)?.abort()
       return { jsonrpc: '2.0', id: request.id, result: { cancellation_id: cancellationId, state: 'canceled' } }
     }
 
@@ -147,6 +158,7 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
       }
 
       if (canceled.has(parsed.data.cancellation_id)) {
+        canceled.delete(parsed.data.cancellation_id)
         return domainFailure(request.id, traceId, {
           code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled before it started.', retryable: false,
         })
@@ -170,13 +182,33 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
         })
       }
 
-      try {
-        const artifact = analyzeOrderFlowFixture(fixture, {
-          meta: serverMeta(traceId),
-          artifact_id: `artifact-${String(request.id)}`,
+      if (canceled.has(parsed.data.cancellation_id)) {
+        canceled.delete(parsed.data.cancellation_id)
+        return domainFailure(request.id, traceId, {
+          code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while preparing its input.', retryable: false,
         })
+      }
+
+      const controller = new AbortController()
+      active.set(parsed.data.cancellation_id, controller)
+      try {
+        const artifact = await runAnalysis(fixture, {
+          signal: controller.signal,
+          meta: serverMeta(traceId),
+          artifactId: `artifact-${String(request.id)}`,
+        })
+        if (controller.signal.aborted) {
+          return domainFailure(request.id, traceId, {
+            code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while running.', retryable: false,
+          })
+        }
         return { jsonrpc: '2.0', id: request.id, result: artifact }
       } catch (error) {
+        if (controller.signal.aborted) {
+          return domainFailure(request.id, traceId, {
+            code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while running.', retryable: false,
+          })
+        }
         if (error instanceof FixtureChecksumMismatchError) {
           return domainFailure(request.id, traceId, {
             code: 'FIXTURE_CHECKSUM_MISMATCH', category: 'validation', message: error.message, retryable: false,
@@ -185,6 +217,9 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
         return domainFailure(request.id, traceId, {
           code: 'INTERNAL_ERROR', category: 'internal', message: 'Order Flow analysis failed.', retryable: false,
         })
+      } finally {
+        active.delete(parsed.data.cancellation_id)
+        canceled.delete(parsed.data.cancellation_id)
       }
     }
 

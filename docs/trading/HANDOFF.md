@@ -48,11 +48,12 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
-- Fast Trade God suite: 58 passed, 0 failed, 138 expectations across 12 files.
+- Fast Trade God suite: 60 passed, 0 failed, 145 expectations across 12 files.
 - Electron main, preload, and renderer production builds passed.
 - Real Electron smoke: not run.
 - Packaged sidecar bundle and resolution: implemented and integration-tested; actual packaged installer not built/smoked.
 - Crash policy: failed work is not replayed; the sidecar restarts only on the next explicit request.
+- Active cancellation: proven inside the handler and across real stdio; not yet exposed through the typed client or workbench.
 - Full monorepo typecheck: blocked by a pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package typechecks: unverified after prior tool-layer hangs.
 
@@ -71,7 +72,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 1. Real Electron success-path smoke.
 2. Real Electron failure-state smoke.
 3. Actual packaged-app build/resource-layout smoke.
-4. Active-computation cancellation.
+4. Typed client/workbench cancellation control.
 5. Trace-to-persisted-receipt proof.
 
 ## Do Not Do Yet

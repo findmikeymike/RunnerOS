@@ -168,5 +168,7 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - 2026-07-11: self-contained packaged sidecar build, packaged/bundled-Bun resolution, packaged bootstrap registration, partial-frame proof, and next-request restart policy added through red-green tests.
 - Complete fast Phase 0 suite after packaging/lifecycle hardening: 58 passed, 0 failed, 138 expectations across 12 files.
 - Restart policy: fail the crashed request, never replay it, and start a new process only for a later explicit request.
+- 2026-07-11: cooperative active cancellation added at handler and real concurrent stdio boundaries; the engine remains healthy after cancellation.
+- Complete fast Phase 0 suite after active sidecar cancellation: 60 passed, 0 failed, 145 expectations across 12 files.
 - **Required at first possible desktop opportunity:** real visual Electron smoke of Ready, fixture result (`28`, `6`, `5592.25`), and one forced visible failure.
-- Still open: actual packaged-installer smoke, real visual Electron smoke, active-computation cancellation, and trace-to-persisted-receipt proof.
+- Still open: actual packaged-installer smoke, real visual Electron smoke, client/workbench cancellation control, and trace-to-persisted-receipt proof.

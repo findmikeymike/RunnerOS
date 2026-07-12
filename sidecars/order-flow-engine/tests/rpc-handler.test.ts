@@ -107,6 +107,47 @@ describe('Order Flow JSON-RPC handler', () => {
     })
   })
 
+  test('aborts analysis already in progress and remains healthy', async () => {
+    const fixture = await loadEsDemoFixture()
+    let markStarted!: () => void
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const handler = createOrderFlowRpcHandler({
+      now: () => '2026-07-11T15:30:00.000Z',
+      instanceId: 'order-flow-test-1',
+      analyzeFixture: async (_fixture, context) => {
+        markStarted()
+        await new Promise<void>((resolve) => context.signal.addEventListener('abort', () => resolve(), { once: true }))
+        throw new Error('analysis aborted')
+      },
+    })
+    const analysis = handler.handle(rpc('analyze-active-cancel', 'trade.analyze_fixture', {
+      meta: clientMeta,
+      fixture: { id: fixture.manifest.fixture_id, sha256: fixture.manifest.events_sha256 },
+      instrument: fixture.manifest.instrument,
+      session: fixture.manifest.session,
+      analysis: { name: 'order-flow-summary', version: '0.1.0', configuration_hash: 'b'.repeat(64) },
+      deadline_at: '2026-07-11T15:30:05.000Z',
+      cancellation_id: 'cancel-active-analysis',
+    }))
+
+    await Promise.race([
+      started,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('analysis did not enter injectable work')), 100)),
+    ])
+    const cancellation = await handler.handle(rpc('cancel-active', 'trade.cancel', {
+      meta: clientMeta,
+      cancellation_id: 'cancel-active-analysis',
+    }))
+    const response = await analysis
+
+    expect(cancellation).toMatchObject({ result: { state: 'canceled' } })
+    expect(response).toMatchObject({
+      error: { data: { trade_error: { code: 'CANCELED', category: 'canceled', retryable: false } } },
+    })
+    await expect(handler.handle(rpc('health-after-cancel', 'trade.health', { meta: clientMeta })))
+      .resolves.toMatchObject({ result: { state: 'ready' } })
+  })
+
   test('returns JSON-RPC method-not-found without crashing', async () => {
     const handler = createOrderFlowRpcHandler({ now: () => '2026-07-11T15:30:00.000Z', instanceId: 'order-flow-test-1' })
 

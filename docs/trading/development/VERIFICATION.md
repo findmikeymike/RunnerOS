@@ -146,6 +146,15 @@ A lower rung does not prove a higher rung.
 - Policy: a crashed request fails visibly and is never automatically replayed; a later explicit request may start a fresh sidecar process.
 - Not proven: electron-builder installer/resource layout, installed packaged-app execution, real visual workbench interaction, active-computation cancellation, or trace-to-persisted-receipt joining.
 
+## Phase 0 Slice 10 — Active Sidecar Cancellation
+
+- Method: handler and real stdio cancellation tests were observed failing before implementation.
+- Complete fast Trade God suite: 60 passed, 0 failed, 145 expectations across 12 files.
+- Packaged sidecar rebuild: passed.
+- Electron `build:main`: passed.
+- Proven: a cancellation ID can abort injected work already running, cancellation during fixture preparation is honored, the analysis returns a typed non-retryable `CANCELED` error, the handler remains healthy, and concurrent stdio processing allows cancellation to overtake an in-flight analysis request.
+- Not proven: cancellation initiated from the typed client or workbench, forced cancellation of non-cooperative synchronous donor algorithms, or visual cancellation state.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.
