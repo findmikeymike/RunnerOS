@@ -32,6 +32,11 @@ It is not generic AI chat. It is a music-specific work system with specialist ag
 - [Human Layer](./human-layer.md): vetted partner and expert-access layer.
 - [Claims To Prove](./claims-to-prove.md): strong claims that need demos, screenshots, tests, or proof before public launch.
 
+## Dated Pitch Packets
+
+- [2026-07-10 Pitch Packet](./packets/2026-07-10/): overview pitch, key features, and power features for the current Creator Social Integration version.
+- [Download the 2026-07-10 Word packet ZIP](./packets/artist-os-desktop-pitch-packet-2026-07-10.zip).
+
 ## One-Line Pitch
 
 Artist OS Desktop is an AI command center for music artists and managers, with specialist agents that understand the artist, manage campaign work, create assets, coordinate promotion, and turn messy creative output into approved release-ready materials.
