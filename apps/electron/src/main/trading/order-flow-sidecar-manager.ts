@@ -6,7 +6,7 @@ import {
   type RpcRequest,
   type RpcTransport,
 } from '@trade-god/client'
-import { PROTOCOL_VERSION, type AnalysisArtifact, type HealthResponse } from '@trade-god/contracts'
+import { PROTOCOL_VERSION, type AnalysisArtifact, type CancelAnalysisResponse, type HealthResponse } from '@trade-god/contracts'
 
 type ManagerState = 'stopped' | 'starting' | 'ready' | 'stopping' | 'failed'
 
@@ -71,6 +71,10 @@ export class OrderFlowSidecarManager implements RpcTransport {
 
   analyzeFixture(input: AnalyzeFixtureInput): Promise<AnalysisArtifact> {
     return this.client.analyzeFixture(input)
+  }
+
+  cancelAnalysis(cancellationId: string): Promise<CancelAnalysisResponse> {
+    return this.client.cancelAnalysis(cancellationId)
   }
 
   async request(request: RpcRequest): Promise<unknown> {

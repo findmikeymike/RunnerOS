@@ -155,6 +155,14 @@ A lower rung does not prove a higher rung.
 - Proven: a cancellation ID can abort injected work already running, cancellation during fixture preparation is honored, the analysis returns a typed non-retryable `CANCELED` error, the handler remains healthy, and concurrent stdio processing allows cancellation to overtake an in-flight analysis request.
 - Not proven: cancellation initiated from the typed client or workbench, forced cancellation of non-cooperative synchronous donor algorithms, or visual cancellation state.
 
+## Phase 0 Slice 11 — Typed Workbench Cancellation Control
+
+- Method: contract, client, IPC, and preload tests were observed failing before implementation.
+- Complete fast Trade God suite: 62 passed, 0 failed, 150 expectations across 12 files.
+- Packaged sidecar rebuild and Electron main/preload/renderer builds: passed.
+- Proven: traceable cancellation acknowledgement schema, caller-owned cancellation ID, typed client cancel command, supervisor delegation, exactly three local IPC/preload capabilities, shared Electron API typing, and compiled Run-to-Cancel workbench state.
+- Not proven: visual click-path cancellation in real Electron or forced cancellation of non-cooperative synchronous donor algorithms.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

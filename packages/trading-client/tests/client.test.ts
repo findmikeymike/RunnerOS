@@ -116,4 +116,24 @@ describe('TradingClient', () => {
       retryable: false,
     })
   })
+
+  test('uses a caller-owned cancellation id and sends a typed cancel command', async () => {
+    const fixture = await loadEsDemoFixture()
+    const requests: any[] = []
+    const handler = createOrderFlowRpcHandler({ now: () => '2026-07-11T15:30:00.000Z', instanceId: 'cancel-client-test' })
+    const trading = client({ request: async (request) => { requests.push(request); return handler.handle(request) } })
+
+    await trading.analyzeFixture({
+      fixture: { id: fixture.manifest.fixture_id, sha256: fixture.manifest.events_sha256 },
+      instrument: fixture.manifest.instrument,
+      session: fixture.manifest.session,
+      analysis: { name: 'order-flow-summary', version: '0.1.0', configuration_hash: 'b'.repeat(64) },
+      timeoutMs: 5_000,
+      cancellationId: 'cancel-from-workbench',
+    })
+    const canceled = await trading.cancelAnalysis('cancel-from-workbench')
+
+    expect(requests[0].params.cancellation_id).toBe('cancel-from-workbench')
+    expect(canceled).toMatchObject({ cancellation_id: 'cancel-from-workbench', state: 'canceled' })
+  })
 })

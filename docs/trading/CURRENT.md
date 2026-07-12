@@ -35,6 +35,7 @@ The workbench can request engine health, run the known fixture, and display tota
 - Defined crash policy: never replay failed work; restart only on the next explicit request.
 - Verified partial stdout-frame assembly.
 - Added cooperative active cancellation inside the Order Flow handler and concurrent stdio request processing so cancel commands are not blocked behind running analysis.
+- Exposed caller-owned cancellation IDs through the typed client, supervisor, narrow IPC/preload contract, shared Electron API, and workbench Run-to-Cancel control.
 - Audited 42 starred trading repositories and documented the integration strategy.
 
 ## Next Actions
@@ -43,7 +44,7 @@ The workbench can request engine health, run the known fixture, and display tota
 2. Verify Ready state, run the fixture, and confirm total volume `28`, delta `6`, and POC `5592.25`.
 3. Exercise a visible runtime failure state and record the proof.
 4. Build and inspect an actual packaged app/installer so the resource layout is proven beyond unit/integration tests.
-5. Expose active cancellation through the typed client/UI, then add trace-to-persisted-receipt proof.
+5. Add trace-to-persisted-receipt proof.
 6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them into Phase 0 blindly.
 
 ## Blockers / Decisions Needed
@@ -54,11 +55,11 @@ The fixture, transport, contract, worktree, and initial compatibility policy are
 
 ## Verification State
 
-- Complete fast Trade God suite: 60 passed, 0 failed, 145 expectations across 12 files.
+- Complete fast Trade God suite: 62 passed, 0 failed, 150 expectations across 12 files.
 - Electron `build:main`, `build:preload`, and `build:renderer` passed.
 - The generated packaged sidecar bundle launched independently and answered a schema-valid health request.
 - Packaged root selection, bundled-Bun selection, partial frames, and next-request restart behavior passed focused tests.
-- Active cancellation passed at handler and spawned stdio-process boundaries; typed client/UI cancellation control is not yet implemented.
+- Active cancellation passed from typed client through sidecar boundaries; the workbench control is build-verified but not visually smoked.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.

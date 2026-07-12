@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Activity, AlertTriangle, Database, Play, ShieldCheck } from 'lucide-react'
+import { Activity, AlertTriangle, Database, Play, ShieldCheck, Square } from 'lucide-react'
 import type { AnalysisArtifact, HealthResponse } from '@trade-god/contracts'
 
 type RuntimeState = 'checking' | 'ready' | 'error'
@@ -24,6 +24,8 @@ const TradeGodWorkbenchPage: React.FC = () => {
   const [artifact, setArtifact] = useState<AnalysisArtifact | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
+  const [cancellationId, setCancellationId] = useState<string | null>(null)
+  const [canceling, setCanceling] = useState(false)
 
   useEffect(() => {
     let active = true
@@ -42,16 +44,31 @@ const TradeGodWorkbenchPage: React.FC = () => {
   }, [])
 
   const runFixture = useCallback(async () => {
+    const runCancellationId = `workbench-${crypto.randomUUID()}`
     setRunning(true)
+    setCancellationId(runCancellationId)
     setError(null)
     try {
-      setArtifact(await window.electronAPI.analyzeTradeGodFixture(fixtureInput))
+      setArtifact(await window.electronAPI.analyzeTradeGodFixture({ ...fixtureInput, cancellationId: runCancellationId }))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
       setRunning(false)
+      setCancellationId(null)
+      setCanceling(false)
     }
   }, [])
+
+  const cancelFixture = useCallback(async () => {
+    if (!cancellationId || canceling) return
+    setCanceling(true)
+    try {
+      await window.electronAPI.cancelTradeGodAnalysis(cancellationId)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+      setCanceling(false)
+    }
+  }, [canceling, cancellationId])
 
   const statusLabel = runtimeState === 'checking' ? 'Checking runtime' : runtimeState === 'ready' ? 'Ready' : 'Unavailable'
 
@@ -81,9 +98,15 @@ const TradeGodWorkbenchPage: React.FC = () => {
               <Metric label="Events" value="4" />
               <Metric label="Mode" value="Replay fixture" />
             </dl>
-            <button type="button" onClick={runFixture} disabled={runtimeState !== 'ready' || running} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 py-3 text-sm font-semibold text-black transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-35">
-              <Play className="h-4 w-4" /> {running ? 'Analyzing…' : 'Run ES fixture'}
-            </button>
+            {running ? (
+              <button type="button" onClick={cancelFixture} disabled={canceling} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-red-300 px-4 py-3 text-sm font-semibold text-black transition hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-50">
+                <Square className="h-4 w-4" /> {canceling ? 'Canceling…' : 'Cancel analysis'}
+              </button>
+            ) : (
+              <button type="button" onClick={runFixture} disabled={runtimeState !== 'ready'} className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 py-3 text-sm font-semibold text-black transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-35">
+                <Play className="h-4 w-4" /> Run ES fixture
+              </button>
+            )}
             <div className="mt-4 flex items-start gap-2 text-xs leading-5 text-white/38"><ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" /> Project-owned synthetic data. Checksum verified before analysis.</div>
           </div>
 

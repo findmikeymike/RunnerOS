@@ -463,6 +463,7 @@ export interface ElectronAPI {
   // Trade God local desktop runtime (never routed to remote workspace servers)
   getTradeGodHealth(): Promise<import('@trade-god/contracts').HealthResponse>
   analyzeTradeGodFixture(input: import('@trade-god/client').AnalyzeFixtureInput): Promise<import('@trade-god/contracts').AnalysisArtifact>
+  cancelTradeGodAnalysis(cancellationId: string): Promise<import('@trade-god/contracts').CancelAnalysisResponse>
 
   // Session management
   getSessions(): Promise<Session[]>

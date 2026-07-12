@@ -1,6 +1,7 @@
 import {
   PROTOCOL_VERSION,
   analysisArtifactSchema,
+  cancelAnalysisResponseSchema,
   analyzeFixtureRequestSchema,
   assertCompatibleProtocol,
   healthResponseSchema,
@@ -9,6 +10,7 @@ import {
   type AnalysisArtifact,
   type AnalyzeFixtureRequest,
   type HealthResponse,
+  type CancelAnalysisResponse,
   type TradingError,
   type WireMeta,
 } from '@trade-god/contracts'
@@ -38,6 +40,7 @@ export interface AnalyzeFixtureInput {
   session: AnalyzeFixtureRequest['session']
   analysis: AnalyzeFixtureRequest['analysis']
   timeoutMs: number
+  cancellationId?: string
 }
 
 export class TradingClientError extends Error {
@@ -94,10 +97,18 @@ export class TradingClient {
       session: input.session,
       analysis: input.analysis,
       deadline_at: new Date(Date.parse(now) + input.timeoutMs).toISOString(),
-      cancellation_id: this.options.nextId('cancel'),
+      cancellation_id: input.cancellationId ?? this.options.nextId('cancel'),
     })
 
     return this.request('trade.analyze_fixture', params, traceId, analysisArtifactSchema)
+  }
+
+  async cancelAnalysis(cancellationId: string): Promise<CancelAnalysisResponse> {
+    const traceId = this.options.nextId('trace')
+    return this.request('trade.cancel', {
+      meta: this.meta(traceId),
+      cancellation_id: cancellationId,
+    }, traceId, cancelAnalysisResponseSchema)
   }
 
   private meta(traceId: string): WireMeta {

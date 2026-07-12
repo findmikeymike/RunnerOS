@@ -5,6 +5,7 @@ import {
   PROTOCOL_VERSION,
   analyzeFixtureRequestSchema,
   analysisArtifactSchema,
+  cancelAnalysisResponseSchema,
   assertCompatibleProtocol,
   healthResponseSchema,
   tradingErrorSchema,
@@ -64,6 +65,13 @@ describe('health and capabilities', () => {
 })
 
 describe('fixture analysis contracts', () => {
+  test('accepts a traceable cancellation acknowledgement', () => {
+    expect(cancelAnalysisResponseSchema.parse({
+      meta,
+      cancellation_id: 'cancel-active-analysis',
+      state: 'canceled',
+    })).toMatchObject({ cancellation_id: 'cancel-active-analysis', state: 'canceled' })
+  })
   test('accepts a fully bounded fixture request', () => {
     const result = analyzeFixtureRequestSchema.parse({
       meta,

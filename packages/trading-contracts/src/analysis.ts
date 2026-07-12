@@ -47,6 +47,12 @@ export const analyzeFixtureRequestSchema = z.object({
   cancellation_id: identifierSchema,
 }).passthrough()
 
+export const cancelAnalysisResponseSchema = z.object({
+  meta: wireMetaSchema,
+  cancellation_id: identifierSchema,
+  state: z.literal('canceled'),
+}).passthrough()
+
 export const qualitySchema = z.object({
   state: z.enum(['valid', 'degraded', 'invalid']),
   flags: z.array(identifierSchema),
@@ -85,3 +91,4 @@ export const analysisArtifactSchema = z.object({
 
 export type AnalyzeFixtureRequest = z.infer<typeof analyzeFixtureRequestSchema>
 export type AnalysisArtifact = z.infer<typeof analysisArtifactSchema>
+export type CancelAnalysisResponse = z.infer<typeof cancelAnalysisResponseSchema>

@@ -133,7 +133,7 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
       }
       canceled.add(cancellationId)
       active.get(cancellationId)?.abort()
-      return { jsonrpc: '2.0', id: request.id, result: { cancellation_id: cancellationId, state: 'canceled' } }
+      return { jsonrpc: '2.0', id: request.id, result: { meta: serverMeta(traceId), cancellation_id: cancellationId, state: 'canceled' } }
     }
 
     if (request.method === 'trade.shutdown') {
