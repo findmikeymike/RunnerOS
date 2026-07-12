@@ -1,4 +1,6 @@
 import { describe, expect, test } from 'bun:test'
+import { rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { loadEsDemoFixture } from '@trade-god/testkit'
@@ -18,6 +20,7 @@ function manager(
   script = orderFlowCli,
   requestTimeoutMs = 1_000,
   limits: { maxLineBytes?: number; maxStderrBytes?: number } = {},
+  env: Record<string, string> = {},
 ) {
   return new OrderFlowSidecarManager({
     command: [process.execPath, script],
@@ -25,7 +28,7 @@ function manager(
     requestTimeoutMs,
     maxLineBytes: limits.maxLineBytes ?? 1_000_000,
     maxStderrBytes: limits.maxStderrBytes ?? 4_096,
-    env: { TRADE_GOD_SIDECAR_INSTANCE_ID: 'electron-test-sidecar' },
+    env: { TRADE_GOD_SIDECAR_INSTANCE_ID: 'electron-test-sidecar', ...env },
     now: () => new Date().toISOString(),
   })
 }
@@ -86,5 +89,32 @@ describe('OrderFlowSidecarManager', () => {
     expect(sidecar.status().stderr).toHaveLength(32)
 
     await sidecar.stop()
+  })
+
+  test('assembles a response split across stdout chunks', async () => {
+    const sidecar = manager(path.join(fixtureDir, 'partial-frame-sidecar.ts'), 500)
+
+    const health = await sidecar.health()
+    expect(health).toMatchObject({ state: 'ready' })
+
+    await sidecar.stop()
+  })
+
+  test('restarts on the next request after a crash without replaying failed work', async () => {
+    const marker = path.join(tmpdir(), `trade-god-crash-once-${process.pid}.marker`)
+    rmSync(marker, { force: true })
+    const sidecar = manager(path.join(fixtureDir, 'crash-once-sidecar.ts'), 500, {}, {
+      TRADE_GOD_CRASH_ONCE_MARKER: marker,
+      TRADE_GOD_REAL_SIDECAR: orderFlowCli,
+    })
+
+    try {
+      await expect(sidecar.health()).rejects.toBeInstanceOf(SidecarExitedError)
+      const health = await sidecar.health()
+      expect(health.state).toBe('ready')
+    } finally {
+      await sidecar.stop()
+      rmSync(marker, { force: true })
+    }
   })
 })

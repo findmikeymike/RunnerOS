@@ -114,7 +114,7 @@ import {
 } from './campaign-social-job-preparer'
 import { executeScheduledSocialBrowser } from './scheduled-social-browser-executor'
 import { runSocialJson } from './social-cli'
-import { createTradeGodRuntime } from './trading/trading-runtime'
+import { createTradeGodRuntime, resolveTradeGodHostConfig } from './trading/trading-runtime'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -558,21 +558,23 @@ app.whenReady().then(async () => {
       }
     })
 
-    // Trade God Phase 0 is dev-only until its sidecar is copied into packaged resources.
-    if (!isClientOnly && !app.isPackaged) {
+    if (!isClientOnly) {
       try {
+        const tradeGodHost = resolveTradeGodHostConfig({
+          isPackaged: app.isPackaged,
+          appPath: app.getAppPath(),
+          resourcesPath: process.resourcesPath,
+          cwd: process.cwd(),
+          homeDir: homedir(),
+          env: process.env,
+          platform: process.platform,
+        })
         tradeGodRuntime = createTradeGodRuntime({
           ipcMain,
-          rootCandidates: [
-            process.env.RUNNEROS_ROOT,
-            process.cwd(),
-            app.getAppPath(),
-            join(app.getAppPath(), '..', '..'),
-          ].filter((candidate): candidate is string => Boolean(candidate)),
-          runtimeExecutable: process.env.TRADE_GOD_RUNTIME_EXECUTABLE || join(homedir(), '.bun', 'bin', 'bun'),
+          ...tradeGodHost,
           now: () => new Date().toISOString(),
         })
-        mainLog.info('[trade-god] local runtime registered')
+        mainLog.info(`[trade-god] local runtime registered (${app.isPackaged ? 'packaged' : 'development'})`)
       } catch (error) {
         mainLog.warn('[trade-god] local runtime unavailable:', error instanceof Error ? error.message : String(error))
       }

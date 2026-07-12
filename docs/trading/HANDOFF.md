@@ -28,13 +28,13 @@ Build a local-first desktop trading intelligence system where deterministic anal
 
 ## Current Truth
 
-The Phase 0 development walking skeleton is implemented. A project-owned ES fixture travels through a standalone Order Flow sidecar, validated contracts, a typed client, Electron supervision, narrow IPC/preload methods, and a visible Trade God workbench.
+The Phase 0 walking skeleton is implemented for development and packaged-sidecar resolution. A project-owned ES fixture travels through a standalone Order Flow sidecar, validated contracts, a typed client, Electron supervision, narrow IPC/preload methods, and a visible Trade God workbench. The build now emits a self-contained sidecar bundle and packaged mode selects RunnerOS's bundled Bun.
 
-This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real Electron user path and packaged sidecar have not been proven.
+This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real visual Electron user path and a fully built packaged installer have not been proven.
 
 ## Immediate Assignment
 
-Run the real Electron app from this worktree, open `trade-god`, verify health and the known artifact, force one visible failure state, and record the evidence. Then implement packaged-sidecar bundling/resolution.
+At the first reliable desktop opportunity, run Electron from this worktree, open `trade-god`, verify health and the known artifact, force one visible failure state, and record the evidence. Until then, continue with active cancellation and trace-to-receipt work.
 
 ## Known Expected Artifact
 
@@ -48,10 +48,11 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
-- Fast Trade God suite: 53 passed, 0 failed, 129 expectations across 11 files.
+- Fast Trade God suite: 58 passed, 0 failed, 138 expectations across 12 files.
 - Electron main, preload, and renderer production builds passed.
 - Real Electron smoke: not run.
-- Packaged sidecar: not implemented.
+- Packaged sidecar bundle and resolution: implemented and integration-tested; actual packaged installer not built/smoked.
+- Crash policy: failed work is not replayed; the sidecar restarts only on the next explicit request.
 - Full monorepo typecheck: blocked by a pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package typechecks: unverified after prior tool-layer hangs.
 
@@ -69,9 +70,9 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 1. Real Electron success-path smoke.
 2. Real Electron failure-state smoke.
-3. Packaged-sidecar asset/copy/resolution path.
-4. Restart-policy and partial-frame tests.
-5. Active-computation cancellation.
+3. Actual packaged-app build/resource-layout smoke.
+4. Active-computation cancellation.
+5. Trace-to-persisted-receipt proof.
 
 ## Do Not Do Yet
 

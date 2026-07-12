@@ -115,7 +115,7 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - [x] Altered checksum is rejected before analysis.
 - [x] Invalid response payload never reaches UI as valid data.
 - [x] Timeout, cancellation, and crash are distinguishable.
-- [ ] Sidecar restarts or remains stopped according to documented policy.
+- [x] Sidecar restarts or remains stopped according to documented policy.
 - [ ] Electron real IPC path shows health, successful artifact, and error state.
 - [ ] Trace ID joins request, logs, artifact, and receipt.
 - [x] No live/provider/broker capability is reachable.
@@ -146,8 +146,7 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 
 ## Open Questions
 
-- Exact sidecar restart policy during development versus packaged desktop runtime.
-- Packaged-sidecar asset location and build/copy convention.
+- Exact run-receipt storage adapter for Phase 0 trace joining.
 
 ## Evidence Log
 
@@ -166,4 +165,8 @@ All envelopes include `schema_version`, `message_id`, `trace_id`, `created_at`, 
 - Complete fast Phase 0 suite after preload wiring: 34 passed, 0 failed, 69 expectations.
 - 2026-07-11: typed Trade God route, command navigation, and diagnostic renderer workbench added; renderer production build passed.
 - Complete fast Phase 0 suite after the workbench: 53 passed, 0 failed, 129 expectations across 11 files.
-- Still open: real Electron smoke, packaged path resolution, restart policy, active-computation cancellation, partial-frame tests, and trace-to-persisted-receipt proof.
+- 2026-07-11: self-contained packaged sidecar build, packaged/bundled-Bun resolution, packaged bootstrap registration, partial-frame proof, and next-request restart policy added through red-green tests.
+- Complete fast Phase 0 suite after packaging/lifecycle hardening: 58 passed, 0 failed, 138 expectations across 12 files.
+- Restart policy: fail the crashed request, never replay it, and start a new process only for a later explicit request.
+- **Required at first possible desktop opportunity:** real visual Electron smoke of Ready, fixture result (`28`, `6`, `5592.25`), and one forced visible failure.
+- Still open: actual packaged-installer smoke, real visual Electron smoke, active-computation cancellation, and trace-to-persisted-receipt proof.

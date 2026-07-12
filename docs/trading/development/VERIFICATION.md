@@ -135,6 +135,17 @@ A lower rung does not prove a higher rung.
 - Proven: typed `trade-god` route parsing, command navigation entry, diagnostic shell rendering, and production renderer compilation. The implemented page requests health, runs the known fixture, and renders summary, provenance, quality, trace, and failure state through the two preload methods.
 - Not proven: actual Electron launch, live click-path behavior, visual correctness, forced runtime failure behavior, packaged sidecar resolution, or restart policy.
 
+## Phase 0 Slice 9 — Packaged Sidecar and Supervisor Policy
+
+- Method: packaged resolution, artifact build, host selection, partial-frame handling, and restart policy were each introduced through focused failing tests before implementation/fixtures.
+- Complete fast Trade God suite: 58 passed, 0 failed, 138 expectations across 12 files.
+- `trade-god:build-sidecars`: passed and emitted `apps/electron/dist/trade-god/order-flow-engine.mjs`.
+- Packaged artifact integration test: launched the self-contained bundle with Bun and received schema-valid ready health.
+- Electron `build:main`, `build:preload`, and `build:renderer`: passed.
+- Proven: source-versus-packaged entrypoint resolution, packaged app-root isolation, bundled-Bun selection, packaged bootstrap registration compiling into main, split stdout-frame assembly, and restart-on-next-explicit-request after a crash without replaying failed work.
+- Policy: a crashed request fails visibly and is never automatically replayed; a later explicit request may start a fresh sidecar process.
+- Not proven: electron-builder installer/resource layout, installed packaged-app execution, real visual workbench interaction, active-computation cancellation, or trace-to-persisted-receipt joining.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

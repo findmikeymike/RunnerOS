@@ -10,9 +10,9 @@ source_of_truth: true
 ## Snapshot
 
 - Date: 2026-07-11
-- Stage: Phase 0 walking skeleton awaiting real Electron smoke and packaged-sidecar support
-- Current goal: launch the exact worktree, exercise the Trade God workbench, and capture runtime proof
-- Overall state: the first end-to-end development path exists from deterministic fixture through sidecar, typed client, Electron IPC/preload, and visible renderer workbench; it is build- and test-verified, not yet runtime-smoked in Electron
+- Stage: Phase 0 walking skeleton awaiting real visual Electron smoke
+- Current goal: capture the real Trade God workbench success and failure paths at the first possible desktop opportunity
+- Overall state: the development and packaged-sidecar paths are implemented and test-verified through Electron bootstrap; the actual visual Electron user path and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -31,33 +31,36 @@ The workbench can request engine health, run the known fixture, and display tota
 - Added the standalone Order Flow JSON-RPC sidecar and typed trading client boundary.
 - Added Electron process supervision, constrained lifecycle, narrow local IPC, runtime resolution, preload exposure, and quit disposal.
 - Added the typed `trade-god` route, command navigation entry, and diagnostic workbench.
-- Kept packaged initialization disabled until the sidecar is deliberately bundled.
+- Added a self-contained packaged Order Flow sidecar build, packaged-source resolution, bundled-Bun selection, and packaged Electron bootstrap registration.
+- Defined crash policy: never replay failed work; restart only on the next explicit request.
+- Verified partial stdout-frame assembly.
 - Audited 42 starred trading repositories and documented the integration strategy.
 
 ## Next Actions
 
-1. Launch Electron from this exact worktree and open the Trade God workbench.
+1. **Required at first possible desktop opportunity:** launch Electron from this exact worktree and open the Trade God workbench.
 2. Verify Ready state, run the fixture, and confirm total volume `28`, delta `6`, and POC `5592.25`.
 3. Exercise a visible runtime failure state and record the proof.
-4. Add the packaged sidecar copy/build step and packaged-resource resolver.
-5. Define restart policy and add partial-frame plus active-cancellation tests.
+4. Build and inspect an actual packaged app/installer so the resource layout is proven beyond unit/integration tests.
+5. Add active-computation cancellation and trace-to-persisted-receipt proof.
 6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them into Phase 0 blindly.
 
 ## Blockers / Decisions Needed
 
-- Packaged-sidecar asset location and build/copy convention.
-- Explicit development and packaged-runtime restart policy.
+- Physical access or reliable Computer Use access for the real visual Electron smoke.
 
 The fixture, transport, contract, worktree, and initial compatibility policy are no longer open blockers.
 
 ## Verification State
 
-- Complete fast Trade God suite: 53 passed, 0 failed, 129 expectations across 11 files.
+- Complete fast Trade God suite: 58 passed, 0 failed, 138 expectations across 12 files.
 - Electron `build:main`, `build:preload`, and `build:renderer` passed.
+- The generated packaged sidecar bundle launched independently and answered a schema-valid health request.
+- Packaged root selection, bundled-Bun selection, partial frames, and next-request restart behavior passed focused tests.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.
-- Real Electron interaction and packaged-sidecar execution are not yet verified.
+- Real Electron interaction and a fully built packaged installer are not yet verified.
 
 ## Explicitly Not In Scope Yet
 
@@ -68,4 +71,4 @@ The fixture, transport, contract, worktree, and initial compatibility policy are
 
 ## Notes for the Next Agent
 
-Read this file, `HANDOFF.md`, the Phase 0 spec, and `development/VERIFICATION.md`. Do not call build/test proof runtime proof. The next useful move is the real Electron smoke—not more architecture or more agent folders.
+Read this file, `HANDOFF.md`, the Phase 0 spec, and `development/VERIFICATION.md`. Do not call bundle-level proof an installed-app smoke. At the first reliable desktop opportunity, verify Ready, run the fixture, confirm `28 / 6 / 5592.25`, and force one visible failure.
