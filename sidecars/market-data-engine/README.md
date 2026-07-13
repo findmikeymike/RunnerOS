@@ -17,7 +17,7 @@ The focused test is verified on Darwin ARM64. Windows and Linux wheels are prese
 
 The project-owned ES fixture is converted into exact Nautilus `TradeTick` objects and emitted as the provider-independent Trade God canonical batch. Python and TypeScript agree on the full golden payload and canonical SHA-256. Source checksum/count mismatch fails closed; duplicate records are excluded and out-of-order input is visibly degraded.
 
-Invalid timestamp, size, precision, and instrument-metadata reporting remain the next quality-gate slice. There is no live data, network provider, broker, account, order, or execution capability.
+The quality gate also returns typed outcomes for malformed payloads/records, invalid timestamps, non-positive sizes, off-tick prices, unsupported aggressors, and invalid instrument metadata. The fixture-only RPC command is the next slice. There is no live data, network provider, broker, account, order, or execution capability.
 
 ## Verify
 

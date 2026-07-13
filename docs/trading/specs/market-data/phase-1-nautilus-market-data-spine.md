@@ -159,10 +159,10 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 - [ ] Windows and Linux runtime/package compatibility is smoke-verified.
 - [x] A project-owned ES fixture becomes valid Nautilus `TradeTick` objects.
 - [x] Trade God canonical events validate without Nautilus imports in the contract package.
-- [ ] Decimal/fixed-point precision round-trips exactly.
+- [x] Decimal/fixed-point precision round-trips exactly for canonical fixture output and contract validation.
 - [x] Identical fixture replay produces canonical-equivalent output and checksum across Python and TypeScript.
 - [x] Duplicate and out-of-order behavior is deterministic and visible.
-- [ ] Bad timestamps, sizes, checksums, and instrument metadata fail with typed errors.
+- [x] Bad timestamps, sizes, price increments, checksums, malformed records/payloads, and instrument metadata produce typed quality outcomes.
 - [ ] The Order Flow engine consumes only Trade God canonical input.
 - [ ] Trace joins source batch, adapter logs, quality report, feature artifact, and receipt.
 - [ ] Cancellation and sidecar crash remain distinguishable.

@@ -209,6 +209,15 @@ A lower rung does not prove a higher rung.
 - Input integrity: records are parsed only from the checksum-verified bytes, so callers cannot validate one payload and emit another.
 - Not proven: malformed JSON/record typing, invalid timestamp/size/precision/instrument reporting, sidecar RPC, Order Flow replay, candles, or historical storage.
 
+## Phase 1 Slice 4 — Replay Quality Matrix
+
+- Method: red-green TDD plus adversarial fail-closed review.
+- Python adapter suite: 9 passed, 0 failed.
+- Proven degraded outcomes: duplicate source identities are excluded; out-of-order events remain visible; malformed records, invalid timestamps, non-positive sizes, off-tick prices, and unsupported aggressors are rejected while valid records remain usable.
+- Proven invalid outcomes: source checksum/count mismatch, checksum-verified malformed JSON/non-array payloads, invalid instrument metadata, and all-rejected batches raise `FixtureQualityError` with the actual typed quality report.
+- Validation order: checksum rejection occurs before parsing untrusted bytes; canonical records derive only from verified bytes.
+- Not proven: RPC framing/cancellation/crash behavior for the Python sidecar, Order Flow consumption, candles, or historical storage.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

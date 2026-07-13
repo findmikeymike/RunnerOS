@@ -145,6 +145,96 @@ class FixtureAdapterTest(unittest.TestCase):
         self.assertEqual(len(batch["events"]), 3)
         self.assertEqual(batch["events"][-1]["quality_flags"], ["out-of-order-event-time"])
 
+    def test_rejects_bad_records_with_typed_quality_and_keeps_valid_records(self) -> None:
+        original_manifest = json.loads((FIXTURE_DIR / "manifest.json").read_text())
+        valid = json.loads((FIXTURE_DIR / original_manifest["events_file"]).read_text())
+        bad_timestamp = {**valid[0], "sequence": 5, "event_time": "not-a-time"}
+        bad_size = {**valid[0], "sequence": 6, "size": "0"}
+        bad_precision = {**valid[0], "sequence": 7, "price": "5592.10"}
+        missing_price = {key: value for key, value in {**valid[0], "sequence": 8}.items() if key != "price"}
+        bad_aggressor = {**valid[0], "sequence": 9, "aggressor": "maybe"}
+        records = [*valid, bad_timestamp, bad_size, bad_precision, missing_price, bad_aggressor]
+        source_bytes = canonical_json(records).encode("utf-8")
+        manifest = {
+            **original_manifest,
+            "event_count": len(records),
+            "events_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        }
+
+        batch = build_canonical_batch(
+            manifest,
+            trace_id="trace-invalid-records",
+            batch_id="batch-invalid-records",
+            source_bytes=source_bytes,
+        )
+
+        self.assertEqual(batch["quality"]["state"], "degraded")
+        self.assertEqual(batch["quality"]["counts"]["received"], 9)
+        self.assertEqual(batch["quality"]["counts"]["accepted"], 4)
+        self.assertEqual(batch["quality"]["counts"]["rejected"], 5)
+        self.assertEqual(set(batch["quality"]["flags"]), {
+            "invalid-event-time",
+            "non-positive-size",
+            "invalid-price-increment",
+            "malformed-source-record",
+            "unsupported-aggressor-side",
+        })
+        self.assertEqual(len(batch["quality"]["issues"]), 5)
+
+    def test_fails_closed_on_invalid_instrument_metadata(self) -> None:
+        manifest = json.loads((FIXTURE_DIR / "manifest.json").read_text())
+        manifest["instrument"] = {**manifest["instrument"], "tick_size": "0"}
+        source_bytes = (FIXTURE_DIR / manifest["events_file"]).read_bytes()
+
+        with self.assertRaises(FixtureQualityError) as raised:
+            build_canonical_batch(
+                manifest,
+                trace_id="trace-invalid-instrument",
+                batch_id="batch-invalid-instrument",
+                source_bytes=source_bytes,
+            )
+
+        self.assertEqual(raised.exception.report["flags"], ["invalid-instrument-metadata"])
+
+    def test_fails_closed_on_a_verified_but_malformed_payload(self) -> None:
+        manifest = json.loads((FIXTURE_DIR / "manifest.json").read_text())
+        source_bytes = b"not-json"
+        manifest["event_count"] = 0
+        manifest["events_sha256"] = hashlib.sha256(source_bytes).hexdigest()
+
+        with self.assertRaises(FixtureQualityError) as raised:
+            build_canonical_batch(
+                manifest,
+                trace_id="trace-malformed-source",
+                batch_id="batch-malformed-source",
+                source_bytes=source_bytes,
+            )
+
+        self.assertEqual(raised.exception.report["flags"], ["malformed-source-payload"])
+
+    def test_all_rejected_records_preserve_the_actual_quality_cause(self) -> None:
+        original_manifest = json.loads((FIXTURE_DIR / "manifest.json").read_text())
+        original = json.loads((FIXTURE_DIR / original_manifest["events_file"]).read_text())[0]
+        records = [{**original, "size": "0"}]
+        source_bytes = canonical_json(records).encode("utf-8")
+        manifest = {
+            **original_manifest,
+            "event_count": 1,
+            "events_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        }
+
+        with self.assertRaises(FixtureQualityError) as raised:
+            build_canonical_batch(
+                manifest,
+                trace_id="trace-all-rejected",
+                batch_id="batch-all-rejected",
+                source_bytes=source_bytes,
+            )
+
+        self.assertEqual(raised.exception.report["state"], "invalid")
+        self.assertEqual(raised.exception.report["flags"], ["non-positive-size"])
+        self.assertEqual(raised.exception.report["issues"][0]["code"], "non-positive-size")
+
 
 if __name__ == "__main__":
     unittest.main()

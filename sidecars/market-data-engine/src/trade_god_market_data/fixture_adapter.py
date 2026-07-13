@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 from typing import Any
@@ -130,6 +130,31 @@ def _fixed_point(value: str) -> dict[str, str | int]:
     return {"value": value, "raw": str(raw), "precision": precision}
 
 
+def _instrument_tick_size(instrument: Any) -> Decimal | None:
+    if not isinstance(instrument, Mapping):
+        return None
+    required = {"id", "symbol", "venue", "asset_class", "currency", "tick_size", "multiplier"}
+    if not required.issubset(instrument):
+        return None
+    if instrument["asset_class"] not in {"future", "equity", "option", "forex", "crypto"}:
+        return None
+    currency = instrument["currency"]
+    if not isinstance(currency, str) or len(currency) != 3 or not currency.isupper():
+        return None
+    if not all(isinstance(instrument[key], str) and instrument[key] for key in ("id", "symbol", "venue")):
+        return None
+    if not isinstance(instrument["tick_size"], str) or not isinstance(instrument["multiplier"], str):
+        return None
+    try:
+        tick_size = Decimal(instrument["tick_size"])
+        multiplier = Decimal(instrument["multiplier"])
+    except InvalidOperation:
+        return None
+    if not tick_size.is_finite() or not multiplier.is_finite() or tick_size <= 0 or multiplier <= 0:
+        return None
+    return tick_size
+
+
 def build_canonical_batch(
     manifest: Mapping[str, Any],
     *,
@@ -155,9 +180,28 @@ def build_canonical_batch(
         )
         raise FixtureQualityError("Fixture checksum mismatch", report)
 
-    records = json.loads(source_bytes)
+    try:
+        records = json.loads(source_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        report = _invalid_report(
+            batch_id=batch_id,
+            trace_id=trace_id,
+            received=int(manifest.get("event_count", 0)),
+            source_sha256=actual_source_sha256,
+            flag="malformed-source-payload",
+            message="Checksum-verified source bytes are not valid JSON.",
+        )
+        raise FixtureQualityError("Malformed fixture payload", report) from None
     if not isinstance(records, list):
-        raise ValueError("Fixture events payload must be a JSON array")
+        report = _invalid_report(
+            batch_id=batch_id,
+            trace_id=trace_id,
+            received=int(manifest.get("event_count", 0)),
+            source_sha256=actual_source_sha256,
+            flag="malformed-source-payload",
+            message="Fixture events payload must be a JSON array.",
+        )
+        raise FixtureQualityError("Malformed fixture payload", report)
 
     if len(records) != int(manifest["event_count"]):
         report = _invalid_report(
@@ -170,6 +214,18 @@ def build_canonical_batch(
         )
         raise FixtureQualityError("Fixture event count mismatch", report)
 
+    tick_size = _instrument_tick_size(instrument)
+    if tick_size is None:
+        report = _invalid_report(
+            batch_id=batch_id,
+            trace_id=trace_id,
+            received=len(records),
+            source_sha256=actual_source_sha256,
+            flag="invalid-instrument-metadata",
+            message="Instrument metadata is missing, unsupported, or non-positive.",
+        )
+        raise FixtureQualityError("Invalid instrument metadata", report)
+
     accepted: list[tuple[Mapping[str, Any], list[str]]] = []
     seen_record_ids: set[str] = set()
     issues: list[dict[str, Any]] = []
@@ -177,9 +233,117 @@ def build_canonical_batch(
     out_of_order_count = 0
     previous_event_time: int | None = None
 
-    for record in records:
-        sequence = str(record["sequence"])
+    for index, record in enumerate(records):
+        fallback_record_id = f"{fixture_id}:index-{index}"
+        if not isinstance(record, Mapping):
+            issues.append({
+                "code": "malformed-source-record",
+                "severity": "error",
+                "message": "Source record must be a JSON object.",
+                "record_id": fallback_record_id,
+            })
+            continue
+
+        sequence_value = record.get("sequence")
+        if isinstance(sequence_value, bool) or not isinstance(sequence_value, (int, str)):
+            issues.append({
+                "code": "malformed-source-record",
+                "severity": "error",
+                "message": "Source record requires an integer sequence.",
+                "record_id": fallback_record_id,
+            })
+            continue
+        sequence = str(sequence_value)
+        if not sequence.isdigit() or int(sequence) <= 0:
+            issues.append({
+                "code": "malformed-source-record",
+                "severity": "error",
+                "message": "Source record sequence must be positive.",
+                "record_id": fallback_record_id,
+            })
+            continue
+
         record_id = f"{fixture_id}:{sequence}"
+        required = {"event_time", "price", "size", "aggressor"}
+        if not required.issubset(record):
+            issues.append({
+                "code": "malformed-source-record",
+                "severity": "error",
+                "message": "Source record is missing a required market field.",
+                "record_id": record_id,
+            })
+            continue
+
+        if not isinstance(record["event_time"], str):
+            issues.append({
+                "code": "invalid-event-time",
+                "severity": "error",
+                "message": "Event time must be an offset-aware ISO-8601 string.",
+                "record_id": record_id,
+            })
+            continue
+        try:
+            event_time = _utc_nanoseconds(record["event_time"])
+        except (TypeError, ValueError):
+            issues.append({
+                "code": "invalid-event-time",
+                "severity": "error",
+                "message": "Event time must be an offset-aware ISO-8601 string.",
+                "record_id": record_id,
+            })
+            continue
+
+        if not isinstance(record["size"], str):
+            issues.append({
+                "code": "non-positive-size",
+                "severity": "error",
+                "message": "Trade size must be a positive decimal string.",
+                "record_id": record_id,
+            })
+            continue
+        try:
+            size = Decimal(record["size"])
+        except InvalidOperation:
+            size = Decimal(0)
+        if not size.is_finite() or size <= 0:
+            issues.append({
+                "code": "non-positive-size",
+                "severity": "error",
+                "message": "Trade size must be a positive decimal string.",
+                "record_id": record_id,
+            })
+            continue
+
+        if not isinstance(record["price"], str):
+            issues.append({
+                "code": "invalid-price-increment",
+                "severity": "error",
+                "message": "Trade price must align to the instrument tick size.",
+                "record_id": record_id,
+            })
+            continue
+        try:
+            price = Decimal(record["price"])
+        except InvalidOperation:
+            price = Decimal("NaN")
+        if not price.is_finite() or price % tick_size != 0:
+            issues.append({
+                "code": "invalid-price-increment",
+                "severity": "error",
+                "message": "Trade price must align to the instrument tick size.",
+                "record_id": record_id,
+            })
+            continue
+
+        if record["aggressor"] not in _AGGRESSOR_SIDES:
+            issues.append({
+                "code": "unsupported-aggressor-side",
+                "severity": "error",
+                "message": "Aggressor side must be buy or sell for this fixture.",
+                "record_id": record_id,
+            })
+            continue
+
         if record_id in seen_record_ids:
             duplicate_count += 1
             issues.append({
@@ -191,7 +355,6 @@ def build_canonical_batch(
             continue
 
         seen_record_ids.add(record_id)
-        event_time = _utc_nanoseconds(str(record["event_time"]))
         quality_flags: list[str] = []
         if previous_event_time is not None and event_time < previous_event_time:
             out_of_order_count += 1
@@ -206,14 +369,30 @@ def build_canonical_batch(
         accepted.append((record, quality_flags))
 
     if not accepted:
-        report = _invalid_report(
-            batch_id=batch_id,
-            trace_id=trace_id,
-            received=len(records),
-            source_sha256=actual_source_sha256,
-            flag="no-accepted-records",
-            message="Fixture contains no records eligible for canonical output.",
-        )
+        if not issues:
+            issues.append({
+                "code": "no-accepted-records",
+                "severity": "error",
+                "message": "Fixture contains no records eligible for canonical output.",
+            })
+        flags = list(dict.fromkeys(issue["code"] for issue in issues))
+        report = {
+            "quality_report_schema_version": "market-quality-report@1",
+            "batch_id": batch_id,
+            "trace_id": trace_id,
+            "state": "invalid",
+            "counts": {
+                "received": len(records),
+                "accepted": 0,
+                "rejected": len(records),
+                "duplicates": duplicate_count,
+                "out_of_order": out_of_order_count,
+            },
+            "flags": flags,
+            "issues": issues,
+            "source_sha256": actual_source_sha256,
+            "canonical_events_sha256": _empty_events_sha256(),
+        }
         raise FixtureQualityError("Fixture has no accepted records", report)
 
     accepted_records = [record for record, _ in accepted]
@@ -267,11 +446,10 @@ def build_canonical_batch(
         canonical_json(events).encode("utf-8"),
     ).hexdigest()
     event_times = [int(event["ts_event_ns"]) for event in events]
-    quality_flags = []
-    if duplicate_count > 0:
-        quality_flags.append("duplicate-source-record")
-    if out_of_order_count > 0:
-        quality_flags.append("out-of-order-event-time")
+    quality_flags: list[str] = []
+    for issue in issues:
+        if issue["code"] not in quality_flags:
+            quality_flags.append(issue["code"])
     quality = {
         "quality_report_schema_version": "market-quality-report@1",
         "batch_id": batch_id,
@@ -280,7 +458,7 @@ def build_canonical_batch(
         "counts": {
             "received": len(records),
             "accepted": len(events),
-            "rejected": duplicate_count,
+            "rejected": len(records) - len(events),
             "duplicates": duplicate_count,
             "out_of_order": out_of_order_count,
         },
