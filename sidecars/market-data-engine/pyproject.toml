@@ -1,0 +1,18 @@
+[project]
+name = "trade-god-market-data-engine"
+version = "0.1.0"
+description = "Replay-only NautilusTrader adapter for Trade God market data"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "nautilus_trader==1.230.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trade_god_market_data"]
+
+[tool.uv]
+package = true

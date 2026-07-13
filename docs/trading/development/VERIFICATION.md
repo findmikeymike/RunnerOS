@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-11
+last_verified: 2026-07-13
 source_of_truth: true
 ---
 
@@ -176,6 +176,17 @@ A lower rung does not prove a higher rung.
 - Electron `build:main`: passed.
 - Proven: supervisor-owned trace before analysis starts; caller trace propagation through the typed client; structured start/success/failure/canceled log events; matching artifact and receipt trace; receipt/artifact identifiers in success logs.
 - Not proven: visual user path, packaged installer, log retention/search UX, or a spawned failure/cancellation receipt audit.
+
+## Phase 1 Slice 1 — Pinned Nautilus TradeTick Boundary
+
+- Environment: isolated sidecar `.venv`, Python `3.12.9`, NautilusTrader `1.230.0`, Darwin ARM64.
+- Dependency declaration: exact Nautilus version, local Python `3.12.9` pin, compatible Python 3.12 range in `pyproject.toml`, and full graph in `uv.lock`.
+- License recorded from upstream package metadata: `LGPL-3.0-or-later`.
+- Method: red-green TDD; the unit test first failed because `trade_god_market_data.fixture_adapter` did not exist.
+- Focused suite: 1 passed, 0 failed.
+- Proven: four project-owned ES records become Nautilus `TradeTick` objects with exact `ESU6.XCME` identity, decimal prices/sizes, aggressor sides, sequence trade IDs, and deterministic UTC nanosecond timestamps.
+- Boundary: no Nautilus import was added to Trade God contracts, Electron, Order Flow, or agent code.
+- Not proven: Windows/Linux runtime packaging, canonical Trade God market events, quality report, replay checksum, sidecar protocol, failure matrix, or Order Flow consumption.
 
 ## Trading-Specific Integrity Tests
 

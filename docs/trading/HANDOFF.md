@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-11
+last_verified: 2026-07-13
 source_of_truth: false
 ---
 
@@ -16,15 +16,16 @@ Build a local-first desktop trading intelligence system where deterministic anal
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` `e7e96be3`
-- Implementation head before this docs refresh: `d215ed7a`
+- Implementation head before the active slice: `840c83db`
 - Other RunnerOS worktrees: intentionally untouched
 
 ## Read First
 
 1. `docs/trading/CURRENT.md`
 2. `docs/trading/specs/foundation/phase-0-contract-kernel.md`
-3. `docs/trading/development/VERIFICATION.md`
-4. `docs/trading/architecture/OVERVIEW.md`
+3. `docs/trading/specs/market-data/phase-1-nautilus-market-data-spine.md`
+4. `docs/trading/development/VERIFICATION.md`
+5. `docs/trading/architecture/OVERVIEW.md`
 
 ## Current Truth
 
@@ -32,9 +33,11 @@ The Phase 0 walking skeleton is implemented for development and packaged-sidecar
 
 This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real visual Electron user path and a fully built packaged installer have not been proven.
 
+Phase 1 has begun with an isolated Python 3.12.9/NautilusTrader 1.230.0 sidecar. The project-owned ES fixture now becomes exact Nautilus `TradeTick` objects. Nautilus objects remain inside the sidecar; canonical Trade God market events are the next boundary and are not implemented yet.
+
 ## Immediate Assignment
 
-At the first reliable desktop opportunity, run Electron from this worktree, open `trade-god`, verify health and the known artifact, force one visible failure state, and record the evidence. Until then, continue with active cancellation and trace-to-receipt work.
+Build the canonical market-trade event and quality-report schemas with golden examples, then map the proven Nautilus ticks into them. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
 
 ## Known Expected Artifact
 
@@ -59,6 +62,8 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Receipt-focused verification: 23 passed, 0 failed. Latest complete suite remains 62 passed; the attempted combined rerun hung in the tool layer and was stopped.
 - Full monorepo typecheck: blocked by a pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package typechecks: unverified after prior tool-layer hangs.
+- Phase 1 fixture adapter: 1 test passed after an observed failing test; Python `3.12.9`, NautilusTrader `1.230.0`, Darwin ARM64.
+- Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
 
 ## Non-Negotiable Boundaries
 
@@ -72,10 +77,11 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Next Smallest Actions
 
-1. Real Electron success-path smoke.
-2. Real Electron failure-state smoke.
-3. Actual packaged-app build/resource-layout smoke.
-4. Real visual success/cancel/failure smoke and packaged-installer smoke.
+1. Canonical market-trade event and quality-report contracts.
+2. Nautilus tick to canonical-event conversion plus deterministic checksum.
+3. Duplicate, ordering, precision, timestamp, and checksum failure tests.
+4. Real visual success/cancel/failure smoke at the first desktop opportunity.
+5. Actual packaged-app build/resource-layout smoke.
 
 ## Do Not Do Yet
 

@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-12
+last_verified: 2026-07-13
 source_of_truth: true
 spec_id: TG-DATA-001
 target_phase: 1
@@ -46,7 +46,7 @@ Start with the stable public Python data model and catalog path:
 - Public data loaders/wranglers for source conversion.
 - A dedicated adapter process that serializes Trade God envelopes.
 
-Do not mix Nautilus v1 Cython objects and v2 PyO3/Arrow objects in the first slice. The exact pinned Nautilus version and v1/v2 migration policy must be recorded after the executable compatibility spike.
+Do not mix Nautilus v1 Cython objects and v2 PyO3/Arrow objects in the first slice. The compatibility spike pins stable NautilusTrader `1.230.0`, local Python `3.12.9`, and a compatible Python `3.12.x` range; any v2 migration requires a separate decision and contract proof.
 
 ## Ownership Boundary
 
@@ -151,8 +151,9 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 
 ## Acceptance Criteria
 
-- [ ] Nautilus version, license, Python version, and platform are pinned and reproducible.
-- [ ] A project-owned ES fixture becomes valid Nautilus `TradeTick` objects.
+- [x] Nautilus version/license and local Python `3.12.9` are pinned; Darwin ARM64 is verified.
+- [ ] Windows and Linux runtime/package compatibility is smoke-verified.
+- [x] A project-owned ES fixture becomes valid Nautilus `TradeTick` objects.
 - [ ] Trade God canonical events validate without Nautilus imports in the contract package.
 - [ ] Identical replay produces canonical-equivalent output and checksum.
 - [ ] Decimal/fixed-point precision round-trips exactly.
