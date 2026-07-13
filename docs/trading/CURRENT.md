@@ -47,6 +47,7 @@ The workbench can request engine health, run the known fixture, and display tota
 3. Exercise a visible runtime failure state and record the proof.
 4. Build and inspect an actual packaged app/installer so the resource layout is proven beyond unit/integration tests.
 5. At the first desktop opportunity, visually smoke success, cancellation, and one failure; separately build/smoke the packaged installer.
+6. Execute `specs/market-data/phase-1-nautilus-market-data-spine.md`: first pin/install Nautilus, then prove fixture `TradeTick` conversion and canonical event contracts.
 6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them into Phase 0 blindly.
 
 ## Blockers / Decisions Needed
