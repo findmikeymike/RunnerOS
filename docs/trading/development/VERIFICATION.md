@@ -199,6 +199,16 @@ A lower rung does not prove a higher rung.
 - Boundary: the TypeScript contracts contain no Nautilus import.
 - Not proven: Python emits these contracts, Python and TypeScript produce the same checksum, quality policies execute on bad records, replay reaches Order Flow, or candles/history exist.
 
+## Phase 1 Slice 3 — Cross-Language Canonical Adapter
+
+- Method: red-green TDD plus `$rival`/`$fix`; missing Python exports failed first, then false-valid quality and split-brain source inputs were identified and repaired.
+- Python adapter suite: 5 passed, 0 failed.
+- TypeScript contract suite after golden expansion: 20 passed, 0 failed.
+- Proven: the full four-record source bytes become Nautilus ticks, canonical events, quality report, and bounded batch; Python output equals the TypeScript-owned golden object; both languages produce SHA-256 `bd90ebcf629d2fae7ffaec70f49f09caf85bc91f533ea69365ff2e5959efa05b`.
+- Quality proven: source checksum mismatch fails closed with an invalid typed report; manifest count mismatch is fail-closed in code; duplicate source identities are excluded and counted; out-of-order accepted events are retained, flagged, and degrade the batch.
+- Input integrity: records are parsed only from the checksum-verified bytes, so callers cannot validate one payload and emit another.
+- Not proven: malformed JSON/record typing, invalid timestamp/size/precision/instrument reporting, sidecar RPC, Order Flow replay, candles, or historical storage.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

@@ -33,11 +33,11 @@ The Phase 0 walking skeleton is implemented for development and packaged-sidecar
 
 This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real visual Electron user path and a fully built packaged installer have not been proven.
 
-Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 sidecar and provider-independent Trade God event, quality-report, and bounded-batch contracts. The project-owned ES fixture becomes exact Nautilus `TradeTick` objects, but the Python adapter does not emit the new contracts yet.
+Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 sidecar and provider-independent Trade God event, quality-report, and bounded-batch contracts. The Python adapter emits the exact full TypeScript golden batch and checksum, rejects corrupted source bytes/counts, excludes duplicate source records, and marks out-of-order input degraded.
 
 ## Immediate Assignment
 
-Map the proven Nautilus ticks into canonical batches, execute quality checks, and prove a real cross-language checksum. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
+Finish typed bad-record quality outcomes, add the fixture-only market-data command, and route a validated canonical batch into Order Flow. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
 
 ## Known Expected Artifact
 
@@ -64,6 +64,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Standalone package typechecks: unverified after prior tool-layer hangs.
 - Phase 1 fixture adapter: 1 test passed after an observed failing test; Python `3.12.9`, NautilusTrader `1.230.0`, Darwin ARM64.
 - Phase 1 canonical contracts: 20 tests passed and standalone typecheck passed after adversarial findings were reproduced and fixed.
+- Phase 1 Python canonical adapter: 5 tests passed; Python and TypeScript full-batch goldens/checksums agree exactly.
 - Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
 
 ## Non-Negotiable Boundaries
@@ -78,8 +79,8 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Next Smallest Actions
 
-1. Nautilus tick to canonical-event conversion plus deterministic checksum.
-2. Duplicate, ordering, precision, timestamp, and checksum failure execution.
+1. Complete invalid timestamp, size, precision, malformed-record, and instrument quality outcomes.
+2. Add the fixture-only market-data sidecar command.
 3. Canonical replay batch into the Order Flow input boundary.
 4. Real visual success/cancel/failure smoke at the first desktop opportunity.
 5. Actual packaged-app build/resource-layout smoke.

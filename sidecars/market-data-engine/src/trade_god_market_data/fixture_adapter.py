@@ -2,6 +2,9 @@
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
+from decimal import Decimal
+import hashlib
+import json
 from typing import Any
 
 from nautilus_trader.model.data import TradeTick
@@ -14,6 +17,62 @@ _AGGRESSOR_SIDES = {
     "buy": AggressorSide.BUYER,
     "sell": AggressorSide.SELLER,
 }
+
+_CANONICAL_AGGRESSOR_SIDES = {
+    AggressorSide.BUYER: "buyer",
+    AggressorSide.SELLER: "seller",
+    AggressorSide.NO_AGGRESSOR: "unknown",
+}
+
+
+def canonical_json(value: Any) -> str:
+    """Encode the shared canonical JSON subset used by Trade God checksums."""
+
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+class FixtureQualityError(ValueError):
+    """A fixture cannot produce a usable canonical batch."""
+
+    def __init__(self, message: str, report: dict[str, Any]) -> None:
+        super().__init__(message)
+        self.report = report
+
+
+def _empty_events_sha256() -> str:
+    return hashlib.sha256(canonical_json([]).encode("utf-8")).hexdigest()
+
+
+def _invalid_report(
+    *,
+    batch_id: str,
+    trace_id: str,
+    received: int,
+    source_sha256: str,
+    flag: str,
+    message: str,
+) -> dict[str, Any]:
+    return {
+        "quality_report_schema_version": "market-quality-report@1",
+        "batch_id": batch_id,
+        "trace_id": trace_id,
+        "state": "invalid",
+        "counts": {
+            "received": received,
+            "accepted": 0,
+            "rejected": received,
+            "duplicates": 0,
+            "out_of_order": 0,
+        },
+        "flags": [flag],
+        "issues": [{
+            "code": flag,
+            "severity": "error",
+            "message": message,
+        }],
+        "source_sha256": source_sha256,
+        "canonical_events_sha256": _empty_events_sha256(),
+    }
 
 
 def _utc_nanoseconds(value: str) -> int:
@@ -62,3 +121,191 @@ def load_trade_ticks(
         )
 
     return tuple(ticks)
+
+
+def _fixed_point(value: str) -> dict[str, str | int]:
+    decimal = Decimal(value)
+    precision = max(0, -decimal.as_tuple().exponent)
+    raw = int(decimal * (10**precision))
+    return {"value": value, "raw": str(raw), "precision": precision}
+
+
+def build_canonical_batch(
+    manifest: Mapping[str, Any],
+    *,
+    trace_id: str,
+    batch_id: str,
+    source_bytes: bytes,
+) -> dict[str, Any]:
+    """Convert a fixture batch through Nautilus and emit Trade God wire data."""
+
+    instrument = manifest["instrument"]
+    fixture_id = str(manifest["fixture_id"])
+    fixture_sha256 = str(manifest["events_sha256"])
+    actual_source_sha256 = hashlib.sha256(source_bytes).hexdigest()
+
+    if actual_source_sha256 != fixture_sha256:
+        report = _invalid_report(
+            batch_id=batch_id,
+            trace_id=trace_id,
+            received=int(manifest.get("event_count", 0)),
+            source_sha256=actual_source_sha256,
+            flag="source-checksum-mismatch",
+            message="Source bytes do not match the fixture manifest checksum.",
+        )
+        raise FixtureQualityError("Fixture checksum mismatch", report)
+
+    records = json.loads(source_bytes)
+    if not isinstance(records, list):
+        raise ValueError("Fixture events payload must be a JSON array")
+
+    if len(records) != int(manifest["event_count"]):
+        report = _invalid_report(
+            batch_id=batch_id,
+            trace_id=trace_id,
+            received=len(records),
+            source_sha256=actual_source_sha256,
+            flag="source-event-count-mismatch",
+            message="Source record count does not match the fixture manifest.",
+        )
+        raise FixtureQualityError("Fixture event count mismatch", report)
+
+    accepted: list[tuple[Mapping[str, Any], list[str]]] = []
+    seen_record_ids: set[str] = set()
+    issues: list[dict[str, Any]] = []
+    duplicate_count = 0
+    out_of_order_count = 0
+    previous_event_time: int | None = None
+
+    for record in records:
+        sequence = str(record["sequence"])
+        record_id = f"{fixture_id}:{sequence}"
+        if record_id in seen_record_ids:
+            duplicate_count += 1
+            issues.append({
+                "code": "duplicate-source-record",
+                "severity": "warning",
+                "message": "Duplicate source record was excluded from canonical output.",
+                "record_id": record_id,
+            })
+            continue
+
+        seen_record_ids.add(record_id)
+        event_time = _utc_nanoseconds(str(record["event_time"]))
+        quality_flags: list[str] = []
+        if previous_event_time is not None and event_time < previous_event_time:
+            out_of_order_count += 1
+            quality_flags.append("out-of-order-event-time")
+            issues.append({
+                "code": "out-of-order-event-time",
+                "severity": "warning",
+                "message": "Event time precedes the prior accepted source record.",
+                "record_id": record_id,
+            })
+        previous_event_time = event_time
+        accepted.append((record, quality_flags))
+
+    if not accepted:
+        report = _invalid_report(
+            batch_id=batch_id,
+            trace_id=trace_id,
+            received=len(records),
+            source_sha256=actual_source_sha256,
+            flag="no-accepted-records",
+            message="Fixture contains no records eligible for canonical output.",
+        )
+        raise FixtureQualityError("Fixture has no accepted records", report)
+
+    accepted_records = [record for record, _ in accepted]
+    ticks = load_trade_ticks(manifest, accepted_records)
+    events: list[dict[str, Any]] = []
+
+    for (record, quality_flags), tick in zip(accepted, ticks, strict=True):
+        sequence = str(record["sequence"])
+        events.append({
+            "event_schema_version": "market-trade-event@1",
+            "event_id": f"trade:{fixture_id}:{sequence}",
+            "trace_id": trace_id,
+            "producer": {
+                "name": "trade-god-market-data-engine",
+                "version": "0.1.0",
+            },
+            "instrument": {
+                "id": str(instrument["id"]),
+                "symbol": str(instrument["symbol"]),
+                "venue": str(instrument["venue"]),
+                "asset_class": str(instrument["asset_class"]),
+                "currency": str(instrument["currency"]),
+                "tick_size": str(instrument["tick_size"]),
+                "multiplier": str(instrument["multiplier"]),
+            },
+            "ts_event_ns": str(tick.ts_event),
+            "ts_init_ns": str(tick.ts_init),
+            "price": _fixed_point(str(tick.price)),
+            "size": _fixed_point(str(tick.size)),
+            "aggressor_side": _CANONICAL_AGGRESSOR_SIDES[tick.aggressor_side],
+            "trade_id": str(tick.trade_id),
+            "source": {
+                "provider": "trade-god-fixture",
+                "record_id": f"{fixture_id}:{sequence}",
+                "mode": "replay",
+                "fixture_id": fixture_id,
+                "fixture_sha256": fixture_sha256,
+            },
+            "quality_flags": quality_flags,
+            "provenance": {
+                "source_schema": "synthetic-trades@1",
+                "transformations": [
+                    "fixture-record-to-trade-tick",
+                    "trade-tick-to-market-event",
+                ],
+            },
+            "extensions": {},
+        })
+
+    canonical_events_sha256 = hashlib.sha256(
+        canonical_json(events).encode("utf-8"),
+    ).hexdigest()
+    event_times = [int(event["ts_event_ns"]) for event in events]
+    quality_flags = []
+    if duplicate_count > 0:
+        quality_flags.append("duplicate-source-record")
+    if out_of_order_count > 0:
+        quality_flags.append("out-of-order-event-time")
+    quality = {
+        "quality_report_schema_version": "market-quality-report@1",
+        "batch_id": batch_id,
+        "trace_id": trace_id,
+        "state": "degraded" if quality_flags else "valid",
+        "counts": {
+            "received": len(records),
+            "accepted": len(events),
+            "rejected": duplicate_count,
+            "duplicates": duplicate_count,
+            "out_of_order": out_of_order_count,
+        },
+        "flags": quality_flags,
+        "issues": issues,
+        "source_sha256": fixture_sha256,
+        "canonical_events_sha256": canonical_events_sha256,
+    }
+
+    return {
+        "batch_schema_version": "market-trade-batch@1",
+        "batch_id": batch_id,
+        "trace_id": trace_id,
+        "mode": "replay",
+        "instrument_id": str(instrument["id"]),
+        "source": {
+            "provider": "trade-god-fixture",
+            "fixture_id": fixture_id,
+            "source_sha256": fixture_sha256,
+        },
+        "event_time_range": {
+            "start_ns": str(min(event_times)),
+            "end_ns": str(max(event_times)),
+        },
+        "events": events,
+        "quality": quality,
+        "canonical_events_sha256": canonical_events_sha256,
+    }

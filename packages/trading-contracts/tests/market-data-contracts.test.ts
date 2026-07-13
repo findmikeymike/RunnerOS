@@ -27,7 +27,7 @@ describe('canonical market-data contracts', () => {
     const event = marketTradeEventSchema.parse(await example('market-trade-event.v1.json'))
 
     expect(quality.state).toBe('valid')
-    expect(batch.events).toHaveLength(1)
+    expect(batch.events).toHaveLength(4)
     expect(batch.quality.counts.accepted).toBe(batch.events.length)
     expect(batch.events[0]).toEqual(event)
     expect(batch.quality).toEqual(quality)
@@ -64,7 +64,7 @@ describe('canonical market-data contracts', () => {
     report.state = 'degraded'
     expect(marketQualityReportSchema.safeParse(report).success).toBe(false)
 
-    report.counts.duplicates = 2
+    report.counts.duplicates = 5
     report.flags = ['duplicate-source-record']
     expect(marketQualityReportSchema.safeParse(report).success).toBe(false)
   })
@@ -100,8 +100,8 @@ describe('canonical market-data contracts', () => {
   test('rejects repeated canonical source records even with different event IDs', async () => {
     const batch = await example('market-trade-batch.v1.json')
     batch.events.push({ ...batch.events[0], event_id: 'event-esu6-0002' })
-    batch.quality.counts.accepted = 2
-    batch.quality.counts.received = 2
+    batch.quality.counts.accepted = 5
+    batch.quality.counts.received = 5
 
     expect(marketTradeBatchSchema.safeParse(batch).success).toBe(false)
   })

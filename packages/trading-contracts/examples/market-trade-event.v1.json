@@ -1,6 +1,6 @@
 {
   "event_schema_version": "market-trade-event@1",
-  "event_id": "event-esu6-0001",
+  "event_id": "trade:es-demo-2026-07-11:1",
   "trace_id": "trace-market-replay-001",
   "producer": {
     "name": "trade-god-market-data-engine",

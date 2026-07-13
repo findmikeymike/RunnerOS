@@ -11,8 +11,8 @@ source_of_truth: true
 
 - Date: 2026-07-13
 - Stage: Phase 1 market-data spine started; Phase 0 still awaits real visual Electron smoke
-- Current goal: map the proven Nautilus `TradeTick` fixture into canonical Trade God batches and quality reports
-- Overall state: the Nautilus compatibility slice and provider-independent market-data contracts are test-verified; adapter emission, quality execution, replay routing, candles, the actual visual Electron path, and a built installer remain unverified
+- Current goal: complete the quality failure matrix, then route the validated canonical replay batch into Order Flow
+- Overall state: the Nautilus adapter now emits the exact provider-independent golden batch with cross-language checksum agreement and initial quality enforcement; bad-record coverage, replay routing, candles, the actual visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -45,12 +45,14 @@ The workbench can request engine health, run the known fixture, and display tota
 - Converted the four project-owned ES records into exact Nautilus `TradeTick` objects with stable instrument identity, prices, sizes, aggressor sides, trade IDs, and nanosecond timestamps.
 - Added Nautilus-independent canonical market-trade event, quality-report, and bounded batch contracts with checked provenance, cross-field identity, reversible fixed-point values, JSON-safe extensions, and real canonical-output checksums.
 - Ran an adversarial contract review and fixed negative-price rejection, empty defect states, impossible diagnostic counts, duplicate canonical source records, unsafe extensions, and placeholder golden checksums.
+- Added deterministic Python emission of the complete four-event canonical batch; Python output equals the TypeScript-owned golden and produces the same SHA-256.
+- Added fail-closed source checksum/count validation, visible duplicate exclusion, visible out-of-order degradation, and a single checksum-verified source-bytes input.
 
 ## Next Actions
 
-1. Map the proven Nautilus `TradeTick` batch into canonical contracts without Nautilus imports crossing the sidecar boundary.
-2. Execute the quality gate for duplicate/out-of-order/precision/timestamp/checksum failures.
-3. Feed a validated canonical replay batch into the Order Flow input adapter.
+1. Add typed quality outcomes for invalid timestamps, non-positive sizes, bad precision, malformed records, and invalid instrument metadata.
+2. Add a fixture-only market-data sidecar command returning the validated canonical batch.
+3. Feed that canonical replay batch into the Order Flow input adapter.
 4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
 5. Build and smoke the packaged installer separately.
 6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them blindly.
@@ -75,12 +77,14 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Red-green proof: the adapter test first failed on the absent module, then passed after implementation.
 - Phase 1 canonical contracts: 20 passed, 0 failed across the complete contract package; standalone contract typecheck passed.
 - Contract `$rival` findings were reproduced with failing tests, fixed, and re-verified.
+- Phase 1 Python canonical adapter: 5 passed, 0 failed; full Python output equals the TypeScript golden and checksum.
+- Adapter `$rival` findings fixed: false-valid source data and split-brain `bytes` versus `records` inputs.
 - Windows and Linux Nautilus runtime/package smoke remain unverified.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical schemas are implemented; Python adapter emission, quality-gate execution, and deterministic replay remain unimplemented.
+- Canonical Python emission and initial quality enforcement are implemented; the remaining bad-record matrix, sidecar command, Order Flow replay, and candles remain unimplemented.
 
 ## Explicitly Not In Scope Yet
 
