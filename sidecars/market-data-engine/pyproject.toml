@@ -7,6 +7,9 @@ dependencies = [
   "nautilus_trader==1.230.0",
 ]
 
+[project.scripts]
+trade-god-market-data = "trade_god_market_data.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

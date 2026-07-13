@@ -113,6 +113,8 @@ Do not use JSON-RPC for unbounded live tick throughput. Before live mode, benchm
 
 No broker, account, order, execution, credential, or network-provider capability is reachable in this slice.
 
+Current implementation checkpoint: `health`, `capabilities`, `load_fixture`, and `shutdown` are test-verified. `replay_batch` and `cancel` remain part of the v1 target and will be added with supervisor lifecycle semantics.
+
 ## Determinism Requirements
 
 - Replaying identical bytes with identical configuration yields canonical-equivalent events and quality report.
@@ -166,7 +168,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 - [ ] The Order Flow engine consumes only Trade God canonical input.
 - [ ] Trace joins source batch, adapter logs, quality report, feature artifact, and receipt.
 - [ ] Cancellation and sidecar crash remain distinguishable.
-- [ ] No live/provider/broker/order capability is reachable.
+- [x] No live/provider/broker/order capability is reachable from the implemented fixture-only RPC.
 
 ## Explicit Non-Goals
 

@@ -11,18 +11,20 @@ source_of_truth: true
 
 - Date: 2026-07-13
 - Stage: Phase 1 market-data spine started; Phase 0 still awaits real visual Electron smoke
-- Current goal: expose the validated canonical batch through a supervised fixture-only market-data sidecar command
-- Overall state: canonical emission and the replay quality matrix are test-verified; sidecar transport, Order Flow replay routing, candles, the actual visual Electron path, and a built installer remain unverified
+- Current goal: supervise and contract-validate the fixture-only market-data sidecar from Electron main
+- Overall state: canonical emission, replay quality, and the fixture-only Python JSON-RPC process are test-verified; Electron supervision, Order Flow replay routing, candles, the actual visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
-- Implementation head before this slice: `a8a73ce3`
+- Implementation head entering this slice: `5a3264af`
 
 ## Working Capability
 
 `synthetic ES fixture -> Order Flow sidecar -> validated artifact -> typed client -> Electron supervisor/IPC/preload -> Trade God workbench`
 
 `project-owned ES records -> isolated Python 3.12 sidecar -> Nautilus 1.230.0 TradeTick objects`
+
+`market.load_fixture -> fixed project fixture -> validated canonical batch or typed quality error`
 
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
@@ -48,11 +50,13 @@ The workbench can request engine health, run the known fixture, and display tota
 - Added deterministic Python emission of the complete four-event canonical batch; Python output equals the TypeScript-owned golden and produces the same SHA-256.
 - Added fail-closed source checksum/count validation, visible duplicate exclusion, visible out-of-order degradation, and a single checksum-verified source-bytes input.
 - Completed typed quality outcomes for malformed payloads/records, invalid timestamps, non-positive sizes, off-tick prices, unsupported aggressors, invalid instruments, and all-rejected batches without leaking raw parser/Nautilus errors.
+- Added a replay-only Python JSON-RPC process with health, explicit capabilities, fixed-fixture loading, typed data-quality errors, and clean shutdown.
+- Prevented RPC callers from supplying paths/manifests, explicitly denied live/broker/execution authority, rejected non-standard JSON numbers, and bounded request-id caching.
 
 ## Next Actions
 
-1. Add a fixture-only market-data sidecar command returning the validated canonical batch.
-2. Supervise and validate that command through the existing local process boundary.
+1. Supervise and contract-validate the market-data process through Electron main.
+2. Add replay/cancel lifecycle semantics and distinguish cancellation from process crash.
 3. Feed the canonical replay batch into the Order Flow input adapter.
 4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
 5. Build and smoke the packaged installer separately.
@@ -81,12 +85,14 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Phase 1 Python canonical adapter: 5 passed, 0 failed; full Python output equals the TypeScript golden and checksum.
 - Adapter `$rival` findings fixed: false-valid source data and split-brain `bytes` versus `records` inputs.
 - Phase 1 completed quality matrix: 9 passed, 0 failed, including typed malformed and all-rejected paths.
+- Phase 1 market-data RPC: 7 passed, 0 failed; complete Python sidecar suite: 16 passed, 0 failed.
+- RPC runtime proof includes a real child process over stdin/stdout, strict parse failure, health, and clean shutdown. Electron supervision is not yet proven.
 - Windows and Linux Nautilus runtime/package smoke remain unverified.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical Python emission and the replay quality matrix are implemented; the market-data sidecar command, Order Flow replay, and candles remain unimplemented.
+- Canonical Python emission, replay quality, and the fixture-only market-data command are implemented; Electron supervision, replay/cancel, Order Flow replay, and candles remain unimplemented.
 
 ## Explicitly Not In Scope Yet
 

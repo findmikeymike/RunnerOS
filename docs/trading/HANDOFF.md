@@ -33,11 +33,11 @@ The Phase 0 walking skeleton is implemented for development and packaged-sidecar
 
 This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real visual Electron user path and a fully built packaged installer have not been proven.
 
-Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent Trade God event, quality-report, and bounded-batch contracts. Python emits the exact full TypeScript golden/checksum and the replay quality matrix now handles malformed data, timestamps, sizes, price increments, aggressors, instruments, corruption, duplicates, ordering, and all-rejected batches with typed outcomes.
+Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent Trade God event, quality-report, and bounded-batch contracts. Python emits the exact full TypeScript golden/checksum and the replay quality matrix now handles malformed data, timestamps, sizes, price increments, aggressors, instruments, corruption, duplicates, ordering, and all-rejected batches with typed outcomes. A replay-only JSON-RPC process now exposes health, explicit capabilities, fixed-fixture loading, typed quality errors, and shutdown without accepting caller paths or granting live/broker/execution authority.
 
 ## Immediate Assignment
 
-Add the fixture-only market-data command, supervise it, and route a validated canonical batch into Order Flow. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
+Supervise and contract-validate the fixture-only market-data command, then add replay/cancel lifecycle semantics and route a validated canonical batch into Order Flow. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
 
 ## Known Expected Artifact
 
@@ -66,6 +66,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Phase 1 canonical contracts: 20 tests passed and standalone typecheck passed after adversarial findings were reproduced and fixed.
 - Phase 1 Python canonical adapter: 5 tests passed; Python and TypeScript full-batch goldens/checksums agree exactly.
 - Phase 1 completed replay quality matrix: 9 tests passed with typed malformed and all-rejected failure paths.
+- Phase 1 market-data RPC: 7 tests passed; complete Python suite: 16 tests passed. A real spawned process proved strict JSONL parsing, dependency-aware health, and shutdown, but Electron supervision/crash classification is not yet proven.
 - Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
 
 ## Non-Negotiable Boundaries
@@ -80,9 +81,9 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Next Smallest Actions
 
-1. Add the fixture-only market-data sidecar command.
-2. Supervise and contract-validate its process response.
-3. Canonical replay batch into the Order Flow input boundary.
+1. Supervise and contract-validate the fixture-only market-data process response.
+2. Add replay/cancel and distinguish cancellation from sidecar crash.
+3. Route the canonical replay batch into the Order Flow input boundary.
 4. Real visual success/cancel/failure smoke at the first desktop opportunity.
 5. Actual packaged-app build/resource-layout smoke.
 

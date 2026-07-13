@@ -218,6 +218,15 @@ A lower rung does not prove a higher rung.
 - Validation order: checksum rejection occurs before parsing untrusted bytes; canonical records derive only from verified bytes.
 - Not proven: RPC framing/cancellation/crash behavior for the Python sidecar, Order Flow consumption, candles, or historical storage.
 
+## Phase 1 Slice 5 — Fixture-Only Market-Data RPC
+
+- Method: red-green TDD plus `$rival`/`$fix`; the focused suite first failed on the missing RPC module.
+- Focused RPC suite: 7 passed, 0 failed. Complete Python market-data suite: 16 passed, 0 failed.
+- Proven: newline-delimited JSON-RPC framing in a real child process; checksum-aware dependency health with degraded state; explicit replay-only capabilities; exact golden canonical batch loading; typed quality-error propagation; strict rejection of `NaN`/`Infinity`; bounded idempotency cache; duplicate request-id protection; clean shutdown.
+- Input authority: RPC clients supply only fixture, trace, and batch IDs. The supervisor configures the fixture directory; caller paths and manifests are unreachable.
+- Safety: capabilities explicitly deny live data, broker access, and trade execution.
+- Not proven: Electron supervision, cancellation, crash classification/restart policy, replay pacing, Order Flow consumption, candles, or historical storage.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

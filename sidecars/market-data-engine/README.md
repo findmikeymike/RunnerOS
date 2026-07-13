@@ -17,10 +17,21 @@ The focused test is verified on Darwin ARM64. Windows and Linux wheels are prese
 
 The project-owned ES fixture is converted into exact Nautilus `TradeTick` objects and emitted as the provider-independent Trade God canonical batch. Python and TypeScript agree on the full golden payload and canonical SHA-256. Source checksum/count mismatch fails closed; duplicate records are excluded and out-of-order input is visibly degraded.
 
-The quality gate also returns typed outcomes for malformed payloads/records, invalid timestamps, non-positive sizes, off-tick prices, unsupported aggressors, and invalid instrument metadata. The fixture-only RPC command is the next slice. There is no live data, network provider, broker, account, order, or execution capability.
+The quality gate also returns typed outcomes for malformed payloads/records, invalid timestamps, non-positive sizes, off-tick prices, unsupported aggressors, and invalid instrument metadata.
+
+The newline-delimited JSON-RPC command exposes `market.health`, `market.capabilities`, `market.load_fixture`, and `market.shutdown`. It accepts only the supervisor-configured project fixture ID—never caller-supplied paths or manifests. Health degrades if the configured fixture is missing or checksum-invalid. Capabilities explicitly report `live_data`, `broker_access`, and `trade_execution` as false. Responses are one line each, non-standard JSON numbers are rejected, request-id caching is bounded, and data-quality failures include the typed quality report.
+
+Supervision, cancellation, replay pacing, and crash classification are the next slice. There is no live data, network provider, broker, account, order, or execution capability.
 
 ## Verify
 
 ```bash
 ./.venv/bin/python -m unittest discover -s tests -v
+```
+
+Launch manually from this directory:
+
+```bash
+./.venv/bin/python -m trade_god_market_data.cli \
+  --fixture-root ../../packages/trading-testkit/fixtures/es-demo
 ```
