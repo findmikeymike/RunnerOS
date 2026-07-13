@@ -115,6 +115,8 @@ No broker, account, order, execution, credential, or network-provider capability
 
 Current implementation checkpoint: `health`, `capabilities`, `load_fixture`, and `shutdown` are test-verified. `replay_batch` and `cancel` remain part of the v1 target and will be added with supervisor lifecycle semantics.
 
+Electron checkpoint: the development Python process is now resolved, supervised, contract-validated, and disposed from Electron main. Packaged Python resolution remains intentionally absent until a self-contained asset is built and smoked.
+
 ## Determinism Requirements
 
 - Replaying identical bytes with identical configuration yields canonical-equivalent events and quality report.

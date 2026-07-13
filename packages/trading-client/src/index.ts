@@ -5,6 +5,11 @@ import {
   analyzeFixtureRequestSchema,
   assertCompatibleProtocol,
   healthResponseSchema,
+  marketDataCapabilitiesResponseSchema,
+  marketDataErrorSchema,
+  marketDataHealthSchema,
+  marketLoadFixtureRequestSchema,
+  marketTradeBatchSchema,
   tradingErrorSchema,
   wireMetaSchema,
   type AnalysisArtifact,
@@ -12,6 +17,11 @@ import {
   type HealthResponse,
   type CancelAnalysisResponse,
   type TradingError,
+  type MarketDataCapabilitiesResponse,
+  type MarketDataError,
+  type MarketDataHealth,
+  type MarketQualityReport,
+  type MarketTradeBatch,
   type WireMeta,
 } from '@trade-god/contracts'
 import type { z } from 'zod'
@@ -32,6 +42,17 @@ interface TradingClientOptions {
   now: () => string
   nextId: (prefix: string) => string
   producer: WireMeta['producer']
+}
+
+interface MarketDataClientOptions {
+  transport: RpcTransport
+  nextId: (prefix: string) => string
+}
+
+export interface LoadMarketFixtureInput {
+  fixtureId: string
+  traceId: string
+  batchId: string
 }
 
 export interface AnalyzeFixtureInput {
@@ -71,6 +92,29 @@ export class InvalidTradingResponseError extends Error {
   constructor(message = 'Trading response is malformed.') {
     super(message)
     this.name = 'InvalidTradingResponseError'
+  }
+}
+
+export class InvalidMarketDataResponseError extends Error {
+  constructor(message = 'Market-data response is malformed.') {
+    super(message)
+    this.name = 'InvalidMarketDataResponseError'
+  }
+}
+
+export class MarketDataClientError extends Error {
+  readonly code: MarketDataError['code']
+  readonly category: MarketDataError['category']
+  readonly retryable: false
+  readonly qualityReport?: MarketQualityReport
+
+  constructor(error: MarketDataError) {
+    super(error.message)
+    this.name = 'MarketDataClientError'
+    this.code = error.code
+    this.category = error.category
+    this.retryable = error.retryable
+    this.qualityReport = error.quality_report
   }
 }
 
@@ -156,5 +200,62 @@ export class TradingClient {
 
   private assertTrace(expected: string, actual: string): void {
     if (expected !== actual) throw new ResponseTraceMismatchError()
+  }
+}
+
+export class MarketDataClient {
+  constructor(private readonly options: MarketDataClientOptions) {}
+
+  health(): Promise<MarketDataHealth> {
+    return this.request('market.health', {}, marketDataHealthSchema)
+  }
+
+  capabilities(): Promise<MarketDataCapabilitiesResponse> {
+    return this.request('market.capabilities', {}, marketDataCapabilitiesResponseSchema)
+  }
+
+  async loadFixture(input: LoadMarketFixtureInput): Promise<MarketTradeBatch> {
+    const params = marketLoadFixtureRequestSchema.parse({
+      fixture_id: input.fixtureId,
+      trace_id: input.traceId,
+      batch_id: input.batchId,
+    })
+    const batch = await this.request('market.load_fixture', params, marketTradeBatchSchema)
+    if (
+      batch.trace_id !== input.traceId
+      || batch.batch_id !== input.batchId
+      || batch.source.fixture_id !== input.fixtureId
+    ) {
+      throw new InvalidMarketDataResponseError('Market-data response identity does not match its request.')
+    }
+    return batch
+  }
+
+  private async request<T extends z.ZodType>(
+    method: string,
+    params: unknown,
+    resultSchema: T,
+  ): Promise<z.infer<T>> {
+    const id = this.options.nextId('market-rpc')
+    const raw = await this.options.transport.request({ jsonrpc: '2.0', id, method, params })
+    if (!raw || typeof raw !== 'object') throw new InvalidMarketDataResponseError()
+    const response = raw as Record<string, unknown>
+    if (response.jsonrpc !== '2.0' || response.id !== id) {
+      throw new InvalidMarketDataResponseError('Market-data response id is invalid.')
+    }
+    if ('error' in response) {
+      const rpcError = response.error
+      if (!rpcError || typeof rpcError !== 'object') throw new InvalidMarketDataResponseError()
+      const data = (rpcError as Record<string, unknown>).data
+      const errorValue = data && typeof data === 'object'
+        ? (data as Record<string, unknown>).market_error
+        : undefined
+      const parsedError = marketDataErrorSchema.safeParse(errorValue)
+      if (!parsedError.success) throw new InvalidMarketDataResponseError('Market-data error payload is malformed.')
+      throw new MarketDataClientError(parsedError.data)
+    }
+    const parsed = resultSchema.safeParse(response.result)
+    if (!parsed.success) throw new InvalidMarketDataResponseError()
+    return parsed.data
   }
 }

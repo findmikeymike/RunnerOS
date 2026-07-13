@@ -4,7 +4,12 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { TRADE_GOD_IPC } from '../trading-ipc.ts'
-import { createTradeGodRuntime, resolveOrderFlowLaunch, resolveTradeGodHostConfig } from '../trading-runtime.ts'
+import {
+  createTradeGodRuntime,
+  resolveMarketDataLaunch,
+  resolveOrderFlowLaunch,
+  resolveTradeGodHostConfig,
+} from '../trading-runtime.ts'
 
 class FakeIpcMain {
   readonly handlers = new Map<string, (...args: any[]) => any>()
@@ -17,6 +22,12 @@ const repoRoot = path.resolve(import.meta.dir, '../../../../../..')
 test('resolves and runs the development sidecar from an explicit RunnerOS root', async () => {
   const launch = resolveOrderFlowLaunch({ rootCandidates: [repoRoot], runtimeExecutable: process.execPath })
   expect(launch.command).toEqual([process.execPath, path.join(repoRoot, 'sidecars/order-flow-engine/src/cli.ts')])
+  const marketLaunch = resolveMarketDataLaunch({ rootCandidates: [repoRoot], platform: process.platform })
+  expect(marketLaunch.command).toEqual([
+    path.join(repoRoot, 'sidecars/market-data-engine/.venv/bin/python'),
+    '-m', 'trade_god_market_data.cli', '--fixture-root',
+    path.join(repoRoot, 'packages/trading-testkit/fixtures/es-demo'),
+  ])
 
   const ipc = new FakeIpcMain()
   const runtime = createTradeGodRuntime({
@@ -28,6 +39,8 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
 
   const health = await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})
   expect(health).toMatchObject({ state: 'ready' })
+  expect(runtime.marketDataManager).toBeDefined()
+  expect(await runtime.marketDataManager!.health()).toMatchObject({ state: 'ready' })
 
   await runtime.dispose()
   expect(ipc.handlers.size).toBe(0)
@@ -36,6 +49,8 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
 test('fails clearly when no sidecar entrypoint exists', () => {
   expect(() => resolveOrderFlowLaunch({ rootCandidates: ['/definitely/missing'], runtimeExecutable: process.execPath }))
     .toThrow('Order Flow sidecar entrypoint was not found')
+  expect(() => resolveMarketDataLaunch({ rootCandidates: ['/definitely/missing'], platform: process.platform }))
+    .toThrow('Market Data sidecar runtime was not found')
 })
 
 test('resolves the packaged sidecar bundle before source candidates', () => {

@@ -227,6 +227,17 @@ A lower rung does not prove a higher rung.
 - Safety: capabilities explicitly deny live data, broker access, and trade execution.
 - Not proven: Electron supervision, cancellation, crash classification/restart policy, replay pacing, Order Flow consumption, candles, or historical storage.
 
+## Phase 1 Slice 6 — Typed Client and Electron Supervision
+
+- Method: red-green TDD plus `$rival`/`$fix`; missing contracts/client/manager failed first, then coalesced-frame limits, extensible known capabilities, invalid outbound identities, and dependency truth were reproduced and repaired.
+- Focused slice: 39 passed, 0 failed, 79 expectations across contract, client, generic process, market manager, and runtime tests.
+- `apps/electron` `build:main`: passed.
+- Proven contracts: replay-only capabilities deny live/broker/execution authority, allow only known v1 commands, and can add `replay_batch`/`cancel` without silently accepting order methods.
+- Proven client boundary: response ID, schema, batch/trace/fixture identity, and typed errors validate before consumers receive data; invalid outbound identifiers never reach transport.
+- Proven process boundary: real Python health/load/error/shutdown; bounded per-line framing; coalesced frames; timeout versus exit versus oversized protocol corruption; clean disposal.
+- Runtime truth: a valid local `.venv` is discovered and wired lazily in development. Packaged mode deliberately has no market-data manager until Python assets are bundled and smoke-tested.
+- Not proven: replay pacing, active cancellation, cancellation-versus-crash behavior in the market sidecar, packaged Python, Order Flow consumption, candles, or historical storage.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

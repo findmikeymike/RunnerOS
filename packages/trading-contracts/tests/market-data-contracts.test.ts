@@ -3,6 +3,10 @@ import { describe, expect, test } from 'bun:test'
 import {
   MARKET_TRADE_BATCH_MAX_EVENTS,
   canonicalJson,
+  marketDataCapabilitiesResponseSchema,
+  marketDataErrorSchema,
+  marketDataHealthSchema,
+  marketLoadFixtureRequestSchema,
   marketQualityReportSchema,
   marketTradeBatchSchema,
   marketTradeEventSchema,
@@ -104,5 +108,64 @@ describe('canonical market-data contracts', () => {
     batch.quality.counts.received = 5
 
     expect(marketTradeBatchSchema.safeParse(batch).success).toBe(false)
+  })
+
+  test('requires replay-only market-data RPC capability truth', () => {
+    const capabilities = {
+      commands: ['market.health', 'market.capabilities', 'market.load_fixture', 'market.shutdown'],
+      fixture_mode: true,
+      fixture_ids: ['es-demo-2026-07-11'],
+      live_data: false,
+      broker_access: false,
+      trade_execution: false,
+    }
+    const health = marketDataHealthSchema.parse({
+      service: 'trade-god-market-data-engine',
+      version: '0.1.0',
+      state: 'ready',
+      protocol_version: 'market-data-rpc@1',
+      artifact_versions: ['market-trade-batch@1'],
+      capabilities,
+      dependencies: [{ name: 'es-demo-2026-07-11', state: 'ready' }],
+    })
+    const response = marketDataCapabilitiesResponseSchema.parse({
+      protocol_version: 'market-data-rpc@1',
+      artifact_versions: ['market-trade-batch@1'],
+      ...capabilities,
+    })
+
+    expect(health.state).toBe('ready')
+    expect(response.live_data).toBe(false)
+    expect(marketDataHealthSchema.safeParse({ ...health, capabilities: { ...capabilities, broker_access: true } }).success).toBe(false)
+    expect(marketDataHealthSchema.safeParse({
+      ...health,
+      capabilities: { ...capabilities, commands: [...capabilities.commands, 'market.cancel'] },
+    }).success).toBe(true)
+    expect(marketDataHealthSchema.safeParse({
+      ...health,
+      capabilities: { ...capabilities, commands: [...capabilities.commands, 'market.place_order'] },
+    }).success).toBe(false)
+    expect(marketLoadFixtureRequestSchema.safeParse({
+      fixture_id: 'es-demo-2026-07-11', trace_id: 'trace-valid', batch_id: 'batch-valid',
+    }).success).toBe(true)
+  })
+
+  test('validates typed market-data quality errors', async () => {
+    const quality = await example('market-quality-report.v1.json')
+    quality.state = 'invalid'
+    quality.counts.accepted = 0
+    quality.counts.rejected = 4
+    quality.flags = ['malformed-source-payload']
+    quality.issues = [{ code: 'malformed-source-payload', severity: 'error', message: 'Fixture is malformed.' }]
+    quality.canonical_events_sha256 = '4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e1b69a3c7a3d9a6fbe8d8e0'
+
+    const error = marketDataErrorSchema.parse({
+      code: 'MARKET_DATA_INVALID',
+      category: 'data-quality',
+      message: 'Fixture has no accepted records',
+      retryable: false,
+      quality_report: quality,
+    })
+    expect(error.quality_report?.state).toBe('invalid')
   })
 })

@@ -2,12 +2,18 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 
 import { OrderFlowSidecarManager } from './order-flow-sidecar-manager.ts'
+import { MarketDataSidecarManager } from './market-data-sidecar-manager.ts'
 import { registerTradingIpc, type IpcMainLike } from './trading-ipc.ts'
 import { TradingRunReceiptStore } from './run-receipt-store.ts'
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
   runtimeExecutable: string
+}
+
+interface ResolveMarketDataLaunchOptions {
+  rootCandidates: string[]
+  platform: NodeJS.Platform
 }
 
 interface RuntimeOptions extends ResolveLaunchOptions {
@@ -67,8 +73,32 @@ export function resolveOrderFlowLaunch(options: ResolveLaunchOptions): {
   throw new Error('Order Flow sidecar entrypoint was not found (source or packaged bundle) in the configured RunnerOS roots.')
 }
 
+export function resolveMarketDataLaunch(options: ResolveMarketDataLaunchOptions): {
+  command: [string, ...string[]]
+  cwd: string
+  mode: 'development'
+} {
+  for (const root of options.rootCandidates) {
+    const sidecarRoot = path.join(root, 'sidecars', 'market-data-engine')
+    const python = options.platform === 'win32'
+      ? path.join(sidecarRoot, '.venv', 'Scripts', 'python.exe')
+      : path.join(sidecarRoot, '.venv', 'bin', 'python')
+    const moduleEntrypoint = path.join(sidecarRoot, 'src', 'trade_god_market_data', 'cli.py')
+    const fixtureRoot = path.join(root, 'packages', 'trading-testkit', 'fixtures', 'es-demo')
+    if (existsSync(python) && existsSync(moduleEntrypoint) && existsSync(path.join(fixtureRoot, 'manifest.json'))) {
+      return {
+        command: [python, '-m', 'trade_god_market_data.cli', '--fixture-root', fixtureRoot],
+        cwd: sidecarRoot,
+        mode: 'development',
+      }
+    }
+  }
+  throw new Error('Market Data sidecar runtime was not found in the configured RunnerOS roots.')
+}
+
 export function createTradeGodRuntime(options: RuntimeOptions): {
   manager: OrderFlowSidecarManager
+  marketDataManager?: MarketDataSidecarManager
   dispose: () => Promise<void>
 } {
   const launch = resolveOrderFlowLaunch(options)
@@ -83,5 +113,30 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(options.receiptDirectory ? { receiptWriter: new TradingRunReceiptStore(options.receiptDirectory) } : {}),
     ...(options.log ? { log: options.log } : {}),
   })
-  return { manager, dispose: registerTradingIpc(options.ipcMain, manager) }
+  let marketDataManager: MarketDataSidecarManager | undefined
+  try {
+    const marketLaunch = resolveMarketDataLaunch({
+      rootCandidates: options.rootCandidates,
+      platform: process.platform,
+    })
+    marketDataManager = new MarketDataSidecarManager({
+      command: marketLaunch.command,
+      cwd: marketLaunch.cwd,
+      requestTimeoutMs: 5_000,
+      maxLineBytes: 1_000_000,
+      maxStderrBytes: 16_384,
+      env: { PYTHONUNBUFFERED: '1' },
+    })
+  } catch {
+    // Packaged Python assets are intentionally unavailable until their bundle is built and smoked.
+  }
+
+  const disposeTradingIpc = registerTradingIpc(options.ipcMain, manager)
+  return {
+    manager,
+    ...(marketDataManager ? { marketDataManager } : {}),
+    dispose: async () => {
+      await Promise.all([disposeTradingIpc(), marketDataManager?.stop()])
+    },
+  }
 }

@@ -5,7 +5,10 @@ import { loadEsDemoFixture } from '@trade-god/testkit'
 import { createOrderFlowRpcHandler } from '../../../sidecars/order-flow-engine/src/index.ts'
 
 import {
+  InvalidMarketDataResponseError,
   InvalidTradingResponseError,
+  MarketDataClient,
+  MarketDataClientError,
   ResponseTraceMismatchError,
   TradingClient,
   TradingClientError,
@@ -137,5 +140,84 @@ describe('TradingClient', () => {
     expect(requests[0].params.cancellation_id).toBe('cancel-from-workbench')
     expect(requests[0].params.meta.trace_id).toBe('trace-from-workbench')
     expect(canceled).toMatchObject({ cancellation_id: 'cancel-from-workbench', state: 'canceled' })
+  })
+})
+
+describe('MarketDataClient', () => {
+  function marketClient(transport: RpcTransport) {
+    let sequence = 0
+    return new MarketDataClient({ transport, nextId: (prefix) => `${prefix}-${++sequence}` })
+  }
+
+  test('validates health and canonical fixture batches', async () => {
+    const batch = await Bun.file(new URL('../../trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    const transport: RpcTransport = {
+      request: async (request) => request.method === 'market.health'
+        ? {
+            jsonrpc: '2.0', id: request.id, result: {
+              service: 'trade-god-market-data-engine', version: '0.1.0', state: 'ready',
+              protocol_version: 'market-data-rpc@1', artifact_versions: ['market-trade-batch@1'],
+              capabilities: {
+                commands: ['market.health', 'market.capabilities', 'market.load_fixture', 'market.shutdown'],
+                fixture_mode: true, fixture_ids: ['es-demo-2026-07-11'], live_data: false,
+                broker_access: false, trade_execution: false,
+              },
+              dependencies: [{ name: 'es-demo-2026-07-11', state: 'ready' }],
+            },
+          }
+        : { jsonrpc: '2.0', id: request.id, result: batch },
+    }
+    const market = marketClient(transport)
+
+    expect((await market.health()).state).toBe('ready')
+    expect((await market.loadFixture({
+      fixtureId: 'es-demo-2026-07-11', traceId: 'trace-market-replay-001', batchId: 'batch-es-demo-001',
+    })).events).toHaveLength(4)
+  })
+
+  test('rejects malformed and trace-mismatched market-data responses', async () => {
+    const malformed = marketClient({
+      request: async (request) => ({ jsonrpc: '2.0', id: request.id, result: { state: 'ready' } }),
+    })
+    await expect(malformed.health()).rejects.toBeInstanceOf(InvalidMarketDataResponseError)
+
+    const batch = await Bun.file(new URL('../../trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    const mismatched = marketClient({
+      request: async (request) => ({ jsonrpc: '2.0', id: request.id, result: { ...batch, trace_id: 'trace-wrong' } }),
+    })
+    await expect(mismatched.loadFixture({
+      fixtureId: 'es-demo-2026-07-11', traceId: 'trace-expected', batchId: 'batch-es-demo-001',
+    })).rejects.toBeInstanceOf(InvalidMarketDataResponseError)
+  })
+
+  test('normalizes typed market-data failures', async () => {
+    const market = marketClient({
+      request: async (request) => ({
+        jsonrpc: '2.0', id: request.id, error: {
+          code: -32000, message: 'Requested market-data fixture is unavailable.', data: {
+            market_error: {
+              code: 'FIXTURE_NOT_FOUND', category: 'validation',
+              message: 'Requested market-data fixture is unavailable.', retryable: false,
+            },
+          },
+        },
+      }),
+    })
+
+    await expect(market.loadFixture({
+      fixtureId: 'missing', traceId: 'trace-missing', batchId: 'batch-missing',
+    })).rejects.toMatchObject<Partial<MarketDataClientError>>({
+      code: 'FIXTURE_NOT_FOUND', category: 'validation', retryable: false,
+    })
+  })
+
+  test('rejects invalid fixture request identities before transport', async () => {
+    let calls = 0
+    const market = marketClient({ request: async () => { calls += 1; return {} } })
+
+    await expect(market.loadFixture({
+      fixtureId: 'es-demo-2026-07-11', traceId: 'not valid', batchId: 'batch-valid',
+    })).rejects.toBeDefined()
+    expect(calls).toBe(0)
   })
 })

@@ -10,6 +10,7 @@ import {
 import { instrumentSchema } from './analysis.ts'
 import {
   MARKET_QUALITY_REPORT_SCHEMA_VERSION,
+  MARKET_DATA_RPC_PROTOCOL_VERSION,
   MARKET_TRADE_BATCH_SCHEMA_VERSION,
   MARKET_TRADE_EVENT_SCHEMA_VERSION,
 } from './version.ts'
@@ -268,9 +269,89 @@ export const marketTradeBatchSchema = z.object({
   }
 })
 
+export const marketDataCommandSchema = z.enum([
+  'market.health',
+  'market.capabilities',
+  'market.load_fixture',
+  'market.replay_batch',
+  'market.cancel',
+  'market.shutdown',
+])
+
+const requiredMarketDataCommands = [
+  'market.health',
+  'market.capabilities',
+  'market.load_fixture',
+  'market.shutdown',
+] as const
+
+export const marketDataCapabilitiesSchema = z.object({
+  commands: z.array(marketDataCommandSchema).min(requiredMarketDataCommands.length).max(marketDataCommandSchema.options.length),
+  fixture_mode: z.literal(true),
+  fixture_ids: z.array(identifierSchema).max(32),
+  live_data: z.literal(false),
+  broker_access: z.literal(false),
+  trade_execution: z.literal(false),
+}).superRefine((capabilities, context) => {
+  const commands = new Set(capabilities.commands)
+  if (commands.size !== capabilities.commands.length || requiredMarketDataCommands.some((command) => !commands.has(command))) {
+    context.addIssue({ code: 'custom', path: ['commands'], message: 'Market-data commands must match the declared RPC capability set' })
+  }
+})
+
+const marketDataProtocolFields = {
+  protocol_version: z.literal(MARKET_DATA_RPC_PROTOCOL_VERSION),
+  artifact_versions: z.tuple([z.literal(MARKET_TRADE_BATCH_SCHEMA_VERSION)]),
+}
+
+export const marketDataHealthSchema = z.object({
+  service: z.literal('trade-god-market-data-engine'),
+  version: semverSchema,
+  state: z.enum(['ready', 'degraded', 'stopped']),
+  ...marketDataProtocolFields,
+  capabilities: marketDataCapabilitiesSchema,
+  dependencies: z.array(z.object({
+    name: identifierSchema,
+    state: z.enum(['ready', 'unavailable']),
+  })).max(16),
+})
+
+export const marketDataCapabilitiesResponseSchema = z.object({
+  ...marketDataProtocolFields,
+  commands: marketDataCapabilitiesSchema.shape.commands,
+  fixture_mode: z.literal(true),
+  fixture_ids: marketDataCapabilitiesSchema.shape.fixture_ids,
+  live_data: z.literal(false),
+  broker_access: z.literal(false),
+  trade_execution: z.literal(false),
+}).superRefine((capabilities, context) => {
+  const commands = new Set(capabilities.commands)
+  if (commands.size !== capabilities.commands.length || requiredMarketDataCommands.some((command) => !commands.has(command))) {
+    context.addIssue({ code: 'custom', path: ['commands'], message: 'Market-data commands must match the declared RPC capability set' })
+  }
+})
+
+export const marketDataErrorSchema = z.object({
+  code: identifierSchema,
+  category: z.enum(['validation', 'data-quality', 'internal', 'lifecycle']),
+  message: z.string().min(1).max(500),
+  retryable: z.literal(false),
+  quality_report: marketQualityReportSchema.optional(),
+})
+
+export const marketLoadFixtureRequestSchema = z.object({
+  fixture_id: identifierSchema,
+  trace_id: identifierSchema,
+  batch_id: identifierSchema,
+})
+
 export type FixedPointValue = z.infer<typeof fixedPointValueSchema>
 export type PositiveFixedPointValue = z.infer<typeof positiveFixedPointValueSchema>
 export type MarketTradeEvent = z.infer<typeof marketTradeEventSchema>
 export type MarketQualityIssue = z.infer<typeof marketQualityIssueSchema>
 export type MarketQualityReport = z.infer<typeof marketQualityReportSchema>
 export type MarketTradeBatch = z.infer<typeof marketTradeBatchSchema>
+export type MarketDataHealth = z.infer<typeof marketDataHealthSchema>
+export type MarketDataCapabilitiesResponse = z.infer<typeof marketDataCapabilitiesResponseSchema>
+export type MarketDataError = z.infer<typeof marketDataErrorSchema>
+export type MarketLoadFixtureRequest = z.infer<typeof marketLoadFixtureRequestSchema>
