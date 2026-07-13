@@ -11,12 +11,12 @@ source_of_truth: true
 
 - Date: 2026-07-13
 - Stage: Phase 1 market-data spine started; Phase 0 still awaits real visual Electron smoke
-- Current goal: define Trade God's canonical market-trade event and quality-report contracts around the proven Nautilus boundary
-- Overall state: the first replay-only Nautilus compatibility slice is test-verified; canonical events, quality gate, replay routing, the actual visual Electron path, and a built installer remain unverified
+- Current goal: map the proven Nautilus `TradeTick` fixture into canonical Trade God batches and quality reports
+- Overall state: the Nautilus compatibility slice and provider-independent market-data contracts are test-verified; adapter emission, quality execution, replay routing, candles, the actual visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
-- Implementation head before this slice: `840c83db`
+- Implementation head before this slice: `a8a73ce3`
 
 ## Working Capability
 
@@ -43,12 +43,14 @@ The workbench can request engine health, run the known fixture, and display tota
 - Audited 42 starred trading repositories and documented the integration strategy.
 - Pinned NautilusTrader `1.230.0` and the local Python `3.12.9` interpreter in a separately locked market-data sidecar.
 - Converted the four project-owned ES records into exact Nautilus `TradeTick` objects with stable instrument identity, prices, sizes, aggressor sides, trade IDs, and nanosecond timestamps.
+- Added Nautilus-independent canonical market-trade event, quality-report, and bounded batch contracts with checked provenance, cross-field identity, reversible fixed-point values, JSON-safe extensions, and real canonical-output checksums.
+- Ran an adversarial contract review and fixed negative-price rejection, empty defect states, impossible diagnostic counts, duplicate canonical source records, unsafe extensions, and placeholder golden checksums.
 
 ## Next Actions
 
-1. Add provider-independent canonical market-trade event and quality-report schemas with golden examples.
-2. Map the proven Nautilus `TradeTick` batch into those contracts without Nautilus imports crossing the sidecar boundary.
-3. Add deterministic checksum and duplicate/out-of-order/precision/timestamp failure tests.
+1. Map the proven Nautilus `TradeTick` batch into canonical contracts without Nautilus imports crossing the sidecar boundary.
+2. Execute the quality gate for duplicate/out-of-order/precision/timestamp/checksum failures.
+3. Feed a validated canonical replay batch into the Order Flow input adapter.
 4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
 5. Build and smoke the packaged installer separately.
 6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them blindly.
@@ -71,12 +73,14 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Audit-chain focused suite: 17 passed, 0 failed, 31 expectations; Electron `build:main` passed.
 - Phase 1 Nautilus fixture adapter: 1 passed, 0 failed. Runtime proof: Python `3.12.9`, NautilusTrader `1.230.0`, Darwin ARM64.
 - Red-green proof: the adapter test first failed on the absent module, then passed after implementation.
+- Phase 1 canonical contracts: 20 passed, 0 failed across the complete contract package; standalone contract typecheck passed.
+- Contract `$rival` findings were reproduced with failing tests, fixed, and re-verified.
 - Windows and Linux Nautilus runtime/package smoke remain unverified.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical market events, quality gate, and deterministic replay remain unimplemented.
+- Canonical schemas are implemented; Python adapter emission, quality-gate execution, and deterministic replay remain unimplemented.
 
 ## Explicitly Not In Scope Yet
 

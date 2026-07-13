@@ -188,6 +188,17 @@ A lower rung does not prove a higher rung.
 - Boundary: no Nautilus import was added to Trade God contracts, Electron, Order Flow, or agent code.
 - Not proven: Windows/Linux runtime packaging, canonical Trade God market events, quality report, replay checksum, sidecar protocol, failure matrix, or Order Flow consumption.
 
+## Phase 1 Slice 2 — Canonical Market-Data Contracts
+
+- Method: red-green TDD plus `$rival`/`$fix`; missing exports failed first, then five adversarial test groups reproduced the review findings before repair.
+- Complete contract package: 20 passed, 0 failed, 34 expectations across two files.
+- Standalone `packages/trading-contracts` typecheck: passed.
+- Golden examples: market-trade event, quality report, and bounded replay batch parse and agree exactly.
+- Proven: nanosecond timestamps remain strings; price/size fixed-point values round-trip; negative prices are supported while size remains positive; event/batch/quality trace, instrument, counts, source, range, and checksums agree; canonical source records are unique; extension data is JSON-safe; the JSON control batch is capped at 10,000 events.
+- Canonical checksum: real SHA-256 over sorted-key, no-whitespace UTF-8 JSON for the ordered event array.
+- Boundary: the TypeScript contracts contain no Nautilus import.
+- Not proven: Python emits these contracts, Python and TypeScript produce the same checksum, quality policies execute on bad records, replay reaches Order Flow, or candles/history exist.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

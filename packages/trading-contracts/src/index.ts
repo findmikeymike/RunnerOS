@@ -1,5 +1,6 @@
 export * from './analysis.ts'
 export * from './common.ts'
 export * from './errors.ts'
+export * from './market-data.ts'
 export * from './service.ts'
 export * from './version.ts'

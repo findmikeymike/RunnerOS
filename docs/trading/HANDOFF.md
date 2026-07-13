@@ -33,11 +33,11 @@ The Phase 0 walking skeleton is implemented for development and packaged-sidecar
 
 This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real visual Electron user path and a fully built packaged installer have not been proven.
 
-Phase 1 has begun with an isolated Python 3.12.9/NautilusTrader 1.230.0 sidecar. The project-owned ES fixture now becomes exact Nautilus `TradeTick` objects. Nautilus objects remain inside the sidecar; canonical Trade God market events are the next boundary and are not implemented yet.
+Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 sidecar and provider-independent Trade God event, quality-report, and bounded-batch contracts. The project-owned ES fixture becomes exact Nautilus `TradeTick` objects, but the Python adapter does not emit the new contracts yet.
 
 ## Immediate Assignment
 
-Build the canonical market-trade event and quality-report schemas with golden examples, then map the proven Nautilus ticks into them. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
+Map the proven Nautilus ticks into canonical batches, execute quality checks, and prove a real cross-language checksum. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
 
 ## Known Expected Artifact
 
@@ -63,6 +63,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Full monorepo typecheck: blocked by a pre-existing campaign-calendar failure at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package typechecks: unverified after prior tool-layer hangs.
 - Phase 1 fixture adapter: 1 test passed after an observed failing test; Python `3.12.9`, NautilusTrader `1.230.0`, Darwin ARM64.
+- Phase 1 canonical contracts: 20 tests passed and standalone typecheck passed after adversarial findings were reproduced and fixed.
 - Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
 
 ## Non-Negotiable Boundaries
@@ -77,9 +78,9 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Next Smallest Actions
 
-1. Canonical market-trade event and quality-report contracts.
-2. Nautilus tick to canonical-event conversion plus deterministic checksum.
-3. Duplicate, ordering, precision, timestamp, and checksum failure tests.
+1. Nautilus tick to canonical-event conversion plus deterministic checksum.
+2. Duplicate, ordering, precision, timestamp, and checksum failure execution.
+3. Canonical replay batch into the Order Flow input boundary.
 4. Real visual success/cancel/failure smoke at the first desktop opportunity.
 5. Actual packaged-app build/resource-layout smoke.
 

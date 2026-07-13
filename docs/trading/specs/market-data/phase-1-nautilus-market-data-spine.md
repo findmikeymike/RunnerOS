@@ -123,6 +123,10 @@ No broker, account, order, execution, credential, or network-provider capability
 - Duplicate handling is deterministic.
 - Checksums cover source bytes and canonical output.
 
+### Canonical Event Checksum v1
+
+`canonical_events_sha256` hashes the ordered event array encoded as UTF-8 JSON with recursively lexicographically sorted object keys and no insignificant whitespace. Market decimals and nanosecond timestamps remain strings; extension numbers are restricted to safe integers. Array order is preserved. Both the quality report and batch carry the same digest.
+
 ## Repository Harvest Plan
 
 ### NautilusTrader — ADAPTER
@@ -154,7 +158,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 - [x] Nautilus version/license and local Python `3.12.9` are pinned; Darwin ARM64 is verified.
 - [ ] Windows and Linux runtime/package compatibility is smoke-verified.
 - [x] A project-owned ES fixture becomes valid Nautilus `TradeTick` objects.
-- [ ] Trade God canonical events validate without Nautilus imports in the contract package.
+- [x] Trade God canonical events validate without Nautilus imports in the contract package.
 - [ ] Identical replay produces canonical-equivalent output and checksum.
 - [ ] Decimal/fixed-point precision round-trips exactly.
 - [ ] Duplicate and out-of-order behavior is deterministic and visible.

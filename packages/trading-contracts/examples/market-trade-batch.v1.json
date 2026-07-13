@@ -1,0 +1,81 @@
+{
+  "batch_schema_version": "market-trade-batch@1",
+  "batch_id": "batch-es-demo-001",
+  "trace_id": "trace-market-replay-001",
+  "mode": "replay",
+  "instrument_id": "CME:ESU6",
+  "source": {
+    "provider": "trade-god-fixture",
+    "fixture_id": "es-demo-2026-07-11",
+    "source_sha256": "ccf7063cf2b19a0e876b3117860d823e55f06af683714f857633bf05f40cb774"
+  },
+  "event_time_range": {
+    "start_ns": "1783780200000000000",
+    "end_ns": "1783780200000000000"
+  },
+  "events": [
+    {
+      "event_schema_version": "market-trade-event@1",
+      "event_id": "event-esu6-0001",
+      "trace_id": "trace-market-replay-001",
+      "producer": {
+        "name": "trade-god-market-data-engine",
+        "version": "0.1.0"
+      },
+      "instrument": {
+        "id": "CME:ESU6",
+        "symbol": "ESU6",
+        "venue": "XCME",
+        "asset_class": "future",
+        "currency": "USD",
+        "tick_size": "0.25",
+        "multiplier": "50"
+      },
+      "ts_event_ns": "1783780200000000000",
+      "ts_init_ns": "1783780200000000000",
+      "price": {
+        "value": "5592.00",
+        "raw": "559200",
+        "precision": 2
+      },
+      "size": {
+        "value": "5",
+        "raw": "5",
+        "precision": 0
+      },
+      "aggressor_side": "buyer",
+      "trade_id": "1",
+      "source": {
+        "provider": "trade-god-fixture",
+        "record_id": "es-demo-2026-07-11:1",
+        "mode": "replay",
+        "fixture_id": "es-demo-2026-07-11",
+        "fixture_sha256": "ccf7063cf2b19a0e876b3117860d823e55f06af683714f857633bf05f40cb774"
+      },
+      "quality_flags": [],
+      "provenance": {
+        "source_schema": "synthetic-trades@1",
+        "transformations": ["fixture-record-to-trade-tick", "trade-tick-to-market-event"]
+      },
+      "extensions": {}
+    }
+  ],
+  "quality": {
+    "quality_report_schema_version": "market-quality-report@1",
+    "batch_id": "batch-es-demo-001",
+    "trace_id": "trace-market-replay-001",
+    "state": "valid",
+    "counts": {
+      "received": 1,
+      "accepted": 1,
+      "rejected": 0,
+      "duplicates": 0,
+      "out_of_order": 0
+    },
+    "flags": [],
+    "issues": [],
+    "source_sha256": "ccf7063cf2b19a0e876b3117860d823e55f06af683714f857633bf05f40cb774",
+    "canonical_events_sha256": "115ca2aef294fb4d4febcab2d162d3ab1ebda46abcc38a3883067186ac2860d1"
+  },
+  "canonical_events_sha256": "115ca2aef294fb4d4febcab2d162d3ab1ebda46abcc38a3883067186ac2860d1"
+}

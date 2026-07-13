@@ -1,0 +1,17 @@
+{
+  "quality_report_schema_version": "market-quality-report@1",
+  "batch_id": "batch-es-demo-001",
+  "trace_id": "trace-market-replay-001",
+  "state": "valid",
+  "counts": {
+    "received": 1,
+    "accepted": 1,
+    "rejected": 0,
+    "duplicates": 0,
+    "out_of_order": 0
+  },
+  "flags": [],
+  "issues": [],
+  "source_sha256": "ccf7063cf2b19a0e876b3117860d823e55f06af683714f857633bf05f40cb774",
+  "canonical_events_sha256": "115ca2aef294fb4d4febcab2d162d3ab1ebda46abcc38a3883067186ac2860d1"
+}
