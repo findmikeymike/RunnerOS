@@ -462,7 +462,7 @@ export interface CommunityEmailSendResult {
 export interface ElectronAPI {
   // Trade God local desktop runtime (never routed to remote workspace servers)
   getTradeGodHealth(): Promise<import('@trade-god/contracts').HealthResponse>
-  analyzeTradeGodFixture(input: import('@trade-god/client').AnalyzeFixtureInput): Promise<import('@trade-god/contracts').AnalysisArtifact>
+  analyzeTradeGodFixture(input: import('@trade-god/client').AnalyzeFixtureInput): Promise<import('@trade-god/contracts').OrderFlowArtifact>
   cancelTradeGodAnalysis(cancellationId: string): Promise<import('@trade-god/contracts').CancelAnalysisResponse>
 
   // Session management
@@ -1622,6 +1622,9 @@ export const getNavigationStateKey = (state: NavigationState): string => {
   }
   if (state.navigator === 'vault') {
     return 'vault'
+  }
+  if (state.navigator === 'tradeGod') {
+    return 'trade-god'
   }
   if (state.navigator === 'workflows') {
     switch (state.details.type) {

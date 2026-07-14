@@ -1,5 +1,3 @@
-import { createInterface } from 'node:readline'
-
 import { analyzeOrderFlowFixture } from '@trade-god/testkit'
 
 import { createOrderFlowRpcHandler } from './index.ts'
@@ -26,7 +24,6 @@ const handler = createOrderFlowRpcHandler({
   } : {}),
 })
 
-const lines = createInterface({ input: process.stdin, crlfDelay: Infinity, terminal: false })
 const pending = new Set<Promise<void>>()
 
 async function processLine(line: string): Promise<void> {
@@ -70,13 +67,50 @@ async function processLine(line: string): Promise<void> {
 
   const response = await handler.handle(request as Parameters<typeof handler.handle>[0])
   process.stdout.write(`${JSON.stringify(response)}\n`)
-  if (handler.state() === 'stopped') lines.close()
+  if (handler.state() === 'stopped') process.stdin.destroy()
 }
 
-for await (const line of lines) {
+function schedule(line: string): void {
   const task = processLine(line)
   pending.add(task)
   void task.finally(() => pending.delete(task))
 }
+
+const frame = Buffer.allocUnsafe(ORDER_FLOW_MAX_LINE_BYTES)
+let frameLength = 0
+let discardingOversizedFrame = false
+
+for await (const chunkValue of process.stdin) {
+  const chunk = Buffer.isBuffer(chunkValue) ? chunkValue : Buffer.from(chunkValue)
+  let offset = 0
+  while (offset < chunk.length) {
+    const newline = chunk.indexOf(0x0a, offset)
+    const end = newline === -1 ? chunk.length : newline
+    const pieceLength = end - offset
+    if (!discardingOversizedFrame) {
+      if (frameLength + pieceLength > ORDER_FLOW_MAX_LINE_BYTES) {
+        discardingOversizedFrame = true
+        frameLength = 0
+        process.stdout.write(`${JSON.stringify({
+          jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Request too large' },
+        })}\n`)
+      } else {
+        chunk.copy(frame, frameLength, offset, end)
+        frameLength += pieceLength
+      }
+    }
+
+    if (newline === -1) break
+    if (!discardingOversizedFrame) {
+      const lineEnd = frameLength > 0 && frame[frameLength - 1] === 0x0d ? frameLength - 1 : frameLength
+      schedule(frame.subarray(0, lineEnd).toString('utf8'))
+    }
+    frameLength = 0
+    discardingOversizedFrame = false
+    offset = newline + 1
+  }
+}
+
+if (!discardingOversizedFrame && frameLength > 0) schedule(frame.subarray(0, frameLength).toString('utf8'))
 
 await Promise.all(pending)

@@ -3,6 +3,9 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
+import { CANONICAL_ORDER_FLOW_CONFIGURATION } from '@trade-god/contracts'
+import { loadEsDemoFixture } from '@trade-god/testkit'
+
 import { TRADE_GOD_IPC } from '../trading-ipc.ts'
 import {
   createTradeGodRuntime,
@@ -20,6 +23,7 @@ class FakeIpcMain {
 const repoRoot = path.resolve(import.meta.dir, '../../../../../..')
 
 test('resolves and runs the development sidecar from an explicit RunnerOS root', async () => {
+  const contextDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-agent-context-'))
   const launch = resolveOrderFlowLaunch({ rootCandidates: [repoRoot], runtimeExecutable: process.execPath })
   expect(launch.command).toEqual([process.execPath, path.join(repoRoot, 'sidecars/order-flow-engine/src/cli.ts')])
   const marketLaunch = resolveMarketDataLaunch({ rootCandidates: [repoRoot], platform: process.platform })
@@ -35,14 +39,63 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     rootCandidates: [repoRoot],
     runtimeExecutable: process.execPath,
     now: () => new Date().toISOString(),
+    contextDirectory,
   })
 
   const health = await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})
   expect(health).toMatchObject({ state: 'ready' })
   expect(runtime.marketDataManager).toBeDefined()
+  expect(runtime.canonicalPipeline).toBeDefined()
+  expect(runtime.specialistContextPipeline).toBeDefined()
   expect(await runtime.marketDataManager!.health()).toMatchObject({ state: 'ready' })
 
+  const fixture = await loadEsDemoFixture()
+  const artifact = await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, {
+    fixture: { id: fixture.manifest.fixture_id, sha256: fixture.manifest.events_sha256 },
+    instrument: fixture.manifest.instrument,
+    session: fixture.manifest.session,
+    analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
+    timeoutMs: 5_000,
+    traceId: 'trace-runtime-canonical',
+  })
+  expect(artifact).toMatchObject({
+    artifact_schema_version: 'order-flow-artifact@2',
+    input: { kind: 'canonical-market-batch' },
+    summary: { event_count: 4, total_volume: '28', delta: '6' },
+  })
+
+  const delivery = await runtime.specialistContextPipeline!.routeFixtureSnapshot({
+    fixtureId: fixture.manifest.fixture_id,
+    traceId: 'trace-specialist-context',
+    batchId: 'batch-specialist-context',
+    snapshotId: 'snapshot-specialist-context',
+    intervalNs: '20000000000',
+    watermarkNs: '1783780230000000000',
+    staleAfterNs: '5000000000',
+    recentTradeLimit: 2,
+    closedCandleLimit: 1,
+    consumerAgentId: 'order-flow-specialist',
+    capability: 'order-flow-interpretation',
+  })
+  expect(delivery).toMatchObject({
+    delivery_mode: 'reference', status: 'queued',
+    consumer: { agent_id: 'order-flow-specialist', capability: 'order-flow-interpretation' },
+    context: {
+      context_schema_version: 'agent-market-snapshot@1',
+      trace_id: 'trace-specialist-context',
+      authority: { purpose: 'analysis', execution_allowed: false, order_submission_allowed: false },
+    },
+  })
+  expect(delivery).not.toHaveProperty('snapshot')
+  const resolved = await runtime.contextStore!.resolveForConsumer(delivery.delivery_id, 'order-flow-specialist')
+  expect(resolved.receipt.status).toBe('resolved')
+  expect(resolved.snapshot).toMatchObject({
+    snapshot_id: 'snapshot-specialist-context',
+    trades: { returned_count: 2, visible_count: 4, truncated: true },
+  })
+
   await runtime.dispose()
+  rmSync(contextDirectory, { recursive: true, force: true })
   expect(ipc.handlers.size).toBe(0)
 })
 

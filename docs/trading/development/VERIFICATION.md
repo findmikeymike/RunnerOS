@@ -276,6 +276,17 @@ A lower rung does not prove a higher rung.
 - Resource bounds: request identities are stored as bounded hashes, pre-cancel state is bounded, and JSONL frames are rejected before parsing above the declared line limit.
 - Not proven: installed Electron UI uses this new path, agent-context delivery, live streaming, packaged Python assets, or real visual behavior.
 
+## Phase 1 Slice 10 — Hardened Runtime Path and Specialist Context References
+
+- Method: `$rival` review followed by `$fix`, focused proof, then a second adversarial storage-boundary pass.
+- Focused closure: 66 passed, 0 failed across 12 files.
+- Type/build proof: contract, market-state, and Electron typechecks passed; Electron main, preload, and renderer production builds passed.
+- Runtime hardening proven: the real Electron IPC route uses the canonical Python -> Order Flow pipeline; one caller deadline covers market loading and analysis; active work is aborted on deadline; duplicate cancellation IDs cannot steal ownership; stopped analysis is rejected; started/succeeded receipt identity is stable; contradictory receipt and v2 artifact fields fail schema validation; JSONL input is bounded before unbounded line buffering.
+- Context contracts: `agent-context-reference@1` binds context/schema/snapshot/trace/instrument/checksum/authority identity; `agent-context-delivery-receipt@1` records reference-only queue and authorized resolution states.
+- Storage/routing proof: a full integrity-checked `agent-market-snapshot@1` is atomically stored once under `<userData>/trade-god/agent-context/`; the addressed `order-flow-specialist` boundary receives only its reference; wrong-consumer, forged-reference, concurrent-publication, and path-traversal cases fail closed.
+- Boundary: deterministic Order Flow still consumes the full canonical batch, never the truncated agent snapshot.
+- Not proven: an actual LLM specialist session resolving the reference, typed specialist interpretation output, paced replay/cancel, packaged Python assets, installed Electron behavior, or visual UI smoke.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

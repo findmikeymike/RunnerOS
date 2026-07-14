@@ -1,5 +1,5 @@
 import type { AnalyzeFixtureInput } from '@trade-god/client'
-import type { AnalysisArtifact, CancelAnalysisResponse, HealthResponse } from '@trade-god/contracts'
+import type { CancelAnalysisResponse, HealthResponse, OrderFlowArtifact } from '@trade-god/contracts'
 
 export const TRADE_GOD_IPC = {
   HEALTH: 'trade-god:health',
@@ -9,7 +9,7 @@ export const TRADE_GOD_IPC = {
 
 export interface TradingIpcManager {
   health(): Promise<HealthResponse>
-  analyzeFixture(input: AnalyzeFixtureInput): Promise<AnalysisArtifact>
+  analyzeFixture(input: AnalyzeFixtureInput): Promise<OrderFlowArtifact>
   cancelAnalysis(cancellationId: string): Promise<CancelAnalysisResponse>
   stop(): Promise<void>
 }

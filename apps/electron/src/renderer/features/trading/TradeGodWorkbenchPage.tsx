@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { Activity, AlertTriangle, Database, Play, ShieldCheck, Square } from 'lucide-react'
-import type { AnalysisArtifact, HealthResponse } from '@trade-god/contracts'
+import { CANONICAL_ORDER_FLOW_CONFIGURATION, type HealthResponse, type OrderFlowArtifact } from '@trade-god/contracts'
 
 type RuntimeState = 'checking' | 'ready' | 'error'
 
@@ -14,14 +14,14 @@ const fixtureInput = {
     currency: 'USD', tick_size: '0.25', multiplier: '50',
   },
   session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-rth' },
-  analysis: { name: 'order-flow-summary', version: '0.1.0', configuration_hash: 'b'.repeat(64) },
+  analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
   timeoutMs: 5_000,
 }
 
 const TradeGodWorkbenchPage: React.FC = () => {
   const [runtimeState, setRuntimeState] = useState<RuntimeState>('checking')
   const [health, setHealth] = useState<HealthResponse | null>(null)
-  const [artifact, setArtifact] = useState<AnalysisArtifact | null>(null)
+  const [artifact, setArtifact] = useState<OrderFlowArtifact | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
   const [cancellationId, setCancellationId] = useState<string | null>(null)
@@ -123,7 +123,7 @@ const TradeGodWorkbenchPage: React.FC = () => {
             </div>
             <div className="mt-5 border-t border-white/[0.07] pt-4 font-mono text-[10px] leading-5 text-white/32">
               <div>trace: {artifact?.meta.trace_id ?? '—'}</div>
-              <div>fixture: {artifact?.input.fixture_sha256 ?? '—'}</div>
+              <div>source: {artifact ? String('fixture_sha256' in artifact.input ? artifact.input.fixture_sha256 : artifact.input.source_sha256) : '—'}</div>
               <div>content: {artifact?.content_hash ?? '—'}</div>
               <div>producer: {health?.meta.producer.name ?? '—'} {health?.meta.producer.version ?? ''}</div>
             </div>

@@ -1,7 +1,7 @@
 ---
 status: current
 owner: team
-last_verified: 2026-07-11
+last_verified: 2026-07-13
 source_of_truth: true
 ---
 
@@ -96,7 +96,7 @@ Create a directory only when its first owned responsibility is implemented. Empt
 3. Raw/normalized data is persisted append-only where appropriate.
 4. Deterministic engine produces a versioned artifact.
 5. Contract validator accepts or rejects it.
-6. Agent receives a compact evidence bundle and produces a typed interpretation.
+6. The compact evidence bundle is persisted once; the addressed agent receives a checksum-bound reference, resolves it at its consumer boundary, and produces a typed interpretation.
 7. Head agent synthesizes compatible/conflicting theses.
 8. UI renders artifacts and annotations through adapters.
 9. Journal records the run, versions, evidence, conclusions, and later outcome.
@@ -110,6 +110,7 @@ Create a directory only when its first owned responsibility is implemented. Empt
 | Derived analytics | Producing engine and artifact store |
 | Agent/workflow lifecycle | RunnerOS control plane |
 | Durable hypotheses/outcomes | Journal/context service |
+| Bounded agent market snapshots and delivery receipts | Electron-main Trade God context store until a dedicated context service replaces it |
 | Chart interaction and panels | Renderer state |
 | Risk decision | Risk engine |
 | Order/fill/account truth | Execution gateway reconciled with broker |
@@ -123,6 +124,8 @@ Create a directory only when its first owned responsibility is implemented. Empt
   data/normalized/
   data/derived/
   artifacts/
+  agent-context/contexts/
+  agent-context/deliveries/
   runs/
   index.sqlite
   logs/

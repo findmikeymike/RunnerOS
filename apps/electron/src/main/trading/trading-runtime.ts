@@ -5,6 +5,10 @@ import { OrderFlowSidecarManager } from './order-flow-sidecar-manager.ts'
 import { MarketDataSidecarManager } from './market-data-sidecar-manager.ts'
 import { registerTradingIpc, type IpcMainLike } from './trading-ipc.ts'
 import { TradingRunReceiptStore } from './run-receipt-store.ts'
+import { CanonicalOrderFlowPipeline } from './canonical-order-flow-pipeline.ts'
+import type { TradingIpcManager } from './trading-ipc.ts'
+import { AgentContextStore } from './agent-context-store.ts'
+import { SpecialistContextPipeline } from './specialist-context-pipeline.ts'
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
@@ -20,6 +24,7 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   ipcMain: IpcMainLike
   now: () => string
   receiptDirectory?: string
+  contextDirectory?: string
   log?: (entry: { event: string; traceId: string; receiptId: string; artifactId?: string; errorCode?: string }) => void
 }
 
@@ -99,6 +104,9 @@ export function resolveMarketDataLaunch(options: ResolveMarketDataLaunchOptions)
 export function createTradeGodRuntime(options: RuntimeOptions): {
   manager: OrderFlowSidecarManager
   marketDataManager?: MarketDataSidecarManager
+  canonicalPipeline?: CanonicalOrderFlowPipeline
+  contextStore?: AgentContextStore
+  specialistContextPipeline?: SpecialistContextPipeline
   dispose: () => Promise<void>
 } {
   const launch = resolveOrderFlowLaunch(options)
@@ -131,10 +139,28 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     // Packaged Python assets are intentionally unavailable until their bundle is built and smoked.
   }
 
-  const disposeTradingIpc = registerTradingIpc(options.ipcMain, manager)
+  const canonicalPipeline = marketDataManager
+    ? new CanonicalOrderFlowPipeline(marketDataManager, manager)
+    : undefined
+  const contextStore = options.contextDirectory ? new AgentContextStore(options.contextDirectory, options.now) : undefined
+  const specialistContextPipeline = marketDataManager && contextStore
+    ? new SpecialistContextPipeline(marketDataManager, contextStore)
+    : undefined
+  const ipcManager: TradingIpcManager = canonicalPipeline
+    ? {
+        health: () => manager.health(),
+        analyzeFixture: (input) => canonicalPipeline.analyzeFixture(input),
+        cancelAnalysis: (cancellationId) => manager.cancelAnalysis(cancellationId),
+        stop: () => manager.stop(),
+      }
+    : manager
+  const disposeTradingIpc = registerTradingIpc(options.ipcMain, ipcManager)
   return {
     manager,
     ...(marketDataManager ? { marketDataManager } : {}),
+    ...(canonicalPipeline ? { canonicalPipeline } : {}),
+    ...(contextStore ? { contextStore } : {}),
+    ...(specialistContextPipeline ? { specialistContextPipeline } : {}),
     dispose: async () => {
       await Promise.all([disposeTradingIpc(), marketDataManager?.stop()])
     },

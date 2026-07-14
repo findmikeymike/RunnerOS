@@ -81,10 +81,9 @@ export class OrderFlowSidecarManager implements RpcTransport {
     this.options.log?.({ event: 'analysis_started', traceId, receiptId })
     try {
       const artifact = await this.client.analyzeFixture(tracedInput)
-      const artifactReceiptId = `receipt-${artifact.artifact_id}`
       await this.options.receiptWriter?.write({
         receipt_schema_version: 'trade-run-receipt@1',
-        receipt_id: artifactReceiptId,
+        receipt_id: receiptId,
         trace_id: artifact.meta.trace_id,
         status: 'succeeded',
         started_at: startedAt,
@@ -92,7 +91,7 @@ export class OrderFlowSidecarManager implements RpcTransport {
         request: { fixture_id: input.fixture.id, fixture_sha256: input.fixture.sha256 },
         artifact: { artifact_id: artifact.artifact_id, content_hash: artifact.content_hash },
       })
-      this.options.log?.({ event: 'analysis_succeeded', traceId, receiptId: artifactReceiptId, artifactId: artifact.artifact_id })
+      this.options.log?.({ event: 'analysis_succeeded', traceId, receiptId, artifactId: artifact.artifact_id })
       return artifact
     } catch (error) {
       await this.options.receiptWriter?.write({
@@ -131,14 +130,13 @@ export class OrderFlowSidecarManager implements RpcTransport {
     this.options.log?.({ event: 'analysis_started', traceId, receiptId })
     try {
       const artifact = await this.client.analyzeMarketBatch(tracedInput)
-      const artifactReceiptId = `receipt-${artifact.artifact_id}`
       await this.options.receiptWriter?.write({
-        receipt_schema_version: 'trade-run-receipt@2', receipt_id: artifactReceiptId,
+        receipt_schema_version: 'trade-run-receipt@2', receipt_id: receiptId,
         trace_id: artifact.meta.trace_id, status: 'succeeded', started_at: startedAt,
         completed_at: this.options.now(), request: requestIdentity,
         artifact: { artifact_id: artifact.artifact_id, content_hash: artifact.content_hash },
       })
-      this.options.log?.({ event: 'analysis_succeeded', traceId, receiptId: artifactReceiptId, artifactId: artifact.artifact_id })
+      this.options.log?.({ event: 'analysis_succeeded', traceId, receiptId, artifactId: artifact.artifact_id })
       return artifact
     } catch (error) {
       await this.options.receiptWriter?.write({

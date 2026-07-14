@@ -4,6 +4,7 @@ import {
   MARKET_TRADE_BATCH_SCHEMA_VERSION,
   ORDER_FLOW_MARKET_ARTIFACT_SCHEMA_VERSION,
   ORDER_FLOW_MARKET_INPUT_SCHEMA_VERSION,
+  CANONICAL_ORDER_FLOW_CONFIGURATION,
   canonicalJson,
   canonicalOrderFlowArtifactSchema,
   marketTradeBatchSchema,
@@ -17,17 +18,7 @@ export const ORDER_FLOW_MAX_EVENTS = 5_000
 export const ORDER_FLOW_MAX_REQUEST_BYTES = 750_000
 export const ORDER_FLOW_MAX_LINE_BYTES = 800_000
 
-const configurationContent = {
-  name: 'order-flow-summary',
-  version: '0.2.0',
-  parameters: {},
-}
-
-export const CANONICAL_ORDER_FLOW_CONFIGURATION = {
-  name: configurationContent.name,
-  version: configurationContent.version,
-  configuration_hash: createHash('sha256').update(canonicalJson(configurationContent), 'utf8').digest('hex'),
-} as const
+export { CANONICAL_ORDER_FLOW_CONFIGURATION } from '@trade-god/contracts'
 
 export interface AnalyzeCanonicalMarketBatchOptions {
   meta: WireMeta

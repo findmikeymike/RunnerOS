@@ -10,7 +10,7 @@ import {
 import { loadEsDemoFixture } from '@trade-god/testkit'
 
 import { ORDER_FLOW_RPC_CACHE_MAX, createOrderFlowRpcHandler } from '../src/index.ts'
-import { CANONICAL_ORDER_FLOW_CONFIGURATION } from '../src/analyze-market-batch.ts'
+import { CANONICAL_ORDER_FLOW_CONFIGURATION, analyzeCanonicalMarketBatch } from '../src/analyze-market-batch.ts'
 
 const clientMeta = {
   schema_version: PROTOCOL_VERSION,
@@ -21,6 +21,17 @@ const clientMeta = {
 
 function rpc(id: string, method: string, params: unknown = {}) {
   return { jsonrpc: '2.0' as const, id, method, params }
+}
+
+function canonicalParams(batch: any, cancellationId: string, deadlineAt: string) {
+  return {
+    meta: { ...clientMeta, trace_id: `trace-${cancellationId}`, created_at: new Date().toISOString() },
+    input: { schema_version: 'order-flow-market-input@1', kind: 'canonical-market-batch', batch },
+    session: { exchange_timezone: 'America/Chicago', session_id: 'CME-2026-07-11-RTH' },
+    analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
+    deadline_at: deadlineAt,
+    cancellation_id: cancellationId,
+  }
 }
 
 describe('Order Flow JSON-RPC handler', () => {
@@ -209,6 +220,46 @@ describe('Order Flow JSON-RPC handler', () => {
       .resolves.toMatchObject({ result: { state: 'ready' } })
   })
 
+  test('rejects a duplicate active cancellation id without losing ownership of the first run', async () => {
+    const batch = await Bun.file(new URL('../../../packages/trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    let markStarted!: () => void
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    const handler = createOrderFlowRpcHandler({
+      now: () => new Date().toISOString(), instanceId: 'duplicate-cancellation-test',
+      analyzeMarketBatch: async (_batch, context) => {
+        markStarted()
+        await new Promise<void>((resolve) => context.signal.addEventListener('abort', () => resolve(), { once: true }))
+        throw new Error('analysis aborted')
+      },
+    })
+    const deadline = new Date(Date.now() + 1_000).toISOString()
+    const first = handler.handle(rpc('canonical-first', 'trade.analyze_market_batch', canonicalParams(batch, 'shared-cancel-id', deadline)))
+    await started
+    const duplicate = await handler.handle(rpc('canonical-duplicate', 'trade.analyze_market_batch', canonicalParams(batch, 'shared-cancel-id', deadline)))
+    await handler.handle(rpc('canonical-cancel', 'trade.cancel', { meta: clientMeta, cancellation_id: 'shared-cancel-id' }))
+
+    expect(duplicate).toMatchObject({ error: { data: { trade_error: { code: 'INVALID_REQUEST' } } } })
+    await expect(first).resolves.toMatchObject({ error: { data: { trade_error: { code: 'CANCELED' } } } })
+  })
+
+  test('actively aborts and classifies analysis that crosses its deadline', async () => {
+    const batch = await Bun.file(new URL('../../../packages/trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    const handler = createOrderFlowRpcHandler({
+      now: () => new Date().toISOString(), instanceId: 'deadline-test',
+      analyzeMarketBatch: async (_batch, context) => {
+        await new Promise<void>((resolve) => context.signal.addEventListener('abort', () => resolve(), { once: true }))
+        throw new Error('deadline abort')
+      },
+    })
+    const response = await handler.handle(rpc('canonical-deadline', 'trade.analyze_market_batch', canonicalParams(
+      batch, 'deadline-cancel-id', new Date(Date.now() + 20).toISOString(),
+    )))
+
+    expect(response).toMatchObject({
+      error: { data: { trade_error: { code: 'DEADLINE_EXCEEDED', category: 'timeout' } } },
+    })
+  })
+
   test('returns JSON-RPC method-not-found without crashing', async () => {
     const handler = createOrderFlowRpcHandler({ now: () => '2026-07-11T15:30:00.000Z', instanceId: 'order-flow-test-1' })
 
@@ -228,5 +279,11 @@ describe('Order Flow JSON-RPC handler', () => {
 
     expect(response).toEqual({ jsonrpc: '2.0', id: 'shutdown-1', result: { state: 'stopped' } })
     expect(handler.state()).toBe('stopped')
+    const batch = await Bun.file(new URL('../../../packages/trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    await expect(handler.handle(rpc('analysis-after-stop', 'trade.analyze_market_batch', canonicalParams(
+      batch, 'after-stop', new Date(Date.now() + 1_000).toISOString(),
+    )))).resolves.toMatchObject({
+      error: { data: { trade_error: { code: 'CAPABILITY_UNAVAILABLE', category: 'unavailable' } } },
+    })
   })
 })

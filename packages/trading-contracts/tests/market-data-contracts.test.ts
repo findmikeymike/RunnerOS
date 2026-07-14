@@ -281,5 +281,14 @@ describe('canonical market-data contracts', () => {
     expect(request.input.batch.events).toHaveLength(4)
     expect(artifact.input).not.toHaveProperty('fixture_id')
     expect(canonicalOrderFlowArtifactSchema.safeParse({ ...artifact, artifact_schema_version: 'order-flow-artifact@1' }).success).toBe(false)
+    expect(canonicalOrderFlowArtifactSchema.safeParse({
+      ...artifact, summary: { ...artifact.summary, total_volume: '999', delta: '-999' },
+    }).success).toBe(false)
+    expect(canonicalOrderFlowArtifactSchema.safeParse({
+      ...artifact, input: { ...artifact.input, event_count: 99 },
+    }).success).toBe(false)
+    expect(canonicalOrderFlowArtifactSchema.safeParse({
+      ...artifact, event_time_range: { start_ns: artifact.event_time_range.end_ns, end_ns: '1' },
+    }).success).toBe(false)
   })
 })

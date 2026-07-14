@@ -573,6 +573,7 @@ app.whenReady().then(async () => {
           ipcMain,
           ...tradeGodHost,
           receiptDirectory: join(app.getPath('userData'), 'trade-god', 'run-receipts'),
+          contextDirectory: join(app.getPath('userData'), 'trade-god', 'agent-context'),
           log: (entry) => mainLog.info('[trade-god:run]', JSON.stringify(entry)),
           now: () => new Date().toISOString(),
         })

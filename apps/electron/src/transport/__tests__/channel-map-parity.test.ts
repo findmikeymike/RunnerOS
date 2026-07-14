@@ -29,6 +29,9 @@ type ApiToChannelMapKeys = Exclude<
   | 'changeLanguage' // direct IPC to main process — syncs i18n language
   | 'captureVisualElement' // direct IPC to main process — captures the renderer window
   | 'getFilePath' // renderer-local — webUtils.getPathForFile, no IPC round-trip
+  | 'getTradeGodHealth' // direct local Trade God sidecar IPC
+  | 'analyzeTradeGodFixture' // direct local Trade God sidecar IPC
+  | 'cancelTradeGodAnalysis' // direct local Trade God sidecar IPC
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string
 

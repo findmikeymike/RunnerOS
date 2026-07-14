@@ -11,9 +11,9 @@ test('preload adapter invokes only the three local Trade God channels', async ()
   })
   const input = { timeoutMs: 500 } as any
 
-  expect(await api.getTradeGodHealth()).toEqual({ state: 'ready' })
-  expect(await api.analyzeTradeGodFixture(input)).toEqual({ artifact_id: 'artifact-preload' })
-  expect(await api.cancelTradeGodAnalysis('cancel-preload')).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.getTradeGodHealth() as any).toEqual({ state: 'ready' })
+  expect(await api.analyzeTradeGodFixture(input) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.cancelTradeGodAnalysis('cancel-preload') as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(calls).toEqual([
     { channel: TRADE_GOD_IPC.HEALTH, args: [] },
     { channel: TRADE_GOD_IPC.ANALYZE_FIXTURE, args: [input] },

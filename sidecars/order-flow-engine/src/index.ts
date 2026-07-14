@@ -69,6 +69,11 @@ export interface OrderFlowRpcHandler {
   state(): 'ready' | 'stopped'
 }
 
+interface ActiveAnalysis {
+  controller: AbortController
+  reason?: 'canceled' | 'deadline'
+}
+
 const commands = ['health', 'capabilities', 'analyze_fixture', 'analyze_market_batch', 'cancel', 'shutdown'] as const
 export const ORDER_FLOW_RPC_CACHE_MAX = 256
 const ORDER_FLOW_PRECANCELED_MAX = 256
@@ -76,7 +81,7 @@ const ORDER_FLOW_PRECANCELED_MAX = 256
 export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): OrderFlowRpcHandler {
   let lifecycle: 'ready' | 'stopped' = 'ready'
   const canceled = new Set<string>()
-  const active = new Map<string, AbortController>()
+  const active = new Map<string, ActiveAnalysis>()
   const handled = new Map<string, { digest: string; response: RpcResponse }>()
   const runAnalysis = options.analyzeFixture ?? ((fixture, context) => analyzeOrderFlowFixture(fixture, {
     meta: context.meta,
@@ -109,10 +114,30 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
     id,
     error: {
       code: rpcCode,
-      message: error.message,
+      message: String(error.message),
       data: { trade_error: tradingErrorSchema.parse({ meta: serverMeta(traceId), ...error }) },
     },
   })
+
+  const interruptionFailure = (id: RpcId, traceId: string, entry: ActiveAnalysis): RpcFailure => (
+    entry.reason === 'deadline'
+      ? domainFailure(id, traceId, {
+          code: 'DEADLINE_EXCEEDED', category: 'timeout', message: 'Analysis deadline elapsed while work was running.', retryable: false,
+        })
+      : domainFailure(id, traceId, {
+          code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while running.', retryable: false,
+        })
+  )
+
+  const armDeadline = (entry: ActiveAnalysis, deadlineAt: string): ReturnType<typeof setTimeout> | undefined => {
+    const remaining = Date.parse(deadlineAt) - Date.parse(options.now())
+    if (remaining > 2_147_483_647) return undefined
+    return setTimeout(() => {
+      if (entry.reason) return
+      entry.reason = 'deadline'
+      entry.controller.abort(new Error('deadline exceeded'))
+    }, Math.max(0, remaining))
+  }
 
   const execute = async (request: RpcRequest): Promise<RpcResponse> => {
     const params = request.params && typeof request.params === 'object'
@@ -147,6 +172,12 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
       }
     }
 
+    if (lifecycle === 'stopped' && request.method !== 'trade.shutdown') {
+      return domainFailure(request.id, traceId, {
+        code: 'CAPABILITY_UNAVAILABLE', category: 'unavailable', message: 'Order Flow service is stopped.', retryable: false,
+      })
+    }
+
     if (request.method === 'trade.cancel') {
       const cancellationId = typeof params.cancellation_id === 'string' ? params.cancellation_id : ''
       if (!cancellationId) {
@@ -159,12 +190,20 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
         if (oldest !== undefined) canceled.delete(oldest)
       }
       canceled.add(cancellationId)
-      active.get(cancellationId)?.abort()
+      const entry = active.get(cancellationId)
+      if (entry) {
+        entry.reason = 'canceled'
+        entry.controller.abort(new Error('analysis canceled'))
+      }
       return { jsonrpc: '2.0', id: request.id, result: { meta: serverMeta(traceId), cancellation_id: cancellationId, state: 'canceled' } }
     }
 
     if (request.method === 'trade.shutdown') {
       lifecycle = 'stopped'
+      for (const entry of active.values()) {
+        entry.reason = 'canceled'
+        entry.controller.abort(new Error('service shutdown'))
+      }
       return { jsonrpc: '2.0', id: request.id, result: { state: 'stopped' } }
     }
 
@@ -196,46 +235,37 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
           code: 'DEADLINE_EXCEEDED', category: 'timeout', message: 'Analysis deadline has elapsed.', retryable: false,
         })
       }
-
-      const fixture = await loadEsDemoFixture()
-      if (parsed.data.fixture.id !== fixture.manifest.fixture_id) {
+      if (active.has(parsed.data.cancellation_id)) {
         return domainFailure(request.id, traceId, {
-          code: 'FIXTURE_NOT_FOUND', category: 'validation', message: 'Requested fixture is unavailable.', retryable: false,
-        })
+          code: 'INVALID_REQUEST', category: 'validation', message: 'cancellation_id is already active.', retryable: false,
+        }, -32600)
       }
-      if (parsed.data.fixture.sha256 !== fixture.manifest.events_sha256) {
-        return domainFailure(request.id, traceId, {
-          code: 'FIXTURE_CHECKSUM_MISMATCH', category: 'validation', message: 'Fixture checksum does not match its manifest.', retryable: false,
-        })
-      }
-
-      if (canceled.has(parsed.data.cancellation_id)) {
-        canceled.delete(parsed.data.cancellation_id)
-        return domainFailure(request.id, traceId, {
-          code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while preparing its input.', retryable: false,
-        })
-      }
-
-      const controller = new AbortController()
-      active.set(parsed.data.cancellation_id, controller)
+      const entry: ActiveAnalysis = { controller: new AbortController() }
+      active.set(parsed.data.cancellation_id, entry)
+      const deadlineTimer = armDeadline(entry, parsed.data.deadline_at)
       try {
+        const fixture = await loadEsDemoFixture()
+        if (entry.controller.signal.aborted) return interruptionFailure(request.id, traceId, entry)
+        if (parsed.data.fixture.id !== fixture.manifest.fixture_id) {
+          return domainFailure(request.id, traceId, {
+            code: 'FIXTURE_NOT_FOUND', category: 'validation', message: 'Requested fixture is unavailable.', retryable: false,
+          })
+        }
+        if (parsed.data.fixture.sha256 !== fixture.manifest.events_sha256) {
+          return domainFailure(request.id, traceId, {
+            code: 'FIXTURE_CHECKSUM_MISMATCH', category: 'validation', message: 'Fixture checksum does not match its manifest.', retryable: false,
+          })
+        }
         const artifact = await runAnalysis(fixture, {
-          signal: controller.signal,
+          signal: entry.controller.signal,
           meta: serverMeta(traceId),
           artifactId: `artifact-${String(request.id)}`,
         })
-        if (controller.signal.aborted) {
-          return domainFailure(request.id, traceId, {
-            code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while running.', retryable: false,
-          })
-        }
+        if (!entry.reason && Date.parse(options.now()) >= Date.parse(parsed.data.deadline_at)) entry.reason = 'deadline'
+        if (entry.reason || entry.controller.signal.aborted) return interruptionFailure(request.id, traceId, entry)
         return { jsonrpc: '2.0', id: request.id, result: artifact }
       } catch (error) {
-        if (controller.signal.aborted) {
-          return domainFailure(request.id, traceId, {
-            code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while running.', retryable: false,
-          })
-        }
+        if (entry.reason || entry.controller.signal.aborted) return interruptionFailure(request.id, traceId, entry)
         if (error instanceof FixtureChecksumMismatchError) {
           return domainFailure(request.id, traceId, {
             code: 'FIXTURE_CHECKSUM_MISMATCH', category: 'validation', message: error.message, retryable: false,
@@ -245,7 +275,8 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
           code: 'INTERNAL_ERROR', category: 'internal', message: 'Order Flow analysis failed.', retryable: false,
         })
       } finally {
-        active.delete(parsed.data.cancellation_id)
+        if (deadlineTimer) clearTimeout(deadlineTimer)
+        if (active.get(parsed.data.cancellation_id) === entry) active.delete(parsed.data.cancellation_id)
         canceled.delete(parsed.data.cancellation_id)
       }
     }
@@ -285,28 +316,26 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
           code: 'DEADLINE_EXCEEDED', category: 'timeout', message: 'Analysis deadline has elapsed.', retryable: false,
         })
       }
-
-      const controller = new AbortController()
-      active.set(parsed.data.cancellation_id, controller)
+      if (active.has(parsed.data.cancellation_id)) {
+        return domainFailure(request.id, traceId, {
+          code: 'INVALID_REQUEST', category: 'validation', message: 'cancellation_id is already active.', retryable: false,
+        }, -32600)
+      }
+      const entry: ActiveAnalysis = { controller: new AbortController() }
+      active.set(parsed.data.cancellation_id, entry)
+      const deadlineTimer = armDeadline(entry, parsed.data.deadline_at)
       try {
         const artifact = await runMarketAnalysis(parsed.data.input.batch, {
-          signal: controller.signal,
+          signal: entry.controller.signal,
           meta: serverMeta(traceId),
           artifactId: `artifact-${String(request.id)}`,
           sessionId: parsed.data.session.session_id,
         })
-        if (controller.signal.aborted) {
-          return domainFailure(request.id, traceId, {
-            code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while running.', retryable: false,
-          })
-        }
+        if (!entry.reason && Date.parse(options.now()) >= Date.parse(parsed.data.deadline_at)) entry.reason = 'deadline'
+        if (entry.reason || entry.controller.signal.aborted) return interruptionFailure(request.id, traceId, entry)
         return { jsonrpc: '2.0', id: request.id, result: artifact }
       } catch (error) {
-        if (controller.signal.aborted) {
-          return domainFailure(request.id, traceId, {
-            code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while running.', retryable: false,
-          })
-        }
+        if (entry.reason || entry.controller.signal.aborted) return interruptionFailure(request.id, traceId, entry)
         if (error instanceof CanonicalOrderFlowInputError) {
           return domainFailure(request.id, traceId, {
             code: 'INVALID_REQUEST', category: 'validation', message: error.message, retryable: false,
@@ -316,7 +345,8 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
           code: 'INTERNAL_ERROR', category: 'internal', message: 'Canonical Order Flow analysis failed.', retryable: false,
         })
       } finally {
-        active.delete(parsed.data.cancellation_id)
+        if (deadlineTimer) clearTimeout(deadlineTimer)
+        if (active.get(parsed.data.cancellation_id) === entry) active.delete(parsed.data.cancellation_id)
         canceled.delete(parsed.data.cancellation_id)
       }
     }

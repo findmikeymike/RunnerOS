@@ -81,6 +81,21 @@ describe('fixture analysis contracts', () => {
       artifact: { artifact_id: 'artifact-1', content_hash: 'b'.repeat(64) },
     }).status).toBe('succeeded')
   })
+  test('rejects impossible receipt status, payload, and time combinations', () => {
+    const base = {
+      receipt_schema_version: 'trade-run-receipt@2', receipt_id: 'receipt-invalid', trace_id: meta.trace_id,
+      started_at: '2026-07-13T12:00:01.000Z', completed_at: '2026-07-13T12:00:00.000Z',
+      request: {
+        kind: 'canonical-market-batch', batch_id: 'batch-invalid', batch_trace_id: 'trace-market',
+        canonical_events_sha256: 'a'.repeat(64), source_sha256: 'b'.repeat(64), instrument_id: 'CME:ESU6',
+      },
+    }
+    expect(tradingRunReceiptSchema.safeParse({ ...base, status: 'succeeded' }).success).toBe(false)
+    expect(tradingRunReceiptSchema.safeParse({
+      ...base, completed_at: base.started_at, status: 'failed',
+      artifact: { artifact_id: 'artifact-impossible', content_hash: 'c'.repeat(64) },
+    }).success).toBe(false)
+  })
   test('accepts a fully bounded fixture request', () => {
     const result = analyzeFixtureRequestSchema.parse({
       meta,

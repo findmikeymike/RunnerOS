@@ -67,7 +67,10 @@ export async function loadEsDemoFixture(): Promise<LoadedTradeFixture> {
   const eventsFile = String(manifestValue.events_file ?? '')
   const rawEvents = await Bun.file(new URL(eventsFile, fixtureRoot)).text()
   const eventValues = JSON.parse(rawEvents) as unknown[]
-  eventValues.forEach(assertTradeEvent)
+  const events = eventValues.map((event) => {
+    assertTradeEvent(event)
+    return event
+  })
 
   const manifest: FixtureManifest = {
     fixture_id: String(manifestValue.fixture_id),
@@ -87,7 +90,7 @@ export async function loadEsDemoFixture(): Promise<LoadedTradeFixture> {
   }
   if (manifest.event_count !== eventValues.length) throw new Error('Fixture event count does not match its manifest.')
 
-  return { manifest, events: eventValues, rawEvents }
+  return { manifest, events, rawEvents }
 }
 
 export async function verifyFixtureChecksum(fixture: LoadedTradeFixture): Promise<boolean> {

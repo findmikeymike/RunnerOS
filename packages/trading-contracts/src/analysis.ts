@@ -63,11 +63,33 @@ const tradingRunReceiptBase = {
   error: z.object({ code: z.string().min(1), message: z.string().min(1) }).passthrough().optional(),
 }
 
+function enforceReceiptIntegrity(
+  receipt: {
+    status: 'succeeded' | 'failed' | 'canceled'
+    started_at: string
+    completed_at: string
+    artifact?: unknown
+    error?: unknown
+  },
+  context: z.RefinementCtx,
+): void {
+  if (Date.parse(receipt.completed_at) < Date.parse(receipt.started_at)) {
+    context.addIssue({ code: 'custom', path: ['completed_at'], message: 'Receipt completion cannot precede its start' })
+  }
+  if (receipt.status === 'succeeded') {
+    if (!receipt.artifact) context.addIssue({ code: 'custom', path: ['artifact'], message: 'Succeeded receipts require an artifact' })
+    if (receipt.error) context.addIssue({ code: 'custom', path: ['error'], message: 'Succeeded receipts cannot contain an error' })
+  } else {
+    if (!receipt.error) context.addIssue({ code: 'custom', path: ['error'], message: 'Failed or canceled receipts require an error' })
+    if (receipt.artifact) context.addIssue({ code: 'custom', path: ['artifact'], message: 'Failed or canceled receipts cannot contain an artifact' })
+  }
+}
+
 export const fixtureTradingRunReceiptSchema = z.object({
   receipt_schema_version: z.literal('trade-run-receipt@1'),
   ...tradingRunReceiptBase,
   request: z.object({ fixture_id: identifierSchema, fixture_sha256: sha256Schema }).passthrough(),
-}).passthrough()
+}).passthrough().superRefine(enforceReceiptIntegrity)
 
 export const canonicalTradingRunReceiptSchema = z.object({
   receipt_schema_version: z.literal('trade-run-receipt@2'),
@@ -80,7 +102,7 @@ export const canonicalTradingRunReceiptSchema = z.object({
     source_sha256: sha256Schema,
     instrument_id: identifierSchema,
   }).passthrough(),
-}).passthrough()
+}).passthrough().superRefine(enforceReceiptIntegrity)
 
 export const tradingRunReceiptSchema = z.union([
   fixtureTradingRunReceiptSchema,

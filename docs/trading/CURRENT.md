@@ -10,13 +10,13 @@ source_of_truth: true
 ## Snapshot
 
 - Date: 2026-07-13
-- Stage: Phase 1 canonical market data now powers the first specialist engine; Phase 0 still awaits real visual Electron smoke
-- Current goal: add reference-based delivery of bounded market context to specialist agents
-- Overall state: canonical emission, replay quality, fixture-only Python RPC, typed supervision, deterministic candles/context, and replay-only canonical Order Flow consumption are test-verified; agent delivery, paced replay/cancellation, packaged Python assets, the visual Electron path, and a built installer remain unverified
+- Stage: Phase 1 now has a durable specialist-context delivery seam; Phase 0 still awaits real visual Electron smoke
+- Current goal: add paced replay and cancellation before increasing the synchronous replay bound
+- Overall state: canonical emission, replay quality, deterministic candles, hardened canonical Order Flow, and reference-only specialist context routing are test-verified; no real LLM specialist consumes the delivery yet, and paced replay, packaged Python assets, the visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
-- Implementation head entering this slice: `3bdb38e6`
+- Implementation head entering this slice: `e79bbd27`
 
 ## Working Capability
 
@@ -31,6 +31,8 @@ source_of_truth: true
 `market state -> bounded/checksummed analysis-only agent snapshot -> future specialist consumers`
 
 `real supervised Python market child -> canonical batch -> real supervised Order Flow child -> order-flow-artifact@2 + trade-run-receipt@2`
+
+`agent-market-snapshot@1 -> atomic local context store -> checksum-bound reference -> addressed specialist delivery receipt -> authorized resolution`
 
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
@@ -70,12 +72,15 @@ The workbench can request engine health, run the known fixture, and display tota
 - Added `trade.analyze_market_batch`, a provider-neutral replay-only Order Flow boundary that accepts canonical batches, independently verifies their checksum, uses exact mixed-precision arithmetic, tracks unknown-side volume, and emits `order-flow-artifact@2`.
 - Added `CanonicalOrderFlowPipeline` and proved the real Python market-data child feeds the real supervised Order Flow child without Nautilus/provider objects entering the calculator.
 - Added canonical `trade-run-receipt@2`, strict client-side artifact/provenance checks, bounded hashed request caching, pre-parse JSONL size rejection, and fail-closed live/corrupt input behavior.
+- Hardened the real Electron canonical path after adversarial review: stable receipt identity, active deadlines across market loading and analysis, duplicate-cancellation ownership, stopped-service rejection, bounded pre-parse framing, and cross-field receipt/artifact invariants.
+- Added `agent-context-reference@1` and `agent-context-delivery-receipt@1`, an atomic user-data context store, reference-only specialist queueing, consumer-bound resolution, idempotent concurrent publication, checksum/identity revalidation, and path-safe storage IDs.
+- Routed the real supervised fixture snapshot to the addressed `order-flow-specialist` boundary and proved the queued payload contains a reference rather than a copied snapshot. This is a delivery seam, not proof that an LLM specialist reasoned over it.
 
 ## Next Actions
 
-1. Add a versioned context-delivery seam for specialist agents with receipt/reference identity rather than prompt copying.
-2. Route `agent-market-snapshot@1` by reference into the first specialist while keeping deterministic Order Flow on full canonical batches.
-3. Add paced replay/cancel lifecycle semantics before increasing the 10,000-event control-path bound.
+1. Add paced replay/cancel lifecycle semantics before increasing the 10,000-event control-path bound.
+2. Connect the context-resolution seam to the first real specialist-agent runtime and add typed interpretation output/evaluation; do not call the current addressed test consumer a real agent.
+3. Keep deterministic Order Flow on full canonical batches; specialists receive only bounded context references.
 4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
 5. Build and smoke the packaged installer separately.
 6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them blindly.
@@ -88,13 +93,13 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 
 ## Verification State
 
-- Complete fast Trade God suite: 62 passed, 0 failed, 150 expectations across 12 files.
+- Complete focused Trade God closure: 66 passed, 0 failed across 12 files.
 - Electron `build:main`, `build:preload`, and `build:renderer` passed.
 - The generated packaged sidecar bundle launched independently and answered a schema-valid health request.
 - Packaged root selection, bundled-Bun selection, partial frames, and next-request restart behavior passed focused tests.
 - Active cancellation passed from typed client through sidecar boundaries; the workbench control is build-verified but not visually smoked.
 - Receipt-focused verification: 23 passed, 0 failed across contract, atomic store, supervisor, and runtime tests.
-- The prior complete 62-test suite remains the latest full-suite result; a new combined closure command hung in the tool layer and was stopped, so no larger full-suite count is claimed.
+- Contract, market-state, and Electron standalone typechecks passed; Electron main, preload, and renderer production builds passed.
 - Audit-chain focused suite: 17 passed, 0 failed, 31 expectations; Electron `build:main` passed.
 - Phase 1 Nautilus fixture adapter: 1 passed, 0 failed. Runtime proof: Python `3.12.9`, NautilusTrader `1.230.0`, Darwin ARM64.
 - Red-green proof: the adapter test first failed on the absent module, then passed after implementation.
@@ -117,9 +122,9 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Windows and Linux Nautilus runtime/package smoke remain unverified.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
-- Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.
+- Specialist-context proof persists the full integrity-checked snapshot once, queues only its reference, blocks wrong-consumer and forged/path-unsafe references, and records resolution. No actual LLM specialist execution is claimed.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, and replay-only canonical Order Flow consumption are implemented; paced replay/cancel, packaged Python assets, and agent-delivery routing remain unimplemented.
+- Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, replay-only canonical Order Flow, and reference-only specialist delivery are implemented; paced replay/cancel, packaged Python assets, and actual specialist reasoning remain unimplemented.
 
 ## Explicitly Not In Scope Yet
 
