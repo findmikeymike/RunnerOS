@@ -287,6 +287,19 @@ A lower rung does not prove a higher rung.
 - Boundary: deterministic Order Flow still consumes the full canonical batch, never the truncated agent snapshot.
 - Not proven: an actual LLM specialist session resolving the reference, typed specialist interpretation output, paced replay/cancel, packaged Python assets, installed Electron behavior, or visual UI smoke.
 
+## Phase 1 Slice 11 — Pull-Based Paced Replay and Cancellation
+
+- Method: contract-first lifecycle, real Python handler/CLI concurrency proof, typed client/Electron wiring, then adversarial deadline and capacity checks.
+- Python sidecar suite: 21 passed, 0 failed.
+- Focused TypeScript closure: 93 passed, 0 failed across 14 files.
+- Proven protocol: `market.replay_batch` starts a bounded `market-replay-session@1`; `market.replay_next` returns one ordered `market-replay-step@1` event per pull and a checksum-verified canonical batch only after all events; `market.cancel` returns an addressed typed cancellation receipt.
+- Backpressure: each replay serializes pulls and waits for the consumer before advancing; no unsolicited event stream or second transport was introduced.
+- Failure truth: cancellation and deadline interrupt an active wait as typed `canceled`/`timeout` market-data errors while health remains ready. Sidecar exit remains `JsonlSidecarExitedError`, not a cancellation.
+- Bounds: pace is 1–60,000 ms; active replay sessions are capped at 64; request identities remain bounded; the canonical batch remains capped at 10,000 events.
+- Client integrity: event index/count/remaining count, trace, batch, instrument, emitted order, final checksum, and complete batch identity validate before a caller receives completion.
+- Build/type proof: contract, market-state, and Electron typechecks passed; Electron main production build passed. The trading-client package has no standalone typecheck script and is covered through its focused tests plus Electron typecheck/import path.
+- Not proven: measured JSONL throughput threshold, reconnect/gap/staleness handling, session calendar correctness, packaged Python runtime, actual specialist reasoning, or visual Electron behavior.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

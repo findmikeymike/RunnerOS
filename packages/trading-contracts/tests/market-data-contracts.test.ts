@@ -3,11 +3,15 @@ import { describe, expect, test } from 'bun:test'
 import {
   MARKET_TRADE_BATCH_MAX_EVENTS,
   canonicalJson,
+  marketDataCapabilitiesSchema,
   marketDataCapabilitiesResponseSchema,
   marketDataErrorSchema,
   marketDataHealthSchema,
   marketCandleSeriesSchema,
   agentMarketSnapshotSchema,
+  marketReplayCancellationSchema,
+  marketReplaySessionSchema,
+  marketReplayStepSchema,
   analyzeMarketBatchRequestSchema,
   canonicalOrderFlowArtifactSchema,
   marketLoadFixtureRequestSchema,
@@ -144,7 +148,7 @@ describe('canonical market-data contracts', () => {
     expect(marketDataHealthSchema.safeParse({
       ...health,
       capabilities: { ...capabilities, commands: [...capabilities.commands, 'market.cancel'] },
-    }).success).toBe(true)
+    }).success).toBe(false)
     expect(marketDataHealthSchema.safeParse({
       ...health,
       capabilities: { ...capabilities, commands: [...capabilities.commands, 'market.place_order'] },
@@ -152,6 +156,44 @@ describe('canonical market-data contracts', () => {
     expect(marketLoadFixtureRequestSchema.safeParse({
       fixture_id: 'es-demo-2026-07-11', trace_id: 'trace-valid', batch_id: 'batch-valid',
     }).success).toBe(true)
+  })
+
+  test('requires a complete paced-replay capability and lifecycle contract', async () => {
+    const batch = await Bun.file(new URL('../examples/market-trade-batch.v1.json', import.meta.url)).json()
+    const replayCommands = ['market.health', 'market.capabilities', 'market.load_fixture', 'market.replay_batch', 'market.replay_next', 'market.cancel', 'market.shutdown']
+    expect(marketDataCapabilitiesSchema.safeParse({
+      commands: replayCommands, fixture_mode: true, fixture_ids: ['es-demo-2026-07-11'],
+      live_data: false, broker_access: false, trade_execution: false,
+    }).success).toBe(true)
+    expect(marketDataCapabilitiesSchema.safeParse({
+      commands: replayCommands.filter((command) => command !== 'market.cancel'), fixture_mode: true,
+      fixture_ids: ['es-demo-2026-07-11'], live_data: false, broker_access: false, trade_execution: false,
+    }).success).toBe(false)
+
+    const session = marketReplaySessionSchema.parse({
+      replay_schema_version: 'market-replay-session@1', replay_id: 'replay-contract-1',
+      cancellation_id: 'cancel-replay-contract-1', trace_id: batch.trace_id, batch_id: batch.batch_id,
+      instrument_id: batch.instrument_id, event_count: batch.events.length,
+      canonical_events_sha256: batch.canonical_events_sha256, pace_interval_ms: 10, state: 'ready', next_index: 0,
+      started_at: '2026-07-13T12:00:00.000Z', deadline_at: '2026-07-13T12:00:05.000Z',
+    })
+    expect(session.state).toBe('ready')
+    expect(marketReplayStepSchema.parse({
+      replay_step_schema_version: 'market-replay-step@1', replay_id: session.replay_id,
+      trace_id: batch.trace_id, batch_id: batch.batch_id, state: 'event', event_index: 0,
+      emitted_count: 1, remaining_count: batch.events.length - 1,
+      emitted_at: '2026-07-13T12:00:00.001Z', event: batch.events[0],
+    }).state).toBe('event')
+    expect(marketReplayStepSchema.parse({
+      replay_step_schema_version: 'market-replay-step@1', replay_id: session.replay_id,
+      trace_id: batch.trace_id, batch_id: batch.batch_id, state: 'completed',
+      emitted_count: batch.events.length, remaining_count: 0,
+      completed_at: '2026-07-13T12:00:00.050Z', batch,
+    }).state).toBe('completed')
+    expect(marketReplayCancellationSchema.parse({
+      replay_id: session.replay_id, cancellation_id: session.cancellation_id,
+      state: 'canceled', canceled_at: '2026-07-13T12:00:00.010Z',
+    }).state).toBe('canceled')
   })
 
   test('validates typed market-data quality errors', async () => {

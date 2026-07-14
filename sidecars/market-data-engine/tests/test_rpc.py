@@ -1,7 +1,12 @@
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
+import queue
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 
@@ -18,6 +23,19 @@ def request(request_id: int, method: str, params: dict | None = None) -> dict:
     if params is not None:
         value["params"] = params
     return value
+
+
+def replay_params(replay_id: str, cancellation_id: str, *, pace_ms: int = 10, deadline_ms: int = 5_000) -> dict:
+    deadline = datetime.now(timezone.utc) + timedelta(milliseconds=deadline_ms)
+    return {
+        "fixture_id": "es-demo-2026-07-11",
+        "trace_id": f"trace-{replay_id}",
+        "batch_id": f"batch-{replay_id}",
+        "replay_id": replay_id,
+        "cancellation_id": cancellation_id,
+        "pace_interval_ms": pace_ms,
+        "deadline_at": deadline.isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+    }
 
 
 class MarketDataRpcHandlerTest(unittest.TestCase):
@@ -93,6 +111,73 @@ class MarketDataRpcHandlerTest(unittest.TestCase):
         self.assertEqual(first, repeated)
         self.assertEqual(conflict["error"]["data"]["market_error"]["code"], "DUPLICATE_REQUEST_ID")
 
+    def test_pulls_a_complete_batch_at_the_declared_pace(self) -> None:
+        started = time.monotonic()
+        session = self.handler.handle(request(20, "market.replay_batch", replay_params("replay-complete", "cancel-complete")))
+        self.assertEqual(session["result"]["state"], "ready")
+
+        steps = [self.handler.handle(request(21 + index, "market.replay_next", {"replay_id": "replay-complete"}))
+                 for index in range(5)]
+
+        self.assertEqual([step["result"]["state"] for step in steps], ["event", "event", "event", "event", "completed"])
+        completed_batch = steps[-1]["result"]["batch"]
+        self.assertEqual(completed_batch["trace_id"], "trace-replay-complete")
+        self.assertEqual(completed_batch["batch_id"], "batch-replay-complete")
+        self.assertEqual(len(completed_batch["events"]), 4)
+        self.assertGreaterEqual(time.monotonic() - started, 0.025)
+
+    def test_cancel_overtakes_a_waiting_replay_without_stopping_the_service(self) -> None:
+        self.handler.handle(request(30, "market.replay_batch", replay_params(
+            "replay-cancel", "cancel-active-replay", pace_ms=250,
+        )))
+        first = self.handler.handle(request(31, "market.replay_next", {"replay_id": "replay-cancel"}))
+        self.assertEqual(first["result"]["state"], "event")
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            waiting = executor.submit(self.handler.handle, request(32, "market.replay_next", {"replay_id": "replay-cancel"}))
+            time.sleep(0.02)
+            canceled = self.handler.handle(request(33, "market.cancel", {"cancellation_id": "cancel-active-replay"}))
+            interrupted = waiting.result(timeout=1)
+
+        self.assertEqual(canceled["result"]["state"], "canceled")
+        self.assertEqual(interrupted["error"]["data"]["market_error"]["code"], "CANCELED")
+        self.assertEqual(interrupted["error"]["data"]["market_error"]["category"], "canceled")
+        self.assertEqual(self.handler.handle(request(34, "market.health"))["result"]["state"], "ready")
+
+    def test_deadline_interrupts_pacing_as_a_timeout_not_a_crash(self) -> None:
+        self.handler.handle(request(40, "market.replay_batch", replay_params(
+            "replay-deadline", "cancel-deadline", pace_ms=500, deadline_ms=50,
+        )))
+        self.handler.handle(request(41, "market.replay_next", {"replay_id": "replay-deadline"}))
+        started = time.monotonic()
+        response = self.handler.handle(request(42, "market.replay_next", {"replay_id": "replay-deadline"}))
+
+        self.assertEqual(response["error"]["data"]["market_error"]["code"], "DEADLINE_EXCEEDED")
+        self.assertEqual(response["error"]["data"]["market_error"]["category"], "timeout")
+        self.assertLess(time.monotonic() - started, 0.3)
+
+    def test_rejects_invalid_deadlines_and_bounds_active_replay_sessions(self) -> None:
+        invalid = replay_params("replay-invalid-deadline", "cancel-invalid-deadline")
+        invalid["deadline_at"] = "2026-07-13T12:00:00"
+        response = self.handler.handle(request(60, "market.replay_batch", invalid))
+        self.assertEqual(response["error"]["data"]["market_error"]["code"], "INVALID_REQUEST")
+        self.assertEqual(self.handler.handle(request(61, "market.health"))["result"]["state"], "ready")
+
+        bounded = MarketDataRpcHandler(FIXTURE_DIR)
+        for index in range(64):
+            result = bounded.handle(request(100 + index, "market.replay_batch", replay_params(
+                f"replay-capacity-{index}", f"cancel-capacity-{index}",
+            )))
+            self.assertIn("result", result)
+        overflow = bounded.handle(request(200, "market.replay_batch", replay_params(
+            "replay-capacity-overflow", "cancel-capacity-overflow",
+        )))
+        self.assertEqual(overflow["error"]["data"]["market_error"]["code"], "REPLAY_CAPACITY_EXCEEDED")
+        bounded.handle(request(201, "market.cancel", {"cancellation_id": "cancel-capacity-0"}))
+        admitted = bounded.handle(request(202, "market.replay_batch", replay_params(
+            "replay-capacity-replacement", "cancel-capacity-replacement",
+        )))
+        self.assertIn("result", admitted)
+
     def test_bounds_the_idempotency_window(self) -> None:
         for request_id in range(1_025):
             response = self.handler.handle(request(request_id, "market.capabilities"))
@@ -125,8 +210,54 @@ class MarketDataRpcHandlerTest(unittest.TestCase):
         self.assertEqual(completed.stderr, "")
         responses = [json.loads(line) for line in completed.stdout.splitlines()]
         self.assertEqual(responses[0]["error"]["code"], -32700)
-        self.assertEqual([response["id"] for response in responses], [None, 7, 8])
-        self.assertEqual(responses[2]["result"]["state"], "stopped")
+        self.assertEqual({response["id"] for response in responses}, {None, 7, 8})
+        self.assertEqual(next(response for response in responses if response["id"] == 8)["result"]["state"], "stopped")
+
+    def test_cli_processes_cancel_while_replay_next_is_waiting(self) -> None:
+        process = subprocess.Popen(
+            [
+                str(Path(__file__).resolve().parents[1] / ".venv" / "bin" / "python"),
+                "-m", "trade_god_market_data.cli", "--fixture-root", str(FIXTURE_DIR),
+            ],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+        self.assertIsNotNone(process.stdin)
+        self.assertIsNotNone(process.stdout)
+        responses: queue.Queue[str] = queue.Queue()
+        reader = threading.Thread(target=lambda: [responses.put(line) for line in process.stdout], daemon=True)
+        reader.start()
+
+        def send(value: dict) -> None:
+            process.stdin.write(json.dumps(value) + "\n")
+            process.stdin.flush()
+
+        def receive() -> dict:
+            return json.loads(responses.get(timeout=3))
+
+        try:
+            send(request(50, "market.replay_batch", replay_params("replay-cli", "cancel-cli", pace_ms=500)))
+            self.assertEqual(receive()["result"]["state"], "ready")
+            send(request(51, "market.replay_next", {"replay_id": "replay-cli"}))
+            self.assertEqual(receive()["result"]["state"], "event")
+            send(request(52, "market.replay_next", {"replay_id": "replay-cli"}))
+            send(request(53, "market.cancel", {"cancellation_id": "cancel-cli"}))
+            pair = {response["id"]: response for response in (receive(), receive())}
+            self.assertEqual(pair[53]["result"]["state"], "canceled")
+            self.assertEqual(pair[52]["error"]["data"]["market_error"]["code"], "CANCELED")
+            send(request(54, "market.health"))
+            self.assertEqual(receive()["result"]["state"], "ready")
+            send(request(55, "market.shutdown"))
+            self.assertEqual(receive()["result"]["state"], "stopped")
+            process.wait(timeout=3)
+            self.assertEqual(process.returncode, 0)
+            self.assertEqual(process.stderr.read(), "")
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=3)
+            process.stdin.close()
+            process.stdout.close()
+            process.stderr.close()
 
 
 if __name__ == "__main__":

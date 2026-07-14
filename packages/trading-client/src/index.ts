@@ -14,6 +14,12 @@ import {
   marketDataErrorSchema,
   marketDataHealthSchema,
   marketLoadFixtureRequestSchema,
+  marketReplayCancelRequestSchema,
+  marketReplayCancellationSchema,
+  marketReplayNextRequestSchema,
+  marketReplaySessionSchema,
+  marketReplayStartRequestSchema,
+  marketReplayStepSchema,
   marketTradeBatchSchema,
   tradingErrorSchema,
   wireMetaSchema,
@@ -29,6 +35,9 @@ import {
   type MarketDataHealth,
   type MarketQualityReport,
   type MarketTradeBatch,
+  type MarketReplayCancellation,
+  type MarketReplaySession,
+  type MarketReplayStep,
   type WireMeta,
 } from '@trade-god/contracts'
 import type { z } from 'zod'
@@ -54,12 +63,20 @@ interface TradingClientOptions {
 interface MarketDataClientOptions {
   transport: RpcTransport
   nextId: (prefix: string) => string
+  now: () => string
 }
 
 export interface LoadMarketFixtureInput {
   fixtureId: string
   traceId: string
   batchId: string
+}
+
+export interface StartMarketReplayInput extends LoadMarketFixtureInput {
+  replayId: string
+  cancellationId: string
+  paceIntervalMs: number
+  timeoutMs: number
 }
 
 export interface AnalyzeFixtureInput {
@@ -266,6 +283,8 @@ export class TradingClient {
 }
 
 export class MarketDataClient {
+  private readonly replays = new Map<string, { session: MarketReplaySession; events: MarketTradeBatch['events'] }>()
+
   constructor(private readonly options: MarketDataClientOptions) {}
 
   health(): Promise<MarketDataHealth> {
@@ -295,6 +314,81 @@ export class MarketDataClient {
       throw new InvalidMarketDataResponseError('Market-data response identity does not match its request.')
     }
     return batch
+  }
+
+  async startReplay(input: StartMarketReplayInput): Promise<MarketReplaySession> {
+    if (!Number.isFinite(input.timeoutMs) || input.timeoutMs <= 0) {
+      throw new TypeError('timeoutMs must be a positive finite number.')
+    }
+    const now = this.options.now()
+    const params = marketReplayStartRequestSchema.parse({
+      fixture_id: input.fixtureId,
+      trace_id: input.traceId,
+      batch_id: input.batchId,
+      replay_id: input.replayId,
+      cancellation_id: input.cancellationId,
+      pace_interval_ms: input.paceIntervalMs,
+      deadline_at: new Date(Date.parse(now) + input.timeoutMs).toISOString(),
+    })
+    const session = await this.request('market.replay_batch', params, marketReplaySessionSchema)
+    if (
+      session.replay_id !== input.replayId
+      || session.cancellation_id !== input.cancellationId
+      || session.trace_id !== input.traceId
+      || session.batch_id !== input.batchId
+      || session.pace_interval_ms !== input.paceIntervalMs
+      || session.deadline_at !== params.deadline_at
+    ) throw new InvalidMarketDataResponseError('Market replay session identity does not match its request.')
+    this.replays.set(session.replay_id, { session, events: [] })
+    return session
+  }
+
+  async nextReplay(replayId: string): Promise<MarketReplayStep> {
+    const params = marketReplayNextRequestSchema.parse({ replay_id: replayId })
+    const tracked = this.replays.get(params.replay_id)
+    if (!tracked) throw new InvalidMarketDataResponseError('Market replay session is not active in this client.')
+    const step = await this.request('market.replay_next', params, marketReplayStepSchema)
+    if (
+      step.replay_id !== tracked.session.replay_id
+      || step.trace_id !== tracked.session.trace_id
+      || step.batch_id !== tracked.session.batch_id
+    ) throw new InvalidMarketDataResponseError('Market replay step identity does not match its session.')
+    if (step.state === 'event') {
+      if (
+        step.event_index !== tracked.events.length
+        || step.emitted_count !== tracked.events.length + 1
+        || step.emitted_count + step.remaining_count !== tracked.session.event_count
+        || step.event.trace_id !== tracked.session.trace_id
+        || step.event.instrument.id !== tracked.session.instrument_id
+      ) throw new InvalidMarketDataResponseError('Market replay event cursor or identity is invalid.')
+      tracked.events.push(step.event)
+      return step
+    }
+    const checksum = createHash('sha256').update(canonicalJson(step.batch.events), 'utf8').digest('hex')
+    if (
+      step.emitted_count !== tracked.session.event_count
+      || tracked.events.length !== tracked.session.event_count
+      || canonicalJson(step.batch.events) !== canonicalJson(tracked.events)
+      || step.batch.canonical_events_sha256 !== tracked.session.canonical_events_sha256
+      || checksum !== step.batch.canonical_events_sha256
+      || step.batch.instrument_id !== tracked.session.instrument_id
+    ) throw new InvalidMarketDataResponseError('Completed market replay does not match emitted events and session identity.')
+    this.replays.delete(replayId)
+    return step
+  }
+
+  async cancelReplay(cancellationId: string): Promise<MarketReplayCancellation> {
+    const params = marketReplayCancelRequestSchema.parse({ cancellation_id: cancellationId })
+    const result = await this.request('market.cancel', params, marketReplayCancellationSchema)
+    if (result.cancellation_id !== params.cancellation_id) {
+      throw new InvalidMarketDataResponseError('Market replay cancellation identity is invalid.')
+    }
+    const tracked = this.replays.get(result.replay_id)
+    if (!tracked || tracked.session.cancellation_id !== result.cancellation_id) {
+      throw new InvalidMarketDataResponseError('Market replay cancellation does not match an active client session.')
+    }
+    this.replays.delete(result.replay_id)
+    return result
   }
 
   private async request<T extends z.ZodType>(

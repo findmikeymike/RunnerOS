@@ -177,7 +177,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 - [x] Bounded analysis-only agent context validates with freshness, quality, provenance, truncation, and content integrity.
 - [x] The Order Flow engine consumes only Trade God canonical input on the new replay path.
 - [ ] Trace joins source batch, adapter logs, quality report, feature artifact, and receipt.
-- [ ] Cancellation and sidecar crash remain distinguishable.
+- [x] Paced replay cancellation and deadline are typed domain outcomes while sidecar crash remains a distinct supervisor/transport failure.
 - [x] No live/provider/broker/order capability is reachable from the implemented fixture-only RPC.
 
 ## Explicit Non-Goals
@@ -192,7 +192,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 
 ## Go/No-Go Gate
 
-The canonical Order Flow seam now satisfies this initial gate. Do not proceed to live/provider operation until paced replay/cancellation, reconnect/gap/staleness behavior, session correctness, backpressure, and packaged-runtime gates are also proven.
+The canonical Order Flow seam plus pull-based paced replay now satisfy the initial replay/cancellation/backpressure gate. Do not proceed to live/provider operation until measured transport thresholds, reconnect/gap/staleness behavior, session correctness, and packaged-runtime gates are also proven.
 
 ## Grounding
 

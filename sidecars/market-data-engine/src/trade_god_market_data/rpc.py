@@ -5,9 +5,12 @@ from collections.abc import Mapping
 import hashlib
 import json
 from pathlib import Path
+import re
+import threading
 from typing import Any
 
 from .fixture_adapter import FixtureQualityError, build_canonical_batch, canonical_json
+from .paced_replay import PacedReplayRegistry, ReplayLifecycleError
 
 
 RPC_PROTOCOL_VERSION = "market-data-rpc@1"
@@ -16,9 +19,13 @@ COMMANDS = (
     "market.health",
     "market.capabilities",
     "market.load_fixture",
+    "market.replay_batch",
+    "market.replay_next",
+    "market.cancel",
     "market.shutdown",
 )
 MAX_HANDLED_RESPONSES = 1_024
+IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,159}$")
 
 
 def _valid_id(value: Any) -> bool:
@@ -32,6 +39,9 @@ class MarketDataRpcHandler:
         self._fixture_root = fixture_root.resolve()
         self._state = "ready"
         self._handled: OrderedDict[str, tuple[str, dict[str, Any]]] = OrderedDict()
+        self._inflight: dict[str, str] = {}
+        self._request_lock = threading.RLock()
+        self._replays = PacedReplayRegistry()
 
     @property
     def state(self) -> str:
@@ -159,6 +169,57 @@ class MarketDataRpcHandler:
 
         return self._success(request_id, batch)
 
+    @staticmethod
+    def _valid_identifier(value: Any) -> bool:
+        return isinstance(value, str) and IDENTIFIER_PATTERN.fullmatch(value) is not None
+
+    def _start_replay(self, request_id: Any, params: Any) -> dict[str, Any]:
+        required = {
+            "fixture_id", "trace_id", "batch_id", "replay_id", "cancellation_id",
+            "pace_interval_ms", "deadline_at",
+        }
+        if not isinstance(params, Mapping) or set(params) != required:
+            return self._failure(request_id, -32600, "INVALID_REQUEST", "validation", "Paced replay request is invalid.")
+        if not all(self._valid_identifier(params[key]) for key in (
+            "fixture_id", "trace_id", "batch_id", "replay_id", "cancellation_id",
+        )) or not isinstance(params["pace_interval_ms"], int) or isinstance(params["pace_interval_ms"], bool) \
+                or not 1 <= params["pace_interval_ms"] <= 60_000 \
+                or not isinstance(params["deadline_at"], str):
+            return self._failure(request_id, -32600, "INVALID_REQUEST", "validation", "Paced replay fields are invalid.")
+        loaded = self._load_fixture(request_id, {
+            "fixture_id": params["fixture_id"], "trace_id": params["trace_id"], "batch_id": params["batch_id"],
+        })
+        if "error" in loaded:
+            return loaded
+        try:
+            result = self._replays.start(
+                replay_id=params["replay_id"], cancellation_id=params["cancellation_id"],
+                batch=loaded["result"], pace_interval_ms=params["pace_interval_ms"],
+                deadline_at=params["deadline_at"],
+            )
+        except (ReplayLifecycleError, TypeError, ValueError) as error:
+            if isinstance(error, ReplayLifecycleError):
+                return self._failure(request_id, -32000, error.code, error.category, str(error))
+            return self._failure(request_id, -32600, "INVALID_REQUEST", "validation", "Replay deadline is invalid.")
+        return self._success(request_id, result)
+
+    def _next_replay(self, request_id: Any, params: Any) -> dict[str, Any]:
+        if not isinstance(params, Mapping) or set(params) != {"replay_id"} or not self._valid_identifier(params["replay_id"]):
+            return self._failure(request_id, -32600, "INVALID_REQUEST", "validation", "replay_id is required.")
+        try:
+            return self._success(request_id, self._replays.next(params["replay_id"]))
+        except ReplayLifecycleError as error:
+            return self._failure(request_id, -32000, error.code, error.category, str(error))
+
+    def _cancel_replay(self, request_id: Any, params: Any) -> dict[str, Any]:
+        if not isinstance(params, Mapping) or set(params) != {"cancellation_id"} \
+                or not self._valid_identifier(params["cancellation_id"]):
+            return self._failure(request_id, -32600, "INVALID_REQUEST", "validation", "cancellation_id is required.")
+        try:
+            return self._success(request_id, self._replays.cancel(params["cancellation_id"]))
+        except ReplayLifecycleError as error:
+            return self._failure(request_id, -32000, error.code, error.category, str(error))
+
     def _execute(self, request: Mapping[str, Any]) -> dict[str, Any]:
         request_id = request["id"]
         method = request["method"]
@@ -195,10 +256,26 @@ class MarketDataRpcHandler:
                 return self._failure(request_id, -32000, "SERVICE_STOPPED", "lifecycle", "Market-data service is stopped.")
             return self._load_fixture(request_id, params)
 
+        if method == "market.replay_batch":
+            if self._state != "ready":
+                return self._failure(request_id, -32000, "SERVICE_STOPPED", "lifecycle", "Market-data service is stopped.")
+            return self._start_replay(request_id, params)
+
+        if method == "market.replay_next":
+            if self._state != "ready":
+                return self._failure(request_id, -32000, "SERVICE_STOPPED", "lifecycle", "Market-data service is stopped.")
+            return self._next_replay(request_id, params)
+
+        if method == "market.cancel":
+            if self._state != "ready":
+                return self._failure(request_id, -32000, "SERVICE_STOPPED", "lifecycle", "Market-data service is stopped.")
+            return self._cancel_replay(request_id, params)
+
         if method == "market.shutdown":
             if params not in (None, {}):
                 return self._failure(request_id, -32600, "INVALID_REQUEST", "validation", "Shutdown takes no parameters.")
             self._state = "stopped"
+            self._replays.stop()
             return self._success(request_id, {"state": self._state})
 
         return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "Method not found"}}
@@ -216,19 +293,33 @@ class MarketDataRpcHandler:
         request_id = request["id"]
         key = f"{type(request_id).__name__}:{request_id}"
         digest = canonical_json(request)
-        prior = self._handled.get(key)
-        if prior is not None:
-            self._handled.move_to_end(key)
-            if prior[0] == digest:
-                return prior[1]
-            return self._failure(
-                request_id, -32600, "DUPLICATE_REQUEST_ID", "validation",
-                "Request id was reused with different content.",
-            )
+        with self._request_lock:
+            prior = self._handled.get(key)
+            if prior is not None:
+                self._handled.move_to_end(key)
+                if prior[0] == digest:
+                    return prior[1]
+                return self._failure(
+                    request_id, -32600, "DUPLICATE_REQUEST_ID", "validation",
+                    "Request id was reused with different content.",
+                )
+            inflight_digest = self._inflight.get(key)
+            if inflight_digest is not None:
+                return self._failure(
+                    request_id, -32600, "REQUEST_IN_PROGRESS" if inflight_digest == digest else "DUPLICATE_REQUEST_ID",
+                    "lifecycle" if inflight_digest == digest else "validation",
+                    "Request id is already in progress." if inflight_digest == digest else "Request id was reused with different content.",
+                )
+            self._inflight[key] = digest
 
-        response = self._execute(request)
-        self._handled[key] = (digest, response)
-        self._handled.move_to_end(key)
-        if len(self._handled) > MAX_HANDLED_RESPONSES:
-            self._handled.popitem(last=False)
+        try:
+            response = self._execute(request)
+        finally:
+            with self._request_lock:
+                self._inflight.pop(key, None)
+        with self._request_lock:
+            self._handled[key] = (digest, response)
+            self._handled.move_to_end(key)
+            if len(self._handled) > MAX_HANDLED_RESPONSES:
+                self._handled.popitem(last=False)
         return response

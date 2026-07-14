@@ -37,7 +37,7 @@ Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provide
 
 ## Immediate Assignment
 
-Add paced replay/cancel before raising the 10,000-event synchronous bound. Then connect the proven context-reference seam to a real specialist runtime with typed interpretation output and evaluation. Do not pass the truncated agent snapshot into deterministic Order Flow, which consumes full canonical batches. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
+Benchmark the new pull-based JSONL replay and record the measured threshold for a dedicated streaming transport; do not raise the 10,000-event synchronous bound by assumption. Then connect the proven context-reference seam to a real specialist runtime with typed interpretation output and evaluation. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
 
 ## Known Expected Artifact
 
@@ -51,7 +51,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
-- Focused Trade God closure: 66 passed, 0 failed across 12 files.
+- Paced replay focused closure: 93 passed, 0 failed across 14 TypeScript files; Python market-data suite: 21 passed, 0 failed.
 - Electron main, preload, and renderer production builds passed.
 - Real Electron smoke: not run.
 - Packaged sidecar bundle and resolution: implemented and integration-tested; actual packaged installer not built/smoked.
@@ -72,6 +72,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Agent market context: 46 tests passed, 126 expectations; typechecks and Electron main build passed. Fresh/stale/no-data, limits/truncation, quality aggregation, exact batch/checksum mapping, content integrity, and analysis-only authority are proven. Actual agent consumption is not.
 - Canonical Order Flow: 64 tests passed, 137 expectations across ten focused files. Contract/market-state typechecks, Electron main build, packaged sidecar build/health, exact mixed-precision math, bounded framing/cache behavior, corrupt/live rejection, v2 provenance/receipts, and the real Python-child -> Order-Flow-child path passed.
 - Specialist context delivery: full snapshots persist atomically under `<userData>/trade-god/agent-context/`; specialists receive `agent-context-reference@1`, not copied market payloads; queue and authorized resolution produce `agent-context-delivery-receipt@1`. Concurrency, tamper, wrong-consumer, and path traversal checks pass. This does not prove real LLM-agent reasoning.
+- Paced replay: `market.replay_batch`, `market.replay_next`, and `market.cancel` are typed through contracts, client, real Python stdio, and Electron supervision. Pulls serialize per replay for natural backpressure; deadlines/cancellation interrupt waits without crashing the process; active sessions are capped at 64; final batch identity/checksum must match every emitted event.
 - Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
 
 ## Non-Negotiable Boundaries
@@ -86,8 +87,9 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Next Smallest Actions
 
-1. Add paced replay/cancel and distinguish cancellation from sidecar crash.
+1. Benchmark JSONL replay and set the measured streaming-transport threshold.
 2. Connect reference resolution to the first real specialist agent and type/evaluate its interpretation.
+3. Add reconnect/gap/staleness and session-correctness gates.
 3. Package the Python/Nautilus runtime after the delivery seam is stable.
 4. Real visual success/cancel/failure smoke at the first desktop opportunity.
 5. Actual packaged-app build/resource-layout smoke.

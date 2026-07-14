@@ -93,4 +93,48 @@ describe('MarketDataSidecarManager', () => {
       await sidecar.stop()
     }
   })
+
+  test('pulls a real fixture at a bounded pace with consumer backpressure', async () => {
+    const sidecar = manager()
+    const eventIds: string[] = []
+    const started = performance.now()
+    try {
+      const batch = await sidecar.replayFixture({
+        fixtureId: 'es-demo-2026-07-11', traceId: 'trace-paced-replay', batchId: 'batch-paced-replay',
+        replayId: 'replay-paced-manager', cancellationId: 'cancel-paced-manager',
+        paceIntervalMs: 10, timeoutMs: 5_000,
+      }, async (event) => {
+        eventIds.push(event.event_id)
+        await Bun.sleep(2)
+      })
+      expect(batch.events.map((event) => event.event_id)).toEqual(eventIds)
+      expect(batch.events).toHaveLength(4)
+      expect(performance.now() - started).toBeGreaterThanOrEqual(25)
+      expect(sidecar.status().state).toBe('ready')
+    } finally {
+      await sidecar.stop()
+    }
+  })
+
+  test('cancels a waiting replay as a typed domain outcome while the process stays ready', async () => {
+    const sidecar = manager()
+    try {
+      const session = await sidecar.startReplay({
+        fixtureId: 'es-demo-2026-07-11', traceId: 'trace-canceled-replay', batchId: 'batch-canceled-replay',
+        replayId: 'replay-canceled-manager', cancellationId: 'cancel-canceled-manager',
+        paceIntervalMs: 500, timeoutMs: 5_000,
+      })
+      expect((await sidecar.nextReplay(session.replay_id)).state).toBe('event')
+      const waiting = sidecar.nextReplay(session.replay_id).catch((error) => error)
+      await Bun.sleep(20)
+      expect((await sidecar.cancelReplay(session.cancellation_id)).state).toBe('canceled')
+      expect(await waiting).toMatchObject({
+        code: 'CANCELED', category: 'canceled', retryable: false,
+      })
+      expect(sidecar.status().state).toBe('ready')
+      expect((await sidecar.health()).state).toBe('ready')
+    } finally {
+      await sidecar.stop()
+    }
+  })
 })

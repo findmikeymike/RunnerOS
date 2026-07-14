@@ -184,7 +184,9 @@ describe('TradingClient', () => {
 describe('MarketDataClient', () => {
   function marketClient(transport: RpcTransport) {
     let sequence = 0
-    return new MarketDataClient({ transport, nextId: (prefix) => `${prefix}-${++sequence}` })
+    return new MarketDataClient({
+      transport, nextId: (prefix) => `${prefix}-${++sequence}`, now: () => '2026-07-13T12:00:00.000Z',
+    })
   }
 
   test('validates health and canonical fixture batches', async () => {
@@ -266,5 +268,68 @@ describe('MarketDataClient', () => {
       fixtureId: 'es-demo-2026-07-11', traceId: 'not valid', batchId: 'batch-valid',
     })).rejects.toBeDefined()
     expect(calls).toBe(0)
+  })
+
+  test('validates paced replay cursor, completion, and cancellation identities', async () => {
+    const batch = await Bun.file(new URL('../../trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    let eventIndex = 0
+    const market = marketClient({
+      request: async (request) => {
+        if (request.method === 'market.replay_batch') return {
+          jsonrpc: '2.0', id: request.id, result: {
+            replay_schema_version: 'market-replay-session@1', replay_id: 'replay-client-1',
+            cancellation_id: 'cancel-replay-client-1', trace_id: batch.trace_id, batch_id: batch.batch_id,
+            instrument_id: batch.instrument_id, event_count: batch.events.length,
+            canonical_events_sha256: batch.canonical_events_sha256, pace_interval_ms: 10,
+            state: 'ready', next_index: 0, started_at: '2026-07-13T12:00:00.000Z',
+            deadline_at: '2026-07-13T12:00:05.000Z',
+          },
+        }
+        if (request.method === 'market.replay_next' && eventIndex < batch.events.length) {
+          const index = eventIndex++
+          return { jsonrpc: '2.0', id: request.id, result: {
+            replay_step_schema_version: 'market-replay-step@1', replay_id: 'replay-client-1',
+            trace_id: batch.trace_id, batch_id: batch.batch_id, state: 'event', event_index: index,
+            emitted_count: index + 1, remaining_count: batch.events.length - index - 1,
+            emitted_at: '2026-07-13T12:00:00.010Z', event: batch.events[index],
+          } }
+        }
+        return { jsonrpc: '2.0', id: request.id, result: {
+          replay_step_schema_version: 'market-replay-step@1', replay_id: 'replay-client-1',
+          trace_id: batch.trace_id, batch_id: batch.batch_id, state: 'completed',
+          emitted_count: batch.events.length, remaining_count: 0,
+          completed_at: '2026-07-13T12:00:00.050Z', batch,
+        } }
+      },
+    })
+    const session = await market.startReplay({
+      fixtureId: batch.source.fixture_id, traceId: batch.trace_id, batchId: batch.batch_id,
+      replayId: 'replay-client-1', cancellationId: 'cancel-replay-client-1', paceIntervalMs: 10, timeoutMs: 5_000,
+    })
+    expect(session.state).toBe('ready')
+    for (let index = 0; index < batch.events.length; index += 1) {
+      expect((await market.nextReplay(session.replay_id)).state).toBe('event')
+    }
+    expect((await market.nextReplay(session.replay_id)).state).toBe('completed')
+
+    const canceledMarket = marketClient({
+      request: async (request) => request.method === 'market.replay_batch'
+        ? { jsonrpc: '2.0', id: request.id, result: {
+            replay_schema_version: 'market-replay-session@1', replay_id: 'replay-client-cancel',
+            cancellation_id: 'cancel-replay-client', trace_id: batch.trace_id, batch_id: batch.batch_id,
+            instrument_id: batch.instrument_id, event_count: batch.events.length,
+            canonical_events_sha256: batch.canonical_events_sha256, pace_interval_ms: 10,
+            state: 'ready', next_index: 0, started_at: '2026-07-13T12:00:00.000Z', deadline_at: '2026-07-13T12:00:05.000Z',
+          } }
+        : { jsonrpc: '2.0', id: request.id, result: {
+            replay_id: 'replay-client-cancel', cancellation_id: 'cancel-replay-client',
+            state: 'canceled', canceled_at: '2026-07-13T12:00:00.010Z',
+          } },
+    })
+    await canceledMarket.startReplay({
+      fixtureId: batch.source.fixture_id, traceId: batch.trace_id, batchId: batch.batch_id,
+      replayId: 'replay-client-cancel', cancellationId: 'cancel-replay-client', paceIntervalMs: 10, timeoutMs: 5_000,
+    })
+    expect((await canceledMarket.cancelReplay('cancel-replay-client')).state).toBe('canceled')
   })
 })

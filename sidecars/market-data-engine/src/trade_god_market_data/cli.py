@@ -1,9 +1,11 @@
 """Newline-delimited JSON-RPC process entry point."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import sys
+import threading
 from typing import Any
 
 from .rpc import MarketDataRpcHandler
@@ -21,8 +23,12 @@ def _parse_args() -> argparse.Namespace:
 
 
 def _write(response: dict[str, Any]) -> None:
-    sys.stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
-    sys.stdout.flush()
+    with _WRITE_LOCK:
+        sys.stdout.write(json.dumps(response, ensure_ascii=False, separators=(",", ":")) + "\n")
+        sys.stdout.flush()
+
+
+_WRITE_LOCK = threading.Lock()
 
 
 def _reject_nonstandard_number(value: str) -> None:
@@ -31,17 +37,19 @@ def _reject_nonstandard_number(value: str) -> None:
 
 def main() -> int:
     handler = MarketDataRpcHandler(_parse_args().fixture_root)
-    for line in sys.stdin:
-        if not line.strip():
-            continue
-        try:
-            request = json.loads(line, parse_constant=_reject_nonstandard_number)
-        except (json.JSONDecodeError, ValueError):
-            _write({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
-            continue
-        _write(handler.handle(request))
-        if handler.state == "stopped":
-            break
+    with ThreadPoolExecutor(max_workers=8, thread_name_prefix="market-rpc") as executor:
+        for line in sys.stdin:
+            if not line.strip():
+                continue
+            try:
+                request = json.loads(line, parse_constant=_reject_nonstandard_number)
+            except (json.JSONDecodeError, ValueError):
+                _write({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
+                continue
+            future = executor.submit(handler.handle, request)
+            future.add_done_callback(lambda completed: _write(completed.result()))
+            if isinstance(request, dict) and request.get("method") == "market.shutdown":
+                break
     return 0
 
 

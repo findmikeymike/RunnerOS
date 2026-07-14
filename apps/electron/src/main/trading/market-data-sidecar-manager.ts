@@ -1,10 +1,14 @@
 import {
   MarketDataClient,
   type LoadMarketFixtureInput,
+  type StartMarketReplayInput,
   type RpcRequest,
   type RpcTransport,
 } from '@trade-god/client'
-import type { AgentMarketSnapshot, MarketCandleSeries, MarketDataHealth, MarketTradeBatch } from '@trade-god/contracts'
+import type {
+  AgentMarketSnapshot, MarketCandleSeries, MarketDataHealth, MarketReplayCancellation,
+  MarketReplaySession, MarketReplayStep, MarketTradeBatch, MarketTradeEvent,
+} from '@trade-god/contracts'
 import { buildAgentMarketSnapshot, buildMarketReplaySnapshot } from '@trade-god/market-state'
 
 import {
@@ -38,6 +42,7 @@ export class MarketDataSidecarManager implements RpcTransport {
     this.client = new MarketDataClient({
       transport: this,
       nextId: (prefix) => this.nextId(prefix),
+      now: () => new Date().toISOString(),
     })
   }
 
@@ -47,6 +52,30 @@ export class MarketDataSidecarManager implements RpcTransport {
 
   loadFixture(input: LoadMarketFixtureInput): Promise<MarketTradeBatch> {
     return this.client.loadFixture(input)
+  }
+
+  startReplay(input: StartMarketReplayInput): Promise<MarketReplaySession> {
+    return this.client.startReplay(input)
+  }
+
+  nextReplay(replayId: string): Promise<MarketReplayStep> {
+    return this.client.nextReplay(replayId)
+  }
+
+  cancelReplay(cancellationId: string): Promise<MarketReplayCancellation> {
+    return this.client.cancelReplay(cancellationId)
+  }
+
+  async replayFixture(
+    input: StartMarketReplayInput,
+    onEvent?: (event: MarketTradeEvent, step: Extract<MarketReplayStep, { state: 'event' }>) => void | Promise<void>,
+  ): Promise<MarketTradeBatch> {
+    const session = await this.startReplay(input)
+    while (true) {
+      const step = await this.nextReplay(session.replay_id)
+      if (step.state === 'completed') return step.batch
+      await onEvent?.(step.event, step)
+    }
   }
 
   async loadFixtureSnapshot(input: LoadFixtureSnapshotInput): Promise<MarketCandleSeries> {

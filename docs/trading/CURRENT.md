@@ -10,9 +10,9 @@ source_of_truth: true
 ## Snapshot
 
 - Date: 2026-07-13
-- Stage: Phase 1 now has a durable specialist-context delivery seam; Phase 0 still awaits real visual Electron smoke
-- Current goal: add paced replay and cancellation before increasing the synchronous replay bound
-- Overall state: canonical emission, replay quality, deterministic candles, hardened canonical Order Flow, and reference-only specialist context routing are test-verified; no real LLM specialist consumes the delivery yet, and paced replay, packaged Python assets, the visual Electron path, and a built installer remain unverified
+- Stage: Phase 1 now has pull-based paced replay, backpressure, deadlines, and cancellation; Phase 0 still awaits real visual Electron smoke
+- Current goal: benchmark JSONL replay and record the measured threshold for a dedicated streaming transport without raising the 10,000-event bound yet
+- Overall state: canonical emission, deterministic candles, hardened Order Flow, specialist context references, and paced/cancelable replay are test-verified; no real LLM specialist consumes the delivery yet, and throughput thresholds, reconnect/gap behavior, packaged Python assets, the visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -33,6 +33,8 @@ source_of_truth: true
 `real supervised Python market child -> canonical batch -> real supervised Order Flow child -> order-flow-artifact@2 + trade-run-receipt@2`
 
 `agent-market-snapshot@1 -> atomic local context store -> checksum-bound reference -> addressed specialist delivery receipt -> authorized resolution`
+
+`market.replay_batch -> bounded replay session -> consumer-paced market.replay_next pulls -> completed canonical batch or typed cancel/timeout`
 
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
@@ -75,12 +77,15 @@ The workbench can request engine health, run the known fixture, and display tota
 - Hardened the real Electron canonical path after adversarial review: stable receipt identity, active deadlines across market loading and analysis, duplicate-cancellation ownership, stopped-service rejection, bounded pre-parse framing, and cross-field receipt/artifact invariants.
 - Added `agent-context-reference@1` and `agent-context-delivery-receipt@1`, an atomic user-data context store, reference-only specialist queueing, consumer-bound resolution, idempotent concurrent publication, checksum/identity revalidation, and path-safe storage IDs.
 - Routed the real supervised fixture snapshot to the addressed `order-flow-specialist` boundary and proved the queued payload contains a reference rather than a copied snapshot. This is a delivery seam, not proof that an LLM specialist reasoned over it.
+- Added `market-replay-session@1` and `market-replay-step@1` with caller-owned replay/cancellation identity, bounded pace, deadline, cursor, event, completion, and cancellation contracts.
+- Added a bounded pull-based Python replay registry and concurrent stdio dispatch so cancellation can overtake a waiting event without killing the sidecar. One pull per replay is serialized; active sessions are capped at 64.
+- Added typed client/Electron start, next, cancel, and `replayFixture` flows. Consumer callbacks provide natural backpressure; completion is rejected unless every emitted event, cursor, identity, and checksum matches the canonical batch.
 
 ## Next Actions
 
-1. Add paced replay/cancel lifecycle semantics before increasing the 10,000-event control-path bound.
+1. Benchmark JSONL replay and record the event-rate/payload threshold that requires a dedicated streaming transport; keep the 10,000-event control-path bound unchanged until measured.
 2. Connect the context-resolution seam to the first real specialist-agent runtime and add typed interpretation output/evaluation; do not call the current addressed test consumer a real agent.
-3. Keep deterministic Order Flow on full canonical batches; specialists receive only bounded context references.
+3. Add reconnect/gap/staleness and session-correctness gates before any live-data work.
 4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
 5. Build and smoke the packaged installer separately.
 6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them blindly.
@@ -93,7 +98,7 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 
 ## Verification State
 
-- Complete focused Trade God closure: 66 passed, 0 failed across 12 files.
+- Paced replay focused closure: 93 passed, 0 failed across 14 TypeScript files; Python market-data suite: 21 passed, 0 failed.
 - Electron `build:main`, `build:preload`, and `build:renderer` passed.
 - The generated packaged sidecar bundle launched independently and answered a schema-valid health request.
 - Packaged root selection, bundled-Bun selection, partial frames, and next-request restart behavior passed focused tests.
@@ -123,8 +128,9 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Specialist-context proof persists the full integrity-checked snapshot once, queues only its reference, blocks wrong-consumer and forged/path-unsafe references, and records resolution. No actual LLM specialist execution is claimed.
+- Paced replay proof: complete real fixture replay respects the configured pace and consumer backpressure; active cancel and deadline return typed domain errors while the same Python process remains healthy. Process exit remains a separate supervisor error.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, replay-only canonical Order Flow, and reference-only specialist delivery are implemented; paced replay/cancel, packaged Python assets, and actual specialist reasoning remain unimplemented.
+- Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, replay-only canonical Order Flow, reference-only specialist delivery, and paced replay/cancel are implemented; measured streaming thresholds, packaged Python assets, and actual specialist reasoning remain unimplemented.
 
 ## Explicitly Not In Scope Yet
 

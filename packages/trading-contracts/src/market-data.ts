@@ -6,6 +6,7 @@ import {
   positiveDecimalStringSchema,
   semverSchema,
   sha256Schema,
+  utcTimestampSchema,
 } from './common.ts'
 import { instrumentSchema } from './analysis.ts'
 import {
@@ -16,6 +17,8 @@ import {
   AGENT_MARKET_SNAPSHOT_SCHEMA_VERSION,
   MARKET_TRADE_BATCH_SCHEMA_VERSION,
   MARKET_TRADE_EVENT_SCHEMA_VERSION,
+  MARKET_REPLAY_SESSION_SCHEMA_VERSION,
+  MARKET_REPLAY_STEP_SCHEMA_VERSION,
 } from './version.ts'
 
 export const MARKET_TRADE_BATCH_MAX_EVENTS = 10_000
@@ -285,6 +288,7 @@ export const marketDataCommandSchema = z.enum([
   'market.capabilities',
   'market.load_fixture',
   'market.replay_batch',
+  'market.replay_next',
   'market.cancel',
   'market.shutdown',
 ])
@@ -307,6 +311,10 @@ export const marketDataCapabilitiesSchema = z.object({
   const commands = new Set(capabilities.commands)
   if (commands.size !== capabilities.commands.length || requiredMarketDataCommands.some((command) => !commands.has(command))) {
     context.addIssue({ code: 'custom', path: ['commands'], message: 'Market-data commands must match the declared RPC capability set' })
+  }
+  const replayCommands = ['market.replay_batch', 'market.replay_next', 'market.cancel'] as const
+  if (replayCommands.some((command) => commands.has(command)) && replayCommands.some((command) => !commands.has(command))) {
+    context.addIssue({ code: 'custom', path: ['commands'], message: 'Paced replay capabilities must be declared as one complete set' })
   }
 })
 
@@ -340,11 +348,15 @@ export const marketDataCapabilitiesResponseSchema = z.object({
   if (commands.size !== capabilities.commands.length || requiredMarketDataCommands.some((command) => !commands.has(command))) {
     context.addIssue({ code: 'custom', path: ['commands'], message: 'Market-data commands must match the declared RPC capability set' })
   }
+  const replayCommands = ['market.replay_batch', 'market.replay_next', 'market.cancel'] as const
+  if (replayCommands.some((command) => commands.has(command)) && replayCommands.some((command) => !commands.has(command))) {
+    context.addIssue({ code: 'custom', path: ['commands'], message: 'Paced replay capabilities must be declared as one complete set' })
+  }
 })
 
 export const marketDataErrorSchema = z.object({
   code: identifierSchema,
-  category: z.enum(['validation', 'data-quality', 'internal', 'lifecycle']),
+  category: z.enum(['validation', 'data-quality', 'internal', 'lifecycle', 'canceled', 'timeout']),
   message: z.string().min(1).max(500),
   retryable: z.literal(false),
   quality_report: marketQualityReportSchema.optional(),
@@ -355,6 +367,84 @@ export const marketLoadFixtureRequestSchema = z.object({
   trace_id: identifierSchema,
   batch_id: identifierSchema,
 })
+
+export const marketReplayStartRequestSchema = z.object({
+  fixture_id: identifierSchema,
+  trace_id: identifierSchema,
+  batch_id: identifierSchema,
+  replay_id: identifierSchema,
+  cancellation_id: identifierSchema,
+  pace_interval_ms: z.number().int().min(1).max(60_000),
+  deadline_at: utcTimestampSchema,
+}).strict()
+
+export const marketReplaySessionSchema = z.object({
+  replay_schema_version: z.literal(MARKET_REPLAY_SESSION_SCHEMA_VERSION),
+  replay_id: identifierSchema,
+  cancellation_id: identifierSchema,
+  trace_id: identifierSchema,
+  batch_id: identifierSchema,
+  instrument_id: identifierSchema,
+  event_count: z.number().int().positive().max(MARKET_TRADE_BATCH_MAX_EVENTS),
+  canonical_events_sha256: sha256Schema,
+  pace_interval_ms: z.number().int().min(1).max(60_000),
+  state: z.literal('ready'),
+  next_index: z.literal(0),
+  started_at: utcTimestampSchema,
+  deadline_at: utcTimestampSchema,
+}).strict().superRefine((session, context) => {
+  if (Date.parse(session.deadline_at) <= Date.parse(session.started_at)) {
+    context.addIssue({ code: 'custom', path: ['deadline_at'], message: 'Replay deadline must follow its start' })
+  }
+})
+
+export const marketReplayNextRequestSchema = z.object({ replay_id: identifierSchema }).strict()
+export const marketReplayCancelRequestSchema = z.object({ cancellation_id: identifierSchema }).strict()
+
+const marketReplayStepBase = {
+  replay_step_schema_version: z.literal(MARKET_REPLAY_STEP_SCHEMA_VERSION),
+  replay_id: identifierSchema,
+  trace_id: identifierSchema,
+  batch_id: identifierSchema,
+  emitted_count: z.number().int().nonnegative().max(MARKET_TRADE_BATCH_MAX_EVENTS),
+  remaining_count: z.number().int().nonnegative().max(MARKET_TRADE_BATCH_MAX_EVENTS),
+}
+
+export const marketReplayEventStepSchema = z.object({
+  ...marketReplayStepBase,
+  state: z.literal('event'),
+  event_index: z.number().int().nonnegative().max(MARKET_TRADE_BATCH_MAX_EVENTS - 1),
+  emitted_at: utcTimestampSchema,
+  event: marketTradeEventSchema,
+}).strict().superRefine((step, context) => {
+  if (step.emitted_count !== step.event_index + 1) {
+    context.addIssue({ code: 'custom', path: ['emitted_count'], message: 'Replay event cursor must advance exactly once' })
+  }
+})
+
+export const marketReplayCompletedStepSchema = z.object({
+  ...marketReplayStepBase,
+  state: z.literal('completed'),
+  remaining_count: z.literal(0),
+  completed_at: utcTimestampSchema,
+  batch: marketTradeBatchSchema,
+}).strict().superRefine((step, context) => {
+  if (
+    step.replay_id.length === 0
+    || step.trace_id !== step.batch.trace_id
+    || step.batch_id !== step.batch.batch_id
+    || step.emitted_count !== step.batch.events.length
+  ) context.addIssue({ code: 'custom', path: ['batch'], message: 'Completed replay identity and counts must match its batch' })
+})
+
+export const marketReplayStepSchema = z.union([marketReplayEventStepSchema, marketReplayCompletedStepSchema])
+
+export const marketReplayCancellationSchema = z.object({
+  replay_id: identifierSchema,
+  cancellation_id: identifierSchema,
+  state: z.literal('canceled'),
+  canceled_at: utcTimestampSchema,
+}).strict()
 
 const positiveNanosecondDurationSchema = z.string().regex(/^[1-9]\d*$/, 'Expected a positive nanosecond duration string')
 
@@ -711,6 +801,10 @@ export type MarketDataHealth = z.infer<typeof marketDataHealthSchema>
 export type MarketDataCapabilitiesResponse = z.infer<typeof marketDataCapabilitiesResponseSchema>
 export type MarketDataError = z.infer<typeof marketDataErrorSchema>
 export type MarketLoadFixtureRequest = z.infer<typeof marketLoadFixtureRequestSchema>
+export type MarketReplayStartRequest = z.infer<typeof marketReplayStartRequestSchema>
+export type MarketReplaySession = z.infer<typeof marketReplaySessionSchema>
+export type MarketReplayStep = z.infer<typeof marketReplayStepSchema>
+export type MarketReplayCancellation = z.infer<typeof marketReplayCancellationSchema>
 export type NonNegativeFixedPointValue = z.infer<typeof nonNegativeFixedPointValueSchema>
 export type MarketCandle = z.infer<typeof marketCandleSchema>
 export type MarketCandleSeries = z.infer<typeof marketCandleSeriesSchema>
