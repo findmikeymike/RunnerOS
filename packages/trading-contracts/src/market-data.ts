@@ -11,6 +11,8 @@ import { instrumentSchema } from './analysis.ts'
 import {
   MARKET_QUALITY_REPORT_SCHEMA_VERSION,
   MARKET_DATA_RPC_PROTOCOL_VERSION,
+  MARKET_CANDLE_SCHEMA_VERSION,
+  MARKET_CANDLE_SERIES_SCHEMA_VERSION,
   MARKET_TRADE_BATCH_SCHEMA_VERSION,
   MARKET_TRADE_EVENT_SCHEMA_VERSION,
 } from './version.ts'
@@ -61,7 +63,7 @@ function decimalRawValue(value: string, precision: number): string | null {
   return BigInt(`${negative ? '-' : ''}${digits}`).toString()
 }
 
-function createFixedPointSchema(valueSchema: typeof decimalStringSchema, rawSchema: z.ZodString) {
+function createFixedPointSchema(valueSchema: z.ZodType<string>, rawSchema: z.ZodString) {
   return z.object({
     value: valueSchema,
     raw: rawSchema,
@@ -81,6 +83,14 @@ export const fixedPointValueSchema = createFixedPointSchema(decimalStringSchema,
 export const positiveFixedPointValueSchema = createFixedPointSchema(
   positiveDecimalStringSchema,
   positiveIntegerStringSchema,
+)
+const nonNegativeDecimalStringSchema = decimalStringSchema.refine((value) => !value.startsWith('-'), {
+  message: 'Expected a non-negative decimal string',
+})
+const nonNegativeIntegerStringSchema = z.string().regex(/^(?:0|[1-9]\d*)$/, 'Expected a non-negative integer string')
+export const nonNegativeFixedPointValueSchema = createFixedPointSchema(
+  nonNegativeDecimalStringSchema,
+  nonNegativeIntegerStringSchema,
 )
 
 const marketProducerSchema = z.object({
@@ -345,6 +355,164 @@ export const marketLoadFixtureRequestSchema = z.object({
   batch_id: identifierSchema,
 })
 
+const positiveNanosecondDurationSchema = z.string().regex(/^[1-9]\d*$/, 'Expected a positive nanosecond duration string')
+
+function scaledRaw(value: { raw: string; precision: number }, precision: number): bigint {
+  return BigInt(value.raw) * (10n ** BigInt(precision - value.precision))
+}
+
+function compareFixedPoint(
+  left: { raw: string; precision: number },
+  right: { raw: string; precision: number },
+): number {
+  const precision = Math.max(left.precision, right.precision)
+  const leftRaw = scaledRaw(left, precision)
+  const rightRaw = scaledRaw(right, precision)
+  return leftRaw < rightRaw ? -1 : leftRaw > rightRaw ? 1 : 0
+}
+
+export const marketCandleSchema = z.object({
+  candle_schema_version: z.literal(MARKET_CANDLE_SCHEMA_VERSION),
+  candle_id: identifierSchema,
+  trace_id: identifierSchema,
+  instrument_id: identifierSchema,
+  interval_ns: positiveNanosecondDurationSchema,
+  alignment: z.literal('unix-epoch'),
+  start_ns: nanosecondTimestampSchema,
+  end_ns: nanosecondTimestampSchema,
+  state: z.enum(['closed', 'developing']),
+  open: fixedPointValueSchema,
+  high: fixedPointValueSchema,
+  low: fixedPointValueSchema,
+  close: fixedPointValueSchema,
+  volume: nonNegativeFixedPointValueSchema,
+  buy_volume: nonNegativeFixedPointValueSchema,
+  sell_volume: nonNegativeFixedPointValueSchema,
+  unknown_volume: nonNegativeFixedPointValueSchema,
+  delta: fixedPointValueSchema,
+  trade_count: z.number().int().positive(),
+  first_event_id: identifierSchema,
+  last_event_id: identifierSchema,
+  source_batch_ids: z.array(identifierSchema).min(1).max(64),
+  quality_flags: z.array(identifierSchema).max(64),
+}).superRefine((candle, context) => {
+  if (BigInt(candle.end_ns) - BigInt(candle.start_ns) !== BigInt(candle.interval_ns)) {
+    context.addIssue({ code: 'custom', path: ['end_ns'], message: 'Candle end must equal start plus interval' })
+  }
+  if (
+    compareFixedPoint(candle.high, candle.open) < 0
+    || compareFixedPoint(candle.high, candle.close) < 0
+    || compareFixedPoint(candle.high, candle.low) < 0
+    || compareFixedPoint(candle.low, candle.open) > 0
+    || compareFixedPoint(candle.low, candle.close) > 0
+  ) {
+    context.addIssue({ code: 'custom', path: ['high'], message: 'Candle OHLC ordering is invalid' })
+  }
+  const volumePrecision = Math.max(
+    candle.volume.precision,
+    candle.buy_volume.precision,
+    candle.sell_volume.precision,
+    candle.unknown_volume.precision,
+  )
+  const componentVolume = scaledRaw(candle.buy_volume, volumePrecision)
+    + scaledRaw(candle.sell_volume, volumePrecision)
+    + scaledRaw(candle.unknown_volume, volumePrecision)
+  if (scaledRaw(candle.volume, volumePrecision) !== componentVolume) {
+    context.addIssue({ code: 'custom', path: ['volume'], message: 'Candle volume must equal side volumes' })
+  }
+  const deltaPrecision = Math.max(candle.delta.precision, candle.buy_volume.precision, candle.sell_volume.precision)
+  if (
+    scaledRaw(candle.delta, deltaPrecision)
+    !== scaledRaw(candle.buy_volume, deltaPrecision) - scaledRaw(candle.sell_volume, deltaPrecision)
+  ) {
+    context.addIssue({ code: 'custom', path: ['delta'], message: 'Candle delta must equal buy minus sell volume' })
+  }
+  if (new Set(candle.source_batch_ids).size !== candle.source_batch_ids.length) {
+    context.addIssue({ code: 'custom', path: ['source_batch_ids'], message: 'Candle source batches must be unique' })
+  }
+})
+
+export const marketCandleSeriesSchema = z.object({
+  series_schema_version: z.literal(MARKET_CANDLE_SERIES_SCHEMA_VERSION),
+  snapshot_id: identifierSchema,
+  trace_id: identifierSchema,
+  instrument_id: identifierSchema,
+  interval_ns: positiveNanosecondDurationSchema,
+  alignment: z.literal('unix-epoch'),
+  watermark_ns: nanosecondTimestampSchema,
+  as_of_event_ns: nanosecondTimestampSchema.optional(),
+  current_price: fixedPointValueSchema.optional(),
+  current_event_id: identifierSchema.optional(),
+  closed: z.array(marketCandleSchema).max(10_000),
+  developing: marketCandleSchema.optional(),
+  source_batch_ids: z.array(identifierSchema).max(64),
+  quality_flags: z.array(identifierSchema).max(64),
+}).superRefine((series, context) => {
+  const currentFields = [series.as_of_event_ns, series.current_price, series.current_event_id]
+  if (currentFields.some(Boolean) && !currentFields.every(Boolean)) {
+    context.addIssue({ code: 'custom', path: ['current_price'], message: 'Current event time, price, and identity must appear together' })
+  }
+  if (series.as_of_event_ns && BigInt(series.as_of_event_ns) > BigInt(series.watermark_ns)) {
+    context.addIssue({ code: 'custom', path: ['as_of_event_ns'], message: 'Current event cannot exceed the replay watermark' })
+  }
+  if (new Set(series.source_batch_ids).size !== series.source_batch_ids.length) {
+    context.addIssue({ code: 'custom', path: ['source_batch_ids'], message: 'Series source batches must be unique' })
+  }
+
+  let priorEnd: bigint | undefined
+  const allCandles = [...series.closed, ...(series.developing ? [series.developing] : [])]
+  for (const [index, candle] of allCandles.entries()) {
+    if (
+      candle.trace_id !== series.trace_id
+      || candle.instrument_id !== series.instrument_id
+      || candle.interval_ns !== series.interval_ns
+      || candle.alignment !== series.alignment
+    ) {
+      context.addIssue({ code: 'custom', path: ['closed', index], message: 'Candle identity must match its series' })
+    }
+    if (priorEnd !== undefined && BigInt(candle.start_ns) < priorEnd) {
+      context.addIssue({ code: 'custom', path: ['closed', index, 'start_ns'], message: 'Candles must be ordered and non-overlapping' })
+    }
+    priorEnd = BigInt(candle.end_ns)
+  }
+  for (const [index, candle] of series.closed.entries()) {
+    if (candle.state !== 'closed' || BigInt(candle.end_ns) > BigInt(series.watermark_ns)) {
+      context.addIssue({ code: 'custom', path: ['closed', index, 'state'], message: 'Closed candles must end at or before the watermark' })
+    }
+  }
+  if (series.developing && (
+    series.developing.state !== 'developing'
+    || BigInt(series.developing.start_ns) > BigInt(series.watermark_ns)
+    || BigInt(series.developing.end_ns) <= BigInt(series.watermark_ns)
+  )) {
+    context.addIssue({ code: 'custom', path: ['developing'], message: 'Developing candle must contain the watermark' })
+  }
+  const latest = allCandles.at(-1)
+  const hasCurrent = currentFields.every(Boolean)
+  if ((latest && !hasCurrent) || (!latest && hasCurrent)) {
+    context.addIssue({ code: 'custom', path: ['current_price'], message: 'Current market fields and visible candles must appear together' })
+  }
+  if (latest && series.current_event_id && latest.last_event_id !== series.current_event_id) {
+    context.addIssue({ code: 'custom', path: ['current_event_id'], message: 'Current event must close the latest visible candle' })
+  }
+  if (latest && series.current_price && compareFixedPoint(latest.close, series.current_price) !== 0) {
+    context.addIssue({ code: 'custom', path: ['current_price'], message: 'Current price must equal the latest visible close' })
+  }
+  const seriesBatchIds = new Set(series.source_batch_ids)
+  const seriesFlags = new Set(series.quality_flags)
+  for (const [index, candle] of allCandles.entries()) {
+    if (candle.source_batch_ids.some((batchId) => !seriesBatchIds.has(batchId))) {
+      context.addIssue({ code: 'custom', path: ['closed', index, 'source_batch_ids'], message: 'Candle source batches must belong to the series' })
+    }
+    if (candle.quality_flags.some((flag) => !seriesFlags.has(flag))) {
+      context.addIssue({ code: 'custom', path: ['closed', index, 'quality_flags'], message: 'Candle quality flags must propagate to the series' })
+    }
+  }
+  if (series.source_batch_ids.some((batchId) => !allCandles.some((candle) => candle.source_batch_ids.includes(batchId)))) {
+    context.addIssue({ code: 'custom', path: ['source_batch_ids'], message: 'Series source batches must contribute to a visible candle' })
+  }
+})
+
 export type FixedPointValue = z.infer<typeof fixedPointValueSchema>
 export type PositiveFixedPointValue = z.infer<typeof positiveFixedPointValueSchema>
 export type MarketTradeEvent = z.infer<typeof marketTradeEventSchema>
@@ -355,3 +523,6 @@ export type MarketDataHealth = z.infer<typeof marketDataHealthSchema>
 export type MarketDataCapabilitiesResponse = z.infer<typeof marketDataCapabilitiesResponseSchema>
 export type MarketDataError = z.infer<typeof marketDataErrorSchema>
 export type MarketLoadFixtureRequest = z.infer<typeof marketLoadFixtureRequestSchema>
+export type NonNegativeFixedPointValue = z.infer<typeof nonNegativeFixedPointValueSchema>
+export type MarketCandle = z.infer<typeof marketCandleSchema>
+export type MarketCandleSeries = z.infer<typeof marketCandleSeriesSchema>

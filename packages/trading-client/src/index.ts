@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+
 import {
   PROTOCOL_VERSION,
   analysisArtifactSchema,
@@ -5,6 +7,7 @@ import {
   analyzeFixtureRequestSchema,
   assertCompatibleProtocol,
   healthResponseSchema,
+  canonicalJson,
   marketDataCapabilitiesResponseSchema,
   marketDataErrorSchema,
   marketDataHealthSchema,
@@ -221,6 +224,10 @@ export class MarketDataClient {
       batch_id: input.batchId,
     })
     const batch = await this.request('market.load_fixture', params, marketTradeBatchSchema)
+    const checksum = createHash('sha256').update(canonicalJson(batch.events), 'utf8').digest('hex')
+    if (checksum !== batch.canonical_events_sha256) {
+      throw new InvalidMarketDataResponseError('Market-data canonical event checksum is invalid.')
+    }
     if (
       batch.trace_id !== input.traceId
       || batch.batch_id !== input.batchId

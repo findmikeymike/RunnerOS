@@ -11,8 +11,8 @@ source_of_truth: true
 
 - Date: 2026-07-13
 - Stage: Phase 1 market-data spine started; Phase 0 still awaits real visual Electron smoke
-- Current goal: add deterministic replay/cancel lifecycle semantics before candle history
-- Overall state: canonical emission, replay quality, fixture-only Python RPC, typed client validation, and development Electron-main supervision are test-verified; replay pacing/cancellation, Order Flow replay routing, candles, packaged Python assets, the actual visual Electron path, and a built installer remain unverified
+- Current goal: expose bounded agent-facing market snapshots from the validated replay/candle state
+- Overall state: canonical emission, replay quality, fixture-only Python RPC, typed client validation, development Electron-main supervision, and deterministic current-price/candle history are test-verified; paced replay/cancellation, Order Flow canonical routing, agent snapshots, packaged Python assets, the actual visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -25,6 +25,8 @@ source_of_truth: true
 `project-owned ES records -> isolated Python 3.12 sidecar -> Nautilus 1.230.0 TradeTick objects`
 
 `market.load_fixture -> fixed project fixture -> validated canonical batch or typed quality error`
+
+`validated canonical batch -> no-lookahead watermark -> current price + closed candle history + one developing candle`
 
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
@@ -55,12 +57,15 @@ The workbench can request engine health, run the known fixture, and display tota
 - Added typed market-data health/capability/error/load contracts and a `MarketDataClient` that rejects malformed, identity-mismatched, or unsafe responses before consumers see them.
 - Added a reusable bounded JSONL sidecar process supervisor that distinguishes timeout, exit, and protocol corruption and correctly limits each frame even when multiple responses share one stdout chunk.
 - Added `MarketDataSidecarManager`, real Python process tests, development launch resolution, lazy Electron-main runtime wiring, and clean joint disposal. Packaged mode intentionally exposes no market-data manager until Python assets exist.
+- Added versioned candle/series contracts with exact fixed-point OHLC, side volume, delta, provenance, state, watermark, and explicit Unix-epoch alignment.
+- Added a provider-independent replay engine that verifies canonical checksums, rejects live/invalid data, sorts event time deterministically, deduplicates retries across traces, enforces no lookahead, and never invents empty candles.
+- Wired `loadFixtureSnapshot` through the supervised manager so the real pipeline returns current price, closed history, and a developing candle. Synchronous desktop replay is capped at 64 batches and 10,000 total events.
 
 ## Next Actions
 
-1. Add replay/cancel lifecycle semantics and distinguish cancellation from process crash.
-2. Build deterministic event replay and candle-history state from canonical batches.
-3. Feed the canonical replay batch into the Order Flow input adapter.
+1. Define and build the bounded agent-facing market snapshot/context contract.
+2. Feed canonical batches—not Nautilus/provider objects—into the Order Flow input adapter.
+3. Add paced replay/cancel lifecycle semantics before increasing the 10,000-event control-path bound.
 4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
 5. Build and smoke the packaged installer separately.
 6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them blindly.
@@ -92,12 +97,14 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Python RPC proof includes a real child process over stdin/stdout, strict parse failure, dependency-aware health, and clean shutdown.
 - Typed market-data client/Electron supervision slice: 39 passed, 0 failed, 79 expectations across six files; production Electron main build passed.
 - A real Python child process was supervised through health, exact canonical load, typed failure recovery, and clean shutdown. Timeout, crash, oversized protocol frames, and coalesced valid frames are distinguishable/tested at the generic process boundary.
+- Replay/candle slice: 41 passed, 0 failed, 95 expectations across five files; contract and market-state standalone typechecks passed; Electron main build passed.
+- Real supervised fixture-to-candle proof: current price `5592.00`; one closed 20-second candle and one developing candle at the `15:30:30` watermark. This is deterministic control-path proof, not live streaming.
 - Windows and Linux Nautilus runtime/package smoke remain unverified.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical Python emission, replay quality, fixture RPC, typed client, and development Electron supervision are implemented; replay/cancel, packaged Python assets, Order Flow replay, and candles remain unimplemented.
+- Canonical Python emission, replay quality, fixture RPC, typed client, development Electron supervision, and bounded deterministic candles are implemented; paced replay/cancel, packaged Python assets, Order Flow canonical input, and agent snapshots remain unimplemented.
 
 ## Explicitly Not In Scope Yet
 

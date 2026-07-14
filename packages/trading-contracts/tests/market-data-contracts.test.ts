@@ -6,6 +6,7 @@ import {
   marketDataCapabilitiesResponseSchema,
   marketDataErrorSchema,
   marketDataHealthSchema,
+  marketCandleSeriesSchema,
   marketLoadFixtureRequestSchema,
   marketQualityReportSchema,
   marketTradeBatchSchema,
@@ -167,5 +168,33 @@ describe('canonical market-data contracts', () => {
       quality_report: quality,
     })
     expect(error.quality_report?.state).toBe('invalid')
+  })
+
+  test('validates exact candle history and developing-candle invariants', () => {
+    const price = { value: '5592.00', raw: '559200', precision: 2 }
+    const zero = { value: '0', raw: '0', precision: 0 }
+    const candle = {
+      candle_schema_version: 'market-candle@1', candle_id: 'candle:CME:ESU6:1783780200000000000',
+      trace_id: 'trace-candles', instrument_id: 'CME:ESU6', interval_ns: '20000000000',
+      alignment: 'unix-epoch',
+      start_ns: '1783780200000000000', end_ns: '1783780220000000000', state: 'closed',
+      open: price, high: price, low: price, close: price,
+      volume: { value: '5', raw: '5', precision: 0 }, buy_volume: { value: '5', raw: '5', precision: 0 },
+      sell_volume: zero, unknown_volume: zero, delta: { value: '5', raw: '5', precision: 0 }, trade_count: 1,
+      first_event_id: 'event-first', last_event_id: 'event-first', source_batch_ids: ['batch-one'], quality_flags: [],
+    }
+    const series = marketCandleSeriesSchema.parse({
+      series_schema_version: 'market-candle-series@1', snapshot_id: 'snapshot-candles', trace_id: 'trace-candles',
+      instrument_id: 'CME:ESU6', interval_ns: '20000000000', alignment: 'unix-epoch', watermark_ns: '1783780220000000000',
+      as_of_event_ns: '1783780200000000000', current_price: price, current_event_id: 'event-first',
+      closed: [candle], source_batch_ids: ['batch-one'], quality_flags: [],
+    })
+
+    expect(series.closed[0]?.state).toBe('closed')
+    expect(marketCandleSeriesSchema.safeParse({ ...series, developing: candle }).success).toBe(false)
+    expect(marketCandleSeriesSchema.safeParse({ ...series, source_batch_ids: [] }).success).toBe(false)
+    expect(marketCandleSeriesSchema.safeParse({
+      ...series, current_price: undefined, current_event_id: undefined, as_of_event_ns: undefined,
+    }).success).toBe(false)
   })
 })

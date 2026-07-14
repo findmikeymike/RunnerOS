@@ -6,6 +6,8 @@ export const MARKET_TRADE_EVENT_SCHEMA_VERSION = 'market-trade-event@1'
 export const MARKET_QUALITY_REPORT_SCHEMA_VERSION = 'market-quality-report@1'
 export const MARKET_TRADE_BATCH_SCHEMA_VERSION = 'market-trade-batch@1'
 export const MARKET_DATA_RPC_PROTOCOL_VERSION = 'market-data-rpc@1'
+export const MARKET_CANDLE_SCHEMA_VERSION = 'market-candle@1'
+export const MARKET_CANDLE_SERIES_SCHEMA_VERSION = 'market-candle-series@1'
 
 export interface ProtocolCompatibility {
   compatible: true

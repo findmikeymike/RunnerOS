@@ -38,10 +38,23 @@ describe('MarketDataSidecarManager', () => {
         traceId: 'trace-electron-market-001',
         batchId: 'batch-electron-market-001',
       })
+      const snapshot = await sidecar.loadFixtureSnapshot({
+        fixtureId: 'es-demo-2026-07-11',
+        traceId: 'trace-electron-candles-001',
+        batchId: 'batch-electron-candles-001',
+        snapshotId: 'snapshot-electron-candles-001',
+        intervalNs: '20000000000',
+        watermarkNs: '1783780230000000000',
+      })
 
       expect(health).toMatchObject({ state: 'ready', protocol_version: 'market-data-rpc@1' })
       expect(batch.events).toHaveLength(4)
       expect(batch.trace_id).toBe('trace-electron-market-001')
+      expect(snapshot).toMatchObject({
+        current_price: { value: '5592.00' },
+        closed: [{ trade_count: 2 }],
+        developing: { trade_count: 2 },
+      })
       expect(sidecar.status()).toMatchObject({ state: 'ready', pid: expect.any(Number) })
     } finally {
       await sidecar.stop()

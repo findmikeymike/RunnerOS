@@ -117,6 +117,8 @@ Current implementation checkpoint: `health`, `capabilities`, `load_fixture`, and
 
 Electron checkpoint: the development Python process is now resolved, supervised, contract-validated, and disposed from Electron main. Packaged Python resolution remains intentionally absent until a self-contained asset is built and smoked.
 
+Replay/candle checkpoint: canonical replay now produces checksum-verified current price, closed candle history, and at most one developing candle under an explicit watermark. V1 is Unix-epoch aligned, omits empty candles, and is synchronously bounded to 10,000 events; session-aligned and streamed history remain future work.
+
 ## Determinism Requirements
 
 - Replaying identical bytes with identical configuration yields canonical-equivalent events and quality report.
@@ -167,6 +169,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 - [x] Identical fixture replay produces canonical-equivalent output and checksum across Python and TypeScript.
 - [x] Duplicate and out-of-order behavior is deterministic and visible.
 - [x] Bad timestamps, sizes, price increments, checksums, malformed records/payloads, and instrument metadata produce typed quality outcomes.
+- [x] Bounded replay produces deterministic current price, closed history, and a developing candle without future-event leakage.
 - [ ] The Order Flow engine consumes only Trade God canonical input.
 - [ ] Trace joins source batch, adapter logs, quality report, feature artifact, and receipt.
 - [ ] Cancellation and sidecar crash remain distinguishable.
@@ -176,7 +179,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 
 - Live provider credentials or WebSocket feeds.
 - Full-depth order books.
-- Bars, quotes, options, news, fundamentals, or corporate actions.
+- Provider-supplied bars, quotes, options, news, fundamentals, or corporate actions.
 - Portfolio, risk, broker, or execution integration.
 - Redis or distributed infrastructure.
 - Agents or LLM interpretation.

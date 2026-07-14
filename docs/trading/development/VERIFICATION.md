@@ -238,6 +238,19 @@ A lower rung does not prove a higher rung.
 - Runtime truth: a valid local `.venv` is discovered and wired lazily in development. Packaged mode deliberately has no market-data manager until Python assets are bundled and smoke-tested.
 - Not proven: replay pacing, active cancellation, cancellation-versus-crash behavior in the market sidecar, packaged Python, Order Flow consumption, candles, or historical storage.
 
+## Phase 1 Slice 7 — Deterministic Replay and Candle History
+
+- Method: red-green TDD plus `$rival`/`$fix`; missing candle contracts/engine failed first, then client checksum coverage, explicit alignment, invalid-quality rejection, retry trace dedupe, provenance consistency, and synchronous scale bounds were added.
+- Focused closure: 41 passed, 0 failed, 95 expectations across five files.
+- Standalone `packages/trading-contracts` and `packages/trading-market-state` typechecks: passed.
+- `apps/electron` `build:main`: passed.
+- Proven: real supervised fixture -> checksum-verified canonical batch -> current price -> ordered closed candles + at most one developing candle.
+- Integrity: event-time sort is deterministic; equal timestamps break by event ID; events beyond the watermark never affect state; final candles close only after the watermark reaches their exclusive end; repeated events across replay traces deduplicate; conflicting content, live mode, and invalid-quality batches fail closed.
+- Exact math: OHLC comparisons and volume/delta aggregation use fixed-point `BigInt`, not floating point. Volume equals buy + sell + unknown and delta equals buy - sell.
+- Alignment/gaps: v1 candles explicitly align to Unix-epoch intervals and do not synthesize empty candles; detected interior gaps carry `missing-candle-interval`.
+- Runtime bound: synchronous Electron-main replay is capped at 64 batches and 10,000 total events. Larger/paced streams require the later replay/cancel worker or transport.
+- Not proven: session-aligned/daily candles, persistent catalog/history, live streaming, paced replay/cancel, agent snapshots, Order Flow consumption, or packaged Python runtime.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

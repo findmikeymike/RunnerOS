@@ -188,6 +188,15 @@ describe('MarketDataClient', () => {
     await expect(mismatched.loadFixture({
       fixtureId: 'es-demo-2026-07-11', traceId: 'trace-expected', batchId: 'batch-es-demo-001',
     })).rejects.toBeInstanceOf(InvalidMarketDataResponseError)
+
+    const tamperedBatch = await Bun.file(new URL('../../trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    tamperedBatch.events[0].price = { value: '1.00', raw: '100', precision: 2 }
+    const tampered = marketClient({
+      request: async (request) => ({ jsonrpc: '2.0', id: request.id, result: tamperedBatch }),
+    })
+    await expect(tampered.loadFixture({
+      fixtureId: 'es-demo-2026-07-11', traceId: 'trace-market-replay-001', batchId: 'batch-es-demo-001',
+    })).rejects.toBeInstanceOf(InvalidMarketDataResponseError)
   })
 
   test('normalizes typed market-data failures', async () => {

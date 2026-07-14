@@ -33,11 +33,11 @@ The Phase 0 walking skeleton is implemented for development and packaged-sidecar
 
 This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real visual Electron user path and a fully built packaged installer have not been proven.
 
-Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent Trade God event, quality-report, and bounded-batch contracts. Python emits the exact full TypeScript golden/checksum and the replay quality matrix handles malformed data, timestamps, sizes, price increments, aggressors, instruments, corruption, duplicates, ordering, and all-rejected batches with typed outcomes. The replay-only RPC now has typed TypeScript contracts/client validation and a bounded Electron-main supervisor. Development runtime health, exact load, typed failure recovery, and shutdown are proven against the real Python process.
+Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent Trade God event, quality-report, bounded-batch, candle, and candle-series contracts. Python emits the exact TypeScript golden/checksum and the replay quality matrix handles malformed and degraded data with typed outcomes. The replay-only RPC has typed client validation and bounded Electron-main supervision. A provider-independent replay engine now turns that real supervised batch into current price, closed history, and one developing candle under an explicit no-lookahead watermark.
 
 ## Immediate Assignment
 
-Add replay/cancel lifecycle semantics, then deterministic candle history and the canonical Order Flow input seam. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
+Build the bounded agent-facing market snapshot, then the canonical Order Flow input seam. Add paced replay/cancel before raising the current 10,000-event synchronous bound. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
 
 ## Known Expected Artifact
 
@@ -68,6 +68,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Phase 1 completed replay quality matrix: 9 tests passed with typed malformed and all-rejected failure paths.
 - Phase 1 market-data RPC: 7 tests passed; complete Python suite: 16 tests passed. A real spawned process proved strict JSONL parsing, dependency-aware health, and shutdown.
 - Typed client/Electron supervision: 39 tests passed, 79 expectations; Electron main build passed. Real Python development supervision is proven. Packaged Python assets and installed-app runtime remain unproven.
+- Replay/candles: 41 tests passed, 95 expectations; contract and market-state typechecks and Electron main build passed. No-lookahead, retry dedupe, invalid/live rejection, checksum validation, exact OHLC/volume/delta, history, and developing state are proven on bounded replay.
 - Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
 
 ## Non-Negotiable Boundaries
@@ -82,9 +83,9 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Next Smallest Actions
 
-1. Add replay/cancel and distinguish cancellation from sidecar crash.
-2. Build deterministic replay plus historical/developing candles.
-3. Route the canonical replay batch into the Order Flow input boundary.
+1. Build the bounded agent-facing market snapshot/context contract.
+2. Route canonical events/candles into the Order Flow input boundary.
+3. Add paced replay/cancel and distinguish cancellation from sidecar crash.
 4. Real visual success/cancel/failure smoke at the first desktop opportunity.
 5. Actual packaged-app build/resource-layout smoke.
 

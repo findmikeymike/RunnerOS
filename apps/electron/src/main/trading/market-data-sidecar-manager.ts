@@ -4,7 +4,8 @@ import {
   type RpcRequest,
   type RpcTransport,
 } from '@trade-god/client'
-import type { MarketDataHealth, MarketTradeBatch } from '@trade-god/contracts'
+import type { MarketCandleSeries, MarketDataHealth, MarketTradeBatch } from '@trade-god/contracts'
+import { buildMarketReplaySnapshot } from '@trade-god/market-state'
 
 import {
   JsonlSidecarProcess,
@@ -13,6 +14,12 @@ import {
 
 
 type MarketDataManagerOptions = Omit<JsonlSidecarProcessOptions, 'serviceLabel'>
+
+export interface LoadFixtureSnapshotInput extends LoadMarketFixtureInput {
+  snapshotId: string
+  intervalNs: string
+  watermarkNs: string
+}
 
 export class MarketDataSidecarManager implements RpcTransport {
   private readonly process: JsonlSidecarProcess
@@ -33,6 +40,17 @@ export class MarketDataSidecarManager implements RpcTransport {
 
   loadFixture(input: LoadMarketFixtureInput): Promise<MarketTradeBatch> {
     return this.client.loadFixture(input)
+  }
+
+  async loadFixtureSnapshot(input: LoadFixtureSnapshotInput): Promise<MarketCandleSeries> {
+    const batch = await this.loadFixture(input)
+    return buildMarketReplaySnapshot({
+      snapshotId: input.snapshotId,
+      traceId: input.traceId,
+      intervalNs: input.intervalNs,
+      watermarkNs: input.watermarkNs,
+      batches: [batch],
+    })
   }
 
   request(request: RpcRequest): Promise<unknown> {
