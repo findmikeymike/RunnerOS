@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 
 import { PROTOCOL_VERSION } from '@trade-god/contracts'
 import { loadEsDemoFixture } from '@trade-god/testkit'
+import { ORDER_FLOW_MAX_LINE_BYTES } from '../src/analyze-market-batch.ts'
 
 test('serves newline-delimited JSON-RPC on stdout and keeps stderr clean', async () => {
   const cliPath = new URL('../src/cli.ts', import.meta.url).pathname
@@ -92,4 +93,28 @@ test('processes cancellation while analysis is in flight over stdio', async () =
     error: { data: { trade_error: { code: 'CANCELED', category: 'canceled' } } },
   })
   expect(responses.find((response) => response.id === 'cancel-active')).toMatchObject({ result: { state: 'canceled' } })
+})
+
+test('rejects an oversized JSONL frame before parsing and remains responsive', async () => {
+  const cliPath = new URL('../src/cli.ts', import.meta.url).pathname
+  const child = Bun.spawn([process.execPath, cliPath], { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' })
+  const meta = {
+    schema_version: PROTOCOL_VERSION, trace_id: 'trace-oversized-stdio', created_at: '2026-07-13T12:00:00.000Z',
+    producer: { name: 'stdio-test-client', version: '0.1.0', instance_id: 'stdio-test-1' },
+  }
+  child.stdin.write(`${'x'.repeat(ORDER_FLOW_MAX_LINE_BYTES + 1)}\n`)
+  child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 'health-after-large', method: 'trade.health', params: { meta } })}\n`)
+  child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 'shutdown-after-large', method: 'trade.shutdown', params: { meta } })}\n`)
+  child.stdin.end()
+
+  const timeout = setTimeout(() => child.kill(), 2_000)
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited, new Response(child.stdout).text(), new Response(child.stderr).text(),
+  ])
+  clearTimeout(timeout)
+  expect(exitCode).toBe(0)
+  expect(stderr).toBe('')
+  const responses = stdout.trim().split('\n').map((line) => JSON.parse(line))
+  expect(responses[0]).toEqual({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Request too large' } })
+  expect(responses[1]).toMatchObject({ id: 'health-after-large', result: { state: 'ready' } })
 })

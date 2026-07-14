@@ -15,6 +15,7 @@ export const serviceCommandSchema = z.enum([
   'health',
   'capabilities',
   'analyze_fixture',
+  'analyze_market_batch',
   'cancel',
   'shutdown',
 ])

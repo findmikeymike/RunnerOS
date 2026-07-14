@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 
-import { PROTOCOL_VERSION, type AnalyzeFixtureRequest } from '@trade-god/contracts'
+import { PROTOCOL_VERSION, canonicalJson, type AnalyzeFixtureRequest } from '@trade-god/contracts'
 import { loadEsDemoFixture } from '@trade-god/testkit'
 import { createOrderFlowRpcHandler } from '../../../sidecars/order-flow-engine/src/index.ts'
+import { CANONICAL_ORDER_FLOW_CONFIGURATION } from '../../../sidecars/order-flow-engine/src/analyze-market-batch.ts'
 
 import {
   InvalidMarketDataResponseError,
@@ -140,6 +142,42 @@ describe('TradingClient', () => {
     expect(requests[0].params.cancellation_id).toBe('cancel-from-workbench')
     expect(requests[0].params.meta.trace_id).toBe('trace-from-workbench')
     expect(canceled).toMatchObject({ cancellation_id: 'cancel-from-workbench', state: 'canceled' })
+  })
+
+  test('validates canonical Order Flow artifact identity and content hash', async () => {
+    const batch = await Bun.file(new URL('../../trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    const artifact = await client(realHandlerTransport()).analyzeMarketBatch({
+      batch,
+      session: { exchange_timezone: 'America/Chicago', session_id: 'CME-2026-07-11-RTH' },
+      analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
+      timeoutMs: 5_000,
+      traceId: 'trace-client-canonical',
+    })
+
+    expect(artifact.summary).toMatchObject({ total_volume: '28', delta: '6', point_of_control_price: '5592.25' })
+    expect(artifact.input.batch_id).toBe(batch.batch_id)
+  })
+
+  test('rejects a self-consistent artifact whose provenance does not match the requested market batch', async () => {
+    const batch = await Bun.file(new URL('../../trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    const real = realHandlerTransport()
+    const transport: RpcTransport = {
+      request: async (request) => {
+        const response = await real.request(request) as any
+        if (request.method !== 'trade.analyze_market_batch' || !response.result) return response
+        response.result.session_id = 'CME-WRONG-SESSION'
+        const { meta: _meta, artifact_id: _artifactId, content_hash: _oldHash, ...content } = response.result
+        response.result.content_hash = createHash('sha256').update(canonicalJson(content), 'utf8').digest('hex')
+        return response
+      },
+    }
+
+    await expect(client(transport).analyzeMarketBatch({
+      batch,
+      session: { exchange_timezone: 'America/Chicago', session_id: 'CME-2026-07-11-RTH' },
+      analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
+      timeoutMs: 5_000,
+    })).rejects.toBeInstanceOf(InvalidTradingResponseError)
   })
 })
 

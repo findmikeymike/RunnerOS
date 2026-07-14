@@ -3,6 +3,8 @@ import { createHash } from 'node:crypto'
 import {
   PROTOCOL_VERSION,
   analysisArtifactSchema,
+  analyzeMarketBatchRequestSchema,
+  canonicalOrderFlowArtifactSchema,
   cancelAnalysisResponseSchema,
   analyzeFixtureRequestSchema,
   assertCompatibleProtocol,
@@ -16,6 +18,8 @@ import {
   tradingErrorSchema,
   wireMetaSchema,
   type AnalysisArtifact,
+  type AnalyzeMarketBatchRequest,
+  type CanonicalOrderFlowArtifact,
   type AnalyzeFixtureRequest,
   type HealthResponse,
   type CancelAnalysisResponse,
@@ -63,6 +67,15 @@ export interface AnalyzeFixtureInput {
   instrument: AnalyzeFixtureRequest['instrument']
   session: AnalyzeFixtureRequest['session']
   analysis: AnalyzeFixtureRequest['analysis']
+  timeoutMs: number
+  cancellationId?: string
+  traceId?: string
+}
+
+export interface AnalyzeMarketBatchInput {
+  batch: AnalyzeMarketBatchRequest['input']['batch']
+  session: AnalyzeMarketBatchRequest['session']
+  analysis: AnalyzeMarketBatchRequest['analysis']
   timeoutMs: number
   cancellationId?: string
   traceId?: string
@@ -149,6 +162,52 @@ export class TradingClient {
     })
 
     return this.request('trade.analyze_fixture', params, traceId, analysisArtifactSchema)
+  }
+
+  async analyzeMarketBatch(input: AnalyzeMarketBatchInput): Promise<CanonicalOrderFlowArtifact> {
+    if (!Number.isFinite(input.timeoutMs) || input.timeoutMs <= 0) {
+      throw new TypeError('timeoutMs must be a positive finite number.')
+    }
+
+    const traceId = input.traceId ?? this.options.nextId('trace')
+    const now = this.options.now()
+    const params = analyzeMarketBatchRequestSchema.parse({
+      meta: this.meta(traceId),
+      input: { schema_version: 'order-flow-market-input@1', kind: 'canonical-market-batch', batch: input.batch },
+      session: input.session,
+      analysis: input.analysis,
+      deadline_at: new Date(Date.parse(now) + input.timeoutMs).toISOString(),
+      cancellation_id: input.cancellationId ?? this.options.nextId('cancel'),
+    })
+    const artifact = await this.request(
+      'trade.analyze_market_batch', params, traceId, canonicalOrderFlowArtifactSchema,
+    )
+    const { meta: _meta, artifact_id: _artifactId, content_hash: _contentHash, ...deterministicContent } = artifact
+    const checksum = createHash('sha256').update(canonicalJson(deterministicContent), 'utf8').digest('hex')
+    if (checksum !== artifact.content_hash) {
+      throw new InvalidTradingResponseError('Canonical Order Flow artifact checksum is invalid.')
+    }
+    if (
+      artifact.input.batch_id !== input.batch.batch_id
+      || artifact.input.batch_trace_id !== input.batch.trace_id
+      || artifact.input.batch_schema_version !== input.batch.batch_schema_version
+      || artifact.input.canonical_events_sha256 !== input.batch.canonical_events_sha256
+      || artifact.input.source_sha256 !== input.batch.source.source_sha256
+      || artifact.input.mode !== input.batch.mode
+      || artifact.input.quality_state !== input.batch.quality.state
+      || artifact.input.event_count !== input.batch.events.length
+      || artifact.instrument_id !== input.batch.instrument_id
+      || artifact.session_id !== input.session.session_id
+      || artifact.event_time_range.start_ns !== input.batch.event_time_range.start_ns
+      || artifact.event_time_range.end_ns !== input.batch.event_time_range.end_ns
+      || canonicalJson(artifact.algorithm) !== canonicalJson(input.analysis)
+      || artifact.quality.state !== input.batch.quality.state
+      || canonicalJson(artifact.quality.flags) !== canonicalJson([...new Set(input.batch.quality.flags)].sort())
+      || artifact.summary.event_count !== input.batch.events.length
+    ) {
+      throw new InvalidTradingResponseError('Canonical Order Flow artifact identity does not match its input.')
+    }
+    return artifact
   }
 
   async cancelAnalysis(cancellationId: string): Promise<CancelAnalysisResponse> {

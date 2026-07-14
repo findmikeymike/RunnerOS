@@ -33,11 +33,11 @@ The Phase 0 walking skeleton is implemented for development and packaged-sidecar
 
 This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real visual Electron user path and a fully built packaged installer have not been proven.
 
-Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent event, quality, batch, candle, series, and agent-snapshot contracts. Python emits the exact TypeScript golden/checksum; typed client/Electron supervision validates it; the replay engine produces current price and candle history under a no-lookahead watermark. `agent-market-snapshot@1` now packages bounded recent trades/candles, freshness, quality, mapped provenance, truncation, integrity hash, and explicit analysis-only authority.
+Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent event, quality, batch, candle, series, and agent-snapshot contracts. Python emits the exact TypeScript golden/checksum; typed client/Electron supervision validates it; the replay engine produces current price and candle history under a no-lookahead watermark. The real Python child now feeds its canonical batch into the real supervised Order Flow child, which emits checksum-verified `order-flow-artifact@2` and `trade-run-receipt@2` without provider/Nautilus leakage.
 
 ## Immediate Assignment
 
-Route canonical input/context into Order Flow without provider/Nautilus leakage, then add the specialist-agent delivery/reference seam. Add paced replay/cancel before raising the 10,000-event synchronous bound. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
+Add the specialist-agent delivery/reference seam for `agent-market-snapshot@1`; do not pass the truncated agent snapshot into deterministic Order Flow, which now consumes full canonical batches. Add paced replay/cancel before raising the 10,000-event synchronous bound. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
 
 ## Known Expected Artifact
 
@@ -70,6 +70,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Typed client/Electron supervision: 39 tests passed, 79 expectations; Electron main build passed. Real Python development supervision is proven. Packaged Python assets and installed-app runtime remain unproven.
 - Replay/candles: 41 tests passed, 95 expectations; contract and market-state typechecks and Electron main build passed. No-lookahead, retry dedupe, invalid/live rejection, checksum validation, exact OHLC/volume/delta, history, and developing state are proven on bounded replay.
 - Agent market context: 46 tests passed, 126 expectations; typechecks and Electron main build passed. Fresh/stale/no-data, limits/truncation, quality aggregation, exact batch/checksum mapping, content integrity, and analysis-only authority are proven. Actual agent consumption is not.
+- Canonical Order Flow: 64 tests passed, 137 expectations across ten focused files. Contract/market-state typechecks, Electron main build, packaged sidecar build/health, exact mixed-precision math, bounded framing/cache behavior, corrupt/live rejection, v2 provenance/receipts, and the real Python-child -> Order-Flow-child path passed.
 - Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
 
 ## Non-Negotiable Boundaries
@@ -84,9 +85,9 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Next Smallest Actions
 
-1. Route canonical batches/snapshots into the Order Flow input boundary.
-2. Add reference-based delivery of `agent-market-snapshot@1` to specialist agents.
-3. Add paced replay/cancel and distinguish cancellation from sidecar crash.
+1. Add reference-based delivery of `agent-market-snapshot@1` to specialist agents.
+2. Add paced replay/cancel and distinguish cancellation from sidecar crash.
+3. Package the Python/Nautilus runtime after the delivery seam is stable.
 4. Real visual success/cancel/failure smoke at the first desktop opportunity.
 5. Actual packaged-app build/resource-layout smoke.
 

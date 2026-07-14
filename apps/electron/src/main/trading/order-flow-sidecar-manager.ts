@@ -4,10 +4,11 @@ import {
   TradingClient,
   TradingClientError,
   type AnalyzeFixtureInput,
+  type AnalyzeMarketBatchInput,
   type RpcRequest,
   type RpcTransport,
 } from '@trade-god/client'
-import { PROTOCOL_VERSION, type AnalysisArtifact, type CancelAnalysisResponse, type HealthResponse, type TradingRunReceipt } from '@trade-god/contracts'
+import { PROTOCOL_VERSION, type AnalysisArtifact, type CancelAnalysisResponse, type CanonicalOrderFlowArtifact, type HealthResponse, type TradingRunReceipt } from '@trade-god/contracts'
 
 type ManagerState = 'stopped' | 'starting' | 'ready' | 'stopping' | 'failed'
 
@@ -109,6 +110,46 @@ export class OrderFlowSidecarManager implements RpcTransport {
         traceId,
         receiptId,
         errorCode: error instanceof TradingClientError ? error.code : 'INTERNAL_ERROR',
+      })
+      throw error
+    }
+  }
+
+  async analyzeMarketBatch(input: AnalyzeMarketBatchInput): Promise<CanonicalOrderFlowArtifact> {
+    const traceId = input.traceId ?? this.nextId('trace-run')
+    const receiptId = `receipt-${input.cancellationId ?? this.nextId('run')}`
+    const tracedInput = { ...input, traceId }
+    const startedAt = this.options.now()
+    const requestIdentity = {
+      kind: 'canonical-market-batch' as const,
+      batch_id: input.batch.batch_id,
+      batch_trace_id: input.batch.trace_id,
+      canonical_events_sha256: input.batch.canonical_events_sha256,
+      source_sha256: input.batch.source.source_sha256,
+      instrument_id: input.batch.instrument_id,
+    }
+    this.options.log?.({ event: 'analysis_started', traceId, receiptId })
+    try {
+      const artifact = await this.client.analyzeMarketBatch(tracedInput)
+      const artifactReceiptId = `receipt-${artifact.artifact_id}`
+      await this.options.receiptWriter?.write({
+        receipt_schema_version: 'trade-run-receipt@2', receipt_id: artifactReceiptId,
+        trace_id: artifact.meta.trace_id, status: 'succeeded', started_at: startedAt,
+        completed_at: this.options.now(), request: requestIdentity,
+        artifact: { artifact_id: artifact.artifact_id, content_hash: artifact.content_hash },
+      })
+      this.options.log?.({ event: 'analysis_succeeded', traceId, receiptId: artifactReceiptId, artifactId: artifact.artifact_id })
+      return artifact
+    } catch (error) {
+      await this.options.receiptWriter?.write({
+        receipt_schema_version: 'trade-run-receipt@2', receipt_id: receiptId, trace_id: traceId,
+        status: error instanceof TradingClientError && error.category === 'canceled' ? 'canceled' : 'failed',
+        started_at: startedAt, completed_at: this.options.now(), request: requestIdentity,
+        error: { code: error instanceof TradingClientError ? error.code : 'INTERNAL_ERROR', message: error instanceof Error ? error.message : String(error) },
+      })
+      this.options.log?.({
+        event: error instanceof TradingClientError && error.category === 'canceled' ? 'analysis_canceled' : 'analysis_failed',
+        traceId, receiptId, errorCode: error instanceof TradingClientError ? error.code : 'INTERNAL_ERROR',
       })
       throw error
     }

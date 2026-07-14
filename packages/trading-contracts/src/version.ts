@@ -2,6 +2,8 @@ import { semverSchema } from './common.ts'
 
 export const PROTOCOL_VERSION = '1.0.0'
 export const ANALYSIS_ARTIFACT_SCHEMA_VERSION = 'order-flow-artifact@1'
+export const ORDER_FLOW_MARKET_INPUT_SCHEMA_VERSION = 'order-flow-market-input@1'
+export const ORDER_FLOW_MARKET_ARTIFACT_SCHEMA_VERSION = 'order-flow-artifact@2'
 export const MARKET_TRADE_EVENT_SCHEMA_VERSION = 'market-trade-event@1'
 export const MARKET_QUALITY_REPORT_SCHEMA_VERSION = 'market-quality-report@1'
 export const MARKET_TRADE_BATCH_SCHEMA_VERSION = 'market-trade-batch@1'

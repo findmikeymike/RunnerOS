@@ -1,13 +1,19 @@
+import { createHash } from 'node:crypto'
+
 import {
   ANALYSIS_ARTIFACT_SCHEMA_VERSION,
+  ORDER_FLOW_MARKET_ARTIFACT_SCHEMA_VERSION,
   PROTOCOL_VERSION,
   analyzeFixtureRequestSchema,
+  analyzeMarketBatchRequestSchema,
   assertCompatibleProtocol,
   healthResponseSchema,
   tradingErrorSchema,
   wireMetaSchema,
   type TradingError,
   type AnalysisArtifact,
+  type CanonicalOrderFlowArtifact,
+  type MarketTradeBatch,
   type WireMeta,
 } from '@trade-god/contracts'
 import {
@@ -15,6 +21,12 @@ import {
   analyzeOrderFlowFixture,
   loadEsDemoFixture,
 } from '@trade-god/testkit'
+import {
+  CANONICAL_ORDER_FLOW_CONFIGURATION,
+  CanonicalOrderFlowInputError,
+  ORDER_FLOW_MAX_REQUEST_BYTES,
+  analyzeCanonicalMarketBatch,
+} from './analyze-market-batch.ts'
 
 type RpcId = string | number | null
 
@@ -46,6 +58,10 @@ export interface OrderFlowRpcHandlerOptions {
     fixture: Awaited<ReturnType<typeof loadEsDemoFixture>>,
     context: { signal: AbortSignal; meta: WireMeta; artifactId: string },
   ) => AnalysisArtifact | Promise<AnalysisArtifact>
+  analyzeMarketBatch?: (
+    batch: MarketTradeBatch,
+    context: { signal: AbortSignal; meta: WireMeta; artifactId: string; sessionId: string },
+  ) => CanonicalOrderFlowArtifact | Promise<CanonicalOrderFlowArtifact>
 }
 
 export interface OrderFlowRpcHandler {
@@ -53,7 +69,9 @@ export interface OrderFlowRpcHandler {
   state(): 'ready' | 'stopped'
 }
 
-const commands = ['health', 'capabilities', 'analyze_fixture', 'cancel', 'shutdown'] as const
+const commands = ['health', 'capabilities', 'analyze_fixture', 'analyze_market_batch', 'cancel', 'shutdown'] as const
+export const ORDER_FLOW_RPC_CACHE_MAX = 256
+const ORDER_FLOW_PRECANCELED_MAX = 256
 
 export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): OrderFlowRpcHandler {
   let lifecycle: 'ready' | 'stopped' = 'ready'
@@ -63,6 +81,11 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
   const runAnalysis = options.analyzeFixture ?? ((fixture, context) => analyzeOrderFlowFixture(fixture, {
     meta: context.meta,
     artifact_id: context.artifactId,
+  }))
+  const runMarketAnalysis = options.analyzeMarketBatch ?? ((batch, context) => analyzeCanonicalMarketBatch(batch, {
+    meta: context.meta,
+    artifactId: context.artifactId,
+    sessionId: context.sessionId,
   }))
 
   const serverMeta = (traceId: string): WireMeta => wireMetaSchema.parse({
@@ -103,7 +126,7 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
         meta: serverMeta(traceId),
         state: lifecycle,
         protocol_version: PROTOCOL_VERSION,
-        artifact_versions: [ANALYSIS_ARTIFACT_SCHEMA_VERSION],
+        artifact_versions: [ANALYSIS_ARTIFACT_SCHEMA_VERSION, ORDER_FLOW_MARKET_ARTIFACT_SCHEMA_VERSION],
         capabilities: { commands, fixture_mode: true },
         dependencies: [],
       })
@@ -117,7 +140,7 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
         result: {
           meta: serverMeta(traceId),
           protocol_version: PROTOCOL_VERSION,
-          artifact_versions: [ANALYSIS_ARTIFACT_SCHEMA_VERSION],
+          artifact_versions: [ANALYSIS_ARTIFACT_SCHEMA_VERSION, ORDER_FLOW_MARKET_ARTIFACT_SCHEMA_VERSION],
           commands,
           fixture_mode: true,
         },
@@ -130,6 +153,10 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
         return domainFailure(request.id, traceId, {
           code: 'INVALID_REQUEST', category: 'validation', message: 'cancellation_id is required.', retryable: false,
         }, -32600)
+      }
+      if (!canceled.has(cancellationId) && canceled.size >= ORDER_FLOW_PRECANCELED_MAX) {
+        const oldest = canceled.values().next().value
+        if (oldest !== undefined) canceled.delete(oldest)
       }
       canceled.add(cancellationId)
       active.get(cancellationId)?.abort()
@@ -223,13 +250,84 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
       }
     }
 
+    if (request.method === 'trade.analyze_market_batch') {
+      if (Buffer.byteLength(JSON.stringify(params), 'utf8') > ORDER_FLOW_MAX_REQUEST_BYTES) {
+        return domainFailure(request.id, traceId, {
+          code: 'INVALID_REQUEST', category: 'validation', message: 'Canonical Order Flow request is too large.', retryable: false,
+        }, -32600)
+      }
+      const parsed = analyzeMarketBatchRequestSchema.safeParse(params)
+      if (!parsed.success) {
+        return domainFailure(request.id, traceId, {
+          code: 'INVALID_REQUEST', category: 'validation', message: 'Canonical Order Flow request is invalid.', retryable: false,
+        }, -32600)
+      }
+      try {
+        assertCompatibleProtocol(parsed.data.meta.schema_version)
+      } catch {
+        return domainFailure(request.id, traceId, {
+          code: 'UNSUPPORTED_PROTOCOL_VERSION', category: 'incompatible', message: 'Trading protocol version is unsupported.', retryable: false,
+        })
+      }
+      if (JSON.stringify(parsed.data.analysis) !== JSON.stringify(CANONICAL_ORDER_FLOW_CONFIGURATION)) {
+        return domainFailure(request.id, traceId, {
+          code: 'INVALID_REQUEST', category: 'validation', message: 'Canonical Order Flow configuration is unsupported.', retryable: false,
+        }, -32600)
+      }
+      if (canceled.has(parsed.data.cancellation_id)) {
+        canceled.delete(parsed.data.cancellation_id)
+        return domainFailure(request.id, traceId, {
+          code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled before it started.', retryable: false,
+        })
+      }
+      if (Date.parse(parsed.data.deadline_at) <= Date.parse(options.now())) {
+        return domainFailure(request.id, traceId, {
+          code: 'DEADLINE_EXCEEDED', category: 'timeout', message: 'Analysis deadline has elapsed.', retryable: false,
+        })
+      }
+
+      const controller = new AbortController()
+      active.set(parsed.data.cancellation_id, controller)
+      try {
+        const artifact = await runMarketAnalysis(parsed.data.input.batch, {
+          signal: controller.signal,
+          meta: serverMeta(traceId),
+          artifactId: `artifact-${String(request.id)}`,
+          sessionId: parsed.data.session.session_id,
+        })
+        if (controller.signal.aborted) {
+          return domainFailure(request.id, traceId, {
+            code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while running.', retryable: false,
+          })
+        }
+        return { jsonrpc: '2.0', id: request.id, result: artifact }
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return domainFailure(request.id, traceId, {
+            code: 'CANCELED', category: 'canceled', message: 'Analysis was canceled while running.', retryable: false,
+          })
+        }
+        if (error instanceof CanonicalOrderFlowInputError) {
+          return domainFailure(request.id, traceId, {
+            code: 'INVALID_REQUEST', category: 'validation', message: error.message, retryable: false,
+          }, -32600)
+        }
+        return domainFailure(request.id, traceId, {
+          code: 'INTERNAL_ERROR', category: 'internal', message: 'Canonical Order Flow analysis failed.', retryable: false,
+        })
+      } finally {
+        active.delete(parsed.data.cancellation_id)
+        canceled.delete(parsed.data.cancellation_id)
+      }
+    }
+
     return { jsonrpc: '2.0', id: request.id, error: { code: -32601, message: 'Method not found' } }
   }
 
   return {
     async handle(request) {
       const key = String(request.id)
-      const digest = JSON.stringify(request)
+      const digest = createHash('sha256').update(JSON.stringify(request), 'utf8').digest('hex')
       const prior = handled.get(key)
       if (prior) {
         if (prior.digest === digest) return prior.response
@@ -239,6 +337,10 @@ export function createOrderFlowRpcHandler(options: OrderFlowRpcHandlerOptions): 
       }
 
       const response = await execute(request)
+      if (handled.size >= ORDER_FLOW_RPC_CACHE_MAX) {
+        const oldest = handled.keys().next().value
+        if (oldest !== undefined) handled.delete(oldest)
+      }
       handled.set(key, { digest, response })
       return response
     },

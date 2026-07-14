@@ -263,6 +263,19 @@ A lower rung does not prove a higher rung.
 - Runtime: the real supervised Python fixture can produce the agent snapshot through `MarketDataSidecarManager.loadFixtureAgentSnapshot`.
 - Not proven: delivery to an actual head/specialist agent, context-store persistence/reference lookup, Order Flow consumption, live data, paced replay/cancel, packaged Python, or visual UI.
 
+## Phase 1 Slice 9 — Canonical Order Flow Consumption
+
+- Method: typed boundary implementation followed by `$rival`/`$fix`; the adversarial pass found unbounded request retention, incomplete returned-provenance comparison, and an oversized frame parsed before its size gate.
+- Focused closure: 64 passed, 0 failed, 137 expectations across ten contract, client, calculator, RPC/stdio, receipt, manager, packaged-bundle, and real-pipeline files.
+- Build/type proof: standalone contract and market-state typechecks passed; Electron main build passed; the self-contained packaged Order Flow sidecar rebuilt successfully.
+- Real process proof: supervised Python 3.12/Nautilus fixture emission -> checksum-verified canonical batch -> supervised Bun Order Flow sidecar -> `order-flow-artifact@2` -> `trade-run-receipt@2`.
+- Exact output: 4 events, total `28`, buy `17`, sell `11`, unknown `0`, delta `6`, POC `5592.25`.
+- Boundary: the calculator receives only normalized canonical event fields. Provider/Nautilus objects and fixture-file access are absent from the v2 request and artifact calculation.
+- Integrity: client verifies content hash plus batch/schema/trace/checksum/source/mode/quality/event count/instrument/session/time/config identity. Corrupt checksums, live batches, unsupported configs, oversized frames, and malformed inputs fail closed.
+- Exact math: mixed price/size precision, unknown aggressor volume, and deterministic lower-price POC tie resolution use fixed-point `BigInt` arithmetic.
+- Resource bounds: request identities are stored as bounded hashes, pre-cancel state is bounded, and JSONL frames are rejected before parsing above the declared line limit.
+- Not proven: installed Electron UI uses this new path, agent-context delivery, live streaming, packaged Python assets, or real visual behavior.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

@@ -1,9 +1,16 @@
 import { describe, expect, test } from 'bun:test'
 
-import { ANALYSIS_ARTIFACT_SCHEMA_VERSION, PROTOCOL_VERSION, analysisArtifactSchema } from '@trade-god/contracts'
+import {
+  ANALYSIS_ARTIFACT_SCHEMA_VERSION,
+  ORDER_FLOW_MARKET_ARTIFACT_SCHEMA_VERSION,
+  PROTOCOL_VERSION,
+  analysisArtifactSchema,
+  canonicalOrderFlowArtifactSchema,
+} from '@trade-god/contracts'
 import { loadEsDemoFixture } from '@trade-god/testkit'
 
-import { createOrderFlowRpcHandler } from '../src/index.ts'
+import { ORDER_FLOW_RPC_CACHE_MAX, createOrderFlowRpcHandler } from '../src/index.ts'
+import { CANONICAL_ORDER_FLOW_CONFIGURATION } from '../src/analyze-market-batch.ts'
 
 const clientMeta = {
   schema_version: PROTOCOL_VERSION,
@@ -31,14 +38,58 @@ describe('Order Flow JSON-RPC handler', () => {
       result: {
         state: 'ready',
         protocol_version: PROTOCOL_VERSION,
-        artifact_versions: [ANALYSIS_ARTIFACT_SCHEMA_VERSION],
+        artifact_versions: [ANALYSIS_ARTIFACT_SCHEMA_VERSION, ORDER_FLOW_MARKET_ARTIFACT_SCHEMA_VERSION],
         capabilities: {
-          commands: ['health', 'capabilities', 'analyze_fixture', 'cancel', 'shutdown'],
+          commands: ['health', 'capabilities', 'analyze_fixture', 'analyze_market_batch', 'cancel', 'shutdown'],
           fixture_mode: true,
         },
       },
     })
     expect(JSON.stringify(response)).not.toContain('place_live_order')
+  })
+
+  test('analyzes a canonical market batch without fixture or provider objects entering the calculator', async () => {
+    const batch = await Bun.file(new URL('../../../packages/trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    const handler = createOrderFlowRpcHandler({
+      now: () => '2026-07-13T12:00:00.000Z',
+      instanceId: 'order-flow-canonical-test',
+    })
+    const response = await handler.handle(rpc('canonical-1', 'trade.analyze_market_batch', {
+      meta: { ...clientMeta, trace_id: 'trace-canonical-analysis', created_at: '2026-07-13T12:00:00.000Z' },
+      input: { schema_version: 'order-flow-market-input@1', kind: 'canonical-market-batch', batch },
+      session: { exchange_timezone: 'America/Chicago', session_id: 'CME-2026-07-11-RTH' },
+      analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
+      deadline_at: '2026-07-13T12:00:05.000Z', cancellation_id: 'cancel-canonical-1',
+    }))
+
+    expect('result' in response).toBe(true)
+    if ('result' in response) {
+      const artifact = canonicalOrderFlowArtifactSchema.parse(response.result)
+      expect(artifact.artifact_schema_version).toBe(ORDER_FLOW_MARKET_ARTIFACT_SCHEMA_VERSION)
+      expect(artifact.summary).toEqual({
+        event_count: 4, total_volume: '28', buy_volume: '17', sell_volume: '11', unknown_volume: '0',
+        delta: '6', point_of_control_price: '5592.25',
+      })
+      expect(artifact.input).not.toHaveProperty('fixture_id')
+      expect(JSON.stringify(artifact)).not.toContain('nautilus')
+    }
+  })
+
+  test('fails closed on a checksum-corrupt canonical market batch', async () => {
+    const batch = await Bun.file(new URL('../../../packages/trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
+    batch.events[0].price = { value: '5591.00', raw: '559100', precision: 2 }
+    const handler = createOrderFlowRpcHandler({ now: () => '2026-07-13T12:00:00.000Z', instanceId: 'order-flow-canonical-test' })
+    const response = await handler.handle(rpc('canonical-corrupt', 'trade.analyze_market_batch', {
+      meta: { ...clientMeta, trace_id: 'trace-canonical-corrupt', created_at: '2026-07-13T12:00:00.000Z' },
+      input: { schema_version: 'order-flow-market-input@1', kind: 'canonical-market-batch', batch },
+      session: { exchange_timezone: 'America/Chicago', session_id: 'CME-2026-07-11-RTH' },
+      analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
+      deadline_at: '2026-07-13T12:00:05.000Z', cancellation_id: 'cancel-canonical-corrupt',
+    }))
+
+    expect(response).toMatchObject({
+      error: { data: { trade_error: { code: 'INVALID_REQUEST', category: 'validation', retryable: false } } },
+    })
   })
 
   test('analyzes the checksummed ES fixture into a validated artifact', async () => {
@@ -74,6 +125,16 @@ describe('Order Flow JSON-RPC handler', () => {
     const second = await handler.handle(request)
 
     expect(second).toEqual(first)
+  })
+
+  test('bounds cached request identities instead of retaining canonical payloads forever', async () => {
+    const handler = createOrderFlowRpcHandler({ now: () => '2026-07-11T15:30:00.000Z', instanceId: 'bounded-cache-test' })
+    for (let index = 0; index <= ORDER_FLOW_RPC_CACHE_MAX; index += 1) {
+      await handler.handle(rpc(`bounded-${index}`, 'trade.health', { meta: clientMeta }))
+    }
+
+    const evictedIdCanBeReused = await handler.handle(rpc('bounded-0', 'trade.capabilities', { meta: clientMeta }))
+    expect(evictedIdCanBeReused).toMatchObject({ result: { commands: expect.arrayContaining(['analyze_market_batch']) } })
   })
 
   test('rejects reuse of a request id with different content', async () => {

@@ -10,13 +10,13 @@ source_of_truth: true
 ## Snapshot
 
 - Date: 2026-07-13
-- Stage: Phase 1 market-data spine started; Phase 0 still awaits real visual Electron smoke
-- Current goal: route the canonical market artifact into Order Flow without bypassing the new context boundary
-- Overall state: canonical emission, replay quality, fixture-only Python RPC, typed client validation, development Electron-main supervision, deterministic current-price/candle history, and bounded analysis-only agent context are test-verified; paced replay/cancellation, actual agent/Order Flow consumption, packaged Python assets, the visual Electron path, and a built installer remain unverified
+- Stage: Phase 1 canonical market data now powers the first specialist engine; Phase 0 still awaits real visual Electron smoke
+- Current goal: add reference-based delivery of bounded market context to specialist agents
+- Overall state: canonical emission, replay quality, fixture-only Python RPC, typed supervision, deterministic candles/context, and replay-only canonical Order Flow consumption are test-verified; agent delivery, paced replay/cancellation, packaged Python assets, the visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
-- Implementation head entering this slice: `5a3264af`
+- Implementation head entering this slice: `3bdb38e6`
 
 ## Working Capability
 
@@ -29,6 +29,8 @@ source_of_truth: true
 `validated canonical batch -> no-lookahead watermark -> current price + closed candle history + one developing candle`
 
 `market state -> bounded/checksummed analysis-only agent snapshot -> future specialist consumers`
+
+`real supervised Python market child -> canonical batch -> real supervised Order Flow child -> order-flow-artifact@2 + trade-run-receipt@2`
 
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
@@ -65,11 +67,14 @@ The workbench can request engine health, run the known fixture, and display tota
 - Added `agent-market-snapshot@1`: current price, bounded recent trades/candles, freshness, aggregated quality, exact batch/checksum provenance, explicit truncation, and a content checksum.
 - Hard-coded snapshot authority to analysis only with execution/order submission false, added stored-context integrity verification, and covered fresh, stale, degraded, truncated, and no-data states.
 - Wired `loadFixtureAgentSnapshot` through the real supervised market-data manager. The artifact exists for consumers; no specialist or head-agent router consumes it yet.
+- Added `trade.analyze_market_batch`, a provider-neutral replay-only Order Flow boundary that accepts canonical batches, independently verifies their checksum, uses exact mixed-precision arithmetic, tracks unknown-side volume, and emits `order-flow-artifact@2`.
+- Added `CanonicalOrderFlowPipeline` and proved the real Python market-data child feeds the real supervised Order Flow child without Nautilus/provider objects entering the calculator.
+- Added canonical `trade-run-receipt@2`, strict client-side artifact/provenance checks, bounded hashed request caching, pre-parse JSONL size rejection, and fail-closed live/corrupt input behavior.
 
 ## Next Actions
 
-1. Feed canonical batches/snapshots—not Nautilus/provider objects—into the Order Flow input adapter.
-2. Add a versioned context-delivery seam for specialist agents with receipt/reference identity rather than prompt copying.
+1. Add a versioned context-delivery seam for specialist agents with receipt/reference identity rather than prompt copying.
+2. Route `agent-market-snapshot@1` by reference into the first specialist while keeping deterministic Order Flow on full canonical batches.
 3. Add paced replay/cancel lifecycle semantics before increasing the 10,000-event control-path bound.
 4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
 5. Build and smoke the packaged installer separately.
@@ -106,12 +111,15 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Real supervised fixture-to-candle proof: current price `5592.00`; one closed 20-second candle and one developing candle at the `15:30:30` watermark. This is deterministic control-path proof, not live streaming.
 - Agent snapshot closure: 46 passed, 0 failed, 126 expectations across five files; contract and market-state typechecks and Electron main build passed.
 - Supervised context proof returns two of four recent trades, one closed candle, the developing candle, fresh state, mapped source/canonical checksums, and analysis-only authority. No real agent has consumed it yet.
+- Canonical Order Flow closure: 64 passed, 0 failed, 137 expectations across ten focused files; contract and market-state typechecks, Electron main build, packaged Order Flow sidecar build, and self-contained bundle health test passed.
+- Real process proof: the supervised Python/Nautilus fixture path emitted a canonical batch consumed by the supervised Order Flow child, producing exact `28 / 17 / 11 / 6 / 5592.25` output plus a trace-linked v2 receipt.
+- Adversarial fixes verified: bounded hashed request cache, bounded pre-cancel state, pre-parse JSONL frame limit, complete client provenance checks, mixed-precision/unknown-side math, lower-price POC tie resolution, and live/corrupt input rejection.
 - Windows and Linux Nautilus runtime/package smoke remain unverified.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical Python emission, replay quality, fixture RPC, typed client, development Electron supervision, bounded deterministic candles, and bounded agent snapshots are implemented; paced replay/cancel, packaged Python assets, Order Flow canonical input, and agent-delivery routing remain unimplemented.
+- Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, and replay-only canonical Order Flow consumption are implemented; paced replay/cancel, packaged Python assets, and agent-delivery routing remain unimplemented.
 
 ## Explicitly Not In Scope Yet
 

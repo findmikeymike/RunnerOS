@@ -53,17 +53,39 @@ export const cancelAnalysisResponseSchema = z.object({
   state: z.literal('canceled'),
 }).passthrough()
 
-export const tradingRunReceiptSchema = z.object({
-  receipt_schema_version: z.literal('trade-run-receipt@1'),
+const tradingRunReceiptBase = {
   receipt_id: identifierSchema,
   trace_id: identifierSchema,
   status: z.enum(['succeeded', 'failed', 'canceled']),
   started_at: utcTimestampSchema,
   completed_at: utcTimestampSchema,
-  request: z.object({ fixture_id: identifierSchema, fixture_sha256: sha256Schema }).passthrough(),
   artifact: z.object({ artifact_id: identifierSchema, content_hash: sha256Schema }).passthrough().optional(),
   error: z.object({ code: z.string().min(1), message: z.string().min(1) }).passthrough().optional(),
+}
+
+export const fixtureTradingRunReceiptSchema = z.object({
+  receipt_schema_version: z.literal('trade-run-receipt@1'),
+  ...tradingRunReceiptBase,
+  request: z.object({ fixture_id: identifierSchema, fixture_sha256: sha256Schema }).passthrough(),
 }).passthrough()
+
+export const canonicalTradingRunReceiptSchema = z.object({
+  receipt_schema_version: z.literal('trade-run-receipt@2'),
+  ...tradingRunReceiptBase,
+  request: z.object({
+    kind: z.literal('canonical-market-batch'),
+    batch_id: identifierSchema,
+    batch_trace_id: identifierSchema,
+    canonical_events_sha256: sha256Schema,
+    source_sha256: sha256Schema,
+    instrument_id: identifierSchema,
+  }).passthrough(),
+}).passthrough()
+
+export const tradingRunReceiptSchema = z.union([
+  fixtureTradingRunReceiptSchema,
+  canonicalTradingRunReceiptSchema,
+])
 
 export const qualitySchema = z.object({
   state: z.enum(['valid', 'degraded', 'invalid']),

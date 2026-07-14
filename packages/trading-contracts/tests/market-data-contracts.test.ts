@@ -8,6 +8,8 @@ import {
   marketDataHealthSchema,
   marketCandleSeriesSchema,
   agentMarketSnapshotSchema,
+  analyzeMarketBatchRequestSchema,
+  canonicalOrderFlowArtifactSchema,
   marketLoadFixtureRequestSchema,
   marketQualityReportSchema,
   marketTradeBatchSchema,
@@ -242,5 +244,42 @@ describe('canonical market-data contracts', () => {
         ...snapshot.provenance.batches, snapshot.provenance.batches[0],
       ] },
     }).success).toBe(false)
+  })
+
+  test('versions canonical market input and its provider-neutral Order Flow artifact', async () => {
+    const batch = await example('market-trade-batch.v1.json')
+    const meta = {
+      schema_version: '1.0.0', trace_id: 'trace-order-flow-canonical', created_at: '2026-07-13T12:00:00.000Z',
+      producer: { name: 'contract-test', version: '0.1.0', instance_id: 'contract-test-1' },
+    }
+    const request = analyzeMarketBatchRequestSchema.parse({
+      meta,
+      input: { schema_version: 'order-flow-market-input@1', kind: 'canonical-market-batch', batch },
+      session: { exchange_timezone: 'America/Chicago', session_id: 'CME-2026-07-11-RTH' },
+      analysis: { name: 'order-flow-summary', version: '0.2.0', configuration_hash: 'b'.repeat(64) },
+      deadline_at: '2026-07-13T12:00:05.000Z', cancellation_id: 'cancel-canonical-contract',
+    })
+    const artifact = canonicalOrderFlowArtifactSchema.parse({
+      meta,
+      artifact_schema_version: 'order-flow-artifact@2', artifact_id: 'artifact-canonical-contract',
+      artifact_type: 'order-flow-summary', algorithm: request.analysis,
+      input: {
+        schema_version: 'order-flow-market-input@1', kind: 'canonical-market-batch',
+        batch_schema_version: batch.batch_schema_version, batch_id: batch.batch_id, batch_trace_id: batch.trace_id,
+        canonical_events_sha256: batch.canonical_events_sha256, source_sha256: batch.source.source_sha256,
+        mode: batch.mode, quality_state: batch.quality.state, event_count: batch.events.length,
+      },
+      instrument_id: batch.instrument_id, session_id: request.session.session_id,
+      event_time_range: batch.event_time_range,
+      quality: { state: 'valid', flags: [], warnings: [] }, content_hash: 'c'.repeat(64),
+      summary: {
+        event_count: 4, total_volume: '28', buy_volume: '17', sell_volume: '11', unknown_volume: '0',
+        delta: '6', point_of_control_price: '5592.25',
+      },
+    })
+
+    expect(request.input.batch.events).toHaveLength(4)
+    expect(artifact.input).not.toHaveProperty('fixture_id')
+    expect(canonicalOrderFlowArtifactSchema.safeParse({ ...artifact, artifact_schema_version: 'order-flow-artifact@1' }).success).toBe(false)
   })
 })

@@ -121,6 +121,8 @@ Replay/candle checkpoint: canonical replay now produces checksum-verified curren
 
 Agent-context checkpoint: `agent-market-snapshot@1` bounds recent trades/candles/issues, carries freshness/quality/mapped checksums/truncation, hashes its deterministic content, and denies execution/order authority. The supervised manager can emit it; actual agent delivery remains separate work.
 
+Order Flow checkpoint: `trade.analyze_market_batch` accepts a bounded replay-only canonical batch and emits `order-flow-artifact@2` plus `trade-run-receipt@2`. A real supervised Python market-data child -> real supervised Order Flow child proof produces exact `28 / 17 / 11 / 6 / 5592.25` output. The calculator has no Nautilus/provider dependency; the truncated agent snapshot is intentionally not its input.
+
 ## Determinism Requirements
 
 - Replaying identical bytes with identical configuration yields canonical-equivalent events and quality report.
@@ -157,8 +159,8 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 4. Convert the existing ES synthetic trades into Nautilus `TradeTick` objects.
 5. Emit and validate canonical events plus a deterministic batch checksum.
 6. Add duplicate, out-of-order, precision, timestamp, and checksum failure tests.
-7. Feed the canonical batch into an Order Flow input adapter without allowing the Order Flow engine to read provider/Nautilus objects.
-8. Persist the run artifact and trace-linked receipt.
+7. Feed the canonical batch into an Order Flow input adapter without allowing the Order Flow engine to read provider/Nautilus objects. **Complete.**
+8. Persist the run artifact and trace-linked receipt. **Complete for the canonical replay path.**
 9. Benchmark JSONL and record the threshold requiring a streaming transport.
 
 ## Acceptance Criteria
@@ -173,7 +175,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 - [x] Bad timestamps, sizes, price increments, checksums, malformed records/payloads, and instrument metadata produce typed quality outcomes.
 - [x] Bounded replay produces deterministic current price, closed history, and a developing candle without future-event leakage.
 - [x] Bounded analysis-only agent context validates with freshness, quality, provenance, truncation, and content integrity.
-- [ ] The Order Flow engine consumes only Trade God canonical input.
+- [x] The Order Flow engine consumes only Trade God canonical input on the new replay path.
 - [ ] Trace joins source batch, adapter logs, quality report, feature artifact, and receipt.
 - [ ] Cancellation and sidecar crash remain distinguishable.
 - [x] No live/provider/broker/order capability is reachable from the implemented fixture-only RPC.
@@ -190,7 +192,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 
 ## Go/No-Go Gate
 
-Proceed to live/provider adapters only after the replay slice is deterministic, quality failures are forced, the external contract has no Nautilus dependency, and the Order Flow engine consumes the canonical batch successfully.
+The canonical Order Flow seam now satisfies this initial gate. Do not proceed to live/provider operation until paced replay/cancellation, reconnect/gap/staleness behavior, session correctness, backpressure, and packaged-runtime gates are also proven.
 
 ## Grounding
 

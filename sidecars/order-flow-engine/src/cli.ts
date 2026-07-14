@@ -3,6 +3,7 @@ import { createInterface } from 'node:readline'
 import { analyzeOrderFlowFixture } from '@trade-god/testkit'
 
 import { createOrderFlowRpcHandler } from './index.ts'
+import { ORDER_FLOW_MAX_LINE_BYTES } from './analyze-market-batch.ts'
 
 const testDelayMs = Number(process.env.TRADE_GOD_TEST_ANALYSIS_DELAY_MS || 0)
 const handler = createOrderFlowRpcHandler({
@@ -30,6 +31,15 @@ const pending = new Set<Promise<void>>()
 
 async function processLine(line: string): Promise<void> {
   if (!line.trim()) return
+
+  if (Buffer.byteLength(line, 'utf8') > ORDER_FLOW_MAX_LINE_BYTES) {
+    process.stdout.write(`${JSON.stringify({
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32600, message: 'Request too large' },
+    })}\n`)
+    return
+  }
 
   let request: unknown
   try {
