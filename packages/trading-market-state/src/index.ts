@@ -1,13 +1,19 @@
 import { createHash } from 'node:crypto'
 
 import {
+  AGENT_MARKET_SNAPSHOT_MAX_CLOSED_CANDLES,
+  AGENT_MARKET_SNAPSHOT_MAX_ISSUES,
+  AGENT_MARKET_SNAPSHOT_MAX_TRADES,
+  AGENT_MARKET_SNAPSHOT_SCHEMA_VERSION,
   MARKET_CANDLE_SCHEMA_VERSION,
   MARKET_CANDLE_SERIES_SCHEMA_VERSION,
+  agentMarketSnapshotSchema,
   canonicalJson,
   identifierSchema,
   marketCandleSeriesSchema,
   marketTradeBatchSchema,
   nanosecondTimestampSchema,
+  type AgentMarketSnapshot,
   type FixedPointValue,
   type MarketCandle,
   type MarketCandleSeries,
@@ -27,6 +33,13 @@ export interface BuildMarketReplaySnapshotInput {
 
 export const MARKET_REPLAY_MAX_BATCHES = 64
 export const MARKET_REPLAY_MAX_EVENTS = 10_000
+
+export interface BuildAgentMarketSnapshotInput extends BuildMarketReplaySnapshotInput {
+  staleAfterNs: string
+  recentTradeLimit?: number
+  closedCandleLimit?: number
+  qualityIssueLimit?: number
+}
 
 interface EventEntry {
   event: MarketTradeEvent
@@ -235,4 +248,159 @@ export function buildMarketReplaySnapshot(input: BuildMarketReplaySnapshotInput)
     source_batch_ids: sourceBatchIds,
     quality_flags: [...new Set(qualityFlags)].sort(),
   })
+}
+
+function boundedInteger(value: number | undefined, fallback: number, name: string, maximum: number, minimum = 0): number {
+  const selected = value ?? fallback
+  if (!Number.isInteger(selected) || selected < minimum || selected > maximum) {
+    throw new TypeError(`${name} must be an integer from ${minimum} through ${maximum}.`)
+  }
+  return selected
+}
+
+export function buildAgentMarketSnapshot(input: BuildAgentMarketSnapshotInput): AgentMarketSnapshot {
+  const recentTradeLimit = boundedInteger(
+    input.recentTradeLimit, 200, 'recentTradeLimit', AGENT_MARKET_SNAPSHOT_MAX_TRADES, 1,
+  )
+  const closedCandleLimit = boundedInteger(
+    input.closedCandleLimit, 100, 'closedCandleLimit', AGENT_MARKET_SNAPSHOT_MAX_CLOSED_CANDLES,
+  )
+  const qualityIssueLimit = boundedInteger(
+    input.qualityIssueLimit, AGENT_MARKET_SNAPSHOT_MAX_ISSUES, 'qualityIssueLimit', AGENT_MARKET_SNAPSHOT_MAX_ISSUES,
+  )
+  const staleAfterNsValue = nanosecondTimestampSchema.parse(input.staleAfterNs)
+  const staleAfterNs = BigInt(staleAfterNsValue)
+  if (staleAfterNs <= 0n) throw new TypeError('staleAfterNs must be positive.')
+
+  const series = buildMarketReplaySnapshot(input)
+  const watermarkNs = BigInt(series.watermark_ns)
+  const uniqueBatches = new Map<string, MarketTradeBatch>()
+  const visibleEvents = new Map<string, MarketTradeEvent>()
+  for (const batchValue of input.batches) {
+    const batch = marketTradeBatchSchema.parse(batchValue)
+    if (!uniqueBatches.has(batch.batch_id)) uniqueBatches.set(batch.batch_id, batch)
+    for (const event of batch.events) {
+      if (BigInt(event.ts_event_ns) > watermarkNs) continue
+      const prior = visibleEvents.get(event.event_id)
+      if (!prior || canonicalJson(event).localeCompare(canonicalJson(prior)) < 0) {
+        visibleEvents.set(event.event_id, event)
+      }
+    }
+  }
+  const orderedEvents = [...visibleEvents.values()].sort((left, right) => {
+    const time = BigInt(left.ts_event_ns) - BigInt(right.ts_event_ns)
+    return time < 0n ? -1 : time > 0n ? 1 : left.event_id.localeCompare(right.event_id)
+  })
+  const recentEvents = orderedEvents.slice(-recentTradeLimit)
+  const closed = closedCandleLimit === 0 ? [] : series.closed.slice(-closedCandleLimit)
+  const contributingBatches = series.source_batch_ids
+    .map((batchId) => uniqueBatches.get(batchId))
+    .filter((batch): batch is MarketTradeBatch => Boolean(batch))
+    .sort((left, right) => left.batch_id.localeCompare(right.batch_id))
+
+  const counts = contributingBatches.reduce((total, batch) => ({
+    received: total.received + batch.quality.counts.received,
+    accepted: total.accepted + batch.quality.counts.accepted,
+    rejected: total.rejected + batch.quality.counts.rejected,
+    duplicates: total.duplicates + batch.quality.counts.duplicates,
+    out_of_order: total.out_of_order + batch.quality.counts.out_of_order,
+  }), { received: 0, accepted: 0, rejected: 0, duplicates: 0, out_of_order: 0 })
+  const flags = [...new Set([
+    ...series.quality_flags,
+    ...contributingBatches.flatMap((batch) => batch.quality.flags),
+  ])].sort()
+  if (flags.length > 256) throw new Error('Agent market snapshot contains more than 256 quality flags.')
+  const allIssues = [...new Map(
+    contributingBatches
+      .flatMap((batch) => batch.quality.issues)
+      .map((issue) => [canonicalJson(issue), issue] as const),
+  ).entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, issue]) => issue)
+  const issues = qualityIssueLimit === 0 ? [] : allIssues.slice(0, qualityIssueLimit)
+  const hasDefect = flags.length > 0
+    || allIssues.length > 0
+    || counts.rejected > 0
+    || counts.duplicates > 0
+    || counts.out_of_order > 0
+  const qualityState = orderedEvents.length === 0 ? 'unavailable' : hasDefect ? 'degraded' : 'valid'
+  const instrument = orderedEvents[0]?.instrument
+    ?? contributingBatches[0]?.events[0]?.instrument
+    ?? [...uniqueBatches.values()][0]?.events[0]?.instrument
+  if (!instrument) throw new Error('Agent market snapshot has no instrument context.')
+
+  const freshness = series.as_of_event_ns
+    ? (() => {
+        const age = watermarkNs - BigInt(series.as_of_event_ns)
+        return {
+          state: age <= staleAfterNs ? 'fresh' as const : 'stale' as const,
+          age_ns: age.toString(),
+          stale_after_ns: staleAfterNs.toString(),
+        }
+      })()
+    : { state: 'no-data' as const, stale_after_ns: staleAfterNs.toString() }
+
+  const content = {
+    snapshot_schema_version: AGENT_MARKET_SNAPSHOT_SCHEMA_VERSION,
+    snapshot_id: series.snapshot_id,
+    trace_id: series.trace_id,
+    mode: 'replay' as const,
+    authority: {
+      purpose: 'analysis' as const,
+      execution_allowed: false as const,
+      order_submission_allowed: false as const,
+    },
+    instrument,
+    watermark_ns: series.watermark_ns,
+    ...(series.as_of_event_ns && series.current_price && series.current_event_id ? {
+      as_of_event_ns: series.as_of_event_ns,
+      current: { price: series.current_price, event_id: series.current_event_id },
+    } : {}),
+    freshness,
+    candles: {
+      interval_ns: series.interval_ns,
+      alignment: series.alignment,
+      closed,
+      ...(series.developing ? { developing: series.developing } : {}),
+      total_closed_count: series.closed.length,
+      returned_closed_count: closed.length,
+      truncated: closed.length < series.closed.length,
+    },
+    trades: {
+      events: recentEvents,
+      visible_count: orderedEvents.length,
+      returned_count: recentEvents.length,
+      truncated: recentEvents.length < orderedEvents.length,
+    },
+    quality: {
+      state: qualityState,
+      flags,
+      counts,
+      issues,
+      total_issue_count: allIssues.length,
+      returned_issue_count: issues.length,
+      issues_truncated: issues.length < allIssues.length,
+    },
+    provenance: {
+      batches: contributingBatches.map((batch) => ({
+        batch_id: batch.batch_id,
+        source_sha256: batch.source.source_sha256,
+        canonical_events_sha256: batch.canonical_events_sha256,
+      })),
+      replay_engine: { name: 'trade-god-market-state' as const, version: '0.1.0' },
+      deterministic: true as const,
+    },
+  }
+  return assertAgentMarketSnapshotIntegrity({
+    ...content,
+    snapshot_content_sha256: createHash('sha256').update(canonicalJson(content), 'utf8').digest('hex'),
+  })
+}
+
+export function assertAgentMarketSnapshotIntegrity(value: unknown): AgentMarketSnapshot {
+  const snapshot = agentMarketSnapshotSchema.parse(value)
+  const { snapshot_content_sha256: digest, ...content } = snapshot
+  const expected = createHash('sha256').update(canonicalJson(content), 'utf8').digest('hex')
+  if (digest !== expected) throw new Error('Agent market snapshot checksum mismatch.')
+  return snapshot
 }

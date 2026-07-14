@@ -13,6 +13,7 @@ import {
   MARKET_DATA_RPC_PROTOCOL_VERSION,
   MARKET_CANDLE_SCHEMA_VERSION,
   MARKET_CANDLE_SERIES_SCHEMA_VERSION,
+  AGENT_MARKET_SNAPSHOT_SCHEMA_VERSION,
   MARKET_TRADE_BATCH_SCHEMA_VERSION,
   MARKET_TRADE_EVENT_SCHEMA_VERSION,
 } from './version.ts'
@@ -513,6 +514,193 @@ export const marketCandleSeriesSchema = z.object({
   }
 })
 
+export const AGENT_MARKET_SNAPSHOT_MAX_TRADES = 500
+export const AGENT_MARKET_SNAPSHOT_MAX_CLOSED_CANDLES = 200
+export const AGENT_MARKET_SNAPSHOT_MAX_ISSUES = 100
+
+export const agentMarketSnapshotSchema = z.object({
+  snapshot_schema_version: z.literal(AGENT_MARKET_SNAPSHOT_SCHEMA_VERSION),
+  snapshot_id: identifierSchema,
+  trace_id: identifierSchema,
+  mode: z.literal('replay'),
+  authority: z.object({
+    purpose: z.literal('analysis'),
+    execution_allowed: z.literal(false),
+    order_submission_allowed: z.literal(false),
+  }),
+  instrument: instrumentSchema.catchall(jsonValueSchema),
+  watermark_ns: nanosecondTimestampSchema,
+  as_of_event_ns: nanosecondTimestampSchema.optional(),
+  current: z.object({
+    price: fixedPointValueSchema,
+    event_id: identifierSchema,
+  }).optional(),
+  freshness: z.object({
+    state: z.enum(['fresh', 'stale', 'no-data']),
+    age_ns: nanosecondTimestampSchema.optional(),
+    stale_after_ns: positiveNanosecondDurationSchema,
+  }),
+  candles: z.object({
+    interval_ns: positiveNanosecondDurationSchema,
+    alignment: z.literal('unix-epoch'),
+    closed: z.array(marketCandleSchema).max(AGENT_MARKET_SNAPSHOT_MAX_CLOSED_CANDLES),
+    developing: marketCandleSchema.optional(),
+    total_closed_count: z.number().int().nonnegative(),
+    returned_closed_count: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+  }),
+  trades: z.object({
+    events: z.array(marketTradeEventSchema).max(AGENT_MARKET_SNAPSHOT_MAX_TRADES),
+    visible_count: z.number().int().nonnegative(),
+    returned_count: z.number().int().nonnegative(),
+    truncated: z.boolean(),
+  }),
+  quality: z.object({
+    state: z.enum(['valid', 'degraded', 'unavailable']),
+    flags: z.array(identifierSchema).max(256),
+    counts: z.object({
+      received: z.number().int().nonnegative(),
+      accepted: z.number().int().nonnegative(),
+      rejected: z.number().int().nonnegative(),
+      duplicates: z.number().int().nonnegative(),
+      out_of_order: z.number().int().nonnegative(),
+    }),
+    issues: z.array(marketQualityIssueSchema).max(AGENT_MARKET_SNAPSHOT_MAX_ISSUES),
+    total_issue_count: z.number().int().nonnegative(),
+    returned_issue_count: z.number().int().nonnegative(),
+    issues_truncated: z.boolean(),
+  }),
+  provenance: z.object({
+    batches: z.array(z.object({
+      batch_id: identifierSchema,
+      source_sha256: sha256Schema,
+      canonical_events_sha256: sha256Schema,
+    })).max(64),
+    replay_engine: z.object({
+      name: z.literal('trade-god-market-state'),
+      version: semverSchema,
+    }),
+    deterministic: z.literal(true),
+  }),
+  snapshot_content_sha256: sha256Schema,
+}).superRefine((snapshot, context) => {
+  const hasCurrent = Boolean(snapshot.current && snapshot.as_of_event_ns)
+  if (Boolean(snapshot.current) !== Boolean(snapshot.as_of_event_ns)) {
+    context.addIssue({ code: 'custom', path: ['current'], message: 'Current price and event time must appear together' })
+  }
+  if (snapshot.as_of_event_ns && BigInt(snapshot.as_of_event_ns) > BigInt(snapshot.watermark_ns)) {
+    context.addIssue({ code: 'custom', path: ['as_of_event_ns'], message: 'Agent context cannot exceed its watermark' })
+  }
+  if (hasCurrent) {
+    const age = BigInt(snapshot.watermark_ns) - BigInt(snapshot.as_of_event_ns!)
+    if (!snapshot.freshness.age_ns || BigInt(snapshot.freshness.age_ns) !== age) {
+      context.addIssue({ code: 'custom', path: ['freshness', 'age_ns'], message: 'Freshness age must equal watermark minus current event time' })
+    }
+    const expectedState = age <= BigInt(snapshot.freshness.stale_after_ns) ? 'fresh' : 'stale'
+    if (snapshot.freshness.state !== expectedState) {
+      context.addIssue({ code: 'custom', path: ['freshness', 'state'], message: 'Freshness state does not match its threshold' })
+    }
+  } else if (snapshot.freshness.state !== 'no-data' || snapshot.freshness.age_ns !== undefined) {
+    context.addIssue({ code: 'custom', path: ['freshness'], message: 'No-data context cannot claim freshness age' })
+  }
+
+  if (
+    snapshot.trades.returned_count !== snapshot.trades.events.length
+    || snapshot.trades.returned_count > snapshot.trades.visible_count
+    || snapshot.trades.truncated !== (snapshot.trades.returned_count < snapshot.trades.visible_count)
+  ) {
+    context.addIssue({ code: 'custom', path: ['trades'], message: 'Trade context counts and truncation must agree' })
+  }
+  let priorTrade: MarketTradeEvent | undefined
+  for (const [index, event] of snapshot.trades.events.entries()) {
+    if (event.instrument.id !== snapshot.instrument.id || BigInt(event.ts_event_ns) > BigInt(snapshot.watermark_ns)) {
+      context.addIssue({ code: 'custom', path: ['trades', 'events', index], message: 'Trade context instrument/time is outside snapshot scope' })
+    }
+    if (priorTrade) {
+      const priorTime = BigInt(priorTrade.ts_event_ns)
+      const eventTime = BigInt(event.ts_event_ns)
+      if (eventTime < priorTime || (eventTime === priorTime && event.event_id.localeCompare(priorTrade.event_id) < 0)) {
+        context.addIssue({ code: 'custom', path: ['trades', 'events', index], message: 'Trade context must be deterministically ordered' })
+      }
+    }
+    priorTrade = event
+  }
+  const latestTrade = snapshot.trades.events.at(-1)
+  if (hasCurrent && !latestTrade) {
+    context.addIssue({ code: 'custom', path: ['trades', 'events'], message: 'Current context requires at least one returned trade' })
+  }
+  if (latestTrade && snapshot.current?.event_id !== latestTrade.event_id) {
+    context.addIssue({ code: 'custom', path: ['current', 'event_id'], message: 'Current event must equal the latest returned trade' })
+  }
+  if (latestTrade && snapshot.current && compareFixedPoint(snapshot.current.price, latestTrade.price) !== 0) {
+    context.addIssue({ code: 'custom', path: ['current', 'price'], message: 'Current price must equal the latest returned trade' })
+  }
+
+  if (
+    snapshot.candles.returned_closed_count !== snapshot.candles.closed.length
+    || snapshot.candles.returned_closed_count > snapshot.candles.total_closed_count
+    || snapshot.candles.truncated !== (snapshot.candles.returned_closed_count < snapshot.candles.total_closed_count)
+  ) {
+    context.addIssue({ code: 'custom', path: ['candles'], message: 'Candle context counts and truncation must agree' })
+  }
+  const contextCandles = [...snapshot.candles.closed, ...(snapshot.candles.developing ? [snapshot.candles.developing] : [])]
+  let priorCandleEnd: bigint | undefined
+  for (const [index, candle] of contextCandles.entries()) {
+    if (
+      candle.trace_id !== snapshot.trace_id
+      || candle.instrument_id !== snapshot.instrument.id
+      || candle.interval_ns !== snapshot.candles.interval_ns
+      || candle.alignment !== snapshot.candles.alignment
+    ) {
+      context.addIssue({ code: 'custom', path: ['candles', 'closed', index], message: 'Agent candle identity must match snapshot scope' })
+    }
+    if (priorCandleEnd !== undefined && BigInt(candle.start_ns) < priorCandleEnd) {
+      context.addIssue({ code: 'custom', path: ['candles', 'closed', index], message: 'Agent candles must be ordered and non-overlapping' })
+    }
+    priorCandleEnd = BigInt(candle.end_ns)
+  }
+  const latestCandle = contextCandles.at(-1)
+  if (latestCandle && snapshot.current && compareFixedPoint(snapshot.current.price, latestCandle.close) !== 0) {
+    context.addIssue({ code: 'custom', path: ['current', 'price'], message: 'Current price must equal the latest returned candle close' })
+  }
+
+  const qualityHasDefect = snapshot.quality.flags.length > 0
+    || snapshot.quality.issues.length > 0
+    || snapshot.quality.counts.rejected > 0
+    || snapshot.quality.counts.duplicates > 0
+    || snapshot.quality.counts.out_of_order > 0
+  if (snapshot.quality.state === 'valid' && qualityHasDefect) {
+    context.addIssue({ code: 'custom', path: ['quality', 'state'], message: 'Valid agent context cannot contain quality defects' })
+  }
+  if (snapshot.quality.state === 'degraded' && !qualityHasDefect) {
+    context.addIssue({ code: 'custom', path: ['quality', 'state'], message: 'Degraded agent context must identify a defect' })
+  }
+  if (snapshot.quality.state === 'unavailable' && hasCurrent) {
+    context.addIssue({ code: 'custom', path: ['quality', 'state'], message: 'Unavailable agent context cannot contain current market data' })
+  }
+  if (!hasCurrent && snapshot.quality.state !== 'unavailable') {
+    context.addIssue({ code: 'custom', path: ['quality', 'state'], message: 'Context without current market data must be unavailable' })
+  }
+  if (
+    snapshot.quality.returned_issue_count !== snapshot.quality.issues.length
+    || snapshot.quality.returned_issue_count > snapshot.quality.total_issue_count
+    || snapshot.quality.issues_truncated !== (snapshot.quality.returned_issue_count < snapshot.quality.total_issue_count)
+  ) {
+    context.addIssue({ code: 'custom', path: ['quality', 'issues'], message: 'Quality issue counts and truncation must agree' })
+  }
+  if (snapshot.quality.counts.received !== snapshot.quality.counts.accepted + snapshot.quality.counts.rejected) {
+    context.addIssue({ code: 'custom', path: ['quality', 'counts'], message: 'Quality received count must equal accepted plus rejected' })
+  }
+  const provenanceBatchIds = snapshot.provenance.batches.map((batch) => batch.batch_id)
+  if (new Set(provenanceBatchIds).size !== provenanceBatchIds.length) {
+    context.addIssue({ code: 'custom', path: ['provenance', 'batches'], message: 'Agent snapshot provenance batch IDs must be unique' })
+  }
+  const provenanceBatchSet = new Set(provenanceBatchIds)
+  if (contextCandles.some((candle) => candle.source_batch_ids.some((batchId) => !provenanceBatchSet.has(batchId)))) {
+    context.addIssue({ code: 'custom', path: ['provenance', 'batches'], message: 'Agent candle sources must map to snapshot batch provenance' })
+  }
+})
+
 export type FixedPointValue = z.infer<typeof fixedPointValueSchema>
 export type PositiveFixedPointValue = z.infer<typeof positiveFixedPointValueSchema>
 export type MarketTradeEvent = z.infer<typeof marketTradeEventSchema>
@@ -526,3 +714,4 @@ export type MarketLoadFixtureRequest = z.infer<typeof marketLoadFixtureRequestSc
 export type NonNegativeFixedPointValue = z.infer<typeof nonNegativeFixedPointValueSchema>
 export type MarketCandle = z.infer<typeof marketCandleSchema>
 export type MarketCandleSeries = z.infer<typeof marketCandleSeriesSchema>
+export type AgentMarketSnapshot = z.infer<typeof agentMarketSnapshotSchema>

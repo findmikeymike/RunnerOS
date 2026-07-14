@@ -251,6 +251,18 @@ A lower rung does not prove a higher rung.
 - Runtime bound: synchronous Electron-main replay is capped at 64 batches and 10,000 total events. Larger/paced streams require the later replay/cancel worker or transport.
 - Not proven: session-aligned/daily candles, persistent catalog/history, live streaming, paced replay/cancel, agent snapshots, Order Flow consumption, or packaged Python runtime.
 
+## Phase 1 Slice 8 — Bounded Agent Market Snapshot
+
+- Method: red-green TDD plus `$rival`/`$fix`; missing contract/builder/manager methods failed first, then batch-checksum mapping, no-data context, content integrity, current trade/candle agreement, provenance linkage, and issue-count truncation were tightened.
+- Focused closure: 46 passed, 0 failed, 126 expectations across five files.
+- Standalone contract and market-state typechecks: passed. Electron main build: passed.
+- Proven artifact: `agent-market-snapshot@1` contains bounded recent trades, recent closed candles, developing candle, current price/event, freshness threshold/age, aggregate quality/counts/issues, mapped source/canonical checksums, truncation counts, and deterministic content hash.
+- Authority: purpose is statically `analysis`; execution and order submission are statically false in the contract and emitted artifact.
+- Context states: fresh, stale, and pre-first-event no-data behavior are tested. Larger trade/candle/issue requests fail before payload construction.
+- Integrity: `assertAgentMarketSnapshotIntegrity` reparses and recomputes the content checksum, returning the stripped validated artifact for safe storage/passage.
+- Runtime: the real supervised Python fixture can produce the agent snapshot through `MarketDataSidecarManager.loadFixtureAgentSnapshot`.
+- Not proven: delivery to an actual head/specialist agent, context-store persistence/reference lookup, Order Flow consumption, live data, paced replay/cancel, packaged Python, or visual UI.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

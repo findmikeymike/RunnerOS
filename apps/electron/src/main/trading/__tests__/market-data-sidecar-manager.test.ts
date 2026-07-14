@@ -46,6 +46,17 @@ describe('MarketDataSidecarManager', () => {
         intervalNs: '20000000000',
         watermarkNs: '1783780230000000000',
       })
+      const agentContext = await sidecar.loadFixtureAgentSnapshot({
+        fixtureId: 'es-demo-2026-07-11',
+        traceId: 'trace-electron-agent-context',
+        batchId: 'batch-electron-agent-context',
+        snapshotId: 'snapshot-electron-agent-context',
+        intervalNs: '20000000000',
+        watermarkNs: '1783780230000000000',
+        staleAfterNs: '5000000000',
+        recentTradeLimit: 2,
+        closedCandleLimit: 1,
+      })
 
       expect(health).toMatchObject({ state: 'ready', protocol_version: 'market-data-rpc@1' })
       expect(batch.events).toHaveLength(4)
@@ -54,6 +65,12 @@ describe('MarketDataSidecarManager', () => {
         current_price: { value: '5592.00' },
         closed: [{ trade_count: 2 }],
         developing: { trade_count: 2 },
+      })
+      expect(agentContext).toMatchObject({
+        authority: { purpose: 'analysis', execution_allowed: false, order_submission_allowed: false },
+        current: { price: { value: '5592.00' } },
+        trades: { returned_count: 2, visible_count: 4, truncated: true },
+        freshness: { state: 'fresh' },
       })
       expect(sidecar.status()).toMatchObject({ state: 'ready', pid: expect.any(Number) })
     } finally {

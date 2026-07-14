@@ -11,8 +11,8 @@ source_of_truth: true
 
 - Date: 2026-07-13
 - Stage: Phase 1 market-data spine started; Phase 0 still awaits real visual Electron smoke
-- Current goal: expose bounded agent-facing market snapshots from the validated replay/candle state
-- Overall state: canonical emission, replay quality, fixture-only Python RPC, typed client validation, development Electron-main supervision, and deterministic current-price/candle history are test-verified; paced replay/cancellation, Order Flow canonical routing, agent snapshots, packaged Python assets, the actual visual Electron path, and a built installer remain unverified
+- Current goal: route the canonical market artifact into Order Flow without bypassing the new context boundary
+- Overall state: canonical emission, replay quality, fixture-only Python RPC, typed client validation, development Electron-main supervision, deterministic current-price/candle history, and bounded analysis-only agent context are test-verified; paced replay/cancellation, actual agent/Order Flow consumption, packaged Python assets, the visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -27,6 +27,8 @@ source_of_truth: true
 `market.load_fixture -> fixed project fixture -> validated canonical batch or typed quality error`
 
 `validated canonical batch -> no-lookahead watermark -> current price + closed candle history + one developing candle`
+
+`market state -> bounded/checksummed analysis-only agent snapshot -> future specialist consumers`
 
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
@@ -60,11 +62,14 @@ The workbench can request engine health, run the known fixture, and display tota
 - Added versioned candle/series contracts with exact fixed-point OHLC, side volume, delta, provenance, state, watermark, and explicit Unix-epoch alignment.
 - Added a provider-independent replay engine that verifies canonical checksums, rejects live/invalid data, sorts event time deterministically, deduplicates retries across traces, enforces no lookahead, and never invents empty candles.
 - Wired `loadFixtureSnapshot` through the supervised manager so the real pipeline returns current price, closed history, and a developing candle. Synchronous desktop replay is capped at 64 batches and 10,000 total events.
+- Added `agent-market-snapshot@1`: current price, bounded recent trades/candles, freshness, aggregated quality, exact batch/checksum provenance, explicit truncation, and a content checksum.
+- Hard-coded snapshot authority to analysis only with execution/order submission false, added stored-context integrity verification, and covered fresh, stale, degraded, truncated, and no-data states.
+- Wired `loadFixtureAgentSnapshot` through the real supervised market-data manager. The artifact exists for consumers; no specialist or head-agent router consumes it yet.
 
 ## Next Actions
 
-1. Define and build the bounded agent-facing market snapshot/context contract.
-2. Feed canonical batches—not Nautilus/provider objects—into the Order Flow input adapter.
+1. Feed canonical batches/snapshots—not Nautilus/provider objects—into the Order Flow input adapter.
+2. Add a versioned context-delivery seam for specialist agents with receipt/reference identity rather than prompt copying.
 3. Add paced replay/cancel lifecycle semantics before increasing the 10,000-event control-path bound.
 4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
 5. Build and smoke the packaged installer separately.
@@ -99,12 +104,14 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - A real Python child process was supervised through health, exact canonical load, typed failure recovery, and clean shutdown. Timeout, crash, oversized protocol frames, and coalesced valid frames are distinguishable/tested at the generic process boundary.
 - Replay/candle slice: 41 passed, 0 failed, 95 expectations across five files; contract and market-state standalone typechecks passed; Electron main build passed.
 - Real supervised fixture-to-candle proof: current price `5592.00`; one closed 20-second candle and one developing candle at the `15:30:30` watermark. This is deterministic control-path proof, not live streaming.
+- Agent snapshot closure: 46 passed, 0 failed, 126 expectations across five files; contract and market-state typechecks and Electron main build passed.
+- Supervised context proof returns two of four recent trades, one closed candle, the developing candle, fresh state, mapped source/canonical checksums, and analysis-only authority. No real agent has consumed it yet.
 - Windows and Linux Nautilus runtime/package smoke remain unverified.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
 - Standalone package TypeScript checking remains unverified because two prior invocations hung in the tool layer and were stopped.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical Python emission, replay quality, fixture RPC, typed client, development Electron supervision, and bounded deterministic candles are implemented; paced replay/cancel, packaged Python assets, Order Flow canonical input, and agent snapshots remain unimplemented.
+- Canonical Python emission, replay quality, fixture RPC, typed client, development Electron supervision, bounded deterministic candles, and bounded agent snapshots are implemented; paced replay/cancel, packaged Python assets, Order Flow canonical input, and agent-delivery routing remain unimplemented.
 
 ## Explicitly Not In Scope Yet
 

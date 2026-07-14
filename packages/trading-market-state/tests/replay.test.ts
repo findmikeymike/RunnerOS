@@ -2,11 +2,16 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   canonicalJson,
+  agentMarketSnapshotSchema,
   marketCandleSeriesSchema,
   type MarketTradeBatch,
 } from '@trade-god/contracts'
 
-import { buildMarketReplaySnapshot } from '../src/index.ts'
+import {
+  assertAgentMarketSnapshotIntegrity,
+  buildAgentMarketSnapshot,
+  buildMarketReplaySnapshot,
+} from '../src/index.ts'
 
 
 async function fixtureBatch(): Promise<MarketTradeBatch> {
@@ -164,5 +169,74 @@ describe('deterministic market replay', () => {
       watermarkNs: '1783780230000000000',
       batches: [batch],
     })).toThrow('checksum')
+  })
+})
+
+describe('bounded agent market context', () => {
+  test('packages current price, recent trades, candles, quality, freshness, and authority', async () => {
+    const snapshot = buildAgentMarketSnapshot({
+      snapshotId: 'agent-market-fixture-001', traceId: 'trace-agent-market-fixture',
+      intervalNs: '20000000000', watermarkNs: '1783780230000000000', staleAfterNs: '5000000000',
+      recentTradeLimit: 2, closedCandleLimit: 1, batches: [await fixtureBatch()],
+    })
+
+    expect(agentMarketSnapshotSchema.parse(snapshot)).toEqual(snapshot)
+    expect(snapshot.authority).toEqual({ purpose: 'analysis', execution_allowed: false, order_submission_allowed: false })
+    expect(snapshot.current).toMatchObject({ price: { value: '5592.00' }, event_id: 'trade:es-demo-2026-07-11:4' })
+    expect(snapshot.freshness).toEqual({ state: 'fresh', age_ns: '0', stale_after_ns: '5000000000' })
+    expect(snapshot.trades).toMatchObject({ visible_count: 4, returned_count: 2, truncated: true })
+    expect(snapshot.trades.events.map((event) => event.event_id)).toEqual([
+      'trade:es-demo-2026-07-11:3', 'trade:es-demo-2026-07-11:4',
+    ])
+    expect(snapshot.candles).toMatchObject({ total_closed_count: 1, returned_closed_count: 1, truncated: false })
+    expect(snapshot.candles.developing?.trade_count).toBe(2)
+    const { snapshot_content_sha256: _digest, ...content } = snapshot
+    expect(new Bun.CryptoHasher('sha256').update(canonicalJson(content)).digest('hex')).toBe(snapshot.snapshot_content_sha256)
+    expect(assertAgentMarketSnapshotIntegrity(snapshot)).toEqual(snapshot)
+    expect(() => assertAgentMarketSnapshotIntegrity({
+      ...snapshot, snapshot_content_sha256: 'b'.repeat(64),
+    })).toThrow('checksum')
+  })
+
+  test('marks old replay state stale and truncates older closed candles deterministically', async () => {
+    const snapshot = buildAgentMarketSnapshot({
+      snapshotId: 'agent-market-stale', traceId: 'trace-agent-market-stale',
+      intervalNs: '10000000000', watermarkNs: '1783780240000000000', staleAfterNs: '5000000000',
+      recentTradeLimit: 4, closedCandleLimit: 2, batches: [await fixtureBatch()],
+    })
+
+    expect(snapshot.freshness.state).toBe('stale')
+    expect(snapshot.freshness.age_ns).toBe('10000000000')
+    expect(snapshot.candles.total_closed_count).toBe(4)
+    expect(snapshot.candles.returned_closed_count).toBe(2)
+    expect(snapshot.candles.truncated).toBe(true)
+    expect(snapshot.candles.closed.map((candle) => candle.last_event_id)).toEqual([
+      'trade:es-demo-2026-07-11:3', 'trade:es-demo-2026-07-11:4',
+    ])
+  })
+
+  test('rejects unbounded context requests before building agent payloads', async () => {
+    const input = {
+      snapshotId: 'agent-market-bounds', traceId: 'trace-agent-market-bounds',
+      intervalNs: '20000000000', watermarkNs: '1783780230000000000', staleAfterNs: '5000000000',
+      batches: [await fixtureBatch()],
+    }
+    expect(() => buildAgentMarketSnapshot({ ...input, recentTradeLimit: 501 })).toThrow('recentTradeLimit')
+    expect(() => buildAgentMarketSnapshot({ ...input, closedCandleLimit: 201 })).toThrow('closedCandleLimit')
+  })
+
+  test('returns explicit no-data context before the first visible event', async () => {
+    const snapshot = buildAgentMarketSnapshot({
+      snapshotId: 'agent-market-no-data', traceId: 'trace-agent-market-no-data',
+      intervalNs: '20000000000', watermarkNs: '1783780190000000000', staleAfterNs: '5000000000',
+      batches: [await fixtureBatch()],
+    })
+
+    expect(snapshot.instrument.id).toBe('CME:ESU6')
+    expect(snapshot.current).toBeUndefined()
+    expect(snapshot.freshness).toEqual({ state: 'no-data', stale_after_ns: '5000000000' })
+    expect(snapshot.quality.state).toBe('unavailable')
+    expect(snapshot.trades).toMatchObject({ visible_count: 0, returned_count: 0, truncated: false })
+    expect(snapshot.provenance.batches).toEqual([])
   })
 })

@@ -4,8 +4,8 @@ import {
   type RpcRequest,
   type RpcTransport,
 } from '@trade-god/client'
-import type { MarketCandleSeries, MarketDataHealth, MarketTradeBatch } from '@trade-god/contracts'
-import { buildMarketReplaySnapshot } from '@trade-god/market-state'
+import type { AgentMarketSnapshot, MarketCandleSeries, MarketDataHealth, MarketTradeBatch } from '@trade-god/contracts'
+import { buildAgentMarketSnapshot, buildMarketReplaySnapshot } from '@trade-god/market-state'
 
 import {
   JsonlSidecarProcess,
@@ -19,6 +19,13 @@ export interface LoadFixtureSnapshotInput extends LoadMarketFixtureInput {
   snapshotId: string
   intervalNs: string
   watermarkNs: string
+}
+
+export interface LoadFixtureAgentSnapshotInput extends LoadFixtureSnapshotInput {
+  staleAfterNs: string
+  recentTradeLimit?: number
+  closedCandleLimit?: number
+  qualityIssueLimit?: number
 }
 
 export class MarketDataSidecarManager implements RpcTransport {
@@ -49,6 +56,21 @@ export class MarketDataSidecarManager implements RpcTransport {
       traceId: input.traceId,
       intervalNs: input.intervalNs,
       watermarkNs: input.watermarkNs,
+      batches: [batch],
+    })
+  }
+
+  async loadFixtureAgentSnapshot(input: LoadFixtureAgentSnapshotInput): Promise<AgentMarketSnapshot> {
+    const batch = await this.loadFixture(input)
+    return buildAgentMarketSnapshot({
+      snapshotId: input.snapshotId,
+      traceId: input.traceId,
+      intervalNs: input.intervalNs,
+      watermarkNs: input.watermarkNs,
+      staleAfterNs: input.staleAfterNs,
+      ...(input.recentTradeLimit === undefined ? {} : { recentTradeLimit: input.recentTradeLimit }),
+      ...(input.closedCandleLimit === undefined ? {} : { closedCandleLimit: input.closedCandleLimit }),
+      ...(input.qualityIssueLimit === undefined ? {} : { qualityIssueLimit: input.qualityIssueLimit }),
       batches: [batch],
     })
   }

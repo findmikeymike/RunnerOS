@@ -7,6 +7,7 @@ import {
   marketDataErrorSchema,
   marketDataHealthSchema,
   marketCandleSeriesSchema,
+  agentMarketSnapshotSchema,
   marketLoadFixtureRequestSchema,
   marketQualityReportSchema,
   marketTradeBatchSchema,
@@ -195,6 +196,51 @@ describe('canonical market-data contracts', () => {
     expect(marketCandleSeriesSchema.safeParse({ ...series, source_batch_ids: [] }).success).toBe(false)
     expect(marketCandleSeriesSchema.safeParse({
       ...series, current_price: undefined, current_event_id: undefined, as_of_event_ns: undefined,
+    }).success).toBe(false)
+  })
+
+  test('requires bounded analysis-only agent market context', async () => {
+    const batch = await example('market-trade-batch.v1.json')
+    const price = batch.events.at(-1).price
+    const snapshot = {
+      snapshot_schema_version: 'agent-market-snapshot@1', snapshot_id: 'agent-market-001', trace_id: 'trace-agent-market',
+      mode: 'replay', authority: { purpose: 'analysis', execution_allowed: false, order_submission_allowed: false },
+      instrument: batch.events[0].instrument, watermark_ns: '1783780230000000000', as_of_event_ns: '1783780230000000000',
+      current: { price, event_id: batch.events.at(-1).event_id },
+      freshness: { state: 'fresh', age_ns: '0', stale_after_ns: '5000000000' },
+      candles: {
+        interval_ns: '20000000000', alignment: 'unix-epoch', closed: [],
+        total_closed_count: 0, returned_closed_count: 0, truncated: false,
+      },
+      trades: { events: batch.events.slice(-2), visible_count: 4, returned_count: 2, truncated: true },
+      quality: {
+        state: 'valid', flags: [], counts: batch.quality.counts, issues: [],
+        total_issue_count: 0, returned_issue_count: 0, issues_truncated: false,
+      },
+      provenance: {
+        batches: [{
+          batch_id: batch.batch_id, source_sha256: batch.source.source_sha256,
+          canonical_events_sha256: batch.canonical_events_sha256,
+        }],
+        replay_engine: { name: 'trade-god-market-state', version: '0.1.0' }, deterministic: true,
+      },
+      snapshot_content_sha256: 'a'.repeat(64),
+    }
+
+    expect(agentMarketSnapshotSchema.parse(snapshot).authority.execution_allowed).toBe(false)
+    expect(agentMarketSnapshotSchema.safeParse({
+      ...snapshot, authority: { ...snapshot.authority, execution_allowed: true },
+    }).success).toBe(false)
+    expect(agentMarketSnapshotSchema.safeParse({
+      ...snapshot, trades: { ...snapshot.trades, returned_count: 4 },
+    }).success).toBe(false)
+    expect(agentMarketSnapshotSchema.safeParse({
+      ...snapshot, current: { ...snapshot.current, price: { value: '1.00', raw: '100', precision: 2 } },
+    }).success).toBe(false)
+    expect(agentMarketSnapshotSchema.safeParse({
+      ...snapshot, provenance: { ...snapshot.provenance, batches: [
+        ...snapshot.provenance.batches, snapshot.provenance.batches[0],
+      ] },
     }).success).toBe(false)
   })
 })
