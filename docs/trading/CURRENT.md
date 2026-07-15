@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-13
+last_verified: 2026-07-14
 source_of_truth: true
 ---
 
@@ -9,14 +9,14 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-13
-- Stage: Phase 1 now has pull-based paced replay, backpressure, deadlines, and cancellation; Phase 0 still awaits real visual Electron smoke
-- Current goal: benchmark JSONL replay and record the measured threshold for a dedicated streaming transport without raising the 10,000-event bound yet
-- Overall state: canonical emission, deterministic candles, hardened Order Flow, specialist context references, and paced/cancelable replay are test-verified; no real LLM specialist consumes the delivery yet, and throughput thresholds, reconnect/gap behavior, packaged Python assets, the visual Electron path, and a built installer remain unverified
+- Date: 2026-07-14
+- Stage: Phase 1 has a measured and enforced bounded-JSONL replay policy; Phase 0 still awaits real visual Electron smoke
+- Current goal: connect the proven context-reference seam to the first real specialist runtime with typed interpretation and evaluation
+- Overall state: canonical emission, deterministic candles, hardened Order Flow, specialist context references, paced/cancelable replay, and measured transport limits are test-verified; no real LLM specialist consumes the delivery yet, and reconnect/gap behavior, packaged Python assets, the visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
-- Implementation head entering this slice: `e79bbd27`
+- Implementation head entering this slice: `f5e71ba6`
 
 ## Working Capability
 
@@ -35,6 +35,8 @@ source_of_truth: true
 `agent-market-snapshot@1 -> atomic local context store -> checksum-bound reference -> addressed specialist delivery receipt -> authorized resolution`
 
 `market.replay_batch -> bounded replay session -> consumer-paced market.replay_next pulls -> completed canonical batch or typed cancel/timeout`
+
+`bounded JSONL policy -> declared <=1,000 requested events/sec + measured <=750 KB response -> otherwise STREAMING_TRANSPORT_REQUIRED`
 
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
@@ -80,11 +82,14 @@ The workbench can request engine health, run the known fixture, and display tota
 - Added `market-replay-session@1` and `market-replay-step@1` with caller-owned replay/cancellation identity, bounded pace, deadline, cursor, event, completion, and cancellation contracts.
 - Added a bounded pull-based Python replay registry and concurrent stdio dispatch so cancellation can overtake a waiting event without killing the sidecar. One pull per replay is serialized; active sessions are capped at 64.
 - Added typed client/Electron start, next, cancel, and `replayFixture` flows. Consumer callbacks provide natural backpressure; completion is rejected unless every emitted event, cursor, identity, and checksum matches the canonical batch.
+- Benchmarked the real Python child over JSONL at 100–10,000 generated canonical events. Reproducible two-trial observation mode sustained 966–978 events/sec at the protocol's fastest 1 ms pace; this is paced-path evidence, not an unthrottled transport ceiling. Payload size is the binding measured limit: 750 events completed at 713,568 bytes while 800 reached 761,067 bytes and 10,000 reached 9,608,099 bytes.
+- Enforced a 750,000-byte safe response ceiling beneath Electron's 1,000,000-byte frame limit for replay completion and direct fixture load, retained the canonical 10,000-event schema bound, labeled 1,000 events/sec as the declared protocol target cap, bounded string RPC IDs, advertised the policy in typed capabilities, and return `STREAMING_TRANSPORT_REQUIRED` before unsafe work starts.
+- Fixed the paced-replay transport mismatch found by cold review: `market.replay_next` now gets a per-request timeout derived from the declared replay pace while health/load retain the 5-second default; a real 1.2-second replay interval passes through Electron supervision.
 
 ## Next Actions
 
-1. Benchmark JSONL replay and record the event-rate/payload threshold that requires a dedicated streaming transport; keep the 10,000-event control-path bound unchanged until measured.
-2. Connect the context-resolution seam to the first real specialist-agent runtime and add typed interpretation output/evaluation; do not call the current addressed test consumer a real agent.
+1. Connect the context-resolution seam to the first real specialist-agent runtime and add typed interpretation output/evaluation; do not call the current addressed test consumer a real agent.
+2. Design the dedicated live/unbounded streaming transport only when live-data work begins; keep JSONL as the bounded control/replay path.
 3. Add reconnect/gap/staleness and session-correctness gates before any live-data work.
 4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
 5. Build and smoke the packaged installer separately.
@@ -98,7 +103,7 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 
 ## Verification State
 
-- Paced replay focused closure: 93 passed, 0 failed across 14 TypeScript files; Python market-data suite: 21 passed, 0 failed.
+- JSONL policy and rival-fix proof: Python market-data suite 27 passed; two-trial observation evidence is reproducible; three enforced trials admit 750 events at 713,568 bytes and reject 800 events with typed `STREAMING_TRANSPORT_REQUIRED`; real Electron tests prove oversized direct loads fail typed without process death and replay pacing above the default request timeout succeeds.
 - Electron `build:main`, `build:preload`, and `build:renderer` passed.
 - The generated packaged sidecar bundle launched independently and answered a schema-valid health request.
 - Packaged root selection, bundled-Bun selection, partial frames, and next-request restart behavior passed focused tests.
@@ -130,7 +135,7 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Specialist-context proof persists the full integrity-checked snapshot once, queues only its reference, blocks wrong-consumer and forged/path-unsafe references, and records resolution. No actual LLM specialist execution is claimed.
 - Paced replay proof: complete real fixture replay respects the configured pace and consumer backpressure; active cancel and deadline return typed domain errors while the same Python process remains healthy. Process exit remains a separate supervisor error.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, replay-only canonical Order Flow, reference-only specialist delivery, and paced replay/cancel are implemented; measured streaming thresholds, packaged Python assets, and actual specialist reasoning remain unimplemented.
+- Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, replay-only canonical Order Flow, reference-only specialist delivery, paced replay/cancel, and measured JSONL transport limits are implemented; packaged Python assets and actual specialist reasoning remain unimplemented.
 
 ## Explicitly Not In Scope Yet
 

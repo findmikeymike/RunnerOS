@@ -201,6 +201,11 @@ describe('MarketDataClient', () => {
                 commands: ['market.health', 'market.capabilities', 'market.load_fixture', 'market.shutdown'],
                 fixture_mode: true, fixture_ids: ['es-demo-2026-07-11'], live_data: false,
                 broker_access: false, trade_execution: false,
+                transport_policy: {
+                  mode: 'bounded-jsonl-control', supervisor_max_line_bytes: 1_000_000,
+                  safe_completion_bytes: 750_000, protocol_max_target_events_per_second: 1_000,
+                  dedicated_streaming_required_for_live: true,
+                },
               },
               dependencies: [{ name: 'es-demo-2026-07-11', state: 'ready' }],
             },

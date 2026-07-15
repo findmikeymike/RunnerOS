@@ -22,6 +22,9 @@ import {
 } from './version.ts'
 
 export const MARKET_TRADE_BATCH_MAX_EVENTS = 10_000
+export const MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES = 1_000_000
+export const MARKET_JSONL_REPLAY_SAFE_COMPLETION_BYTES = 750_000
+export const MARKET_JSONL_REPLAY_PROTOCOL_MAX_TARGET_EVENTS_PER_SECOND = 1_000
 
 export const jsonValueSchema: z.ZodType<unknown> = z.lazy(() => z.union([
   z.null(),
@@ -307,6 +310,13 @@ export const marketDataCapabilitiesSchema = z.object({
   live_data: z.literal(false),
   broker_access: z.literal(false),
   trade_execution: z.literal(false),
+  transport_policy: z.object({
+    mode: z.literal('bounded-jsonl-control'),
+    supervisor_max_line_bytes: z.literal(MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES),
+    safe_completion_bytes: z.literal(MARKET_JSONL_REPLAY_SAFE_COMPLETION_BYTES),
+    protocol_max_target_events_per_second: z.literal(MARKET_JSONL_REPLAY_PROTOCOL_MAX_TARGET_EVENTS_PER_SECOND),
+    dedicated_streaming_required_for_live: z.literal(true),
+  }).strict(),
 }).superRefine((capabilities, context) => {
   const commands = new Set(capabilities.commands)
   if (commands.size !== capabilities.commands.length || requiredMarketDataCommands.some((command) => !commands.has(command))) {
@@ -343,6 +353,7 @@ export const marketDataCapabilitiesResponseSchema = z.object({
   live_data: z.literal(false),
   broker_access: z.literal(false),
   trade_execution: z.literal(false),
+  transport_policy: marketDataCapabilitiesSchema.shape.transport_policy,
 }).superRefine((capabilities, context) => {
   const commands = new Set(capabilities.commands)
   if (commands.size !== capabilities.commands.length || requiredMarketDataCommands.some((command) => !commands.has(command))) {
@@ -356,7 +367,7 @@ export const marketDataCapabilitiesResponseSchema = z.object({
 
 export const marketDataErrorSchema = z.object({
   code: identifierSchema,
-  category: z.enum(['validation', 'data-quality', 'internal', 'lifecycle', 'canceled', 'timeout']),
+  category: z.enum(['validation', 'data-quality', 'internal', 'lifecycle', 'canceled', 'timeout', 'transport']),
   message: z.string().min(1).max(500),
   retryable: z.literal(false),
   quality_report: marketQualityReportSchema.optional(),

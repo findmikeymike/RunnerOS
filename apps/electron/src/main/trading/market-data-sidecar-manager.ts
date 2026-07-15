@@ -13,6 +13,7 @@ import { buildAgentMarketSnapshot, buildMarketReplaySnapshot } from '@trade-god/
 
 import {
   JsonlSidecarProcess,
+  JsonlSidecarRequestTimeoutError,
   type JsonlSidecarProcessOptions,
 } from './jsonl-sidecar-process.ts'
 
@@ -36,9 +37,12 @@ export class MarketDataSidecarManager implements RpcTransport {
   private readonly process: JsonlSidecarProcess
   private readonly client: MarketDataClient
   private sequence = 0
+  private readonly baseRequestTimeoutMs: number
+  private readonly replayTiming = new Map<string, { cancellationId: string; paceIntervalMs: number }>()
 
   constructor(options: MarketDataManagerOptions) {
     this.process = new JsonlSidecarProcess({ serviceLabel: 'Market Data', ...options })
+    this.baseRequestTimeoutMs = options.requestTimeoutMs
     this.client = new MarketDataClient({
       transport: this,
       nextId: (prefix) => this.nextId(prefix),
@@ -54,16 +58,38 @@ export class MarketDataSidecarManager implements RpcTransport {
     return this.client.loadFixture(input)
   }
 
-  startReplay(input: StartMarketReplayInput): Promise<MarketReplaySession> {
-    return this.client.startReplay(input)
+  async startReplay(input: StartMarketReplayInput): Promise<MarketReplaySession> {
+    const session = await this.client.startReplay(input)
+    this.replayTiming.set(session.replay_id, {
+      cancellationId: session.cancellation_id,
+      paceIntervalMs: session.pace_interval_ms,
+    })
+    return session
   }
 
-  nextReplay(replayId: string): Promise<MarketReplayStep> {
-    return this.client.nextReplay(replayId)
+  async nextReplay(replayId: string): Promise<MarketReplayStep> {
+    try {
+      const step = await this.client.nextReplay(replayId)
+      if (step.state === 'completed') this.replayTiming.delete(replayId)
+      return step
+    } catch (error) {
+      const timing = this.replayTiming.get(replayId)
+      if (error instanceof JsonlSidecarRequestTimeoutError && timing) {
+        try {
+          await this.client.cancelReplay(timing.cancellationId)
+        } catch {
+          // Preserve the original transport timeout; stop() remains the final cleanup boundary.
+        }
+        this.replayTiming.delete(replayId)
+      }
+      throw error
+    }
   }
 
-  cancelReplay(cancellationId: string): Promise<MarketReplayCancellation> {
-    return this.client.cancelReplay(cancellationId)
+  async cancelReplay(cancellationId: string): Promise<MarketReplayCancellation> {
+    const result = await this.client.cancelReplay(cancellationId)
+    this.replayTiming.delete(result.replay_id)
+    return result
   }
 
   async replayFixture(
@@ -105,7 +131,15 @@ export class MarketDataSidecarManager implements RpcTransport {
   }
 
   request(request: RpcRequest): Promise<unknown> {
-    return this.process.request(request)
+    if (request.method !== 'market.replay_next' || !request.params || typeof request.params !== 'object') {
+      return this.process.request(request)
+    }
+    const replayId = (request.params as Record<string, unknown>).replay_id
+    const timing = typeof replayId === 'string' ? this.replayTiming.get(replayId) : undefined
+    const timeoutMs = timing
+      ? Math.max(this.baseRequestTimeoutMs, timing.paceIntervalMs + 1_000)
+      : this.baseRequestTimeoutMs
+    return this.process.request(request, timeoutMs)
   }
 
   status(): ReturnType<JsonlSidecarProcess['status']> {
@@ -113,6 +147,7 @@ export class MarketDataSidecarManager implements RpcTransport {
   }
 
   stop(): Promise<void> {
+    this.replayTiming.clear()
     return this.process.stop({
       jsonrpc: '2.0',
       id: this.nextId('market-rpc'),

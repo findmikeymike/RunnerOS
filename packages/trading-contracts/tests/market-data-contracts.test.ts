@@ -2,6 +2,8 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   MARKET_TRADE_BATCH_MAX_EVENTS,
+  MARKET_JSONL_REPLAY_SAFE_COMPLETION_BYTES,
+  MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES,
   canonicalJson,
   marketDataCapabilitiesSchema,
   marketDataCapabilitiesResponseSchema,
@@ -24,7 +26,19 @@ async function example(name: string): Promise<Record<string, any>> {
   return Bun.file(new URL(`../examples/${name}`, import.meta.url)).json()
 }
 
+const transportPolicy = {
+  mode: 'bounded-jsonl-control',
+  supervisor_max_line_bytes: 1_000_000,
+  safe_completion_bytes: 750_000,
+  protocol_max_target_events_per_second: 1_000,
+  dedicated_streaming_required_for_live: true,
+} as const
+
 describe('canonical market-data contracts', () => {
+  test('keeps measured JSONL replay headroom below the supervisor line ceiling', () => {
+    expect(MARKET_JSONL_REPLAY_SAFE_COMPLETION_BYTES).toBe(750_000)
+    expect(MARKET_JSONL_REPLAY_SAFE_COMPLETION_BYTES).toBeLessThan(MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES)
+  })
   test('accepts the golden market-trade event without mutable JS numbers', async () => {
     const result = marketTradeEventSchema.parse(await example('market-trade-event.v1.json'))
 
@@ -126,6 +140,7 @@ describe('canonical market-data contracts', () => {
       live_data: false,
       broker_access: false,
       trade_execution: false,
+      transport_policy: transportPolicy,
     }
     const health = marketDataHealthSchema.parse({
       service: 'trade-god-market-data-engine',
@@ -164,10 +179,12 @@ describe('canonical market-data contracts', () => {
     expect(marketDataCapabilitiesSchema.safeParse({
       commands: replayCommands, fixture_mode: true, fixture_ids: ['es-demo-2026-07-11'],
       live_data: false, broker_access: false, trade_execution: false,
+      transport_policy: transportPolicy,
     }).success).toBe(true)
     expect(marketDataCapabilitiesSchema.safeParse({
       commands: replayCommands.filter((command) => command !== 'market.cancel'), fixture_mode: true,
       fixture_ids: ['es-demo-2026-07-11'], live_data: false, broker_access: false, trade_execution: false,
+      transport_policy: transportPolicy,
     }).success).toBe(false)
 
     const session = marketReplaySessionSchema.parse({

@@ -1,0 +1,139 @@
+{
+  "benchmark_schema_version": "market-jsonl-replay-benchmark@1",
+  "generated_at": "2026-07-15T02:12:25Z",
+  "mode": "enforce",
+  "platform": {
+    "system": "Darwin",
+    "release": "25.5.0",
+    "machine": "arm64"
+  },
+  "python": "3.12.9",
+  "implementation_sha256": "0e3c456f2ec4df079a178dfc8404b392945f1622de5b2be86ba611d475352aa4",
+  "repeats": 3,
+  "policy": {
+    "supervisor_max_line_bytes": 1000000,
+    "safe_batch_payload_bytes": 750000,
+    "protocol_max_target_events_per_second": 1000,
+    "dedicated_streaming_required_when": [
+      "live_or_unbounded",
+      "target_events_per_second_above_1000",
+      "completion_response_above_750000_bytes"
+    ]
+  },
+  "runs": [
+    {
+      "event_count": 750,
+      "trial": 1,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 880.963,
+      "session_start_ms": 1388.239,
+      "event_response_ms": {
+        "mean": 1.056,
+        "p50": 0.972,
+        "p95": 1.298,
+        "p99": 6.52,
+        "max": 11.189
+      },
+      "line_bytes": {
+        "session_start": 590,
+        "event_mean": 1335.0,
+        "event_max": 1338,
+        "completion": 713568
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": true,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 32.058
+    },
+    {
+      "event_count": 750,
+      "trial": 2,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 910.806,
+      "session_start_ms": 779.483,
+      "event_response_ms": {
+        "mean": 1.043,
+        "p50": 0.969,
+        "p95": 1.339,
+        "p99": 6.325,
+        "max": 10.84
+      },
+      "line_bytes": {
+        "session_start": 590,
+        "event_mean": 1335.0,
+        "event_max": 1338,
+        "completion": 713568
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": true,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 12.06
+    },
+    {
+      "event_count": 750,
+      "trial": 3,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 778.831,
+      "session_start_ms": 798.036,
+      "event_response_ms": {
+        "mean": 1.197,
+        "p50": 0.967,
+        "p95": 2.399,
+        "p99": 7.942,
+        "max": 14.279
+      },
+      "line_bytes": {
+        "session_start": 590,
+        "event_mean": 1335.0,
+        "event_max": 1338,
+        "completion": 713568
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": true,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 32.913
+    },
+    {
+      "event_count": 800,
+      "trial": 1,
+      "pace_interval_ms": 1,
+      "state": "rejected",
+      "session_start_ms": 916.703,
+      "response_line_bytes": 325,
+      "error_code": "STREAMING_TRANSPORT_REQUIRED",
+      "error_category": "transport"
+    },
+    {
+      "event_count": 800,
+      "trial": 2,
+      "pace_interval_ms": 1,
+      "state": "rejected",
+      "session_start_ms": 891.579,
+      "response_line_bytes": 325,
+      "error_code": "STREAMING_TRANSPORT_REQUIRED",
+      "error_category": "transport"
+    },
+    {
+      "event_count": 800,
+      "trial": 3,
+      "pace_interval_ms": 1,
+      "state": "rejected",
+      "session_start_ms": 871.793,
+      "response_line_bytes": 325,
+      "error_code": "STREAMING_TRANSPORT_REQUIRED",
+      "error_category": "transport"
+    }
+  ]
+}

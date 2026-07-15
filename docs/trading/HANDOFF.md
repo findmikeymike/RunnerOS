@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-13
+last_verified: 2026-07-14
 source_of_truth: false
 ---
 
@@ -16,7 +16,7 @@ Build a local-first desktop trading intelligence system where deterministic anal
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` `e7e96be3`
-- Implementation head before the active slice: `840c83db`
+- Implementation head before the active slice: `f5e71ba6`
 - Other RunnerOS worktrees: intentionally untouched
 
 ## Read First
@@ -37,7 +37,7 @@ Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provide
 
 ## Immediate Assignment
 
-Benchmark the new pull-based JSONL replay and record the measured threshold for a dedicated streaming transport; do not raise the 10,000-event synchronous bound by assumption. Then connect the proven context-reference seam to a real specialist runtime with typed interpretation output and evaluation. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
+Connect the proven context-reference seam to a real specialist runtime with typed interpretation output and evaluation. JSONL is now explicitly limited to bounded control/replay: the protocol declares at most 1,000 requested events/sec and enforcement allows at most a measured 750,000-byte response frame; larger, live, or unbounded flows require a dedicated stream. At the first reliable desktop opportunity, pause for the real Electron success/cancel/failure smoke and record the evidence.
 
 ## Known Expected Artifact
 
@@ -73,6 +73,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Canonical Order Flow: 64 tests passed, 137 expectations across ten focused files. Contract/market-state typechecks, Electron main build, packaged sidecar build/health, exact mixed-precision math, bounded framing/cache behavior, corrupt/live rejection, v2 provenance/receipts, and the real Python-child -> Order-Flow-child path passed.
 - Specialist context delivery: full snapshots persist atomically under `<userData>/trade-god/agent-context/`; specialists receive `agent-context-reference@1`, not copied market payloads; queue and authorized resolution produce `agent-context-delivery-receipt@1`. Concurrency, tamper, wrong-consumer, and path traversal checks pass. This does not prove real LLM-agent reasoning.
 - Paced replay: `market.replay_batch`, `market.replay_next`, and `market.cancel` are typed through contracts, client, real Python stdio, and Electron supervision. Pulls serialize per replay for natural backpressure; deadlines/cancellation interrupt waits without crashing the process; active sessions are capped at 64; final batch identity/checksum must match every emitted event.
+- Measured JSONL policy: the real Darwin ARM64/Python 3.12.9 child sustained 966–978 events/sec in two observation trials at the protocol's fastest 1 ms pace; this is not claimed as raw transport capacity. A 750-event completion was 713,568 bytes; 800 was 761,067 bytes; 10,000 was 9,608,099 bytes. Replay completion and direct load now reject estimated responses above 750,000 bytes with typed `STREAMING_TRANSPORT_REQUIRED`; Electron's hard frame ceiling remains 1,000,000 bytes. Replay-next timeouts are pace-aware, so valid intervals above the default 5-second control timeout remain supported.
 - Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
 
 ## Non-Negotiable Boundaries
@@ -87,9 +88,8 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Next Smallest Actions
 
-1. Benchmark JSONL replay and set the measured streaming-transport threshold.
-2. Connect reference resolution to the first real specialist agent and type/evaluate its interpretation.
-3. Add reconnect/gap/staleness and session-correctness gates.
+1. Connect reference resolution to the first real specialist agent and type/evaluate its interpretation.
+2. Add reconnect/gap/staleness and session-correctness gates.
 3. Package the Python/Nautilus runtime after the delivery seam is stable.
 4. Real visual success/cancel/failure smoke at the first desktop opportunity.
 5. Actual packaged-app build/resource-layout smoke.

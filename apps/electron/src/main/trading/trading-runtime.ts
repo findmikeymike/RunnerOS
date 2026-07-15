@@ -1,6 +1,8 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
+import { MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES } from '@trade-god/contracts'
+
 import { OrderFlowSidecarManager } from './order-flow-sidecar-manager.ts'
 import { MarketDataSidecarManager } from './market-data-sidecar-manager.ts'
 import { registerTradingIpc, type IpcMainLike } from './trading-ipc.ts'
@@ -131,7 +133,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       command: marketLaunch.command,
       cwd: marketLaunch.cwd,
       requestTimeoutMs: 5_000,
-      maxLineBytes: 1_000_000,
+      maxLineBytes: MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES,
       maxStderrBytes: 16_384,
       env: { PYTHONUNBUFFERED: '1' },
     })

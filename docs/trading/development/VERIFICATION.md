@@ -298,7 +298,19 @@ A lower rung does not prove a higher rung.
 - Bounds: pace is 1–60,000 ms; active replay sessions are capped at 64; request identities remain bounded; the canonical batch remains capped at 10,000 events.
 - Client integrity: event index/count/remaining count, trace, batch, instrument, emitted order, final checksum, and complete batch identity validate before a caller receives completion.
 - Build/type proof: contract, market-state, and Electron typechecks passed; Electron main production build passed. The trading-client package has no standalone typecheck script and is covered through its focused tests plus Electron typecheck/import path.
-- Not proven: measured JSONL throughput threshold, reconnect/gap/staleness handling, session calendar correctness, packaged Python runtime, actual specialist reasoning, or visual Electron behavior.
+- Not proven in Slice 11: JSONL payload policy, raw transport capacity, reconnect/gap/staleness handling, session calendar correctness, packaged Python runtime, actual specialist reasoning, or visual Electron behavior. The payload policy is completed in Slice 12 below; unthrottled raw capacity remains intentionally unclaimed.
+
+## Phase 1 Slice 12 — Measured JSONL Replay Policy
+
+- Benchmark observation: `./.venv/bin/python benchmarks/benchmark_jsonl_replay.py --mode observe --counts 100,750,800,1000,10000 --pace-ms 1 --repeats 2` uses a benchmark-only sidecar that preserves the real RPC handler/adapter/replay/framing while disabling policy guards. It records hardware, Python, implementation digest, mode, and trial number so the payload curve remains reproducible after enforcement.
+- Benchmark enforcement: `./.venv/bin/python benchmarks/benchmark_jsonl_replay.py --mode enforce --counts 750,800 --pace-ms 1 --repeats 3 --assert-policy` exercises production rejection.
+- Baseline evidence: paced observation sustained 966–978 events/sec at the fastest supported 1 ms pace; this does not claim an unthrottled JSONL capacity. Completion frames measured 713,568 bytes at 750 events, 761,067 bytes at 800, 955,084 bytes at 1,000, and 9,608,099 bytes at 10,000.
+- Enforced decision: bounded JSONL declares a 1,000 requested-events/sec protocol cap and enforces a measured 750,000-byte estimated response limit. Larger, faster, live, or unbounded flows require dedicated streaming; the canonical schema's 10,000-event maximum remains unchanged.
+- Failure truth: unsafe replay and direct fixture load fail before emitting an oversized result as typed `STREAMING_TRANSPORT_REQUIRED` / `transport`; neither can crash the Electron supervisor on its 1,000,000-byte line ceiling. Replay-next requests use pace-aware timeouts while other control methods retain the normal timeout.
+- Rival fixes: a real Electron child rejects a 1,000-event direct load without dying; a real 1.2-second replay interval succeeds despite a 1-second default control timeout; observation and enforcement evidence are independently reproducible.
+- Focused proof after rival fixes: Python sidecar suite 27 passed; affected TypeScript suite 85 passed across 15 files with 248 expectations; contract and Electron typechecks passed; Electron main build and targeted Electron lint passed; enforced 750/800 benchmark gate passed across three trials.
+- Evidence: `docs/trading/evidence/market-jsonl-replay-benchmark-darwin-arm64.json` and `docs/trading/evidence/market-jsonl-replay-policy-enforcement-darwin-arm64.json`.
+- Not proven: Windows/Linux performance, sustained live streaming, reconnect/gap/staleness handling, session calendar correctness, packaged Python runtime, actual specialist reasoning, or visual Electron behavior.
 
 ## Trading-Specific Integrity Tests
 

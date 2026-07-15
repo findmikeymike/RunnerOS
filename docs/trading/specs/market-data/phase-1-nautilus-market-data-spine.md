@@ -100,7 +100,7 @@ Output is a typed quality report with `valid`, `degraded`, or `invalid`, counts,
 
 Use newline-delimited JSON-RPC for the Phase 1 control path because Phase 0 already proves its supervision, limits, cancellation, errors, receipts, and packaging.
 
-Do not use JSON-RPC for unbounded live tick throughput. Before live mode, benchmark and choose a bounded streaming transport such as Arrow IPC, shared memory, or a local binary stream. The canonical schema remains transport-independent.
+Do not use JSON-RPC for unbounded live tick throughput. The protocol declares at most 1,000 requested events/sec from its 1 ms minimum pace; that is a target cap, not a measured raw transport ceiling. The measured payload policy permits at most a 750,000-byte estimated response beneath Electron's 1,000,000-byte hard frame limit. The reproducible 2026-07-14 Darwin ARM64 observation sustained 966–978 paced events/sec; 750 generated events completed at 713,568 bytes, 800 reached 761,067 bytes, and 10,000 reached 9,608,099 bytes. Larger, faster, live, or unbounded flows require a dedicated transport such as Arrow IPC, shared memory, or a local binary stream. The canonical schema remains transport-independent.
 
 ## Sidecar Capabilities v1
 
@@ -113,7 +113,7 @@ Do not use JSON-RPC for unbounded live tick throughput. Before live mode, benchm
 
 No broker, account, order, execution, credential, or network-provider capability is reachable in this slice.
 
-Current implementation checkpoint: `health`, `capabilities`, `load_fixture`, and `shutdown` are test-verified. `replay_batch` and `cancel` remain part of the v1 target and will be added with supervisor lifecycle semantics.
+Current implementation checkpoint: `health`, `capabilities`, `load_fixture`, `replay_batch`, `replay_next`, `cancel`, and `shutdown` are test-verified with supervisor lifecycle semantics. Capabilities advertise the measured JSONL policy.
 
 Electron checkpoint: the development Python process is now resolved, supervised, contract-validated, and disposed from Electron main. Packaged Python resolution remains intentionally absent until a self-contained asset is built and smoked.
 
@@ -161,7 +161,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 6. Add duplicate, out-of-order, precision, timestamp, and checksum failure tests.
 7. Feed the canonical batch into an Order Flow input adapter without allowing the Order Flow engine to read provider/Nautilus objects. **Complete.**
 8. Persist the run artifact and trace-linked receipt. **Complete for the canonical replay path.**
-9. Benchmark JSONL and record the threshold requiring a streaming transport.
+9. Benchmark JSONL and record/enforce the threshold requiring a streaming transport. **Complete for Darwin ARM64/Python 3.12.9.**
 
 ## Acceptance Criteria
 
@@ -178,6 +178,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 - [x] The Order Flow engine consumes only Trade God canonical input on the new replay path.
 - [ ] Trace joins source batch, adapter logs, quality report, feature artifact, and receipt.
 - [x] Paced replay cancellation and deadline are typed domain outcomes while sidecar crash remains a distinct supervisor/transport failure.
+- [x] Measured JSONL payload/rate limits are advertised and unsafe replay is rejected before session creation with a typed transport error.
 - [x] No live/provider/broker/order capability is reachable from the implemented fixture-only RPC.
 
 ## Explicit Non-Goals
@@ -192,7 +193,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 
 ## Go/No-Go Gate
 
-The canonical Order Flow seam plus pull-based paced replay now satisfy the initial replay/cancellation/backpressure gate. Do not proceed to live/provider operation until measured transport thresholds, reconnect/gap/staleness behavior, session correctness, and packaged-runtime gates are also proven.
+The canonical Order Flow seam, pull-based paced replay, and measured JSONL threshold satisfy the initial replay/cancellation/backpressure gate. Do not proceed to live/provider operation until reconnect/gap/staleness behavior, session correctness, a dedicated stream, and packaged-runtime gates are also proven.
 
 ## Grounding
 

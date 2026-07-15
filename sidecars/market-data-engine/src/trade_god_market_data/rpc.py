@@ -11,6 +11,14 @@ from typing import Any
 
 from .fixture_adapter import FixtureQualityError, build_canonical_batch, canonical_json
 from .paced_replay import PacedReplayRegistry, ReplayLifecycleError
+from .transport_policy import (
+    JSONL_REPLAY_PROTOCOL_MAX_TARGET_EVENTS_PER_SECOND,
+    JSONL_REPLAY_SAFE_COMPLETION_BYTES,
+    JSONL_SUPERVISOR_MAX_LINE_BYTES,
+    MAX_RPC_STRING_ID_LENGTH,
+    load_requires_dedicated_streaming,
+    requires_dedicated_streaming,
+)
 
 
 RPC_PROTOCOL_VERSION = "market-data-rpc@1"
@@ -29,7 +37,11 @@ IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,159}$")
 
 
 def _valid_id(value: Any) -> bool:
-    return value is None or (isinstance(value, (str, int)) and not isinstance(value, bool))
+    return value is None or (
+        isinstance(value, int) and not isinstance(value, bool)
+    ) or (
+        isinstance(value, str) and len(value) <= MAX_RPC_STRING_ID_LENGTH
+    )
 
 
 class MarketDataRpcHandler:
@@ -82,6 +94,13 @@ class MarketDataRpcHandler:
             "live_data": False,
             "broker_access": False,
             "trade_execution": False,
+            "transport_policy": {
+                "mode": "bounded-jsonl-control",
+                "supervisor_max_line_bytes": JSONL_SUPERVISOR_MAX_LINE_BYTES,
+                "safe_completion_bytes": JSONL_REPLAY_SAFE_COMPLETION_BYTES,
+                "protocol_max_target_events_per_second": JSONL_REPLAY_PROTOCOL_MAX_TARGET_EVENTS_PER_SECOND,
+                "dedicated_streaming_required_for_live": True,
+            },
         }
 
     @staticmethod
@@ -167,6 +186,12 @@ class MarketDataRpcHandler:
                 "The configured market-data fixture could not be loaded.",
             )
 
+        if load_requires_dedicated_streaming(batch):
+            return self._failure(
+                request_id, -32000, "STREAMING_TRANSPORT_REQUIRED", "transport",
+                "Fixture result exceeds the measured bounded JSONL transport policy.",
+            )
+
         return self._success(request_id, batch)
 
     @staticmethod
@@ -191,6 +216,11 @@ class MarketDataRpcHandler:
         })
         if "error" in loaded:
             return loaded
+        if requires_dedicated_streaming(loaded["result"], params["pace_interval_ms"]):
+            return self._failure(
+                request_id, -32000, "STREAMING_TRANSPORT_REQUIRED", "transport",
+                "Replay exceeds the measured bounded JSONL transport policy.",
+            )
         try:
             result = self._replays.start(
                 replay_id=params["replay_id"], cancellation_id=params["cancellation_id"],

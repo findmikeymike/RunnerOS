@@ -1,0 +1,305 @@
+{
+  "benchmark_schema_version": "market-jsonl-replay-benchmark@1",
+  "generated_at": "2026-07-15T02:13:30Z",
+  "mode": "observe",
+  "platform": {
+    "system": "Darwin",
+    "release": "25.5.0",
+    "machine": "arm64"
+  },
+  "python": "3.12.9",
+  "implementation_sha256": "0e3c456f2ec4df079a178dfc8404b392945f1622de5b2be86ba611d475352aa4",
+  "repeats": 2,
+  "policy": {
+    "supervisor_max_line_bytes": 1000000,
+    "safe_batch_payload_bytes": 750000,
+    "protocol_max_target_events_per_second": 1000,
+    "dedicated_streaming_required_when": [
+      "live_or_unbounded",
+      "target_events_per_second_above_1000",
+      "completion_response_above_750000_bytes"
+    ]
+  },
+  "runs": [
+    {
+      "event_count": 100,
+      "trial": 1,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 971.87,
+      "session_start_ms": 758.529,
+      "event_response_ms": {
+        "mean": 0.967,
+        "p50": 0.979,
+        "p95": 1.087,
+        "p99": 1.311,
+        "max": 1.435
+      },
+      "line_bytes": {
+        "session_start": 590,
+        "event_mean": 1328.4,
+        "event_max": 1333,
+        "completion": 96069
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": true,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 2.97
+    },
+    {
+      "event_count": 100,
+      "trial": 2,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 965.656,
+      "session_start_ms": 612.902,
+      "event_response_ms": {
+        "mean": 0.968,
+        "p50": 0.978,
+        "p95": 1.028,
+        "p99": 1.131,
+        "max": 1.175
+      },
+      "line_bytes": {
+        "session_start": 590,
+        "event_mean": 1328.4,
+        "event_max": 1333,
+        "completion": 96069
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": true,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 2.919
+    },
+    {
+      "event_count": 750,
+      "trial": 1,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 970.782,
+      "session_start_ms": 616.293,
+      "event_response_ms": {
+        "mean": 0.969,
+        "p50": 0.972,
+        "p95": 1.116,
+        "p99": 1.307,
+        "max": 1.397
+      },
+      "line_bytes": {
+        "session_start": 590,
+        "event_mean": 1335.0,
+        "event_max": 1338,
+        "completion": 713568
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": true,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 19.304
+    },
+    {
+      "event_count": 750,
+      "trial": 2,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 971.486,
+      "session_start_ms": 615.678,
+      "event_response_ms": {
+        "mean": 0.969,
+        "p50": 0.972,
+        "p95": 1.087,
+        "p99": 1.363,
+        "max": 1.4
+      },
+      "line_bytes": {
+        "session_start": 590,
+        "event_mean": 1335.0,
+        "event_max": 1338,
+        "completion": 713568
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": true,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 18.421
+    },
+    {
+      "event_count": 800,
+      "trial": 1,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 971.175,
+      "session_start_ms": 629.757,
+      "event_response_ms": {
+        "mean": 0.968,
+        "p50": 0.971,
+        "p95": 1.077,
+        "p99": 1.315,
+        "max": 1.426
+      },
+      "line_bytes": {
+        "session_start": 590,
+        "event_mean": 1335.0,
+        "event_max": 1338,
+        "completion": 761067
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": false,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 19.733
+    },
+    {
+      "event_count": 800,
+      "trial": 2,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 969.666,
+      "session_start_ms": 620.137,
+      "event_response_ms": {
+        "mean": 0.968,
+        "p50": 0.967,
+        "p95": 1.152,
+        "p99": 1.245,
+        "max": 1.53
+      },
+      "line_bytes": {
+        "session_start": 590,
+        "event_mean": 1335.0,
+        "event_max": 1338,
+        "completion": 761067
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": false,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 20.922
+    },
+    {
+      "event_count": 1000,
+      "trial": 1,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 971.993,
+      "session_start_ms": 625.657,
+      "event_response_ms": {
+        "mean": 0.968,
+        "p50": 0.968,
+        "p95": 1.113,
+        "p99": 1.368,
+        "max": 1.474
+      },
+      "line_bytes": {
+        "session_start": 595,
+        "event_mean": 1342.2,
+        "event_max": 1346,
+        "completion": 955084
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": false,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 23.764
+    },
+    {
+      "event_count": 1000,
+      "trial": 2,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 972.278,
+      "session_start_ms": 656.042,
+      "event_response_ms": {
+        "mean": 0.968,
+        "p50": 0.969,
+        "p95": 1.252,
+        "p99": 1.324,
+        "max": 1.462
+      },
+      "line_bytes": {
+        "session_start": 595,
+        "event_mean": 1342.2,
+        "event_max": 1346,
+        "completion": 955084
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": false,
+        "completion_within_supervisor_limit": true
+      },
+      "completion_response_ms": 23.496
+    },
+    {
+      "event_count": 10000,
+      "trial": 1,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 970.361,
+      "session_start_ms": 776.683,
+      "event_response_ms": {
+        "mean": 0.973,
+        "p50": 0.969,
+        "p95": 1.19,
+        "p99": 1.406,
+        "max": 6.315
+      },
+      "line_bytes": {
+        "session_start": 600,
+        "event_mean": 1356.2,
+        "event_max": 1359,
+        "completion": 9608099
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": false,
+        "completion_within_supervisor_limit": false
+      },
+      "completion_response_ms": 175.978
+    },
+    {
+      "event_count": 10000,
+      "trial": 2,
+      "pace_interval_ms": 1,
+      "state": "completed",
+      "target_events_per_second": 1000.0,
+      "achieved_events_per_second": 978.433,
+      "session_start_ms": 968.169,
+      "event_response_ms": {
+        "mean": 0.967,
+        "p50": 0.968,
+        "p95": 1.098,
+        "p99": 1.302,
+        "max": 2.075
+      },
+      "line_bytes": {
+        "session_start": 600,
+        "event_mean": 1356.2,
+        "event_max": 1359,
+        "completion": 9608099
+      },
+      "policy_fit": {
+        "target_rate_within_protocol_limit": true,
+        "completion_within_safe_payload": false,
+        "completion_within_supervisor_limit": false
+      },
+      "completion_response_ms": 176.748
+    }
+  ]
+}

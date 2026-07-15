@@ -62,4 +62,18 @@ describe('JsonlSidecarProcess', () => {
       await Promise.all([silent.stop(), crashing.stop(), oversized.stop()])
     }
   })
+
+  test('allows a caller to extend one request timeout without weakening the process default', async () => {
+    const sidecar = processFor('silent-sidecar.ts', 30)
+    const started = performance.now()
+    try {
+      await expect(sidecar.request(
+        { jsonrpc: '2.0', id: 'extended', method: 'test', params: {} },
+        80,
+      )).rejects.toBeInstanceOf(JsonlSidecarRequestTimeoutError)
+      expect(performance.now() - started).toBeGreaterThanOrEqual(70)
+    } finally {
+      await sidecar.stop()
+    }
+  })
 })

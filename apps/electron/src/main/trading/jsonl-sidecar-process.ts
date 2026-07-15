@@ -51,7 +51,10 @@ export class JsonlSidecarProcess implements RpcTransport {
 
   constructor(private readonly options: JsonlSidecarProcessOptions) {}
 
-  request(request: RpcRequest): Promise<unknown> {
+  request(request: RpcRequest, requestTimeoutMs = this.options.requestTimeoutMs): Promise<unknown> {
+    if (!Number.isFinite(requestTimeoutMs) || requestTimeoutMs <= 0) {
+      throw new TypeError('requestTimeoutMs must be a positive finite number.')
+    }
     const child = this.ensureStarted()
     const id = String(request.id)
     if (this.pending.has(id)) {
@@ -62,7 +65,7 @@ export class JsonlSidecarProcess implements RpcTransport {
       const timer = setTimeout(() => {
         this.pending.delete(id)
         reject(new JsonlSidecarRequestTimeoutError(this.options.serviceLabel))
-      }, this.options.requestTimeoutMs)
+      }, requestTimeoutMs)
       this.pending.set(id, { resolve, reject, timer })
       child.stdin.write(`${JSON.stringify(request)}\n`, (error) => {
         if (!error) return

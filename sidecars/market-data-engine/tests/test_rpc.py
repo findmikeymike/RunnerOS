@@ -8,6 +8,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from trade_god_market_data.rpc import MarketDataRpcHandler
@@ -51,6 +52,13 @@ class MarketDataRpcHandlerTest(unittest.TestCase):
         self.assertFalse(capabilities["live_data"])
         self.assertFalse(capabilities["broker_access"])
         self.assertFalse(capabilities["trade_execution"])
+        self.assertEqual(capabilities["transport_policy"], {
+            "mode": "bounded-jsonl-control",
+            "supervisor_max_line_bytes": 1_000_000,
+            "safe_completion_bytes": 750_000,
+            "protocol_max_target_events_per_second": 1_000,
+            "dedicated_streaming_required_for_live": True,
+        })
         self.assertEqual(capabilities["fixture_ids"], ["es-demo-2026-07-11"])
         self.assertEqual(response["result"]["dependencies"], [{
             "name": "es-demo-2026-07-11",
@@ -110,6 +118,39 @@ class MarketDataRpcHandlerTest(unittest.TestCase):
         conflict = self.handler.handle(request(6, "market.health"))
         self.assertEqual(first, repeated)
         self.assertEqual(conflict["error"]["data"]["market_error"]["code"], "DUPLICATE_REQUEST_ID")
+
+        oversized_id = self.handler.handle(request("x" * 201, "market.health"))
+        self.assertEqual(oversized_id["error"]["code"], -32600)
+
+    def test_rejects_replay_that_exceeds_the_measured_jsonl_payload_policy(self) -> None:
+        batch = json.loads(EXPECTED_BATCH.read_text())
+        batch["events"][0]["extensions"]["benchmark.padding"] = "x" * 750_000
+        with patch.object(self.handler, "_load_fixture", return_value={
+            "jsonrpc": "2.0", "id": 19, "result": batch,
+        }):
+            response = self.handler.handle(request(
+                19,
+                "market.replay_batch",
+                replay_params("replay-too-large", "cancel-too-large", pace_ms=1),
+            ))
+
+        error = response["error"]["data"]["market_error"]
+        self.assertEqual(error["code"], "STREAMING_TRANSPORT_REQUIRED")
+        self.assertEqual(error["category"], "transport")
+
+    def test_rejects_direct_fixture_load_that_exceeds_the_jsonl_payload_policy(self) -> None:
+        batch = json.loads(EXPECTED_BATCH.read_text())
+        batch["events"][0]["extensions"]["benchmark.padding"] = "x" * 750_000
+        with patch("trade_god_market_data.rpc.build_canonical_batch", return_value=batch):
+            response = self.handler.handle(request(18, "market.load_fixture", {
+                "fixture_id": "es-demo-2026-07-11",
+                "trace_id": "trace-too-large",
+                "batch_id": "batch-too-large",
+            }))
+
+        error = response["error"]["data"]["market_error"]
+        self.assertEqual(error["code"], "STREAMING_TRANSPORT_REQUIRED")
+        self.assertEqual(error["category"], "transport")
 
     def test_pulls_a_complete_batch_at_the_declared_pace(self) -> None:
         started = time.monotonic()
