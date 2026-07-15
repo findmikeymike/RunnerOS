@@ -8,6 +8,7 @@ import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
 import { randomUUID } from 'node:crypto'
 import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary } from '@craft-agent/shared/agent'
+import type { LLMQueryRequest, LLMQueryResult } from '@craft-agent/shared/agent'
 import {
   resolveSessionConnection,
   createBackendFromConnection,
@@ -5069,6 +5070,37 @@ user a clickable link to where the thing now lives.`
     }
 
     return managedToSession(managed, isBranch ? { messages: managed.messages } : undefined)
+  }
+
+  /**
+   * Run a bounded, tool-free structured model call through Runner's configured
+   * provider without exposing credentials or provider selection to a caller.
+   * The hidden carrier session is always deleted after the call.
+   */
+  async runOneShotLlmQuery(
+    workspaceId: string,
+    request: LLMQueryRequest,
+    options?: { llmConnection?: string; model?: string },
+  ): Promise<LLMQueryResult> {
+    const session = await this.createSession(workspaceId, {
+      name: 'Trade God specialist runtime',
+      hidden: true,
+      workingDirectory: 'none',
+      permissionMode: 'safe',
+      enabledSourceSlugs: [],
+      ...(options?.llmConnection ? { llmConnection: options.llmConnection } : {}),
+      ...(options?.model ? { model: options.model } : {}),
+    })
+    try {
+      const managed = this.sessions.get(session.id)
+      if (!managed) throw new Error('One-shot model carrier session was not created.')
+      const agent = await this.getOrCreateAgent(managed)
+      const queryAgent = agent as AgentBackend & { queryLlm?: (input: LLMQueryRequest) => Promise<LLMQueryResult> }
+      if (typeof queryAgent.queryLlm !== 'function') throw new Error('Configured agent backend does not support structured one-shot queries.')
+      return await queryAgent.queryLlm(request)
+    } finally {
+      await this.deleteSession(session.id)
+    }
   }
 
   /**

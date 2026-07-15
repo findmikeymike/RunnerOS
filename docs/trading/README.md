@@ -40,6 +40,7 @@ These project-local documents are deep reference material:
 - `agents/AGENT-CORE.md` — universal agent anatomy and build checklist.
 - `agents/ORDER-FLOW-AGENT.md` — full specialist-agent example.
 - `integrations/OPEN-SOURCE-HARVEST.md` — audited open-source harvest and integration map.
+- `research/ORDER-FLOW-SPECIALIST-RESEARCH.md` — primary-source doctrine behind the first specialist runtime.
 
 They inform the system but do not replace the active spec or current status.
 

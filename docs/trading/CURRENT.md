@@ -10,9 +10,9 @@ source_of_truth: true
 ## Snapshot
 
 - Date: 2026-07-14
-- Stage: Phase 1 has a measured and enforced bounded-JSONL replay policy; Phase 0 still awaits real visual Electron smoke
-- Current goal: connect the proven context-reference seam to the first real specialist runtime with typed interpretation and evaluation
-- Overall state: canonical emission, deterministic candles, hardened Order Flow, specialist context references, paced/cancelable replay, and measured transport limits are test-verified; no real LLM specialist consumes the delivery yet, and reconnect/gap behavior, packaged Python assets, the visual Electron path, and a built installer remain unverified
+- Stage: Phase 1 now has its first bounded specialist runtime; Phase 0 still awaits real visual Electron smoke
+- Current goal: adversarially close and visually expose the first Order Flow specialist, then move to reconnect/gap/session correctness before live data
+- Overall state: the Order Flow specialist now joins deterministic artifacts with addressed context, runs through Runner's provider-neutral structured-model seam, validates and stores typed analysis-only interpretations, and refuses stale/invalid evidence; a real provider call was attempted but local saved credentials were unavailable to the headless evaluator, while reconnect/gap behavior, packaged Python assets, the visual Electron path, and a built installer remain unverified
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -37,6 +37,8 @@ source_of_truth: true
 `market.replay_batch -> bounded replay session -> consumer-paced market.replay_next pulls -> completed canonical batch or typed cancel/timeout`
 
 `bounded JSONL policy -> declared <=1,000 requested events/sec + measured <=750 KB response -> otherwise STREAMING_TRANSPORT_REQUIRED`
+
+`canonical Order Flow artifact + resolved agent snapshot -> order-flow-specialist-request@1 -> bounded structured model -> validated/stored order-flow-interpretation@1`
 
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
@@ -85,15 +87,21 @@ The workbench can request engine health, run the known fixture, and display tota
 - Benchmarked the real Python child over JSONL at 100–10,000 generated canonical events. Reproducible two-trial observation mode sustained 966–978 events/sec at the protocol's fastest 1 ms pace; this is paced-path evidence, not an unthrottled transport ceiling. Payload size is the binding measured limit: 750 events completed at 713,568 bytes while 800 reached 761,067 bytes and 10,000 reached 9,608,099 bytes.
 - Enforced a 750,000-byte safe response ceiling beneath Electron's 1,000,000-byte frame limit for replay completion and direct fixture load, retained the canonical 10,000-event schema bound, labeled 1,000 events/sec as the declared protocol target cap, bounded string RPC IDs, advertised the policy in typed capabilities, and return `STREAMING_TRANSPORT_REQUIRED` before unsafe work starts.
 - Fixed the paced-replay transport mismatch found by cold review: `market.replay_next` now gets a per-request timeout derived from the declared replay pace while health/load retain the 5-second default; a real 1.2-second replay interval passes through Electron supervision.
+- Added the versioned Order Flow specialist request/interpretation contracts with immutable trace, input hashes, exact deterministic measurements, feed capability, alternative hypothesis, machine-coded evidence scenarios/invalidation/expiry, and analysis-only authority.
+- Added a joined pipeline that loads one canonical batch through the real Python market-data child, feeds that same batch to the real Order Flow child and snapshot builder, resolves only the addressed reference, verifies every identity/checksum, and submits one bounded structured-model request.
+- Added deterministic admission gates for stale, unavailable, or invalid evidence; hostile model output is rejected if it changes measurements/identity, overstates feed capability, cites unknown evidence, omits required alternatives, exceeds limited-sample confidence, or matches the conservative execution-language policy. Scenario conditions are machine-coded rather than free-form prose, and the specialist has no tools or route to broker execution.
+- Added atomic interpretation storage and a hidden one-shot Runner model carrier that uses the configured provider, structured output, no sources, safe permissions, and guaranteed session deletion.
+- Added and bundled `order-flow-specialist@0.1.0` doctrine plus primary-source research on CME MBO/MDP aggression, trade classification uncertainty, order-flow impact, and spoofing/intent limits.
+- Added a real-provider evaluation harness. Both saved Runner connections reached their backend initialization but lacked credentials in the headless evaluator; no real-model reasoning result is claimed yet.
 
 ## Next Actions
 
-1. Connect the context-resolution seam to the first real specialist-agent runtime and add typed interpretation output/evaluation; do not call the current addressed test consumer a real agent.
-2. Design the dedicated live/unbounded streaming transport only when live-data work begins; keep JSONL as the bounded control/replay path.
-3. Add reconnect/gap/staleness and session-correctness gates before any live-data work.
-4. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, and one visible failure.
-5. Build and smoke the packaged installer separately.
-6. Review the 15 upstream-only v0.11.1 commits separately; do not merge them blindly.
+1. Complete one real-provider evaluation after an approved credential is available; do not represent scripted-model proof as model-quality proof.
+2. Add reconnect/gap/staleness and session-correctness gates before any live-data work.
+3. Design the dedicated live/unbounded streaming transport only when live-data work begins; keep JSONL as the bounded control/replay path.
+4. Add an operator-facing interpretation surface only after the contract/runtime is accepted.
+5. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, one visible failure, and specialist-provider attachment.
+6. Build and smoke the packaged installer separately.
 
 ## Blockers / Decisions Needed
 
@@ -132,15 +140,17 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Windows and Linux Nautilus runtime/package smoke remain unverified.
 - Frozen-lockfile install passed; focused RunnerOS control-plane baseline passed: 232 tests, 0 failures.
 - Full monorepo typecheck remains blocked by a recorded pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
-- Specialist-context proof persists the full integrity-checked snapshot once, queues only its reference, blocks wrong-consumer and forged/path-unsafe references, and records resolution. No actual LLM specialist execution is claimed.
+- Specialist runtime proof: 16 focused tests pass through the real Python and Order Flow children, joined context resolution, scripted structured-model analysis, 6/6 evaluation, atomic storage, hostile measurement/evidence/execution rejection, impossible scenario-state rejection, malformed/provider failure handling, and pre-model stale refusal. This proves orchestration and enforcement, not trading skill or live-model quality.
+- Contract/server/Electron typechecks pass after provider-gateway wiring; the final focused gate passes 82 tests across contracts, real sidecars, joined specialist behavior, adversarial policy cases, storage, and provider-carrier lifecycle.
+- Real-provider evaluator reached both configured Runner connection backends. Neither saved credential was available to the headless process, so real-model output remains unverified.
 - Paced replay proof: complete real fixture replay respects the configured pace and consumer backpressure; active cancel and deadline return typed domain errors while the same Python process remains healthy. Process exit remains a separate supervisor error.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
-- Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, replay-only canonical Order Flow, reference-only specialist delivery, paced replay/cancel, and measured JSONL transport limits are implemented; packaged Python assets and actual specialist reasoning remain unimplemented.
+- Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, replay-only canonical Order Flow, reference-only specialist delivery, typed specialist interpretation enforcement, paced replay/cancel, and measured JSONL transport limits are implemented; packaged Python assets and real-model quality remain unverified.
 
 ## Explicitly Not In Scope Yet
 
 - Live broker connectivity, order placement, or autonomous execution.
-- Production order-flow intelligence or real-time tick streaming.
+- Production-grade order-flow intelligence or real-time tick streaming.
 - Full agent roster, charting workspace, or generalized plugin marketplace.
 - Broad donor-code porting without license, provenance, and boundary review.
 

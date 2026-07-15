@@ -15,6 +15,8 @@ export const AGENT_CONTEXT_REFERENCE_SCHEMA_VERSION = 'agent-context-reference@1
 export const AGENT_CONTEXT_DELIVERY_RECEIPT_SCHEMA_VERSION = 'agent-context-delivery-receipt@1'
 export const MARKET_REPLAY_SESSION_SCHEMA_VERSION = 'market-replay-session@1'
 export const MARKET_REPLAY_STEP_SCHEMA_VERSION = 'market-replay-step@1'
+export const ORDER_FLOW_SPECIALIST_REQUEST_SCHEMA_VERSION = 'order-flow-specialist-request@1'
+export const ORDER_FLOW_INTERPRETATION_SCHEMA_VERSION = 'order-flow-interpretation@1'
 
 export interface ProtocolCompatibility {
   compatible: true

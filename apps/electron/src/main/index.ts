@@ -574,6 +574,7 @@ app.whenReady().then(async () => {
           ...tradeGodHost,
           receiptDirectory: join(app.getPath('userData'), 'trade-god', 'run-receipts'),
           contextDirectory: join(app.getPath('userData'), 'trade-god', 'agent-context'),
+          interpretationDirectory: join(app.getPath('userData'), 'trade-god', 'interpretations'),
           log: (entry) => mainLog.info('[trade-god:run]', JSON.stringify(entry)),
           now: () => new Date().toISOString(),
         })
@@ -814,6 +815,15 @@ app.whenReady().then(async () => {
 
       // Capture module-level references for before-quit cleanup and deep-link handlers
       sessionManager = instance.sessionManager
+      const localWorkspaces = getWorkspaces().filter((workspace) => !workspace.remoteServer)
+      const specialistWorkspace = localWorkspaces.find((workspace) => workspace.name.toLowerCase() === 'trading')
+        ?? localWorkspaces[0]
+      if (tradeGodRuntime && specialistWorkspace) {
+        tradeGodRuntime.setSpecialistModel((request) => (
+          instance.sessionManager.runOneShotLlmQuery(specialistWorkspace.id, request)
+        ))
+        mainLog.info(`[trade-god] specialist model gateway attached to workspace ${specialistWorkspace.id}`)
+      }
       oauthFlowStore = instance.oauthFlowStore
       moduleSink = instance.wsServer.push.bind(instance.wsServer)
       moduleClientResolver = resolveClientId

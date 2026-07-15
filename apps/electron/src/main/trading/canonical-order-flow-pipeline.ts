@@ -1,5 +1,5 @@
 import type { AnalyzeFixtureInput } from '@trade-god/client'
-import type { CanonicalOrderFlowArtifact } from '@trade-god/contracts'
+import type { CanonicalOrderFlowArtifact, MarketTradeBatch } from '@trade-god/contracts'
 
 import type { MarketDataSidecarManager } from './market-data-sidecar-manager.ts'
 import type { OrderFlowSidecarManager } from './order-flow-sidecar-manager.ts'
@@ -21,6 +21,13 @@ export class CanonicalOrderFlowPipeline {
   ) {}
 
   async analyzeFixture(input: AnalyzeFixtureInput): Promise<CanonicalOrderFlowArtifact> {
+    return (await this.analyzeFixtureEvidence(input)).artifact
+  }
+
+  async analyzeFixtureEvidence(input: AnalyzeFixtureInput): Promise<{
+    batch: MarketTradeBatch
+    artifact: CanonicalOrderFlowArtifact
+  }> {
     if (!Number.isFinite(input.timeoutMs) || input.timeoutMs <= 0) {
       throw new TypeError('timeoutMs must be a positive finite number.')
     }
@@ -41,7 +48,7 @@ export class CanonicalOrderFlowPipeline {
     }
     const remainingMs = deadlineAt - this.nowMs()
     if (remainingMs <= 0) throw new CanonicalOrderFlowDeadlineError()
-    return this.orderFlow.analyzeMarketBatch({
+    const artifact = await this.orderFlow.analyzeMarketBatch({
       batch,
       session: input.session,
       analysis: input.analysis,
@@ -49,6 +56,7 @@ export class CanonicalOrderFlowPipeline {
       traceId,
       ...(input.cancellationId ? { cancellationId: input.cancellationId } : {}),
     })
+    return { batch, artifact }
   }
 
   private beforeDeadline<T>(operation: Promise<T>, deadlineAt: number): Promise<T> {

@@ -312,6 +312,16 @@ A lower rung does not prove a higher rung.
 - Evidence: `docs/trading/evidence/market-jsonl-replay-benchmark-darwin-arm64.json` and `docs/trading/evidence/market-jsonl-replay-policy-enforcement-darwin-arm64.json`.
 - Not proven: Windows/Linux performance, sustained live streaming, reconnect/gap/staleness handling, session calendar correctness, packaged Python runtime, actual specialist reasoning, or visual Electron behavior.
 
+## Phase 1 Slice 13 — First Bounded Order Flow Specialist
+
+- Contracts: `order-flow-specialist-request@1` and `order-flow-interpretation@1` bind one trace, canonical batch, artifact checksum, snapshot checksum, addressed delivery, analysis-only authority, agent/doctrine versions, and a SHA-256-pinned doctrine. Bundled skill provenance is intentionally not claimed by the runtime artifact.
+- Real-process integration: the Python market-data child emits one canonical batch used for both the real Order Flow child and the agent snapshot. The addressed reference is resolved and the exact joined evidence reaches a scripted structured-model adapter.
+- Enforcement: runtime-owned path-safe interpretation IDs/timestamps; snapshot/artifact checksum revalidation; exact measurement/identity matching; conservative unavailable aggression provenance; trades-only depth; limited-sample confidence ceiling; required alternatives/no-trade reasons; allowlisted evidence; prohibited execution-language detection; stale/invalid pre-model refusal; malformed/provider failure propagation; atomic restrictive-permission storage.
+- Evaluation: the deterministic rubric requires 6/6 checks for analyzed status, analysis-only authority, feed honesty, calibration, alternative hypothesis, and machine-coded evidence scenarios. The specialist has no tools or broker route; free-form analyst narrative is additionally rejected on conservative execution-language policy matches, but the hard safety boundary is structural rather than a claim that regex understands every possible synonym.
+- Focused proof after rival fixes: 82 contract/Electron/provider-lifecycle tests passed with 201 expectations; the narrower specialist-contract/provider-lifecycle set accounts for 20 passing tests. Contract, server-core, and Electron typechecks, targeted Electron lint, Electron main build, and `git diff --check` passed.
+- Real-provider attempt: both configured Runner backends initialized, but neither saved credential was available to the headless evaluator. No authenticated real-model output, trading quality, visual UI, or live-market behavior is claimed.
+- Required remaining proof: approved credential real-model evaluation, retained scored receipt, real Electron provider-attachment smoke, reconnect/gap/session correctness, packaged Python, and installed app.
+
 ## Trading-Specific Integrity Tests
 
 - Event time is distinct from receive/process time.

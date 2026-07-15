@@ -11,6 +11,8 @@ import { CanonicalOrderFlowPipeline } from './canonical-order-flow-pipeline.ts'
 import type { TradingIpcManager } from './trading-ipc.ts'
 import { AgentContextStore } from './agent-context-store.ts'
 import { SpecialistContextPipeline } from './specialist-context-pipeline.ts'
+import { OrderFlowSpecialist, type SpecialistModel } from './order-flow-specialist.ts'
+import { OrderFlowSpecialistPipeline } from './order-flow-specialist-pipeline.ts'
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
@@ -27,6 +29,8 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   now: () => string
   receiptDirectory?: string
   contextDirectory?: string
+  interpretationDirectory?: string
+  specialistModel?: SpecialistModel
   log?: (entry: { event: string; traceId: string; receiptId: string; artifactId?: string; errorCode?: string }) => void
 }
 
@@ -109,6 +113,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   canonicalPipeline?: CanonicalOrderFlowPipeline
   contextStore?: AgentContextStore
   specialistContextPipeline?: SpecialistContextPipeline
+  orderFlowSpecialist?: OrderFlowSpecialist
+  orderFlowSpecialistPipeline?: OrderFlowSpecialistPipeline
+  setSpecialistModel: (model: SpecialistModel) => void
   dispose: () => Promise<void>
 } {
   const launch = resolveOrderFlowLaunch(options)
@@ -148,6 +155,17 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const specialistContextPipeline = marketDataManager && contextStore
     ? new SpecialistContextPipeline(marketDataManager, contextStore)
     : undefined
+  let specialistModel = options.specialistModel
+  const modelGateway: SpecialistModel = (request) => {
+    if (!specialistModel) throw new Error('Trade God specialist model provider is not configured.')
+    return specialistModel(request)
+  }
+  const orderFlowSpecialist = canonicalPipeline && specialistContextPipeline && contextStore
+    ? new OrderFlowSpecialist(modelGateway, options.now, options.interpretationDirectory)
+    : undefined
+  const orderFlowSpecialistPipeline = canonicalPipeline && specialistContextPipeline && contextStore && orderFlowSpecialist
+    ? new OrderFlowSpecialistPipeline(canonicalPipeline, contextStore, orderFlowSpecialist, options.now)
+    : undefined
   const ipcManager: TradingIpcManager = canonicalPipeline
     ? {
         health: () => manager.health(),
@@ -163,6 +181,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(canonicalPipeline ? { canonicalPipeline } : {}),
     ...(contextStore ? { contextStore } : {}),
     ...(specialistContextPipeline ? { specialistContextPipeline } : {}),
+    ...(orderFlowSpecialist ? { orderFlowSpecialist } : {}),
+    ...(orderFlowSpecialistPipeline ? { orderFlowSpecialistPipeline } : {}),
+    setSpecialistModel: (model) => { specialistModel = model },
     dispose: async () => {
       await Promise.all([disposeTradingIpc(), marketDataManager?.stop()])
     },
