@@ -16,7 +16,7 @@ export interface AutomationTemplate {
   /** Stable unique ID for the template (used as React key). */
   id: string
   /** Display category for grouping in the picker UI. */
-  category: 'webhook' | 'file' | 'poll' | 'message'
+  category: 'scheduled' | 'webhook' | 'file' | 'poll' | 'message'
   /** Short headline shown on the card. */
   title: string
   /** One-sentence summary shown under the title. */
@@ -35,6 +35,52 @@ export interface AutomationTemplate {
 }
 
 export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
+  // ----- SchedulerTick -----
+  {
+    id: 'scheduled-social-comment-replies',
+    category: 'scheduled',
+    title: 'Daily social comment replies',
+    description: 'Have Social Publisher inspect and answer eligible public comments across every ready profile pack each day.',
+    glyph: '💬',
+    event: 'SchedulerTick',
+    matcher: {
+      name: 'Daily social comment replies',
+      cron: '0 16 * * *',
+      timezone: 'America/Chicago',
+      permissionMode: 'ask',
+      enabled: false,
+      actions: [
+        {
+          type: 'prompt',
+          agentSlug: 'social-publisher',
+          thinkingLevel: 'high',
+          prompt: `This scheduled task is an active bounded engagement mandate for public comment replies across every social account pack currently saved in Settings.
+
+Run date: $CRAFT_LOCAL_DATE
+Run time: $CRAFT_LOCAL_TIME
+
+1. Read the social-publishing skill, Engagement Playbook, Artist Voice, and relevant campaign context.
+2. Run the Printing Press Social catalog and enumerate every saved account set and exact platform/profile inside each set.
+3. Deduplicate exact profiles that appear in multiple sets.
+4. Process only Instagram, TikTok, X, and YouTube profiles.
+5. Verify each saved session and visible account identity before inspecting or replying. Skip expired, logged-out, ambiguous, CAPTCHA/2FA-blocked, or unverified profiles.
+6. Inspect recent unanswered public comments and mentions. Do not inspect or answer DMs under this mandate.
+7. Skip spam, already-answered comments, and comments where a useful native response is unnecessary.
+8. Reply using Artist Voice, comment-reply examples, thread context, and verified campaign/release facts.
+9. Every reply must bind to an exact comment ID or permalink. Never fall back to a new top-level comment.
+10. Send no more than 20 public replies per exact profile per run.
+11. Use a stable idempotency key for every live action.
+12. Escalate without replying when content involves business commitments, booking, licensing, press, controversy, rights, payments, contracts, credentials, account recovery, threats, safety, medical/legal claims, minors, or uncertain identity.
+13. Do not post, upload, cold-DM, delete, edit, follow, block, report, switch accounts, or change account settings.
+14. Finish with one private receipt grouped by account set and exact platform/profile: inspected, replied, skipped, escalated, failed, and login/blocker counts. Do not copy private message bodies or credentials.
+
+Eligible exact-target replies inside this mandate may execute without per-item approval.`,
+        },
+      ],
+    },
+    setupHint: 'Disabled by default. Review the schedule and scope, verify saved social sessions, then toggle it on.',
+  },
+
   // ----- WebhookReceive -----
   {
     id: 'wh-github-push',
@@ -274,6 +320,7 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
 ]
 
 export const TEMPLATE_CATEGORY_LABELS: Record<AutomationTemplate['category'], string> = {
+  scheduled: 'Scheduled Work',
   webhook: 'Inbound Webhooks',
   file: 'File Watchers',
   poll: 'URL Polling',

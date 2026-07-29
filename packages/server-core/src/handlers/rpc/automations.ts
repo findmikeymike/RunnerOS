@@ -218,6 +218,7 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
           labels: payload.labels,
           permissionMode: payload.permissionMode,
           mentions: references.mentions,
+          agentSlug: action.agentSlug,
           llmConnection: action.llmConnection,
           model: action.model,
           thinkingLevel: action.thinkingLevel,

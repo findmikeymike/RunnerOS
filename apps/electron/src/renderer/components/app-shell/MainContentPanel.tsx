@@ -84,7 +84,8 @@ import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { navigate, routes } from '@/lib/navigate'
 import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
-import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react'
+import { TemplatesGalleryDialog } from '@/components/automations/TemplatesGalleryDialog'
+import { ChevronDown, ChevronRight, Plus, Sparkles, X } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 export interface MainContentPanelProps {
@@ -853,21 +854,36 @@ function ResourceRows({
                 </p>
               </div>
             </div>
-            {addEditConfig && addLabel ? (
+            {automations || (addEditConfig && addLabel) ? (
               <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <EditPopover
-                  align="end"
-                  trigger={
-                    <button
-                      type="button"
-                      className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      {addLabel}
-                    </button>
-                  }
-                  {...addEditConfig}
-                />
+                {automations ? (
+                  <TemplatesGalleryDialog
+                    trigger={
+                      <button
+                        type="button"
+                        className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                        From template
+                      </button>
+                    }
+                  />
+                ) : null}
+                {addEditConfig && addLabel ? (
+                  <EditPopover
+                    align="end"
+                    trigger={
+                      <button
+                        type="button"
+                        className="inline-flex h-9 items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.035] px-4 text-xs font-medium text-white/68 transition-colors hover:bg-white/[0.06]"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        {addLabel}
+                      </button>
+                    }
+                    {...addEditConfig}
+                  />
+                ) : null}
               </div>
             ) : null}
           </div>

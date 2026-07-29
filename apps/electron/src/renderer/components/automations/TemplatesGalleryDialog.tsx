@@ -4,7 +4,8 @@
  * One-click "Add automation from template" picker. Drops a fully-formed
  * matcher into automations.json via the createAutomationFromTemplate RPC.
  *
- * Three categories of templates today:
+ * Template categories include:
+ *   - Scheduled work   (SchedulerTick)
  *   - Inbound webhooks (WebhookReceive)
  *   - File watchers   (FileWatch)
  *   - URL polling     (PollUrl)
@@ -65,6 +66,7 @@ export function TemplatesGalleryDialog({ trigger }: TemplatesGalleryDialogProps)
 
   const groups = React.useMemo(() => {
     const byCategory: Record<AutomationTemplate['category'], AutomationTemplate[]> = {
+      scheduled: [],
       webhook: [],
       file: [],
       poll: [],

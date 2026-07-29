@@ -446,7 +446,7 @@ interface AutomationsConfigFile {
 }
 
 type RawAction =
-  | { type: 'prompt'; prompt: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
+  | { type: 'prompt'; prompt: string; agentSlug?: string; llmConnection?: string; model?: string; thinkingLevel?: ThinkingLevel }
   | WebhookAction
   | QueueWorkAction
 
