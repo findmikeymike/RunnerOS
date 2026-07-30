@@ -31,5 +31,7 @@ Current V1 implementation notes:
 - Outputs -> Finals is wired through UI list/detail actions and the `promote_output_to_final` session tool. Finals are pointers stored in workspace context; campaign promotion uses the active campaign workspace id.
 - Campaign Scheduled Work now has a guided composer, backend-owned atomic mutations, durable agent/workflow completion polling, review decisions, attention states, and approval-blocked social work.
 - College Radio and Spotify Playlist Creator are default HQ/Campaign workers; College Radio hands verified email work to Outreach Agent.
+- Artist HQ Home now derives `Next`, `This Week`, `Workers`, and `Projects` from State of Play, Calendar, Scheduled Work, Automations, and campaign workspace data instead of sample cards. State of Play also renders live HQ goals and refreshes when its derived snapshot is missing or older than 12 hours.
+- Weekly Spotify Snapshot and YouTube Intel Pulse remain opt-in. When activated they run Mondays at 9:00 AM and 10:00 AM local time, respectively. Their read/research work uses safe permission mode; any later public post, send, spend, delete, or external account mutation still requires exact approval.
 
 Add new Creator Command Center specs here unless they clearly belong in another feature folder.

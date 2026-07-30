@@ -142,11 +142,24 @@ export function MainContentPanel({
     () => findPrimaryCampaignWorkspace(workspaces),
     [workspaces],
   )
+  const campaignWorkspaces = useMemo(
+    () => workspaces
+      .filter((workspace) => !isArtistHQWorkspace(workspace, workspaces))
+      .map((workspace) => ({
+        id: workspace.id,
+        name: workspace.name,
+        primary: workspace.id === primaryCampaignWorkspace?.id,
+      })),
+    [primaryCampaignWorkspace?.id, workspaces],
+  )
+  const handleOpenCampaignWorkspace = useCallback(async (workspaceId: string) => {
+    await Promise.resolve(onSelectWorkspace(workspaceId))
+    navigation.navigate(routes.view.campaign())
+  }, [navigation, onSelectWorkspace])
   const handleOpenPrimaryCampaignWorkspace = useCallback(async () => {
     if (!primaryCampaignWorkspace) return
-    await Promise.resolve(onSelectWorkspace(primaryCampaignWorkspace.id))
-    navigation.navigate(routes.view.campaign())
-  }, [navigation, onSelectWorkspace, primaryCampaignWorkspace])
+    await handleOpenCampaignWorkspace(primaryCampaignWorkspace.id)
+  }, [handleOpenCampaignWorkspace, primaryCampaignWorkspace])
 
   // Session multi-select state
   const isMultiSelectActive = useIsMultiSelectActive()
@@ -615,7 +628,9 @@ export function MainContentPanel({
             workspaceName={activeWorkspace?.name}
             primaryCampaignWorkspaceName={primaryCampaignWorkspace?.name}
             primaryCampaignWorkspaceId={primaryCampaignWorkspace?.id}
+            campaignWorkspaces={campaignWorkspaces}
             onOpenPrimaryCampaignWorkspace={primaryCampaignWorkspace ? handleOpenPrimaryCampaignWorkspace : undefined}
+            onOpenCampaignWorkspace={handleOpenCampaignWorkspace}
           />
         </Panel>
       )
@@ -639,7 +654,9 @@ export function MainContentPanel({
             workspaceName={activeWorkspace?.name}
             primaryCampaignWorkspaceName={primaryCampaignWorkspace?.name}
             primaryCampaignWorkspaceId={primaryCampaignWorkspace?.id}
+            campaignWorkspaces={campaignWorkspaces}
             onOpenPrimaryCampaignWorkspace={primaryCampaignWorkspace ? handleOpenPrimaryCampaignWorkspace : undefined}
+            onOpenCampaignWorkspace={handleOpenCampaignWorkspace}
           />
         </Panel>
       )

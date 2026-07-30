@@ -110,6 +110,22 @@ describe('HQ State of Play composer', () => {
     expect(state.nextMove.route?.prompt).toContain('Re-open Alex Manager');
   });
 
+  test('lets Spotify Analyst create the missing snapshot instead of blocking on its absence', () => {
+    const state = buildHqStateOfPlay({
+      now,
+      docs: [profileDoc()],
+    });
+
+    expect(state.nextMove.title).toBe('Add a Spotify snapshot');
+    expect(state.nextMove.route).toEqual(expect.objectContaining({
+      target: 'agent',
+      agentSlug: 'spotify-analyst',
+      action: 'refresh',
+      confidence: 'high',
+      blockedReason: undefined,
+    }));
+  });
+
   test('excludes source and shared-intel docs from goals but includes user goals', () => {
     const sharedIntel: SharedIntelNote = {
       version: 1,

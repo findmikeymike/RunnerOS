@@ -929,7 +929,7 @@ export interface ElectronAPI {
   testAutomation(payload: TestAutomationPayload): Promise<TestAutomationResult>
 
   // Automation state management
-  setAutomationEnabled(workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean): Promise<void>
+  setAutomationEnabled(workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean, permissionMode?: PermissionMode): Promise<void>
   duplicateAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
   deleteAutomation(workspaceId: string, eventName: string, matcherIndex: number): Promise<void>
   /** Append a fully-formed matcher under the given event. Server assigns id and de-dupes WebhookReceive slugs. */

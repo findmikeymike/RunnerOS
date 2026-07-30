@@ -42,6 +42,14 @@ App-entered credentials persist across relaunch because the credential manager w
 7. Run one tool-specific smoke per app-configured provider.
 8. Save only pass/fail notes in docs; never save key values or private artist details.
 
+## Artist HQ Home Integration Smoke
+
+1. Open HQ Home and confirm the header `Next` value matches the nearest Calendar/Scheduled Work item, falling back to State of Play when the week is empty.
+2. Confirm `This Week`, `Workers`, and `Projects` show only persisted events, work, enabled automations, and campaign-scoped workspaces; empty columns must say they are empty rather than showing sample tasks.
+3. Add or edit an HQ goal in Workspace Context, refresh State of Play, and confirm the goal appears in the Home card with a working `Manage` route.
+4. Activate Spotify Pulse and Intel Pulse once. Confirm each creates one weekly Monday automation in local time, uses safe permission mode, and appears in Workers without duplicate definitions/runs.
+5. Restart RunnerOS and confirm the same automations, campaign cards, goals, and live work remain visible. Public posts, sends, spending, deletes, and external account mutations must still stop for exact approval.
+
 ## Agent Rule
 
 Future agents may read `smoke/local/*.md` only when explicitly doing local smoke setup or real-provider smoke testing. They must never commit those files or quote private content into tracked docs.

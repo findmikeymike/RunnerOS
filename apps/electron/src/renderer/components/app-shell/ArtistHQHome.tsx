@@ -130,13 +130,24 @@ import {
   type ArtistIntelSource,
   YOUTUBE_INTELLIGENCE_AGENT_SLUG,
 } from '@/lib/artist-intel'
+import {
+  buildHqProjectColumns,
+  buildHqThisWeekItems,
+  buildHqWorkerItems,
+  hqHeaderNextLabel,
+  shouldRefreshHqStateOnOpen,
+  type HqCampaignSummary,
+  type HqHomeProjectColumn,
+} from '@/lib/artist-hq-home-feed'
 
 interface ArtistHQHomeProps {
   workspaceId: string
   workspaceName?: string
   primaryCampaignWorkspaceName?: string
   primaryCampaignWorkspaceId?: string
+  campaignWorkspaces?: HqCampaignSummary[]
   onOpenPrimaryCampaignWorkspace?: () => void
+  onOpenCampaignWorkspace?: (workspaceId: string) => void
 }
 
 type ArtistHQTab = 'home' | 'profile' | 'voice' | 'calendar' | 'network' | 'research' | 'branding'
@@ -231,45 +242,14 @@ const emptyVoiceDraft: VoiceDraft = {
   writingExcerpts: '',
 }
 
-const projectColumns = [
-  {
-    id: 'focus',
-    label: 'Focus',
-    cards: [
-      { title: 'Current Release', detail: 'Open the active campaign workspace', status: 'active', action: 'open-campaign' },
-      { title: 'Spotify Pulse', detail: 'Connect analytics and review listener movement', status: 'waiting' },
-    ],
-  },
-  {
-    id: 'active',
-    label: 'Active',
-    cards: [
-      { title: 'Content System', detail: 'Weekly clips and hooks', status: 'active' },
-      { title: 'Audience Research', detail: 'Reference artists and cities', status: 'active' },
-    ],
-  },
-  {
-    id: 'waiting',
-    label: 'Waiting',
-    cards: [
-      { title: 'Network Follow Ups', detail: 'People to touch this week', status: 'waiting' },
-    ],
-  },
-  {
-    id: 'upcoming',
-    label: 'Upcoming',
-    cards: [
-      { title: 'Next Campaign', detail: 'Single, EP, album, or other release', status: 'planned' },
-    ],
-  },
-]
-
 export function ArtistHQHome({
   workspaceId,
   workspaceName,
   primaryCampaignWorkspaceName,
   primaryCampaignWorkspaceId,
+  campaignWorkspaces = [],
   onOpenPrimaryCampaignWorkspace,
+  onOpenCampaignWorkspace,
 }: ArtistHQHomeProps) {
   const {
     activeAgents: shellActiveAgents = [],
@@ -390,6 +370,18 @@ export function ArtistHQHome({
   const activeCalendarEvents = React.useMemo(
     () => calendar.events.filter((event) => !event.deletedAt),
     [calendar.events],
+  )
+  const thisWeekItems = React.useMemo(
+    () => buildHqThisWeekItems(activeCalendarEvents, scheduledWorkResult.work.items),
+    [activeCalendarEvents, scheduledWorkResult.work.items],
+  )
+  const workerItems = React.useMemo(
+    () => buildHqWorkerItems(automations, scheduledWorkResult.work.items),
+    [automations, scheduledWorkResult.work.items],
+  )
+  const projectColumns = React.useMemo(
+    () => buildHqProjectColumns(campaignWorkspaces, scheduledWorkResult.work.items),
+    [campaignWorkspaces, scheduledWorkResult.work.items],
   )
   const selectedDateEvents = React.useMemo(
     () => activeCalendarEvents.filter((event) => event.date === selectedDate),
@@ -532,6 +524,17 @@ export function ArtistHQHome({
     })
     return () => cleanup()
   }, [refreshAutomations])
+
+  React.useEffect(() => {
+    if (!spotifySyncAutomation || spotifySyncAutomation.permissionMode === 'safe') return
+    void window.electronAPI.setAutomationEnabled(
+      workspaceId,
+      spotifySyncAutomation.event,
+      spotifySyncAutomation.matcherIndex,
+      spotifySyncAutomation.enabled,
+      'safe',
+    ).then(refreshAutomations).catch(() => undefined)
+  }, [refreshAutomations, spotifySyncAutomation, workspaceId])
 
   const saveNetwork = React.useCallback(
     async (nextNetwork: ArtistNetwork) => {
@@ -766,6 +769,15 @@ export function ArtistHQHome({
     }
   }, [workspaceId])
 
+  const refreshedStaleHqStateRef = React.useRef<string | null>(null)
+  React.useEffect(() => {
+    const refreshKey = `${workspaceId}:${hqState?.generatedAt ?? 'missing'}`
+    if (refreshedStaleHqStateRef.current === refreshKey) return
+    if (!shouldRefreshHqStateOnOpen(hqState?.generatedAt)) return
+    refreshedStaleHqStateRef.current = refreshKey
+    void window.electronAPI.refreshHqState(workspaceId).catch(() => undefined)
+  }, [hqState?.generatedAt, workspaceId])
+
   const launchHqRoute = React.useCallback(async (route: HqStateRouteHint, recommendationId?: string) => {
     if (route.target !== 'agent' || !route.agentSlug) {
       toast.error(route.blockedReason ?? 'This recommendation needs review first.')
@@ -805,6 +817,7 @@ export function ArtistHQHome({
           spotifySyncAutomation.event,
           spotifySyncAutomation.matcherIndex,
           !spotifySyncAutomation.enabled,
+          'safe',
         )
         toast.success(spotifySyncAutomation.enabled ? 'Spotify sync paused' : 'Spotify sync enabled')
       } else {
@@ -1027,7 +1040,7 @@ export function ArtistHQHome({
   }, [network.people, query])
 
   const artistName = profile.artistName || workspaceName || 'Artist HQ'
-  const nextDate = 'This week'
+  const nextDate = hqHeaderNextLabel(hqState?.nextMove.title, thisWeekItems)
 
   // Dynamic header properties based on active tab
   const getHeaderProps = () => {
@@ -1105,7 +1118,7 @@ export function ArtistHQHome({
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/35">Next</p>
-                <p className="mt-1.5 text-xs font-medium text-white/70">{nextDate}</p>
+                <p className="mt-1.5 max-w-56 line-clamp-2 text-xs font-medium text-white/70">{nextDate}</p>
               </div>
             </div>
 
@@ -1213,14 +1226,37 @@ export function ArtistHQHome({
 
               <HQCard>
                 <SectionTitle icon={CalendarDays} title="This Week" meta="calendar" />
-                <TimelineItem time="Today" title="Review active campaign" />
-                <TimelineItem time="Next" title="Plan content and outreach" />
-                <TimelineItem time="Soon" title="Add key dates to Calendar" />
+                {thisWeekItems.length > 0 ? thisWeekItems.map((item) => (
+                  <TimelineItem key={item.id} time={item.when} title={item.title} />
+                )) : (
+                  <EmptyLine title="Nothing scheduled this week" detail="Add an event or scheduled job from Calendar." />
+                )}
               </HQCard>
 
               <HQCard>
-                <SectionTitle icon={Bot} title="Workers" meta="quiet" />
-                <EmptyLine title="No active global workers" detail="Spotify sync, research monitors, and calendar jobs will appear here." />
+                <SectionTitle icon={Bot} title="Workers" meta={workerItems.length ? `${workerItems.length} active` : 'quiet'} />
+                {workerItems.length > 0 ? (
+                  <div className="space-y-2">
+                    {workerItems.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => item.kind === 'automation'
+                          ? navigate(routes.view.automations())
+                          : (window.location.hash = '#artist-hq/calendar')}
+                        className="flex w-full items-center justify-between gap-3 rounded-[11px] border border-white/[0.045] bg-white/[0.018] px-3 py-2 text-left transition-colors hover:bg-white/[0.045]"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-xs font-medium text-white/66">{item.title}</span>
+                          <span className="mt-0.5 block truncate text-[10px] text-white/30">{item.detail}</span>
+                        </span>
+                        <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-white/28">{item.status}</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <EmptyLine title="No active global workers" detail="Activate Spotify, Intel Pulse, or schedule HQ work." />
+                )}
               </HQCard>
 
               <FinalsWidget
@@ -1235,8 +1271,13 @@ export function ArtistHQHome({
             <HQCard>
               <SectionTitle icon={FolderKanban} title="Projects" meta="global" />
               <ProjectBoard
-                primaryCampaignWorkspaceName={primaryCampaignWorkspaceName}
-                onOpenPrimaryCampaignWorkspace={onOpenPrimaryCampaignWorkspace}
+                columns={projectColumns}
+                onOpenCampaignWorkspace={onOpenCampaignWorkspace ?? (
+                  primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
+                    ? () => onOpenPrimaryCampaignWorkspace()
+                    : undefined
+                )}
+                onOpenScheduledWork={() => { window.location.hash = '#artist-hq/calendar' }}
               />
             </HQCard>
           </>
@@ -1826,6 +1867,44 @@ function StateOfPlayPanel({
                 <p className="mt-2 line-clamp-3 text-xs leading-5 text-white/44">{state.momentum.up.join(' ')}</p>
               </div>
             ) : null}
+            <div className="mt-4 border-t border-white/[0.05] pt-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">Goals</div>
+                <button
+                  type="button"
+                  onClick={() => navigate(routes.view.workspaceContext())}
+                  className="text-[10px] font-medium text-white/36 transition-colors hover:text-white/65"
+                >
+                  Manage
+                </button>
+              </div>
+              {state.goalProgress.length > 0 ? (
+                <div className="mt-2 space-y-2">
+                  {state.goalProgress.slice(0, 3).map((goal) => (
+                    <button
+                      key={`${goal.goal}:${goal.status}`}
+                      type="button"
+                      onClick={() => navigate(routes.view.workspaceContext())}
+                      className="flex w-full items-center justify-between gap-3 rounded-[10px] border border-white/[0.04] bg-white/[0.015] px-2.5 py-2 text-left hover:bg-white/[0.04]"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs text-white/58">{goal.goal}</span>
+                        <span className="mt-0.5 block truncate text-[10px] text-white/28">{goal.note}</span>
+                      </span>
+                      <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-white/28">{goal.status}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => navigate(routes.view.workspaceContext())}
+                  className="mt-2 w-full rounded-[10px] border border-dashed border-white/[0.06] px-3 py-2.5 text-left text-xs text-white/38 hover:bg-white/[0.035]"
+                >
+                  Add an HQ goal to sharpen recommendations.
+                </button>
+              )}
+            </div>
             <div className="mt-4 border-t border-white/[0.05] pt-3">
               <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/30">System Evidence</div>
               {unhealthySources.length > 0 ? (
@@ -2589,66 +2668,49 @@ function HqWorkLink({ label, onClick }: { label: string; onClick: () => void }) 
 }
 
 function ProjectBoard({
-  primaryCampaignWorkspaceName,
-  onOpenPrimaryCampaignWorkspace,
+  columns,
+  onOpenCampaignWorkspace,
+  onOpenScheduledWork,
 }: {
-  primaryCampaignWorkspaceName?: string
-  onOpenPrimaryCampaignWorkspace?: () => void
+  columns: HqHomeProjectColumn[]
+  onOpenCampaignWorkspace?: (workspaceId: string) => void
+  onOpenScheduledWork: () => void
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-      {projectColumns.map((column) => (
+      {columns.map((column) => (
         <div key={column.id} className="min-h-[210px] rounded-[14px] border border-white/[0.05] bg-black/20 p-3">
           <div className="mb-3 flex items-center justify-between">
             <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">{column.label}</div>
             <span className="text-[10px] text-white/28">{column.cards.length}</span>
           </div>
           <div className="space-y-2">
-            {column.cards.map((card) => {
-              const isCampaignAction = card.action === 'open-campaign'
-              const disabled = isCampaignAction && !onOpenPrimaryCampaignWorkspace
-              const detail = isCampaignAction
-                ? primaryCampaignWorkspaceName
-                  ? `Open ${primaryCampaignWorkspaceName}`
-                  : 'No campaign workspace yet'
-                : card.detail
-
-              const content = (
-                <>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="truncate text-sm font-semibold text-white/76">{card.title}</div>
-                    {isCampaignAction ? <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/28" /> : null}
-                  </div>
-                  <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/38">{detail}</div>
-                </>
-              )
-
-              if (isCampaignAction) {
-                return (
-                  <button
-                    key={card.title}
-                    type="button"
-                    onClick={onOpenPrimaryCampaignWorkspace}
-                    disabled={disabled}
-                    className={cn(
-                      'w-full rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3 text-left transition-colors',
-                      disabled
-                        ? 'cursor-not-allowed opacity-55'
-                        : 'hover:border-[#fb923c]/35 hover:bg-[#fb923c]/[0.055]',
-                    )}
-                    aria-label={primaryCampaignWorkspaceName ? `Open ${primaryCampaignWorkspaceName}` : 'No campaign workspace available'}
-                  >
-                    {content}
-                  </button>
-                )
-              }
-
-              return (
-                <div key={card.title} className="rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3">
-                  {content}
+            {column.cards.length > 0 ? column.cards.map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                onClick={() => card.kind === 'campaign' && card.workspaceId
+                  ? onOpenCampaignWorkspace?.(card.workspaceId)
+                  : onOpenScheduledWork()}
+                disabled={card.kind === 'campaign' && !onOpenCampaignWorkspace}
+                className={cn(
+                  'w-full rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3 text-left transition-colors',
+                  card.kind === 'campaign' && !onOpenCampaignWorkspace
+                    ? 'cursor-not-allowed opacity-55'
+                    : 'hover:border-[#fb923c]/35 hover:bg-[#fb923c]/[0.055]',
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="truncate text-sm font-semibold text-white/76">{card.title}</div>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/28" />
                 </div>
-              )
-            })}
+                <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/38">{card.detail}</div>
+              </button>
+            )) : (
+              <p className="rounded-[12px] border border-dashed border-white/[0.05] px-3 py-4 text-xs leading-5 text-white/28">
+                No {column.label.toLowerCase()} items.
+              </p>
+            )}
           </div>
         </div>
       ))}
@@ -2949,7 +3011,7 @@ function createSpotifySyncMatcher(): Record<string, unknown> {
     name: SPOTIFY_SYNC_AUTOMATION_NAME,
     cron: SPOTIFY_SYNC_CRON,
     timezone: getLocalTimezone(),
-    permissionMode: 'ask',
+    permissionMode: 'safe',
     labels: ['spotify', 'artist-hq', 'scheduled'],
     actions: [
       {

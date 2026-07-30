@@ -5,6 +5,7 @@ import { getWorkspaceByNameOrId } from '@craft-agent/shared/config'
 import { appendAutomationHistoryEntry } from '@craft-agent/shared/automations/history-store'
 import { validateAutomationsConfig } from '@craft-agent/shared/automations'
 import { AUTOMATION_HISTORY_MAX_RUNS_PER_MATCHER } from '@craft-agent/shared/automations/constants'
+import type { PermissionMode } from '@craft-agent/shared/agent/modes'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from '../handler-deps'
 
@@ -264,12 +265,22 @@ export function registerAutomationsHandlers(server: RpcServer, deps: HandlerDeps
   })
 
   // Automation enabled state management (toggle enabled/disabled in automations.json)
-  server.handle(RPC_CHANNELS.automations.SET_ENABLED, async (_ctx, workspaceId: string, eventName: string, matcherIndex: number, enabled: boolean) => {
+  server.handle(RPC_CHANNELS.automations.SET_ENABLED, async (
+    _ctx,
+    workspaceId: string,
+    eventName: string,
+    matcherIndex: number,
+    enabled: boolean,
+    permissionMode?: PermissionMode,
+  ) => {
     await withAutomationMatcher(workspaceId, eventName, matcherIndex, (matchers, idx) => {
       if (enabled) {
         delete matchers[idx].enabled
       } else {
         matchers[idx].enabled = false
+      }
+      if (permissionMode) {
+        matchers[idx].permissionMode = permissionMode
       }
     })
   })

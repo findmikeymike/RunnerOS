@@ -364,7 +364,7 @@ function buildContextNextMove(input: HqInputState, missing: string[]): HqStateNe
       why: 'HQ has no current streaming context, so it cannot read momentum or market signals.',
       worker: 'spotify-analyst',
       action: 'refresh',
-      oneClick: false,
+      oneClick: true,
     };
   }
 
@@ -441,7 +441,6 @@ function routeContextDocSlugs(input: HqInputState, action: HqStateAction, nextMo
 
 function routeBlockedReason(input: HqInputState, nextMove: HqStateNextMove): string | undefined {
   if (!clean(nextMove.worker)) return 'No target worker was selected.';
-  if (nextMove.worker === 'spotify-analyst' && !input.spotify) return 'Spotify context is missing.';
   if (nextMove.worker === 'branding-agent' && (!clean(input.profile?.artistName) || !clean(input.profile?.sound) || !clean(input.profile?.audience))) {
     return 'Artist profile is not complete enough for an autonomous worker launch.';
   }
