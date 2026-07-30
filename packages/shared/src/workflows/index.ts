@@ -40,6 +40,7 @@ export {
   readActivatedWorkflows,
   writeActivatedWorkflows,
   setWorkflowActive,
+  ensureDefaultWorkflowActivations,
   loadActivatedWorkflows,
   writeGlobalWorkflow,
   deleteGlobalWorkflow,
@@ -95,5 +96,10 @@ export {
   EMAIL_TRIAGE_SLUG,
   CONTENT_MASTERMIND_SLUG,
   PAID_CAMPAIGN_BUILDER_SLUG,
+  INDUSTRY_OUTREACH_PIPELINE_SLUG,
+  COLLEGE_RADIO_CAMPAIGN_SLUG,
+  MERCH_PRODUCT_BUILDER_SLUG,
   ENSURED_STARTER_WORKFLOW_SLUGS,
+  HQ_DEFAULT_WORKFLOW_SLUGS,
+  CAMPAIGN_DEFAULT_WORKFLOW_SLUGS,
 } from './starter-templates.ts';

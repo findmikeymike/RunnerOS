@@ -629,7 +629,7 @@ export function findApprovedScheduledJobApproval(
   now: Date = new Date(),
   campaignId?: string,
 ): CampaignScheduleApproval | undefined {
-  return (item.approvals ?? []).findLast((approval) => (
+  return [...(item.approvals ?? [])].reverse().find((approval) => (
     approval.status === 'approved'
     && !isApprovalExpired(approval, now)
     && approvalMatchesJob(approval, item, job, campaignId)

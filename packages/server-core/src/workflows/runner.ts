@@ -28,6 +28,7 @@ import {
   assertValidWorkflowRunId,
   attachAgentMessageReceipts,
   markRunningRunsInterrupted,
+  normalizeWorkflowTriggerInputs,
   parseStructuredStepOutput,
   readRun,
   resolveTemplate,
@@ -207,7 +208,8 @@ export class WorkflowRunner {
     workspaceId: string;
     triggerInputs: Record<string, unknown>;
   }): Promise<WorkflowRunSnapshot> {
-    const { workflow, workspaceId, triggerInputs } = input;
+    const { workflow, workspaceId } = input;
+    const triggerInputs = normalizeWorkflowTriggerInputs(workflow, input.triggerInputs);
     const key = concurrencyKey(workspaceId, workflow.slug);
     if (this.activeByKey.has(key)) {
       throw new Error(
@@ -886,7 +888,7 @@ export class WorkflowRunner {
   }
 
   private async finalizeDefaultOutput(active: ActiveRun): Promise<void> {
-    if (active.snapshot.finalOutputId || (active.snapshot.outputIds?.length ?? 0) > 0) return;
+    if (active.snapshot.finalOutputId) return;
     try {
       const next = await this.createDefaultWorkflowOutput(active.snapshot);
       active.snapshot = this.cloneSnapshot(next);

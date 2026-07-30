@@ -13,6 +13,9 @@ export const WEEKLY_CONTENT_PIPELINE_SLUG = 'weekly-content-pipeline';
 export const EMAIL_TRIAGE_SLUG = 'email-triage';
 export const CONTENT_MASTERMIND_SLUG = 'content-mastermind';
 export const PAID_CAMPAIGN_BUILDER_SLUG = 'paid-campaign-builder';
+export const INDUSTRY_OUTREACH_PIPELINE_SLUG = 'industry-outreach-pipeline';
+export const COLLEGE_RADIO_CAMPAIGN_SLUG = 'college-radio-campaign';
+export const MERCH_PRODUCT_BUILDER_SLUG = 'merch-product-builder';
 
 const weeklyContentPipeline = {
   slug: WEEKLY_CONTENT_PIPELINE_SLUG,
@@ -462,11 +465,592 @@ The workflow stops at an approval-ready execution packet. External account chang
 `,
 };
 
+const industryOutreachPipeline = {
+  slug: INDUSTRY_OUTREACH_PIPELINE_SLUG,
+  metadata: {
+    name: 'Industry Outreach Pipeline',
+    description: 'Find high-fit music-industry targets, then turn the strongest opportunities into verified, personalized, approval-ready outreach.',
+    avatar: '🎯',
+    trigger: {
+      type: 'manual' as const,
+      inputs: [
+        {
+          name: 'campaign_brief',
+          type: 'string' as const,
+          required: true,
+          description: 'Artist, release, sound, related artists, campaign, links, timing, and current objective',
+        },
+        {
+          name: 'outreach_goal',
+          type: 'string' as const,
+          required: true,
+          description: 'The relationship or outcome being pursued',
+        },
+        {
+          name: 'target_lanes',
+          type: 'string' as const,
+          default: 'A&R, artist development, indie labels, managers, publishers, sync, and credible scene connectors',
+          description: 'Target roles or industry categories',
+        },
+        {
+          name: 'markets',
+          type: 'string' as const,
+          default: 'Recommend from the artist and campaign context',
+          description: 'Countries, cities, scenes, or territories',
+        },
+        {
+          name: 'sender_identity',
+          type: 'string' as const,
+          default: 'Use the approved Artist HQ sender identity',
+          description: 'Artist or team member who would send the outreach',
+        },
+        {
+          name: 'target_count',
+          type: 'number' as const,
+          default: 10,
+          description: 'Maximum number of researched targets',
+          min: 1,
+          max: 25,
+          integer: true,
+        },
+        {
+          name: 'draft_count',
+          type: 'number' as const,
+          default: 3,
+          description: 'Maximum number of finalists receiving personalized drafts',
+          min: 0,
+          max: 10,
+          integer: true,
+          maxFrom: 'target_count',
+        },
+        {
+          name: 'enrichment_budget',
+          type: 'number' as const,
+          default: 0,
+          description: 'Planning ceiling for a later paid-enrichment approval packet; this workflow spends $0',
+          min: 0,
+          max: 25,
+        },
+      ],
+    },
+    steps: [
+      {
+        id: 'hunt',
+        agent: 'industry-hunter',
+        description: 'Research and rank a tight list of evidence-backed industry targets.',
+        input: `Build an Industry Hunter Target List for this artist campaign.
+
+Campaign:
+{{trigger.campaign_brief}}
+
+Outreach goal:
+{{trigger.outreach_goal}}
+
+Target lanes:
+{{trigger.target_lanes}}
+
+Markets:
+{{trigger.markets}}
+
+Maximum targets:
+{{trigger.target_count}}
+
+Use Artist HQ and campaign context before asking for repeated information.
+
+Research real reachable operators—not famous executives by default. Prefer people whose current public work, roster, credits, interviews, projects, or professional activity prove meaningful fit.
+
+For every target include:
+- name, role, and organization
+- target category
+- verified public profile and evidence links
+- evidence checked date
+- why this person fits this specific artist
+- likely outreach angle
+- suggested low-friction ask
+- reachability
+- confidence
+- confirmed facts versus inference
+- missing information
+- explicit Outreach Agent handoff
+
+Do not purchase contact enrichment during this step. Do not invent titles, relationships, profile URLs, emails, quotes, or interests.
+
+Return the research packet directly to the workflow. Do not create a separate Output because the final Outreach Packet will be the workflow’s canonical Output.`,
+        timeout: 1200,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: {
+          requireNonEmptyOutput: true,
+          requireToolUse: true,
+          minOutputChars: 1400,
+        },
+      },
+      {
+        id: 'outreach-packet',
+        agent: 'outreach-agent',
+        description: 'Select the strongest opportunities and create deeply personalized outreach drafts.',
+        input: `Act as the final Outreach Director for this campaign.
+
+Campaign:
+{{trigger.campaign_brief}}
+
+Outreach goal:
+{{trigger.outreach_goal}}
+
+Sender:
+{{trigger.sender_identity}}
+
+Maximum personalized finalists:
+{{trigger.draft_count}}
+
+Later paid contact-enrichment planning ceiling:
+\${{trigger.enrichment_budget}}
+
+INDUSTRY HUNTER TARGET LIST:
+{{steps.hunt.output}}
+
+Select only the strongest legitimate opportunities. Do not draft for weak targets merely to fill the requested count.
+
+Recheck important public facts and source freshness for each finalist. Do not repeat the entire broad hunt.
+
+Do not perform paid lookup in this workflow. A positive ceiling is planning context, not spending approval. When paid enrichment could materially improve a finalist, include an exact later approval packet whose aggregate maximum cannot exceed the stated ceiling. Never guess an email.
+
+Produce one polished Industry Outreach Packet containing:
+- campaign and artist fit snapshot
+- executive recommendation
+- selected finalists and blunt selection reasons
+- targets rejected or deferred and why
+- confirmed recipient/profile/contact information
+- confidence and unresolved caveats
+- specific public research supporting each angle
+- one recommended outreach angle per finalist
+- two subject options
+- one concise personalized email draft
+- exact low-friction ask
+- one follow-up draft and timing recommendation
+- sender/account requirements
+- links or assets to include
+- Ready Now / Verify First / Do Not Contact status
+- final approval checklist
+
+Do not create Gmail drafts or send messages during this workflow. External delivery remains a separate action requiring current-turn approval for the exact recipient, sender, subject, body, links, attachments, and send action.
+
+Do not fabricate familiarity, praise, referrals, relationships, quotes, contact information, or personal interests.`,
+        timeout: 900,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: {
+          requireNonEmptyOutput: true,
+          requireToolUse: true,
+          minOutputChars: 1800,
+        },
+      },
+    ],
+    outputs: {
+      mode: 'final-step' as const,
+      kind: 'document' as const,
+      title: 'Industry Outreach Pipeline',
+      primary: { from: 'step-output' as const, step: 'outreach-packet' },
+    },
+  } satisfies WorkflowMetadata,
+  body: `# Industry Outreach Pipeline
+
+Run this when an artist needs a small number of genuinely relevant industry relationships—not a scraped bulk prospect list.
+
+The workflow researches broadly, personalizes selectively, and stops at an approval-ready outreach packet. It never sends messages automatically.
+`,
+};
+
+const collegeRadioCampaign = {
+  slug: COLLEGE_RADIO_CAMPAIGN_SLUG,
+  metadata: {
+    name: 'College Radio Campaign',
+    description: 'Verify college and noncommercial radio targets, then turn the strongest eligible stations into approval-ready outreach and submission queues.',
+    avatar: '📻',
+    trigger: {
+      type: 'manual' as const,
+      inputs: [
+        {
+          name: 'release_brief',
+          type: 'string' as const,
+          required: true,
+          description: 'Artist, release, date, genre, story, links, and campaign context',
+        },
+        {
+          name: 'sound_alikes',
+          type: 'string' as const,
+          required: true,
+          description: 'Two to five honest comparable artists',
+        },
+        {
+          name: 'clean_status',
+          type: 'string' as const,
+          required: true,
+          description: 'Clean, explicit, or clean edit available',
+        },
+        {
+          name: 'markets',
+          type: 'string' as const,
+          default: 'Prioritize hometown, tour markets, and strongest artist-fit regions',
+          description: 'Geographic priorities',
+        },
+        {
+          name: 'station_count',
+          type: 'number' as const,
+          default: 12,
+          description: 'Maximum verified targets',
+          min: 1,
+          max: 50,
+          integer: true,
+        },
+        {
+          name: 'email_draft_count',
+          type: 'number' as const,
+          default: 5,
+          description: 'Maximum personalized email drafts',
+          min: 0,
+          max: 20,
+          integer: true,
+          maxFrom: 'station_count',
+        },
+        {
+          name: 'sender_identity',
+          type: 'string' as const,
+          default: 'Use the approved Artist HQ sender identity',
+          description: 'Artist or team member who would send the outreach',
+        },
+        {
+          name: 'include_physical',
+          type: 'boolean' as const,
+          default: false,
+          description: 'Include stations currently requiring physical submissions',
+        },
+      ],
+    },
+    steps: [
+      {
+        id: 'verify-stations',
+        agent: 'college-radio-agent',
+        description: 'Verify current stations, shows, contacts, and submission rules.',
+        input: `Build a current, verified College Radio Target List for this release.
+
+Release:
+{{trigger.release_brief}}
+
+Honest sound-alikes:
+{{trigger.sound_alikes}}
+
+Clean status:
+{{trigger.clean_status}}
+
+Market priorities:
+{{trigger.markets}}
+
+Maximum verified targets:
+{{trigger.station_count}}
+
+Use Artist HQ and campaign context before asking for repeated information.
+
+Treat bundled station directories only as research leads. Verify every target against current public sources before recommending it.
+
+For every station or show include:
+- station, show, host or music director when publicly confirmed
+- current evidence URL and date checked
+- format and artist-fit reasoning
+- current submission method: email, form, upload, or physical
+- confirmed public contact or submission URL
+- attachment, file-format, clean-edit, and release-date rules
+- eligibility or geographic restrictions
+- recommended angle
+- confidence and missing information
+- Ready / Verify First / Not Eligible status
+
+Reject directory-only records as unverified. Never invent contacts, submission rules, airplay claims, or relationships.
+
+Do not send email, submit forms, upload music, or mail packages.
+
+Do not call create_output or message_agent in this workflow. Return the complete packet directly to the workflow. Outreach runs exactly once as the next step and creates the canonical final Output.`,
+        timeout: 1200,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: {
+          requireNonEmptyOutput: true,
+          requireToolUse: true,
+          minOutputChars: 1600,
+        },
+      },
+      {
+        id: 'campaign-packet',
+        agent: 'outreach-agent',
+        description: 'Turn verified stations into a focused, approval-ready campaign.',
+        input: `Act as the final College Radio Campaign Director.
+
+Release:
+{{trigger.release_brief}}
+
+Sender:
+{{trigger.sender_identity}}
+
+Maximum email drafts:
+{{trigger.email_draft_count}}
+
+Include physical-submission targets:
+{{trigger.include_physical}}
+
+VERIFIED COLLEGE RADIO TARGET LIST:
+{{steps.verify-stations.output}}
+
+Use the verified research packet as source truth. Do not repeat the broad station search unless information is missing, stale, or contradictory.
+
+Select only genuinely eligible, high-fit targets. Do not fill quotas with weak stations.
+
+Create email drafts only for targets with a verified email submission method. Route forms and uploads into manual submission queues. Include physical targets only when explicitly enabled.
+
+Produce one polished College Radio Campaign containing:
+- release and radio-fit snapshot
+- ranked verified targets with blunt selection reasons
+- email-ready targets with To, Subject, Body, links, and attachments
+- form and upload submission field plans
+- physical mailing queue when enabled
+- one-sheet, clean-edit, metadata, and asset gaps
+- recommended submission and follow-up dates
+- excluded or deferred targets and reasons
+- Ready Now / Verify First / Not Eligible status
+- exact approval checklist
+
+Do not create Gmail drafts, send messages, submit forms, upload files, or claim that anything was delivered. External delivery remains a separate action requiring approval.`,
+        timeout: 900,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: {
+          requireNonEmptyOutput: true,
+          minOutputChars: 1800,
+        },
+      },
+    ],
+    outputs: {
+      mode: 'final-step' as const,
+      kind: 'document' as const,
+      title: 'College Radio Campaign',
+      primary: { from: 'step-output' as const, step: 'campaign-packet' },
+    },
+  } satisfies WorkflowMetadata,
+  body: `# College Radio Campaign
+
+Run when an artist needs current-rule-aware college and noncommercial radio outreach.
+
+The workflow verifies first, drafts selectively, and stops before delivery.
+`,
+};
+
+const merchProductBuilder = {
+  slug: MERCH_PRODUCT_BUILDER_SLUG,
+  metadata: {
+    name: 'Merch Product Builder',
+    description: 'Turn uploaded artwork into one production-ready Printify product, optional lifestyle mockup direction, Shopify storefront guidance when connected, and an approval-gated Merch Launch Kit.',
+    avatar: '👕',
+    trigger: {
+      type: 'manual' as const,
+      inputs: [
+        {
+          name: 'artwork',
+          type: 'string' as const,
+          required: true,
+          description: 'Uploaded artwork, file paths, folder, or existing Output',
+        },
+        {
+          name: 'product_goal',
+          type: 'string' as const,
+          required: true,
+          description: 'Product idea, audience, campaign purpose, and launch context',
+        },
+        {
+          name: 'product_preferences',
+          type: 'string' as const,
+          default: 'Choose the strongest single product and avoid catalog sprawl',
+          description: 'Garment, placement, colors, sizes, or provider preferences',
+        },
+        {
+          name: 'target_market',
+          type: 'string' as const,
+          default: 'Use Artist HQ and campaign context',
+          description: 'Primary country or fulfillment region',
+        },
+        {
+          name: 'mockup_request',
+          type: 'boolean' as const,
+          default: false,
+          description: 'Request an artist-wearing-the-product lifestyle concept',
+        },
+        {
+          name: 'artist_reference',
+          type: 'string' as const,
+          default: 'Use an approved Artist Vault face reference when available',
+          description: 'Approved artist reference image or Vault asset',
+        },
+        {
+          name: 'generation_budget',
+          type: 'number' as const,
+          default: 0,
+          description: 'Planning ceiling for a later image-generation approval packet; this workflow spends $0',
+          min: 0,
+          max: 100,
+        },
+        {
+          name: 'sample_first',
+          type: 'boolean' as const,
+          default: true,
+          description: 'Require sample or physical QA before recommending publication',
+        },
+      ],
+    },
+    steps: [
+      {
+        id: 'build-kit',
+        agent: 'print-agent',
+        description: 'Lead the complete product build and conditionally delegate visual or Shopify work only when needed.',
+        input: `Act as lead Merch Product Builder and final director.
+
+Artwork:
+{{trigger.artwork}}
+
+Product goal:
+{{trigger.product_goal}}
+
+Product preferences:
+{{trigger.product_preferences}}
+
+Target market:
+{{trigger.target_market}}
+
+Lifestyle mockup requested:
+{{trigger.mockup_request}}
+
+Approved artist reference:
+{{trigger.artist_reference}}
+
+Later image-generation planning ceiling:
+\${{trigger.generation_budget}}
+
+Sample-first:
+{{trigger.sample_first}}
+
+Use Artist HQ, campaign, branding, voice, visual-world, release, and Vault context before asking for repeated information.
+
+ARTWORK AND PRODUCT INTAKE
+- Inspect the real supplied files.
+- Separate production artwork from screenshots, notes, references, and existing mockups.
+- Flag resolution, transparency, crop, contrast, edge safety, text, background, aspect-ratio, and possible rights concerns.
+- Never silently upscale, stretch, remove a background, rewrite artwork, or alter the design.
+- Choose one strongest product unless the user explicitly requested more.
+
+PRINTIFY RESEARCH
+- Run Printify doctor and inspect the actual connected shop.
+- Use current catalog, provider, variant, shipping, placement, and cost data.
+- Select the blueprint, provider, garment, print area, colors, and sizes based on quality, availability, target market, economics, and artwork compatibility.
+- Preserve aspect ratio and use real product-template constraints.
+- Produce a placement matrix and exact product manifest.
+- Treat Printify as the fulfillment/product source of truth.
+
+OPTIONAL ART DIRECTOR DELEGATION
+Contact Art Director exactly once only when:
+- lifestyle mockup requested is true; or
+- the supplied artwork needs creative repair or product-specific adaptation that Print Agent cannot safely perform.
+
+Give Art Director the selected real product specification, accepted artwork, exact problem, approved reference, and planning ceiling.
+
+Never create a real-person likeness from text alone. Use only the approved reference with a reference-capable tool. If no usable reference exists, return a non-likeness alternative.
+
+Do not generate or purchase imagery in this workflow. A positive ceiling is planning context, not spending approval. Art Director must return the strongest mockup direction, a reference-safe prompt, the exact tool/model plan, and a later approval packet capped by that ceiling. A future generated lifestyle image must be labeled promotional concept art, not exact product proof; official Printify mockups remain the accuracy reference.
+
+CONDITIONAL SHOPIFY DELEGATION
+Run Shopify doctor as a read-only connection check.
+
+If Shopify validates successfully, contact Shopify Agent exactly once. Give it the finalized Printify product plan and ask it to:
+- inspect existing products, collections, storefront patterns, and likely duplicates read-only
+- determine whether the Printify shop is intended to sync to this Shopify store
+- recommend collection placement, title, Shopify HTML description, SEO title, meta description, tags, alt text, and media order
+- produce a post-Printify-sync DRAFT update plan
+- make no Shopify changes
+
+If Shopify does not validate, do not contact Shopify Agent. Record: "Shopify skipped — not connected."
+
+Never create a second Shopify product when Printify will sync the fulfillment-backed product. Shopify work follows the Printify draft/sync.
+
+ECONOMICS AND LISTING
+- Show real product costs and known shipping.
+- Clearly label unknown fees and return assumptions.
+- Calculate price floor, conservative launch price, stretch price, gross margin, fulfillment-adjusted contribution, and discount room.
+- Flag products whose economics do not support likely acquisition costs.
+- Write buyer-facing listing copy without invented quality, scarcity, delivery, sustainability, or product claims.
+
+FINAL MERCH LAUNCH KIT
+Produce one decisive document containing:
+- executive recommendation
+- accepted and rejected asset inventory
+- one selected product and why it won
+- exact shop, blueprint, provider, variants, colors, and sizes
+- print placement matrix and production warnings
+- print-ready or revision-needed asset paths
+- official Printify mockup plan
+- optional lifestyle mockup direction and exact later-generation approval packet
+- product cost and margin waterfall
+- recommended pricing and discount room
+- title options and recommended title
+- short description and clean Shopify HTML description
+- SEO title, meta description, tags, collections, and alt text
+- recommended storefront media order
+- Shopify Connected / Shopify Skipped status
+- duplicate-product and sync warnings
+- sample-order and physical-QA recommendation
+- exact Printify dry-run and approval packet
+- later Shopify draft-update plan when connected
+- Ready Now / Needs Artwork Fix / Needs Approval / Blocked status
+- exact next approval
+
+Do not upload artwork, create a product, order a sample, sync, publish, update Shopify, or perform any external write during this workflow.
+
+Return the complete Merch Launch Kit directly to the workflow. Do not create a duplicate document Output.`,
+        timeout: 1800,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: {
+          requireNonEmptyOutput: true,
+          requireToolUse: true,
+          minOutputChars: 2200,
+        },
+      },
+    ],
+    outputs: {
+      mode: 'final-step' as const,
+      kind: 'document' as const,
+      title: 'Merch Launch Kit',
+      primary: { from: 'step-output' as const, step: 'build-kit' },
+    },
+  } satisfies WorkflowMetadata,
+  body: `# Merch Product Builder
+
+Run this when campaign artwork should become one serious, production-ready merch product rather than a bloated print-on-demand catalog.
+
+Print Agent leads one run, Art Director joins only when visual work is needed, and Shopify Agent joins only when a real Shopify connection validates.
+
+The workflow stops at exact approval packets. Nothing is uploaded, created, ordered, synchronized, or published automatically.
+`,
+};
+
 export const STARTER_WORKFLOWS: ReadonlyArray<{
   slug: string;
   metadata: WorkflowMetadata;
   body: string;
-}> = [weeklyContentPipeline, emailTriage, contentMastermind, paidCampaignBuilder];
+}> = [
+  weeklyContentPipeline,
+  emailTriage,
+  contentMastermind,
+  paidCampaignBuilder,
+  industryOutreachPipeline,
+  collegeRadioCampaign,
+  merchProductBuilder,
+];
 
 export const STARTER_WORKFLOW_SLUGS: readonly string[] = STARTER_WORKFLOWS.map((w) => w.slug);
 
@@ -478,4 +1062,15 @@ export const STARTER_WORKFLOW_SLUGS: readonly string[] = STARTER_WORKFLOWS.map((
 export const ENSURED_STARTER_WORKFLOW_SLUGS = [
   CONTENT_MASTERMIND_SLUG,
   PAID_CAMPAIGN_BUILDER_SLUG,
+  INDUSTRY_OUTREACH_PIPELINE_SLUG,
+  COLLEGE_RADIO_CAMPAIGN_SLUG,
+  MERCH_PRODUCT_BUILDER_SLUG,
 ] as const;
+
+/** Automatically active in new Artist HQ workspaces. */
+export const HQ_DEFAULT_WORKFLOW_SLUGS = STARTER_WORKFLOW_SLUGS.filter(
+  (slug) => slug !== COLLEGE_RADIO_CAMPAIGN_SLUG && slug !== MERCH_PRODUCT_BUILDER_SLUG,
+);
+
+/** Automatically active in new Campaign workspaces. */
+export const CAMPAIGN_DEFAULT_WORKFLOW_SLUGS = STARTER_WORKFLOW_SLUGS;

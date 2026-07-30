@@ -53,13 +53,13 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Agents mapped: 44
 - Hidden from Workers home: 5
 - Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `spotify-playlist-creator`, `content-genius`, `scroll-stopper`, `anticipation-director`, `content-director`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
-- Starter workflows mapped: 4
+- Starter workflows mapped: 7
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
 - Scheduled Work execution: wired
 - Domains: Command 3, Content Creation 9, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 4, Socials 3
 - Permission modes: ask 36, safe 8
-- Known skills: 124 (82 bundled, 6 system, 124 user-global on this machine)
+- Known skills: 124 (85 bundled, 6 system, 124 user-global on this machine)
 - Known builtin sources: 27
 
 ## Reference Health
@@ -158,6 +158,30 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Agent refs: `ad-creative-agent`, `ads-agent`, `ads-strategist`
 - Missing agent refs: none
 - Step order: strategy -> @ads-strategist; creative -> @ad-creative-agent; execution-packet -> @ads-agent
+
+### Industry Outreach Pipeline (`industry-outreach-pipeline`)
+
+- Description: Find high-fit music-industry targets, then turn the strongest opportunities into verified, personalized, approval-ready outreach.
+- Trigger: `manual`; inputs: 8; steps: 2
+- Agent refs: `industry-hunter`, `outreach-agent`
+- Missing agent refs: none
+- Step order: hunt -> @industry-hunter; outreach-packet -> @outreach-agent
+
+### College Radio Campaign (`college-radio-campaign`)
+
+- Description: Verify college and noncommercial radio targets, then turn the strongest eligible stations into approval-ready outreach and submission queues.
+- Trigger: `manual`; inputs: 8; steps: 2
+- Agent refs: `college-radio-agent`, `outreach-agent`
+- Missing agent refs: none
+- Step order: verify-stations -> @college-radio-agent; campaign-packet -> @outreach-agent
+
+### Merch Product Builder (`merch-product-builder`)
+
+- Description: Turn uploaded artwork into one production-ready Printify product, optional lifestyle mockup direction, Shopify storefront guidance when connected, and an approval-gated Merch Launch Kit.
+- Trigger: `manual`; inputs: 8; steps: 1
+- Agent refs: `print-agent`
+- Missing agent refs: none
+- Step order: build-kit -> @print-agent
 
 
 ## Workers By Domain
@@ -413,12 +437,12 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Description: Turn artwork into print-on-demand merch plans and product drafts.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
-- Skills: `printify-commerce`, `print-product-assets`
+- Skills: `printify-commerce`, `print-product-assets`, `pod-product-strategy`, `pod-pricing-margin`, `pod-listing-copy`
 - Sources: `printify`
-- Optional sources: none
-- Trusted tools: none
+- Optional sources: `shopify`
+- Trusted tools: `message_agent`
 - Tags: `print`, `printify`, `pod`, `apparel`, `products`, `commerce`
-- Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
+- Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`, `trusted-worker-tools`
 - Inputs: Image folders, artwork files, shirt/product ideas, Printify shop tasks, product batches, pricing, placement, catalog, upload, order, and fulfillment requests.
 - Outputs: Asset inventories, product plans, placement specs, Printify manifests, upload/product approval packets, QA reports, receipts, and Canvas-ready previews.
 

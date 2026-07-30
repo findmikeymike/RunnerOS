@@ -13,13 +13,19 @@ import {
 import type { WorkflowRunSnapshot, WorkflowRunState } from './run-types.ts';
 import {
   CONTENT_MASTERMIND_SLUG,
+  COLLEGE_RADIO_CAMPAIGN_SLUG,
+  CAMPAIGN_DEFAULT_WORKFLOW_SLUGS,
   ENSURED_STARTER_WORKFLOW_SLUGS,
+  HQ_DEFAULT_WORKFLOW_SLUGS,
+  INDUSTRY_OUTREACH_PIPELINE_SLUG,
+  MERCH_PRODUCT_BUILDER_SLUG,
   PAID_CAMPAIGN_BUILDER_SLUG,
   STARTER_WORKFLOWS,
   STARTER_WORKFLOW_SLUGS,
 } from './starter-templates.ts';
 import {
   deleteGlobalWorkflow,
+  ensureDefaultWorkflowActivations,
   ensureRequiredWorkflows,
   loadActivatedWorkflows,
   loadAllGlobalWorkflows,
@@ -392,6 +398,28 @@ describe('parseWorkflowFile', () => {
 
     const invalid = valid.replace('default: 2', 'default: two');
     expect(parseWorkflowFile(invalid)).toBeNull();
+  });
+
+  test('validates numeric bounds and cross-input ceilings', () => {
+    const valid = minimalMeta({
+      trigger: {
+        type: 'manual',
+        inputs: [
+          { name: 'targets', type: 'number', default: 10, min: 1, max: 25, integer: true },
+          { name: 'drafts', type: 'number', default: 3, min: 0, max: 10, integer: true, maxFrom: 'targets' },
+        ],
+      },
+    });
+    expect(parseWorkflowFile(serializeWorkflow(valid, ''))).not.toBeNull();
+
+    const invalidReference = structuredClone(valid);
+    invalidReference.trigger.inputs![1]!.maxFrom = 'missing';
+    expect(() => serializeWorkflow(invalidReference, '')).toThrow();
+
+    const invalidDefaults = structuredClone(valid);
+    invalidDefaults.trigger.inputs![0]!.default = 2;
+    invalidDefaults.trigger.inputs![1]!.default = 3;
+    expect(() => serializeWorkflow(invalidDefaults, '')).toThrow();
   });
 
   test('warns + downgrades to manual when trigger.type is an unknown string', () => {
@@ -818,7 +846,21 @@ describe('activation manifest', () => {
     setWorkflowActive(workspace, 'flow-x', true);
     expect(readActivatedWorkflows(workspace).active).toContain('flow-x');
     setWorkflowActive(workspace, 'flow-x', false);
-    expect(readActivatedWorkflows(workspace).active).not.toContain('flow-x');
+    const manifest = readActivatedWorkflows(workspace);
+    expect(manifest.active).not.toContain('flow-x');
+    expect(manifest.inactive).toContain('flow-x');
+  });
+
+  test('default activation migrates existing workspaces but respects explicit opt-out', () => {
+    writeGlobalWorkflow({ slug: 'new-default', metadata: minimalMeta(), body: '' }, opts());
+
+    expect(ensureDefaultWorkflowActivations(workspace, ['new-default'], opts()).activated).toBe(1);
+    expect(readActivatedWorkflows(workspace).active).toContain('new-default');
+
+    setWorkflowActive(workspace, 'new-default', false);
+    expect(ensureDefaultWorkflowActivations(workspace, ['new-default'], opts()).activated).toBe(0);
+    expect(readActivatedWorkflows(workspace).active).not.toContain('new-default');
+    expect(readActivatedWorkflows(workspace).inactive).toContain('new-default');
   });
 
   test('loadActivatedWorkflows skips and self-heals slugs missing from the library', () => {
@@ -869,6 +911,70 @@ describe('seedGlobalWorkflowLibraryIfEmpty', () => {
     expect(parsed?.metadata.outputs?.primary?.step).toBe('execution-packet')
     expect(STARTER_WORKFLOW_SLUGS).toContain(PAID_CAMPAIGN_BUILDER_SLUG)
     expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(PAID_CAMPAIGN_BUILDER_SLUG)
+  })
+
+  test('Industry Outreach Pipeline parses with selective research, spend, and delivery boundaries', () => {
+    const workflow = STARTER_WORKFLOWS.find((item) => item.slug === INDUSTRY_OUTREACH_PIPELINE_SLUG)
+
+    expect(workflow).toBeDefined()
+    const parsed = parseWorkflowFile(serializeWorkflow(workflow!.metadata, workflow!.body))
+    expect(parsed).not.toBeNull()
+    expect(parsed?.metadata.steps.map((step) => step.agent)).toEqual([
+      'industry-hunter',
+      'outreach-agent',
+    ])
+    expect(parsed?.metadata.steps.map((step) => step.retries)).toEqual([1, 1])
+    expect(parsed?.metadata.steps.every((step) => step.completion?.requireToolUse)).toBe(true)
+    expect(parsed?.metadata.trigger.inputs?.find((input) => input.name === 'enrichment_budget')?.default).toBe(0)
+    expect(parsed?.metadata.trigger.inputs?.find((input) => input.name === 'target_count')).toMatchObject({ min: 1, max: 25, integer: true })
+    expect(parsed?.metadata.trigger.inputs?.find((input) => input.name === 'draft_count')?.maxFrom).toBe('target_count')
+    expect(parsed?.metadata.steps[0]?.input).toContain('Do not purchase contact enrichment during this step')
+    expect(parsed?.metadata.steps[1]?.input).toContain('Do not create Gmail drafts or send messages during this workflow')
+    expect(parsed?.metadata.outputs?.primary?.step).toBe('outreach-packet')
+    expect(STARTER_WORKFLOW_SLUGS).toContain(INDUSTRY_OUTREACH_PIPELINE_SLUG)
+    expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(INDUSTRY_OUTREACH_PIPELINE_SLUG)
+  })
+
+  test('College Radio Campaign parses and defaults only in Campaign workspaces', () => {
+    const workflow = STARTER_WORKFLOWS.find((item) => item.slug === COLLEGE_RADIO_CAMPAIGN_SLUG)
+
+    expect(workflow).toBeDefined()
+    const parsed = parseWorkflowFile(serializeWorkflow(workflow!.metadata, workflow!.body))
+    expect(parsed).not.toBeNull()
+    expect(parsed?.metadata.steps.map((step) => step.agent)).toEqual([
+      'college-radio-agent',
+      'outreach-agent',
+    ])
+    expect(parsed?.metadata.steps[0]?.completion?.requireToolUse).toBe(true)
+    expect(parsed?.metadata.trigger.inputs?.find((input) => input.name === 'email_draft_count')?.maxFrom).toBe('station_count')
+    expect(parsed?.metadata.steps[0]?.input).toContain('Do not call create_output or message_agent')
+    expect(parsed?.metadata.steps[1]?.completion?.requireToolUse).toBeUndefined()
+    expect(parsed?.metadata.steps[1]?.input).toContain('Do not create Gmail drafts, send messages, submit forms, upload files')
+    expect(parsed?.metadata.outputs?.primary?.step).toBe('campaign-packet')
+    expect(STARTER_WORKFLOW_SLUGS).toContain(COLLEGE_RADIO_CAMPAIGN_SLUG)
+    expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(COLLEGE_RADIO_CAMPAIGN_SLUG)
+    expect(CAMPAIGN_DEFAULT_WORKFLOW_SLUGS).toContain(COLLEGE_RADIO_CAMPAIGN_SLUG)
+    expect(HQ_DEFAULT_WORKFLOW_SLUGS).not.toContain(COLLEGE_RADIO_CAMPAIGN_SLUG)
+  })
+
+  test('Merch Product Builder parses as one lead run with conditional delegates and Campaign-only defaulting', () => {
+    const workflow = STARTER_WORKFLOWS.find((item) => item.slug === MERCH_PRODUCT_BUILDER_SLUG)
+
+    expect(workflow).toBeDefined()
+    const parsed = parseWorkflowFile(serializeWorkflow(workflow!.metadata, workflow!.body))
+    expect(parsed).not.toBeNull()
+    expect(parsed?.metadata.steps.map((step) => step.agent)).toEqual(['print-agent'])
+    expect(parsed?.metadata.steps[0]?.completion?.requireToolUse).toBe(true)
+    expect(parsed?.metadata.steps[0]?.input).toContain('Contact Art Director exactly once only when')
+    expect(parsed?.metadata.steps[0]?.input).toContain('If Shopify validates successfully, contact Shopify Agent exactly once')
+    expect(parsed?.metadata.steps[0]?.input).toContain('Shopify skipped — not connected')
+    expect(parsed?.metadata.steps[0]?.input).toContain('Do not upload artwork, create a product, order a sample, sync, publish, update Shopify')
+    expect(parsed?.metadata.trigger.inputs?.find((input) => input.name === 'generation_budget')?.default).toBe(0)
+    expect(parsed?.metadata.outputs?.primary?.step).toBe('build-kit')
+    expect(STARTER_WORKFLOW_SLUGS).toContain(MERCH_PRODUCT_BUILDER_SLUG)
+    expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(MERCH_PRODUCT_BUILDER_SLUG)
+    expect(CAMPAIGN_DEFAULT_WORKFLOW_SLUGS).toContain(MERCH_PRODUCT_BUILDER_SLUG)
+    expect(HQ_DEFAULT_WORKFLOW_SLUGS).not.toContain(MERCH_PRODUCT_BUILDER_SLUG)
   })
 
   test('seeds starters on first run', () => {

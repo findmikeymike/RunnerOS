@@ -320,6 +320,171 @@ describe('WorkflowRunner', () => {
     expect(manifest?.preview?.mode).toBe('markdown')
   })
 
+  test('Industry Outreach Pipeline hands research to Outreach and creates one no-send final packet', async () => {
+    const template = STARTER_WORKFLOWS.find((workflow) => workflow.slug === 'industry-outreach-pipeline')!
+    const workflow: LoadedWorkflow = {
+      ...template,
+      path: '/tmp/industry-outreach-pipeline',
+      source: 'global',
+    }
+    const hunterOutput = `HUNTER_TARGET_LIST ${'h'.repeat(1420)}`
+    const finalOutput = `# Industry Outreach Packet\n\nAPPROVAL_ONLY ${'o'.repeat(1850)}`
+    const h = makeHarness({
+      stepOutputs: [hunterOutput, finalOutput],
+    })
+    h.setStepBehavior(0, async (record) => {
+      record.toolUseCount = 1
+    })
+    h.setStepBehavior(1, async (record) => {
+      record.toolUseCount = 1
+    })
+    const runner = new WorkflowRunner(h.deps)
+
+    await runner.start({
+      workflow,
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: {
+        campaign_brief: 'Alternative R&B single with a late-August release',
+        outreach_goal: 'Find credible artist-development relationships',
+        target_lanes: 'A&R, indie labels, managers, and sync',
+        markets: 'US and UK',
+        sender_identity: 'Artist manager',
+        target_count: 10,
+        draft_count: 3,
+        enrichment_budget: 0,
+      },
+    })
+    await waitFor(() => lastCompleted(h.events) !== undefined)
+
+    const completed = lastCompleted(h.events)!
+    expect(completed.state).toBe('succeeded')
+    expect(h.sessions.size).toBe(2)
+    expect(completed.steps.map((step) => step.attempts)).toEqual([1, 1])
+    expect(h.promptsSent[0]?.prompt).not.toContain('HUNTER_TARGET_LIST')
+    expect(h.promptsSent[0]?.prompt).toContain('Do not purchase contact enrichment during this step')
+    expect(h.promptsSent[1]?.prompt).toContain('HUNTER_TARGET_LIST')
+    expect(h.promptsSent[1]?.prompt).toContain('Later paid contact-enrichment planning ceiling:\n$0')
+    expect(h.promptsSent[1]?.prompt).toContain('Do not perform paid lookup in this workflow')
+    expect(h.promptsSent[1]?.prompt).toContain('Do not create Gmail drafts or send messages during this workflow')
+    expect([...h.sessions.values()].map((session) => (session.options as { spawnedFromAgent?: { agentSlug?: string } }).spawnedFromAgent?.agentSlug)).toEqual([
+      'industry-hunter',
+      'outreach-agent',
+    ])
+    expect(completed.outputIds).toHaveLength(1)
+    const manifest = readOutput(workspaceRoot, completed.finalOutputId!)
+    expect(manifest?.title).toBe('Industry Outreach Pipeline')
+    expect(manifest?.tags).toContain('show-in-canvas')
+    expect(manifest?.origin.agentSlug).toBe('outreach-agent')
+    expect(manifest?.preview?.mode).toBe('markdown')
+  })
+
+  test('College Radio Campaign verifies once, hands off once, and creates one no-send final packet', async () => {
+    const template = STARTER_WORKFLOWS.find((workflow) => workflow.slug === 'college-radio-campaign')!
+    const workflow: LoadedWorkflow = {
+      ...template,
+      path: '/tmp/college-radio-campaign',
+      source: 'global',
+    }
+    const verifiedOutput = `VERIFIED_RADIO_TARGETS ${'r'.repeat(1620)}`
+    const finalOutput = `# College Radio Campaign\n\nAPPROVAL_ONLY ${'o'.repeat(1850)}`
+    const h = makeHarness({
+      stepOutputs: [verifiedOutput, finalOutput],
+    })
+    h.setStepBehavior(0, async (record) => {
+      record.toolUseCount = 1
+    })
+    const runner = new WorkflowRunner(h.deps)
+
+    await runner.start({
+      workflow,
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: {
+        release_brief: 'Alternative single releasing September 18',
+        sound_alikes: 'Japanese Breakfast, St. Vincent, Mitski',
+        clean_status: 'Clean edit available',
+        markets: 'Chicago, Austin, and college towns in the Midwest',
+        station_count: 12,
+        email_draft_count: 5,
+        sender_identity: 'Artist manager',
+        include_physical: false,
+      },
+    })
+    await waitFor(() => lastCompleted(h.events) !== undefined)
+
+    const completed = lastCompleted(h.events)!
+    expect(completed.state).toBe('succeeded')
+    expect(h.sessions.size).toBe(2)
+    expect(completed.steps.map((step) => step.attempts)).toEqual([1, 1])
+    expect(h.promptsSent[0]?.prompt).not.toContain('VERIFIED_RADIO_TARGETS')
+    expect(h.promptsSent[0]?.prompt).toContain('Do not call create_output or message_agent')
+    expect(h.promptsSent[1]?.prompt).toContain('VERIFIED_RADIO_TARGETS')
+    expect(h.promptsSent[1]?.prompt).toContain('Include physical-submission targets:\nfalse')
+    expect(h.promptsSent[1]?.prompt).toContain('Do not create Gmail drafts, send messages, submit forms, upload files')
+    expect([...h.sessions.values()].map((session) => (session.options as { spawnedFromAgent?: { agentSlug?: string } }).spawnedFromAgent?.agentSlug)).toEqual([
+      'college-radio-agent',
+      'outreach-agent',
+    ])
+    expect(completed.outputIds).toHaveLength(1)
+    const manifest = readOutput(workspaceRoot, completed.finalOutputId!)
+    expect(manifest?.title).toBe('College Radio Campaign')
+    expect(manifest?.tags).toContain('show-in-canvas')
+    expect(manifest?.origin.agentSlug).toBe('outreach-agent')
+    expect(manifest?.preview?.mode).toBe('markdown')
+  })
+
+  test('Merch Product Builder runs one lead agent and creates one approval-gated launch kit', async () => {
+    const template = STARTER_WORKFLOWS.find((workflow) => workflow.slug === 'merch-product-builder')!
+    const workflow: LoadedWorkflow = {
+      ...template,
+      path: '/tmp/merch-product-builder',
+      source: 'global',
+    }
+    const finalOutput = `# Merch Launch Kit\n\nSHOPIFY_ROUTING_AND_APPROVALS ${'m'.repeat(2250)}`
+    const h = makeHarness({
+      stepOutputs: [finalOutput],
+    })
+    h.setStepBehavior(0, async (record) => {
+      record.toolUseCount = 1
+    })
+    const runner = new WorkflowRunner(h.deps)
+
+    await runner.start({
+      workflow,
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: {
+        artwork: '/workspace/vault/shirt-front.png',
+        product_goal: 'One campaign shirt for the September single',
+        product_preferences: 'Black and bone garments, centered full front',
+        target_market: 'United States',
+        mockup_request: true,
+        artist_reference: '/workspace/vault/artist-face-reference.jpg',
+        generation_budget: 0,
+        sample_first: true,
+      },
+    })
+    await waitFor(() => lastCompleted(h.events) !== undefined)
+
+    const completed = lastCompleted(h.events)!
+    expect(completed.state).toBe('succeeded')
+    expect(h.sessions.size).toBe(1)
+    expect(completed.steps.map((step) => step.attempts)).toEqual([1])
+    expect(h.promptsSent[0]?.prompt).toContain('Lifestyle mockup requested:\ntrue')
+    expect(h.promptsSent[0]?.prompt).toContain('Later image-generation planning ceiling:\n$0')
+    expect(h.promptsSent[0]?.prompt).toContain('Do not generate or purchase imagery in this workflow')
+    expect(h.promptsSent[0]?.prompt).toContain('Contact Art Director exactly once only when')
+    expect(h.promptsSent[0]?.prompt).toContain('If Shopify validates successfully, contact Shopify Agent exactly once')
+    expect(h.promptsSent[0]?.prompt).toContain('Do not upload artwork, create a product, order a sample, sync, publish, update Shopify')
+    expect([...h.sessions.values()].map((session) => (session.options as { spawnedFromAgent?: { agentSlug?: string } }).spawnedFromAgent?.agentSlug)).toEqual([
+      'print-agent',
+    ])
+    expect(completed.outputIds).toHaveLength(1)
+    const manifest = readOutput(workspaceRoot, completed.finalOutputId!)
+    expect(manifest?.title).toBe('Merch Launch Kit')
+    expect(manifest?.tags).toContain('show-in-canvas')
+    expect(manifest?.origin.agentSlug).toBe('print-agent')
+    expect(manifest?.preview?.mode).toBe('markdown')
+  })
+
   test('happy path: 2-step workflow succeeds and threads outputs via templater', async () => {
     const h = makeHarness({ stepOutputs: ['STEP_ONE_OUT', 'STEP_TWO_OUT'] });
     const runner = new WorkflowRunner(h.deps);
@@ -447,6 +612,63 @@ describe('WorkflowRunner', () => {
     const onDisk = readRun(workspaceRoot, completed.id);
     expect(onDisk!.outputIds).toEqual([explicitOutputId]);
     expect(onDisk!.finalOutputId).toBe(explicitOutputId);
+  });
+
+  test('creates the canonical final output when an earlier step attached evidence only', async () => {
+    const evidenceOutputId = '11111111-2222-4333-8444-555555555555';
+    const h = makeHarness({ stepOutputs: ['research evidence', '# Final director packet'] });
+    h.setStepBehavior(0, async () => {
+      const current = [...h.events]
+        .reverse()
+        .find((event): event is Extract<WorkflowRunEvent, { type: 'run.updated' }> => event.type === 'run.updated')
+        ?.run;
+      if (!current) throw new Error('run snapshot not emitted');
+      writeRun(workspaceRoot, {
+        ...current,
+        outputIds: [evidenceOutputId],
+        finalOutputId: undefined,
+      });
+    });
+
+    const runner = new WorkflowRunner(h.deps);
+    await runner.start({
+      workflow: makeWorkflow({
+        outputs: {
+          mode: 'final-step',
+          kind: 'document',
+          title: 'Canonical director packet',
+          primary: { from: 'step-output', step: 'second' },
+        },
+      }),
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: { topic: 'canonical output' },
+    });
+
+    await waitFor(() => lastCompleted(h.events) !== undefined);
+
+    const completed = lastCompleted(h.events)!;
+    expect(completed.outputIds).toHaveLength(2);
+    expect(completed.outputIds).toContain(evidenceOutputId);
+    expect(completed.finalOutputId).not.toBe(evidenceOutputId);
+    expect(readOutput(workspaceRoot, completed.finalOutputId!)?.origin.stepId).toBe('second');
+  });
+
+  test('rejects out-of-range starter workload before creating a session', async () => {
+    const template = STARTER_WORKFLOWS.find((workflow) => workflow.slug === 'industry-outreach-pipeline')!;
+    const workflow: LoadedWorkflow = { ...template, path: '/tmp/industry-outreach-pipeline', source: 'global' };
+    const h = makeHarness();
+    const runner = new WorkflowRunner(h.deps);
+
+    await expect(runner.start({
+      workflow,
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: {
+        campaign_brief: 'Launch',
+        outreach_goal: 'Relationships',
+        target_count: 1000,
+      },
+    })).rejects.toThrow('Workflow input "target_count" must be at most 25.');
+    expect(h.sessions.size).toBe(0);
   });
 
   test('default output creation failure is recorded without failing the run', async () => {

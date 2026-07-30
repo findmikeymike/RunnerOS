@@ -467,6 +467,47 @@ export function writeGlobalAgent(input: CreateAgentInput, options?: AgentStorage
   return loaded;
 }
 
+const SERIALIZED_AGENT_METADATA_KEYS = [
+  'name',
+  'description',
+  'avatar',
+  'llmConnection',
+  'model',
+  'permissionMode',
+  'thinkingLevel',
+  'skills',
+  'sources',
+  'optionalSources',
+  'trustedWorkerTools',
+  'visualAgent',
+  'greeting',
+  'inputs',
+  'outputs',
+  'tags',
+] as const;
+
+/**
+ * Built-in migrations must not erase frontmatter owned by another installed
+ * version or a user's customization. Merge supported metadata into the
+ * original document while retaining every unknown field.
+ */
+function writeBuiltInAgentMigration(
+  input: CreateAgentInput,
+  options?: AgentStorageOptions,
+): LoadedAgent {
+  const file = getGlobalAgentFile(input.slug, options);
+  const original = matter(readFileSync(file, 'utf-8'));
+  const supported = matter(serializeAgent(input.metadata, input.systemPrompt)).data as Record<string, unknown>;
+  const data = { ...(original.data as Record<string, unknown>) };
+  for (const key of SERIALIZED_AGENT_METADATA_KEYS) delete data[key];
+  Object.assign(data, supported);
+  writeFileSync(file, matter.stringify(input.systemPrompt.trimEnd() + '\n', data), 'utf-8');
+
+  const loaded = loadGlobalAgent(input.slug, options);
+  if (!loaded) throw new Error(`Failed to re-load migrated agent "${input.slug}"`);
+  return loaded;
+}
+
 /**
  * Delete an agent from the global library AND from every workspace's
  * activation manifest. The caller passes the list of workspace root paths
@@ -611,7 +652,7 @@ export function ensureBuiltInAgentSkillsForSlug(
   };
 
   try {
-    writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+    writeBuiltInAgentMigration({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
     return { updated: true };
   } catch {
     // Best-effort migration; loading must not fail because of a malformed write.
@@ -624,7 +665,7 @@ export function ensureBuiltInAgentMetadataSlugs(
   required: Partial<Pick<AgentMetadata, 'skills' | 'sources' | 'optionalSources'>>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'print-agent']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
@@ -661,7 +702,7 @@ export function ensureBuiltInAgentMetadataSlugs(
   if (!changed) return { updated: false };
 
   try {
-    writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+    writeBuiltInAgentMigration({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
     return { updated: true };
   } catch {
     return { updated: false };
@@ -712,7 +753,7 @@ export function replaceBuiltInAgentMetadata(
   if (!changed) return { updated: false };
 
   try {
-    writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+    writeBuiltInAgentMigration({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
     return { updated: true };
   } catch {
     return { updated: false };
@@ -737,13 +778,13 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'trypost-agent', 'content-director']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'trypost-agent', 'content-director', 'print-agent']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !loaded.systemPrompt.includes(oldText)) return { updated: false };
 
   try {
-    writeGlobalAgent(
+    writeBuiltInAgentMigration(
       {
         slug,
         metadata: loaded.metadata,
@@ -773,7 +814,7 @@ export function replaceBuiltInAgentPromptPattern(
   if (!loaded || !pattern.test(loaded.systemPrompt)) return { updated: false };
 
   try {
-    writeGlobalAgent(
+    writeBuiltInAgentMigration(
       {
         slug,
         metadata: loaded.metadata,
@@ -808,7 +849,7 @@ export function removeBuiltInAgentSkills(
       skills: nextSkills.length > 0 ? nextSkills : undefined,
     };
     try {
-      writeGlobalAgent({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
+      writeBuiltInAgentMigration({ slug, metadata: next, systemPrompt: loaded.systemPrompt }, options);
       updated += 1;
     } catch {
       // Best-effort migration; loading must not fail because of a malformed write.

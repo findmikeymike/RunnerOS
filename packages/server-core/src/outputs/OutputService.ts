@@ -785,7 +785,12 @@ export class OutputService {
     });
 
     if (input.workflowRunId) {
-      await this.attachOutputToWorkflowRun(input.workspaceId, input.workflowRunId, manifest.id);
+      await this.attachOutputToWorkflowRun(
+        input.workspaceId,
+        input.workflowRunId,
+        manifest.id,
+        input.stepId,
+      );
     }
     let shownInCanvas = false;
     let canvasReceipt: string | undefined;
@@ -816,7 +821,7 @@ export class OutputService {
   }
 
   createDefaultWorkflowOutput(run: WorkflowRunSnapshot): WorkflowRunSnapshot {
-    if (run.finalOutputId || (run.outputIds?.length ?? 0) > 0) return run;
+    if (run.finalOutputId) return run;
     if (run.state !== 'succeeded') return run;
     const outputMode = run.workflowSnapshot.metadata.outputs?.mode ?? 'final-step';
     if (outputMode !== 'final-step') return run;
@@ -935,17 +940,26 @@ export class OutputService {
     });
   }
 
-  private async attachOutputToWorkflowRun(workspaceId: string, runId: string, outputId: string): Promise<void> {
+  private async attachOutputToWorkflowRun(
+    workspaceId: string,
+    runId: string,
+    outputId: string,
+    stepId?: string,
+  ): Promise<void> {
     await this.withRunMutex(workspaceId, runId, async () => {
       const root = this.deps.getWorkspaceRootPath(workspaceId);
       const run = readRun(root, runId);
       if (!run) return;
       if ((run.outputIds ?? []).includes(outputId)) return;
       const outputIds = [...(run.outputIds ?? []), outputId];
+      const outputMode = run.workflowSnapshot.metadata.outputs?.mode ?? 'final-step';
+      const declaredFinalStepId = run.workflowSnapshot.metadata.outputs?.primary?.step
+        ?? run.workflowSnapshot.metadata.steps.at(-1)?.id;
+      const mayBecomeFinal = outputMode !== 'final-step' || stepId === declaredFinalStepId;
       const next: WorkflowRunSnapshot = {
         ...run,
         outputIds,
-        finalOutputId: run.finalOutputId ?? outputId,
+        finalOutputId: run.finalOutputId ?? (mayBecomeFinal ? outputId : undefined),
         updatedAt: new Date().toISOString(),
       };
       writeRun(root, next);

@@ -729,6 +729,11 @@ describe('native read tools sensitive credential paths', () => {
     expect(shouldAllowToolInMode('Grep', { pattern: 'TODO', path: '/Users/test/project/src' }, 'safe').allowed).toBe(true);
   });
 
+  it('allows bounded internal agent delegation in safe mode', () => {
+    expect(shouldAllowToolInMode('message_agent', { agentSlug: 'worker', task: 'Research' }, 'safe').allowed).toBe(true);
+    expect(shouldAllowToolInMode('mcp__session__message_agent', { agentSlug: 'worker', task: 'Research' }, 'safe').allowed).toBe(true);
+  });
+
   it('keeps ask and allow-all semantics unchanged', () => {
     expect(shouldAllowToolInMode('Read', { file_path: '~/.ssh/id_rsa' }, 'ask').allowed).toBe(true);
     expect(shouldAllowToolInMode('Read', { file_path: '~/.ssh/id_rsa' }, 'allow-all').allowed).toBe(true);

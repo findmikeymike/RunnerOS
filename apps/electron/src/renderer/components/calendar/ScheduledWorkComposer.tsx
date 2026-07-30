@@ -447,6 +447,13 @@ function WorkflowInputs({ draft, onChange }: {
             <input
               className={INPUT_CLASS}
               type={input.type === 'number' ? 'number' : 'text'}
+              min={input.type === 'number' ? input.min : undefined}
+              max={input.type === 'number'
+                ? (input.maxFrom && typeof draft.triggerInputs[input.maxFrom] === 'number'
+                    ? Math.min(input.max ?? Number.POSITIVE_INFINITY, draft.triggerInputs[input.maxFrom] as number)
+                    : input.max)
+                : undefined}
+              step={input.type === 'number' ? (input.integer ? 1 : 'any') : undefined}
               value={String(draft.triggerInputs[input.name] ?? '')}
               onChange={(event) => onChange({ ...draft, triggerInputs: { ...draft.triggerInputs, [input.name]: input.type === 'number' ? Number(event.target.value) : event.target.value } })}
               required={input.required}

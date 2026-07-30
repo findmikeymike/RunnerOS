@@ -78,14 +78,14 @@
       "record-doctor",
       "industry-hunter"
     ],
-    "workflowCount": 4,
+    "workflowCount": 7,
     "sharedIntelPromptWired": true,
     "finalsPromotionWired": true,
     "scheduledWorkWired": true
   },
   "referenceHealth": {
     "knownSkillCount": 124,
-    "bundledSkillCount": 82,
+    "bundledSkillCount": 85,
     "systemSkillCount": 6,
     "userGlobalSkillCount": 124,
     "knownSourceCount": 27,
@@ -208,6 +208,70 @@
         {
           "id": "execution-packet",
           "agent": "ads-agent"
+        }
+      ]
+    },
+    {
+      "slug": "industry-outreach-pipeline",
+      "name": "Industry Outreach Pipeline",
+      "description": "Find high-fit music-industry targets, then turn the strongest opportunities into verified, personalized, approval-ready outreach.",
+      "triggerType": "manual",
+      "inputCount": 8,
+      "stepCount": 2,
+      "agentRefs": [
+        "industry-hunter",
+        "outreach-agent"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "hunt",
+          "agent": "industry-hunter"
+        },
+        {
+          "id": "outreach-packet",
+          "agent": "outreach-agent"
+        }
+      ]
+    },
+    {
+      "slug": "college-radio-campaign",
+      "name": "College Radio Campaign",
+      "description": "Verify college and noncommercial radio targets, then turn the strongest eligible stations into approval-ready outreach and submission queues.",
+      "triggerType": "manual",
+      "inputCount": 8,
+      "stepCount": 2,
+      "agentRefs": [
+        "college-radio-agent",
+        "outreach-agent"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "verify-stations",
+          "agent": "college-radio-agent"
+        },
+        {
+          "id": "campaign-packet",
+          "agent": "outreach-agent"
+        }
+      ]
+    },
+    {
+      "slug": "merch-product-builder",
+      "name": "Merch Product Builder",
+      "description": "Turn uploaded artwork into one production-ready Printify product, optional lifestyle mockup direction, Shopify storefront guidance when connected, and an approval-gated Merch Launch Kit.",
+      "triggerType": "manual",
+      "inputCount": 8,
+      "stepCount": 1,
+      "agentRefs": [
+        "print-agent"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "build-kit",
+          "agent": "print-agent"
         }
       ]
     }
@@ -891,13 +955,20 @@
       "thinkingLevel": "high",
       "skills": [
         "printify-commerce",
-        "print-product-assets"
+        "print-product-assets",
+        "pod-product-strategy",
+        "pod-pricing-margin",
+        "pod-listing-copy"
       ],
       "sources": [
         "printify"
       ],
-      "optionalSources": [],
-      "trustedWorkerTools": [],
+      "optionalSources": [
+        "shopify"
+      ],
+      "trustedWorkerTools": [
+        "message_agent"
+      ],
       "visualAgent": true,
       "tags": [
         "print",
@@ -916,7 +987,9 @@
         "canvas-visual-agent",
         "explicit-approval-required",
         "external-action-boundary",
-        "requires-source-activation"
+        "optional-source-aware",
+        "requires-source-activation",
+        "trusted-worker-tools"
       ],
       "inputs": "Image folders, artwork files, shirt/product ideas, Printify shop tasks, product batches, pricing, placement, catalog, upload, order, and fulfillment requests.",
       "outputs": "Asset inventories, product plans, placement specs, Printify manifests, upload/product approval packets, QA reports, receipts, and Canvas-ready previews."

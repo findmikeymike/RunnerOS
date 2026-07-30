@@ -1526,7 +1526,7 @@ export const SESSION_TOOL_DEFS: SessionToolDef[] = [
   { name: 'cancel_deep_research_run', description: TOOL_DESCRIPTIONS.cancel_deep_research_run, inputSchema: CancelDeepResearchRunSchema, executionMode: 'registry', safeMode: 'block', handler: handleCancelDeepResearchRun },
   // Inter-session messaging
   { name: 'send_agent_message', description: TOOL_DESCRIPTIONS.send_agent_message, inputSchema: SendAgentMessageSchema, executionMode: 'registry', safeMode: 'block', handler: handleSendAgentMessage },
-  { name: 'message_agent', description: TOOL_DESCRIPTIONS.message_agent, inputSchema: MessageAgentSchema, executionMode: 'registry', safeMode: 'block', handler: handleMessageAgent },
+  { name: 'message_agent', description: TOOL_DESCRIPTIONS.message_agent, inputSchema: MessageAgentSchema, executionMode: 'registry', safeMode: 'allow', handler: handleMessageAgent },
   { name: 'list_agent_message_receipts', description: TOOL_DESCRIPTIONS.list_agent_message_receipts, inputSchema: ListAgentMessageReceiptsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListAgentMessageReceipts },
   // Messaging gateway tools
   { name: 'list_messaging_channels', description: TOOL_DESCRIPTIONS.list_messaging_channels, inputSchema: ListMessagingChannelsSchema, executionMode: 'registry', safeMode: 'allow', readOnly: true, handler: handleListMessagingChannels },

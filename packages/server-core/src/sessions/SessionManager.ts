@@ -3295,6 +3295,46 @@ export class SessionManager implements ISessionManager {
               sessionLog.info('[agent-definitions] Removed Content Director persona/tool conflicts')
             }
           }
+          const printAgent = STARTER_AGENTS.find(agent => agent.slug === 'print-agent')
+          if (printAgent) {
+            const printMetadataUpdated = [
+              ensureBuiltInAgentMetadataSlugs('print-agent', {
+                skills: printAgent.metadata.skills,
+                sources: printAgent.metadata.sources,
+                optionalSources: printAgent.metadata.optionalSources,
+              }).updated,
+              replaceBuiltInAgentMetadata('print-agent', {
+                trustedWorkerTools: { from: undefined, to: printAgent.metadata.trustedWorkerTools },
+              }).updated,
+            ].some(Boolean)
+            if (printMetadataUpdated) {
+              sessionLog.info('[agent-definitions] Updated Print Agent POD and conditional Shopify routing')
+            }
+            if (replaceBuiltInAgentPromptText(
+              'print-agent',
+              '10. Never print or request raw API tokens. If auth is missing, tell the user to add `PRINTIFY_API_TOKEN` in Settings -> Secrets.\n\nDefault report shape:',
+              `10. Never print or request raw API tokens. If auth is missing, tell the user to add \`PRINTIFY_API_TOKEN\` in Settings -> Secrets.
+
+Merch Product Builder orchestration:
+- Remain the lead and final director. Do not create extra agent calls by default.
+- If a lifestyle mockup is explicitly requested or artwork needs creative repair, contact \`art-director\` exactly once with the selected real product spec, accepted artwork, exact visual task, approved reference, and generation budget. Never request a text-only likeness of a real person. Label AI lifestyle images as promotional concepts, not exact product proof.
+- When the optional Shopify source is available, run \`cd tools/shopify && node bin/shopify.mjs doctor --agent\` as a read-only connection check.
+- Contact \`shopify-agent\` exactly once only when Shopify doctor validates. Give it the finalized Printify product packet and ask for read-only duplicate, collection, listing, SEO, alt-text, media-order, and post-sync DRAFT guidance. If doctor does not validate, skip delegation and record \`Shopify skipped — not connected\`.
+- Printify remains the fulfillment/product source of truth. Never create a duplicate Shopify product when Printify will sync it.
+- Return one complete Merch Launch Kit to the workflow. Do not create a duplicate document Output.
+
+Default report shape:`,
+            ).updated) {
+              sessionLog.info('[agent-definitions] Added Print Agent conditional Merch Product Builder orchestration')
+            }
+            if (replaceBuiltInAgentPromptText(
+              'print-agent',
+              '- If a lifestyle mockup is explicitly requested or artwork needs creative repair, contact `art-director` exactly once with the selected real product spec, accepted artwork, exact visual task, approved reference, and generation budget. Never request a text-only likeness of a real person. Label AI lifestyle images as promotional concepts, not exact product proof.',
+              '- If a lifestyle mockup is explicitly requested or artwork needs creative repair, contact `art-director` exactly once with the selected real product spec, accepted artwork, exact visual task, approved reference, and planning ceiling. This workflow must not purchase or generate imagery; request a reference-safe concept, prompt, tool/model plan, and later approval packet. Never request a text-only likeness of a real person. Label any future AI lifestyle image as a promotional concept, not exact product proof.',
+            ).updated) {
+              sessionLog.info('[agent-definitions] Hardened Print Agent generation approval boundary')
+            }
+          }
           const videoDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'video-director')
           if (videoDirectorAgent) {
             if (ensureBuiltInAgentMetadataSlugs('video-director', {
@@ -3837,7 +3877,17 @@ Keep the list tight. Ten strong targets are more useful than one hundred vague n
           const industryHunterPromptUpdated = industryHunterAgent
             ? replaceBuiltInAgentPromptText('industry-hunter', industryHunterOldPrompt, industryHunterAgent.systemPrompt).updated
             : false
-          if (industryHunterPromptUpdated) {
+          const industryHunterZeroCommandUpdated = replaceBuiltInAgentPromptText(
+            'industry-hunter',
+            '`ZERO_AGENT=codex zero search "Tomba LinkedIn email finder"`',
+            '`zero search "Tomba LinkedIn email finder"`',
+          ).updated
+          const outreachZeroCommandUpdated = replaceBuiltInAgentPromptText(
+            'outreach-agent',
+            '`ZERO_AGENT=codex zero search "Tomba LinkedIn email finder"`',
+            '`zero search "Tomba LinkedIn email finder"`',
+          ).updated
+          if (industryHunterPromptUpdated || industryHunterZeroCommandUpdated || outreachZeroCommandUpdated) {
             sessionLog.info('[agent-definitions] Updated Industry Hunter Zero prompt')
           }
           const collegeRadioAgent = STARTER_AGENTS.find(agent => agent.slug === 'college-radio-agent')
@@ -3869,6 +3919,11 @@ Memory rule: save durable station-campaign preferences and collaboration pattern
                   trustedWorkerTools: { from: undefined, to: collegeRadioAgent.metadata.trustedWorkerTools },
                 }).updated,
                 replaceBuiltInAgentPromptText('college-radio-agent', collegeRadioOldPrompt, collegeRadioAgent.systemPrompt).updated,
+                replaceBuiltInAgentPromptText(
+                  'college-radio-agent',
+                  '`$HOME/.agents/skills/college-radio-matcher/match.py`',
+                  '`~/.agents/skills/college-radio-matcher/match.py`',
+                ).updated,
               ].some(Boolean)
             : false
           if (collegeRadioUpdated) {
@@ -3921,6 +3976,9 @@ user a clickable link to where the thing now lives.`
           ensureRequiredWorkflows,
           STARTER_WORKFLOWS,
           ENSURED_STARTER_WORKFLOW_SLUGS,
+          INDUSTRY_OUTREACH_PIPELINE_SLUG,
+          COLLEGE_RADIO_CAMPAIGN_SLUG,
+          MERCH_PRODUCT_BUILDER_SLUG,
         } = await import('@craft-agent/shared/workflows')
         const { seeded: workflowsSeeded } = seedGlobalWorkflowLibraryIfEmpty(STARTER_WORKFLOWS)
         if (workflowsSeeded > 0) {
@@ -3931,6 +3989,66 @@ user a clickable link to where the thing now lives.`
         const { ensured: workflowsEnsured } = ensureRequiredWorkflows(ensuredStarters)
         if (workflowsEnsured > 0) {
           sessionLog.info(`[workflows] Added ${workflowsEnsured} ensured starter workflow(s) to the global library`)
+        }
+        const boundedWorkflowSlugs = new Set([
+          INDUSTRY_OUTREACH_PIPELINE_SLUG,
+          COLLEGE_RADIO_CAMPAIGN_SLUG,
+          MERCH_PRODUCT_BUILDER_SLUG,
+        ])
+        const promptReplacements = new Map<string, Array<[string, string]>>([
+          [INDUSTRY_OUTREACH_PIPELINE_SLUG, [
+            ['Total paid contact-enrichment ceiling:', 'Later paid contact-enrichment planning ceiling:'],
+            [
+              'If the enrichment budget is zero, perform no paid lookup. If it is positive, never exceed the total stated ceiling. Never guess an email when enrichment fails.',
+              'Do not perform paid lookup in this workflow. A positive ceiling is planning context, not spending approval. When paid enrichment could materially improve a finalist, include an exact later approval packet whose aggregate maximum cannot exceed the stated ceiling. Never guess an email.',
+            ],
+          ]],
+          [MERCH_PRODUCT_BUILDER_SLUG, [
+            ['Maximum image-generation spend:', 'Later image-generation planning ceiling:'],
+            [
+              'Give Art Director the selected real product specification, accepted artwork, exact problem, approved reference, and budget ceiling.',
+              'Give Art Director the selected real product specification, accepted artwork, exact problem, approved reference, and planning ceiling.',
+            ],
+            [
+              'A zero generation budget forbids paid generation. Do not exceed a positive ceiling. Return any created asset paths in the final kit.',
+              'Do not generate or purchase imagery in this workflow. A positive ceiling is planning context, not spending approval. Art Director must return the strongest mockup direction, a reference-safe prompt, the exact tool/model plan, and a later approval packet capped by that ceiling. A future generated lifestyle image must be labeled promotional concept art, not exact product proof; official Printify mockups remain the accuracy reference.',
+            ],
+            ['- optional lifestyle mockups with concept labels', '- optional lifestyle mockup direction and exact later-generation approval packet'],
+          ]],
+        ])
+        for (const starter of ensuredStarters.filter(workflow => boundedWorkflowSlugs.has(workflow.slug))) {
+          const existing = loadGlobalWorkflow(starter.slug)
+          if (!existing) continue
+          const metadata = structuredClone(existing.metadata)
+          let changed = false
+          metadata.trigger.inputs = (metadata.trigger.inputs ?? []).map((input) => {
+            const canonical = starter.metadata.trigger.inputs?.find(candidate => candidate.name === input.name)
+            if (!canonical) return input
+            const next = {
+              ...input,
+              description: canonical.description,
+              min: canonical.min,
+              max: canonical.max,
+              integer: canonical.integer,
+              maxFrom: canonical.maxFrom,
+            }
+            if (JSON.stringify(next) !== JSON.stringify(input)) changed = true
+            return next
+          })
+          for (const step of metadata.steps) {
+            let nextInput = step.input
+            for (const [from, to] of promptReplacements.get(starter.slug) ?? []) {
+              nextInput = nextInput.replace(from, to)
+            }
+            if (nextInput !== step.input) {
+              step.input = nextInput
+              changed = true
+            }
+          }
+          if (changed) {
+            writeGlobalWorkflow({ slug: existing.slug, metadata, body: existing.body })
+            sessionLog.info(`[workflows] Hardened limits and approval boundaries for ${existing.slug}`)
+          }
         }
       } catch (err) {
         sessionLog.warn('[workflows] Starter seed skipped:', err as Error)
@@ -3964,6 +4082,29 @@ user a clickable link to where the thing now lives.`
       // client connect. This is critical for headless servers where no UI may
       // ever connect, yet scheduled/event-driven automations must still fire.
       const workspaces = getWorkspaces()
+      try {
+        const {
+          ensureDefaultWorkflowActivations,
+          INDUSTRY_OUTREACH_PIPELINE_SLUG,
+          COLLEGE_RADIO_CAMPAIGN_SLUG,
+          MERCH_PRODUCT_BUILDER_SLUG,
+        } = await import('@craft-agent/shared/workflows')
+        for (const workspace of workspaces) {
+          const newDefaults = workspace.artistWorkspaceScope === 'hq'
+            ? [INDUSTRY_OUTREACH_PIPELINE_SLUG]
+            : [
+                INDUSTRY_OUTREACH_PIPELINE_SLUG,
+                COLLEGE_RADIO_CAMPAIGN_SLUG,
+                MERCH_PRODUCT_BUILDER_SLUG,
+              ]
+          const { activated } = ensureDefaultWorkflowActivations(workspace.rootPath, newDefaults)
+          if (activated > 0) {
+            sessionLog.info(`[workflows] Activated ${activated} new default workflow(s) in ${workspace.name}`)
+          }
+        }
+      } catch (err) {
+        sessionLog.warn('[workflows] Existing-workspace default activation skipped:', err as Error)
+      }
       for (const workspace of workspaces) {
         this.setupConfigWatcher(workspace.rootPath, workspace.id)
       }

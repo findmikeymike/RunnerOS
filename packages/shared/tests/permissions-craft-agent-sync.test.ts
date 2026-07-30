@@ -63,4 +63,30 @@ describe('permissions craft-agent allowlist sync', () => {
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file spotify.json --expected-action-id act_abc-123 --expected-action-digest sha256:bad --confirm yes --json', patterns).allowed).toBe(false)
     expect(validateBashCommand('cd tools/printing-press-social && node src/social.mjs execute --action-file dry-run.json --confirm yes --json', patterns).allowed).toBe(false)
   })
+
+  it('allows workflow research CLIs but blocks paid and mutating variants', () => {
+    const permissionsPath = resolve(import.meta.dir, '../../../apps/electron/resources/permissions/default.json')
+    const permissions = JSON.parse(readFileSync(permissionsPath, 'utf-8')) as {
+      allowedBashPatterns?: AllowedBashEntry[]
+    }
+    const patterns = compileBashPatterns(permissions.allowedBashPatterns)
+
+    expect(validateBashCommand('command -v zero && zero --version', patterns).allowed).toBe(true)
+    expect(validateBashCommand('zero search "Tomba LinkedIn email finder"', patterns).allowed).toBe(true)
+    expect(validateBashCommand('ZERO_AGENT=codex zero search "Tomba LinkedIn email finder"', patterns).allowed).toBe(false)
+    expect(validateBashCommand('zero get 1 --formatted', patterns).allowed).toBe(true)
+    expect(validateBashCommand('zero fetch "https://example.com" --max-pay 0.50 --json', patterns).allowed).toBe(false)
+
+    expect(validateBashCommand('python3 ~/.agents/skills/college-radio-matcher/match.py --limit 12 --format json', patterns).allowed).toBe(true)
+
+    expect(validateBashCommand('cd tools/printify && node bin/printify.mjs doctor --agent', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printify && node bin/printify.mjs catalog retrieves-list-of-blueprints-in-the --agent', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printify && node bin/printify.mjs uploads an-image --body-json "{}" --dry-run --agent', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printify && node bin/printify.mjs uploads an-image --confirm-runner --agent', patterns).allowed).toBe(false)
+    expect(validateBashCommand('cd tools/printify && node bin/printify.mjs uploads an-image --dry-run --confirm-runner --agent', patterns).allowed).toBe(false)
+
+    expect(validateBashCommand('cd tools/shopify && node bin/shopify.mjs products list --first 10 --agent', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/shopify && node bin/shopify.mjs products create --input product.json --agent', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/shopify && node bin/shopify.mjs products create --input product.json --confirm --agent', patterns).allowed).toBe(false)
+  })
 })

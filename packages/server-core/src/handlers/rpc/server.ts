@@ -59,9 +59,16 @@ export function registerServerHandlers(
     const workspace = addWorkspace({ name: trimmed, rootPath })
     setActiveWorkspace(workspace.id)
     try {
-      const { setWorkflowActive, STARTER_WORKFLOW_SLUGS } = await import('@craft-agent/shared/workflows')
+      const {
+        setWorkflowActive,
+        HQ_DEFAULT_WORKFLOW_SLUGS,
+        CAMPAIGN_DEFAULT_WORKFLOW_SLUGS,
+      } = await import('@craft-agent/shared/workflows')
       if (!rootExistedBeforeAdd) {
-        for (const slug of STARTER_WORKFLOW_SLUGS) {
+        const defaultSlugs = workspace.artistWorkspaceScope === 'hq'
+          ? HQ_DEFAULT_WORKFLOW_SLUGS
+          : CAMPAIGN_DEFAULT_WORKFLOW_SLUGS
+        for (const slug of defaultSlugs) {
           try { setWorkflowActive(workspace.rootPath, slug, true) } catch { /* ignore */ }
         }
       }

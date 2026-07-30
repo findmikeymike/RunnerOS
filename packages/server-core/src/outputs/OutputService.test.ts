@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { OutputService } from './OutputService';
-import { writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
+import { readRun, writeRun, type WorkflowRunSnapshot } from '@craft-agent/shared/workflows';
 import { withOutputFinalsRegistryLock } from '@craft-agent/shared/outputs';
 import { OUTPUT_SHOW_IN_CANVAS_TAG } from '@craft-agent/shared/outputs/constants';
 import { VISUAL_BOARD_ASSET_PATH, type VisualBoardSnapshot } from '@craft-agent/shared/visual-board';
@@ -66,6 +66,57 @@ describe('OutputService run mutex', () => {
     expect(ids).toContain(a.outputId!);
     expect(ids).toContain(b.outputId!);
     expect(ids.length).toBe(2);
+  });
+
+  it('never promotes a non-final workflow step output to canonical final', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-final-step-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const runId = randomUUID();
+    const run = makeRunSnapshot(runId, 'ws');
+    run.workflowSnapshot.metadata.steps = [
+      { id: 'research', agent: 'researcher', input: 'Research' },
+      { id: 'director', agent: 'director', input: 'Direct' },
+    ];
+    run.workflowSnapshot.metadata.outputs = {
+      mode: 'final-step',
+      primary: { from: 'step-output', step: 'director' },
+    };
+    writeRun(root, run);
+    const service = new OutputService({ getWorkspaceRootPath: () => root });
+
+    const evidence = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'research-session',
+      workflowRunId: runId,
+      workflowSlug: 'wf',
+      workflowName: 'wf',
+      stepId: 'research',
+      output: {
+        title: 'Research evidence',
+        kind: 'report',
+        summary: 'Evidence',
+        content: 'Evidence',
+      },
+    });
+    expect(readRun(root, runId)?.outputIds).toEqual([evidence.outputId!]);
+    expect(readRun(root, runId)?.finalOutputId).toBeUndefined();
+
+    const final = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'director-session',
+      workflowRunId: runId,
+      workflowSlug: 'wf',
+      workflowName: 'wf',
+      stepId: 'director',
+      output: {
+        title: 'Final',
+        kind: 'document',
+        summary: 'Final',
+        content: 'Final',
+      },
+    });
+    expect(readRun(root, runId)?.outputIds).toEqual([evidence.outputId!, final.outputId!]);
+    expect(readRun(root, runId)?.finalOutputId).toBe(final.outputId);
   });
 });
 

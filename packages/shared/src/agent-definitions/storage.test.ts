@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeEach, afterEach } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -952,9 +952,15 @@ body
     expect(printAgent?.metadata.permissionMode).toBe('ask')
     expect(printAgent?.metadata.skills).toContain('printify-commerce')
     expect(printAgent?.metadata.skills).toContain('print-product-assets')
+    expect(printAgent?.metadata.skills).toContain('pod-product-strategy')
+    expect(printAgent?.metadata.skills).toContain('pod-pricing-margin')
+    expect(printAgent?.metadata.skills).toContain('pod-listing-copy')
     expect(printAgent?.metadata.sources).toContain('printify')
+    expect(printAgent?.metadata.optionalSources).toContain('shopify')
     expect(printAgent?.metadata.visualAgent).toBe(true)
     expect(printAgent?.systemPrompt).toContain('turn local image assets into real print-on-demand products')
+    expect(printAgent?.systemPrompt).toContain('Contact `shopify-agent` exactly once only when Shopify doctor validates')
+    expect(printAgent?.systemPrompt).toContain('contact `art-director` exactly once')
     expect(printAgent?.systemPrompt).toContain('--confirm-runner')
   })
 
@@ -1060,7 +1066,7 @@ body
     expect(industryHunter?.systemPrompt).toContain('Industry Hunter Target List')
     expect(industryHunter?.systemPrompt).toContain('Outreach Agent')
     expect(industryHunter?.systemPrompt).toContain('Zero enrichment')
-    expect(industryHunter?.systemPrompt).toContain('ZERO_AGENT=codex zero search "Tomba LinkedIn email finder"')
+    expect(industryHunter?.systemPrompt).toContain('zero search "Tomba LinkedIn email finder"')
     expect(industryHunter?.systemPrompt).toContain('--max-pay 0.50')
     expect(industryHunter?.systemPrompt).toContain('not looking for famous CEOs')
     expect(industryHunter?.systemPrompt).toContain('showInCanvas: true')
@@ -1334,6 +1340,59 @@ body
     expect(videoDirector.metadata.skills).toEqual(['squad', 'spotify-canvas-video'])
     expect(videoDirector.metadata.optionalSources).toEqual(['media-generation', 'video-studio', 'hypermotion'])
     expect(videoDirector.systemPrompt).toBe('- RunnerOS ships Squad as a built-in source.')
+  })
+
+  test('upgrades stale Print Agent routing and preserves custom metadata', () => {
+    writeGlobalAgent(
+      {
+        slug: 'print-agent',
+        metadata: {
+          name: 'Print Agent',
+          description: 'Builds print products.',
+          skills: ['printify-commerce', 'print-product-assets'],
+          sources: ['printify'],
+        },
+        systemPrompt: 'Before\nold print orchestration anchor\nAfter',
+      },
+      { globalAgentsDir },
+    )
+    const printAgentFile = join(globalAgentsDir, 'print-agent', 'AGENT.md')
+    writeFileSync(
+      printAgentFile,
+      readFileSync(printAgentFile, 'utf-8').replace(
+        'sources:\n  - printify\n',
+        'sources:\n  - printify\nrouting:\n  intents:\n    - printify\n  canChat: true\n  canExecute: true\n',
+      ),
+      'utf-8',
+    )
+
+    expect(ensureBuiltInAgentMetadataSlugs('print-agent', {
+      skills: ['printify-commerce', 'print-product-assets', 'pod-product-strategy', 'pod-pricing-margin', 'pod-listing-copy'],
+      sources: ['printify'],
+      optionalSources: ['shopify'],
+    }, { globalAgentsDir }).updated).toBe(true)
+    expect(replaceBuiltInAgentPromptText(
+      'print-agent',
+      'old print orchestration anchor',
+      'new conditional Shopify orchestration',
+      { globalAgentsDir },
+    ).updated).toBe(true)
+
+    const printAgent = loadGlobalAgent('print-agent', { globalAgentsDir })!
+    expect(printAgent.metadata.skills).toEqual([
+      'printify-commerce',
+      'print-product-assets',
+      'pod-product-strategy',
+      'pod-pricing-margin',
+      'pod-listing-copy',
+    ])
+    expect(printAgent.metadata.sources).toEqual(['printify'])
+    expect(printAgent.metadata.optionalSources).toEqual(['shopify'])
+    expect(printAgent.systemPrompt).toBe('Before\nnew conditional Shopify orchestration\nAfter')
+    const raw = readFileSync(printAgentFile, 'utf-8')
+    expect(raw).toContain('routing:')
+    expect(raw).toContain('intents:')
+    expect(raw).toContain('- printify')
   })
 
   test('replaceBuiltInAgentPromptText only patches built-in prompt bodies on exact match', () => {

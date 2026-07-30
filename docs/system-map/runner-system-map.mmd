@@ -121,6 +121,9 @@ flowchart LR
   Workers --> A_print_agent
   A_print_agent --> S_printify_commerce["skill:printify-commerce"]
   A_print_agent --> S_print_product_assets["skill:print-product-assets"]
+  A_print_agent --> S_pod_product_strategy["skill:pod-product-strategy"]
+  A_print_agent --> S_pod_pricing_margin["skill:pod-pricing-margin"]
+  A_print_agent --> S_pod_listing_copy["skill:pod-listing-copy"]
   A_print_agent --> T_printify["source:printify"]
   Registry --> A_shopify_agent["Shopify Agent\nask\nMerch"]
   Workers --> A_shopify_agent
@@ -258,3 +261,11 @@ flowchart LR
   W_paid_campaign_builder --> A_ads_strategist["ads-strategist"]
   W_paid_campaign_builder --> A_ad_creative_agent["ad-creative-agent"]
   W_paid_campaign_builder --> A_ads_agent["ads-agent"]
+  Workflows["Starter Workflows"] --> W_industry_outreach_pipeline["workflow:Industry Outreach Pipeline"]
+  W_industry_outreach_pipeline --> A_industry_hunter["industry-hunter"]
+  W_industry_outreach_pipeline --> A_outreach_agent["outreach-agent"]
+  Workflows["Starter Workflows"] --> W_college_radio_campaign["workflow:College Radio Campaign"]
+  W_college_radio_campaign --> A_college_radio_agent["college-radio-agent"]
+  W_college_radio_campaign --> A_outreach_agent["outreach-agent"]
+  Workflows["Starter Workflows"] --> W_merch_product_builder["workflow:Merch Product Builder"]
+  W_merch_product_builder --> A_print_agent["print-agent"]

@@ -89,6 +89,7 @@ describe('session tool filtering helpers', () => {
     expect(allowed.has('recall_memory')).toBe(true);
     expect(allowed.has('list_deep_research_runs')).toBe(true);
     expect(allowed.has('get_deep_research_run')).toBe(true);
+    expect(allowed.has('message_agent')).toBe(true);
 
     expect(blocked.has('source_oauth_trigger')).toBe(true);
     expect(blocked.has('source_credential_prompt')).toBe(true);
@@ -110,6 +111,7 @@ describe('session tool filtering helpers', () => {
     expect(allowedPrefixed.has('mcp__session__send_developer_feedback')).toBe(true);
     expect(allowedPrefixed.has('mcp__session__call_llm')).toBe(true);
     expect(allowedPrefixed.has('mcp__session__script_sandbox')).toBe(true);
+    expect(allowedPrefixed.has('mcp__session__message_agent')).toBe(true);
     expect(blockedPrefixed.has('mcp__session__source_oauth_trigger')).toBe(true);
     expect(blockedPrefixed.has('mcp__session__spawn_session')).toBe(true);
   });

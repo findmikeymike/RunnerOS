@@ -1,5 +1,5 @@
 {
-  "version": "2026-03-07",
+  "version": "2026-07-30",
   "allowedBashPatterns": [
     {
       "pattern": "^ls\\b",
@@ -68,6 +68,58 @@
     {
       "pattern": "^markitdown\\b",
       "comment": "Convert documents to Markdown (read-only)"
+    },
+    {
+      "pattern": "^command\\s+-v\\s+zero\\s+&&\\s+zero\\s+--version$",
+      "comment": "Check the installed Zero CLI without purchasing data"
+    },
+    {
+      "pattern": "^command\\s+-v\\s+zero$",
+      "comment": "Locate the installed Zero CLI"
+    },
+    {
+      "pattern": "^zero\\s+--version$",
+      "comment": "Read the installed Zero CLI version"
+    },
+    {
+      "pattern": "^zero\\s+(?:search|get)\\b",
+      "comment": "Search and inspect Zero capabilities without paid fetches"
+    },
+    {
+      "pattern": "^python3\\s+\"?(?:~|/Users/[^/]+)/(?:\\.agents|\\.codex)/skills/college-radio-matcher/match\\.py\"?(?:\\s|$)",
+      "comment": "Run the bundled read-only college radio station matcher"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/printify|\"[^\"]*tools/printify\")\\s+&&\\s+node\\s+bin/printify\\.mjs\\s+(?:agent-context|analytics|api|asset-reuse|catalog|catalog-margin-matrix|completion|doctor|fulfillment-risk|help|personalization-audit|personalization-batch|placement-matrix|product-drift|search|shops-json|uploads-json|version|which)\\b",
+      "comment": "Run Printify wrapper commands classified as read-only"
+    },
+    {
+      "pattern": "^node\\s+bin/printify\\.mjs\\s+(?:agent-context|analytics|api|asset-reuse|catalog|catalog-margin-matrix|completion|doctor|fulfillment-risk|help|personalization-audit|personalization-batch|placement-matrix|product-drift|search|shops-json|uploads-json|version|which)\\b",
+      "comment": "Run Printify read-only commands from its tool directory"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/printify|\"[^\"]*tools/printify\")\\s+&&\\s+node\\s+bin/printify\\.mjs\\s+(?!.*(?:^|\\s)--confirm-runner(?:\\s|$)).*\\s--dry-run(?:\\s|$)",
+      "comment": "Preview a Printify write-like command without making external changes"
+    },
+    {
+      "pattern": "^node\\s+bin/printify\\.mjs\\s+(?!.*(?:^|\\s)--confirm-runner(?:\\s|$)).*\\s--dry-run(?:\\s|$)",
+      "comment": "Preview a Printify write-like command from its tool directory"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/shopify|\"[^\"]*tools/shopify\")\\s+&&\\s+node\\s+bin/shopify\\.mjs\\s+(?:doctor\\b|products\\s+(?:list|get)\\b|orders\\s+(?:list|get)\\b|collections\\s+list\\b|locations\\s+list\\b|inventory\\s+items\\b)",
+      "comment": "Inspect Shopify connection and store records without mutations"
+    },
+    {
+      "pattern": "^node\\s+bin/shopify\\.mjs\\s+(?:doctor\\b|products\\s+(?:list|get)\\b|orders\\s+(?:list|get)\\b|collections\\s+list\\b|locations\\s+list\\b|inventory\\s+items\\b)",
+      "comment": "Run Shopify read-only commands from its tool directory"
+    },
+    {
+      "pattern": "^(?!.*(?:^|\\s)--confirm(?:\\s|$))cd\\s+(?:tools/shopify|\"[^\"]*tools/shopify\")\\s+&&\\s+node\\s+bin/shopify\\.mjs\\s+(?:products\\s+(?:create|update)\\b|collections\\s+create\\b|inventory\\s+adjust\\b)",
+      "comment": "Build a guarded Shopify mutation approval packet without executing it"
+    },
+    {
+      "pattern": "^(?!.*(?:^|\\s)--confirm(?:\\s|$))node\\s+bin/shopify\\.mjs\\s+(?:products\\s+(?:create|update)\\b|collections\\s+create\\b|inventory\\s+adjust\\b)",
+      "comment": "Build a guarded Shopify mutation approval packet from its tool directory"
     },
     {
       "pattern": "^cd\\s+(?:tools/printing-press-social|\"[^\"]*printing-press-social\")\\s+&&\\s+node\\s+src/social\\.mjs\\s+registry\\s+--json$",

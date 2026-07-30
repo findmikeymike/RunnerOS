@@ -1874,6 +1874,7 @@ const ALWAYS_ALLOWED_TOOLS = new Set([
   'TodoWrite',                      // Task tracking
   'SubmitPlan',                     // Plan submission
   'LSP',                            // Language server (read-only)
+  'message_agent',                  // Bounded internal delegation; child mode cannot escalate
   // Browser automation tool (canonical wrapper)
   'browser_tool',
 ]);

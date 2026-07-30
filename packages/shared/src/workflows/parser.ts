@@ -85,7 +85,46 @@ function coerceTriggerInputs(
     if (typeof e.description === 'string' && e.description.trim()) {
       input.description = e.description.trim();
     }
+    if (e.min !== undefined || e.max !== undefined || e.integer !== undefined || e.maxFrom !== undefined) {
+      if (type !== 'number') return null;
+      if (e.min !== undefined) {
+        if (typeof e.min !== 'number' || !Number.isFinite(e.min)) return null;
+        input.min = e.min;
+      }
+      if (e.max !== undefined) {
+        if (typeof e.max !== 'number' || !Number.isFinite(e.max)) return null;
+        input.max = e.max;
+      }
+      if (e.integer !== undefined) {
+        if (typeof e.integer !== 'boolean') return null;
+        input.integer = e.integer;
+      }
+      if (e.maxFrom !== undefined) {
+        if (typeof e.maxFrom !== 'string' || !TRIGGER_INPUT_NAME_REGEX.test(e.maxFrom)) return null;
+        input.maxFrom = e.maxFrom;
+      }
+      if (input.min !== undefined && input.max !== undefined && input.min > input.max) return null;
+      if (
+        typeof input.default === 'number' &&
+        (
+          (input.min !== undefined && input.default < input.min) ||
+          (input.max !== undefined && input.default > input.max) ||
+          (input.integer && !Number.isInteger(input.default))
+        )
+      ) return null;
+    }
     out.push(input);
+  }
+  const byName = new Map(out.map((input) => [input.name, input]));
+  for (const input of out) {
+    if (!input.maxFrom) continue;
+    const referenced = byName.get(input.maxFrom);
+    if (!referenced || referenced.type !== 'number' || referenced.name === input.name) return null;
+    if (
+      typeof input.default === 'number' &&
+      typeof referenced.default === 'number' &&
+      input.default > referenced.default
+    ) return null;
   }
   return out.length > 0 ? out : undefined;
 }
@@ -365,6 +404,10 @@ export function serializeWorkflow(metadata: WorkflowMetadata, body: string): str
       if (i.required) out.required = true;
       if (i.default !== undefined) out.default = i.default;
       if (i.description) out.description = i.description;
+      if (i.min !== undefined) out.min = i.min;
+      if (i.max !== undefined) out.max = i.max;
+      if (i.integer !== undefined) out.integer = i.integer;
+      if (i.maxFrom !== undefined) out.maxFrom = i.maxFrom;
       return out;
     });
   }
@@ -400,6 +443,13 @@ function validateSerializableWorkflowMetadata(metadata: WorkflowMetadata): void 
     if (input.default !== undefined && !defaultMatchesTriggerInputType(input.type, input.default)) {
       throw new Error(`Default value for workflow input "${input.name}" must be a ${input.type}.`);
     }
+  }
+  const serializedInputs = coerceTriggerInputs(metadata.trigger.inputs, []);
+  if (
+    metadata.trigger.inputs &&
+    (serializedInputs === null || serializedInputs?.length !== metadata.trigger.inputs.length)
+  ) {
+    throw new Error('Workflow trigger inputs contain invalid bounds or references.');
   }
   for (const step of metadata.steps) {
     if (hasUnsupportedExecutionField(step as unknown as Record<string, unknown>)) {

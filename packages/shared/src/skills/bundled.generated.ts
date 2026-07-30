@@ -20203,7 +20203,7 @@ Use known Artist HQ and campaign context first. Collect only what is missing:
 ## First-pass matching
 
 \`\`\`bash
-python3 "$HOME/.agents/skills/college-radio-matcher/match.py" \\
+python3 ~/.agents/skills/college-radio-matcher/match.py \\
   --home-state CA \\
   --home-city "Los Angeles" \\
   --market-states OR,WA \\
@@ -30309,6 +30309,170 @@ decline plainly and redirect to the legitimate levers above. The whole tool only
 This is the distribution end of the suite: **The Excavator** finds the song → **References** /
 **Impact Phrases** / **Prosody** / **hook-writer** make it → **Playlist Builder** helps it find its
 right audience on Spotify. When an artist has a release ready, this is the growth step.
+`,
+      },
+    ],
+  },
+  {
+    slug: "pod-listing-copy",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: pod-listing-copy
+description: Write Shopify and POD listing copy, titles, tags, product descriptions, collection blurbs, captions, and landing-page sections.
+tags: [pod, copy, listings, shopify]
+---
+
+# POD Listing Copy
+
+Use this skill for print-on-demand product copy.
+
+Input rule:
+
+- Prefer real product data: product brief, garment, print placement, colors, price, material, shipping/fulfillment notes, and target buyer.
+- If the task is updating an existing Shopify product, fetch or request the current product/handle first.
+- Do not write final publish-ready copy from vibes only; mark missing facts.
+
+Copy rules:
+
+- Write clear buyer-facing copy. No vague hype.
+- Do not invent product claims, delivery promises, scarcity, or discounts.
+- Keep SEO useful but human-readable.
+- Separate Shopify product copy, social captions, and internal notes.
+- Include a short reason for each title or angle.
+- Ban empty hype: "high-quality", "premium", "best-in-class", "amazing", "perfect", "revolutionary", "game-changing".
+- Use clean Shopify HTML for full descriptions. No inline styles.
+
+Shopify HTML shape:
+
+\`\`\`html
+<div class="product-description">
+  <p class="product-hook">One concrete opening sentence.</p>
+  <p class="product-body">Two or three sentences on buyer, feeling, use, or identity.</p>
+  <ul class="product-features">
+    <li>Feature or fit note.</li>
+    <li>Print/product detail.</li>
+    <li>Care, styling, or collection fit.</li>
+  </ul>
+  <p class="product-cta">Subtle closing line.</p>
+</div>
+\`\`\`
+
+SEO/PDP checks:
+
+- Title should be readable and include the core product/search phrase.
+- Description should support Product/Offer schema facts when the storefront has them.
+- Image alt text should describe the design and product, not keyword-stuff.
+- Category/collection fit should be explicit.
+- If variants/colors create duplicate pages, recommend canonical/category handling instead of writing duplicate copy.
+
+Default output:
+
+1. Product title options.
+2. Short description.
+3. Full product description.
+4. SEO title/meta description.
+5. Image alt text.
+6. Tags and collection fit.
+7. Social caption variants.
+8. Missing facts and approval notes.
+`,
+      },
+    ],
+  },
+  {
+    slug: "pod-pricing-margin",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: pod-pricing-margin
+description: Price POD products conservatively using product cost, shipping assumptions, marketplace fees, discount room, and contribution margin floors.
+tags: [pod, pricing, margin, commerce]
+---
+
+# POD Pricing Margin
+
+Use this skill before recommending a live price or price change.
+
+Rules:
+
+- Never recommend pricing below contribution floor.
+- State assumptions when costs, shipping, or fees are missing.
+- Leave room for discounts and bundles when possible.
+- Treat ad spend as CM2, not product gross margin.
+- Mark every live price change as approval-required.
+
+Margin waterfall:
+
+\`\`\`text
+Gross revenue
+- discounts/coupons
+- returns/refunds allowance
+= net revenue
+- product COGS
+= gross profit
+- outbound shipping or shipping subsidy
+- payment processing fees
+- marketplace/platform fees
+- packaging/materials if known
+= fulfillment-adjusted gross profit
+- attributed marketing spend
+= contribution margin
+- allocated overhead if needed
+= operating profit estimate
+\`\`\`
+
+Decision rules:
+
+- Use contribution margin for scale decisions, not gross margin alone.
+- If a product is single-item low AOV, flag cold ads as risky unless CM supports expected CPA.
+- Reconcile cost assumptions monthly or whenever provider/product costs change.
+- Recommend bundles, premium garment options, or cross-sells when single-SKU economics are weak.
+- Show price floor, conservative launch price, and stretch price.
+
+Return:
+
+1. Known costs.
+2. Unknown assumptions.
+3. Margin waterfall.
+4. Price floor.
+5. Recommended launch price.
+6. Bundle/discount room.
+7. Contribution margin estimate.
+8. Approval-needed changes.
+`,
+      },
+    ],
+  },
+  {
+    slug: "pod-product-strategy",
+    files: [
+      {
+        path: "SKILL.md",
+        content: `---
+name: pod-product-strategy
+description: Turn artwork into a sellable print-on-demand product brief with audience, garment, placement, variants, price band, and launch risks.
+tags: [pod, print-on-demand, product, strategy]
+---
+
+# POD Product Strategy
+
+Use this skill when a design, artwork folder, or product idea needs to become a concrete POD offer.
+
+Return:
+
+1. Audience: who would buy this and why now.
+2. Product: recommended garment or product type.
+3. Placement: front, back, left chest, sleeve, oversized, or other.
+4. Variants: color and size guidance. Keep color sprawl tight.
+5. Listing angle: title direction, description angle, tags.
+6. Price band: conservative launch range and margin assumptions.
+7. Risks: print quality, weak audience, brand fit, platform risk.
+8. Decision: launch, hold, revise, or needs human review.
+
+Default stance: simple products beat bloated catalogs. Reject weak products early.
 `,
       },
     ],

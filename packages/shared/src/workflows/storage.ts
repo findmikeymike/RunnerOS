@@ -177,16 +177,20 @@ export function loadGlobalWorkflow(slug: string, options?: WorkflowStorageOption
 export function readActivatedWorkflows(workspaceRootPath: string): ActivatedWorkflowsManifest {
   const path = getActivatedWorkflowsManifestPath(workspaceRootPath);
   if (!existsSync(path)) {
-    return { version: 1, active: [], updatedAt: new Date(0).toISOString() };
+    return { version: 1, active: [], inactive: [], updatedAt: new Date(0).toISOString() };
   }
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf-8')) as Partial<ActivatedWorkflowsManifest>;
     const active = Array.isArray(parsed.active)
       ? Array.from(new Set(parsed.active.filter((s): s is string => typeof s === 'string')))
       : [];
+    const inactive = Array.isArray(parsed.inactive)
+      ? Array.from(new Set(parsed.inactive.filter((s): s is string => typeof s === 'string')))
+      : [];
     return {
       version: 1,
       active,
+      inactive,
       updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : new Date().toISOString(),
     };
   } catch (error) {
@@ -198,18 +202,23 @@ export function readActivatedWorkflows(workspaceRootPath: string): ActivatedWork
     } catch {
       // best-effort recovery; callers still get an empty manifest
     }
-    return { version: 1, active: [], updatedAt: new Date(0).toISOString() };
+    return { version: 1, active: [], inactive: [], updatedAt: new Date(0).toISOString() };
   }
 }
 
 export function writeActivatedWorkflows(
   workspaceRootPath: string,
   slugs: string[],
+  inactiveSlugs?: string[],
 ): ActivatedWorkflowsManifest {
   const dedup = Array.from(new Set(slugs.filter(isValidWorkflowSlug)));
+  const inactive = Array.from(new Set(
+    (inactiveSlugs ?? []).filter(isValidWorkflowSlug).filter((slug) => !dedup.includes(slug)),
+  ));
   const manifest: ActivatedWorkflowsManifest = {
     version: 1,
     active: dedup,
+    inactive,
     updatedAt: new Date().toISOString(),
   };
   if (!existsSync(workspaceRootPath)) mkdirSync(workspaceRootPath, { recursive: true });
@@ -228,9 +237,43 @@ export function setWorkflowActive(
 ): ActivatedWorkflowsManifest {
   const current = readActivatedWorkflows(workspaceRootPath);
   const set = new Set(current.active);
-  if (active) set.add(slug);
-  else set.delete(slug);
-  return writeActivatedWorkflows(workspaceRootPath, [...set]);
+  const inactive = new Set(current.inactive ?? []);
+  if (active) {
+    set.add(slug);
+    inactive.delete(slug);
+  } else {
+    set.delete(slug);
+    inactive.add(slug);
+  }
+  return writeActivatedWorkflows(workspaceRootPath, [...set], [...inactive]);
+}
+
+/**
+ * Add newly introduced defaults to an existing workspace once unless the user
+ * explicitly disabled them or the workflow is absent from the global library.
+ */
+export function ensureDefaultWorkflowActivations(
+  workspaceRootPath: string,
+  slugs: readonly string[],
+  options?: WorkflowStorageOptions,
+): { activated: number; manifest: ActivatedWorkflowsManifest } {
+  const current = readActivatedWorkflows(workspaceRootPath);
+  const active = new Set(current.active);
+  const inactive = new Set(current.inactive ?? []);
+  let activated = 0;
+
+  for (const slug of slugs) {
+    if (!isValidWorkflowSlug(slug) || active.has(slug) || inactive.has(slug)) continue;
+    if (!loadGlobalWorkflow(slug, options)) continue;
+    active.add(slug);
+    activated += 1;
+  }
+
+  if (activated === 0) return { activated, manifest: current };
+  return {
+    activated,
+    manifest: writeActivatedWorkflows(workspaceRootPath, [...active], [...inactive]),
+  };
 }
 
 /**
@@ -253,7 +296,7 @@ export function loadActivatedWorkflows(
   }
   if (retained.length !== manifest.active.length) {
     try {
-      writeActivatedWorkflows(workspaceRootPath, retained);
+      writeActivatedWorkflows(workspaceRootPath, retained, manifest.inactive);
     } catch {
       // Best-effort; stale entries get skipped on the next load.
     }

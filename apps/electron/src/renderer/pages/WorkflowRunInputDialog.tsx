@@ -114,6 +114,11 @@ export function WorkflowRunInputDialog({ open, onOpenChange, workflow, workspace
               ) : i.type === 'number' ? (
                 <input
                   type="number"
+                  min={i.min}
+                  max={i.maxFrom && typeof values[i.maxFrom] === 'number'
+                    ? Math.min(i.max ?? Number.POSITIVE_INFINITY, values[i.maxFrom] as number)
+                    : i.max}
+                  step={i.integer ? 1 : 'any'}
                   value={values[i.name] as number | ''}
                   onChange={(e) => setValues((p) => ({ ...p, [i.name]: e.target.value === '' ? '' : Number(e.target.value) }))}
                   className="runneros-form-input"

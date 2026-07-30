@@ -44,6 +44,14 @@ export interface WorkflowTriggerInput {
   default?: unknown;
   /** Optional one-line description shown next to the field. */
   description?: string;
+  /** Inclusive lower bound for number inputs. */
+  min?: number;
+  /** Inclusive upper bound for number inputs. */
+  max?: number;
+  /** Require a whole number. Only valid for number inputs. */
+  integer?: boolean;
+  /** Require this value to be no greater than another declared number input. */
+  maxFrom?: string;
 }
 
 export interface WorkflowTrigger {
@@ -156,5 +164,7 @@ export const WORKFLOW_FILE = 'WORKFLOW.md';
 export interface ActivatedWorkflowsManifest {
   version: 1;
   active: string[];
+  /** Explicitly disabled workflow slugs. Prevents default migrations from re-enabling them. */
+  inactive?: string[];
   updatedAt: string;
 }
