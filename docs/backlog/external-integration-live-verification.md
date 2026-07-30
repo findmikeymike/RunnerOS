@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-11
+last_verified: 2026-07-30
 source_of_truth: true
 ---
 
@@ -104,6 +104,45 @@ No integration is marked "fully end-to-end verified" until it passes:
 - [ ] Confirm private DM bodies do not enter global memory, Workspace Context, shared Outputs, or public receipts.
 - [ ] Confirm exact-target fallback guards prevent a reply from becoming a top-level comment or new DM thread.
 - [ ] Confirm browser/CDP recovery is clear for missing sessions, expired login, CAPTCHA/2FA, account mismatch, and selector drift.
+
+#### Daily Social Comment Replies Automation: Five-Step Manual Smoke
+
+Run these in order. Keep the automation disabled until step 2, and use a controlled
+account/comment for the live write in step 3.
+
+1. **HQ Calendar routing**
+   - [ ] In Artist HQ Calendar, open a day and verify `Add event` and `Add job`.
+   - [ ] Exercise the progressive Event, Agent Task, and Workflow Run paths without saving throwaway work.
+   - [ ] Confirm campaign-owned Social Publish and Review work is absent or explicitly routed into the primary campaign rather than owned by HQ.
+   - Pass evidence: screenshots or notes showing the available HQ choices and the campaign-routing behavior.
+
+2. **Activate Daily Replies**
+   - [ ] From either HQ or Campaign Automations, find `Daily social comment replies` in the template gallery.
+   - [ ] Confirm the template is disabled by default, targets Social Publisher, covers all saved profile packs, and excludes DMs.
+   - [ ] Add or enable it once and confirm the next run is `4:00 PM` in `America/Chicago`.
+   - [ ] Confirm activating it from one surface does not create a duplicate active automation from the other surface.
+   - Pass evidence: automation ID, enabled state, schedule/timezone, and resolved profile count. Do not record credentials.
+
+3. **Controlled exact-reply run**
+   - [ ] Use one real, non-sensitive unanswered test comment on a known profile.
+   - [ ] Run the automation or its safe test path and confirm the reply is attached to that exact comment.
+   - [ ] Confirm it never falls back to a new top-level comment.
+   - [ ] Confirm the private receipt identifies platform, exact profile, target comment, reply, and outcome without exposing private bodies or credentials.
+   - Pass evidence: provider comment/reply IDs or URLs plus the redacted receipt location.
+
+4. **Fail-closed and escalation cases**
+   - [ ] No connected profiles: stop clearly without creating a reply or receipt that claims success.
+   - [ ] Expired authorization, wrong account, CAPTCHA/2FA, or selector drift: stop and show the correct recovery action.
+   - [ ] Duplicate or already-replied comment: skip without sending twice.
+   - [ ] Sensitive, business, legal, safety, or otherwise human-required comment: escalate without improvising a reply.
+   - Pass evidence: one result per exercised case, including the visible error/escalation state and proof that no external write occurred.
+
+5. **Restart and schedule persistence**
+   - [ ] Restart RunnerOS.
+   - [ ] Confirm the same automation ID remains enabled with the `4:00 PM` Chicago schedule.
+   - [ ] Confirm its saved profile-pack scope, comments-only boundary, and Social Publisher target remain unchanged.
+   - [ ] Confirm the next scheduler tick does not duplicate a reply already completed in step 3.
+   - Pass evidence: pre/post-restart automation ID and configuration plus the next-run display.
 
 ### TryPost / Postiz Provider Publishing
 
