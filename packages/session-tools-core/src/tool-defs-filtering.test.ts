@@ -8,6 +8,7 @@ import {
   getSessionSafeBlockedToolNames,
   getToolDefsAsJsonSchema,
   CreateAutomationSchema,
+  CreateWorkflowSchema,
 } from './tool-defs.ts';
 
 describe('session tool filtering helpers', () => {
@@ -141,5 +142,40 @@ describe('session tool filtering helpers', () => {
       },
     });
     expect(invalidThinking.success).toBe(false);
+  });
+
+  it('create_workflow preserves bounded trigger inputs and delegation limits', () => {
+    const parsed = CreateWorkflowSchema.parse({
+      slug: 'bounded-flow',
+      metadata: {
+        name: 'Bounded flow',
+        description: 'Bounded workflow',
+        trigger: {
+          type: 'manual',
+          inputs: [{
+            name: 'count',
+            type: 'number',
+            min: 1,
+            max: 25,
+            integer: true,
+            maxFrom: 'ceiling',
+          }],
+        },
+        steps: [{
+          id: 'one',
+          agent: 'worker',
+          input: 'Do it',
+          completion: { maxAgentMessages: 2 },
+        }],
+      },
+    });
+
+    expect(parsed.metadata.trigger.inputs?.[0]).toMatchObject({
+      min: 1,
+      max: 25,
+      integer: true,
+      maxFrom: 'ceiling',
+    });
+    expect(parsed.metadata.steps[0]?.completion?.maxAgentMessages).toBe(2);
   });
 });

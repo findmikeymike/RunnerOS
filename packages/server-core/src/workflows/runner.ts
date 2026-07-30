@@ -663,6 +663,7 @@ export class WorkflowRunner {
           runId: active.snapshot.id,
           slug: active.snapshot.workflowSlug,
           stepId: stepDef.id,
+          maxAgentMessages: stepDef.completion?.maxAgentMessages,
         },
         config: agentOptions.launchReceipt?.config ?? {},
         injected: agentOptions.launchReceipt?.injected ?? {
@@ -753,6 +754,9 @@ export class WorkflowRunner {
     }
     if (completion.requireToolUse) {
       lines.push('- You must use at least one available tool before the step can complete.');
+    }
+    if (completion.maxAgentMessages !== undefined) {
+      lines.push(`- You may delegate to at most ${completion.maxAgentMessages} agent${completion.maxAgentMessages === 1 ? '' : 's'} across this workflow step, including retries.`);
     }
     if (stepDef.outputSchema) {
       lines.push('- The final answer must satisfy the JSON schema below.');

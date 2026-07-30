@@ -1912,8 +1912,8 @@ export function getShopifySource(workspaceId: string, workspaceRootPath: string)
  * Built-in source for Printify POD operations through Printing Press.
  *
  * The local wrapper resolves `printify-pp-cli`, injects RunnerOS secrets, and
- * blocks write-like commands unless they are dry-run previews or explicitly
- * confirmed through RunnerOS.
+ * permits only bounded private draft creation without approval; all other
+ * writes must be dry-run previews or explicitly confirmed through RunnerOS.
  */
 export function getPrintifySource(workspaceId: string, workspaceRootPath: string): LoadedSource {
   const toolPath = getPrintifyPath();
@@ -1935,7 +1935,7 @@ export function getPrintifySource(workspaceId: string, workspaceRootPath: string
       baseUrl: 'https://api.printify.com/v1',
       authType: 'bearer',
     },
-    tagline: 'Printing Press Printify CLI for catalog, uploads, product proofing, orders, webhooks, and approval-gated POD operations.',
+    tagline: 'Printing Press Printify CLI for catalog, private drafts, product proofing, and approval-gated public or consequential POD operations.',
     icon: 'P',
     isAuthenticated: authState.configured,
     connectionStatus: !toolFolderExists || !binaryPath ? 'failed' : authState.configured ? 'untested' : 'needs_auth',
@@ -1957,7 +1957,7 @@ export function getPrintifySource(workspaceId: string, workspaceRootPath: string
       raw: [
         '# Printify',
         '',
-        'Use this source for Printify print-on-demand catalog research, artwork uploads, product manifests, placement proofing, personalization audits, order checks, fulfillment risk, and approval-gated writes.',
+        'Use this source for Printify print-on-demand catalog research, artwork uploads, private product drafts, placement proofing, personalization audits, order checks, fulfillment risk, and guarded writes.',
         '',
         'Setup:',
         '1. Open Settings -> Secrets.',
@@ -1969,8 +1969,9 @@ export function getPrintifySource(workspaceId: string, workspaceRootPath: string
         '2. Run `node bin/printify.mjs doctor --agent` before account work.',
         '3. List shops first: `node bin/printify.mjs shops-json --agent --select id,title`.',
         '4. Use catalog, margin, placement, personalization, drift, and risk commands before writes.',
-        '5. Use `--dry-run` for write-capable provider previews.',
-        '6. Only rerun with `--confirm-runner` after explicit approval in the current conversation.',
+        '5. Use `--private-draft` only for accepted artwork uploads and one unpublished product creation.',
+        '6. Use `--dry-run` for other write-capable provider previews.',
+        '7. Only rerun with `--confirm-runner` after exact approval in the current conversation.',
         '',
         'Core commands:',
         '- `node bin/printify.mjs shops-json --agent --select id,title`',
@@ -1979,11 +1980,15 @@ export function getPrintifySource(workspaceId: string, workspaceRootPath: string
         '- `node bin/printify.mjs placement-matrix --product-file <product.json> --uploads-file <uploads.json> --agent`',
         '- `node bin/printify.mjs product-drift --product-file <current.json> --manifest <manifest.json> --agent`',
         '- `node bin/printify.mjs fulfillment-risk --orders-file <orders.json> --products-file <products.json> --agent`',
+        '- `node bin/printify.mjs uploads an-image ... --private-draft --agent`',
+        '- `node bin/printify.mjs shops products-json create-anew-product ... --private-draft --agent`',
         '- `node bin/printify.mjs <write-command> --dry-run --agent`',
         '- `node bin/printify.mjs <write-command> --confirm-runner --agent`',
         '',
         'Hard rules:',
-        '- Never upload artwork, create/update/publish/delete products, submit orders, manage shops, or manage webhooks without explicit approval.',
+        '- Accepted artwork uploads and one unpublished product draft may run with `--private-draft`.',
+        '- Never update, publish, sync, archive, or delete products; submit orders; purchase assets; manage shops; or manage webhooks without exact approval.',
+        '- `--private-draft` never authorizes publishing or another mutation.',
         '- Prefer manifest-driven product creation and proofing commands over raw endpoint calls.',
         '- Use `--select` to keep large Printify responses tight.',
         '- Do not print access tokens, customer PII, or raw order exports unless needed.',

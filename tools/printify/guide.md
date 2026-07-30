@@ -1,6 +1,6 @@
 # Printify Source Guide
 
-Use this source for Printify print-on-demand catalog research, artwork uploads, product manifests, placement proofing, personalization audits, order checks, fulfillment risk, and approval-gated writes.
+Use this source for Printify print-on-demand catalog research, artwork uploads, private product drafts, placement proofing, personalization audits, order checks, fulfillment risk, and guarded writes.
 
 ## Setup
 
@@ -27,7 +27,9 @@ node bin/printify.mjs fulfillment-risk --orders-file orders.json --products-file
 
 ## Write Rules
 
-- Never upload artwork, create/update/publish/delete products, submit orders, manage shops, or manage webhooks without explicit user approval in the current conversation.
+- Accepted artwork uploads and one unpublished product draft may run with `--private-draft`.
+- Never update, publish, sync, archive, or delete products; submit orders; purchase assets; manage shops; or manage webhooks without exact approval.
+- `--private-draft` never authorizes publishing or another mutation.
 - Use `--dry-run` before asking for approval when the upstream command supports it.
 - Use `--confirm-runner` only after approval.
 - Use `--select` to keep large Printify responses tight.

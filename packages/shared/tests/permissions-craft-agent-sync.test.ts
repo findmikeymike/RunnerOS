@@ -82,11 +82,29 @@ describe('permissions craft-agent allowlist sync', () => {
     expect(validateBashCommand('cd tools/printify && node bin/printify.mjs doctor --agent', patterns).allowed).toBe(true)
     expect(validateBashCommand('cd tools/printify && node bin/printify.mjs catalog retrieves-list-of-blueprints-in-the --agent', patterns).allowed).toBe(true)
     expect(validateBashCommand('cd tools/printify && node bin/printify.mjs uploads an-image --body-json "{}" --dry-run --agent', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printify && node bin/printify.mjs uploads an-image --body-json "{}" --private-draft --agent', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printify && node bin/printify.mjs shops products-json create-anew-product 123 --title Draft --private-draft --agent', patterns).allowed).toBe(true)
+    expect(validateBashCommand('cd tools/printify && node bin/printify.mjs shops products-json publish 123 product --private-draft --agent', patterns).allowed).toBe(false)
+    expect(validateBashCommand('cd tools/printify && node bin/printify.mjs uploads an-image --private-draft --agent && touch /tmp/BAD', patterns).allowed).toBe(false)
     expect(validateBashCommand('cd tools/printify && node bin/printify.mjs uploads an-image --confirm-runner --agent', patterns).allowed).toBe(false)
     expect(validateBashCommand('cd tools/printify && node bin/printify.mjs uploads an-image --dry-run --confirm-runner --agent', patterns).allowed).toBe(false)
 
     expect(validateBashCommand('cd tools/shopify && node bin/shopify.mjs products list --first 10 --agent', patterns).allowed).toBe(true)
     expect(validateBashCommand('cd tools/shopify && node bin/shopify.mjs products create --input product.json --agent', patterns).allowed).toBe(true)
     expect(validateBashCommand('cd tools/shopify && node bin/shopify.mjs products create --input product.json --confirm --agent', patterns).allowed).toBe(false)
+  })
+
+  it('allows private Gmail drafts but never Gmail sends by default', () => {
+    const permissionsPath = resolve(import.meta.dir, '../../../apps/electron/resources/permissions/default.json')
+    const permissions = JSON.parse(readFileSync(permissionsPath, 'utf-8')) as {
+      allowedApiEndpoints?: Array<{ method: string; path: string }>
+    }
+    const postRules = (permissions.allowedApiEndpoints ?? [])
+      .filter((rule) => rule.method === 'POST')
+      .map((rule) => new RegExp(rule.path))
+
+    expect(postRules.some((rule) => rule.test('/users/me/drafts'))).toBe(true)
+    expect(postRules.some((rule) => rule.test('/users/me/drafts/send'))).toBe(false)
+    expect(postRules.some((rule) => rule.test('/users/me/messages/send'))).toBe(false)
   })
 })

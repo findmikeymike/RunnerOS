@@ -108,6 +108,7 @@ export interface SessionLaunchReceipt {
     runId?: string;
     slug: string;
     stepId?: string;
+    maxAgentMessages?: number;
   };
   deepResearch?: {
     runId?: string;

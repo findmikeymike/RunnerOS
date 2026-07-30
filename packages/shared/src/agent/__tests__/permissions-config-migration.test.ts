@@ -28,8 +28,12 @@ describe('ensureDefaultPermissions migration', () => {
           { pattern: '^bun\\s+run\\s+typecheck\\b$', comment: 'Typecheck' },
         ],
         allowedMcpPatterns: ['search'],
-        allowedApiEndpoints: [],
-        allowedWritePaths: [],
+        allowedApiEndpoints: [
+          { method: 'POST', path: '^/users/me/drafts$', comment: 'Private Gmail draft' },
+        ],
+        allowedWritePaths: [
+          { pattern: 'session-data/**', comment: 'Session data' },
+        ],
         blockedCommandHints: [
           { command: 'printf', reason: 'printf blocked by default' },
         ],
@@ -47,8 +51,12 @@ describe('ensureDefaultPermissions migration', () => {
           { pattern: '^custom-review\\b', comment: 'User customization' },
         ],
         allowedMcpPatterns: ['list'],
-        allowedApiEndpoints: [],
-        allowedWritePaths: [],
+        allowedApiEndpoints: [
+          { method: 'POST', path: '^/custom/private$', comment: 'User customization' },
+        ],
+        allowedWritePaths: [
+          { pattern: 'custom/**', comment: 'User customization' },
+        ],
         blockedCommandHints: [
           { command: 'sed', reason: 'sed print-only policy', whenNotMatching: '^sed\\s+-n\\b' },
         ],
@@ -76,6 +84,16 @@ describe('ensureDefaultPermissions migration', () => {
     const mcpPatterns = merged.allowedMcpPatterns as string[];
     expect(mcpPatterns).toContain('list');
     expect(mcpPatterns).toContain('search');
+
+    expect(merged.allowedApiEndpoints).toEqual(expect.arrayContaining([
+      expect.objectContaining({ method: 'POST', path: '^/custom/private$' }),
+      expect.objectContaining({ method: 'POST', path: '^/users/me/drafts$' }),
+    ]));
+    const writePaths = merged.allowedWritePaths.map((p: string | { pattern: string }) =>
+      typeof p === 'string' ? p : p.pattern
+    );
+    expect(writePaths).toContain('custom/**');
+    expect(writePaths).toContain('session-data/**');
 
     const blockedCommandHints = merged.blockedCommandHints as Array<{ command: string; reason: string }>;
     expect(blockedCommandHints.some(h => h.command === 'printf')).toBe(true);

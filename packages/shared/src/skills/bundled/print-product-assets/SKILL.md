@@ -56,14 +56,15 @@ cd tools/printify && node bin/printify.mjs product-drift --product-file current-
 
 If `doctor` says `printify-pp-cli` is missing, install the upstream Printing Press CLI with `npx -y @mvanhorn/printing-press-library install printify --cli-only`. Apple Silicon Mac builds bundle the binary. RunnerOS also checks the default `~/.local/bin/printify-pp-cli` install path and `PRINTIFY_PP_CLI`.
 
-Write-capable commands must go through the RunnerOS approval gate:
+Private, reversible draft creation may proceed without approval:
 
 ```bash
 cd tools/printify && node bin/printify.mjs uploads an-image --body-json '{"file_name":"front.png","contents":"data:image/png;base64,..."}' --dry-run --agent
-cd tools/printify && node bin/printify.mjs shops products-json create-anew-product <shopId> --title Sample --blueprint-id <blueprintId> --print-provider-id <providerId> --variants '[]' --print-areas '[]' --agent
+cd tools/printify && node bin/printify.mjs uploads an-image --body-json '{"file_name":"front.png","contents":"data:image/png;base64,..."}' --private-draft --agent
+cd tools/printify && node bin/printify.mjs shops products-json create-anew-product <shopId> --title Sample --blueprint-id <blueprintId> --print-provider-id <providerId> --variants '[]' --print-areas '[]' --private-draft --agent
 ```
 
-Only rerun with `--confirm-runner` after explicit user approval in the current conversation.
+Use `--confirm-runner` only after exact approval for public, paid, destructive, order, sync, or other consequential actions.
 
 ## Output Shape
 
@@ -72,7 +73,7 @@ For each batch, produce:
 1. `asset-inventory` listing accepted/rejected files.
 2. `product-plan` with shop, product, provider, variants, pricing, and garment colors.
 3. `placement-spec` showing each asset and intended print area.
-4. `approval-needed` commands for uploads/product creation/publishing.
+4. `draft-receipts` for private uploads/product creation plus `approval-needed` commands for publishing or other consequential actions.
 5. `qa-notes` with image, placement, margin, fulfillment, and publish risks.
 
 Publish the inventory, placement spec, product manifest, QA report, and receipts as RunnerOS outputs when they should appear on Canvas.
@@ -80,8 +81,8 @@ Publish the inventory, placement spec, product manifest, QA report, and receipts
 ## Safety
 
 - Start read-only.
-- Do not upload artwork without approval.
-- Do not create, update, publish, archive, or delete products without approval.
+- Accepted artwork may be uploaded privately and one unpublished product draft may be created with `--private-draft`.
+- Do not update, publish, sync, archive, or delete products without approval.
 - Do not submit orders or manage webhooks without approval.
 - Do not print access tokens, private customer data, or raw order exports unless required.
 - If a folder contains many files, process a sample first and ask before bulk action.

@@ -789,7 +789,6 @@ export class OutputService {
         input.workspaceId,
         input.workflowRunId,
         manifest.id,
-        input.stepId,
       );
     }
     let shownInCanvas = false;
@@ -829,10 +828,33 @@ export class OutputService {
     const finalStep = this.findFinalSucceededStep(run);
     if (!finalStep) return run;
 
+    const root = this.deps.getWorkspaceRootPath(run.workspaceId);
+    for (let index = (run.outputIds?.length ?? 0) - 1; index >= 0; index--) {
+      const outputId = run.outputIds?.[index];
+      if (!outputId) continue;
+      const output = readOutput(root, outputId);
+      if (
+        output?.origin.source === 'workflow'
+        && output.origin.workflowRunId === run.id
+        && output.origin.stepId === finalStep.id
+        && output.origin.sessionId === finalStep.sessionId
+      ) {
+        const next: WorkflowRunSnapshot = {
+          ...run,
+          finalOutputId: output.id,
+          outputError: undefined,
+          updatedAt: new Date().toISOString(),
+        };
+        writeRun(root, next);
+        this.emitUpdated(run.workspaceId);
+        return next;
+      }
+    }
+
     const content = finalStep.output;
     const normalized = this.normalizeStepOutput(content);
     const workflowName = run.workflowSnapshot.metadata.name || run.workflowSlug;
-    const manifest = createOutputBundle(this.deps.getWorkspaceRootPath(run.workspaceId), {
+    const manifest = createOutputBundle(root, {
       id: randomUUID(),
       workspaceId: run.workspaceId,
       title: run.workflowSnapshot.metadata.outputs?.title?.trim() || `${workflowName} output`,
@@ -861,7 +883,7 @@ export class OutputService {
       outputError: undefined,
       updatedAt: new Date().toISOString(),
     };
-    writeRun(this.deps.getWorkspaceRootPath(run.workspaceId), next);
+    writeRun(root, next);
     this.emitUpdated(run.workspaceId);
     return next;
   }
@@ -877,6 +899,11 @@ export class OutputService {
   }
 
   private findFinalSucceededStep(run: WorkflowRunSnapshot): WorkflowRunStep | undefined {
+    const declaredStepId = run.workflowSnapshot.metadata.outputs?.primary?.step;
+    if (declaredStepId) {
+      const declared = run.steps.find((step) => step.id === declaredStepId);
+      return declared?.state === 'succeeded' && declared.output !== undefined ? declared : undefined;
+    }
     for (let i = run.steps.length - 1; i >= 0; i--) {
       const step = run.steps[i]!;
       if (step.state === 'succeeded' && step.output !== undefined) return step;
@@ -944,7 +971,6 @@ export class OutputService {
     workspaceId: string,
     runId: string,
     outputId: string,
-    stepId?: string,
   ): Promise<void> {
     await this.withRunMutex(workspaceId, runId, async () => {
       const root = this.deps.getWorkspaceRootPath(workspaceId);
@@ -953,9 +979,7 @@ export class OutputService {
       if ((run.outputIds ?? []).includes(outputId)) return;
       const outputIds = [...(run.outputIds ?? []), outputId];
       const outputMode = run.workflowSnapshot.metadata.outputs?.mode ?? 'final-step';
-      const declaredFinalStepId = run.workflowSnapshot.metadata.outputs?.primary?.step
-        ?? run.workflowSnapshot.metadata.steps.at(-1)?.id;
-      const mayBecomeFinal = outputMode !== 'final-step' || stepId === declaredFinalStepId;
+      const mayBecomeFinal = outputMode === 'explicit-tool';
       const next: WorkflowRunSnapshot = {
         ...run,
         outputIds,

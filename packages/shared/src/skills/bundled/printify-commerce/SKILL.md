@@ -1,6 +1,6 @@
 ---
 name: printify-commerce
-description: Operate Printify POD workflows through RunnerOS' wrapped Printing Press Printify CLI with approval-gated writes.
+description: Operate Printify POD workflows through RunnerOS' wrapped Printing Press Printify CLI with safe private drafts and approval-gated public or consequential writes.
 requiredSources:
   - printify
 tags: [commerce, printify, pod, products, uploads]
@@ -54,27 +54,32 @@ cd tools/printify && node bin/printify.mjs asset-reuse --products-file products.
 cd tools/printify && node bin/printify.mjs fulfillment-risk --orders-file orders.json --products-file products.json --agent
 ```
 
-## Write Workflow
+## Private Draft Workflow
 
-The RunnerOS wrapper blocks write-like commands unless they include either:
+RunnerOS may autonomously make two bounded, reversible private changes:
 
-- `--dry-run` for provider preview, or
-- `--confirm-runner` after explicit approval.
+- upload accepted artwork with `uploads an-image --private-draft`
+- create one unpublished Printify product with `shops products-json create-anew-product ... --private-draft`
 
 Examples:
 
 ```bash
 cd tools/printify && node bin/printify.mjs uploads an-image --body-json '{"file_name":"front.png","contents":"data:image/png;base64,..."}' --dry-run --agent
-cd tools/printify && node bin/printify.mjs shops products-json create-anew-product <shopId> --title Sample --blueprint-id 384 --print-provider-id 1 --variants '[]' --print-areas '[]' --agent
+cd tools/printify && node bin/printify.mjs uploads an-image --body-json '{"file_name":"front.png","contents":"data:image/png;base64,..."}' --private-draft --agent
+cd tools/printify && node bin/printify.mjs shops products-json create-anew-product <shopId> --title Sample --blueprint-id 384 --print-provider-id 1 --variants '[]' --print-areas '[]' --private-draft --agent
 cd tools/printify && node bin/printify.mjs shops products-json create-anew-product <shopId> --title Sample --blueprint-id 384 --print-provider-id 1 --variants '[]' --print-areas '[]' --confirm-runner --agent
 ```
+
+All other write-like commands are blocked unless they use `--dry-run` for a provider preview or `--confirm-runner` after exact approval.
 
 ## Safety Rules
 
 - Start read-only.
 - Use `shops-json` before shop-scoped commands.
 - Use manifest/proofing workflows before product creation.
-- Never upload artwork, create/update/publish/delete products, submit orders, manage shops, or manage webhooks without explicit approval.
+- Private artwork uploads and one unpublished product draft may be created without approval when they are directly requested by the workflow.
+- Never update, publish, sync, archive, or delete products; submit orders; purchase assets; manage shops; or manage webhooks without exact approval.
+- `--private-draft` is valid only for artwork upload and unpublished product creation. It never authorizes publishing or another mutation.
 - Use `--dry-run` before any approval request when the upstream command supports it.
 - Use `--select` to keep large API responses tight.
 - Do not print access tokens, private customer data, or raw order exports unless needed.

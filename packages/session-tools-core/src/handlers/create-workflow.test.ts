@@ -114,4 +114,48 @@ describe('handleCreateWorkflow', () => {
     expect(captured?.slug).toBe('feedback-digest');
     expect((result.content[0] as any).text).toContain('/workflows/feedback-digest');
   });
+
+  it('forwards trigger bounds and delegation limits intact', async () => {
+    let captured: CreateWorkflowToolInput | undefined;
+    const ctx = makeCtx({
+      createWorkflow: async (input) => {
+        captured = input;
+        return { ok: true, slug: input.slug };
+      },
+    });
+    const bounded: CreateWorkflowToolInput = {
+      ...VALID_INPUT,
+      metadata: {
+        ...VALID_INPUT.metadata,
+        trigger: {
+          type: 'manual',
+          inputs: [{
+            name: 'count',
+            type: 'number',
+            min: 1,
+            max: 25,
+            integer: true,
+            maxFrom: 'ceiling',
+          }],
+        },
+        steps: [{
+          id: 'one',
+          agent: 'worker',
+          input: 'Do it',
+          completion: { maxAgentMessages: 2 },
+        }],
+      },
+    };
+
+    const result = await handleCreateWorkflow(ctx, bounded);
+
+    expect(result.isError).toBe(false);
+    expect(captured?.metadata.trigger.inputs?.[0]).toMatchObject({
+      min: 1,
+      max: 25,
+      integer: true,
+      maxFrom: 'ceiling',
+    });
+    expect(captured?.metadata.steps[0]?.completion?.maxAgentMessages).toBe(2);
+  });
 });

@@ -1,4 +1,22 @@
-import type { LoadedWorkflow } from './types.ts';
+import type { LoadedWorkflow, WorkflowTriggerInput } from './types.ts';
+
+export function fillMissingWorkflowTriggerInputConstraints(
+  inputs: WorkflowTriggerInput[],
+  canonicalInputs: WorkflowTriggerInput[],
+): WorkflowTriggerInput[] {
+  return inputs.map((input) => {
+    const canonical = canonicalInputs.find((candidate) => candidate.name === input.name);
+    if (!canonical) return input;
+    return {
+      ...input,
+      description: input.description ?? canonical.description,
+      min: input.min ?? canonical.min,
+      max: input.max ?? canonical.max,
+      integer: input.integer ?? canonical.integer,
+      maxFrom: input.maxFrom ?? canonical.maxFrom,
+    };
+  });
+}
 
 export function normalizeWorkflowTriggerInputs(
   workflow: LoadedWorkflow,

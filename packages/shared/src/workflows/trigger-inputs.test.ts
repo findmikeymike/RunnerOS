@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
-import { normalizeWorkflowTriggerInputs } from './trigger-inputs.ts';
+import {
+  fillMissingWorkflowTriggerInputConstraints,
+  normalizeWorkflowTriggerInputs,
+} from './trigger-inputs.ts';
 import type { LoadedWorkflow } from './types.ts';
 
 function workflow(inputs: LoadedWorkflow['metadata']['trigger']['inputs']): LoadedWorkflow {
@@ -64,5 +67,37 @@ describe('normalizeWorkflowTriggerInputs', () => {
     });
     expect(() => normalizeWorkflowTriggerInputs(related, { targets: 2, drafts: 3 }))
       .toThrow('Workflow input "drafts" must be no greater than "targets" (2).');
+  });
+});
+
+describe('fillMissingWorkflowTriggerInputConstraints', () => {
+  test('adds new canonical bounds without overwriting user customizations', () => {
+    expect(fillMissingWorkflowTriggerInputConstraints(
+      [{
+        name: 'count',
+        type: 'number',
+        description: 'My wording',
+        min: 3,
+        max: 9,
+        integer: false,
+      }],
+      [{
+        name: 'count',
+        type: 'number',
+        description: 'Canonical wording',
+        min: 1,
+        max: 25,
+        integer: true,
+        maxFrom: 'ceiling',
+      }],
+    )).toEqual([{
+      name: 'count',
+      type: 'number',
+      description: 'My wording',
+      min: 3,
+      max: 9,
+      integer: false,
+      maxFrom: 'ceiling',
+    }]);
   });
 });

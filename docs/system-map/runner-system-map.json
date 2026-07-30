@@ -985,7 +985,6 @@
         "approval-capable",
         "artifact-output-aware",
         "canvas-visual-agent",
-        "explicit-approval-required",
         "external-action-boundary",
         "optional-source-aware",
         "requires-source-activation",

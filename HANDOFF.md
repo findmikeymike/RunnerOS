@@ -99,7 +99,8 @@ Primary files:
 
 - Outputs become Finals through UI actions or the `promote_output_to_final` session tool. Finals are locked pointers to Output bundles, not copied assets.
 - Shared Intel routes durable session context to selected agents at launch; HNIC retains the broad context override.
-- College Radio is default-visible in HQ/Campaign, verifies directory leads live, creates durable Outreach packets, and hands verified email targets to Outreach Agent. Gmail sends remain exact-approval gated.
+- College Radio is default-visible in Campaigns and addable to HQ, verifies directory leads live, creates durable Outreach packets, and hands verified email targets to Outreach Agent. Private Gmail drafts can be created automatically; sends remain exact-approval gated.
+- Merch Product Builder can create one private unpublished Printify product and official mockups. Spending, ordering, syncing, publishing, deleting, and other consequential actions remain exact-approval gated.
 - Spotify Playlist Creator is default-visible in HQ/Campaign and is distinct from the separate Playlisting Power Up service handoff.
 - Paid ads remain a three-worker chain: Ad Creative -> Ad Strategy -> Ad Runner. Account-side mutations remain approval-gated.
 - The generated system map is the fastest complete inventory of starter agents, skills, sources, launch surfaces, permission signals, Outputs/Finals, and Scheduled Work wiring.

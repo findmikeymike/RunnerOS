@@ -68,7 +68,7 @@ describe('OutputService run mutex', () => {
     expect(ids.length).toBe(2);
   });
 
-  it('never promotes a non-final workflow step output to canonical final', async () => {
+  it('promotes only an Output from the successful final-step attempt', async () => {
     const root = mkdtempSync(join(tmpdir(), 'osvc-final-step-'));
     mkdirSync(join(root, 'outputs'), { recursive: true });
     const runId = randomUUID();
@@ -116,7 +116,94 @@ describe('OutputService run mutex', () => {
       },
     });
     expect(readRun(root, runId)?.outputIds).toEqual([evidence.outputId!, final.outputId!]);
-    expect(readRun(root, runId)?.finalOutputId).toBe(final.outputId);
+    expect(readRun(root, runId)?.finalOutputId).toBeUndefined();
+
+    const succeeded = readRun(root, runId)!;
+    succeeded.state = 'succeeded';
+    succeeded.steps = [
+      { id: 'research', state: 'succeeded', attempts: 1, sessionId: 'research-session', output: 'Evidence' },
+      { id: 'director', state: 'succeeded', attempts: 1, sessionId: 'director-session', output: 'Final' },
+    ];
+    writeRun(root, succeeded);
+
+    const finalized = service.createDefaultWorkflowOutput(succeeded);
+    expect(finalized.finalOutputId).toBe(final.outputId);
+    expect(finalized.outputIds).toEqual([evidence.outputId!, final.outputId!]);
+  });
+
+  it('ignores an Output created by a failed final-step attempt', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-final-retry-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const runId = randomUUID();
+    const run = makeRunSnapshot(runId, 'ws');
+    run.workflowSnapshot.metadata.steps = [
+      { id: 'director', agent: 'director', input: 'Direct' },
+    ];
+    run.workflowSnapshot.metadata.outputs = {
+      mode: 'final-step',
+      primary: { from: 'step-output', step: 'director' },
+    };
+    writeRun(root, run);
+    const service = new OutputService({ getWorkspaceRootPath: () => root });
+
+    const stale = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'failed-attempt',
+      workflowRunId: runId,
+      workflowSlug: 'wf',
+      workflowName: 'wf',
+      stepId: 'director',
+      output: {
+        title: 'Stale',
+        kind: 'document',
+        summary: 'Stale',
+        content: 'Stale',
+      },
+    });
+    const succeeded = readRun(root, runId)!;
+    succeeded.state = 'succeeded';
+    succeeded.steps = [{
+      id: 'director',
+      state: 'succeeded',
+      attempts: 2,
+      sessionId: 'successful-attempt',
+      output: 'Successful final answer',
+    }];
+    writeRun(root, succeeded);
+
+    const finalized = service.createDefaultWorkflowOutput(succeeded);
+    expect(finalized.finalOutputId).toBeDefined();
+    expect(finalized.finalOutputId).not.toBe(stale.outputId);
+    expect(finalized.outputIds).toContain(stale.outputId!);
+    expect(finalized.outputIds).toContain(finalized.finalOutputId!);
+  });
+
+  it('never promotes explicit Outputs when workflow output mode is none', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'osvc-none-'));
+    mkdirSync(join(root, 'outputs'), { recursive: true });
+    const runId = randomUUID();
+    const run = makeRunSnapshot(runId, 'ws');
+    run.workflowSnapshot.metadata.outputs = { mode: 'none' };
+    writeRun(root, run);
+    const service = new OutputService({ getWorkspaceRootPath: () => root });
+
+    const output = await service.createFromSessionTool({
+      workspaceId: 'ws',
+      sessionId: 'session',
+      workflowRunId: runId,
+      workflowSlug: 'wf',
+      workflowName: 'wf',
+      stepId: 'one',
+      output: {
+        title: 'Evidence only',
+        kind: 'report',
+        summary: 'Evidence',
+        content: 'Evidence',
+      },
+    });
+
+    expect(readRun(root, runId)?.outputIds).toEqual([output.outputId!]);
+    expect(readRun(root, runId)?.finalOutputId).toBeUndefined();
   });
 });
 

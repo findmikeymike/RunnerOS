@@ -336,12 +336,17 @@ const WorkflowTriggerInputSchema = z.object({
   required: z.boolean().optional().describe('Whether the run form must provide this input.'),
   default: z.unknown().optional().describe('Optional default value matching the declared type.'),
   description: z.string().optional().describe('Short help text shown in the run form.'),
+  min: z.number().finite().optional().describe('Optional inclusive minimum for number inputs.'),
+  max: z.number().finite().optional().describe('Optional inclusive maximum for number inputs.'),
+  integer: z.boolean().optional().describe('Require a whole number when true.'),
+  maxFrom: z.string().optional().describe('Optional name of another number input whose value is the dynamic maximum.'),
 });
 
 const WorkflowStepCompletionSchema = z.object({
   requireNonEmptyOutput: z.boolean().optional(),
   minOutputChars: z.number().optional(),
   requireToolUse: z.boolean().optional(),
+  maxAgentMessages: z.number().int().min(0).max(20).optional(),
 });
 
 const WorkflowStepSchema = z.object({

@@ -365,7 +365,7 @@ describe('WorkflowRunner', () => {
     expect(h.promptsSent[1]?.prompt).toContain('HUNTER_TARGET_LIST')
     expect(h.promptsSent[1]?.prompt).toContain('Later paid contact-enrichment planning ceiling:\n$0')
     expect(h.promptsSent[1]?.prompt).toContain('Do not perform paid lookup in this workflow')
-    expect(h.promptsSent[1]?.prompt).toContain('Do not create Gmail drafts or send messages during this workflow')
+    expect(h.promptsSent[1]?.prompt).toContain('create one private Gmail draft for each Ready Now finalist')
     expect([...h.sessions.values()].map((session) => (session.options as { spawnedFromAgent?: { agentSlug?: string } }).spawnedFromAgent?.agentSlug)).toEqual([
       'industry-hunter',
       'outreach-agent',
@@ -419,7 +419,7 @@ describe('WorkflowRunner', () => {
     expect(h.promptsSent[0]?.prompt).toContain('Do not call create_output or message_agent')
     expect(h.promptsSent[1]?.prompt).toContain('VERIFIED_RADIO_TARGETS')
     expect(h.promptsSent[1]?.prompt).toContain('Include physical-submission targets:\nfalse')
-    expect(h.promptsSent[1]?.prompt).toContain('Do not create Gmail drafts, send messages, submit forms, upload files')
+    expect(h.promptsSent[1]?.prompt).toContain('create one private Gmail draft for each email-ready target')
     expect([...h.sessions.values()].map((session) => (session.options as { spawnedFromAgent?: { agentSlug?: string } }).spawnedFromAgent?.agentSlug)).toEqual([
       'college-radio-agent',
       'outreach-agent',
@@ -432,7 +432,7 @@ describe('WorkflowRunner', () => {
     expect(manifest?.preview?.mode).toBe('markdown')
   })
 
-  test('Merch Product Builder runs one lead agent and creates one approval-gated launch kit', async () => {
+  test('Merch Product Builder runs one bounded lead agent and creates one private-draft launch kit', async () => {
     const template = STARTER_WORKFLOWS.find((workflow) => workflow.slug === 'merch-product-builder')!
     const workflow: LoadedWorkflow = {
       ...template,
@@ -473,7 +473,10 @@ describe('WorkflowRunner', () => {
     expect(h.promptsSent[0]?.prompt).toContain('Do not generate or purchase imagery in this workflow')
     expect(h.promptsSent[0]?.prompt).toContain('Contact Art Director exactly once only when')
     expect(h.promptsSent[0]?.prompt).toContain('If Shopify validates successfully, contact Shopify Agent exactly once')
-    expect(h.promptsSent[0]?.prompt).toContain('Do not upload artwork, create a product, order a sample, sync, publish, update Shopify')
+    expect(h.promptsSent[0]?.prompt).toContain('create-anew-product ... --private-draft --agent')
+    expect(h.promptsSent[0]?.prompt).toContain('private artwork upload and one unpublished Printify product draft are the only allowed writes')
+    expect(h.promptsSent[0]?.prompt).toContain('at most 2 agents across this workflow step')
+    expect((h.sessions.values().next().value?.options as { launchReceipt?: { workflow?: { maxAgentMessages?: number } } }).launchReceipt?.workflow?.maxAgentMessages).toBe(2)
     expect([...h.sessions.values()].map((session) => (session.options as { spawnedFromAgent?: { agentSlug?: string } }).spawnedFromAgent?.agentSlug)).toEqual([
       'print-agent',
     ])

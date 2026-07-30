@@ -53,6 +53,7 @@ export interface AgentMessageReceipt {
     maxTurns: number;
     maxDepth: number;
     depth: number;
+    maxAgentMessages?: number;
     background?: boolean;
   };
   constraints: {

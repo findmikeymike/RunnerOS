@@ -83,6 +83,8 @@ export interface WorkflowStepCompletionContract {
   minOutputChars?: number;
   /** Require the step session to have used at least one tool before completing. */
   requireToolUse?: boolean;
+  /** Maximum delegated agent messages allowed for this workflow step across all attempts. */
+  maxAgentMessages?: number;
 }
 
 /**

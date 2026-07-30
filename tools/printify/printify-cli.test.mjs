@@ -108,4 +108,43 @@ describe('printify cli wrapper', () => {
     expect(result.stdout.ok).toBe(false);
     expect(result.stdout.error).toContain('printify-pp-cli binary not found or not executable');
   });
+
+  test('private artwork upload can execute without approval', () => {
+    const result = run(['uploads', 'an-image', '--body-json', '{}', '--private-draft', '--agent']);
+
+    expect(result.status).toBe(127);
+    expect(result.stdout.requiresApproval).not.toBe(true);
+    expect(result.stdout.error).toContain('printify-pp-cli binary not found or not executable');
+  });
+
+  test('private unpublished product creation can execute without approval', () => {
+    const result = run([
+      'shops',
+      'products-json',
+      'create-anew-product',
+      '123',
+      '--title',
+      'Draft',
+      '--private-draft',
+      '--agent',
+    ]);
+
+    expect(result.status).toBe(127);
+    expect(result.stdout.requiresApproval).not.toBe(true);
+  });
+
+  test('private-draft flag cannot bypass approval for publish', () => {
+    const result = run([
+      'shops',
+      'products-json',
+      'publish',
+      '123',
+      'product',
+      '--private-draft',
+      '--agent',
+    ]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout.requiresApproval).toBe(true);
+  });
 });

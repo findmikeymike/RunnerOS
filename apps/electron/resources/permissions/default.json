@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-30",
+  "version": "2026-07-30T00:00:00Z",
   "allowedBashPatterns": [
     {
       "pattern": "^ls\\b",
@@ -104,6 +104,14 @@
     {
       "pattern": "^node\\s+bin/printify\\.mjs\\s+(?!.*(?:^|\\s)--confirm-runner(?:\\s|$)).*\\s--dry-run(?:\\s|$)",
       "comment": "Preview a Printify write-like command from its tool directory"
+    },
+    {
+      "pattern": "^cd\\s+(?:tools/printify|\"[^\"]*tools/printify\")\\s+&&\\s+node\\s+bin/printify\\.mjs\\s+(?!.*(?:^|\\s)--confirm-runner(?:\\s|$))(?=[^;&|\\n]*\\s--private-draft(?:\\s|$))(?:uploads\\s+an-image|shops\\s+products-json\\s+create-anew-product)\\b[^;&|\\n]*$",
+      "comment": "Create a private Printify artwork upload or unpublished product draft"
+    },
+    {
+      "pattern": "^node\\s+bin/printify\\.mjs\\s+(?!.*(?:^|\\s)--confirm-runner(?:\\s|$))(?=[^;&|\\n]*\\s--private-draft(?:\\s|$))(?:uploads\\s+an-image|shops\\s+products-json\\s+create-anew-product)\\b[^;&|\\n]*$",
+      "comment": "Create a private Printify artwork upload or unpublished product draft from its tool directory"
     },
     {
       "pattern": "^cd\\s+(?:tools/shopify|\"[^\"]*tools/shopify\")\\s+&&\\s+node\\s+bin/shopify\\.mjs\\s+(?:doctor\\b|products\\s+(?:list|get)\\b|orders\\s+(?:list|get)\\b|collections\\s+list\\b|locations\\s+list\\b|inventory\\s+items\\b)",
@@ -1080,6 +1088,12 @@
       "comment": "Fetch/retrieve data"
     }
   ],
-  "allowedApiEndpoints": [],
+  "allowedApiEndpoints": [
+    {
+      "method": "POST",
+      "path": "^/users/me/drafts$",
+      "comment": "Create a private reversible Gmail draft without sending it"
+    }
+  ],
   "allowedWritePaths": []
 }

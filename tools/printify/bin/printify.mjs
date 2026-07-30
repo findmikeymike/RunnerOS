@@ -104,6 +104,19 @@ function isSafeReadLike(args) {
   return safeCommands.has(command);
 }
 
+function isPrivateDraftWrite(args) {
+  if (!hasFlag(args, '--private-draft')) return false;
+  const positional = args.filter((arg) => !arg.startsWith('--'));
+  return (
+    positional[0]?.toLowerCase() === 'uploads'
+    && positional[1]?.toLowerCase() === 'an-image'
+  ) || (
+    positional[0]?.toLowerCase() === 'shops'
+    && positional[1]?.toLowerCase() === 'products-json'
+    && positional[2]?.toLowerCase() === 'create-anew-product'
+  );
+}
+
 function approvalPacket(args) {
   const safeArgs = redactSensitiveArgs(args);
   const commandArgv = ['node', 'bin/printify.mjs', ...safeArgs];
@@ -192,11 +205,12 @@ const args = process.argv.slice(2);
 const binary = resolveBinary();
 const confirmed = hasFlag(args, '--confirm-runner');
 const dryRun = hasFlag(args, '--dry-run');
-const passthroughArgs = args.filter((arg) => arg !== '--confirm-runner');
+const privateDraft = isPrivateDraftWrite(args);
+const passthroughArgs = args.filter((arg) => arg !== '--confirm-runner' && arg !== '--private-draft');
 
 if (args[0] === 'doctor') {
   doctor(binary, args.slice(1));
-} else if (!isSafeReadLike(args) && !dryRun && !confirmed) {
+} else if (!isSafeReadLike(args) && !dryRun && !confirmed && !privateDraft) {
   jsonOut(approvalPacket(args));
 } else {
   if (!binary) {

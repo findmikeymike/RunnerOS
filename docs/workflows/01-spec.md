@@ -39,6 +39,7 @@ steps:
     completion:           # optional completion gate
       requireToolUse: true
       minOutputChars: 200
+      maxAgentMessages: 2 # hard cap across this step's retries
   - id: draft
     agent: writer
     input: |
@@ -96,6 +97,7 @@ Notes for humans go in the body — when to run this, what good output looks lik
 | `requireNonEmptyOutput` | boolean | no | Defaults to `true`. Set `false` only for unusual steps where empty output is acceptable. |
 | `minOutputChars` | number | no | Non-negative integer. Final assistant output must be at least this many characters. |
 | `requireToolUse` | boolean | no | If true, the step session must record at least one successful tool result before completion. |
+| `maxAgentMessages` | number | no | Integer from 0 to 20. Hard cap on `message_agent` delegations for this step across all retry attempts. |
 
 Unsupported step fields today: `when`, `humanCheckpoint`, and `parallelGroup`.
 

@@ -124,6 +124,72 @@ describe('AgentMessageService', () => {
     expect(result.error?.message).toContain('missing-source');
   });
 
+  test('enforces a workflow-step delegation ceiling across attempts', async () => {
+    let created = 0;
+    const launchReceipts: unknown[] = [];
+    const service = new AgentMessageService(deps({
+      createSession: async (_workspaceId, options) => {
+        launchReceipts.push(options.launchReceipt);
+        return { id: `child-${++created}` };
+      },
+    }));
+    const runtime = {
+      workspaceId: 'ws',
+      parentSessionId: 'attempt-1',
+      parentRunId: 'run-1',
+      parentStepId: 'build-kit',
+      workflowSlug: 'merch-product-builder',
+      parentPermissionMode: 'ask' as const,
+      maxAgentMessages: 2,
+    };
+    const input = { agentSlug: 'reviewer', task: 'Review this.' };
+
+    const first = await service.messageAgent(runtime, input);
+    const second = await service.messageAgent({ ...runtime, parentSessionId: 'attempt-2' }, input);
+    const blocked = await service.messageAgent({ ...runtime, parentSessionId: 'attempt-3' }, input);
+
+    expect(first.status).toBe('succeeded');
+    expect(second.status).toBe('succeeded');
+    expect(blocked).toMatchObject({
+      ok: false,
+      status: 'failed',
+      error: { code: 'delegation-limit' },
+    });
+    expect(created).toBe(2);
+    expect(launchReceipts[0]).toMatchObject({
+      workflow: {
+        runId: 'run-1',
+        slug: 'merch-product-builder',
+        stepId: 'build-kit',
+        maxAgentMessages: 2,
+      },
+    });
+  });
+
+  test('reserves delegation slots atomically for parallel calls', async () => {
+    let created = 0;
+    const service = new AgentMessageService(deps({
+      createSession: async () => ({ id: `child-${++created}` }),
+    }));
+    const runtime = {
+      workspaceId: 'ws',
+      parentSessionId: 'attempt',
+      parentRunId: 'run-parallel',
+      parentStepId: 'one',
+      parentPermissionMode: 'ask' as const,
+      maxAgentMessages: 1,
+    };
+
+    const results = await Promise.all([
+      service.messageAgent(runtime, { agentSlug: 'one', task: 'One.' }),
+      service.messageAgent(runtime, { agentSlug: 'two', task: 'Two.' }),
+    ]);
+
+    expect(results.filter((result) => result.status === 'succeeded')).toHaveLength(1);
+    expect(results.filter((result) => result.error?.code === 'delegation-limit')).toHaveLength(1);
+    expect(created).toBe(1);
+  });
+
   test('returns timeout result without waiting for stalled child send to drain', async () => {
     let aborted = false;
     const started = Date.now();

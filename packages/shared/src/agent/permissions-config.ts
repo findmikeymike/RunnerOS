@@ -141,6 +141,12 @@ function migratePermissions(
   const existingMcpPatterns = new Set(
     (installed.allowedMcpPatterns || []).map(getPatternString)
   );
+  const existingWritePaths = new Set(
+    (installed.allowedWritePaths || []).map(getPatternString)
+  );
+  const existingApiEndpoints = new Set(
+    (installed.allowedApiEndpoints || []).map(rule => `${rule.method}:${rule.path}`)
+  );
 
   // Find new patterns not already in installed
   const newBashPatterns = (bundled.allowedBashPatterns || []).filter(
@@ -148,6 +154,12 @@ function migratePermissions(
   );
   const newMcpPatterns = (bundled.allowedMcpPatterns || []).filter(
     p => !existingMcpPatterns.has(getPatternString(p))
+  );
+  const newWritePaths = (bundled.allowedWritePaths || []).filter(
+    p => !existingWritePaths.has(getPatternString(p))
+  );
+  const newApiEndpoints = (bundled.allowedApiEndpoints || []).filter(
+    rule => !existingApiEndpoints.has(`${rule.method}:${rule.path}`)
   );
 
   // Merge blocked command hints (dedupe by command + whenNotMatching + reason)
@@ -161,6 +173,8 @@ function migratePermissions(
 
   debug('[Permissions] Adding', newBashPatterns.length, 'new bash patterns');
   debug('[Permissions] Adding', newMcpPatterns.length, 'new MCP patterns');
+  debug('[Permissions] Adding', newApiEndpoints.length, 'new API endpoint rules');
+  debug('[Permissions] Adding', newWritePaths.length, 'new write path rules');
   debug('[Permissions] Adding', newBlockedCommandHints.length, 'new blocked command hints');
 
   return {
@@ -173,6 +187,14 @@ function migratePermissions(
     allowedMcpPatterns: [
       ...(installed.allowedMcpPatterns || []),
       ...newMcpPatterns,
+    ],
+    allowedApiEndpoints: [
+      ...(installed.allowedApiEndpoints || []),
+      ...newApiEndpoints,
+    ],
+    allowedWritePaths: [
+      ...(installed.allowedWritePaths || []),
+      ...newWritePaths,
     ],
     blockedCommandHints: [
       ...installedHints,

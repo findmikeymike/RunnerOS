@@ -583,6 +583,7 @@ Return the research packet directly to the workflow. Do not create a separate Ou
           requireNonEmptyOutput: true,
           requireToolUse: true,
           minOutputChars: 1400,
+          maxAgentMessages: 0,
         },
       },
       {
@@ -633,7 +634,9 @@ Produce one polished Industry Outreach Packet containing:
 - Ready Now / Verify First / Do Not Contact status
 - final approval checklist
 
-Do not create Gmail drafts or send messages during this workflow. External delivery remains a separate action requiring current-turn approval for the exact recipient, sender, subject, body, links, attachments, and send action.
+If Gmail is connected, create one private Gmail draft for each Ready Now finalist using the exact sender, recipient, subject, body, links, and attachments from the packet. Draft creation is private and reversible, so it does not require approval. If Gmail is unavailable, preserve the complete draft in the packet and state "Gmail drafts skipped — not connected."
+
+Never send a message. Sending remains a separate public action requiring current-turn approval for the exact draft and sender.
 
 Do not fabricate familiarity, praise, referrals, relationships, quotes, contact information, or personal interests.`,
         timeout: 900,
@@ -643,6 +646,7 @@ Do not fabricate familiarity, praise, referrals, relationships, quotes, contact 
           requireNonEmptyOutput: true,
           requireToolUse: true,
           minOutputChars: 1800,
+          maxAgentMessages: 0,
         },
       },
     ],
@@ -777,6 +781,7 @@ Do not call create_output or message_agent in this workflow. Return the complete
           requireNonEmptyOutput: true,
           requireToolUse: true,
           minOutputChars: 1600,
+          maxAgentMessages: 0,
         },
       },
       {
@@ -818,13 +823,16 @@ Produce one polished College Radio Campaign containing:
 - Ready Now / Verify First / Not Eligible status
 - exact approval checklist
 
-Do not create Gmail drafts, send messages, submit forms, upload files, or claim that anything was delivered. External delivery remains a separate action requiring approval.`,
+If Gmail is connected, create one private Gmail draft for each email-ready target. Draft creation is private and reversible, so it does not require approval. If Gmail is unavailable, preserve the complete drafts in the campaign packet and state "Gmail drafts skipped — not connected."
+
+Never send messages, submit forms, upload files, or claim delivery. Those public actions remain separate and require exact approval.`,
         timeout: 900,
         retries: 1,
         onFailure: 'stop' as const,
         completion: {
           requireNonEmptyOutput: true,
           minOutputChars: 1800,
+          maxAgentMessages: 0,
         },
       },
     ],
@@ -952,6 +960,14 @@ PRINTIFY RESEARCH
 - Produce a placement matrix and exact product manifest.
 - Treat Printify as the fulfillment/product source of truth.
 
+PRIVATE PRINTIFY DRAFT BUILD
+- If the accepted artwork is production-ready, upload it with \`uploads an-image ... --private-draft --agent\`.
+- Create exactly one unpublished Printify product with \`shops products-json create-anew-product ... --private-draft --agent\`.
+- Do not use \`--confirm-runner\`; this workflow is authorized only for the bounded private upload and unpublished draft.
+- Capture the returned upload ID, product ID, unpublished status, and official Printify mockup URLs.
+- Save official mockup image files into session data when the source provides downloadable URLs. Otherwise preserve the official URLs and state the download gap.
+- If the artwork is not production-ready, do not upload or create a product. Return Needs Artwork Fix with the exact blocker.
+
 OPTIONAL ART DIRECTOR DELEGATION
 Contact Art Director exactly once only when:
 - lifestyle mockup requested is true; or
@@ -992,7 +1008,8 @@ Produce one decisive document containing:
 - exact shop, blueprint, provider, variants, colors, and sizes
 - print placement matrix and production warnings
 - print-ready or revision-needed asset paths
-- official Printify mockup plan
+- private Printify upload and unpublished product receipts, including IDs
+- official Printify mockup files or source URLs
 - optional lifestyle mockup direction and exact later-generation approval packet
 - product cost and margin waterfall
 - recommended pricing and discount room
@@ -1003,12 +1020,12 @@ Produce one decisive document containing:
 - Shopify Connected / Shopify Skipped status
 - duplicate-product and sync warnings
 - sample-order and physical-QA recommendation
-- exact Printify dry-run and approval packet
+- exact approval packet only for later publish, sync, sample order, spend, or another consequential action
 - later Shopify draft-update plan when connected
 - Ready Now / Needs Artwork Fix / Needs Approval / Blocked status
 - exact next approval
 
-Do not upload artwork, create a product, order a sample, sync, publish, update Shopify, or perform any external write during this workflow.
+The private artwork upload and one unpublished Printify product draft are the only allowed writes. Do not order a sample, sync, publish, update Shopify, delete anything, spend money, or perform another external write.
 
 Return the complete Merch Launch Kit directly to the workflow. Do not create a duplicate document Output.`,
         timeout: 1800,
@@ -1018,6 +1035,7 @@ Return the complete Merch Launch Kit directly to the workflow. Do not create a d
           requireNonEmptyOutput: true,
           requireToolUse: true,
           minOutputChars: 2200,
+          maxAgentMessages: 2,
         },
       },
     ],
@@ -1034,7 +1052,7 @@ Run this when campaign artwork should become one serious, production-ready merch
 
 Print Agent leads one run, Art Director joins only when visual work is needed, and Shopify Agent joins only when a real Shopify connection validates.
 
-The workflow stops at exact approval packets. Nothing is uploaded, created, ordered, synchronized, or published automatically.
+The workflow may upload accepted artwork and create one private unpublished Printify draft automatically. It stops for approval before spending, ordering, syncing, publishing, deleting, or any other public or consequential action.
 `,
 };
 

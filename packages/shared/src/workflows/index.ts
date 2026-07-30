@@ -64,7 +64,10 @@ export {
   type StructuredOutputParseResult,
 } from './output-schema.ts';
 
-export { normalizeWorkflowTriggerInputs } from './trigger-inputs.ts';
+export {
+  fillMissingWorkflowTriggerInputConstraints,
+  normalizeWorkflowTriggerInputs,
+} from './trigger-inputs.ts';
 
 export type {
   WorkflowRunState,

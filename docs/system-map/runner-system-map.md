@@ -442,7 +442,7 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Optional sources: `shopify`
 - Trusted tools: `message_agent`
 - Tags: `print`, `printify`, `pod`, `apparel`, `products`, `commerce`
-- Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `explicit-approval-required`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`, `trusted-worker-tools`
+- Signals: `approval-capable`, `artifact-output-aware`, `canvas-visual-agent`, `external-action-boundary`, `optional-source-aware`, `requires-source-activation`, `trusted-worker-tools`
 - Inputs: Image folders, artwork files, shirt/product ideas, Printify shop tasks, product batches, pricing, placement, catalog, upload, order, and fulfillment requests.
 - Outputs: Asset inventories, product plans, placement specs, Printify manifests, upload/product approval packets, QA reports, receipts, and Canvas-ready previews.
 

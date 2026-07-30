@@ -43,6 +43,10 @@ one successful tool result. Workflow step sessions are hidden from the main
 session list by default; the Run page is the primary surface, with links into
 the underlying hidden session for drill-down.
 
+If `completion.maxAgentMessages` is set, `message_agent` reservations are
+counted durably by workflow run and step. The cap applies across retries and is
+enforced atomically before a child session is created.
+
 ## Output extraction
 
 | Step config | Strategy |

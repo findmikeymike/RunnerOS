@@ -240,7 +240,7 @@ function coerceCompletionContract(
   }
   const r = raw as Record<string, unknown>;
   const out: WorkflowStepCompletionContract = {};
-  const allowedKeys = new Set(['requireNonEmptyOutput', 'minOutputChars', 'requireToolUse']);
+  const allowedKeys = new Set(['requireNonEmptyOutput', 'minOutputChars', 'requireToolUse', 'maxAgentMessages']);
 
   for (const key of Object.keys(r)) {
     if (!allowedKeys.has(key)) {
@@ -269,6 +269,18 @@ function coerceCompletionContract(
       return null;
     }
     out.requireToolUse = r.requireToolUse;
+  }
+  if (r.maxAgentMessages !== undefined) {
+    if (
+      typeof r.maxAgentMessages !== 'number'
+      || !Number.isInteger(r.maxAgentMessages)
+      || r.maxAgentMessages < 0
+      || r.maxAgentMessages > 20
+    ) {
+      warnings.push(warning('step', 'invalid-step-completion', `step "${stepId}" completion.maxAgentMessages must be an integer from 0 to 20.`));
+      return null;
+    }
+    out.maxAgentMessages = r.maxAgentMessages;
   }
 
   return out;
@@ -446,8 +458,8 @@ function validateSerializableWorkflowMetadata(metadata: WorkflowMetadata): void 
   }
   const serializedInputs = coerceTriggerInputs(metadata.trigger.inputs, []);
   if (
-    metadata.trigger.inputs &&
-    (serializedInputs === null || serializedInputs?.length !== metadata.trigger.inputs.length)
+    (metadata.trigger.inputs?.length ?? 0) > 0 &&
+    (serializedInputs === null || serializedInputs?.length !== (metadata.trigger.inputs?.length ?? 0))
   ) {
     throw new Error('Workflow trigger inputs contain invalid bounds or references.');
   }

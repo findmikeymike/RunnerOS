@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol';
 import {
   DEFAULT_MAX_DEPTH,
+  listAgentMessageReceipts,
   normalizeMessageAgentInput,
   writeAgentMessageReceipt,
   type AgentMessageReceipt,
@@ -20,11 +21,13 @@ export interface AgentMessageRuntimeContext {
   parentSessionId?: string;
   parentRunId?: string;
   parentStepId?: string;
+  workflowSlug?: string;
   callerAgentSlug?: string;
   callerAgentName?: string;
   parentPermissionMode: PermissionMode;
   depth?: number;
   maxDepth?: number;
+  maxAgentMessages?: number;
 }
 
 export interface AgentMessageServiceDeps {
@@ -105,6 +108,15 @@ function timeout<T>(promise: Promise<T>, ms: number): Promise<{ timedOut: false;
   });
 }
 
+const delegationMutexes = new Map<string, Promise<void>>();
+
+function withDelegationMutex<T>(key: string, fn: () => Promise<T> | T): Promise<T> {
+  const previous = delegationMutexes.get(key) ?? Promise.resolve();
+  const next = previous.then(fn, fn);
+  delegationMutexes.set(key, next.then(() => {}, () => {}));
+  return next;
+}
+
 async function drainAfterAbort<T>(promise: Promise<T>, ms = 5000): Promise<void> {
   try {
     await timeout(promise, ms);
@@ -147,6 +159,7 @@ export class AgentMessageService {
         maxTurns: input.maxTurns,
         maxDepth,
         depth,
+        maxAgentMessages: runtime.maxAgentMessages,
         background: input.background,
       },
       constraints: {
@@ -160,9 +173,34 @@ export class AgentMessageService {
 
     const workspaceRootPath = this.deps.getWorkspaceRootPath(runtime.workspaceId);
     const persist = () => writeAgentMessageReceipt(workspaceRootPath, receipt);
-    persist();
-
     const started = Date.now();
+    const delegationKey = `${workspaceRootPath}:${runtime.parentRunId ?? runtime.parentSessionId ?? 'session'}:${runtime.parentStepId ?? ''}`;
+    const reserved = await withDelegationMutex(delegationKey, () => {
+      if (runtime.maxAgentMessages !== undefined) {
+        const used = listAgentMessageReceipts(workspaceRootPath).filter((candidate) => (
+          candidate.parentRunId === runtime.parentRunId
+          && candidate.parentStepId === runtime.parentStepId
+        )).length;
+        if (used >= runtime.maxAgentMessages) return false;
+      }
+      persist();
+      return true;
+    });
+    if (!reserved) {
+      return {
+        ok: false,
+        status: 'failed',
+        agentSlug: input.agentSlug,
+        toolUseCount: 0,
+        toolNames: [],
+        durationMs: Math.max(0, Date.now() - started),
+        error: {
+          code: 'delegation-limit',
+          message: `Workflow step delegation limit reached (${runtime.maxAgentMessages}).`,
+        },
+      };
+    }
+
     try {
       const agentOptions = await this.deps.resolveAgentSessionOptions(runtime.workspaceId, input.agentSlug);
       if (input.sourceSlugs.length > 0 && this.deps.resolveUsableSourceSlugs) {
@@ -203,6 +241,14 @@ export class AgentMessageService {
             slug: input.agentSlug,
             name: input.agentSlug,
           },
+          workflow: runtime.parentRunId && runtime.workflowSlug
+            ? {
+                runId: runtime.parentRunId,
+                slug: runtime.workflowSlug,
+                stepId: runtime.parentStepId,
+                maxAgentMessages: runtime.maxAgentMessages,
+              }
+            : baseLaunchReceipt?.workflow,
           config: {
             ...(baseLaunchReceipt?.config ?? {}),
             permissionMode: input.permissionMode,

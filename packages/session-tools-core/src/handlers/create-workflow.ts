@@ -8,6 +8,10 @@ export interface CreateWorkflowTriggerInput {
   required?: boolean;
   default?: unknown;
   description?: string;
+  min?: number;
+  max?: number;
+  integer?: boolean;
+  maxFrom?: string;
 }
 
 export interface CreateWorkflowTrigger {
@@ -19,6 +23,7 @@ export interface CreateWorkflowStepCompletion {
   requireNonEmptyOutput?: boolean;
   minOutputChars?: number;
   requireToolUse?: boolean;
+  maxAgentMessages?: number;
 }
 
 export interface CreateWorkflowStep {

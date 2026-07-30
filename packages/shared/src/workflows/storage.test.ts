@@ -526,6 +526,7 @@ describe('serializeWorkflow', () => {
           completion: {
             requireToolUse: true,
             minOutputChars: 50,
+            maxAgentMessages: 2,
           },
         },
         { id: 'draft', agent: 'writer', input: 'Use this:\n\n{{steps.research.output.title}}' },
@@ -536,6 +537,14 @@ describe('serializeWorkflow', () => {
     expect(parsed).not.toBeNull();
     expect(parsed!.metadata).toEqual(meta);
     expect(parsed!.body).toBe('Body content here.');
+  });
+
+  test('serializes an explicit empty trigger input list', () => {
+    const meta = minimalMeta({
+      trigger: { type: 'manual', inputs: [] },
+    });
+    const text = serializeWorkflow(meta, '');
+    expect(parseWorkflowFile(text)?.metadata.trigger.inputs).toBeUndefined();
   });
 
   test('throws on invalid trigger input defaults at save serialization time', () => {
@@ -566,6 +575,7 @@ describe('serializeWorkflow', () => {
     expect(parseWorkflowFile([...base, '    completion: []', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    completion:', '      requireToolUse: yes', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    completion:', '      minOutputChars: -1', '---'].join('\n'))).toBeNull();
+    expect(parseWorkflowFile([...base, '    completion:', '      maxAgentMessages: 21', '---'].join('\n'))).toBeNull();
     expect(parseWorkflowFile([...base, '    completion:', '      requireToolsUse: true', '---'].join('\n'))).toBeNull();
   });
 
@@ -929,7 +939,8 @@ describe('seedGlobalWorkflowLibraryIfEmpty', () => {
     expect(parsed?.metadata.trigger.inputs?.find((input) => input.name === 'target_count')).toMatchObject({ min: 1, max: 25, integer: true })
     expect(parsed?.metadata.trigger.inputs?.find((input) => input.name === 'draft_count')?.maxFrom).toBe('target_count')
     expect(parsed?.metadata.steps[0]?.input).toContain('Do not purchase contact enrichment during this step')
-    expect(parsed?.metadata.steps[1]?.input).toContain('Do not create Gmail drafts or send messages during this workflow')
+    expect(parsed?.metadata.steps[1]?.input).toContain('create one private Gmail draft for each Ready Now finalist')
+    expect(parsed?.metadata.steps.every((step) => step.completion?.maxAgentMessages === 0)).toBe(true)
     expect(parsed?.metadata.outputs?.primary?.step).toBe('outreach-packet')
     expect(STARTER_WORKFLOW_SLUGS).toContain(INDUSTRY_OUTREACH_PIPELINE_SLUG)
     expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(INDUSTRY_OUTREACH_PIPELINE_SLUG)
@@ -949,7 +960,8 @@ describe('seedGlobalWorkflowLibraryIfEmpty', () => {
     expect(parsed?.metadata.trigger.inputs?.find((input) => input.name === 'email_draft_count')?.maxFrom).toBe('station_count')
     expect(parsed?.metadata.steps[0]?.input).toContain('Do not call create_output or message_agent')
     expect(parsed?.metadata.steps[1]?.completion?.requireToolUse).toBeUndefined()
-    expect(parsed?.metadata.steps[1]?.input).toContain('Do not create Gmail drafts, send messages, submit forms, upload files')
+    expect(parsed?.metadata.steps[1]?.input).toContain('create one private Gmail draft for each email-ready target')
+    expect(parsed?.metadata.steps.every((step) => step.completion?.maxAgentMessages === 0)).toBe(true)
     expect(parsed?.metadata.outputs?.primary?.step).toBe('campaign-packet')
     expect(STARTER_WORKFLOW_SLUGS).toContain(COLLEGE_RADIO_CAMPAIGN_SLUG)
     expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(COLLEGE_RADIO_CAMPAIGN_SLUG)
@@ -968,7 +980,9 @@ describe('seedGlobalWorkflowLibraryIfEmpty', () => {
     expect(parsed?.metadata.steps[0]?.input).toContain('Contact Art Director exactly once only when')
     expect(parsed?.metadata.steps[0]?.input).toContain('If Shopify validates successfully, contact Shopify Agent exactly once')
     expect(parsed?.metadata.steps[0]?.input).toContain('Shopify skipped — not connected')
-    expect(parsed?.metadata.steps[0]?.input).toContain('Do not upload artwork, create a product, order a sample, sync, publish, update Shopify')
+    expect(parsed?.metadata.steps[0]?.input).toContain('create-anew-product ... --private-draft --agent')
+    expect(parsed?.metadata.steps[0]?.input).toContain('private artwork upload and one unpublished Printify product draft are the only allowed writes')
+    expect(parsed?.metadata.steps[0]?.completion?.maxAgentMessages).toBe(2)
     expect(parsed?.metadata.trigger.inputs?.find((input) => input.name === 'generation_budget')?.default).toBe(0)
     expect(parsed?.metadata.outputs?.primary?.step).toBe('build-kit')
     expect(STARTER_WORKFLOW_SLUGS).toContain(MERCH_PRODUCT_BUILDER_SLUG)

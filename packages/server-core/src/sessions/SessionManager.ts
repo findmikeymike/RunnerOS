@@ -132,6 +132,7 @@ import { scheduleHqStateContextRefresh } from '../hq-state/refresh'
 import {
   loadAllGlobalWorkflows,
   loadGlobalWorkflow,
+  fillMissingWorkflowTriggerInputConstraints,
   normalizeWorkflowTriggerInputs,
   readActivatedWorkflows,
   readRun as readWorkflowRun,
@@ -3334,6 +3335,21 @@ Default report shape:`,
             ).updated) {
               sessionLog.info('[agent-definitions] Hardened Print Agent generation approval boundary')
             }
+            const printPrivateDraftUpdated = [
+              replaceBuiltInAgentPromptText(
+                'print-agent',
+                '6. Never upload artwork, create/update/archive/delete/publish products, submit orders, manage shops, or manage webhooks without explicit approval in the current conversation.\n7. Run dry-run/preview commands first when available. Use `--confirm-runner` only after approval.',
+                '6. You may upload accepted artwork and create one unpublished Printify product draft with `--private-draft` when the task requests it.\n7. Never update, publish, sync, archive, or delete products; submit orders; purchase assets; manage shops; or manage webhooks without exact approval. Run dry-run/preview commands first when available. Use `--confirm-runner` only after approval.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                'print-agent',
+                '- Printify remains the fulfillment/product source of truth. Never create a duplicate Shopify product when Printify will sync it.',
+                '- Printify remains the fulfillment/product source of truth. Create the real unpublished Printify draft and retain its returned product ID and official mockup URLs. Never create a duplicate Shopify product when Printify will sync it.',
+              ).updated,
+            ].some(Boolean)
+            if (printPrivateDraftUpdated) {
+              sessionLog.info('[agent-definitions] Enabled bounded private Printify drafts')
+            }
           }
           const videoDirectorAgent = STARTER_AGENTS.find(agent => agent.slug === 'video-director')
           if (videoDirectorAgent) {
@@ -4002,6 +4018,16 @@ user a clickable link to where the thing now lives.`
               'If the enrichment budget is zero, perform no paid lookup. If it is positive, never exceed the total stated ceiling. Never guess an email when enrichment fails.',
               'Do not perform paid lookup in this workflow. A positive ceiling is planning context, not spending approval. When paid enrichment could materially improve a finalist, include an exact later approval packet whose aggregate maximum cannot exceed the stated ceiling. Never guess an email.',
             ],
+            [
+              'Do not create Gmail drafts or send messages during this workflow. External delivery remains a separate action requiring current-turn approval for the exact recipient, sender, subject, body, links, attachments, and send action.',
+              'If Gmail is connected, create one private Gmail draft for each Ready Now finalist using the exact sender, recipient, subject, body, links, and attachments from the packet. Draft creation is private and reversible, so it does not require approval. If Gmail is unavailable, preserve the complete draft in the packet and state "Gmail drafts skipped — not connected."\n\nNever send a message. Sending remains a separate public action requiring current-turn approval for the exact draft and sender.',
+            ],
+          ]],
+          [COLLEGE_RADIO_CAMPAIGN_SLUG, [
+            [
+              'Do not create Gmail drafts, send messages, submit forms, upload files, or claim that anything was delivered. External delivery remains a separate action requiring approval.',
+              'If Gmail is connected, create one private Gmail draft for each email-ready target. Draft creation is private and reversible, so it does not require approval. If Gmail is unavailable, preserve the complete drafts in the campaign packet and state "Gmail drafts skipped — not connected."\n\nNever send messages, submit forms, upload files, or claim delivery. Those public actions remain separate and require exact approval.',
+            ],
           ]],
           [MERCH_PRODUCT_BUILDER_SLUG, [
             ['Maximum image-generation spend:', 'Later image-generation planning ceiling:'],
@@ -4014,6 +4040,16 @@ user a clickable link to where the thing now lives.`
               'Do not generate or purchase imagery in this workflow. A positive ceiling is planning context, not spending approval. Art Director must return the strongest mockup direction, a reference-safe prompt, the exact tool/model plan, and a later approval packet capped by that ceiling. A future generated lifestyle image must be labeled promotional concept art, not exact product proof; official Printify mockups remain the accuracy reference.',
             ],
             ['- optional lifestyle mockups with concept labels', '- optional lifestyle mockup direction and exact later-generation approval packet'],
+            [
+              '- Treat Printify as the fulfillment/product source of truth.',
+              '- Treat Printify as the fulfillment/product source of truth.\n\nPRIVATE PRINTIFY DRAFT BUILD\n- If the accepted artwork is production-ready, upload it with `uploads an-image ... --private-draft --agent`.\n- Create exactly one unpublished Printify product with `shops products-json create-anew-product ... --private-draft --agent`.\n- Do not use `--confirm-runner`; this workflow is authorized only for the bounded private upload and unpublished draft.\n- Capture the returned upload ID, product ID, unpublished status, and official Printify mockup URLs.\n- Save official mockup image files into session data when the source provides downloadable URLs. Otherwise preserve the official URLs and state the download gap.\n- If the artwork is not production-ready, do not upload or create a product. Return Needs Artwork Fix with the exact blocker.',
+            ],
+            ['- official Printify mockup plan', '- private Printify upload and unpublished product receipts, including IDs\n- official Printify mockup files or source URLs'],
+            ['- exact Printify dry-run and approval packet', '- exact approval packet only for later publish, sync, sample order, spend, or another consequential action'],
+            [
+              'Do not upload artwork, create a product, order a sample, sync, publish, update Shopify, or perform any external write during this workflow.',
+              'The private artwork upload and one unpublished Printify product draft are the only allowed writes. Do not order a sample, sync, publish, update Shopify, delete anything, spend money, or perform another external write.',
+            ],
           ]],
         ])
         for (const starter of ensuredStarters.filter(workflow => boundedWorkflowSlugs.has(workflow.slug))) {
@@ -4021,21 +4057,25 @@ user a clickable link to where the thing now lives.`
           if (!existing) continue
           const metadata = structuredClone(existing.metadata)
           let changed = false
-          metadata.trigger.inputs = (metadata.trigger.inputs ?? []).map((input) => {
-            const canonical = starter.metadata.trigger.inputs?.find(candidate => candidate.name === input.name)
-            if (!canonical) return input
-            const next = {
-              ...input,
-              description: canonical.description,
-              min: canonical.min,
-              max: canonical.max,
-              integer: canonical.integer,
-              maxFrom: canonical.maxFrom,
-            }
-            if (JSON.stringify(next) !== JSON.stringify(input)) changed = true
-            return next
-          })
+          const currentInputs = metadata.trigger.inputs ?? []
+          const nextInputs = fillMissingWorkflowTriggerInputConstraints(
+            currentInputs,
+            starter.metadata.trigger.inputs ?? [],
+          )
+          if (JSON.stringify(nextInputs) !== JSON.stringify(currentInputs)) changed = true
+          metadata.trigger.inputs = nextInputs
           for (const step of metadata.steps) {
+            const canonicalStep = starter.metadata.steps.find(candidate => candidate.id === step.id)
+            if (
+              step.completion?.maxAgentMessages === undefined
+              && canonicalStep?.completion?.maxAgentMessages !== undefined
+            ) {
+              step.completion = {
+                ...(step.completion ?? {}),
+                maxAgentMessages: canonicalStep.completion.maxAgentMessages,
+              }
+              changed = true
+            }
             let nextInput = step.input
             for (const [from, to] of promptReplacements.get(starter.slug) ?? []) {
               nextInput = nextInput.replace(from, to)
@@ -4045,8 +4085,16 @@ user a clickable link to where the thing now lives.`
               changed = true
             }
           }
+          let nextBody = existing.body
+          if (starter.slug === MERCH_PRODUCT_BUILDER_SLUG) {
+            nextBody = nextBody.replace(
+              'The workflow stops at exact approval packets. Nothing is uploaded, created, ordered, synchronized, or published automatically.',
+              'The workflow may upload accepted artwork and create one private unpublished Printify draft automatically. It stops for approval before spending, ordering, syncing, publishing, deleting, or any other public or consequential action.',
+            )
+            if (nextBody !== existing.body) changed = true
+          }
           if (changed) {
-            writeGlobalWorkflow({ slug: existing.slug, metadata, body: existing.body })
+            writeGlobalWorkflow({ slug: existing.slug, metadata, body: nextBody })
             sessionLog.info(`[workflows] Hardened limits and approval boundaries for ${existing.slug}`)
           }
         }
@@ -6831,6 +6879,8 @@ user a clickable link to where the thing now lives.`
             parentSessionId: managed.id,
             parentRunId: managed.launchReceipt?.workflow?.runId ?? managed.launchReceipt?.deepResearch?.runId,
             parentStepId: managed.launchReceipt?.workflow?.stepId ?? managed.launchReceipt?.deepResearch?.stepId,
+            workflowSlug: managed.launchReceipt?.workflow?.slug,
+            maxAgentMessages: managed.launchReceipt?.workflow?.maxAgentMessages,
             callerAgentSlug: managed.spawnedFromAgent?.agentSlug,
             callerAgentName: managed.spawnedFromAgent?.agentName,
             parentPermissionMode: managed.permissionMode ?? 'ask',
