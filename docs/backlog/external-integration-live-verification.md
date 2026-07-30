@@ -55,6 +55,39 @@ No integration is marked "fully end-to-end verified" until it passes:
 - [ ] Confirm receipt/output can be published/displayed in Canvas.
 - [ ] Confirm no token values appear in logs, chat, receipts, or Canvas.
 
+#### Merch Product Builder: End-to-End Manual Smoke
+
+Use one production-ready, non-sensitive test image and a controlled Printify shop.
+The product must remain unpublished throughout this smoke.
+
+1. **Launch from Campaign**
+   - [ ] Find `Merch Product Builder` in the Campaign workflow library and start one run with the test image.
+   - [ ] Confirm Print Agent leads the run and receives the selected artwork and product choices.
+   - [ ] Confirm the workflow creates no duplicate document Output.
+
+2. **Bounded Printify draft**
+   - [ ] Confirm exactly one private Printify artwork upload is created.
+   - [ ] Confirm exactly one unpublished Printify product is created from that upload.
+   - [ ] Confirm the workflow records the upload ID, product ID, shop, blueprint, provider, variants, placement, price, and unpublished status.
+   - [ ] Confirm no second upload or product appears after a retry or repeated scheduler/session event.
+
+3. **Mockups and final kit**
+   - [ ] Confirm official Printify mockup URLs are captured.
+   - [ ] Confirm downloadable official mockups are saved into session data; otherwise confirm the final kit states the exact download gap and retains the source URLs.
+   - [ ] Confirm the final Merch Launch Kit appears once in Outputs with product, margin, QA, mockup, Shopify, and approval status.
+
+4. **Conditional Shopify behavior**
+   - [ ] With Shopify disconnected, confirm the workflow records `Shopify skipped — not connected` and completes without failure.
+   - [ ] With Shopify connected, confirm it performs only the read-only connection and duplicate/listing analysis.
+   - [ ] Confirm it does not create a duplicate Shopify product or perform a Shopify write.
+
+5. **Approval and failure boundaries**
+   - [ ] Confirm publishing, syncing, ordering samples, spending money, updates, deletes, and other consequential actions stop for exact approval.
+   - [ ] Confirm `--private-draft` cannot authorize publish or another mutation.
+   - [ ] Use unsuitable artwork once and confirm the run stops at `Needs Artwork Fix` without uploading or creating a product.
+   - [ ] Confirm expired auth, wrong shop, provider failure, or malformed product data produces an honest blocked result without claiming a completed product.
+   - [ ] Confirm no credentials or sensitive values appear in logs, chat, receipts, Outputs, or Canvas.
+
 ### Google Ads
 
 - [ ] Connect through the intended RunnerOS Google Ads UI path.
