@@ -3,6 +3,8 @@ import {
   Bot,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   Circle,
   ExternalLink,
   FileText,
@@ -29,7 +31,7 @@ import { useAppShellContext } from '@/context/AppShellContext'
 import { useAgents } from '@/hooks/useAgents'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
-import { FinalsWidget } from '@/components/outputs/FinalsWidget'
+import { collectFinalRows, FinalsWidget } from '@/components/outputs/FinalsWidget'
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
 import {
@@ -138,6 +140,8 @@ import {
   shouldRefreshHqStateOnOpen,
   type HqCampaignSummary,
   type HqHomeProjectColumn,
+  type HqHomeTimelineItem,
+  type HqHomeWorkerItem,
 } from '@/lib/artist-hq-home-feed'
 
 interface ArtistHQHomeProps {
@@ -280,6 +284,7 @@ export function ArtistHQHome({
   const [googleCalendarBusy, setGoogleCalendarBusy] = React.useState(false)
   const [googleCalendarConnected, setGoogleCalendarConnected] = React.useState(false)
   const [proactiveMode, setProactiveMode] = React.useState(() => readBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), false))
+  const [homeDetailsOpen, setHomeDetailsOpen] = React.useState(() => readBooleanLocalStorage(hqHomeDetailsStorageKey(workspaceId), false))
   const [hqRouteBusy, setHqRouteBusy] = React.useState(false)
   const [hqRefreshBusy, setHqRefreshBusy] = React.useState(false)
   const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
@@ -383,6 +388,10 @@ export function ArtistHQHome({
     () => buildHqProjectColumns(campaignWorkspaces, scheduledWorkResult.work.items),
     [campaignWorkspaces, scheduledWorkResult.work.items],
   )
+  const hqFinalCount = React.useMemo(
+    () => collectFinalRows(outputs, 'hq').length,
+    [outputs],
+  )
   const selectedDateEvents = React.useMemo(
     () => activeCalendarEvents.filter((event) => event.date === selectedDate),
     [activeCalendarEvents, selectedDate],
@@ -407,6 +416,14 @@ export function ArtistHQHome({
   React.useEffect(() => {
     writeBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), proactiveMode)
   }, [proactiveMode, workspaceId])
+
+  React.useEffect(() => {
+    setHomeDetailsOpen(readBooleanLocalStorage(hqHomeDetailsStorageKey(workspaceId), false))
+  }, [workspaceId])
+
+  React.useEffect(() => {
+    writeBooleanLocalStorage(hqHomeDetailsStorageKey(workspaceId), homeDetailsOpen)
+  }, [homeDetailsOpen, workspaceId])
 
   const refreshGoogleCalendarStatus = React.useCallback(async () => {
     try {
@@ -1107,32 +1124,47 @@ export function ArtistHQHome({
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
-        <section className="relative overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-          <div className={cn("absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full blur-[110px]", headerProps.orb1)} />
-          <div className={cn("absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full blur-[120px]", headerProps.orb2)} />
-          <div className="relative z-10">
-            <div className="flex items-start justify-between gap-4">
-              <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4">
-                {headerProps.icon}
-                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/70">{headerProps.label}</span>
+        {tab === 'home' ? (
+          <section className="rounded-[14px] border border-white/[0.06] bg-[#0C0D0F] px-4 py-3.5 shadow-minimal">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-orange-200/62">
+                  <Sparkles className="h-3 w-3" />
+                  Artist HQ
+                </div>
+                <div className="mt-1.5 flex min-w-0 items-baseline gap-3">
+                  <h1 className="truncate text-2xl font-semibold tracking-tight text-white/92">{artistName}</h1>
+                  <p className="hidden truncate text-xs text-white/34 lg:block">Career command center</p>
+                </div>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/35">Next</p>
-                <p className="mt-1.5 max-w-56 line-clamp-2 text-xs font-medium text-white/70">{nextDate}</p>
+              <div className="min-w-0 md:max-w-[44%] md:text-right">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/30">Next</p>
+                <p className="mt-1 truncate text-xs font-medium text-white/68">{nextDate}</p>
               </div>
             </div>
-
-            <div className="mt-8 max-w-3xl">
-              <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                {headerProps.title}
-              </h1>
-              <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                {headerProps.description}
-              </p>
+          </section>
+        ) : (
+          <section className="relative overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
+            <div className={cn('absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full blur-[110px]', headerProps.orb1)} />
+            <div className={cn('absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full blur-[120px]', headerProps.orb2)} />
+            <div className="relative z-10">
+              <div className="flex items-start justify-between gap-4">
+                <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4">
+                  {headerProps.icon}
+                  <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/70">{headerProps.label}</span>
+                </div>
+              </div>
+              <div className="mt-8 max-w-3xl">
+                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
+                  {headerProps.title}
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
+                  {headerProps.description}
+                </p>
+              </div>
             </div>
-
-          </div>
-        </section>
+          </section>
+        )}
 
         {tab === 'home' && (
           <>
@@ -1150,136 +1182,131 @@ export function ArtistHQHome({
               onRefresh={refreshHqState}
             />
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-              <HQCard className="lg:col-span-1">
-                <div className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.04] pb-2.5">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Music2 className="h-3 w-3 shrink-0 text-white/40" />
-                    <h3 className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/48">
-                      Spotify Pulse
-                    </h3>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-white/24">
-                      {spotifySnapshot ? spotifySnapshot.snapshotDate : 'connect'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={toggleSpotifySync}
-                      disabled={spotifySyncBusy}
-                      title={spotifySyncActive ? 'Weekly Spotify sync active' : 'Enable weekly Spotify sync'}
-                      className={cn(
-                        'inline-flex h-6 w-6 items-center justify-center rounded-full border transition-colors',
-                        spotifySyncActive
-                          ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-300'
-                          : 'border-white/[0.07] bg-white/[0.02] text-white/28 hover:text-white/60',
-                        spotifySyncBusy && 'cursor-wait opacity-60',
-                      )}
-                      aria-label={spotifySyncActive ? 'Pause weekly Spotify sync' : 'Enable weekly Spotify sync'}
-                    >
-                      <RefreshCw className={cn('h-3.5 w-3.5', spotifySyncBusy && 'animate-spin')} />
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <Metric
-                    label={spotifyIsPublicApi ? 'Popularity' : 'Streams'}
-                    value={spotifyIsPublicApi ? formatMetric(spotifySnapshot?.metrics.popularity) : formatMetric(spotifySnapshot?.metrics.streams)}
-                  />
-                  <Metric
-                    label={spotifyIsPublicApi ? 'Top track' : 'Listeners'}
-                    value={spotifyIsPublicApi ? spotifySnapshot?.tracks?.[0]?.name ?? '--' : formatMetric(spotifySnapshot?.metrics.listeners)}
-                  />
-                  <Metric label="Followers" value={formatMetric(spotifySnapshot?.metrics.followers)} />
-                  <Metric
-                    label={spotifyIsPublicApi ? 'Genres' : 'Top city'}
-                    value={spotifyIsPublicApi ? spotifySnapshot?.artist.genres?.[0] ?? '--' : spotifySnapshot?.geo?.topCities?.[0]?.city ?? '--'}
-                  />
-                </div>
-                <p className="mt-3 text-xs leading-5 text-white/38">
-                  {spotifySnapshot
-                    ? spotifyIsPublicApi
-                      ? 'Latest public Spotify API snapshot. Streams and listeners require Spotify for Artists access.'
-                      : `Latest ${spotifySnapshot.windowDays}-day Spotify for Artists snapshot.`
-                    : 'Run Spotify Analyst to create the first snapshot.'}
-                </p>
-                <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/25">
-                  {spotifySyncActive ? 'Weekly sync active' : 'Weekly sync off'}
-                </p>
-                {!spotifyResult.ok ? (
-                  <p className="mt-2 text-xs leading-5 text-red-100/65">{spotifyResult.error}</p>
-                ) : null}
-              </HQCard>
+            <HomeMetricStrip
+              thisWeekCount={thisWeekItems.length}
+              workerCount={workerItems.length}
+              attentionCount={hqState?.attention.length ?? 0}
+              finalCount={hqFinalCount}
+            />
 
-              <IntelPulseCard
-                config={intelConfig}
-                report={intelReport}
-                configError={intelConfigResult.ok ? null : intelConfigResult.error}
-                reportError={intelReportResult.ok ? null : intelReportResult.error}
-                busy={intelBusy}
-                agentReady={Boolean(youtubeIntelligenceAgent)}
-                scheduled={intelSyncActive}
-                onToggle={toggleIntelPulse}
-                onRun={runIntelPulse}
-                onEdit={() => setIntelConfigOpen(true)}
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.35fr_0.85fr]">
+              <HomeOperationsCard
+                thisWeekItems={thisWeekItems}
+                workerItems={workerItems}
               />
-
-              <HQCard>
-                <SectionTitle icon={CalendarDays} title="This Week" meta="calendar" />
-                {thisWeekItems.length > 0 ? thisWeekItems.map((item) => (
-                  <TimelineItem key={item.id} time={item.when} title={item.title} />
-                )) : (
-                  <EmptyLine title="Nothing scheduled this week" detail="Add an event or scheduled job from Calendar." />
-                )}
-              </HQCard>
-
-              <HQCard>
-                <SectionTitle icon={Bot} title="Workers" meta={workerItems.length ? `${workerItems.length} active` : 'quiet'} />
-                {workerItems.length > 0 ? (
-                  <div className="space-y-2">
-                    {workerItems.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        onClick={() => item.kind === 'automation'
-                          ? navigate(routes.view.automations())
-                          : (window.location.hash = '#artist-hq/calendar')}
-                        className="flex w-full items-center justify-between gap-3 rounded-[11px] border border-white/[0.045] bg-white/[0.018] px-3 py-2 text-left transition-colors hover:bg-white/[0.045]"
-                      >
-                        <span className="min-w-0">
-                          <span className="block truncate text-xs font-medium text-white/66">{item.title}</span>
-                          <span className="mt-0.5 block truncate text-[10px] text-white/30">{item.detail}</span>
-                        </span>
-                        <span className="shrink-0 text-[9px] uppercase tracking-[0.12em] text-white/28">{item.status}</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyLine title="No active global workers" detail="Activate Spotify, Intel Pulse, or schedule HQ work." />
-                )}
-              </HQCard>
-
-              <FinalsWidget
-                title="Artist Kit / Finals"
-                outputs={outputs}
-                scope="hq"
-                loading={outputsLoading}
-                onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
+              <PulseSummaryCard
+                spotifyValue={spotifyIsPublicApi
+                  ? formatMetric(spotifySnapshot?.metrics.popularity)
+                  : formatMetric(spotifySnapshot?.metrics.streams)}
+                spotifyMeta={spotifySnapshot ? spotifySnapshot.snapshotDate : 'Needs setup'}
+                spotifyActive={spotifySyncActive}
+                spotifyBusy={spotifySyncBusy}
+                intelValue={`${intelConfig.sources.length} channel${intelConfig.sources.length === 1 ? '' : 's'}`}
+                intelMeta={intelReport.generatedAt ? formatShortDate(intelReport.generatedAt) : 'Not run'}
+                intelActive={intelSyncActive}
+                intelBusy={intelBusy}
+                onToggleSpotify={toggleSpotifySync}
+                onToggleIntel={toggleIntelPulse}
+                onRunIntel={runIntelPulse}
+                intelRunDisabled={!youtubeIntelligenceAgent || intelConfig.sources.length === 0 || intelReport.status === 'queued'}
+                onShowDetails={() => setHomeDetailsOpen(true)}
               />
             </div>
 
-            <HQCard>
-              <SectionTitle icon={FolderKanban} title="Projects" meta="global" />
-              <ProjectBoard
-                columns={projectColumns}
-                onOpenCampaignWorkspace={onOpenCampaignWorkspace ?? (
-                  primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
-                    ? () => onOpenPrimaryCampaignWorkspace()
-                    : undefined
-                )}
-                onOpenScheduledWork={() => { window.location.hash = '#artist-hq/calendar' }}
-              />
+            <HQCard className="p-0">
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <SectionTitle icon={FolderKanban} title="Projects" meta="global" compact />
+              </div>
+              <div className="border-t border-white/[0.045] px-4 pb-4 pt-3">
+                <ProjectBoard
+                  columns={projectColumns}
+                  onOpenCampaignWorkspace={onOpenCampaignWorkspace ?? (
+                    primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
+                      ? () => onOpenPrimaryCampaignWorkspace()
+                      : undefined
+                  )}
+                  onOpenScheduledWork={() => { window.location.hash = '#artist-hq/calendar' }}
+                />
+              </div>
             </HQCard>
+
+            <section className="rounded-[12px] border border-white/[0.05] bg-[#090A0C]">
+              <button
+                type="button"
+                onClick={() => setHomeDetailsOpen((open) => !open)}
+                aria-expanded={homeDetailsOpen}
+                aria-controls="hq-home-details"
+                className="flex h-11 w-full items-center justify-between gap-3 px-4 text-left text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.025] hover:text-white/75"
+              >
+                <span>More details</span>
+                <span className="flex items-center gap-2 text-[9px] uppercase tracking-[0.14em] text-white/28">
+                  Spotify, intel, finals
+                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', homeDetailsOpen && 'rotate-180')} />
+                </span>
+              </button>
+              {homeDetailsOpen ? (
+                <div id="hq-home-details" className="grid grid-cols-1 gap-3 border-t border-white/[0.05] p-3 lg:grid-cols-3">
+                  <HQCard>
+                    <div className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.04] pb-2.5">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Music2 className="h-3 w-3 shrink-0 text-white/40" />
+                        <h3 className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/48">Spotify Pulse</h3>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={toggleSpotifySync}
+                        disabled={spotifySyncBusy}
+                        className={cn(
+                          'inline-flex h-7 w-7 items-center justify-center rounded-[7px] border transition-colors',
+                          spotifySyncActive
+                            ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
+                            : 'border-white/[0.07] bg-white/[0.02] text-white/35 hover:text-white/65',
+                          spotifySyncBusy && 'cursor-wait opacity-60',
+                        )}
+                        aria-label={spotifySyncActive ? 'Pause weekly Spotify sync' : 'Enable weekly Spotify sync'}
+                      >
+                        <RefreshCw className={cn('h-3.5 w-3.5', spotifySyncBusy && 'animate-spin')} />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Metric label={spotifyIsPublicApi ? 'Popularity' : 'Streams'} value={spotifyIsPublicApi ? formatMetric(spotifySnapshot?.metrics.popularity) : formatMetric(spotifySnapshot?.metrics.streams)} />
+                      <Metric label={spotifyIsPublicApi ? 'Top track' : 'Listeners'} value={spotifyIsPublicApi ? spotifySnapshot?.tracks?.[0]?.name ?? '--' : formatMetric(spotifySnapshot?.metrics.listeners)} />
+                      <Metric label="Followers" value={formatMetric(spotifySnapshot?.metrics.followers)} />
+                      <Metric label={spotifyIsPublicApi ? 'Genres' : 'Top city'} value={spotifyIsPublicApi ? spotifySnapshot?.artist.genres?.[0] ?? '--' : spotifySnapshot?.geo?.topCities?.[0]?.city ?? '--'} />
+                    </div>
+                    <p className="mt-3 text-xs leading-5 text-white/38">
+                      {spotifySnapshot
+                        ? spotifyIsPublicApi
+                          ? 'Latest public Spotify API snapshot.'
+                          : `Latest ${spotifySnapshot.windowDays}-day Spotify for Artists snapshot.`
+                        : 'Run Spotify Analyst to create the first snapshot.'}
+                    </p>
+                    {!spotifyResult.ok ? <p className="mt-2 text-xs leading-5 text-red-100/65">{spotifyResult.error}</p> : null}
+                  </HQCard>
+
+                  <IntelPulseCard
+                    config={intelConfig}
+                    report={intelReport}
+                    configError={intelConfigResult.ok ? null : intelConfigResult.error}
+                    reportError={intelReportResult.ok ? null : intelReportResult.error}
+                    busy={intelBusy}
+                    agentReady={Boolean(youtubeIntelligenceAgent)}
+                    scheduled={intelSyncActive}
+                    onToggle={toggleIntelPulse}
+                    onRun={runIntelPulse}
+                    onEdit={() => setIntelConfigOpen(true)}
+                  />
+
+                  <FinalsWidget
+                    title="Artist Kit / Finals"
+                    outputs={outputs}
+                    scope="hq"
+                    loading={outputsLoading}
+                    onOpenOutput={(outputId) => navigate(routes.view.output(outputId))}
+                  />
+                </div>
+              ) : null}
+            </section>
           </>
         )}
 
@@ -1612,19 +1639,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   )
 }
 
-function StateOfPlayPanel({
-  state,
-  workspaceId,
-  proactiveMode,
-  routeBusy,
-  refreshBusy,
-  availableAgentSlugs,
-  onToggleProactiveMode,
-  onLaunchRoute,
-  onOpenEntity,
-  onTransitionRecommendation,
-  onRefresh,
-}: {
+type StateOfPlayPanelProps = {
   state: HqStateOfPlay | null
   workspaceId: string
   proactiveMode: boolean
@@ -1636,7 +1651,125 @@ function StateOfPlayPanel({
   onOpenEntity: (entity: HqStateEntityRef) => void
   onTransitionRecommendation: (recommendationId: string, to: 'dismissed' | 'snoozed') => void
   onRefresh: () => void
-}) {
+}
+
+function StateOfPlayPanel(props: StateOfPlayPanelProps) {
+  const {
+    state,
+    proactiveMode,
+    routeBusy,
+    refreshBusy,
+    availableAgentSlugs,
+    onToggleProactiveMode,
+    onLaunchRoute,
+    onRefresh,
+  } = props
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
+
+  if (!state) {
+    return (
+      <HQCard className="p-3.5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-3.5 w-3.5 text-orange-200/65" />
+              <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/42">State of Play</span>
+            </div>
+            <p className="mt-1.5 text-sm font-medium text-white/72">No HQ brief generated yet</p>
+            <p className="mt-1 truncate text-xs text-white/34">Add artist context or sync a source to generate the first brief.</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} size="md" />
+            <Switch
+              checked={proactiveMode}
+              onCheckedChange={onToggleProactiveMode}
+              aria-label={proactiveMode ? 'Disable proactive HQ mode' : 'Enable proactive HQ mode'}
+              className="data-[state=checked]:bg-orange-300"
+            />
+          </div>
+        </div>
+      </HQCard>
+    )
+  }
+
+  const route = state.nextMove.route
+  const recommendationStatus = state.nextMove.recommendationStatus ?? 'proposed'
+  const routeReadiness = resolveHqRouteReadiness(route, availableAgentSlugs, proactiveMode)
+  const actionState = resolveHqRecommendationActionState(recommendationStatus, routeReadiness, proactiveMode, routeBusy)
+
+  return (
+    <>
+      <HQCard className="border-orange-300/[0.12] bg-[#0D0D0E] p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-orange-300" />
+              <span className="text-[9px] font-semibold uppercase tracking-[0.17em] text-orange-100/60">Recommended next move</span>
+              {state.attention.length > 0 ? (
+                <span className="text-[9px] text-white/28">{state.attention.length} signal{state.attention.length === 1 ? '' : 's'}</span>
+              ) : null}
+            </div>
+            <h2 className="mt-2 truncate text-lg font-semibold tracking-tight text-white/88">{state.nextMove.title}</h2>
+            <p className="mt-1 line-clamp-1 text-xs leading-5 text-white/42">{state.nextMove.why}</p>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            <StateOfPlayRefreshButton busy={refreshBusy} onRefresh={onRefresh} />
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(true)}
+              className="inline-flex h-9 items-center gap-1.5 rounded-[8px] border border-white/[0.07] bg-white/[0.02] px-3 text-xs font-medium text-white/55 transition-colors hover:bg-white/[0.05] hover:text-white/78"
+            >
+              Details
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            {route ? (
+              <button
+                type="button"
+                onClick={() => onLaunchRoute(route, state.nextMove.recommendationId)}
+                disabled={!actionState.canLaunch || routeBusy}
+                className={cn(
+                  'h-9 rounded-[8px] border px-4 text-xs font-semibold transition-colors',
+                  actionState.canLaunch
+                    ? 'border-orange-300/25 bg-orange-300/12 text-orange-50 hover:bg-orange-300/18'
+                    : 'cursor-not-allowed border-white/[0.05] bg-white/[0.018] text-white/28',
+                  routeBusy && 'cursor-wait opacity-65',
+                )}
+              >
+                {actionState.label}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </HQCard>
+
+      <Drawer direction="right" open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DrawerContent className="inset-y-0 right-0 left-auto mt-0 h-full !w-full rounded-none border-l border-white/[0.08] bg-[#070708] sm:!max-w-[720px]">
+          <DrawerHeader className="border-b border-white/[0.06] px-5 py-4 text-left">
+            <DrawerTitle className="text-base font-semibold text-white/88">State of Play</DrawerTitle>
+            <DrawerDescription className="text-xs text-white/38">Signals, route readiness, goals, and system evidence.</DrawerDescription>
+          </DrawerHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <StateOfPlayDetailPanel {...props} />
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </>
+  )
+}
+
+function StateOfPlayDetailPanel({
+  state,
+  workspaceId,
+  proactiveMode,
+  routeBusy,
+  refreshBusy,
+  availableAgentSlugs,
+  onToggleProactiveMode,
+  onLaunchRoute,
+  onOpenEntity,
+  onTransitionRecommendation,
+  onRefresh,
+}: StateOfPlayPanelProps) {
   const recommendationId = state?.nextMove.recommendationId
   const recommendationStatusRevision = state?.nextMove.recommendationStatus ?? ''
   const [detail, setDetail] = React.useState<HqRecommendationDetail | null>(null)
@@ -2267,12 +2400,240 @@ function formatShortDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
 }
 
+function HomeMetricStrip({
+  thisWeekCount,
+  workerCount,
+  attentionCount,
+  finalCount,
+}: {
+  thisWeekCount: number
+  workerCount: number
+  attentionCount: number
+  finalCount: number
+}) {
+  const metrics = [
+    { label: 'This week', value: thisWeekCount, tone: 'bg-white/30' },
+    { label: 'Active workers', value: workerCount, tone: workerCount > 0 ? 'bg-emerald-300' : 'bg-white/25' },
+    { label: 'Needs attention', value: attentionCount, tone: attentionCount > 0 ? 'bg-amber-300' : 'bg-emerald-300' },
+    { label: 'Finals', value: finalCount, tone: 'bg-orange-300' },
+  ]
+
+  return (
+    <section aria-label="HQ summary" className="grid grid-cols-2 overflow-hidden rounded-[12px] border border-white/[0.055] bg-[#090A0C] sm:grid-cols-4">
+      {metrics.map((metric, index) => (
+        <div key={metric.label} className={cn('flex min-h-16 items-center gap-3 px-4 py-3', index > 0 && 'border-l border-white/[0.05]', index === 2 && 'max-sm:border-l-0', index > 1 && 'max-sm:border-t')}>
+          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', metric.tone)} />
+          <div className="min-w-0">
+            <div className="text-lg font-semibold tabular-nums text-white/84">{metric.value}</div>
+            <div className="truncate text-[9px] font-medium uppercase tracking-[0.14em] text-white/32">{metric.label}</div>
+          </div>
+        </div>
+      ))}
+    </section>
+  )
+}
+
+function HomeOperationsCard({
+  thisWeekItems,
+  workerItems,
+}: {
+  thisWeekItems: HqHomeTimelineItem[]
+  workerItems: HqHomeWorkerItem[]
+}) {
+  return (
+    <HQCard className="p-0">
+      <div className="grid grid-cols-1 divide-y divide-white/[0.05] md:grid-cols-[1.2fr_0.8fr] md:divide-x md:divide-y-0">
+        <div className="p-4">
+          <SectionTitle icon={CalendarDays} title="This Week" meta="calendar" />
+          {thisWeekItems.length > 0 ? (
+            <div className="space-y-0.5">
+              {thisWeekItems.slice(0, 3).map((item) => (
+                <TimelineItem key={item.id} time={item.when} title={item.title} />
+              ))}
+            </div>
+          ) : (
+            <CompactEmptyRow title="Nothing scheduled this week" action="Open calendar" onClick={() => { window.location.hash = '#artist-hq/calendar' }} />
+          )}
+        </div>
+        <div className="p-4">
+          <SectionTitle icon={Bot} title="Workers" meta={workerItems.length ? `${workerItems.length} active` : 'quiet'} />
+          {workerItems.length > 0 ? (
+            <div className="space-y-1.5">
+              {workerItems.slice(0, 3).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => item.kind === 'automation'
+                    ? navigate(routes.view.automations())
+                    : (window.location.hash = '#artist-hq/calendar')}
+                  className="flex h-10 w-full items-center justify-between gap-3 rounded-[8px] border border-white/[0.045] bg-white/[0.018] px-3 text-left transition-colors hover:bg-white/[0.045]"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-medium text-white/66">{item.title}</span>
+                    <span className="block truncate text-[9px] text-white/28">{item.detail}</span>
+                  </span>
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-300" title={item.status} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <CompactEmptyRow title="No active workers" action="View automations" onClick={() => navigate(routes.view.automations())} />
+          )}
+        </div>
+      </div>
+    </HQCard>
+  )
+}
+
+function PulseSummaryCard({
+  spotifyValue,
+  spotifyMeta,
+  spotifyActive,
+  spotifyBusy,
+  intelValue,
+  intelMeta,
+  intelActive,
+  intelBusy,
+  intelRunDisabled,
+  onToggleSpotify,
+  onToggleIntel,
+  onRunIntel,
+  onShowDetails,
+}: {
+  spotifyValue: string
+  spotifyMeta: string
+  spotifyActive: boolean
+  spotifyBusy: boolean
+  intelValue: string
+  intelMeta: string
+  intelActive: boolean
+  intelBusy: boolean
+  intelRunDisabled: boolean
+  onToggleSpotify: () => void
+  onToggleIntel: () => void
+  onRunIntel: () => void
+  onShowDetails: () => void
+}) {
+  return (
+    <HQCard className="p-0">
+      <div className="flex items-center justify-between border-b border-white/[0.045] px-4 py-3">
+        <SectionTitle icon={Radio} title="Signals" meta="weekly" compact />
+        <button type="button" onClick={onShowDetails} className="text-[10px] font-medium text-white/34 transition-colors hover:text-white/65">
+          Details
+        </button>
+      </div>
+      <div className="divide-y divide-white/[0.045]">
+        <PulseSummaryRow
+          icon={Music2}
+          title="Spotify"
+          value={spotifyValue}
+          meta={spotifyMeta}
+          active={spotifyActive}
+          busy={spotifyBusy}
+          onToggle={onToggleSpotify}
+        />
+        <PulseSummaryRow
+          icon={Radio}
+          title="YouTube Intel"
+          value={intelValue}
+          meta={intelMeta}
+          active={intelActive}
+          busy={intelBusy}
+          onToggle={onToggleIntel}
+          actionLabel="Run"
+          actionDisabled={intelRunDisabled || intelBusy}
+          onAction={onRunIntel}
+        />
+      </div>
+    </HQCard>
+  )
+}
+
+function PulseSummaryRow({
+  icon: Icon,
+  title,
+  value,
+  meta,
+  active,
+  busy,
+  onToggle,
+  actionLabel,
+  actionDisabled,
+  onAction,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  title: string
+  value: string
+  meta: string
+  active: boolean
+  busy: boolean
+  onToggle: () => void
+  actionLabel?: string
+  actionDisabled?: boolean
+  onAction?: () => void
+}) {
+  return (
+    <div className="flex min-h-[62px] items-center gap-3 px-4 py-2.5">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.055] bg-white/[0.02]">
+        <Icon className="h-3.5 w-3.5 text-white/42" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-white/72">{title}</span>
+          <span className={cn('h-1.5 w-1.5 rounded-full', active ? 'bg-emerald-300' : 'bg-white/22')} />
+        </div>
+        <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[10px] text-white/30">
+          <span className="truncate">{value}</span>
+          <span aria-hidden="true">·</span>
+          <span className="truncate">{meta}</span>
+        </div>
+      </div>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          onClick={onAction}
+          disabled={actionDisabled}
+          className="h-7 rounded-[7px] border border-white/[0.07] px-2.5 text-[10px] font-semibold text-white/55 transition-colors hover:bg-white/[0.045] disabled:cursor-not-allowed disabled:opacity-35"
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={busy}
+        className={cn(
+          'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border transition-colors',
+          active
+            ? 'border-emerald-400/25 bg-emerald-500/10 text-emerald-300'
+            : 'border-white/[0.07] bg-white/[0.02] text-white/32 hover:text-white/62',
+          busy && 'cursor-wait opacity-60',
+        )}
+        aria-label={active ? `Pause ${title}` : `Activate ${title}`}
+      >
+        <RefreshCw className={cn('h-3 w-3', busy && 'animate-spin')} />
+      </button>
+    </div>
+  )
+}
+
 function TimelineItem({ time, title }: { time: string; title: string }) {
   return (
-    <div className="flex items-start gap-3 py-1.5">
-      <div className="w-12 text-[10px] font-medium uppercase tracking-[0.12em] text-white/28">{time}</div>
-      <Circle className="mt-1 h-2 w-2 fill-orange-400 text-orange-400" />
-      <div className="text-sm font-medium text-white/72">{title}</div>
+    <div className="flex min-h-10 items-center gap-3 rounded-[8px] px-1 py-1">
+      <div className="w-16 shrink-0 truncate text-[9px] font-medium uppercase tracking-[0.1em] text-white/28">{time}</div>
+      <Circle className="h-1.5 w-1.5 shrink-0 fill-orange-300 text-orange-300" />
+      <div className="truncate text-xs font-medium text-white/68">{title}</div>
+    </div>
+  )
+}
+
+function CompactEmptyRow({ title, action, onClick }: { title: string; action: string; onClick: () => void }) {
+  return (
+    <div className="flex min-h-10 items-center justify-between gap-3 rounded-[8px] border border-dashed border-white/[0.055] px-3">
+      <span className="truncate text-xs text-white/34">{title}</span>
+      <button type="button" onClick={onClick} className="shrink-0 text-[10px] font-medium text-orange-100/55 hover:text-orange-100/82">
+        {action}
+      </button>
     </div>
   )
 }
@@ -2676,16 +3037,38 @@ function ProjectBoard({
   onOpenCampaignWorkspace?: (workspaceId: string) => void
   onOpenScheduledWork: () => void
 }) {
+  const [activeColumnId, setActiveColumnId] = React.useState<HqHomeProjectColumn['id']>('focus')
+  const activeColumn = columns.find((column) => column.id === activeColumnId) ?? columns[0]
+  const visibleCards = activeColumn?.cards.slice(0, 3) ?? []
+
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-      {columns.map((column) => (
-        <div key={column.id} className="min-h-[210px] rounded-[14px] border border-white/[0.05] bg-black/20 p-3">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/42">{column.label}</div>
-            <span className="text-[10px] text-white/28">{column.cards.length}</span>
-          </div>
+    <div>
+      <div role="tablist" aria-label="Project status" className="flex gap-1 overflow-x-auto border-b border-white/[0.05]">
+        {columns.map((column) => {
+          const active = column.id === activeColumn?.id
+          return (
+            <button
+              key={column.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setActiveColumnId(column.id)}
+              className={cn(
+                'relative flex h-9 shrink-0 items-center gap-2 px-3 text-[10px] font-semibold uppercase tracking-[0.13em] transition-colors',
+                active ? 'text-white/78' : 'text-white/32 hover:text-white/58',
+              )}
+            >
+              {column.label}
+              <span className={cn('tabular-nums', active ? 'text-orange-200/70' : 'text-white/24')}>{column.cards.length}</span>
+              {active ? <span className="absolute inset-x-2 bottom-0 h-px bg-orange-300" /> : null}
+            </button>
+          )
+        })}
+      </div>
+      <div role="tabpanel" className="pt-3">
+        {visibleCards.length > 0 ? (
           <div className="space-y-2">
-            {column.cards.length > 0 ? column.cards.map((card) => (
+            {visibleCards.map((card) => (
               <button
                 key={card.id}
                 type="button"
@@ -2694,26 +3077,31 @@ function ProjectBoard({
                   : onOpenScheduledWork()}
                 disabled={card.kind === 'campaign' && !onOpenCampaignWorkspace}
                 className={cn(
-                  'w-full rounded-[12px] border border-white/[0.055] bg-white/[0.025] p-3 text-left transition-colors',
+                  'flex min-h-14 w-full items-center justify-between gap-3 rounded-[9px] border border-white/[0.055] bg-white/[0.02] px-3 text-left transition-colors',
                   card.kind === 'campaign' && !onOpenCampaignWorkspace
                     ? 'cursor-not-allowed opacity-55'
-                    : 'hover:border-[#fb923c]/35 hover:bg-[#fb923c]/[0.055]',
+                    : 'hover:border-orange-300/25 hover:bg-orange-300/[0.045]',
                 )}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <div className="truncate text-sm font-semibold text-white/76">{card.title}</div>
-                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/28" />
-                </div>
-                <div className="mt-1 line-clamp-2 text-xs leading-5 text-white/38">{card.detail}</div>
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-semibold text-white/72">{card.title}</span>
+                  <span className="mt-1 block truncate text-[10px] text-white/32">{card.detail}</span>
+                </span>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-white/25" />
               </button>
-            )) : (
-              <p className="rounded-[12px] border border-dashed border-white/[0.05] px-3 py-4 text-xs leading-5 text-white/28">
-                No {column.label.toLowerCase()} items.
-              </p>
-            )}
+            ))}
           </div>
-        </div>
-      ))}
+        ) : (
+          <div className="flex h-14 items-center rounded-[9px] border border-dashed border-white/[0.055] px-3 text-xs text-white/30">
+            No {activeColumn?.label.toLowerCase()} items.
+          </div>
+        )}
+        {(activeColumn?.cards.length ?? 0) > visibleCards.length ? (
+          <button type="button" onClick={onOpenScheduledWork} className="mt-2 text-[10px] font-medium text-orange-100/55 hover:text-orange-100/82">
+            View all {activeColumn?.cards.length}
+          </button>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -2985,6 +3373,10 @@ function isResearchOutput(output: OutputSummaryDTO): boolean {
   return output.kind === 'report'
     || output.origin?.source === 'deep-research'
     || /\b(research|report|intel|analysis|spotify|youtube|trend)\b/.test(text)
+}
+
+function hqHomeDetailsStorageKey(workspaceId: string): string {
+  return `runneros:hq-home:${workspaceId}:details-open`
 }
 
 function readBooleanLocalStorage(key: string, fallback: boolean): boolean {
