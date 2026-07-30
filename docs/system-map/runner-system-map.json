@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-11",
+  "generatedAt": "2026-07-30",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -78,16 +78,16 @@
       "record-doctor",
       "industry-hunter"
     ],
-    "workflowCount": 3,
+    "workflowCount": 4,
     "sharedIntelPromptWired": true,
     "finalsPromotionWired": true,
     "scheduledWorkWired": true
   },
   "referenceHealth": {
-    "knownSkillCount": 123,
+    "knownSkillCount": 124,
     "bundledSkillCount": 82,
     "systemSkillCount": 6,
-    "userGlobalSkillCount": 121,
+    "userGlobalSkillCount": 124,
     "knownSourceCount": 27,
     "missingSkills": [],
     "machineLocalOnlySkills": [],
@@ -180,6 +180,34 @@
         {
           "id": "direct-portfolio",
           "agent": "content-director"
+        }
+      ]
+    },
+    {
+      "slug": "paid-campaign-builder",
+      "name": "Paid Campaign Builder",
+      "description": "Turn one artist campaign brief into a coordinated paid-media strategy, creative testing system, and approval-ready execution packet.",
+      "triggerType": "manual",
+      "inputCount": 6,
+      "stepCount": 3,
+      "agentRefs": [
+        "ad-creative-agent",
+        "ads-agent",
+        "ads-strategist"
+      ],
+      "missingAgentRefs": [],
+      "steps": [
+        {
+          "id": "strategy",
+          "agent": "ads-strategist"
+        },
+        {
+          "id": "creative",
+          "agent": "ad-creative-agent"
+        },
+        {
+          "id": "execution-packet",
+          "agent": "ads-agent"
         }
       ]
     }

@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-11
+last_verified: 2026-07-30
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-07-11
+Generated: 2026-07-30
 
 ## Why This Exists
 
@@ -53,13 +53,13 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Agents mapped: 44
 - Hidden from Workers home: 5
 - Campaign default workers: `branding-agent`, `world-builder`, `college-radio-agent`, `spotify-playlist-creator`, `content-genius`, `scroll-stopper`, `anticipation-director`, `content-director`, `art-director`, `ad-creative-agent`, `ads-strategist`, `ads-agent`, `ig-trending-power-up`, `influencer-campaign-power-up`, `playlisting-power-up`, `record-doctor`, `industry-hunter`
-- Starter workflows mapped: 3
+- Starter workflows mapped: 4
 - Shared Intel prompt injection: wired
 - Outputs -> Finals promotion: wired
 - Scheduled Work execution: wired
 - Domains: Command 3, Content Creation 9, Creative 5, Merch 2, Operators 2, Other Workers 2, Outreach 5, Promotion 9, Research 4, Socials 3
 - Permission modes: ask 36, safe 8
-- Known skills: 123 (82 bundled, 6 system, 121 user-global on this machine)
+- Known skills: 124 (82 bundled, 6 system, 124 user-global on this machine)
 - Known builtin sources: 27
 
 ## Reference Health
@@ -150,6 +150,14 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 - Agent refs: `anticipation-director`, `content-director`, `content-genius`, `scroll-stopper`
 - Missing agent refs: none
 - Step order: native-ideas -> @content-genius; anticipation-ideas -> @anticipation-director; absurd-ideas -> @scroll-stopper; direct-portfolio -> @content-director
+
+### Paid Campaign Builder (`paid-campaign-builder`)
+
+- Description: Turn one artist campaign brief into a coordinated paid-media strategy, creative testing system, and approval-ready execution packet.
+- Trigger: `manual`; inputs: 6; steps: 3
+- Agent refs: `ad-creative-agent`, `ads-agent`, `ads-strategist`
+- Missing agent refs: none
+- Step order: strategy -> @ads-strategist; creative -> @ad-creative-agent; execution-packet -> @ads-agent
 
 
 ## Workers By Domain

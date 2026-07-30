@@ -11,7 +11,13 @@ import {
   writeRun,
 } from './run-storage.ts';
 import type { WorkflowRunSnapshot, WorkflowRunState } from './run-types.ts';
-import { CONTENT_MASTERMIND_SLUG, STARTER_WORKFLOWS } from './starter-templates.ts';
+import {
+  CONTENT_MASTERMIND_SLUG,
+  ENSURED_STARTER_WORKFLOW_SLUGS,
+  PAID_CAMPAIGN_BUILDER_SLUG,
+  STARTER_WORKFLOWS,
+  STARTER_WORKFLOW_SLUGS,
+} from './starter-templates.ts';
 import {
   deleteGlobalWorkflow,
   ensureRequiredWorkflows,
@@ -845,6 +851,24 @@ describe('seedGlobalWorkflowLibraryIfEmpty', () => {
     expect(parsed?.metadata.steps.at(-1)?.completion?.minOutputChars).toBe(1800)
     expect(parsed?.metadata.outputs?.primary?.step).toBe('direct-portfolio')
     expect(parsed?.metadata.steps.every((step) => (step.retries ?? 0) === 0)).toBe(true)
+  })
+
+  test('Paid Campaign Builder parses with the strategy-to-creative-to-runner contract', () => {
+    const workflow = STARTER_WORKFLOWS.find((item) => item.slug === PAID_CAMPAIGN_BUILDER_SLUG)
+
+    expect(workflow).toBeDefined()
+    const parsed = parseWorkflowFile(serializeWorkflow(workflow!.metadata, workflow!.body))
+    expect(parsed).not.toBeNull()
+    expect(parsed?.metadata.steps.map((step) => step.agent)).toEqual([
+      'ads-strategist',
+      'ad-creative-agent',
+      'ads-agent',
+    ])
+    expect(parsed?.metadata.steps.map((step) => step.retries)).toEqual([1, 1, 1])
+    expect(parsed?.metadata.steps.at(-1)?.input).toContain('never publish, launch, change budgets, or mutate an external account')
+    expect(parsed?.metadata.outputs?.primary?.step).toBe('execution-packet')
+    expect(STARTER_WORKFLOW_SLUGS).toContain(PAID_CAMPAIGN_BUILDER_SLUG)
+    expect(ENSURED_STARTER_WORKFLOW_SLUGS).toContain(PAID_CAMPAIGN_BUILDER_SLUG)
   })
 
   test('seeds starters on first run', () => {

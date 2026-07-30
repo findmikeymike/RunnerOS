@@ -12,6 +12,7 @@ import type { WorkflowMetadata } from './types.ts';
 export const WEEKLY_CONTENT_PIPELINE_SLUG = 'weekly-content-pipeline';
 export const EMAIL_TRIAGE_SLUG = 'email-triage';
 export const CONTENT_MASTERMIND_SLUG = 'content-mastermind';
+export const PAID_CAMPAIGN_BUILDER_SLUG = 'paid-campaign-builder';
 
 const weeklyContentPipeline = {
   slug: WEEKLY_CONTENT_PIPELINE_SLUG,
@@ -273,10 +274,208 @@ Produce the complete polished document, not a summary.`,
   body: '# Content Mastermind\n\nRun this when a campaign needs a high-quality creative slate rather than a generic idea list.\n',
 };
 
+const paidCampaignBuilder = {
+  slug: PAID_CAMPAIGN_BUILDER_SLUG,
+  metadata: {
+    name: 'Paid Campaign Builder',
+    description: 'Turn one artist campaign brief into a coordinated paid-media strategy, creative testing system, and approval-ready execution packet.',
+    avatar: '📈',
+    trigger: {
+      type: 'manual' as const,
+      inputs: [
+        {
+          name: 'campaign_brief',
+          type: 'string' as const,
+          required: true,
+          description: 'Release, campaign goal, timing, audience, offer, and relevant artist context',
+        },
+        {
+          name: 'budget',
+          type: 'string' as const,
+          required: true,
+          description: 'Total budget or working budget range',
+        },
+        {
+          name: 'platforms',
+          type: 'string' as const,
+          default: 'Recommend the strongest mix',
+          description: 'Meta, Google, Spotify, or let the strategist recommend',
+        },
+        {
+          name: 'territories',
+          type: 'string' as const,
+          default: 'Recommend from available artist intelligence',
+          description: 'Target countries, cities, or markets',
+        },
+        {
+          name: 'destination',
+          type: 'string' as const,
+          default: 'Use the campaign’s primary approved destination',
+          description: 'Smart link, pre-save, streaming page, store, video, or landing page',
+        },
+        {
+          name: 'available_assets',
+          type: 'string' as const,
+          default: 'Use approved Campaign and Vault assets',
+          description: 'Existing clips, artwork, performances, photos, copy, or asset limitations',
+        },
+      ],
+    },
+    steps: [
+      {
+        id: 'strategy',
+        agent: 'ads-strategist',
+        description: 'Build the media strategy, budget allocation, audiences, territories, and testing rules.',
+        input: `Build a decisive Ads Strategy Packet for this artist campaign.
+
+Campaign:
+{{trigger.campaign_brief}}
+
+Budget:
+{{trigger.budget}}
+
+Requested platforms:
+{{trigger.platforms}}
+
+Territories:
+{{trigger.territories}}
+
+Destination:
+{{trigger.destination}}
+
+Available assets:
+{{trigger.available_assets}}
+
+Use real Artist HQ, campaign, Spotify, and prior-performance context when available. Clearly label unavailable intelligence instead of fabricating it.
+
+Deliver:
+- campaign objective and primary conversion
+- platform selection with reasons
+- budget allocation and pacing
+- audience and territory plan
+- campaign/ad-set architecture
+- testing matrix
+- success, kill, and scale rules
+- tracking requirements
+- risks and missing inputs
+- exact handoff requirements for Ad Creative and Ad Runner`,
+        timeout: 600,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: { requireNonEmptyOutput: true, minOutputChars: 900 },
+      },
+      {
+        id: 'creative',
+        agent: 'ad-creative-agent',
+        description: 'Convert the strategy into platform-native creative concepts, hooks, copy, formats, and tests.',
+        input: `Build the Paid Creative Packet from the approved strategic direction.
+
+Campaign:
+{{trigger.campaign_brief}}
+
+Available assets:
+{{trigger.available_assets}}
+
+ADS STRATEGY PACKET:
+{{steps.strategy.output}}
+
+Produce:
+- strongest creative thesis
+- 3–5 distinct ad concepts
+- opening hooks and first-frame direction
+- primary copy, headlines, and CTA variants
+- platform-specific formats and placements
+- asset requirements and production gaps
+- testing combinations mapped to the strategy
+- concepts to reject and why
+- exact handoff fields for Ad Runner
+
+Do not weaken every concept into the same safe brand expression. Preserve distinct creative mechanisms while respecting factual, platform, and policy boundaries.`,
+        timeout: 600,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: { requireNonEmptyOutput: true, minOutputChars: 1200 },
+      },
+      {
+        id: 'execution-packet',
+        agent: 'ads-agent',
+        description: 'Reconcile strategy and creative into one account-ready, approval-gated campaign build plan.',
+        input: `Act as final Ad Runner. Compile one execution-ready Paid Campaign Packet.
+
+Campaign:
+{{trigger.campaign_brief}}
+
+Budget:
+{{trigger.budget}}
+
+Platforms:
+{{trigger.platforms}}
+
+Territories:
+{{trigger.territories}}
+
+Destination:
+{{trigger.destination}}
+
+ADS STRATEGY:
+{{steps.strategy.output}}
+
+PAID CREATIVE:
+{{steps.creative.output}}
+
+Reconcile contradictions rather than repeating both packets.
+
+Deliver:
+- final campaign architecture
+- budget and pacing table
+- exact audiences, territories, placements, and exclusions
+- ad-to-creative mapping
+- naming conventions
+- destination and tracking checklist
+- account/source readiness
+- missing assets or blockers
+- draft build sequence
+- approval packet
+- launch checklist
+- first reporting checkpoints
+- kill, revise, and scale rules
+
+This workflow creates a plan and approval packet only. Inspect connected accounts read-only when useful, but never publish, launch, change budgets, or mutate an external account during this workflow.`,
+        timeout: 900,
+        retries: 1,
+        onFailure: 'stop' as const,
+        completion: { requireNonEmptyOutput: true, minOutputChars: 1600 },
+      },
+    ],
+    outputs: {
+      mode: 'final-step' as const,
+      kind: 'document' as const,
+      title: 'Paid Campaign Builder',
+      primary: { from: 'step-output' as const, step: 'execution-packet' },
+    },
+  } satisfies WorkflowMetadata,
+  body: `# Paid Campaign Builder
+
+Run this when an artist campaign needs one coordinated paid-media plan instead of disconnected strategy, creative, and account recommendations.
+
+The workflow stops at an approval-ready execution packet. External account changes remain separate and require explicit approval.
+`,
+};
+
 export const STARTER_WORKFLOWS: ReadonlyArray<{
   slug: string;
   metadata: WorkflowMetadata;
   body: string;
-}> = [weeklyContentPipeline, emailTriage, contentMastermind];
+}> = [weeklyContentPipeline, emailTriage, contentMastermind, paidCampaignBuilder];
 
 export const STARTER_WORKFLOW_SLUGS: readonly string[] = STARTER_WORKFLOWS.map((w) => w.slug);
+
+/**
+ * Starter workflows added after the original first-run seed. Startup ensures
+ * these reach existing libraries while honoring deletion tombstones and
+ * preserving user-edited copies.
+ */
+export const ENSURED_STARTER_WORKFLOW_SLUGS = [
+  CONTENT_MASTERMIND_SLUG,
+  PAID_CAMPAIGN_BUILDER_SLUG,
+] as const;

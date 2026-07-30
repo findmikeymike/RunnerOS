@@ -3912,19 +3912,25 @@ user a clickable link to where the thing now lives.`
         sessionLog.warn('[agent-definitions] Library seed skipped:', err as Error)
       }
 
-      // Seed starter workflows on first run. Content Mastermind is also added
+      // Seed starter workflows on first run. Ensured starters are also added
       // to existing libraries once; ensureRequiredWorkflows honors deletion
       // tombstones and never overwrites a user-edited workflow.
       try {
-        const { seedGlobalWorkflowLibraryIfEmpty, ensureRequiredWorkflows, STARTER_WORKFLOWS, CONTENT_MASTERMIND_SLUG } = await import('@craft-agent/shared/workflows')
+        const {
+          seedGlobalWorkflowLibraryIfEmpty,
+          ensureRequiredWorkflows,
+          STARTER_WORKFLOWS,
+          ENSURED_STARTER_WORKFLOW_SLUGS,
+        } = await import('@craft-agent/shared/workflows')
         const { seeded: workflowsSeeded } = seedGlobalWorkflowLibraryIfEmpty(STARTER_WORKFLOWS)
         if (workflowsSeeded > 0) {
           sessionLog.info(`[workflows] Seeded ${workflowsSeeded} starter workflow(s) into global library`)
         }
-        const contentMastermind = STARTER_WORKFLOWS.filter(workflow => workflow.slug === CONTENT_MASTERMIND_SLUG)
-        const { ensured: workflowsEnsured } = ensureRequiredWorkflows(contentMastermind)
+        const ensuredSlugs = new Set<string>(ENSURED_STARTER_WORKFLOW_SLUGS)
+        const ensuredStarters = STARTER_WORKFLOWS.filter(workflow => ensuredSlugs.has(workflow.slug))
+        const { ensured: workflowsEnsured } = ensureRequiredWorkflows(ensuredStarters)
         if (workflowsEnsured > 0) {
-          sessionLog.info('[workflows] Added Content Mastermind to the global workflow library')
+          sessionLog.info(`[workflows] Added ${workflowsEnsured} ensured starter workflow(s) to the global library`)
         }
       } catch (err) {
         sessionLog.warn('[workflows] Starter seed skipped:', err as Error)

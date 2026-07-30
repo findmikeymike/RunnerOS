@@ -269,6 +269,57 @@ describe('WorkflowRunner', () => {
     expect(manifest?.preview?.mode).toBe('markdown')
   })
 
+  test('Paid Campaign Builder threads strategy into creative and both packets into one approval-ready final', async () => {
+    const template = STARTER_WORKFLOWS.find((workflow) => workflow.slug === 'paid-campaign-builder')!
+    const workflow: LoadedWorkflow = {
+      ...template,
+      path: '/tmp/paid-campaign-builder',
+      source: 'global',
+    }
+    const strategyOutput = `STRATEGY_KEEPER ${'s'.repeat(920)}`
+    const creativeOutput = `CREATIVE_KEEPER ${'c'.repeat(1220)}`
+    const finalOutput = `# Paid Campaign Packet\n\nAPPROVAL_PACKET ${'f'.repeat(1650)}`
+    const h = makeHarness({
+      stepOutputs: [strategyOutput, creativeOutput, finalOutput],
+    })
+    const runner = new WorkflowRunner(h.deps)
+
+    await runner.start({
+      workflow,
+      workspaceId: WORKSPACE_ID,
+      triggerInputs: {
+        campaign_brief: 'Launch the single on August 21',
+        budget: '$1,500',
+        platforms: 'Meta and Spotify',
+        territories: 'US, UK, Canada',
+        destination: 'Approved smart link',
+        available_assets: 'Performance clip, cover art, and artist photos',
+      },
+    })
+    await waitFor(() => lastCompleted(h.events) !== undefined)
+
+    const completed = lastCompleted(h.events)!
+    expect(completed.state).toBe('succeeded')
+    expect(h.sessions.size).toBe(3)
+    expect(completed.steps.map((step) => step.attempts)).toEqual([1, 1, 1])
+    expect(h.promptsSent[0]?.prompt).not.toContain('CREATIVE_KEEPER')
+    expect(h.promptsSent[1]?.prompt).toContain('STRATEGY_KEEPER')
+    expect(h.promptsSent[2]?.prompt).toContain('STRATEGY_KEEPER')
+    expect(h.promptsSent[2]?.prompt).toContain('CREATIVE_KEEPER')
+    expect(h.promptsSent[2]?.prompt).toContain('never publish, launch, change budgets, or mutate an external account')
+    expect([...h.sessions.values()].map((session) => (session.options as { spawnedFromAgent?: { agentSlug?: string } }).spawnedFromAgent?.agentSlug)).toEqual([
+      'ads-strategist',
+      'ad-creative-agent',
+      'ads-agent',
+    ])
+    expect(completed.outputIds).toHaveLength(1)
+    const manifest = readOutput(workspaceRoot, completed.finalOutputId!)
+    expect(manifest?.title).toBe('Paid Campaign Builder')
+    expect(manifest?.tags).toContain('show-in-canvas')
+    expect(manifest?.origin.agentSlug).toBe('ads-agent')
+    expect(manifest?.preview?.mode).toBe('markdown')
+  })
+
   test('happy path: 2-step workflow succeeds and threads outputs via templater', async () => {
     const h = makeHarness({ stepOutputs: ['STEP_ONE_OUT', 'STEP_TWO_OUT'] });
     const runner = new WorkflowRunner(h.deps);
