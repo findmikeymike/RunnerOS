@@ -944,6 +944,8 @@
   "settings.shortcuts.title": "Atajos",
   "settings.socialAccounts.description": "Instagram, TikTok, X, YouTube",
   "settings.socialAccounts.title": "Social Accounts",
+  "settings.tradingConnections.description": "Broker and prop execution accounts",
+  "settings.tradingConnections.title": "Trading Connections",
   "settings.tools.builtInBrowser": "Navegador integrado",
   "settings.tools.builtInBrowserDesc": "Desactiva si usas herramientas de navegador externas como Playwright, Puppeteer o servidores MCP de navegador.",
   "settings.tools.title": "Herram.",

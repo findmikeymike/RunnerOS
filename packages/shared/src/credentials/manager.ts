@@ -221,6 +221,22 @@ export class CredentialManager {
     return this.delete({ type: 'user_secret', name: normalized });
   }
 
+  async getTradingConnectionSecret(name: string): Promise<string | null> {
+    const credential = await this.get({ type: 'trading_connection_secret', name });
+    return credential?.value || null;
+  }
+
+  async setTradingConnectionSecret(name: string, value: string): Promise<void> {
+    await this.set(
+      { type: 'trading_connection_secret', name },
+      { value, source: 'native', updatedAt: Date.now() },
+    );
+  }
+
+  async deleteTradingConnectionSecret(name: string): Promise<boolean> {
+    return this.delete({ type: 'trading_connection_secret', name });
+  }
+
   async listUserSecrets(): Promise<UserSecretSummary[]> {
     const ids = await this.list({ type: 'user_secret' });
     const summaries = await Promise.all(ids

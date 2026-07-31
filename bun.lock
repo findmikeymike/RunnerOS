@@ -155,6 +155,7 @@
         "@tanstack/react-table": "^8.21.3",
         "@trade-god/client": "workspace:*",
         "@trade-god/contracts": "workspace:*",
+        "@trade-god/execution": "workspace:*",
         "@trade-god/market-state": "workspace:*",
         "chrono-node": "^2.9.0",
         "cmdk": "^1.1.1",

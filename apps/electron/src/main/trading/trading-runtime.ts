@@ -29,6 +29,12 @@ import {
   type TradeAlertTunnelHandle,
 } from './trade-alert-tunnel.ts'
 import { buildSyntheticEsChartFixture } from './synthetic-chart-fixture.ts'
+import {
+  TradingConnectionService,
+  type TradingBrowserSessionLauncher,
+  type TradingCredentialVault,
+} from './trading-connection-service.ts'
+import { FileTradingConnectionStore } from '@trade-god/execution'
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
@@ -47,6 +53,9 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   contextDirectory?: string
   interpretationDirectory?: string
   alertDirectory?: string
+  connectionDirectory?: string
+  credentialVault?: TradingCredentialVault
+  tradingBrowserSessionLauncher?: TradingBrowserSessionLauncher
   alertPort?: number
   alertHost?: string
   alertToken?: string
@@ -197,6 +206,17 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const alertLedger = options.alertDirectory
     ? new TradeAlertLedger(options.alertDirectory, options.now)
     : undefined
+  const tradingConnectionService = (
+    options.connectionDirectory
+    && options.credentialVault
+    && options.tradingBrowserSessionLauncher
+  )
+    ? new TradingConnectionService(
+        new FileTradingConnectionStore(options.connectionDirectory, options.now),
+        options.credentialVault,
+        options.tradingBrowserSessionLauncher,
+      )
+    : undefined
   const unsubscribeAlert = alertLedger && options.onAlert
     ? alertLedger.subscribe(options.onAlert)
     : undefined
@@ -275,6 +295,16 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       ? { getIbkrGatewayHealth: (environment) => marketDataManager.ibkrGatewayHealth(environment) }
       : {}),
     getSyntheticChartFixture: (input) => Promise.resolve(buildSyntheticEsChartFixture(input)),
+    ...(tradingConnectionService
+      ? {
+          listTradingConnections: () => tradingConnectionService.list(),
+          saveTradingConnection: (input) => tradingConnectionService.save(input),
+          removeTradingConnection: (connectionId) => tradingConnectionService.remove(connectionId),
+          openTradingConnectionLogin: (connectionId) => (
+            tradingConnectionService.openBrowserLogin(connectionId)
+          ),
+        }
+      : {}),
     stop: () => manager.stop(),
   }
   const disposeTradingIpc = registerTradingIpc(options.ipcMain, ipcManager)

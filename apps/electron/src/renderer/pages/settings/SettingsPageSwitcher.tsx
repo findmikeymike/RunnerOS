@@ -43,6 +43,7 @@ const SETTINGS_GROUPS: SettingsGroup[] = [
     pages: [
       { id: 'secrets', label: 'Services' },
       { id: 'social-accounts', label: 'Social Accounts' },
+      { id: 'trading-connections', label: 'Trading Connections' },
     ],
   },
   {

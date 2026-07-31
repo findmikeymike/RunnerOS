@@ -944,6 +944,8 @@
   "settings.shortcuts.title": "Skróty",
   "settings.socialAccounts.description": "Instagram, TikTok, X, YouTube",
   "settings.socialAccounts.title": "Social Accounts",
+  "settings.tradingConnections.description": "Broker and prop execution accounts",
+  "settings.tradingConnections.title": "Trading Connections",
   "settings.tools.builtInBrowser": "Wbudowana przeglądarka",
   "settings.tools.builtInBrowserDesc": "Wyłącz, jeśli używasz zewnętrznych narzędzi przeglądarki, takich jak Playwright, Puppeteer lub serwery MCP przeglądarki.",
   "settings.tools.title": "Narzędzia",

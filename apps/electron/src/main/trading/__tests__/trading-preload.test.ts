@@ -28,6 +28,10 @@ test('preload adapter invokes only the local Trade God channels', async () => {
   expect(await api.getTradeGodAlertWebhookSetup() as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.getIbkrGatewayHealth() as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.getSyntheticTradeGodChartFixture(chartInput) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.listTradingConnections() as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.saveTradingConnection({ connection: {} } as any) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.removeTradingConnection('connection-1') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.openTradingConnectionLogin('connection-1') as any).toEqual({ artifact_id: 'artifact-preload' })
   api.onTradeGodAlert((payload) => { subscribedPayload = payload })
   expect(subscribedChannel).toBe(TRADE_GOD_IPC.ALERT_RECEIVED)
   expect(subscribedPayload).toEqual({ id: 'tv-preload' })
@@ -42,5 +46,9 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.ALERT_WEBHOOK_SETUP, args: [] },
     { channel: TRADE_GOD_IPC.IBKR_GATEWAY_HEALTH, args: ['paper'] },
     { channel: TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE, args: [chartInput] },
+    { channel: TRADE_GOD_IPC.LIST_CONNECTIONS, args: [] },
+    { channel: TRADE_GOD_IPC.SAVE_CONNECTION, args: [{ connection: {} }] },
+    { channel: TRADE_GOD_IPC.REMOVE_CONNECTION, args: ['connection-1'] },
+    { channel: TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN, args: ['connection-1'] },
   ])
 })

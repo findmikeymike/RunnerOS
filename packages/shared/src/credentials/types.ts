@@ -33,6 +33,7 @@ export type CredentialType =
   | 'source_apikey'      // API keys
   | 'source_basic'       // Basic auth (base64 encoded user:pass)
   | 'user_secret'        // User-managed app env secret, keyed by env var name
+  | 'trading_connection_secret' // Trading API credential keyed by opaque vault name
   // Messaging gateway credentials (keyed by workspaceId + platform)
   | 'messaging_bearer';  // Platform tokens (e.g., Telegram bot token)
 
@@ -50,6 +51,7 @@ const VALID_CREDENTIAL_TYPES: readonly CredentialType[] = [
   'source_apikey',
   'source_basic',
   'user_secret',
+  'trading_connection_secret',
   'messaging_bearer',
 ] as const;
 
@@ -180,6 +182,10 @@ function isUserSecretCredential(type: CredentialType): boolean {
   return type === 'user_secret';
 }
 
+function isTradingConnectionCredential(type: CredentialType): boolean {
+  return type === 'trading_connection_secret';
+}
+
 /** Convert CredentialId to credential store account string */
 export function credentialIdToAccount(id: CredentialId): string {
   const parts: string[] = [id.type];
@@ -210,6 +216,11 @@ export function credentialIdToAccount(id: CredentialId): string {
   // User-managed app env secret:
   // user_secret::{ENV_VAR_NAME}
   if (isUserSecretCredential(id.type) && id.name) {
+    parts.push(id.name);
+    return parts.join(CREDENTIAL_DELIMITER);
+  }
+
+  if (isTradingConnectionCredential(id.type) && id.name) {
     parts.push(id.name);
     return parts.join(CREDENTIAL_DELIMITER);
   }
@@ -287,6 +298,10 @@ export function accountToCredentialId(account: string): CredentialId | null {
   // User-managed app env secret:
   // user_secret::{ENV_VAR_NAME}
   if (isUserSecretCredential(type) && parts.length === 2) {
+    return { type, name: parts[1] };
+  }
+
+  if (isTradingConnectionCredential(type) && parts.length === 2) {
     return { type, name: parts[1] };
   }
 

@@ -15,6 +15,10 @@ import type {
 import { TRADE_GOD_IPC } from './trading-ipc.ts'
 import type { InterpretFixtureInput } from './order-flow-specialist-pipeline.ts'
 import type { SyntheticChartFixtureInput } from './synthetic-chart-fixture.ts'
+import type {
+  SaveTradingConnectionInput,
+  TradingConnectionStatus,
+} from './trading-connection-service.ts'
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>
 type Subscribe = (channel: string, callback: (payload: unknown) => void) => () => void
@@ -31,6 +35,13 @@ export interface TradingPreloadApi {
   onTradeGodAlert(callback: (alert: TradeAlert) => void): () => void
   getIbkrGatewayHealth(environment?: IbkrGatewayEnvironment): Promise<IbkrGatewayHealth>
   getSyntheticTradeGodChartFixture(input: SyntheticChartFixtureInput): Promise<MarketCandleSeries | null>
+  listTradingConnections(): Promise<TradingConnectionStatus[]>
+  saveTradingConnection(input: SaveTradingConnectionInput): Promise<TradingConnectionStatus>
+  removeTradingConnection(connectionId: string): Promise<boolean>
+  openTradingConnectionLogin(connectionId: string): Promise<{
+    browser_instance_id: string
+    session_ref: string
+  }>
 }
 
 export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): TradingPreloadApi {
@@ -48,6 +59,21 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     ),
     getSyntheticTradeGodChartFixture: (input) => (
       invoke(TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE, input) as Promise<MarketCandleSeries | null>
+    ),
+    listTradingConnections: () => (
+      invoke(TRADE_GOD_IPC.LIST_CONNECTIONS) as Promise<TradingConnectionStatus[]>
+    ),
+    saveTradingConnection: (input) => (
+      invoke(TRADE_GOD_IPC.SAVE_CONNECTION, input) as Promise<TradingConnectionStatus>
+    ),
+    removeTradingConnection: (connectionId) => (
+      invoke(TRADE_GOD_IPC.REMOVE_CONNECTION, connectionId) as Promise<boolean>
+    ),
+    openTradingConnectionLogin: (connectionId) => (
+      invoke(TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN, connectionId) as Promise<{
+        browser_instance_id: string
+        session_ref: string
+      }>
     ),
     onTradeGodAlert: (callback) => subscribe
       ? subscribe(TRADE_GOD_IPC.ALERT_RECEIVED, (payload) => callback(payload as TradeAlert))

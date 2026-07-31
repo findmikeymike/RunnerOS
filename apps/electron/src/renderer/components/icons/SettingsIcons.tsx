@@ -218,6 +218,7 @@ export const SETTINGS_ICONS: Record<SettingsSubpage, React.ComponentType<IconPro
   ai: AiSettingsIcon,
   secrets: PreferencesIcon,
   'social-accounts': SocialAccountsIcon,
+  'trading-connections': SocialAccountsIcon,
   appearance: AppearanceIcon,
   input: InputIcon,
   workspace: WorkspaceIcon,

@@ -582,6 +582,24 @@ app.whenReady().then(async () => {
           contextDirectory: join(app.getPath('userData'), 'trade-god', 'agent-context'),
           interpretationDirectory: join(app.getPath('userData'), 'trade-god', 'interpretations'),
           alertDirectory: join(app.getPath('userData'), 'trade-god', 'alerts'),
+          connectionDirectory: join(app.getPath('userData'), 'trade-god', 'connections'),
+          credentialVault: {
+            getSecret: (name) => getCredentialManager().getTradingConnectionSecret(name),
+            setSecret: (name, value) => getCredentialManager().setTradingConnectionSecret(name, value),
+            deleteSecret: (name) => getCredentialManager().deleteTradingConnectionSecret(name),
+          },
+          tradingBrowserSessionLauncher: {
+            open: async ({ connectionId, sessionRef, partition, url }) => {
+              if (!browserPaneManager) throw new Error('Trading browser runtime is unavailable.')
+              const instanceId = browserPaneManager.createTradingInstance(
+                `trade-${connectionId}`,
+                partition,
+              )
+              await browserPaneManager.navigateTrading(instanceId, url)
+              browserPaneManager.focusTrading(instanceId)
+              return { browser_instance_id: instanceId, session_ref: sessionRef }
+            },
+          },
           alertPort: Number.parseInt(process.env.TRADE_GOD_ALERT_PORT ?? '9102', 10),
           alertHost: process.env.TRADE_GOD_ALERT_HOST ?? '127.0.0.1',
           ...(process.env.TRADE_GOD_ALERT_TOKEN ? { alertToken: process.env.TRADE_GOD_ALERT_TOKEN } : {}),

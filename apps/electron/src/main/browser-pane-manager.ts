@@ -166,6 +166,7 @@ interface BrowserInstance {
   networkLogs: BrowserNetworkEntry[]
   downloads: BrowserDownloadEntry[]
   lastLaunchToken: string | null
+  restrictedToTrading: boolean
 }
 
 interface CreateBrowserInstanceOptions {
@@ -173,6 +174,7 @@ interface CreateBrowserInstanceOptions {
   ownerType?: 'session' | 'manual'
   ownerSessionId?: string
   partition?: string
+  restrictedToTrading?: boolean
 }
 
 export interface BrowserScreenshotOptions {
@@ -468,6 +470,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       networkLogs: [],
       downloads: [],
       lastLaunchToken: null,
+      restrictedToTrading: options?.restrictedToTrading ?? false,
     }
 
     const defaultUa = pageView.webContents.userAgent || ''
@@ -569,12 +572,15 @@ export class BrowserPaneManager implements IBrowserPaneManager {
    * Throws a clear error if the instance is missing or its window was closed.
    * Automatically cleans up stale entries from the instance map.
    */
-  private requireAliveInstance(id: string): BrowserInstance {
+  private requireAliveInstance(id: string, allowTrading = false): BrowserInstance {
     const instance = this.instances.get(id)
     if (!instance) throw new Error(`Browser instance not found: ${id}`)
     if (instance.window.isDestroyed()) {
       this.cleanupDestroyedInstance(instance, `lookup by id ${id}`)
       throw new Error(`Browser window was closed (instance: ${id})`)
+    }
+    if (instance.restrictedToTrading && !allowTrading) {
+      throw new Error('Trading browser sessions are restricted to the trusted execution runtime.')
     }
     return instance
   }
@@ -669,6 +675,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
         this.cleanupDestroyedInstance(instance, 'listInstances')
         continue
       }
+      if (instance.restrictedToTrading) continue
       infos.push(this.toInfo(instance))
     }
     return infos
@@ -686,7 +693,33 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
   async navigate(id: string, url: string): Promise<{ url: string; title: string }> {
     const instance = this.requireAliveInstance(id)
+    return this.navigateInstance(instance, url)
+  }
 
+  createTradingInstance(id: string, partition: string): string {
+    if (!partition.startsWith('persist:trade-browser-')) {
+      throw new Error('Trading browser partition is invalid.')
+    }
+    return this.createInstance(id, {
+      show: true,
+      ownerType: 'manual',
+      partition,
+      restrictedToTrading: true,
+    })
+  }
+
+  async navigateTrading(id: string, url: string): Promise<{ url: string; title: string }> {
+    return this.navigateInstance(this.requireAliveInstance(id, true), url)
+  }
+
+  focusTrading(id: string): void {
+    this.focusInstance(this.requireAliveInstance(id, true))
+  }
+
+  private async navigateInstance(
+    instance: BrowserInstance,
+    url: string,
+  ): Promise<{ url: string; title: string }> {
     let normalizedUrl = url.trim()
     const hasScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(normalizedUrl)
     const isAbout = normalizedUrl.startsWith('about:')
@@ -733,21 +766,25 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   reload(id: string): void {
-    const instance = this.instances.get(id)
-    if (!instance || instance.window.isDestroyed()) return
+    const instance = this.requireAliveInstance(id)
     instance.pageView.webContents.reload()
   }
 
   stop(id: string): void {
-    const instance = this.instances.get(id)
-    if (!instance || instance.window.isDestroyed()) return
+    const instance = this.requireAliveInstance(id)
     instance.pageView.webContents.stop()
   }
 
   focus(id: string): void {
     const instance = this.instances.get(id)
     if (!instance) return
+    if (instance.restrictedToTrading) {
+      throw new Error('Trading browser sessions are restricted to the trusted execution runtime.')
+    }
+    this.focusInstance(instance)
+  }
 
+  private focusInstance(instance: BrowserInstance): void {
     const win = instance.window
     if (win.isDestroyed()) return
 
@@ -1125,8 +1162,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async screenshotRegion(id: string, target: BrowserScreenshotRegionTarget): Promise<BrowserScreenshotResult> {
-    const instance = this.instances.get(id)
-    if (!instance) throw new Error(`Browser instance not found: ${id}`)
+    const instance = this.requireAliveInstance(id)
 
     const hasCoords = [target.x, target.y, target.width, target.height].every((v) => typeof v === 'number')
     const hasRef = typeof target.ref === 'string' && target.ref.length > 0
@@ -1576,8 +1612,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
   }
 
   async detectSecurityChallenge(id: string): Promise<{ detected: boolean; provider: string; signals: string[] }> {
-    const instance = this.instances.get(id)
-    if (!instance || instance.window.isDestroyed()) return { detected: false, provider: 'none', signals: [] }
+    const instance = this.requireAliveInstance(id)
 
     const signals: string[] = []
     const title = instance.title || ''
@@ -1657,6 +1692,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
   bindSession(id: string, sessionId: string): void {
     const instance = this.instances.get(id)
+    if (instance?.restrictedToTrading) {
+      throw new Error('Trading browser sessions cannot be bound to agent sessions.')
+    }
     if (instance) {
       instance.boundSessionId = sessionId
       instance.ownerType = 'session'
@@ -1667,6 +1705,9 @@ export class BrowserPaneManager implements IBrowserPaneManager {
 
   unbindSession(id: string): void {
     const instance = this.instances.get(id)
+    if (instance?.restrictedToTrading) {
+      throw new Error('Trading browser sessions cannot become general browser sessions.')
+    }
     if (instance) {
       instance.boundSessionId = null
       instance.ownerType = 'manual'

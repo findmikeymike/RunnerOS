@@ -18,6 +18,7 @@ import AppSettingsPage from './AppSettingsPage'
 import AiSettingsPage from './AiSettingsPage'
 import SecretsSettingsPage from './SecretsSettingsPage'
 import SocialAccountsSettingsPage from './SocialAccountsSettingsPage'
+import TradingConnectionsSettingsPage from './TradingConnectionsSettingsPage'
 import AppearanceSettingsPage from './AppearanceSettingsPage'
 import InputSettingsPage from './InputSettingsPage'
 import WorkspaceSettingsPage from './WorkspaceSettingsPage'
@@ -38,6 +39,7 @@ export const SETTINGS_PAGE_COMPONENTS: Record<SettingsSubpage, ComponentType> = 
   ai: AiSettingsPage,
   secrets: SecretsSettingsPage,
   'social-accounts': SocialAccountsSettingsPage,
+  'trading-connections': TradingConnectionsSettingsPage,
   appearance: AppearanceSettingsPage,
   input: InputSettingsPage,
   workspace: WorkspaceSettingsPage,

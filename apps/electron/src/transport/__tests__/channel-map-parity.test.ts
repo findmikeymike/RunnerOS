@@ -39,6 +39,10 @@ type ApiToChannelMapKeys = Exclude<
   | 'getTradeGodAlertWebhookSetup' // direct local Trade God receiver IPC
   | 'getIbkrGatewayHealth' // direct local IB Gateway health IPC
   | 'getSyntheticTradeGodChartFixture' // direct local synthetic chart fixture IPC
+  | 'listTradingConnections' // direct local Trading Connections IPC
+  | 'saveTradingConnection' // direct local Trading Connections IPC
+  | 'removeTradingConnection' // direct local Trading Connections IPC
+  | 'openTradingConnectionLogin' // direct local isolated browser-session IPC
   | 'onTradeGodAlert' // direct local Trade God alert listener
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string

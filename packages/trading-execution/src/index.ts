@@ -1,5 +1,6 @@
 export * from './adapter.ts'
 export * from './canonical.ts'
+export * from './connection-store.ts'
 export * from './errors.ts'
 export * from './gateway.ts'
 export * from './store.ts'

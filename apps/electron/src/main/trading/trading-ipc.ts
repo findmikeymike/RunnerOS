@@ -10,10 +10,15 @@ import type {
   IbkrGatewayEnvironment,
   IbkrGatewayHealth,
   MarketCandleSeries,
+  TradingConnection,
 } from '@trade-god/contracts'
 
 import type { InterpretFixtureInput } from './order-flow-specialist-pipeline.ts'
 import type { SyntheticChartFixtureInput } from './synthetic-chart-fixture.ts'
+import type {
+  SaveTradingConnectionInput,
+  TradingConnectionStatus,
+} from './trading-connection-service.ts'
 
 export const TRADE_GOD_IPC = {
   HEALTH: 'trade-god:health',
@@ -27,6 +32,10 @@ export const TRADE_GOD_IPC = {
   ALERT_RECEIVED: 'trade-god:alerts:received',
   IBKR_GATEWAY_HEALTH: 'trade-god:ibkr-gateway-health',
   SYNTHETIC_CHART_FIXTURE: 'trade-god:synthetic-chart-fixture',
+  LIST_CONNECTIONS: 'trade-god:connections:list',
+  SAVE_CONNECTION: 'trade-god:connections:save',
+  REMOVE_CONNECTION: 'trade-god:connections:remove',
+  OPEN_CONNECTION_LOGIN: 'trade-god:connections:open-login',
 } as const
 
 export interface TradingIpcManager {
@@ -40,6 +49,14 @@ export interface TradingIpcManager {
   getAlertWebhookSetup?(): Promise<TradeAlertWebhookSetup>
   getIbkrGatewayHealth?(environment: IbkrGatewayEnvironment): Promise<IbkrGatewayHealth>
   getSyntheticChartFixture(input: SyntheticChartFixtureInput): Promise<MarketCandleSeries | null>
+  listTradingConnections?(): Promise<TradingConnectionStatus[]>
+  saveTradingConnection?(input: SaveTradingConnectionInput): Promise<TradingConnectionStatus>
+  removeTradingConnection?(connectionId: string): Promise<boolean>
+  openTradingConnectionLogin?(connectionId: string): Promise<{
+    browser_instance_id: string
+    session_ref: string
+  }>
+  resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
   stop(): Promise<void>
 }
 
@@ -83,6 +100,25 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     }
     return manager.getSyntheticChartFixture(input as SyntheticChartFixtureInput)
   })
+  ipcMain.handle(TRADE_GOD_IPC.LIST_CONNECTIONS, () => {
+    if (!manager.listTradingConnections) throw new Error('Trading Connections are unavailable.')
+    return manager.listTradingConnections()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SAVE_CONNECTION, (_event, input: unknown) => {
+    if (!manager.saveTradingConnection) throw new Error('Trading Connections are unavailable.')
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new Error('Trading connection payload is invalid.')
+    }
+    return manager.saveTradingConnection(input as SaveTradingConnectionInput)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.REMOVE_CONNECTION, (_event, connectionId: unknown) => {
+    if (!manager.removeTradingConnection) throw new Error('Trading Connections are unavailable.')
+    return manager.removeTradingConnection(String(connectionId))
+  })
+  ipcMain.handle(TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN, (_event, connectionId: unknown) => {
+    if (!manager.openTradingConnectionLogin) throw new Error('Trading Connections are unavailable.')
+    return manager.openTradingConnectionLogin(String(connectionId))
+  })
 
   let disposed = false
   return async () => {
@@ -98,6 +134,10 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.ALERT_WEBHOOK_SETUP)
     ipcMain.removeHandler(TRADE_GOD_IPC.IBKR_GATEWAY_HEALTH)
     ipcMain.removeHandler(TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE)
+    ipcMain.removeHandler(TRADE_GOD_IPC.LIST_CONNECTIONS)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_CONNECTION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_CONNECTION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN)
     await manager.stop()
   }
 }

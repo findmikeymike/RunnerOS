@@ -23,3 +23,16 @@ describe('user secret credentials', () => {
     expect(maskSecretValue('short')).toBe('••••');
   });
 });
+
+describe('trading connection credentials', () => {
+  test('round-trips in a dedicated credential namespace', () => {
+    const id = {
+      type: 'trading_connection_secret' as const,
+      name: 'TRADE_GOD_CONNECTION_ABC123',
+    };
+    const account = credentialIdToAccount(id);
+
+    expect(account).toBe('trading_connection_secret::TRADE_GOD_CONNECTION_ABC123');
+    expect(accountToCredentialId(account)).toEqual(id);
+  });
+});

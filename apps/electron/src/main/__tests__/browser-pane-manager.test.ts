@@ -268,6 +268,24 @@ describe('BrowserPaneManager', () => {
     expect(list[0].agentControlActive).toBe(false)
   })
 
+  it('hides trading sessions from generic browser automation', async () => {
+    const id = manager.createTradingInstance(
+      'trade-connection-apex',
+      'persist:trade-browser-0123456789abcdef01234567',
+    )
+
+    expect(manager.listInstances()).toEqual([])
+    await expect(manager.navigate(id, 'https://example.com')).rejects.toThrow(
+      'restricted to the trusted execution runtime',
+    )
+    expect(await manager.navigateTrading(id, 'https://www.wealthcharts.com/')).toMatchObject({
+      url: 'about:blank',
+    })
+    expect(() => manager.bindSession(id, 'agent-session')).toThrow(
+      'cannot be bound to agent sessions',
+    )
+  })
+
   it('is idempotent when explicit ID already exists', () => {
     const first = manager.createInstance('same-id')
     const second = manager.createInstance('same-id')

@@ -472,6 +472,10 @@ export interface ElectronAPI {
   onTradeGodAlert(callback: (alert: import('@trade-god/contracts').TradeAlert) => void): () => void
   getIbkrGatewayHealth(environment?: import('@trade-god/contracts').IbkrGatewayEnvironment): Promise<import('@trade-god/contracts').IbkrGatewayHealth>
   getSyntheticTradeGodChartFixture(input: import('../main/trading/synthetic-chart-fixture').SyntheticChartFixtureInput): Promise<import('@trade-god/contracts').MarketCandleSeries | null>
+  listTradingConnections(): Promise<import('../main/trading/trading-connection-service').TradingConnectionStatus[]>
+  saveTradingConnection(input: import('../main/trading/trading-connection-service').SaveTradingConnectionInput): Promise<import('../main/trading/trading-connection-service').TradingConnectionStatus>
+  removeTradingConnection(connectionId: string): Promise<boolean>
+  openTradingConnectionLogin(connectionId: string): Promise<{ browser_instance_id: string; session_ref: string }>
 
   // Session management
   getSessions(): Promise<Session[]>

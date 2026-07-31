@@ -944,6 +944,8 @@
   "settings.shortcuts.title": "快捷键",
   "settings.socialAccounts.description": "Instagram, TikTok, X, YouTube",
   "settings.socialAccounts.title": "Social Accounts",
+  "settings.tradingConnections.description": "Broker and prop execution accounts",
+  "settings.tradingConnections.title": "Trading Connections",
   "settings.tools.builtInBrowser": "内置浏览器",
   "settings.tools.builtInBrowserDesc": "如果使用外部浏览器工具 (如 Playwright、Puppeteer 或浏览器 MCP 服务器) 则禁用。",
   "settings.tools.title": "工具",

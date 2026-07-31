@@ -944,6 +944,8 @@
   "settings.shortcuts.title": "ショートカット",
   "settings.socialAccounts.description": "Instagram, TikTok, X, YouTube",
   "settings.socialAccounts.title": "Social Accounts",
+  "settings.tradingConnections.description": "Broker and prop execution accounts",
+  "settings.tradingConnections.title": "Trading Connections",
   "settings.tools.builtInBrowser": "組み込みブラウザ",
   "settings.tools.builtInBrowserDesc": "Playwright、Puppeteer、またはブラウザMCPサーバーなどの外部ブラウザツールを使用する場合は無効にしてください。",
   "settings.tools.title": "ツール",

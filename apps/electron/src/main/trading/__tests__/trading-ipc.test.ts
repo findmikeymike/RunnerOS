@@ -30,6 +30,16 @@ describe('Trade God IPC registration', () => {
         calls.push(`chart:${input.symbol}:${input.timeframe}:${input.sessionMode}`)
         return { snapshot_id: 'snapshot-chart-ipc' } as any
       },
+      listTradingConnections: async () => { calls.push('connections:list'); return [] },
+      saveTradingConnection: async () => {
+        calls.push('connections:save')
+        return { connection: { connection_id: 'connection-1' } } as any
+      },
+      removeTradingConnection: async (id) => { calls.push(`connections:remove:${id}`); return true },
+      openTradingConnectionLogin: async (id) => {
+        calls.push(`connections:login:${id}`)
+        return { browser_instance_id: 'browser-1', session_ref: 'session-1' }
+      },
       stop: async () => { calls.push('stop') },
     }
 
@@ -46,6 +56,10 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.ALERT_WEBHOOK_SETUP,
       TRADE_GOD_IPC.IBKR_GATEWAY_HEALTH,
       TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE,
+      TRADE_GOD_IPC.LIST_CONNECTIONS,
+      TRADE_GOD_IPC.SAVE_CONNECTION,
+      TRADE_GOD_IPC.REMOVE_CONNECTION,
+      TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN,
     ])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})).toEqual({ state: 'ready' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, { timeoutMs: 500 })).toEqual({ artifact_id: 'artifact-ipc' })
@@ -61,6 +75,12 @@ describe('Trade God IPC registration', () => {
     expect(await ipc.handlers.get(TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE)!({}, {
       symbol: 'ES', timeframe: '5m', sessionMode: 'RTH',
     })).toEqual({ snapshot_id: 'snapshot-chart-ipc' })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.LIST_CONNECTIONS)!({})).toEqual([])
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.SAVE_CONNECTION)!({}, { connection: {} }))
+      .toMatchObject({ connection: { connection_id: 'connection-1' } })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.REMOVE_CONNECTION)!({}, 'connection-1')).toBe(true)
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN)!({}, 'connection-1'))
+      .toEqual({ browser_instance_id: 'browser-1', session_ref: 'session-1' })
     expect(calls).toEqual([
       'health',
       'analyze:500',
@@ -72,6 +92,10 @@ describe('Trade God IPC registration', () => {
       'alert-setup',
       'ibkr:paper',
       'chart:ES:5m:RTH',
+      'connections:list',
+      'connections:save',
+      'connections:remove:connection-1',
+      'connections:login:connection-1',
     ])
   })
 
@@ -101,6 +125,10 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.ALERT_WEBHOOK_SETUP,
       TRADE_GOD_IPC.IBKR_GATEWAY_HEALTH,
       TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE,
+      TRADE_GOD_IPC.LIST_CONNECTIONS,
+      TRADE_GOD_IPC.SAVE_CONNECTION,
+      TRADE_GOD_IPC.REMOVE_CONNECTION,
+      TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN,
     ])
     expect(stops).toBe(1)
   })
