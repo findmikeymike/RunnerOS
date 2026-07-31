@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-13
+last_verified: 2026-07-31
 source_of_truth: true
 ---
 
@@ -411,3 +411,16 @@ Use exact claims:
 - “Safe for paper/live” requires the corresponding safety gate.
 
 Never collapse these into “done.”
+# Multi-account connections and Discord routes — 2026-07-31
+
+- Multiple prop firms/accounts can coexist; connection identity remains exact
+  and immutable.
+- WealthCharts login confirmation is main-process owned, constrained to the
+  approved origin, and cannot be forged by renderer save payloads.
+- Removing a browser account clears its isolated persistent partition before
+  deleting metadata.
+- Discord routes bind immutable server/channel/trader IDs to one exact account;
+  duplicates and missing/unready targets fail closed.
+- Focused connection, route-store, IPC, preload, and channel-parity gate: 16
+  tests pass.
+- Repository typecheck and Electron main, preload, and renderer builds pass.

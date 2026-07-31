@@ -19,6 +19,7 @@ import type {
   SaveTradingConnectionInput,
   TradingConnectionStatus,
 } from './trading-connection-service.ts'
+import type { TradingSignalRoute } from './trading-signal-route-store.ts'
 
 type Invoke = (channel: string, ...args: unknown[]) => Promise<unknown>
 type Subscribe = (channel: string, callback: (payload: unknown) => void) => () => void
@@ -42,6 +43,10 @@ export interface TradingPreloadApi {
     browser_instance_id: string
     session_ref: string
   }>
+  confirmTradingConnectionLogin(connectionId: string): Promise<TradingConnectionStatus>
+  listTradingSignalRoutes(): Promise<TradingSignalRoute[]>
+  saveTradingSignalRoute(route: TradingSignalRoute): Promise<TradingSignalRoute>
+  removeTradingSignalRoute(routeId: string): Promise<boolean>
 }
 
 export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): TradingPreloadApi {
@@ -75,6 +80,12 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
         session_ref: string
       }>
     ),
+    confirmTradingConnectionLogin: (connectionId) => (
+      invoke(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN, connectionId) as Promise<TradingConnectionStatus>
+    ),
+    listTradingSignalRoutes: () => invoke(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES) as Promise<TradingSignalRoute[]>,
+    saveTradingSignalRoute: (route) => invoke(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, route) as Promise<TradingSignalRoute>,
+    removeTradingSignalRoute: (routeId) => invoke(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, routeId) as Promise<boolean>,
     onTradeGodAlert: (callback) => subscribe
       ? subscribe(TRADE_GOD_IPC.ALERT_RECEIVED, (payload) => callback(payload as TradeAlert))
       : () => {},

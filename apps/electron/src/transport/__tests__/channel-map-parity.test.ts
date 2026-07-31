@@ -43,6 +43,10 @@ type ApiToChannelMapKeys = Exclude<
   | 'saveTradingConnection' // direct local Trading Connections IPC
   | 'removeTradingConnection' // direct local Trading Connections IPC
   | 'openTradingConnectionLogin' // direct local isolated browser-session IPC
+  | 'confirmTradingConnectionLogin' // direct local isolated browser-session IPC
+  | 'listTradingSignalRoutes' // direct local trading signal-route IPC
+  | 'saveTradingSignalRoute' // direct local trading signal-route IPC
+  | 'removeTradingSignalRoute' // direct local trading signal-route IPC
   | 'onTradeGodAlert' // direct local Trade God alert listener
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string

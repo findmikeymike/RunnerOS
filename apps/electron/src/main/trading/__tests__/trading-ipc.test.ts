@@ -40,6 +40,13 @@ describe('Trade God IPC registration', () => {
         calls.push(`connections:login:${id}`)
         return { browser_instance_id: 'browser-1', session_ref: 'session-1' }
       },
+      confirmTradingConnectionLogin: async (id) => {
+        calls.push(`connections:confirm-login:${id}`)
+        return { browser_login_confirmed: true } as any
+      },
+      listTradingSignalRoutes: async () => { calls.push('routes:list'); return [] },
+      saveTradingSignalRoute: async (route) => { calls.push('routes:save'); return route },
+      removeTradingSignalRoute: async (id) => { calls.push(`routes:remove:${id}`); return true },
       stop: async () => { calls.push('stop') },
     }
 
@@ -60,6 +67,10 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_CONNECTION,
       TRADE_GOD_IPC.REMOVE_CONNECTION,
       TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN,
+      TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN,
+      TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
+      TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
+      TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,
     ])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})).toEqual({ state: 'ready' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, { timeoutMs: 500 })).toEqual({ artifact_id: 'artifact-ipc' })
@@ -81,6 +92,11 @@ describe('Trade God IPC registration', () => {
     expect(await ipc.handlers.get(TRADE_GOD_IPC.REMOVE_CONNECTION)!({}, 'connection-1')).toBe(true)
     expect(await ipc.handlers.get(TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN)!({}, 'connection-1'))
       .toEqual({ browser_instance_id: 'browser-1', session_ref: 'session-1' })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN)!({}, 'connection-1'))
+      .toEqual({ browser_login_confirmed: true })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)!({})).toEqual([])
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)!({}, { route_id: 'route-1' })).toEqual({ route_id: 'route-1' })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE)!({}, 'route-1')).toBe(true)
     expect(calls).toEqual([
       'health',
       'analyze:500',
@@ -96,6 +112,10 @@ describe('Trade God IPC registration', () => {
       'connections:save',
       'connections:remove:connection-1',
       'connections:login:connection-1',
+      'connections:confirm-login:connection-1',
+      'routes:list',
+      'routes:save',
+      'routes:remove:route-1',
     ])
   })
 
@@ -129,6 +149,10 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_CONNECTION,
       TRADE_GOD_IPC.REMOVE_CONNECTION,
       TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN,
+      TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN,
+      TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
+      TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
+      TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,
     ])
     expect(stops).toBe(1)
   })

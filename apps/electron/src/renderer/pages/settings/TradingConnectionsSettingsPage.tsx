@@ -1,10 +1,12 @@
 import * as React from 'react'
 import {
+  CheckCircle2,
   ExternalLink,
   KeyRound,
   Loader2,
   Plus,
   ShieldCheck,
+  RadioTower,
   Trash2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -46,22 +48,34 @@ const EMPTY_CAPABILITIES = {
 
 type Draft = {
   displayName: string
+  firmName: string
   platform: 'tradovate' | 'wealthcharts'
   environment: ExecutionEnvironment
   accountRef: string
   accountLabel: string
   apiSecret: string
-  authorizationEvidenceRef: string
+}
+
+type SignalDraft = {
+  displayName: string
+  serverId: string
+  channelId: string
+  traderAuthorId: string
+  connectionId: string
+}
+
+const EMPTY_SIGNAL_DRAFT: SignalDraft = {
+  displayName: '', serverId: '', channelId: '', traderAuthorId: '', connectionId: '',
 }
 
 const EMPTY_DRAFT: Draft = {
   displayName: '',
+  firmName: 'Apex Trader Funding',
   platform: 'tradovate',
   environment: 'paper',
   accountRef: '',
   accountLabel: '',
   apiSecret: '',
-  authorizationEvidenceRef: '',
 }
 
 export default function TradingConnectionsSettingsPage() {
@@ -70,12 +84,20 @@ export default function TradingConnectionsSettingsPage() {
   >([])
   const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
   const [editing, setEditing] = React.useState(false)
+  const [routes, setRoutes] = React.useState<Awaited<ReturnType<typeof window.electronAPI.listTradingSignalRoutes>>>([])
+  const [signalDraft, setSignalDraft] = React.useState<SignalDraft>(EMPTY_SIGNAL_DRAFT)
+  const [editingSignal, setEditingSignal] = React.useState(false)
   const [busy, setBusy] = React.useState<string | null>('load')
 
   const load = React.useCallback(async () => {
     setBusy('load')
     try {
-      setConnections(await window.electronAPI.listTradingConnections())
+      const [nextConnections, nextRoutes] = await Promise.all([
+        window.electronAPI.listTradingConnections(),
+        window.electronAPI.listTradingSignalRoutes(),
+      ])
+      setConnections(nextConnections)
+      setRoutes(nextRoutes)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load trading connections')
     } finally {
@@ -91,9 +113,9 @@ export default function TradingConnectionsSettingsPage() {
     const accountRef = draft.accountRef.trim()
     const displayName = draft.displayName.trim()
     const accountLabel = draft.accountLabel.trim()
-    const evidenceRef = draft.authorizationEvidenceRef.trim()
-    if (!displayName || !accountRef || !accountLabel || !evidenceRef) {
-      toast.error('Name, account reference, account label, and authorization evidence are required')
+    const firmName = draft.firmName.trim()
+    if (!displayName || !firmName || !accountRef || !accountLabel) {
+      toast.error('Connection name, prop firm, account reference, and account label are required')
       return
     }
     if (draft.platform === 'tradovate' && !draft.apiSecret.trim()) {
@@ -106,9 +128,10 @@ export default function TradingConnectionsSettingsPage() {
       const transport: ExecutionTransportPreference = draft.platform === 'tradovate'
         ? 'api'
         : 'browser'
+      const firmSlug = slugify(firmName)
       const connectionId = [
         'connection',
-        'apex',
+        firmSlug,
         draft.platform,
         draft.environment,
         accountRef,
@@ -117,7 +140,7 @@ export default function TradingConnectionsSettingsPage() {
         connection_schema_version: TRADING_CONNECTION_SCHEMA_VERSION,
         connection_id: connectionId,
         display_name: displayName,
-        firm: { slug: 'apex', name: 'Apex Trader Funding' },
+        firm: { slug: firmSlug, name: firmName },
         platform: draft.platform === 'tradovate'
           ? { slug: 'tradovate', name: 'Tradovate' }
           : { slug: 'wealthcharts', name: 'WealthCharts' },
@@ -129,7 +152,7 @@ export default function TradingConnectionsSettingsPage() {
         ...(transport === 'api' ? { credential_ref: 'assigned-by-trusted-runtime' } : {}),
         ...(transport === 'browser' ? { browser_session_ref: 'assigned-by-trusted-runtime' } : {}),
         risk_policy_ref: `risk-policy-${draft.environment}`,
-        authorization_basis_ref: evidenceRef,
+        authorization_basis_ref: `operator-authorized-${firmSlug}`,
         approval_policy_ref: 'approval-policy-per-order',
         state: 'auth-required',
         capabilities: EMPTY_CAPABILITIES,
@@ -138,14 +161,19 @@ export default function TradingConnectionsSettingsPage() {
         created_at: now,
         updated_at: now,
       }
-      await window.electronAPI.saveTradingConnection({
+      const saved = await window.electronAPI.saveTradingConnection({
         connection,
         ...(transport === 'api' ? { api_secret: draft.apiSecret.trim() } : {}),
       })
       setDraft(EMPTY_DRAFT)
       setEditing(false)
       await load()
-      toast.success('Trading connection saved disabled')
+      if (transport === 'browser') {
+        await window.electronAPI.openTradingConnectionLogin(saved.connection.connection_id)
+        toast.success('Account saved. Sign in, then return here and confirm the session.')
+      } else {
+        toast.success('API account saved. Execution remains locked pending certification.')
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not save trading connection')
     } finally {
@@ -178,6 +206,62 @@ export default function TradingConnectionsSettingsPage() {
     }
   }
 
+  const confirmLogin = async (connectionId: string) => {
+    setBusy(`confirm:${connectionId}`)
+    try {
+      await window.electronAPI.confirmTradingConnectionLogin(connectionId)
+      await load()
+      toast.success('Browser session confirmed and saved')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not confirm trading login')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const saveSignalRoute = async () => {
+    if (!signalDraft.displayName.trim() || !signalDraft.connectionId
+      || !/^\d{1,25}$/.test(signalDraft.serverId)
+      || !/^\d{1,25}$/.test(signalDraft.channelId)
+      || !/^\d{1,25}$/.test(signalDraft.traderAuthorId)) {
+      toast.error('Name, target account, and immutable Discord server, channel, and trader IDs are required')
+      return
+    }
+    setBusy('save-signal')
+    try {
+      const now = new Date().toISOString()
+      await window.electronAPI.saveTradingSignalRoute({
+        route_id: `discord-${signalDraft.serverId}-${signalDraft.channelId}-${signalDraft.traderAuthorId}`,
+        display_name: signalDraft.displayName.trim(),
+        source_type: 'discord',
+        server_id: signalDraft.serverId,
+        channel_id: signalDraft.channelId,
+        trader_author_id: signalDraft.traderAuthorId,
+        connection_id: signalDraft.connectionId,
+        enabled: true,
+        created_at: now,
+        updated_at: now,
+      })
+      setSignalDraft(EMPTY_SIGNAL_DRAFT)
+      setEditingSignal(false)
+      await load()
+      toast.success('Discord trader routed to one exact account')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save Discord route')
+    } finally { setBusy(null) }
+  }
+
+  const removeSignalRoute = async (routeId: string) => {
+    setBusy(`remove-route:${routeId}`)
+    try {
+      await window.electronAPI.removeTradingSignalRoute(routeId)
+      await load()
+    } finally { setBusy(null) }
+  }
+
+  const signedIn = connections.filter((status) => status.browser_login_confirmed).length
+  const ready = connections.filter((status) => status.connection.state === 'ready').length
+
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <PanelHeader
@@ -195,10 +279,11 @@ export default function TradingConnectionsSettingsPage() {
             title="Execution custody"
             description="Secrets stay in the encrypted desktop vault. Browser sessions use a trading-only partition."
           >
-            <div className="grid gap-3 md:grid-cols-3">
-              <Guardrail label="Default state" value="Disabled" />
-              <Guardrail label="First API route" value="Tradovate paper" />
-              <Guardrail label="First browser route" value="WealthCharts paper" />
+            <div className="grid gap-3 md:grid-cols-4">
+              <Guardrail label="Accounts" value={String(connections.length)} />
+              <Guardrail label="Browser sessions" value={`${signedIn} confirmed`} />
+              <Guardrail label="Execution ready" value={String(ready)} />
+              <Guardrail label="Default safety" value="Locked" />
             </div>
           </SettingsSection>
 
@@ -215,6 +300,14 @@ export default function TradingConnectionsSettingsPage() {
                       value={draft.displayName}
                       onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
                       placeholder="Apex Tradovate Paper"
+                    />
+                  </Field>
+                  <Field label="Prop firm">
+                    <input
+                      className={inputClass}
+                      value={draft.firmName}
+                      onChange={(event) => setDraft({ ...draft, firmName: event.target.value })}
+                      placeholder="Apex, Topstep, MyFundedFutures…"
                     />
                   </Field>
                   <Field label="Platform">
@@ -262,17 +355,6 @@ export default function TradingConnectionsSettingsPage() {
                       placeholder="APEX-1234"
                     />
                   </Field>
-                  <Field label="Authorization evidence reference">
-                    <input
-                      className={inputClass}
-                      value={draft.authorizationEvidenceRef}
-                      onChange={(event) => setDraft({
-                        ...draft,
-                        authorizationEvidenceRef: event.target.value,
-                      })}
-                      placeholder="evidence-apex-owner-consent"
-                    />
-                  </Field>
                   {draft.platform === 'tradovate' && (
                     <Field label="API credential" className="md:col-span-2">
                       <input
@@ -314,29 +396,46 @@ export default function TradingConnectionsSettingsPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-medium">{status.connection.display_name}</p>
                           <Badge>{status.connection.environment}</Badge>
-                          <Badge>{status.connection.state}</Badge>
-                          <Badge>{status.connection.enabled ? 'enabled' : 'disabled'}</Badge>
+                          <Badge>{status.connection.transport_preference === 'browser' ? 'Browser' : 'API'}</Badge>
+                          <StatusBadge positive={status.browser_login_confirmed || status.credential_configured}>
+                            {status.connection.transport_preference === 'browser'
+                              ? status.browser_login_confirmed ? 'Login confirmed' : 'Sign-in needed'
+                              : status.credential_configured ? 'Credential saved' : 'Credential needed'}
+                          </StatusBadge>
+                          <StatusBadge positive={status.connection.state === 'ready'}>
+                            {status.connection.state === 'ready' ? 'Execution ready' : 'Execution locked'}
+                          </StatusBadge>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {status.connection.firm.name} · {status.connection.platform.name} · {status.connection.account_display.label}
                         </p>
                         <p className="mt-1 text-[11px] text-muted-foreground">
-                          {status.credential_configured ? 'Credential configured' : ''}
-                          {status.browser_session_configured ? 'Dedicated browser session configured' : ''}
-                          {' · '}{status.connection.certifications.length} certifications
+                          Dedicated identity: {status.connection.account_ref} · {status.connection.certifications.length} certifications
                         </p>
                       </div>
                       <div className="flex gap-2">
                         {status.connection.transport_preference !== 'api' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={busy === `login:${status.connection.connection_id}`}
-                            onClick={() => void openLogin(status.connection.connection_id)}
-                          >
-                            <ExternalLink className="mr-1.5 size-3.5" />
-                            Open login
-                          </Button>
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={busy === `login:${status.connection.connection_id}`}
+                              onClick={() => void openLogin(status.connection.connection_id)}
+                            >
+                              <ExternalLink className="mr-1.5 size-3.5" />
+                              {status.browser_login_confirmed ? 'Open account' : 'Open sign-in'}
+                            </Button>
+                            {!status.browser_login_confirmed && (
+                              <Button
+                                size="sm"
+                                disabled={busy === `confirm:${status.connection.connection_id}`}
+                                onClick={() => void confirmLogin(status.connection.connection_id)}
+                              >
+                                <CheckCircle2 className="mr-1.5 size-3.5" />
+                                I’m signed in
+                              </Button>
+                            )}
+                          </>
                         )}
                         <Button
                           variant="ghost"
@@ -361,9 +460,49 @@ export default function TradingConnectionsSettingsPage() {
             </div>
           </SettingsSection>
 
+          <SettingsSection
+            title="Discord signal routes"
+            description="Routes messages DiscoTrader already monitors to one exact prop account. Display names never authorize a trade; immutable Discord IDs do."
+          >
+            <div className="mb-3 flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => setEditingSignal(true)} disabled={!connections.length}>
+                <Plus className="mr-1.5 size-4" /> Add Discord route
+              </Button>
+            </div>
+            {editingSignal && (
+              <SettingsCard>
+                <SettingsCardContent className="grid gap-4 p-5 md:grid-cols-2">
+                  <Field label="Route name"><input className={inputClass} value={signalDraft.displayName} onChange={(e) => setSignalDraft({ ...signalDraft, displayName: e.target.value })} placeholder="Uncle Mike — NQ room" /></Field>
+                  <Field label="Target prop account">
+                    <select className={inputClass} value={signalDraft.connectionId} onChange={(e) => setSignalDraft({ ...signalDraft, connectionId: e.target.value })}>
+                      <option value="">Choose exact account</option>
+                      {connections.map(({ connection }) => <option key={connection.connection_id} value={connection.connection_id}>{connection.display_name} · {connection.account_display.label}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Discord server ID"><input className={inputClass} value={signalDraft.serverId} onChange={(e) => setSignalDraft({ ...signalDraft, serverId: e.target.value.trim() })} placeholder="Immutable server snowflake" /></Field>
+                  <Field label="Discord channel ID"><input className={inputClass} value={signalDraft.channelId} onChange={(e) => setSignalDraft({ ...signalDraft, channelId: e.target.value.trim() })} placeholder="Immutable channel snowflake" /></Field>
+                  <Field label="Trader user ID" className="md:col-span-2"><input className={inputClass} value={signalDraft.traderAuthorId} onChange={(e) => setSignalDraft({ ...signalDraft, traderAuthorId: e.target.value.trim() })} placeholder="Immutable Discord user snowflake" /></Field>
+                  <div className="flex justify-end gap-2 md:col-span-2"><Button variant="ghost" onClick={() => setEditingSignal(false)}>Cancel</Button><Button onClick={() => void saveSignalRoute()} disabled={busy === 'save-signal'}>Save exact route</Button></div>
+                </SettingsCardContent>
+              </SettingsCard>
+            )}
+            <div className="mt-3 space-y-2">
+              {routes.map((route) => {
+                const target = connections.find(({ connection }) => connection.connection_id === route.connection_id)?.connection
+                return <SettingsCard key={route.route_id}><SettingsCardContent className="flex items-center gap-3 p-4"><RadioTower className="size-4 text-cyan-300" /><div className="min-w-0 flex-1"><p className="text-sm font-medium">{route.display_name}</p><p className="mt-1 text-[11px] text-muted-foreground">Discord {route.server_id}/{route.channel_id} · trader {route.trader_author_id} → {target ? `${target.display_name} (${target.account_display.label})` : 'Missing account — blocked'}</p></div><StatusBadge positive={Boolean(target) && route.enabled}>{target && route.enabled ? 'Routed' : 'Blocked'}</StatusBadge><Button variant="ghost" size="icon" aria-label={`Remove ${route.display_name}`} onClick={() => void removeSignalRoute(route.route_id)}><Trash2 className="size-4" /></Button></SettingsCardContent></SettingsCard>
+              })}
+              {!routes.length && <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted-foreground">No Discord routes yet. Add one per monitored trader/channel/account path.</div>}
+            </div>
+            <p className="mt-3 text-[11px] leading-5 text-muted-foreground">Monitoring enrollment still lives in the DiscoTrader Chrome extension and daemon allowlist. This registry controls the downstream account route and fails closed if the source identity does not match.</p>
+          </SettingsSection>
+
           <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-4 py-3 text-xs text-emerald-200/80">
             <ShieldCheck className="size-4 shrink-0" />
             Credentials alone cannot activate evaluation, performance, or live execution.
+          </div>
+          <div className="flex items-start gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] px-4 py-3 text-xs text-cyan-100/80">
+            <RadioTower className="mt-0.5 size-4 shrink-0" />
+            <span>Discord channels and traders are signal sources, not broker accounts. Configure and monitor them in Futures → DiscoTrader; each executable route must resolve to one exact account.</span>
           </div>
         </div>
       </ScrollArea>
@@ -446,5 +585,22 @@ function Badge({ children }: { children: React.ReactNode }) {
     </span>
   )
 }
+
+function StatusBadge({ children, positive }: { children: React.ReactNode; positive: boolean }) {
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${positive
+      ? 'border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-200'
+      : 'border-amber-400/20 bg-amber-400/[0.08] text-amber-200'}`}>
+      {children}
+    </span>
+  )
+}
+
+const slugify = (value: string): string => value
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-|-$/g, '')
+  .slice(0, 60) || 'prop-firm'
 
 const inputClass = 'h-9 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm outline-none transition focus:border-amber-400/50'

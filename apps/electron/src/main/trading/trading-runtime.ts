@@ -38,6 +38,7 @@ import {
   type TradingBrowserSessionLauncher,
   type TradingCredentialVault,
 } from './trading-connection-service.ts'
+import { TradingSignalRouteStore } from './trading-signal-route-store.ts'
 import {
   ExecutionGateway,
   ExecutionGatewayError,
@@ -227,6 +228,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const tradingConnectionStore = options.connectionDirectory
     ? new FileTradingConnectionStore(options.connectionDirectory, options.now)
     : undefined
+  const tradingSignalRouteStore = options.connectionDirectory
+    ? new TradingSignalRouteStore(options.connectionDirectory, options.now)
+    : undefined
   const tradingConnectionService = (
     tradingConnectionStore
     && options.credentialVault
@@ -261,7 +265,13 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const resolveDiscoTraderRoute = discordManagementSource && tradingConnectionStore
     ? async (ticket: DiscoTraderTicket): Promise<DiscoTraderIntentRoute> => {
         const connections = await tradingConnectionStore.list()
-        const selected = options.discoTraderConnectionId
+        const sourceRoute = await tradingSignalRouteStore?.resolve(
+          ticket.provenance.channelUrl,
+          ticket.provenance.authorId,
+        )
+        const selected = sourceRoute
+          ? connections.find(({ connection_id }) => connection_id === sourceRoute.connection_id)
+          : options.discoTraderConnectionId
           ? connections.find(({ connection_id }) => (
               connection_id === options.discoTraderConnectionId
             ))
@@ -271,7 +281,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         if (!selected) {
           throw new ExecutionGatewayError(
             'CONNECTION_UNAVAILABLE',
-            options.discoTraderConnectionId
+            sourceRoute
+              ? `Discord route ${sourceRoute.display_name} targets missing connection ${sourceRoute.connection_id}.`
+              : options.discoTraderConnectionId
               ? `Configured DiscoTrader connection ${options.discoTraderConnectionId} was not found.`
               : 'DiscoTrader entry requires exactly one enabled ready connection or TRADE_GOD_DISCOTRADER_CONNECTION_ID.',
           )
@@ -402,6 +414,12 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           openTradingConnectionLogin: (connectionId) => (
             tradingConnectionService.openBrowserLogin(connectionId)
           ),
+          confirmTradingConnectionLogin: (connectionId) => (
+            tradingConnectionService.confirmBrowserLogin(connectionId)
+          ),
+          listTradingSignalRoutes: () => tradingSignalRouteStore!.list(),
+          saveTradingSignalRoute: (route) => tradingSignalRouteStore!.save(route),
+          removeTradingSignalRoute: (routeId) => tradingSignalRouteStore!.remove(routeId),
         }
       : {}),
     stop: () => manager.stop(),

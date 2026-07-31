@@ -93,6 +93,8 @@ export const tradingConnectionSchema = z.object({
   }).strict(),
   credential_ref: identifierSchema.optional(),
   browser_session_ref: identifierSchema.optional(),
+  browser_login_confirmed_at: utcTimestampSchema.optional(),
+  browser_login_origin: z.string().url().max(2_048).optional(),
   risk_policy_ref: identifierSchema,
   authorization_basis_ref: identifierSchema,
   approval_policy_ref: identifierSchema,

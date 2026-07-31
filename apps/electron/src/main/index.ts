@@ -3,7 +3,7 @@
 import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
-import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, session, shell } from 'electron'
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
@@ -602,6 +602,13 @@ app.whenReady().then(async () => {
               await browserPaneManager.navigateTrading(instanceId, url)
               browserPaneManager.focusTrading(instanceId)
               return { browser_instance_id: instanceId, session_ref: sessionRef }
+            },
+            inspect: async ({ connectionId }) => {
+              if (!browserPaneManager) throw new Error('Trading browser runtime is unavailable.')
+              return browserPaneManager.inspectTrading(`trade-${connectionId}`)
+            },
+            clear: async ({ partition }) => {
+              await session.fromPartition(partition).clearStorageData()
             },
           },
           alertPort: Number.parseInt(process.env.TRADE_GOD_ALERT_PORT ?? '9102', 10),

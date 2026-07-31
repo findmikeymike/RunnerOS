@@ -476,6 +476,10 @@ export interface ElectronAPI {
   saveTradingConnection(input: import('../main/trading/trading-connection-service').SaveTradingConnectionInput): Promise<import('../main/trading/trading-connection-service').TradingConnectionStatus>
   removeTradingConnection(connectionId: string): Promise<boolean>
   openTradingConnectionLogin(connectionId: string): Promise<{ browser_instance_id: string; session_ref: string }>
+  confirmTradingConnectionLogin(connectionId: string): Promise<import('../main/trading/trading-connection-service').TradingConnectionStatus>
+  listTradingSignalRoutes(): Promise<import('../main/trading/trading-signal-route-store').TradingSignalRoute[]>
+  saveTradingSignalRoute(route: import('../main/trading/trading-signal-route-store').TradingSignalRoute): Promise<import('../main/trading/trading-signal-route-store').TradingSignalRoute>
+  removeTradingSignalRoute(routeId: string): Promise<boolean>
 
   // Session management
   getSessions(): Promise<Session[]>

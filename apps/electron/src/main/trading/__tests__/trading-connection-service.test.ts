@@ -41,10 +41,14 @@ class Vault implements TradingCredentialVault {
 
 class Browser implements TradingBrowserSessionLauncher {
   lastInput: Parameters<TradingBrowserSessionLauncher['open']>[0] | null = null
+  inspected = { url: 'https://www.wealthcharts.com/dashboard', title: 'WealthCharts' }
+  cleared: string[] = []
   async open(input: Parameters<TradingBrowserSessionLauncher['open']>[0]) {
     this.lastInput = input
     return { browser_instance_id: 'browser-trade-1', session_ref: input.sessionRef }
   }
+  async inspect() { return this.inspected }
+  async clear(input: { partition: string }) { this.cleared.push(input.partition) }
 }
 
 const capabilities = {
@@ -139,6 +143,8 @@ describe('trading connection service', () => {
         levels: ['paper-lifecycle-certified' as const],
       }],
       enabled: true,
+      browser_login_confirmed_at: NOW,
+      browser_login_origin: 'https://www.wealthcharts.com',
     }
     const saved = await service.save({ connection: hostile, api_secret: 'top-secret' })
 
@@ -148,6 +154,8 @@ describe('trading connection service', () => {
       certifications: [],
       adapter_certifications: [],
       enabled: false,
+      browser_login_confirmed_at: undefined,
+      browser_login_origin: undefined,
     })
 
     const updated = await service.save({
@@ -304,11 +312,31 @@ describe('trading connection service', () => {
     expect(browser.lastInput?.partition).not.toContain('social')
   })
 
+  test('records a confirmed browser login only on the exact provider origin', async () => {
+    const { service, browser } = await setup()
+    const saved = await service.save({ connection: connection('browser') })
+    await service.openBrowserLogin(saved.connection.connection_id)
+    const confirmed = await service.confirmBrowserLogin(saved.connection.connection_id)
+    expect(confirmed.browser_login_confirmed).toBe(true)
+    expect(confirmed.connection.browser_login_origin).toBe('https://www.wealthcharts.com')
+
+    browser.inspected = { url: 'https://evil.example/phish', title: 'WealthCharts' }
+    await expect(service.confirmBrowserLogin(saved.connection.connection_id))
+      .rejects.toThrow('Login confirmation refused')
+  })
+
   test('deletes connection metadata and its vault secret together', async () => {
     const { service, vault } = await setup()
     const saved = await service.save({ connection: connection('api'), api_secret: 'top-secret' })
     expect(await service.remove(saved.connection.connection_id)).toBe(true)
     expect(vault.values.has(secretName(saved.connection.connection_id))).toBe(false)
     expect(await service.list()).toEqual([])
+  })
+
+  test('revokes a removed browser account by clearing its isolated partition', async () => {
+    const { service, browser } = await setup()
+    const saved = await service.save({ connection: connection('browser') })
+    expect(await service.remove(saved.connection.connection_id)).toBe(true)
+    expect(browser.cleared).toEqual([`persist:${browserSessionRef(saved.connection.connection_id)}`])
   })
 })

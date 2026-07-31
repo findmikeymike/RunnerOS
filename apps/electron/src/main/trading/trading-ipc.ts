@@ -19,6 +19,7 @@ import type {
   SaveTradingConnectionInput,
   TradingConnectionStatus,
 } from './trading-connection-service.ts'
+import type { TradingSignalRoute } from './trading-signal-route-store.ts'
 
 export const TRADE_GOD_IPC = {
   HEALTH: 'trade-god:health',
@@ -36,6 +37,10 @@ export const TRADE_GOD_IPC = {
   SAVE_CONNECTION: 'trade-god:connections:save',
   REMOVE_CONNECTION: 'trade-god:connections:remove',
   OPEN_CONNECTION_LOGIN: 'trade-god:connections:open-login',
+  CONFIRM_CONNECTION_LOGIN: 'trade-god:connections:confirm-login',
+  LIST_SIGNAL_ROUTES: 'trade-god:signal-routes:list',
+  SAVE_SIGNAL_ROUTE: 'trade-god:signal-routes:save',
+  REMOVE_SIGNAL_ROUTE: 'trade-god:signal-routes:remove',
 } as const
 
 export interface TradingIpcManager {
@@ -56,6 +61,10 @@ export interface TradingIpcManager {
     browser_instance_id: string
     session_ref: string
   }>
+  confirmTradingConnectionLogin?(connectionId: string): Promise<TradingConnectionStatus>
+  listTradingSignalRoutes?(): Promise<TradingSignalRoute[]>
+  saveTradingSignalRoute?(route: TradingSignalRoute): Promise<TradingSignalRoute>
+  removeTradingSignalRoute?(routeId: string): Promise<boolean>
   resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
   stop(): Promise<void>
 }
@@ -119,6 +128,22 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (!manager.openTradingConnectionLogin) throw new Error('Trading Connections are unavailable.')
     return manager.openTradingConnectionLogin(String(connectionId))
   })
+  ipcMain.handle(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN, (_event, connectionId: unknown) => {
+    if (!manager.confirmTradingConnectionLogin) throw new Error('Trading Connections are unavailable.')
+    return manager.confirmTradingConnectionLogin(String(connectionId))
+  })
+  ipcMain.handle(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES, () => {
+    if (!manager.listTradingSignalRoutes) throw new Error('Trading signal routes are unavailable.')
+    return manager.listTradingSignalRoutes()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, (_event, route: unknown) => {
+    if (!manager.saveTradingSignalRoute) throw new Error('Trading signal routes are unavailable.')
+    return manager.saveTradingSignalRoute(route as TradingSignalRoute)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, (_event, routeId: unknown) => {
+    if (!manager.removeTradingSignalRoute) throw new Error('Trading signal routes are unavailable.')
+    return manager.removeTradingSignalRoute(String(routeId))
+  })
 
   let disposed = false
   return async () => {
@@ -138,6 +163,10 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN)
+    ipcMain.removeHandler(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN)
+    ipcMain.removeHandler(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)
+    ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE)
     await manager.stop()
   }
 }

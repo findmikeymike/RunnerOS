@@ -716,6 +716,11 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     this.focusInstance(this.requireAliveInstance(id, true))
   }
 
+  inspectTrading(id: string): { url: string; title: string } {
+    const instance = this.requireAliveInstance(id, true)
+    return { url: instance.currentUrl, title: instance.title }
+  }
+
   private async navigateInstance(
     instance: BrowserInstance,
     url: string,

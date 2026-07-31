@@ -23,6 +23,8 @@ export interface TradingBrowserSessionLauncher {
     partition: string
     url: string
   }): Promise<{ browser_instance_id: string; session_ref: string }>
+  inspect(input: { connectionId: string }): Promise<{ url: string; title: string }>
+  clear(input: { connectionId: string; partition: string }): Promise<void>
 }
 
 export interface SaveTradingConnectionInput {
@@ -34,6 +36,7 @@ export interface TradingConnectionStatus {
   connection: TradingConnection
   credential_configured: boolean
   browser_session_configured: boolean
+  browser_login_confirmed: boolean
   certification_evidence: AdapterCertificationEvidence[]
 }
 
@@ -99,6 +102,8 @@ export class TradingConnectionService {
       certifications: existing?.certifications ?? [],
       adapter_certifications: existing?.adapter_certifications ?? [],
       consequential_enabled_until: existing?.consequential_enabled_until,
+      browser_login_confirmed_at: existing?.browser_login_confirmed_at,
+      browser_login_origin: existing?.browser_login_origin,
       enabled: existing?.enabled ?? false,
       ...(
         transportPreference !== 'browser'
@@ -178,8 +183,17 @@ export class TradingConnectionService {
   }
 
   async remove(connectionId: string): Promise<boolean> {
+    const connection = await this.store.get(connectionId).catch(() => null)
+    if (connection?.browser_session_ref) {
+      await this.browser.clear({
+        connectionId,
+        partition: `persist:${connection.browser_session_ref}`,
+      })
+    }
     const removed = await this.store.remove(connectionId)
-    if (removed) await this.vault.deleteSecret(secretName(connectionId))
+    if (removed) {
+      await this.vault.deleteSecret(secretName(connectionId))
+    }
     return removed
   }
 
@@ -202,6 +216,26 @@ export class TradingConnectionService {
     })
   }
 
+  async confirmBrowserLogin(connectionId: string): Promise<TradingConnectionStatus> {
+    const connection = await this.store.get(connectionId)
+    if (connection.transport_preference !== 'browser' || !connection.browser_session_ref) {
+      throw new Error('This trading connection does not have a browser route.')
+    }
+    const inspected = await this.browser.inspect({ connectionId })
+    const expectedOrigin = loginOrigin(connection.platform.slug)
+    const actualOrigin = new URL(inspected.url).origin
+    if (actualOrigin !== expectedOrigin) {
+      throw new Error(`Login confirmation refused: browser is on ${actualOrigin}, not ${expectedOrigin}.`)
+    }
+    const saved = await this.store.save(tradingConnectionSchema.parse({
+      ...connection,
+      browser_login_confirmed_at: this.now(),
+      browser_login_origin: actualOrigin,
+      updated_at: this.now(),
+    }))
+    return this.status(saved)
+  }
+
   async resolveCredential(connection: TradingConnection): Promise<string | null> {
     if (!connection.credential_ref || connection.credential_ref !== credentialRef(connection.connection_id)) {
       return null
@@ -217,6 +251,10 @@ export class TradingConnectionService {
       connection,
       credential_configured: credentialConfigured,
       browser_session_configured: Boolean(connection.browser_session_ref),
+      browser_login_confirmed: Boolean(
+        connection.browser_login_confirmed_at
+        && connection.browser_login_origin === loginOriginOrNull(connection.platform.slug),
+      ),
       certification_evidence: this.certificationStore
         ? await this.certificationStore.list(connection.connection_id)
         : [],
@@ -243,4 +281,10 @@ export const secretName = (connectionId: string): string => (
 const loginUrl = (platformSlug: string): string => {
   if (platformSlug === 'wealthcharts') return 'https://www.wealthcharts.com/'
   throw new Error(`No certified browser login origin exists for ${platformSlug}.`)
+}
+
+const loginOrigin = (platformSlug: string): string => new URL(loginUrl(platformSlug)).origin
+
+const loginOriginOrNull = (platformSlug: string): string | null => {
+  try { return loginOrigin(platformSlug) } catch { return null }
 }

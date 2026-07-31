@@ -1,7 +1,7 @@
 ---
 status: current
 owner: team
-last_verified: 2026-07-30
+last_verified: 2026-07-31
 source_of_truth: true
 ---
 
@@ -45,6 +45,8 @@ This is the routing table for humans and agents. Read only what the current job 
 - `integrations/DISCOTRADER-CONTROL-CENTER.md` — operator setup and safety
   contract for connecting the local daemon and explicitly installing the Trade
   Desk worker in one Trading workspace.
+- `integrations/TRADING-CONNECTIONS-AND-SIGNAL-ROUTES.md` — multi-prop account,
+  saved browser login, and exact Discord-to-account routing contract.
 
 ## Supporting Vision Library
 
