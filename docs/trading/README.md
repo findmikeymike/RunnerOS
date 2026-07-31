@@ -38,6 +38,10 @@ This is the routing table for humans and agents. Read only what the current job 
   foundation for certified API/browser entry, protection, and reconciliation.
   Real connections remain disabled until external paper certification; it
   grants no consequential execution authority.
+- `specs/execution/discord-trade-followup-management.md` — implemented package
+  foundation for exact Discord follow-up resolution, durable compound trade
+  management, and crash recovery. Donor push, desktop runtime wiring, and real
+  paper mutation remain external gates.
 
 ## Supporting Vision Library
 

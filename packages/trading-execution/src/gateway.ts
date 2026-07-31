@@ -23,6 +23,7 @@ import {
   type ExecutionManagementCommand,
   type ExecutionManagementPayload,
   type ExecutionReceipt,
+  type ExecutionProtectionOrder,
   type ExecutionRecord,
   type ExecutionReconciliation,
   type OrderIntent,
@@ -86,6 +87,60 @@ export class ExecutionGateway {
 
   get(intentId: string): Promise<ExecutionRecord> {
     return this.options.store.get(intentId)
+  }
+
+  list(): Promise<ExecutionRecord[]> {
+    return this.options.store.list()
+  }
+
+  async prepareStopMove(
+    intentId: string,
+    target: 'breakeven' | string,
+  ): Promise<Omit<Extract<ExecutionManagementPayload, { operation: 'modify' }>, 'operation'>> {
+    const record = await this.options.store.get(intentId)
+    ensureState(record, ['protected'])
+    const receipt = record.receipt
+    if (!receipt?.protection_verified) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Stop movement requires provider-verified protection.',
+      )
+    }
+    const stops = receipt.protection_orders?.filter(
+      (order) => order.role === 'stop-loss' && isActiveProtectionOrder(order),
+    ) ?? []
+    if (stops.length !== 1) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Stop movement requires exactly one active provider stop order.',
+      )
+    }
+    const stop = stops[0]!
+    const stopPrice = target === 'breakeven' ? receipt.average_fill_price : target
+    if (!stopPrice) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Breakeven movement requires a verified average fill price.',
+      )
+    }
+    const prepared = executionManagementPayloadSchema.parse({
+      operation: 'modify',
+      provider_order_id: stop.provider_order_id,
+      quantity: stop.quantity,
+      order_type: stop.order_type,
+      ...(stop.order_type === 'limit' || stop.order_type === 'stop-limit'
+        ? { limit_price: stop.limit_price }
+        : {}),
+      ...(stop.order_type === 'stop' || stop.order_type === 'stop-limit'
+        ? { stop_price: stopPrice }
+        : {}),
+      time_in_force: stop.time_in_force,
+    })
+    if (prepared.operation !== 'modify') {
+      throw new ExecutionGatewayError('INVALID_STATE', 'Prepared stop command is not a modification.')
+    }
+    const { operation: _operation, ...input } = prepared
+    return input
   }
 
   async approve(
@@ -665,7 +720,12 @@ export class ExecutionGateway {
     }
     if (payload.operation === 'partial-close') {
       ensureState(record, ['protected'])
-      const openQuantity = record.receipt?.filled_quantity ?? 0
+      const activeStops = record.receipt?.protection_orders?.filter(
+        (order) => order.role === 'stop-loss' && isActiveProtectionOrder(order),
+      ) ?? []
+      const openQuantity = activeStops.length === 1
+        ? activeStops[0]!.quantity
+        : record.receipt?.filled_quantity ?? 0
       if (payload.quantity >= openQuantity) {
         throw new ExecutionGatewayError(
           'CAPABILITY_UNAVAILABLE',
@@ -809,6 +869,7 @@ export class ExecutionGateway {
         filledQuantity: result.filled_quantity,
         averageFillPrice: result.average_fill_price,
         protectionVerified: result.protection_verified,
+        protectionOrders: result.protection_orders,
         evidenceRefs: result.evidence_refs,
       })
       return record
@@ -865,6 +926,7 @@ export class ExecutionGateway {
           filledQuantity: result.filled_quantity,
           averageFillPrice: result.average_fill_price,
           protectionVerified: false,
+          protectionOrders: result.protection_orders,
           evidenceRefs: result.evidence_refs,
         })
         return record
@@ -936,6 +998,7 @@ export class ExecutionGateway {
         filledQuantity: result.filled_quantity,
         averageFillPrice: result.average_fill_price,
         protectionVerified: result.protection_verified,
+        protectionOrders: result.protection_orders,
         evidenceRefs: result.evidence_refs,
       })
       return record
@@ -951,6 +1014,7 @@ export class ExecutionGateway {
     filledQuantity: number
     averageFillPrice?: string
     protectionVerified: boolean
+    protectionOrders?: ExecutionProtectionOrder[]
     evidenceRefs: string[]
   }): ExecutionReceipt {
     const unsigned = {
@@ -969,6 +1033,7 @@ export class ExecutionGateway {
       filled_quantity: input.filledQuantity,
       ...(input.averageFillPrice ? { average_fill_price: input.averageFillPrice } : {}),
       protection_verified: input.protectionVerified,
+      ...(input.protectionOrders ? { protection_orders: input.protectionOrders } : {}),
       evidence_refs: input.evidenceRefs,
       completed_at: this.now(),
     } satisfies Omit<ExecutionReceipt, 'content_checksum'>
@@ -991,6 +1056,12 @@ const ensureState = (record: ExecutionRecord, allowed: ExecutionLifecycleState[]
     )
   }
 }
+
+const isActiveProtectionOrder = (order: ExecutionProtectionOrder): boolean => (
+  order.status === 'pending'
+  || order.status === 'working'
+  || order.status === 'partially-filled'
+)
 
 const transition = (
   record: ExecutionRecord,

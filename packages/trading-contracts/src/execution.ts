@@ -21,6 +21,7 @@ export const EXECUTION_RECEIPT_SCHEMA_VERSION = 'execution-receipt@1'
 export const EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION = 'execution-account-snapshot@1'
 export const EXECUTION_SUBMIT_ACK_SCHEMA_VERSION = 'execution-submit-ack@1'
 export const EXECUTION_RECONCILIATION_SCHEMA_VERSION = 'execution-reconciliation@1'
+export const EXECUTION_PROTECTION_ORDER_SCHEMA_VERSION = 'execution-protection-order@1'
 
 export const executionEnvironmentSchema = z.enum([
   'paper',
@@ -476,6 +477,57 @@ export const executionSubmitAcknowledgmentSchema = z.object({
   }
 })
 
+export const executionProtectionOrderSchema = z.object({
+  protection_order_schema_version: z.literal(EXECUTION_PROTECTION_ORDER_SCHEMA_VERSION),
+  provider_order_id: identifierSchema,
+  role: z.enum(['stop-loss', 'take-profit']),
+  quantity: z.number().int().positive().max(10_000),
+  order_type: orderTypeSchema,
+  time_in_force: timeInForceSchema,
+  limit_price: decimalStringSchema.optional(),
+  stop_price: decimalStringSchema.optional(),
+  status: z.enum(['pending', 'working', 'partially-filled']),
+}).strict().superRefine((order, context) => {
+  if (
+    (order.order_type === 'limit' || order.order_type === 'stop-limit')
+    && !order.limit_price
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['limit_price'],
+      message: 'Limit protection orders require their current limit price',
+    })
+  }
+  if (
+    (order.order_type === 'stop' || order.order_type === 'stop-limit')
+    && !order.stop_price
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['stop_price'],
+      message: 'Stop protection orders require their current stop price',
+    })
+  }
+  if (
+    order.role === 'stop-loss'
+    && order.order_type !== 'stop'
+    && order.order_type !== 'stop-limit'
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['order_type'],
+      message: 'Stop-loss protection must identify a stop or stop-limit order',
+    })
+  }
+  if (order.role === 'take-profit' && order.order_type !== 'limit') {
+    context.addIssue({
+      code: 'custom',
+      path: ['order_type'],
+      message: 'Take-profit protection must identify a limit order',
+    })
+  }
+})
+
 export const executionReconciliationSchema = z.object({
   reconciliation_schema_version: z.literal(EXECUTION_RECONCILIATION_SCHEMA_VERSION),
   reconciliation_id: identifierSchema,
@@ -496,6 +548,7 @@ export const executionReconciliationSchema = z.object({
   filled_quantity: z.number().int().nonnegative().max(10_000),
   average_fill_price: decimalStringSchema.optional(),
   protection_verified: z.boolean(),
+  protection_orders: z.array(executionProtectionOrderSchema).max(20).optional(),
   evidence_refs: z.array(identifierSchema).max(100),
   reconciled_at: utcTimestampSchema,
   reason: z.string().trim().min(1).max(500),
@@ -574,6 +627,7 @@ export const executionReceiptSchema = z.object({
   filled_quantity: z.number().int().nonnegative().max(10_000),
   average_fill_price: decimalStringSchema.optional(),
   protection_verified: z.boolean(),
+  protection_orders: z.array(executionProtectionOrderSchema).max(20).optional(),
   evidence_refs: z.array(identifierSchema).max(100),
   completed_at: utcTimestampSchema,
   content_checksum: sha256Schema,
@@ -668,6 +722,7 @@ export type ExecutionManagementAcknowledgment = z.infer<typeof executionManageme
 export type ExecutionAccountSnapshot = z.infer<typeof executionAccountSnapshotSchema>
 export type ExecutionSubmitAcknowledgment = z.infer<typeof executionSubmitAcknowledgmentSchema>
 export type ExecutionReconciliation = z.infer<typeof executionReconciliationSchema>
+export type ExecutionProtectionOrder = z.infer<typeof executionProtectionOrderSchema>
 export type ExecutionLifecycleState = z.infer<typeof executionLifecycleStateSchema>
 export type ExecutionTransition = z.infer<typeof executionTransitionSchema>
 export type ExecutionReceipt = z.infer<typeof executionReceiptSchema>

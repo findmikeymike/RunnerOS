@@ -10,13 +10,13 @@ source_of_truth: true
 ## Snapshot
 
 - Date: 2026-07-30
-- Stage: the provider-neutral execution foundation and safe-exit lifecycle are implemented; real-provider paper certification is the next gate
-- Current goal: certify one real paper adapter without enabling consequential execution
-- Overall state: Trade God now has durable execution contracts and lifecycle storage, exact account/environment connection records, isolated trading browser sessions, a Tradovate demo API adapter foundation, a named WealthCharts browser driver foundation, DiscordTrader ticket convergence, version-bound certification evidence, restart reconciliation, kill switches, and checksum-bound cancel/modify/partial-close/flatten commands. No real adapter is paper-certified or enabled for consequential entry. Tradovate still lacks certified partial-close/protection-resize behavior; WealthCharts management actions remain disabled until its live paper DOM is inspected. The existing Futures command center, synthetic chart, alerts, Order Flow specialist, and health-only IBKR connector remain intact.
+- Stage: the provider-neutral execution and Discord follow-up management foundations are implemented; sender/runtime wiring and real-provider paper certification are the next gates
+- Current goal: connect the signed DiscoTrader management sender and certify one real paper adapter without enabling consequential execution
+- Overall state: Trade God now has durable execution contracts and lifecycle storage, exact account/environment connection records, isolated trading browser sessions, a Tradovate demo API adapter foundation, a named WealthCharts browser driver foundation, DiscordTrader ticket convergence, version-bound certification evidence, restart reconciliation, kill switches, checksum-bound cancel/modify/partial-close/flatten commands, and a durable Discord follow-up manager. Follow-ups resolve by immutable author plus reply/thread/channel/symbol evidence, require exactly one protected gateway trade, and persist exact compound action plans. No desktop receiver currently instantiates this manager, no donor management message is sent yet, and no real adapter is paper-certified or enabled for consequential entry. Tradovate still lacks certified partial-close/protection-resize behavior; WealthCharts management actions remain disabled until its live paper DOM is inspected. The existing Futures command center, synthetic chart, alerts, Order Flow specialist, and health-only IBKR connector remain intact.
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
-- Implementation head after the execution foundation: `068ad136`
+- Implementation head before Discord follow-up closure: `eb60978a`
 
 ## Unified Broker Entry Gateway
 
@@ -128,14 +128,19 @@ The workbench can request engine health, run the known fixture, and display tota
 - Added a lazy-loaded TradingView Lightweight Charts 5.2 surface at the center of Futures Overview with ES/NQ/YM/RTY selection, timeframe and ETH/RTH controls, candlesticks, volume pane, responsive sizing, attribution, and an explicit offline state that invents no prices.
 - Added a deterministic project-owned synthetic ES chart session through validated `market-candle-series@1`, local IPC/preload, and a fixed-point renderer adapter. It supports 1m/5m/15m/1h plus ETH/RTH density changes, labels itself synthetic, and returns no preview prices for NQ/YM/RTY.
 - Added canonical `chart-annotation@1` contracts for attributable user/agent/system levels, markers, trend lines, and price zones. The first renderer slice supports active horizontal levels and markers; agents emit contracts rather than canvas/DOM commands.
+- Added checksum-bound `discord-management-message@1` and `discord-management-receipt@1` contracts plus normalized provider protection-order identity.
+- Added a conservative management-only parser for partial exits, full exits, stop movement, and stopped-out reconciliation; questions, conditions, retrospectives, negations, stale messages, edits, and vague sizing fail closed.
+- Added exact active-trade resolution by immutable Discord author and reply/thread/channel/symbol context. There is no global latest-trade fallback.
+- Added durable ordered execution and recovery for compound `half + breakeven` messages. Exact quantities and stop payloads persist before gateway mutation; gateway idempotency suppresses replay after a crash.
+- Ran a read-only rival pass and fixed unsafe negation matching, time-in-force drift, weak receipt completion claims, untyped protection roles, and non-Discord source-host acceptance.
 
 ## Next Actions
 
-1. Confirm Apex-issued Tradovate API eligibility and supply a demo credential bound to the exact paper account.
-2. Implement and certify Tradovate partial-close/protection-resize behavior.
-3. Run and retain the 50-lifecycle real paper soak plus forced-failure matrix.
-4. Inspect an authenticated WealthCharts paper session and version its exact DOM selector bundle.
-5. After one adapter passes the paper gate, define one bounded consequential canary; keep it disabled until explicit operator approval.
+1. Add the donor-side signed management push and an observe-only desktop receiver that instantiates the durable manager; do not grant broker authority through the donor.
+2. Confirm Apex-issued Tradovate API eligibility and supply a demo credential bound to the exact paper account.
+3. Implement and certify Tradovate partial-close/protection-resize behavior.
+4. Run and retain the 50-lifecycle real paper soak plus forced-failure matrix.
+5. After one adapter passes the paper gate, test the follow-up manager in paper mode before defining any bounded consequential canary.
 
 ## Blockers / Decisions Needed
 
@@ -153,6 +158,7 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Unified gateway closure: 175 passed, 0 failed across 31 trading/Electron files with 582 expectations.
 - Repository-wide `bun run typecheck:all` passed after replacing one unsupported Campaign Calendar `findLast` call with the equivalent target-compatible reverse search.
 - Real Tradovate/WealthCharts paper lifecycle, 50-run provider soak, and consequential canary remain unproven and disabled.
+- Discord follow-up management closure: 110 package tests passed with 288 expectations; both package typechecks, repository-wide `typecheck:all`, and Electron main/preload/renderer production builds passed. The donor sender, desktop receiver, and real paper mutation remain unproven and disabled.
 - JSONL policy and rival-fix proof: Python market-data suite 27 passed; two-trial observation evidence is reproducible; three enforced trials admit 750 events at 713,568 bytes and reject 800 events with typed `STREAMING_TRANSPORT_REQUIRED`; real Electron tests prove oversized direct loads fail typed without process death and replay pacing above the default request timeout succeeds.
 - Electron `build:main`, `build:preload`, and `build:renderer` passed.
 - The generated packaged sidecar bundle launched independently and answered a schema-valid health request.

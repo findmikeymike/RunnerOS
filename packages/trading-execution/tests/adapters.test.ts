@@ -356,6 +356,8 @@ describe('Tradovate API adapter', () => {
         action: 'Sell',
         symbol: 'ESU6',
         orderQty: 1,
+        stopPrice: 5598,
+        timeInForce: 'Day',
       },
       {
         id: 102,
@@ -367,6 +369,8 @@ describe('Tradovate API adapter', () => {
         action: 'Sell',
         symbol: 'ESU6',
         orderQty: 1,
+        price: 5603,
+        timeInForce: 'Day',
       },
     ]
 
@@ -379,6 +383,20 @@ describe('Tradovate API adapter', () => {
       provider_order_ids: ['100', '101', '102'],
       filled_quantity: 1,
       protection_verified: true,
+      protection_orders: [
+        {
+          provider_order_id: '101',
+          role: 'stop-loss',
+          quantity: 1,
+          stop_price: '5598',
+        },
+        {
+          provider_order_id: '102',
+          role: 'take-profit',
+          quantity: 1,
+          limit_price: '5603',
+        },
+      ],
     })
   })
 

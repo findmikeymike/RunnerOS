@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 
 import type {
   ExecutionAuthorization,
+  DiscordManagementMessage,
+  DiscordManagementReceipt,
   ExecutionManagementCommand,
   ExecutionManagementAcknowledgment,
   ExecutionManagementPayload,
@@ -69,6 +71,24 @@ export const computeExecutionReceiptChecksum = (
   receipt: Omit<ExecutionReceipt, 'content_checksum'> | ExecutionReceipt,
 ): string => {
   const { content_checksum: _ignored, ...payload } = receipt as ExecutionReceipt
+  return sha256(payload)
+}
+
+export const computeDiscordManagementMessageChecksum = (
+  message:
+    | Omit<DiscordManagementMessage, 'content_checksum'>
+    | DiscordManagementMessage,
+): string => {
+  const { content_checksum: _ignored, ...payload } = message as DiscordManagementMessage
+  return sha256(payload)
+}
+
+export const computeDiscordManagementReceiptChecksum = (
+  receipt:
+    | Omit<DiscordManagementReceipt, 'content_checksum'>
+    | DiscordManagementReceipt,
+): string => {
+  const { content_checksum: _ignored, ...payload } = receipt as DiscordManagementReceipt
   return sha256(payload)
 }
 

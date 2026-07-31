@@ -1,6 +1,7 @@
 import {
   EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
   EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
+  EXECUTION_PROTECTION_ORDER_SCHEMA_VERSION,
   EXECUTION_RECONCILIATION_SCHEMA_VERSION,
   EXECUTION_SUBMIT_ACK_SCHEMA_VERSION,
   executionAccountSnapshotSchema,
@@ -11,6 +12,7 @@ import {
   type ExecutionCommand,
   type ExecutionManagementAcknowledgment,
   type ExecutionManagementCommand,
+  type ExecutionProtectionOrder,
   type ExecutionReconciliation,
   type OrderIntent,
   type TradingConnection,
@@ -38,6 +40,9 @@ export interface TradovateOrder {
   action: string
   symbol?: string
   orderQty: number
+  price?: number
+  stopPrice?: number
+  timeInForce?: string
   filledQty?: number
   avgPrice?: number
 }
@@ -126,6 +131,9 @@ interface TradovateOrderVersion {
   orderId: number
   orderQty: number
   orderType: string
+  price?: number
+  stopPrice?: number
+  timeInForce?: string
 }
 
 interface TradovateCommand {
@@ -444,6 +452,9 @@ export class TradovateFetchClient implements TradovateRestClient {
           action: order.action,
           symbol: contractNames.get(order.contractId),
           orderQty: version.orderQty,
+          price: version.price,
+          stopPrice: version.stopPrice,
+          timeInForce: version.timeInForce,
           filledQty: report?.cumQty,
           avgPrice: report?.avgPx,
         }
@@ -688,6 +699,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
     const providerOrderIds = [entry, ...children].map((order) => String(order.id))
     const filledQuantity = Math.max(0, Math.trunc(entry.filledQty ?? 0))
     const activeProtection = children.filter((order) => isWorking(order.ordStatus))
+    const protectionOrders = activeProtection.map(normalizeProtectionOrder)
     const protectionVerified = (
       activeProtection.some((order) => order.orderType === 'Stop')
       && (
@@ -706,6 +718,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         filledQuantity,
         averageFillPrice: entry.avgPrice,
         protectionVerified: false,
+        protectionOrders: [],
         reason: !position || position.netPos === 0
           ? 'Tradovate reports the position flat after liquidation.'
           : 'Tradovate liquidation is acknowledged but the position is not yet flat.',
@@ -723,6 +736,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         providerOrderIds,
         filledQuantity: 0,
         protectionVerified: false,
+        protectionOrders: [],
         reason: 'Tradovate reports every targeted order canceled with no fill.',
       }, this.now())
     }
@@ -732,6 +746,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         providerOrderIds,
         filledQuantity,
         protectionVerified: false,
+        protectionOrders,
         reason: `Tradovate order is ${entry.ordStatus}.`,
       }, this.now())
     }
@@ -741,6 +756,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         providerOrderIds,
         filledQuantity: 0,
         protectionVerified: false,
+        protectionOrders,
         reason: 'Tradovate reports the entry working.',
       }, this.now())
     }
@@ -751,6 +767,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         filledQuantity,
         averageFillPrice: entry.avgPrice,
         protectionVerified,
+        protectionOrders,
         reason: 'Tradovate reports a partial fill.',
       }, this.now())
     }
@@ -761,6 +778,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         filledQuantity,
         averageFillPrice: entry.avgPrice,
         protectionVerified: true,
+        protectionOrders,
         reason: 'Tradovate reports a full fill with active native protection.',
       }, this.now())
     }
@@ -771,6 +789,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         filledQuantity,
         averageFillPrice: entry.avgPrice,
         protectionVerified: false,
+        protectionOrders: [],
         reason: 'Tradovate reports the filled position is flat.',
       }, this.now())
     }
@@ -780,6 +799,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
       filledQuantity,
       averageFillPrice: entry.avgPrice,
       protectionVerified: false,
+      protectionOrders,
       reason: 'Tradovate reports a fill without verified active protection.',
     }, this.now())
   }
@@ -926,6 +946,44 @@ const normalizedOrderType = (
   )
 }
 
+const normalizeProtectionOrder = (order: TradovateOrder): ExecutionProtectionOrder => {
+  const orderType = normalizedOrderType(order.orderType)
+  const status = order.ordStatus === 'PartiallyFilled'
+    ? 'partially-filled' as const
+    : order.ordStatus.startsWith('Pending')
+      ? 'pending' as const
+      : 'working' as const
+  const stopPrice = order.stopPrice ?? (
+    orderType === 'stop' || orderType === 'stop-limit' ? order.price : undefined
+  )
+  return {
+    protection_order_schema_version: EXECUTION_PROTECTION_ORDER_SCHEMA_VERSION,
+    provider_order_id: String(order.id),
+    role: orderType === 'stop' || orderType === 'stop-limit'
+      ? 'stop-loss'
+      : 'take-profit',
+    quantity: Math.max(1, Math.trunc(order.orderQty)),
+    order_type: orderType,
+    time_in_force: normalizeTimeInForce(order.timeInForce),
+    ...(orderType === 'limit' || orderType === 'stop-limit'
+      ? { limit_price: String(requireFiniteNumber(order.price, 'Tradovate protection limit price')) }
+      : {}),
+    ...(orderType === 'stop' || orderType === 'stop-limit'
+      ? { stop_price: String(requireFiniteNumber(stopPrice, 'Tradovate protection stop price')) }
+      : {}),
+    status,
+  }
+}
+
+const normalizeTimeInForce = (value: string | undefined): 'day' | 'gtc' => {
+  if (value === 'Day') return 'day'
+  if (value === 'GTC') return 'gtc'
+  throw new ExecutionGatewayError(
+    'RECONCILIATION_DIVERGENCE',
+    'Tradovate protection time-in-force is missing or unsupported.',
+  )
+}
+
 const latestBy = <T extends { id: number }>(
   values: T[],
   key: (value: T) => number,
@@ -978,6 +1036,7 @@ const reconciliation = (
     filledQuantity: number
     averageFillPrice?: number
     protectionVerified: boolean
+    protectionOrders?: ExecutionReconciliation['protection_orders']
     reason: string
   },
   now: string,
@@ -993,6 +1052,7 @@ const reconciliation = (
     ? { average_fill_price: String(value.averageFillPrice) }
     : {}),
   protection_verified: value.protectionVerified,
+  ...(value.protectionOrders ? { protection_orders: value.protectionOrders } : {}),
   evidence_refs: value.providerOrderIds.map((id) => `tradovate-order-${id}`),
   reconciled_at: now,
   reason: value.reason,

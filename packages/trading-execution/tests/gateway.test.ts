@@ -173,6 +173,16 @@ class FakeAdapter implements ExecutionAdapter {
       filled_quantity: 1,
       average_fill_price: '5600.25',
       protection_verified: true,
+      protection_orders: [{
+        protection_order_schema_version: 'execution-protection-order@1',
+        provider_order_id: 'provider-stop-1',
+        role: 'stop-loss',
+        quantity: 1,
+        order_type: 'stop',
+        time_in_force: 'day',
+        stop_price: '5598',
+        status: 'working',
+      }],
       evidence_refs: ['evidence-fill-1'],
       reconciled_at: NOW,
       reason: 'Provider reports a protected fill.',
@@ -361,6 +371,37 @@ describe('execution gateway', () => {
     })
     expect((await gateway.flatten(intent.intent_id, 'Retry after completion.')).state).toBe('closed')
     expect(adapter.manageCount).toBe(1)
+  })
+
+  test('prepares breakeven only from the single reconciled provider stop', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    await gateway.execute(intent.intent_id)
+
+    expect(await gateway.prepareStopMove(intent.intent_id, 'breakeven')).toEqual({
+      provider_order_id: 'provider-stop-1',
+      quantity: 1,
+      order_type: 'stop',
+      stop_price: '5600.25',
+      time_in_force: 'day',
+    })
+
+    adapter.reconciliation = {
+      ...adapter.reconciliation,
+      protection_orders: [
+        ...adapter.reconciliation.protection_orders!,
+        {
+          ...adapter.reconciliation.protection_orders![0]!,
+          provider_order_id: 'provider-stop-2',
+        },
+      ],
+    }
+    await gateway.reconcile(intent.intent_id)
+    await expect(gateway.prepareStopMove(intent.intent_id, 'breakeven')).rejects.toMatchObject({
+      code: 'RECONCILIATION_DIVERGENCE',
+    })
   })
 
   test('kills new entry and automatically flattens an unprotected fill', async () => {

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import { identifierSchema, utcTimestampSchema } from './common.ts'
+import { discordManagementMessageSchema } from './discord-management.ts'
 
 export const DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION = 'discotrader-intent-source@1'
 
@@ -76,6 +77,7 @@ export const discoTraderTicketSchema = z.object({
 export const discoTraderPushPayloadSchema = z.object({
   kind: z.enum([
     'ticket',
+    'management',
     'filled',
     'reconcile_halt',
     'unprotected_position',
@@ -85,6 +87,7 @@ export const discoTraderPushPayloadSchema = z.object({
   severity: z.enum(['info', 'action_required', 'urgent']),
   summary: z.string().trim().min(1).max(2_000),
   ticket: discoTraderTicketSchema.optional(),
+  management: discordManagementMessageSchema.optional(),
   detail: z.unknown().optional(),
   at: utcTimestampSchema,
 }).strict().superRefine((payload, context) => {
@@ -93,6 +96,13 @@ export const discoTraderPushPayloadSchema = z.object({
       code: 'custom',
       path: ['ticket'],
       message: 'Ticket pushes require a full immutable DiscoTrader ticket',
+    })
+  }
+  if (payload.kind === 'management' && !payload.management) {
+    context.addIssue({
+      code: 'custom',
+      path: ['management'],
+      message: 'Management pushes require an immutable Discord management message',
     })
   }
 })
