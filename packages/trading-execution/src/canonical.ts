@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto'
 
 import type {
   ExecutionAuthorization,
+  ExecutionManagementCommand,
+  ExecutionManagementAcknowledgment,
+  ExecutionManagementPayload,
   ExecutionReceipt,
   OrderIntent,
   TradingConnection,
@@ -66,5 +69,50 @@ export const computeExecutionReceiptChecksum = (
   receipt: Omit<ExecutionReceipt, 'content_checksum'> | ExecutionReceipt,
 ): string => {
   const { content_checksum: _ignored, ...payload } = receipt as ExecutionReceipt
+  return sha256(payload)
+}
+
+export const computeManagementActionDigest = (input: {
+  intent: OrderIntent
+  connection: TradingConnection
+  parentCommandId: string
+  payload: ExecutionManagementPayload
+}): string => {
+  const payload = input.payload.operation === 'flatten'
+    ? { operation: 'flatten' as const }
+    : input.payload.operation === 'cancel'
+      ? {
+          operation: 'cancel' as const,
+          provider_order_ids: [...new Set(input.payload.provider_order_ids)].sort(),
+        }
+      : input.payload
+  return sha256({
+    intent_id: input.intent.intent_id,
+    intent_checksum: input.intent.content_checksum,
+    connection_id: input.connection.connection_id,
+    account_ref: input.connection.account_ref,
+    environment: input.connection.environment,
+    parent_command_id: input.parentCommandId,
+    payload,
+  })
+}
+
+export const computeManagementCommandChecksum = (
+  command:
+    | Omit<ExecutionManagementCommand, 'content_checksum'>
+    | ExecutionManagementCommand,
+): string => {
+  const { content_checksum: _ignored, ...payload } = command as ExecutionManagementCommand
+  return sha256(payload)
+}
+
+export const computeManagementAcknowledgmentChecksum = (
+  acknowledgment:
+    | Omit<ExecutionManagementAcknowledgment, 'content_checksum'>
+    | ExecutionManagementAcknowledgment,
+): string => {
+  const { content_checksum: _ignored, ...payload } = (
+    acknowledgment as ExecutionManagementAcknowledgment
+  )
   return sha256(payload)
 }

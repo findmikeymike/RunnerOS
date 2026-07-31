@@ -12,6 +12,8 @@ import {
 import { ExecutionGatewayError } from './errors.ts'
 import {
   computeExecutionReceiptChecksum,
+  computeManagementAcknowledgmentChecksum,
+  computeManagementCommandChecksum,
   computeOrderIntentChecksum,
 } from './canonical.ts'
 
@@ -135,6 +137,47 @@ export class FileExecutionStore {
     })
   }
 
+  async claimManagement(
+    intentId: string,
+    actionDigest: string,
+    mutate: (record: ExecutionRecord) => ExecutionRecord,
+  ): Promise<{ record: ExecutionRecord; claimed: boolean }> {
+    if (!/^[a-f0-9]{64}$/.test(actionDigest)) {
+      throw new Error('Management action digest is invalid.')
+    }
+    return this.withLock(`intent:${intentId}`, async () => {
+      const current = await this.get(intentId)
+      if (
+        current.management_actions.some(
+          (action) => action.command.action_digest === actionDigest,
+        )
+      ) {
+        return { record: current, claimed: false }
+      }
+      const marker = this.managementClaimFile(intentId, actionDigest)
+      try {
+        await writeFile(marker, `${JSON.stringify({
+          intent_id: intentId,
+          action_digest: actionDigest,
+          claimed_at: this.now(),
+          process_id: process.pid,
+        }, null, 2)}\n`, {
+          encoding: 'utf8',
+          flag: 'wx',
+          mode: 0o600,
+        })
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
+          return { record: await this.get(intentId), claimed: false }
+        }
+        throw error
+      }
+      const next = executionRecordSchema.parse(mutate(structuredClone(current)))
+      await this.atomicWrite(this.recordFile(intentId), next)
+      return { record: next, claimed: true }
+    })
+  }
+
   async list(): Promise<ExecutionRecord[]> {
     await mkdir(this.recordsDirectory, { recursive: true })
     const names = await readdir(this.recordsDirectory)
@@ -229,6 +272,14 @@ export class FileExecutionStore {
     return path.join(this.recordsDirectory, `${intentId}.claim.json`)
   }
 
+  private managementClaimFile(intentId: string, actionDigest: string): string {
+    this.assertPathSafeIntentId(intentId)
+    return path.join(
+      this.recordsDirectory,
+      `${intentId}.management.${actionDigest}.claim.json`,
+    )
+  }
+
   private assertPathSafeIntentId(intentId: string): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:@-]{0,159}$/.test(intentId)) {
       throw new Error('Execution intent ID is not path-safe.')
@@ -273,6 +324,24 @@ const verifyRecordIntegrity = (record: ExecutionRecord): ExecutionRecord => {
       'RECORD_INTEGRITY_FAILURE',
       `Execution record ${record.intent.intent_id} has an invalid receipt checksum.`,
     )
+  }
+  for (const action of record.management_actions) {
+    if (computeManagementCommandChecksum(action.command) !== action.command.content_checksum) {
+      throw new ExecutionGatewayError(
+        'RECORD_INTEGRITY_FAILURE',
+        `Execution record ${record.intent.intent_id} has an invalid management-command checksum.`,
+      )
+    }
+    if (
+      action.acknowledgment
+      && computeManagementAcknowledgmentChecksum(action.acknowledgment)
+        !== action.acknowledgment.content_checksum
+    ) {
+      throw new ExecutionGatewayError(
+        'RECORD_INTEGRITY_FAILURE',
+        `Execution record ${record.intent.intent_id} has an invalid management-acknowledgment checksum.`,
+      )
+    }
   }
   return record
 }

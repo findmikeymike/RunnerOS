@@ -6,6 +6,8 @@ import {
   executionSubmitAcknowledgmentSchema,
   type ExecutionAccountSnapshot,
   type ExecutionCommand,
+  type ExecutionManagementAcknowledgment,
+  type ExecutionManagementCommand,
   type ExecutionReconciliation,
   type OrderIntent,
   type TradingConnection,
@@ -62,6 +64,7 @@ export class WealthChartsBrowserAdapter implements ExecutionAdapter {
   readonly descriptor = {
     adapter_id: 'wealthcharts-browser',
     adapter_version: '1.0.0',
+    provider_contract_version: 'wealthcharts-selectors@1',
     transport: 'browser' as const,
     capabilities: {
       read_accounts: true,
@@ -183,6 +186,19 @@ export class WealthChartsBrowserAdapter implements ExecutionAdapter {
       provider_order_ids: result.provider_order_ids,
       acknowledged_at: this.now(),
     })
+  }
+
+  async manage(input: {
+    connection: TradingConnection
+    intent: OrderIntent
+    command: ExecutionCommand
+    managementCommand: ExecutionManagementCommand
+  }): Promise<ExecutionManagementAcknowledgment> {
+    void input
+    throw new ExecutionGatewayError(
+      'CAPABILITY_UNAVAILABLE',
+      'WealthCharts management controls remain disabled until the exact paper DOM bundle is certified.',
+    )
   }
 
   async reconcile(input: {

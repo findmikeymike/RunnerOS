@@ -1,18 +1,23 @@
 import {
   EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
+  EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
   EXECUTION_RECONCILIATION_SCHEMA_VERSION,
   EXECUTION_SUBMIT_ACK_SCHEMA_VERSION,
   executionAccountSnapshotSchema,
+  executionManagementAcknowledgmentSchema,
   executionReconciliationSchema,
   executionSubmitAcknowledgmentSchema,
   type ExecutionAccountSnapshot,
   type ExecutionCommand,
+  type ExecutionManagementAcknowledgment,
+  type ExecutionManagementCommand,
   type ExecutionReconciliation,
   type OrderIntent,
   type TradingConnection,
 } from '@trade-god/contracts'
 
 import type { ExecutionAdapter } from '../adapter.ts'
+import { computeManagementAcknowledgmentChecksum } from '../canonical.ts'
 import { ExecutionAdapterError, ExecutionGatewayError } from '../errors.ts'
 
 export interface TradovateCredential {
@@ -58,6 +63,16 @@ export interface TradovateRestClient {
     orderId?: number
     oso1Id?: number
     oso2Id?: number
+    failureReason?: string
+    failureText?: string
+  }>
+  manage(input: {
+    connection: TradingConnection
+    intent: OrderIntent
+    command: ExecutionCommand
+    managementCommand: ExecutionManagementCommand
+  }): Promise<{
+    providerCommandIds: number[]
     failureReason?: string
     failureText?: string
   }>
@@ -256,6 +271,140 @@ export class TradovateFetchClient implements TradovateRestClient {
     )
   }
 
+  async manage(input: {
+    connection: TradingConnection
+    intent: OrderIntent
+    command: ExecutionCommand
+    managementCommand: ExecutionManagementCommand
+  }): Promise<{
+    providerCommandIds: number[]
+    failureReason?: string
+    failureText?: string
+  }> {
+    const credential = await this.credential(input.connection)
+    const payload = input.managementCommand.payload
+    const tag = tradovateManagementTag(input.managementCommand)
+    if (payload.operation === 'partial-close') {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        'Tradovate partial close is disabled until exit-order and protection resize semantics are certified.',
+      )
+    }
+    if (payload.operation === 'flatten') {
+      const positions = (await this.listPositions(input.connection)).filter(
+        (position) => position.symbol === input.intent.instrument.symbol && position.netPos !== 0,
+      )
+      if (positions.length !== 1) {
+        throw new ExecutionGatewayError(
+          'RECONCILIATION_DIVERGENCE',
+          'Tradovate flatten requires exactly one matching open contract position.',
+        )
+      }
+      const result = await this.requestJson<{
+        orderId?: number
+        failureReason?: string
+        failureText?: string
+      }>(
+        credential,
+        '/order/liquidateposition',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            accountId: credential.account_id,
+            contractId: positions[0]!.contractId,
+            admin: false,
+            customTag50: tag,
+          }),
+        },
+        true,
+      )
+      return {
+        providerCommandIds: typeof result.orderId === 'number' ? [result.orderId] : [],
+        ...(result.failureReason ? { failureReason: result.failureReason } : {}),
+        ...(result.failureText ? { failureText: result.failureText } : {}),
+      }
+    }
+
+    const orders = await this.listOrders(input.connection)
+    if (payload.operation === 'cancel') {
+      const targets = payload.provider_order_ids.map((value) => parsePositiveProviderId(value))
+      if (!targets.every((id) => orders.some((order) => order.id === id))) {
+        throw new ExecutionGatewayError(
+          'ACCOUNT_MISMATCH',
+          'Tradovate cancel target is not owned by the configured account.',
+        )
+      }
+      const providerCommandIds: number[] = []
+      for (const orderId of targets) {
+        const result = await this.requestJson<{
+          commandId?: number
+          failureReason?: string
+          failureText?: string
+        }>(
+          credential,
+          '/order/cancelorder',
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              orderId,
+              clOrdId: tag,
+              isAutomated: true,
+            }),
+          },
+          true,
+        )
+        if (result.failureReason || typeof result.commandId !== 'number') {
+          return {
+            providerCommandIds,
+            failureReason: result.failureReason ?? 'TradovateCancelRejected',
+            failureText: result.failureText ?? 'Tradovate did not acknowledge cancellation.',
+          }
+        }
+        providerCommandIds.push(result.commandId)
+      }
+      return { providerCommandIds }
+    }
+
+    const orderId = parsePositiveProviderId(payload.provider_order_id)
+    if (!orders.some((order) => order.id === orderId)) {
+      throw new ExecutionGatewayError(
+        'ACCOUNT_MISMATCH',
+        'Tradovate modify target is not owned by the configured account.',
+      )
+    }
+    const result = await this.requestJson<{
+      commandId?: number
+      failureReason?: string
+      failureText?: string
+    }>(
+      credential,
+      '/order/modifyorder',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          orderId,
+          clOrdId: tag,
+          orderQty: payload.quantity,
+          orderType: tradovateManagementOrderType(payload.order_type),
+          ...(payload.limit_price
+            ? { price: decimalNumber(payload.limit_price, 'modified limit price') }
+            : {}),
+          ...(payload.stop_price
+            ? { stopPrice: decimalNumber(payload.stop_price, 'modified stop price') }
+            : {}),
+          timeInForce: payload.time_in_force === 'gtc' ? 'GTC' : 'Day',
+          isAutomated: true,
+        }),
+      },
+      true,
+    )
+    return {
+      providerCommandIds: typeof result.commandId === 'number' ? [result.commandId] : [],
+      ...(result.failureReason ? { failureReason: result.failureReason } : {}),
+      ...(result.failureText ? { failureText: result.failureText } : {}),
+    }
+  }
+
   async listOrders(connection: TradingConnection): Promise<TradovateOrder[]> {
     const credential = await this.credential(connection)
     const [orders, versions, commands, reports, contracts] = await Promise.all([
@@ -391,6 +540,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
   readonly descriptor = {
     adapter_id: 'tradovate-api',
     adapter_version: '1.0.0',
+    provider_contract_version: 'tradovate-demo-rest-2026-07',
     transport: 'api' as const,
     capabilities: {
       read_accounts: true,
@@ -403,10 +553,10 @@ export class TradovateApiAdapter implements ExecutionAdapter {
       submit_stop_limit: true,
       native_bracket: true,
       native_oco: true,
-      modify_order: false,
-      cancel_order: false,
+      modify_order: true,
+      cancel_order: true,
       partial_close: false,
-      flatten: false,
+      flatten: true,
       streaming_events: false,
     },
   }
@@ -471,10 +621,53 @@ export class TradovateApiAdapter implements ExecutionAdapter {
     })
   }
 
+  async manage(input: {
+    connection: TradingConnection
+    intent: OrderIntent
+    command: ExecutionCommand
+    managementCommand: ExecutionManagementCommand
+  }): Promise<ExecutionManagementAcknowledgment> {
+    const capability = managementCapability(input.managementCommand.payload.operation)
+    if (!this.descriptor.capabilities[capability]) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        `Tradovate adapter cannot perform ${input.managementCommand.payload.operation}.`,
+      )
+    }
+    let result
+    try {
+      result = await this.client.manage(input)
+    } catch (error) {
+      if (error instanceof ExecutionAdapterError || error instanceof ExecutionGatewayError) throw error
+      throw new ExecutionAdapterError(
+        'TRADOVATE_MANAGEMENT_TRANSPORT',
+        error instanceof Error ? error.message : 'Tradovate management transport failed.',
+        true,
+      )
+    }
+    const rejected = Boolean(result.failureReason) || result.providerCommandIds.length === 0
+    const unsigned = {
+      management_ack_schema_version: EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
+      management_command_id: input.managementCommand.management_command_id,
+      status: rejected ? 'rejected' : 'acknowledged',
+      provider_command_ids: result.providerCommandIds.map(String),
+      evidence_refs: result.providerCommandIds.map((id) => `tradovate-command-${id}`),
+      acknowledged_at: this.now(),
+      message: rejected
+        ? result.failureText ?? result.failureReason ?? 'Tradovate rejected the management command.'
+        : 'Tradovate acknowledged the management command.',
+    } satisfies Omit<ExecutionManagementAcknowledgment, 'content_checksum'>
+    return executionManagementAcknowledgmentSchema.parse({
+      ...unsigned,
+      content_checksum: computeManagementAcknowledgmentChecksum(unsigned),
+    })
+  }
+
   async reconcile(input: {
     connection: TradingConnection
     intent: OrderIntent
     command: ExecutionCommand
+    managementCommand?: ExecutionManagementCommand
   }): Promise<ExecutionReconciliation> {
     const [orders, positions] = await Promise.all([
       this.client.listOrders(input.connection),
@@ -506,6 +699,33 @@ export class TradovateApiAdapter implements ExecutionAdapter {
       candidate.accountId === Number(input.connection.account_ref)
       && candidate.contractId === entry.contractId
     ))
+    if (input.managementCommand?.payload.operation === 'flatten') {
+      return reconciliation(input, {
+        status: !position || position.netPos === 0 ? 'closed' : 'closing',
+        providerOrderIds,
+        filledQuantity,
+        averageFillPrice: entry.avgPrice,
+        protectionVerified: false,
+        reason: !position || position.netPos === 0
+          ? 'Tradovate reports the position flat after liquidation.'
+          : 'Tradovate liquidation is acknowledged but the position is not yet flat.',
+      }, this.now())
+    }
+    if (
+      input.managementCommand?.payload.operation === 'cancel'
+      && input.managementCommand.payload.provider_order_ids.every((id) => (
+        orders.some((order) => String(order.id) === id && isCanceled(order.ordStatus))
+      ))
+      && filledQuantity === 0
+    ) {
+      return reconciliation(input, {
+        status: 'canceled',
+        providerOrderIds,
+        filledQuantity: 0,
+        protectionVerified: false,
+        reason: 'Tradovate reports every targeted order canceled with no fill.',
+      }, this.now())
+    }
     if (isRejected(entry.ordStatus)) {
       return reconciliation(input, {
         status: 'divergent',
@@ -636,6 +856,36 @@ const tradovateClientOrderId = (command: ExecutionCommand): string => (
   `tg-${command.idempotency_key.slice(0, 56)}`
 )
 
+const tradovateManagementTag = (command: ExecutionManagementCommand): string => (
+  `tg-m-${command.idempotency_key.slice(0, 59)}`
+)
+
+const parsePositiveProviderId = (value: string): number => {
+  const id = Number(value)
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    throw new ExecutionGatewayError('CAPABILITY_UNAVAILABLE', 'Tradovate provider order ID is invalid.')
+  }
+  return id
+}
+
+const tradovateManagementOrderType = (
+  value: 'market' | 'limit' | 'stop' | 'stop-limit',
+): string => {
+  if (value === 'market') return 'Market'
+  if (value === 'limit') return 'Limit'
+  if (value === 'stop') return 'Stop'
+  return 'StopLimit'
+}
+
+const managementCapability = (
+  operation: ExecutionManagementCommand['payload']['operation'],
+): 'cancel_order' | 'modify_order' | 'partial_close' | 'flatten' => {
+  if (operation === 'cancel') return 'cancel_order'
+  if (operation === 'modify') return 'modify_order'
+  if (operation === 'partial-close') return 'partial_close'
+  return 'flatten'
+}
+
 const parsePositiveAccountId = (accountRef: string): number => {
   const accountId = Number(accountRef)
   if (!Number.isSafeInteger(accountId) || accountId <= 0) {
@@ -657,6 +907,10 @@ const isWorking = (status: string): boolean => (
 
 const isRejected = (status: string): boolean => (
   ['Rejected', 'Suspended'].includes(status)
+)
+
+const isCanceled = (status: string): boolean => (
+  ['Canceled', 'Cancelled'].includes(status)
 )
 
 const normalizedOrderType = (

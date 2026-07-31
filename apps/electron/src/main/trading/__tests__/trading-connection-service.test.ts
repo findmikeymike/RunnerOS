@@ -130,6 +130,14 @@ describe('trading connection service', () => {
       state: 'ready' as const,
       capabilities: { ...capabilities, submit_market: true, flatten: true },
       certifications: ['paper-lifecycle-certified' as const],
+      adapter_certifications: [{
+        certification_id: 'forged-cert',
+        adapter_id: 'tradovate-api',
+        adapter_version: '9.9.9',
+        provider_contract_version: 'forged',
+        transport: 'api' as const,
+        levels: ['paper-lifecycle-certified' as const],
+      }],
       enabled: true,
     }
     const saved = await service.save({ connection: hostile, api_secret: 'top-secret' })
@@ -138,6 +146,7 @@ describe('trading connection service', () => {
       state: 'auth-required',
       capabilities,
       certifications: [],
+      adapter_certifications: [],
       enabled: false,
     })
 
@@ -227,6 +236,11 @@ describe('trading connection service', () => {
         'paper-entry-certified',
         'paper-lifecycle-certified',
       ],
+      adapter_certifications: [{
+        certification_id: evidence.certification_id,
+        adapter_id: 'tradovate-api',
+        adapter_version: '0.1.0',
+      }],
     })
 
     const staleSetup = await setup({

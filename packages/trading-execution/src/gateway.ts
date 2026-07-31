@@ -2,10 +2,15 @@ import { randomUUID } from 'node:crypto'
 
 import {
   EXECUTION_COMMAND_SCHEMA_VERSION,
+  EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
+  EXECUTION_MANAGEMENT_COMMAND_SCHEMA_VERSION,
   EXECUTION_RECEIPT_SCHEMA_VERSION,
   executionAccountSnapshotSchema,
   executionAuthorizationSchema,
   executionCommandSchema,
+  executionManagementAcknowledgmentSchema,
+  executionManagementCommandSchema,
+  executionManagementPayloadSchema,
   executionReceiptSchema,
   executionReconciliationSchema,
   executionSubmitAcknowledgmentSchema,
@@ -14,6 +19,9 @@ import {
   tradingConnectionSchema,
   type ExecutionAuthorization,
   type ExecutionLifecycleState,
+  type ExecutionManagementAcknowledgment,
+  type ExecutionManagementCommand,
+  type ExecutionManagementPayload,
   type ExecutionReceipt,
   type ExecutionRecord,
   type ExecutionReconciliation,
@@ -27,7 +35,11 @@ import {
   computeActionDigest,
   computeExecutionReceiptChecksum,
   computeIdempotencyKey,
+  computeManagementAcknowledgmentChecksum,
+  computeManagementActionDigest,
+  computeManagementCommandChecksum,
   computeOrderIntentChecksum,
+  sha256,
 } from './canonical.ts'
 import { ExecutionAdapterError, ExecutionGatewayError } from './errors.ts'
 import { FileExecutionStore } from './store.ts'
@@ -267,6 +279,9 @@ export class ExecutionGateway {
       connection,
       intent: record.intent,
       command: record.command,
+      ...(record.management_actions.at(-1)?.command
+        ? { managementCommand: record.management_actions.at(-1)!.command }
+        : {}),
     }))
     if (
       result.command_id !== record.command.command_id
@@ -281,6 +296,181 @@ export class ExecutionGateway {
       )
     }
     return this.applyReconciliation(intentId, connection, adapter, result)
+  }
+
+  cancelOrder(intentId: string, providerOrderIds: string[]): Promise<ExecutionRecord> {
+    return this.manage(intentId, {
+      operation: 'cancel',
+      provider_order_ids: providerOrderIds,
+    })
+  }
+
+  modifyOrder(
+    intentId: string,
+    input: Omit<Extract<ExecutionManagementPayload, { operation: 'modify' }>, 'operation'>,
+  ): Promise<ExecutionRecord> {
+    return this.manage(intentId, { operation: 'modify', ...input })
+  }
+
+  closePosition(intentId: string, quantity: number): Promise<ExecutionRecord> {
+    return this.manage(intentId, { operation: 'partial-close', quantity })
+  }
+
+  flatten(intentId: string, reason: string): Promise<ExecutionRecord> {
+    return this.manage(intentId, { operation: 'flatten', reason })
+  }
+
+  private async manage(
+    intentId: string,
+    payloadInput: ExecutionManagementPayload,
+  ): Promise<ExecutionRecord> {
+    const parsedPayload = executionManagementPayloadSchema.parse(payloadInput)
+    const payload: ExecutionManagementPayload = parsedPayload.operation === 'cancel'
+      ? {
+          operation: 'cancel',
+          provider_order_ids: [...new Set(parsedPayload.provider_order_ids)].sort(),
+        }
+      : parsedPayload
+    const record = await this.options.store.get(intentId)
+    if (!record.command || !record.claim) {
+      throw new ExecutionGatewayError(
+        'INVALID_STATE',
+        'Management commands require a durably claimed entry command.',
+      )
+    }
+    const connection = tradingConnectionSchema.parse(
+      await this.options.resolveConnection(record.intent.connection_id),
+    )
+    const actionDigest = computeManagementActionDigest({
+      intent: record.intent,
+      connection,
+      parentCommandId: record.command.command_id,
+      payload,
+    })
+    if (
+      record.management_actions.some(
+        (action) => action.command.action_digest === actionDigest,
+      )
+    ) {
+      return record
+    }
+    this.assertManagementState(record, payload)
+    const adapter = this.adapterForRecord(record)
+    const capability = managementCapability(payload.operation)
+    if (!adapter.descriptor.capabilities[capability]) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        `Adapter cannot perform ${payload.operation}.`,
+      )
+    }
+    await adapter.connect(connection)
+    const snapshot = executionAccountSnapshotSchema.parse(
+      await adapter.snapshotAccount(connection),
+    )
+    this.assertAccountSnapshot(connection, snapshot, false)
+    let issued: ExecutionManagementCommand | undefined
+    const claim = await this.options.store.claimManagement(intentId, actionDigest, (current) => {
+      const unsigned = {
+        management_command_schema_version: EXECUTION_MANAGEMENT_COMMAND_SCHEMA_VERSION,
+        management_command_id: `management-${randomUUID()}`,
+        parent_command_id: current.command!.command_id,
+        intent_id: current.intent.intent_id,
+        claim_id: current.claim!.claim_id,
+        connection_id: connection.connection_id,
+        adapter_id: adapter.descriptor.adapter_id,
+        adapter_version: adapter.descriptor.adapter_version,
+        payload,
+        action_digest: actionDigest,
+        idempotency_key: sha256({
+          parent_command_id: current.command!.command_id,
+          action_digest: actionDigest,
+        }),
+        issued_at: this.now(),
+      } satisfies Omit<ExecutionManagementCommand, 'content_checksum'>
+      issued = executionManagementCommandSchema.parse({
+        ...unsigned,
+        content_checksum: computeManagementCommandChecksum(unsigned),
+      })
+      current.management_actions.push({ command: issued })
+      if (
+        (payload.operation === 'partial-close' || payload.operation === 'flatten')
+        && current.state !== 'closing'
+      ) {
+        transition(current, 'closing', `${payload.operation} command persisted before provider I/O.`, this.now())
+      }
+      return current
+    })
+    if (!claim.claimed || !issued) return claim.record
+
+    let acknowledgment: ExecutionManagementAcknowledgment
+    try {
+      acknowledgment = parseVerifiedManagementAcknowledgment(await adapter.manage({
+        connection,
+        intent: record.intent,
+        command: record.command,
+        managementCommand: issued,
+      }))
+    } catch (error) {
+      if (error instanceof ExecutionAdapterError && error.submissionMayHaveOccurred) {
+        acknowledgment = buildManagementAcknowledgment({
+          management_ack_schema_version: EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
+          management_command_id: issued.management_command_id,
+          status: 'unknown',
+          provider_command_ids: [],
+          evidence_refs: [],
+          acknowledged_at: this.now(),
+          message: error.message,
+        })
+      } else if (error instanceof ExecutionGatewayError) {
+        acknowledgment = buildManagementAcknowledgment({
+          management_ack_schema_version: EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
+          management_command_id: issued.management_command_id,
+          status: 'rejected',
+          provider_command_ids: [],
+          evidence_refs: [],
+          acknowledged_at: this.now(),
+          message: error instanceof Error ? error.message : 'Management command failed before delivery.',
+        })
+      } else {
+        acknowledgment = buildManagementAcknowledgment({
+          management_ack_schema_version: EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
+          management_command_id: issued.management_command_id,
+          status: 'unknown',
+          provider_command_ids: [],
+          evidence_refs: [],
+          acknowledged_at: this.now(),
+          message: error instanceof Error ? error.message : 'Management result is uncertain.',
+        })
+      }
+    }
+    if (acknowledgment.management_command_id !== issued.management_command_id) {
+      acknowledgment = buildManagementAcknowledgment({
+        management_ack_schema_version: EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
+        management_command_id: issued.management_command_id,
+        status: 'unknown',
+        provider_command_ids: [],
+        evidence_refs: [],
+        acknowledged_at: this.now(),
+        message: 'Provider management acknowledgment did not match the command.',
+      })
+    }
+    await this.options.store.update(intentId, (current) => {
+      const action = current.management_actions.find(
+        (candidate) => candidate.command.management_command_id === issued!.management_command_id,
+      )
+      if (!action) throw new ExecutionGatewayError('INVALID_STATE', 'Management command journal entry is missing.')
+      action.acknowledgment = acknowledgment
+      return current
+    })
+    if (acknowledgment.status === 'rejected') {
+      return this.finishManagementHalt(
+        intentId,
+        connection,
+        adapter,
+        acknowledgment.message,
+      )
+    }
+    return this.reconcile(intentId)
   }
 
   async recoverNonTerminal(): Promise<ExecutionRecoveryResult[]> {
@@ -412,6 +602,19 @@ export class ExecutionGateway {
         connection.transport_preference === 'auto'
         || adapter.descriptor.transport === connection.transport_preference
       ))
+      .filter((adapter) => {
+        const requiredLevel = connection.environment === 'paper'
+          ? 'paper-lifecycle-certified'
+          : 'consequential-lifecycle-certified'
+        return connection.adapter_certifications?.some((certification) => (
+          certification.adapter_id === adapter.descriptor.adapter_id
+          && certification.adapter_version === adapter.descriptor.adapter_version
+          && certification.provider_contract_version
+            === adapter.descriptor.provider_contract_version
+          && certification.transport === adapter.descriptor.transport
+          && certification.levels.includes(requiredLevel)
+        )) === true
+      })
       .sort((left, right) => transportRank(left.descriptor.transport) - transportRank(right.descriptor.transport))
     const adapter = candidates[0]
     if (!adapter) {
@@ -431,6 +634,54 @@ export class ExecutionGateway {
       )
     }
     return adapter
+  }
+
+  private adapterForRecord(record: ExecutionRecord): ExecutionAdapter {
+    if (!record.command) {
+      throw new ExecutionGatewayError('INVALID_STATE', 'Execution command is missing.')
+    }
+    const adapter = this.options.adapters.find(
+      (candidate) => (
+        candidate.descriptor.adapter_id === record.command?.adapter_id
+        && candidate.descriptor.adapter_version === record.command?.adapter_version
+      ),
+    )
+    if (!adapter) {
+      throw new ExecutionGatewayError(
+        'CONNECTION_UNAVAILABLE',
+        'The exact adapter version that entered the position is unavailable.',
+      )
+    }
+    return adapter
+  }
+
+  private assertManagementState(
+    record: ExecutionRecord,
+    payload: ExecutionManagementPayload,
+  ): void {
+    if (payload.operation === 'cancel' || payload.operation === 'modify') {
+      ensureState(record, ['acknowledged', 'partially-filled', 'protected'])
+      return
+    }
+    if (payload.operation === 'partial-close') {
+      ensureState(record, ['protected'])
+      const openQuantity = record.receipt?.filled_quantity ?? 0
+      if (payload.quantity >= openQuantity) {
+        throw new ExecutionGatewayError(
+          'CAPABILITY_UNAVAILABLE',
+          'Partial close quantity must be smaller than the confirmed open quantity; use flatten for a full exit.',
+        )
+      }
+      return
+    }
+    ensureState(record, [
+      'partially-filled',
+      'filled',
+      'protecting',
+      'protected',
+      'protection-unknown',
+      'closing',
+    ])
   }
 
   private assertRisk(intent: OrderIntent, risk: RiskDecision): void {
@@ -493,6 +744,7 @@ export class ExecutionGateway {
   private assertAccountSnapshot(
     connection: TradingConnection,
     snapshot: ReturnType<typeof executionAccountSnapshotSchema.parse>,
+    requireCanTrade = true,
   ): void {
     if (
       snapshot.connection_id !== connection.connection_id
@@ -503,7 +755,7 @@ export class ExecutionGateway {
     if (snapshot.environment !== connection.environment) {
       throw new ExecutionGatewayError('ENVIRONMENT_MISMATCH', 'Provider environment does not match the connection.')
     }
-    if (!snapshot.can_trade) {
+    if (requireCanTrade && !snapshot.can_trade) {
       throw new ExecutionGatewayError('CONNECTION_UNAVAILABLE', 'Provider reports that the account cannot trade.')
     }
     const age = Date.parse(this.now()) - Date.parse(snapshot.captured_at)
@@ -545,6 +797,7 @@ export class ExecutionGateway {
     result: ExecutionReconciliation,
     reason: string,
   ): Promise<ExecutionRecord> {
+    await this.options.store.setConnectionKill(connection.connection_id, true)
     return this.options.store.update(intentId, (record) => {
       transition(record, 'reconcile-halted', reason, this.now())
       record.receipt = this.buildReceipt({
@@ -562,6 +815,32 @@ export class ExecutionGateway {
     })
   }
 
+  private async finishManagementHalt(
+    intentId: string,
+    connection: TradingConnection,
+    adapter: ExecutionAdapter,
+    reason: string,
+  ): Promise<ExecutionRecord> {
+    await this.options.store.setConnectionKill(connection.connection_id, true)
+    return this.options.store.update(intentId, (record) => {
+      if (record.state !== 'reconcile-halted') {
+        transition(record, 'reconcile-halted', reason, this.now())
+      }
+      record.receipt = this.buildReceipt({
+        record,
+        connection,
+        adapter,
+        providerOrderIds: record.receipt?.provider_order_ids ?? [],
+        result: 'reconcile-halted',
+        filledQuantity: record.receipt?.filled_quantity ?? 0,
+        averageFillPrice: record.receipt?.average_fill_price,
+        protectionVerified: false,
+        evidenceRefs: record.receipt?.evidence_refs ?? [],
+      })
+      return record
+    })
+  }
+
   private async applyReconciliation(
     intentId: string,
     connection: TradingConnection,
@@ -571,10 +850,52 @@ export class ExecutionGateway {
     if (result.status === 'divergent' || result.status === 'not-found') {
       return this.finishReconciliationHalt(intentId, connection, adapter, result, result.reason)
     }
+    if (result.status === 'filled' && !result.protection_verified) {
+      await this.options.store.update(intentId, (record) => {
+        if (record.state !== 'protection-unknown') {
+          if (record.state !== 'filled') transition(record, 'filled', result.reason, this.now())
+          transition(record, 'protection-unknown', 'Filled position lacks verified protection.', this.now())
+        }
+        record.receipt = this.buildReceipt({
+          record,
+          connection,
+          adapter,
+          providerOrderIds: result.provider_order_ids,
+          result: 'reconcile-halted',
+          filledQuantity: result.filled_quantity,
+          averageFillPrice: result.average_fill_price,
+          protectionVerified: false,
+          evidenceRefs: result.evidence_refs,
+        })
+        return record
+      })
+      await this.options.store.setConnectionKill(connection.connection_id, true)
+      if (!adapter.descriptor.capabilities.flatten) {
+        return this.finishManagementHalt(
+          intentId,
+          connection,
+          adapter,
+          'Protection failed and the adapter has no certified flatten capability.',
+        )
+      }
+      try {
+        return await this.manage(intentId, {
+          operation: 'flatten',
+          reason: 'Emergency flatten after required protection could not be verified.',
+        })
+      } catch (error) {
+        return this.finishManagementHalt(
+          intentId,
+          connection,
+          adapter,
+          error instanceof Error ? error.message : 'Emergency flatten failed.',
+        )
+      }
+    }
     return this.options.store.update(intentId, (record) => {
       let receiptResult: ExecutionReceipt['result']
       if (result.status === 'working') {
-        ensureState(record, ['acknowledged', 'submit-unknown'])
+        ensureState(record, ['acknowledged', 'submit-unknown', 'closing'])
         if (record.state === 'submit-unknown') {
           transition(record, 'acknowledged', 'Reconciliation adopted the provider working order.', this.now())
         }
@@ -585,21 +906,25 @@ export class ExecutionGateway {
       } else if (result.status === 'filled-protected') {
         if (record.state === 'protecting') {
           transition(record, 'protected', 'Provider-native protection is verified.', this.now())
+        } else if (record.state === 'closing') {
+          transition(record, 'protected', 'Remaining position protection is verified after partial close.', this.now())
         } else if (record.state !== 'protected') {
           if (record.state !== 'filled') transition(record, 'filled', result.reason, this.now())
           transition(record, 'protecting', 'Verifying provider-native protection.', this.now())
           transition(record, 'protected', 'Provider-native protection is verified.', this.now())
         }
         receiptResult = 'filled-protected'
+      } else if (result.status === 'closing') {
+        if (record.state !== 'closing') transition(record, 'closing', result.reason, this.now())
+        receiptResult = 'working'
       } else if (result.status === 'closed') {
         if (record.state !== 'closing') transition(record, 'closing', result.reason, this.now())
         transition(record, 'closed', 'Provider position is flat and no working order can reopen it.', this.now())
         receiptResult = 'closed'
+      } else if (result.status === 'canceled') {
+        transition(record, 'canceled', result.reason, this.now())
+        receiptResult = 'canceled'
       } else {
-        if (record.state !== 'protection-unknown') {
-          if (record.state !== 'filled') transition(record, 'filled', result.reason, this.now())
-          transition(record, 'protection-unknown', 'Filled position lacks verified protection.', this.now())
-        }
         receiptResult = 'reconcile-halted'
       }
       record.receipt = this.buildReceipt({
@@ -705,7 +1030,7 @@ const ALLOWED_TRANSITIONS: Record<ExecutionLifecycleState, ExecutionLifecycleSta
   filled: ['protecting', 'protection-unknown', 'closing', 'reconcile-halted', 'error'],
   protecting: ['protected', 'protection-unknown', 'closing', 'reconcile-halted', 'error'],
   protected: ['closing', 'reconcile-halted', 'error'],
-  closing: ['closed', 'reconcile-halted', 'error'],
+  closing: ['protected', 'closed', 'reconcile-halted', 'error'],
   closed: [],
   'submit-unknown': [
     'acknowledged',
@@ -745,4 +1070,33 @@ const capabilityForEntry = (
   if (orderType === 'limit') return 'submit_limit'
   if (orderType === 'stop') return 'submit_stop'
   return 'submit_stop_limit'
+}
+
+const managementCapability = (
+  operation: ExecutionManagementPayload['operation'],
+): 'cancel_order' | 'modify_order' | 'partial_close' | 'flatten' => {
+  if (operation === 'cancel') return 'cancel_order'
+  if (operation === 'modify') return 'modify_order'
+  if (operation === 'partial-close') return 'partial_close'
+  return 'flatten'
+}
+
+const buildManagementAcknowledgment = (
+  input: Omit<ExecutionManagementAcknowledgment, 'content_checksum'>,
+): ExecutionManagementAcknowledgment => executionManagementAcknowledgmentSchema.parse({
+  ...input,
+  content_checksum: computeManagementAcknowledgmentChecksum(input),
+})
+
+const parseVerifiedManagementAcknowledgment = (
+  input: unknown,
+): ExecutionManagementAcknowledgment => {
+  const acknowledgment = executionManagementAcknowledgmentSchema.parse(input)
+  if (
+    computeManagementAcknowledgmentChecksum(acknowledgment)
+    !== acknowledgment.content_checksum
+  ) {
+    throw new Error('Management acknowledgment checksum is invalid.')
+  }
+  return acknowledgment
 }

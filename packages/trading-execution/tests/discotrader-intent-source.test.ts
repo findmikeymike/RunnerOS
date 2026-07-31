@@ -73,6 +73,7 @@ const record = (intent: OrderIntent): ExecutionRecord => ({
   trace_id: 'trace-discotrader-test',
   intent,
   state: 'created',
+  management_actions: [],
   transitions: [{
     transition_id: 'transition-discotrader-test',
     from: null,

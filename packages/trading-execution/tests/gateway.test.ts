@@ -6,6 +6,7 @@ import path from 'node:path'
 import {
   EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
   EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
+  EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
   EXECUTION_RECONCILIATION_SCHEMA_VERSION,
   EXECUTION_SUBMIT_ACK_SCHEMA_VERSION,
   ORDER_INTENT_SCHEMA_VERSION,
@@ -14,6 +15,7 @@ import {
   type ExecutionAccountSnapshot,
   type ExecutionAuthorization,
   type ExecutionReconciliation,
+  type ExecutionManagementAcknowledgment,
   type ExecutionSubmitAcknowledgment,
   type OrderIntent,
   type RiskDecision,
@@ -26,6 +28,7 @@ import {
   FileExecutionStore,
   computeActionDigest,
   computeExecutionReceiptChecksum,
+  computeManagementAcknowledgmentChecksum,
   computeOrderIntentChecksum,
   type ExecutionAdapter,
 } from '../src/index.ts'
@@ -80,6 +83,24 @@ const makeConnection = (
     'paper-entry-certified',
     'paper-lifecycle-certified',
   ],
+  adapter_certifications: [
+    {
+      certification_id: 'cert-fake-api',
+      adapter_id: 'fake-api',
+      adapter_version: '1.0.0',
+      provider_contract_version: 'fake-provider@1',
+      transport: 'api',
+      levels: ['paper-lifecycle-certified'],
+    },
+    {
+      certification_id: 'cert-fake-browser',
+      adapter_id: 'fake-browser',
+      adapter_version: '1.0.0',
+      provider_contract_version: 'fake-provider@1',
+      transport: 'browser',
+      levels: ['paper-lifecycle-certified'],
+    },
+  ],
   enabled: true,
   created_at: '2026-07-30T14:00:00.000Z',
   updated_at: '2026-07-30T14:00:00.000Z',
@@ -125,6 +146,8 @@ class FakeAdapter implements ExecutionAdapter {
   connectCount = 0
   reconciliation: ExecutionReconciliation
   submitError?: Error
+  manageError?: Error
+  manageCount = 0
   snapshotOverrides: Partial<ExecutionAccountSnapshot> = {}
 
   readonly descriptor
@@ -136,6 +159,7 @@ class FakeAdapter implements ExecutionAdapter {
     this.descriptor = {
       adapter_id: adapterId,
       adapter_version: '1.0.0',
+      provider_contract_version: 'fake-provider@1',
       transport,
       capabilities,
     }
@@ -190,6 +214,34 @@ class FakeAdapter implements ExecutionAdapter {
       status: 'acknowledged',
       provider_order_ids: ['provider-order-1'],
       acknowledged_at: NOW,
+    }
+  }
+
+  async manage(
+    input: Parameters<ExecutionAdapter['manage']>[0],
+  ): Promise<ExecutionManagementAcknowledgment> {
+    this.manageCount += 1
+    if (this.manageError) throw this.manageError
+    if (input.managementCommand.payload.operation === 'flatten') {
+      this.reconciliation = {
+        ...this.reconciliation,
+        status: 'closed',
+        protection_verified: false,
+        reason: 'Fake provider is flat after emergency liquidation.',
+      }
+    }
+    const unsigned = {
+      management_ack_schema_version: EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
+      management_command_id: input.managementCommand.management_command_id,
+      status: 'acknowledged',
+      provider_command_ids: [`provider-${input.managementCommand.payload.operation}-1`],
+      evidence_refs: [`evidence-${input.managementCommand.payload.operation}-1`],
+      acknowledged_at: NOW,
+      message: 'Fake provider acknowledged management command.',
+    } satisfies Omit<ExecutionManagementAcknowledgment, 'content_checksum'>
+    return {
+      ...unsigned,
+      content_checksum: computeManagementAcknowledgmentChecksum(unsigned),
     }
   }
 
@@ -280,6 +332,58 @@ describe('execution gateway', () => {
     expect(reloaded.command?.idempotency_key).toBe(result.command?.idempotency_key)
   })
 
+  test('persists one flatten command before I/O and suppresses a concurrent duplicate', async () => {
+    const adapter = new FakeAdapter()
+    const { root, gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    expect((await gateway.execute(intent.intent_id)).state).toBe('protected')
+    const secondGateway = new ExecutionGateway({
+      store: new FileExecutionStore(root, () => NOW),
+      adapters: [adapter],
+      resolveConnection: async () => connection,
+      now: () => NOW,
+    })
+
+    const outcomes = await Promise.all([
+      gateway.flatten(intent.intent_id, 'Operator requested flat.'),
+      secondGateway.flatten(intent.intent_id, 'Same flatten, differently worded.'),
+    ])
+
+    expect(adapter.manageCount).toBe(1)
+    expect(outcomes.some((record) => record.state === 'closed')).toBe(true)
+    const final = await gateway.get(intent.intent_id)
+    expect(final.state).toBe('closed')
+    expect(final.management_actions).toHaveLength(1)
+    expect(final.management_actions[0]).toMatchObject({
+      command: { payload: { operation: 'flatten' } },
+      acknowledgment: { status: 'acknowledged' },
+    })
+    expect((await gateway.flatten(intent.intent_id, 'Retry after completion.')).state).toBe('closed')
+    expect(adapter.manageCount).toBe(1)
+  })
+
+  test('kills new entry and automatically flattens an unprotected fill', async () => {
+    const adapter = new FakeAdapter()
+    adapter.reconciliation = {
+      ...adapter.reconciliation,
+      status: 'filled',
+      protection_verified: false,
+      reason: 'Provider reports a fill without a working stop.',
+    }
+    const { gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    const result = await gateway.execute(intent.intent_id)
+
+    expect(result.state).toBe('closed')
+    expect(adapter.submitCount).toBe(1)
+    expect(adapter.manageCount).toBe(1)
+    expect(result.management_actions[0]?.command.payload.operation).toBe('flatten')
+    expect((await store.readControl()).connection_kills).toContain(connection.connection_id)
+  })
+
   test('auto selects API before browser and never submits through both', async () => {
     const browser = new FakeAdapter('browser')
     const api = new FakeAdapter('api')
@@ -292,6 +396,28 @@ describe('execution gateway', () => {
 
     expect(api.submitCount).toBe(1)
     expect(browser.submitCount).toBe(0)
+  })
+
+  test('does not inherit certification from another adapter version', async () => {
+    const adapter = new FakeAdapter()
+    const connection = makeConnection({
+      adapter_certifications: [{
+        certification_id: 'cert-old-api',
+        adapter_id: 'fake-api',
+        adapter_version: '0.9.0',
+        provider_contract_version: 'fake-provider@1',
+        transport: 'api',
+        levels: ['paper-lifecycle-certified'],
+      }],
+    })
+    const { gateway } = await setup(connection, [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({
+      code: 'CONNECTION_UNAVAILABLE',
+    })
+    expect(adapter.submitCount).toBe(0)
   })
 
   test('atomically permits only one submit under concurrent execution', async () => {
@@ -431,6 +557,42 @@ describe('execution gateway', () => {
     await writeFile(recordFile, `${JSON.stringify(record, null, 2)}\n`)
 
     await expect(store.get(intent.intent_id)).rejects.toBeInstanceOf(ExecutionGatewayError)
+    await expect(store.get(intent.intent_id)).rejects.toMatchObject({
+      code: 'RECORD_INTEGRITY_FAILURE',
+    })
+  })
+
+  test('detects persisted management command tampering', async () => {
+    const adapter = new FakeAdapter()
+    const { root, gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    await gateway.execute(intent.intent_id)
+    await gateway.flatten(intent.intent_id, 'Operator requested flat.')
+
+    const recordFile = path.join(root, 'records', `${intent.intent_id}.json`)
+    const record = JSON.parse(await readFile(recordFile, 'utf8'))
+    record.management_actions[0].command.payload.reason = 'Tampered reason.'
+    await writeFile(recordFile, `${JSON.stringify(record, null, 2)}\n`)
+
+    await expect(store.get(intent.intent_id)).rejects.toMatchObject({
+      code: 'RECORD_INTEGRITY_FAILURE',
+    })
+  })
+
+  test('detects persisted management acknowledgment tampering', async () => {
+    const adapter = new FakeAdapter()
+    const { root, gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    await gateway.execute(intent.intent_id)
+    await gateway.flatten(intent.intent_id, 'Operator requested flat.')
+
+    const recordFile = path.join(root, 'records', `${intent.intent_id}.json`)
+    const record = JSON.parse(await readFile(recordFile, 'utf8'))
+    record.management_actions[0].acknowledgment.message = 'Tampered acknowledgment.'
+    await writeFile(recordFile, `${JSON.stringify(record, null, 2)}\n`)
+
     await expect(store.get(intent.intent_id)).rejects.toMatchObject({
       code: 'RECORD_INTEGRITY_FAILURE',
     })

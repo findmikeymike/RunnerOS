@@ -97,6 +97,7 @@ export class TradingConnectionService {
       state: existing?.state ?? 'auth-required',
       capabilities: existing?.capabilities ?? EMPTY_CAPABILITIES,
       certifications: existing?.certifications ?? [],
+      adapter_certifications: existing?.adapter_certifications ?? [],
       consequential_enabled_until: existing?.consequential_enabled_until,
       enabled: existing?.enabled ?? false,
       ...(
@@ -161,6 +162,14 @@ export class TradingConnectionService {
       state: 'ready',
       capabilities: evidence.certified_capabilities,
       certifications: evidence.eligible_certifications,
+      adapter_certifications: [{
+        certification_id: evidence.certification_id,
+        adapter_id: evidence.adapter_id,
+        adapter_version: evidence.adapter_version,
+        provider_contract_version: evidence.provider_contract_version,
+        transport: evidence.transport,
+        levels: evidence.eligible_certifications,
+      }],
       enabled: false,
       consequential_enabled_until: undefined,
       updated_at: this.now(),

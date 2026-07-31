@@ -14,6 +14,8 @@ export const RISK_DECISION_SCHEMA_VERSION = 'risk-decision@1'
 export const EXECUTION_AUTHORIZATION_SCHEMA_VERSION = 'execution-authorization@1'
 export const EXTERNAL_AUTHORIZATION_BASIS_SCHEMA_VERSION = 'external-authorization-basis@1'
 export const EXECUTION_COMMAND_SCHEMA_VERSION = 'execution-command@1'
+export const EXECUTION_MANAGEMENT_COMMAND_SCHEMA_VERSION = 'execution-management-command@1'
+export const EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION = 'execution-management-ack@1'
 export const EXECUTION_RECORD_SCHEMA_VERSION = 'execution-record@1'
 export const EXECUTION_RECEIPT_SCHEMA_VERSION = 'execution-receipt@1'
 export const EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION = 'execution-account-snapshot@1'
@@ -96,6 +98,14 @@ export const tradingConnectionSchema = z.object({
   state: executionConnectionStateSchema,
   capabilities: executionCapabilitiesSchema,
   certifications: z.array(executionCertificationSchema).max(5),
+  adapter_certifications: z.array(z.object({
+    certification_id: identifierSchema,
+    adapter_id: identifierSchema,
+    adapter_version: semverSchema,
+    provider_contract_version: z.string().trim().min(1).max(120),
+    transport: executionTransportSchema,
+    levels: z.array(executionCertificationSchema).min(1).max(5),
+  }).strict()).max(20).optional(),
   consequential_enabled_until: utcTimestampSchema.optional(),
   enabled: z.boolean(),
   created_at: utcTimestampSchema,
@@ -316,6 +326,96 @@ export const executionCommandSchema = z.object({
   issued_at: utcTimestampSchema,
 }).strict()
 
+export const executionManagementOperationSchema = z.enum([
+  'cancel',
+  'modify',
+  'partial-close',
+  'flatten',
+])
+
+export const executionManagementPayloadSchema = z.discriminatedUnion('operation', [
+  z.object({
+    operation: z.literal('cancel'),
+    provider_order_ids: z.array(identifierSchema).min(1).max(100),
+  }).strict(),
+  z.object({
+    operation: z.literal('modify'),
+    provider_order_id: identifierSchema,
+    quantity: z.number().int().positive().max(10_000),
+    order_type: orderTypeSchema,
+    limit_price: decimalStringSchema.optional(),
+    stop_price: decimalStringSchema.optional(),
+    time_in_force: timeInForceSchema,
+  }).strict().superRefine((payload, context) => {
+    if (
+      (payload.order_type === 'limit' || payload.order_type === 'stop-limit')
+      && !payload.limit_price
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['limit_price'],
+        message: 'Limit and stop-limit modifications require a limit price',
+      })
+    }
+    if (
+      (payload.order_type === 'stop' || payload.order_type === 'stop-limit')
+      && !payload.stop_price
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['stop_price'],
+        message: 'Stop and stop-limit modifications require a stop price',
+      })
+    }
+  }),
+  z.object({
+    operation: z.literal('partial-close'),
+    quantity: z.number().int().positive().max(10_000),
+  }).strict(),
+  z.object({
+    operation: z.literal('flatten'),
+    reason: z.string().trim().min(1).max(500),
+  }).strict(),
+])
+
+export const executionManagementCommandSchema = z.object({
+  management_command_schema_version: z.literal(EXECUTION_MANAGEMENT_COMMAND_SCHEMA_VERSION),
+  management_command_id: identifierSchema,
+  parent_command_id: identifierSchema,
+  intent_id: identifierSchema,
+  claim_id: identifierSchema,
+  connection_id: identifierSchema,
+  adapter_id: identifierSchema,
+  adapter_version: semverSchema,
+  payload: executionManagementPayloadSchema,
+  action_digest: sha256Schema,
+  idempotency_key: sha256Schema,
+  issued_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict()
+
+export const executionManagementAcknowledgmentSchema = z.object({
+  management_ack_schema_version: z.literal(EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION),
+  management_command_id: identifierSchema,
+  status: z.enum(['acknowledged', 'rejected', 'unknown']),
+  provider_command_ids: z.array(identifierSchema).max(100),
+  evidence_refs: z.array(identifierSchema).max(100),
+  acknowledged_at: utcTimestampSchema,
+  message: z.string().trim().min(1).max(500),
+  content_checksum: sha256Schema,
+}).strict().superRefine((acknowledgment, context) => {
+  if (
+    acknowledgment.status === 'acknowledged'
+    && acknowledgment.provider_command_ids.length === 0
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['provider_command_ids'],
+      message: 'Acknowledged management commands require a provider command ID',
+    })
+  }
+})
+
 export const executionAccountSnapshotSchema = z.object({
   account_snapshot_schema_version: z.literal(EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION),
   account_snapshot_id: identifierSchema,
@@ -387,7 +487,9 @@ export const executionReconciliationSchema = z.object({
     'partially-filled',
     'filled',
     'filled-protected',
+    'closing',
     'closed',
+    'canceled',
     'divergent',
   ]),
   provider_order_ids: z.array(identifierSchema).max(100),
@@ -450,6 +552,7 @@ export const executionReceiptResultSchema = z.enum([
   'working',
   'partially-filled',
   'filled-protected',
+  'canceled',
   'closed',
   'submit-unknown',
   'reconcile-halted',
@@ -503,6 +606,10 @@ export const executionRecordSchema = z.object({
     claimed_at: utcTimestampSchema,
   }).strict().optional(),
   command: executionCommandSchema.optional(),
+  management_actions: z.array(z.object({
+    command: executionManagementCommandSchema,
+    acknowledgment: executionManagementAcknowledgmentSchema.optional(),
+  }).strict()).max(1_000).default([]),
   receipt: executionReceiptSchema.optional(),
   transitions: z.array(executionTransitionSchema).min(1).max(1_000),
   created_at: utcTimestampSchema,
@@ -554,6 +661,10 @@ export type RiskDecision = z.infer<typeof riskDecisionSchema>
 export type ExecutionAuthorization = z.infer<typeof executionAuthorizationSchema>
 export type ExternalAuthorizationBasis = z.infer<typeof externalAuthorizationBasisSchema>
 export type ExecutionCommand = z.infer<typeof executionCommandSchema>
+export type ExecutionManagementOperation = z.infer<typeof executionManagementOperationSchema>
+export type ExecutionManagementPayload = z.infer<typeof executionManagementPayloadSchema>
+export type ExecutionManagementCommand = z.infer<typeof executionManagementCommandSchema>
+export type ExecutionManagementAcknowledgment = z.infer<typeof executionManagementAcknowledgmentSchema>
 export type ExecutionAccountSnapshot = z.infer<typeof executionAccountSnapshotSchema>
 export type ExecutionSubmitAcknowledgment = z.infer<typeof executionSubmitAcknowledgmentSchema>
 export type ExecutionReconciliation = z.infer<typeof executionReconciliationSchema>

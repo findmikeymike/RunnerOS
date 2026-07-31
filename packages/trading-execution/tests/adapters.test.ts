@@ -3,11 +3,14 @@ import { describe, expect, test } from 'bun:test'
 import {
   EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
   EXECUTION_COMMAND_SCHEMA_VERSION,
+  EXECUTION_MANAGEMENT_COMMAND_SCHEMA_VERSION,
   EXECUTION_RECONCILIATION_SCHEMA_VERSION,
   ORDER_INTENT_SCHEMA_VERSION,
   TRADING_CONNECTION_SCHEMA_VERSION,
   type ExecutionAccountSnapshot,
   type ExecutionCommand,
+  type ExecutionManagementCommand,
+  type ExecutionManagementPayload,
   type ExecutionReconciliation,
   type OrderIntent,
   type TradingConnection,
@@ -130,6 +133,26 @@ const command = (targetConnection: TradingConnection, targetIntent: OrderIntent)
   issued_at: NOW,
 })
 
+const managementCommand = (
+  targetConnection: TradingConnection,
+  targetIntent: OrderIntent,
+  payload: ExecutionManagementPayload,
+): ExecutionManagementCommand => ({
+  management_command_schema_version: EXECUTION_MANAGEMENT_COMMAND_SCHEMA_VERSION,
+  management_command_id: `management-${payload.operation}-1`,
+  parent_command_id: command(targetConnection, targetIntent).command_id,
+  intent_id: targetIntent.intent_id,
+  claim_id: command(targetConnection, targetIntent).claim_id,
+  connection_id: targetConnection.connection_id,
+  adapter_id: 'tradovate-api',
+  adapter_version: '1.0.0',
+  payload,
+  action_digest: 'c'.repeat(64),
+  idempotency_key: 'd'.repeat(64),
+  issued_at: NOW,
+  content_checksum: 'e'.repeat(64),
+})
+
 const snapshot = (targetConnection: TradingConnection): ExecutionAccountSnapshot => ({
   account_snapshot_schema_version: EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
   account_snapshot_id: 'snapshot-paper-1',
@@ -163,6 +186,7 @@ class TradovateClient implements TradovateRestClient {
     if (this.placeError) throw this.placeError
     return this.placeResult
   }
+  async manage() { return { providerCommandIds: [201] } }
   async listOrders() { return this.orders }
   async listPositions() { return this.positions }
 }
@@ -441,6 +465,60 @@ describe('Tradovate API adapter', () => {
       submissionMayHaveOccurred: true,
     })
   })
+
+  test('uses only official cancel, modify, and liquidate endpoints with exact account targets', async () => {
+    const targetConnection = connection('tradovate')
+    const targetIntent = intent(targetConnection)
+    const targetCommand = command(targetConnection, targetIntent)
+    const fixture = new TradovateFetchFixture()
+    const client = new TradovateFetchClient({
+      resolveCredential: async () => fixture.credential,
+      fetch: fixture.fetch,
+      now: () => NOW,
+    })
+
+    expect(await client.manage({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+      managementCommand: managementCommand(targetConnection, targetIntent, {
+        operation: 'cancel',
+        provider_order_ids: ['100'],
+      }),
+    })).toMatchObject({ providerCommandIds: [601] })
+    expect(await client.manage({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+      managementCommand: managementCommand(targetConnection, targetIntent, {
+        operation: 'modify',
+        provider_order_id: '100',
+        quantity: 1,
+        order_type: 'limit',
+        limit_price: '5599.75',
+        time_in_force: 'day',
+      }),
+    })).toMatchObject({ providerCommandIds: [602] })
+    expect(await client.manage({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+      managementCommand: managementCommand(targetConnection, targetIntent, {
+        operation: 'flatten',
+        reason: 'Emergency protection failure.',
+      }),
+    })).toMatchObject({ providerCommandIds: [701] })
+
+    expect(fixture.calls.filter((call) => call.url.endsWith('/order/cancelorder'))).toHaveLength(1)
+    expect(fixture.calls.filter((call) => call.url.endsWith('/order/modifyorder'))).toHaveLength(1)
+    expect(fixture.calls.filter((call) => call.url.endsWith('/order/liquidateposition'))).toHaveLength(1)
+    expect(fixture.calls.find((call) => call.url.endsWith('/order/cancelorder'))?.body)
+      .toMatchObject({ orderId: 100, isAutomated: true })
+    expect(fixture.calls.find((call) => call.url.endsWith('/order/modifyorder'))?.body)
+      .toMatchObject({ orderId: 100, orderQty: 1, price: 5599.75, isAutomated: true })
+    expect(fixture.calls.find((call) => call.url.endsWith('/order/liquidateposition'))?.body)
+      .toMatchObject({ accountId: 123456, contractId: 9001, admin: false })
+  })
 })
 
 class TradovateFetchFixture {
@@ -450,7 +528,12 @@ class TradovateFetchFixture {
     account_spec: 'APEX-1234',
     expires_at: '2026-07-30T16:00:00.000Z',
   }
-  readonly calls: Array<{ url: string; method: string; authorization: string | null }> = []
+  readonly calls: Array<{
+    url: string
+    method: string
+    authorization: string | null
+    body?: Record<string, unknown>
+  }> = []
   placeStatus = 200
 
   readonly fetch: TradovateFetch = async (input, init) => {
@@ -460,6 +543,9 @@ class TradovateFetchFixture {
       url,
       method: init?.method ?? 'GET',
       authorization: headers.get('Authorization'),
+      ...(typeof init?.body === 'string'
+        ? { body: JSON.parse(init.body) as Record<string, unknown> }
+        : {}),
     })
     const path = new URL(url).pathname.replace('/v1', '')
     const payloads: Record<string, unknown> = {
@@ -516,6 +602,9 @@ class TradovateFetchFixture {
         oso1Id: 101,
         oso2Id: 102,
       },
+      '/order/cancelorder': { commandId: 601 },
+      '/order/modifyorder': { commandId: 602 },
+      '/order/liquidateposition': { orderId: 701 },
     }
     const status = path === '/order/placeoso' ? this.placeStatus : 200
     return new Response(JSON.stringify(payloads[path] ?? {}), {

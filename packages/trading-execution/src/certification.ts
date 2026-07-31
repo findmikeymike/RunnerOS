@@ -105,7 +105,7 @@ const parseVerifiedEvidence = (input: unknown): AdapterCertificationEvidence => 
 export const deriveCertificationOutcome = (
   evidence: Pick<
     AdapterCertificationEvidence,
-    'environment' | 'transport' | 'scenarios' | 'soak'
+    'environment' | 'transport' | 'scenarios' | 'soak' | 'certified_capabilities'
   >,
 ): Pick<AdapterCertificationEvidence, 'eligible_certifications' | 'blockers'> => {
   const results = new Map(evidence.scenarios.map((scenario) => [scenario.scenario_id, scenario]))
@@ -124,6 +124,20 @@ export const deriveCertificationOutcome = (
     && evidence.soak.incomplete_closes === 0
   )
   if (!cleanSoak) blockers.push('paper-soak: 50 clean entry-to-close lifecycles required')
+  const lifecycleCapabilities: Array<keyof ExecutionCapabilities> = [
+    'cancel_order',
+    'modify_order',
+    'partial_close',
+    'flatten',
+  ]
+  const lifecycleCapabilitiesPass = lifecycleCapabilities.every(
+    (capability) => evidence.certified_capabilities[capability],
+  )
+  for (const capability of lifecycleCapabilities) {
+    if (!evidence.certified_capabilities[capability]) {
+      blockers.push(`capability-${capability}: unavailable`)
+    }
+  }
 
   const readScenarioIds: CertificationScenarioId[] = [
     'correct-account-and-environment',
@@ -131,10 +145,15 @@ export const deriveCertificationOutcome = (
     'wrong-environment-rejected',
   ]
   const readCertified = readScenarioIds.every((id) => results.get(id)?.status === 'pass')
-  const allScenariosPass = blockers.every((blocker) => blocker.startsWith('paper-soak:'))
+  const allScenariosPass = required.every((id) => results.get(id)?.status === 'pass')
   const eligible: AdapterCertificationEvidence['eligible_certifications'] = []
   if (readCertified) eligible.push('read-certified')
-  if (evidence.environment === 'paper' && allScenariosPass && cleanSoak) {
+  if (
+    evidence.environment === 'paper'
+    && allScenariosPass
+    && lifecycleCapabilitiesPass
+    && cleanSoak
+  ) {
     eligible.push('paper-entry-certified', 'paper-lifecycle-certified')
   }
   return { eligible_certifications: eligible, blockers }
@@ -178,6 +197,7 @@ export const runAdapterCertification = async (
     transport: runner.transport,
     scenarios,
     soak,
+    certified_capabilities: runner.certified_capabilities,
   })
   const withoutChecksum = {
     certification_schema_version: ADAPTER_CERTIFICATION_EVIDENCE_SCHEMA_VERSION,

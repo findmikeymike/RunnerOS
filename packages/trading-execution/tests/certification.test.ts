@@ -109,6 +109,17 @@ describe('adapter certification', () => {
     expect(evidence.blockers).toContain('flatten-failure-contained: blocked')
   })
 
+  test('cannot certify a lifecycle when the advertised adapter lacks a management capability', async () => {
+    const runner = new Runner()
+    Object.defineProperty(runner, 'certified_capabilities', {
+      value: { ...capabilities, partial_close: false },
+    })
+    const evidence = await runAdapterCertification(runner, () => NOW)
+
+    expect(evidence.eligible_certifications).toEqual(['read-certified'])
+    expect(evidence.blockers).toContain('capability-partial_close: unavailable')
+  })
+
   test('blocks certification on duplicate, unprotected, divergent, or incomplete lifecycle evidence', async () => {
     const evidence = await runAdapterCertification(new Runner(
       undefined,
