@@ -389,6 +389,14 @@ export class FileDiscordTradeManager {
 
       await this.options.afterGatewayAction?.(receipt, receipt.actions[planned.index]!, record)
       const commandId = managementCommandId(record, receipt.actions[planned.index]!.concrete_payload)
+      const gatewayReceipt = record.receipt
+      if (!gatewayReceipt || gatewayReceipt.evidence_refs.length === 0) {
+        return this.failAction(
+          receipt,
+          planned.index,
+          new Error('Gateway action completed without a reconciled receipt and provider evidence.'),
+        )
+      }
       if (
         receipt.actions[planned.index]!.logical_action.operation !== 'reconcile'
         && !commandId
@@ -404,6 +412,8 @@ export class FileDiscordTradeManager {
         action.status = 'completed'
         action.completed_at = this.now()
         if (commandId) action.management_command_id = commandId
+        action.gateway_receipt_id = gatewayReceipt.receipt_id
+        action.evidence_refs = gatewayReceipt.evidence_refs
         return current
       })
     }
@@ -618,6 +628,7 @@ const isManagementEligible = (record: ExecutionRecord): boolean => (
   record.state === 'protected'
   && Boolean(record.command)
   && Boolean(record.receipt?.protection_verified)
+  && Boolean(record.receipt?.open_quantity)
 )
 
 const confirmedOpenQuantity = (record: ExecutionRecord): number => {
@@ -627,7 +638,11 @@ const confirmedOpenQuantity = (record: ExecutionRecord): number => {
   if (stops.length !== 1) {
     throw new Error('Confirmed open quantity requires exactly one active provider stop order.')
   }
-  return stops[0]!.quantity
+  const openQuantity = record.receipt?.open_quantity
+  if (!openQuantity || stops[0]!.quantity !== openQuantity) {
+    throw new Error('Provider stop quantity does not match the confirmed open position.')
+  }
+  return openQuantity
 }
 
 const discordChannelId = (channelUrl: string): string => {

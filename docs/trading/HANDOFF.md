@@ -35,7 +35,7 @@ This is not yet a live trading system. It has no live quote stream or certified 
 
 The Unified Broker Entry Gateway foundation is implemented locally. Provider-neutral contracts, durable single-claim state, reconciliation, kill switches, checksum-bound management commands, exact adapter certification, and protected-fill recovery are covered by automated tests. Tradovate demo/API and WealthCharts browser foundations implement the same normalized adapter boundary, but neither is paper-certified. DiscordTrader tickets now become immutable gateway intents rather than retaining a second execution authority.
 
-Discord follow-up management is implemented inside `@trade-god/execution`. A checksum-bound message resolves only by immutable author plus reply/thread/channel/symbol evidence to exactly one protected gateway trade. Partial exits, flatten, breakeven/explicit stop moves, stopped-out reconciliation, compound ordering, durable receipts, and crash replay are covered. Rival review fixes prevent negated commands, time-in-force drift, unverifiable completion claims, fake stop roles, and non-Discord channel hosts. This is a tested package seam, not a running desktop service: DiscoTrader does not yet send management pushes, Electron does not yet instantiate the manager, and no paper-certified adapter can execute it.
+Discord follow-up management is implemented inside `@trade-god/execution` and instantiated by Electron in observe-only form. A checksum-bound message resolves only by immutable author plus reply/thread/channel/symbol evidence to exactly one protected gateway trade. The existing 9101 trigger server authenticates the dedicated `discotrader-management` slug, rejects exact signed replays, and directly hands the validated body to the durable manager. Startup recovery runs before new delivery. The runtime intentionally has zero provider adapters until paper certification. DiscoTrader does not yet send management pushes, the Trading workspace matcher has not been installed/smoked, and no paper-certified adapter can execute it.
 
 Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent event, quality, batch, candle, series, and agent-snapshot contracts. Python emits the exact TypeScript golden/checksum; typed client/Electron supervision validates it; the replay engine produces current price and candle history under a no-lookahead watermark. `agent-market-snapshot@2` now binds explicit provider sequence, continuity, freshness, and session-window admission into its checksum. One canonical batch produces both the checksum-verified `order-flow-artifact@2` and the addressed snapshot reference consumed by `order-flow-specialist@0.1.0`. The specialist refuses reconnecting, gapped, stale, unavailable, invalid, or out-of-window evidence before invoking the model. The GPT path has been user-smoked in Electron.
 
@@ -45,7 +45,7 @@ Futures Overview now receives a deterministic project-owned synthetic ES session
 
 ## Immediate Assignment
 
-Wire the donor-side signed management push into an observe-only Electron receiver, then certify one real paper connection. First confirm Apex/Tradovate API eligibility and obtain a demo credential bound to the exact account; then implement/prove partial-close protection resizing and run the 50-lifecycle paper soak. Do not enable consequential execution before the sender, receiver, and paper lifecycle all pass.
+Add the donor-side signed management push, install the dedicated Trading workspace matcher, and smoke one blocked/orphaned delivery through Electron. Then confirm Apex/Tradovate API eligibility, obtain a demo credential bound to the exact account, implement/prove partial-close protection resizing, and run the 50-lifecycle paper soak. Do not attach a provider adapter or enable consequential execution before those gates pass.
 
 ## Known Expected Artifact
 
@@ -62,7 +62,7 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Unified gateway closure: 175 tests passed, 0 failed across 31 trading/Electron files with 582 expectations.
 - Repository-wide `bun run typecheck:all` passed.
 - Electron main, preload, and renderer production builds passed.
-- Discord follow-up management: 110 package tests passed with 288 expectations, both package typechecks passed, repository-wide `typecheck:all` passed, and Electron main/preload/renderer production builds passed. Donor push, desktop instantiation, and real paper mutation are not runtime-proven.
+- Discord follow-up management receiver: 29 trigger-server tests, 110 contract/execution tests, and 4 Electron runtime tests pass; repository-wide typecheck and Electron main/preload/renderer builds pass. Donor push, installed matcher/runtime smoke, and real paper mutation are not proven.
 - Real Tradovate paper lifecycle, WealthCharts paper lifecycle, 50-run provider soak, and consequential canary: not run.
 - Paced replay focused closure: 93 passed, 0 failed across 14 TypeScript files; Python market-data suite: 21 passed, 0 failed.
 - Real Electron smoke: not run.

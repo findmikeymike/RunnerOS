@@ -23,7 +23,7 @@
  */
 
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http'
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import {
   appendWebhookDeliveryRecord,
   type AutomationSystem,
@@ -81,6 +81,8 @@ export interface TriggerHttpServerOptions {
   bodyReadTimeoutMs?: number
   /** Max allowed age/skew for X-Craft-Timestamp. Defaults to 5 minutes. */
   signatureSkewMs?: number
+  /** Exact authenticated slugs that reject reuse of the same signed request. */
+  replayProtectedSlugs?: string[]
   /**
    * Proxy IPs whose X-Forwarded-For header should be trusted for remoteIp.
    * When omitted, CRAFT_TRIGGER_TRUSTED_PROXIES is parsed as a comma-separated list.
@@ -91,7 +93,34 @@ export interface TriggerHttpServerOptions {
   logger?: Logger
   /** Optional test hook/custom persistence for inbound webhook delivery history. */
   deliveryRecorder?: WebhookDeliveryRecorder
+  /**
+   * Optional trusted-main-process consumer. It runs only after the matcher,
+   * method, body, authentication, replay, and rate gates pass. Returning
+   * handled=true bypasses the ordinary automation event bus.
+   */
+  authenticatedDeliveryHandler?: AuthenticatedTriggerDeliveryHandler
 }
+
+export interface AuthenticatedTriggerDelivery {
+  workspaceId: string
+  slug: string
+  matcher: AutomationMatcher
+  method: string
+  headers: Record<string, string>
+  query: Record<string, string>
+  body: unknown
+  bodyRaw: string
+  remoteIp: string
+  authenticated: boolean
+}
+
+export type AuthenticatedTriggerDeliveryHandlerResult =
+  | { handled: false }
+  | { handled: true; status?: number; body?: unknown }
+
+export type AuthenticatedTriggerDeliveryHandler = (
+  delivery: AuthenticatedTriggerDelivery,
+) => Promise<AuthenticatedTriggerDeliveryHandlerResult>
 
 export type WebhookDeliveryRecorder = (
   workspaceRootPath: string,
@@ -120,12 +149,14 @@ export async function startTriggerHttpServer(
   const signatureSkewMs = options.signatureSkewMs ?? DEFAULT_SIGNATURE_SKEW_MS
   const ratePerMin = options.ratePerMin ?? DEFAULT_RATE_PER_MIN
   const trustedProxyIps = options.trustedProxyIps ?? parseTrustedProxyEnv()
+  const replayProtectedSlugs = new Set(options.replayProtectedSlugs ?? [])
   const log = options.logger ?? noopLogger
 
   // slug → { count, windowStart }. Per-slug bucket prevents one noisy trigger
   // from starving others. Keyed by `${workspaceId}:${slug}` to avoid collisions
   // across workspaces.
   const rateBuckets = new Map<string, { count: number; windowStart: number }>()
+  const authenticatedReplayKeys = new Map<string, number>()
 
   const server = createServer((req, res) => {
     handleRequest(
@@ -136,11 +167,14 @@ export async function startTriggerHttpServer(
         bodyMaxBytes,
         bodyReadTimeoutMs,
         signatureSkewMs,
+        replayProtectedSlugs,
         ratePerMin,
         trustedProxyIps,
         deliveryRecorder: options.deliveryRecorder ?? appendWebhookDeliveryRecord,
+        authenticatedDeliveryHandler: options.authenticatedDeliveryHandler,
       },
       rateBuckets,
+      authenticatedReplayKeys,
       log,
     ).catch(
       (err) => {
@@ -182,11 +216,14 @@ async function handleRequest(
     bodyMaxBytes: number
     bodyReadTimeoutMs: number
     signatureSkewMs: number
+    replayProtectedSlugs: Set<string>
     ratePerMin: number
     trustedProxyIps: string[]
     deliveryRecorder: WebhookDeliveryRecorder
+    authenticatedDeliveryHandler?: AuthenticatedTriggerDeliveryHandler
   },
   rateBuckets: Map<string, { count: number; windowStart: number }>,
+  authenticatedReplayKeys: Map<string, number>,
   log: Logger,
 ): Promise<void> {
   const method = (req.method ?? 'GET').toUpperCase()
@@ -293,6 +330,8 @@ async function handleRequest(
     return sendJson(res, 400, { error: 'bad_request' })
   }
 
+  let authenticated = false
+  let replayKey: string | undefined
   if (matcher.secretEnv) {
     const secret = process.env[matcher.secretEnv]
     if (!secret) {
@@ -345,6 +384,31 @@ async function handleRequest(
       })
       return sendJson(res, 401, { error: 'invalid_signature' })
     }
+    authenticated = true
+    if (config.replayProtectedSlugs.has(slug)) {
+      replayKey = createHash('sha256')
+        .update(`${workspaceId}\u0000${slug}\u0000${timestamp}\u0000${provided}`, 'utf8')
+        .digest('hex')
+      const now = Date.now()
+      for (const [key, expiresAt] of authenticatedReplayKeys) {
+        if (expiresAt <= now) authenticatedReplayKeys.delete(key)
+      }
+      if (authenticatedReplayKeys.has(replayKey)) {
+        await recordDelivery(config.deliveryRecorder, workspaceRootPath, log, {
+          timestamp: now,
+          workspaceId,
+          slug,
+          matcherId: matcher.id,
+          method,
+          outcome: 'replay_detected',
+          httpStatus: 409,
+          remoteIp,
+          reason: 'replay_detected',
+        })
+        return sendJson(res, 409, { error: 'replay_detected' })
+      }
+      authenticatedReplayKeys.set(replayKey, now + config.signatureSkewMs)
+    }
   } else if (!matcher.allowUnauthenticated) {
     await recordDelivery(config.deliveryRecorder, workspaceRootPath, log, {
       timestamp: Date.now(),
@@ -362,6 +426,7 @@ async function handleRequest(
 
   const bucketKey = `${workspaceId}:${slug}`
   if (!checkRate(rateBuckets, bucketKey, config.ratePerMin)) {
+    if (replayKey) authenticatedReplayKeys.delete(replayKey)
     await recordDelivery(config.deliveryRecorder, workspaceRootPath, log, {
       timestamp: Date.now(),
       workspaceId,
@@ -401,6 +466,55 @@ async function handleRequest(
     if (!(key in query)) query[key] = value
   })
 
+  if (config.authenticatedDeliveryHandler) {
+    try {
+      const handled = await config.authenticatedDeliveryHandler({
+        workspaceId,
+        slug,
+        matcher,
+        method,
+        headers,
+        query,
+        body,
+        bodyRaw,
+        remoteIp,
+        authenticated,
+      })
+      if (handled.handled) {
+        const status = handled.status ?? 202
+        const accepted = status >= 200 && status < 300
+        if (status >= 500 && replayKey) authenticatedReplayKeys.delete(replayKey)
+        await recordDelivery(config.deliveryRecorder, workspaceRootPath, log, {
+          timestamp: Date.now(),
+          workspaceId,
+          slug,
+          matcherId: matcher.id,
+          method,
+          outcome: accepted ? 'accepted' : 'delivery_handler_rejected',
+          httpStatus: status,
+          remoteIp,
+          reason: accepted ? 'accepted' : 'delivery_handler_rejected',
+        })
+        return sendJson(res, status, handled.body ?? { ok: accepted, slug })
+      }
+    } catch (error) {
+      if (replayKey) authenticatedReplayKeys.delete(replayKey)
+      log.warn(`[trigger-server] Authenticated delivery handler failed for ${workspaceId}/${slug}:`, error)
+      await recordDelivery(config.deliveryRecorder, workspaceRootPath, log, {
+        timestamp: Date.now(),
+        workspaceId,
+        slug,
+        matcherId: matcher.id,
+        method,
+        outcome: 'delivery_handler_unavailable',
+        httpStatus: 503,
+        remoteIp,
+        reason: 'delivery_handler_unavailable',
+      })
+      return sendJson(res, 503, { error: 'delivery_handler_unavailable' })
+    }
+  }
+
   const delivery = await automationSystem.fireWebhookReceive({
     slug,
     method,
@@ -412,6 +526,7 @@ async function handleRequest(
   })
 
   if (delivery.status === 'rate_limited') {
+    if (replayKey) authenticatedReplayKeys.delete(replayKey)
     await recordDelivery(config.deliveryRecorder, workspaceRootPath, log, {
       timestamp: Date.now(),
       workspaceId,
@@ -430,6 +545,7 @@ async function handleRequest(
     })
   }
   if (delivery.status === 'disposed') {
+    if (replayKey) authenticatedReplayKeys.delete(replayKey)
     await recordDelivery(config.deliveryRecorder, workspaceRootPath, log, {
       timestamp: Date.now(),
       workspaceId,

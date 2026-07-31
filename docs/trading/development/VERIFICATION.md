@@ -342,6 +342,15 @@ A lower rung does not prove a higher rung.
 - Runtime/provider proof not claimed: no real Tradovate paper credential, WealthCharts selector bundle, 50-run real-provider paper soak, packaged installer smoke, or consequential canary.
 - Activation remains impossible from renderer state alone. Certification evidence must match the installed adapter ID, adapter version, provider-contract version, connection, transport, and environment.
 
+## Discord Follow-Up Receiver — 2026-07-30
+
+- Rival findings fixed: negated/delayed close false positives, unsafe `to be` breakeven matching, missing `flat`/`done`, stop quantity not bound to provider open quantity, and completed actions without provider evidence.
+- Existing port 9101 is reused. HMAC/timestamp/body/rate gates run before the dedicated trusted handler; the `discotrader-management` slug rejects exact signed replay while releasing its reservation after transient failure.
+- Electron instantiates the durable manager, runs pending-receipt recovery before new delivery, and attaches zero provider adapters.
+- Focused proof: 29 trigger-server tests, 110 contract/execution tests with 296 expectations, and 4 Electron runtime tests passed; contract, execution, server-core, and Electron typechecks passed.
+- Repository-wide `bun run typecheck:all` and Electron main, preload, and renderer production builds passed.
+- Not runtime-proven: donor management sender, installed Trading workspace matcher, live Electron delivery, certified paper adapter, or broker mutation.
+
 ## Completion Language
 
 Use exact claims:

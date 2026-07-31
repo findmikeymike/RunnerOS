@@ -700,22 +700,29 @@ export class TradovateApiAdapter implements ExecutionAdapter {
     const filledQuantity = Math.max(0, Math.trunc(entry.filledQty ?? 0))
     const activeProtection = children.filter((order) => isWorking(order.ordStatus))
     const protectionOrders = activeProtection.map(normalizeProtectionOrder)
+    const position = positions.find((candidate) => (
+      candidate.accountId === Number(input.connection.account_ref)
+      && candidate.contractId === entry.contractId
+    ))
+    const openQuantity = Math.abs(Math.trunc(position?.netPos ?? 0))
+    const activeStops = activeProtection.filter(
+      (order) => order.orderType === 'Stop' || order.orderType === 'StopLimit',
+    )
     const protectionVerified = (
-      activeProtection.some((order) => order.orderType === 'Stop')
+      openQuantity > 0
+      && activeStops.length === 1
+      && Math.trunc(activeStops[0]!.orderQty) === openQuantity
       && (
         !input.intent.protection.take_profit
         || activeProtection.some((order) => order.orderType === 'Limit')
       )
     )
-    const position = positions.find((candidate) => (
-      candidate.accountId === Number(input.connection.account_ref)
-      && candidate.contractId === entry.contractId
-    ))
     if (input.managementCommand?.payload.operation === 'flatten') {
       return reconciliation(input, {
         status: !position || position.netPos === 0 ? 'closed' : 'closing',
         providerOrderIds,
         filledQuantity,
+        openQuantity,
         averageFillPrice: entry.avgPrice,
         protectionVerified: false,
         protectionOrders: [],
@@ -735,6 +742,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         status: 'canceled',
         providerOrderIds,
         filledQuantity: 0,
+        openQuantity: 0,
         protectionVerified: false,
         protectionOrders: [],
         reason: 'Tradovate reports every targeted order canceled with no fill.',
@@ -745,6 +753,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         status: 'divergent',
         providerOrderIds,
         filledQuantity,
+        openQuantity,
         protectionVerified: false,
         protectionOrders,
         reason: `Tradovate order is ${entry.ordStatus}.`,
@@ -755,6 +764,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         status: 'working',
         providerOrderIds,
         filledQuantity: 0,
+        openQuantity,
         protectionVerified: false,
         protectionOrders,
         reason: 'Tradovate reports the entry working.',
@@ -765,6 +775,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         status: 'partially-filled',
         providerOrderIds,
         filledQuantity,
+        openQuantity,
         averageFillPrice: entry.avgPrice,
         protectionVerified,
         protectionOrders,
@@ -776,6 +787,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         status: 'filled-protected',
         providerOrderIds,
         filledQuantity,
+        openQuantity,
         averageFillPrice: entry.avgPrice,
         protectionVerified: true,
         protectionOrders,
@@ -787,6 +799,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
         status: 'closed',
         providerOrderIds,
         filledQuantity,
+        openQuantity: 0,
         averageFillPrice: entry.avgPrice,
         protectionVerified: false,
         protectionOrders: [],
@@ -797,6 +810,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
       status: 'filled',
       providerOrderIds,
       filledQuantity,
+      openQuantity,
       averageFillPrice: entry.avgPrice,
       protectionVerified: false,
       protectionOrders,
@@ -1034,6 +1048,7 @@ const reconciliation = (
     status: ExecutionReconciliation['status']
     providerOrderIds: string[]
     filledQuantity: number
+    openQuantity?: number
     averageFillPrice?: number
     protectionVerified: boolean
     protectionOrders?: ExecutionReconciliation['protection_orders']
@@ -1048,6 +1063,7 @@ const reconciliation = (
   status: value.status,
   provider_order_ids: value.providerOrderIds,
   filled_quantity: value.filledQuantity,
+  ...(value.openQuantity !== undefined ? { open_quantity: value.openQuantity } : {}),
   ...(typeof value.averageFillPrice === 'number'
     ? { average_fill_price: String(value.averageFillPrice) }
     : {}),

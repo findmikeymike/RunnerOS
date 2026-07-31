@@ -3,6 +3,7 @@ import path from 'node:path'
 
 import {
   MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES,
+  type DiscordManagementReceipt,
   type TradeAlert,
   type TradeAlertIngestionStatus,
   type TradeAlertWebhookSetup,
@@ -35,7 +36,11 @@ import {
   type TradingCredentialVault,
 } from './trading-connection-service.ts'
 import {
+  ExecutionGateway,
   FileAdapterCertificationStore,
+  FileDiscoTraderIntentSource,
+  FileDiscordTradeManager,
+  FileExecutionStore,
   FileTradingConnectionStore,
 } from '@trade-god/execution'
 
@@ -57,6 +62,7 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   interpretationDirectory?: string
   alertDirectory?: string
   connectionDirectory?: string
+  executionDirectory?: string
   credentialVault?: TradingCredentialVault
   tradingBrowserSessionLauncher?: TradingBrowserSessionLauncher
   alertPort?: number
@@ -155,6 +161,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   orderFlowSpecialist?: OrderFlowSpecialist
   orderFlowSpecialistPipeline?: OrderFlowSpecialistPipeline
   alertLedger?: TradeAlertLedger
+  ingestDiscordManagementPush?: (input: unknown) => Promise<DiscordManagementReceipt>
   setSpecialistModel: (model: SpecialistModel) => void
   dispose: () => Promise<void>
 } {
@@ -209,20 +216,54 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const alertLedger = options.alertDirectory
     ? new TradeAlertLedger(options.alertDirectory, options.now)
     : undefined
+  const tradingConnectionStore = options.connectionDirectory
+    ? new FileTradingConnectionStore(options.connectionDirectory, options.now)
+    : undefined
   const tradingConnectionService = (
-    options.connectionDirectory
+    tradingConnectionStore
     && options.credentialVault
     && options.tradingBrowserSessionLauncher
   )
     ? new TradingConnectionService(
-        new FileTradingConnectionStore(options.connectionDirectory, options.now),
+        tradingConnectionStore,
         options.credentialVault,
         options.tradingBrowserSessionLauncher,
-        new FileAdapterCertificationStore(options.connectionDirectory, options.now),
+        new FileAdapterCertificationStore(options.connectionDirectory!, options.now),
         undefined,
         options.now,
       )
     : undefined
+  const executionGateway = options.executionDirectory && tradingConnectionStore
+    ? new ExecutionGateway({
+        store: new FileExecutionStore(options.executionDirectory, options.now),
+        resolveConnection: (connectionId) => tradingConnectionStore.get(connectionId),
+        // Observe-only receiver foundation. Provider adapters are attached only
+        // after their exact paper connection has passed certification.
+        adapters: [],
+        now: options.now,
+      })
+    : undefined
+  const discordManagementSource = executionGateway && options.executionDirectory
+    ? new FileDiscoTraderIntentSource(
+        path.join(options.executionDirectory, 'discotrader-sources'),
+        executionGateway,
+        options.now,
+      )
+    : undefined
+  const discordTradeManager = executionGateway && discordManagementSource && options.executionDirectory
+    ? new FileDiscordTradeManager({
+        directory: path.join(options.executionDirectory, 'discord-management'),
+        gateway: executionGateway,
+        source: discordManagementSource,
+        now: options.now,
+      })
+    : undefined
+  let discordManagementRecoveryError: unknown
+  const discordManagementReady = discordTradeManager
+    ? discordTradeManager.recoverPending().catch((error) => {
+        discordManagementRecoveryError = error
+      })
+    : Promise.resolve()
   const unsubscribeAlert = alertLedger && options.onAlert
     ? alertLedger.subscribe(options.onAlert)
     : undefined
@@ -323,9 +364,19 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(orderFlowSpecialist ? { orderFlowSpecialist } : {}),
     ...(orderFlowSpecialistPipeline ? { orderFlowSpecialistPipeline } : {}),
     ...(alertLedger ? { alertLedger } : {}),
+    ...(discordTradeManager
+      ? {
+          ingestDiscordManagementPush: async (input: unknown) => {
+            await discordManagementReady
+            if (discordManagementRecoveryError) throw discordManagementRecoveryError
+            return discordTradeManager.ingestPush(input)
+          },
+        }
+      : {}),
     setSpecialistModel: (model) => { specialistModel = model },
     dispose: async () => {
       unsubscribeAlert?.()
+      await discordManagementReady
       const [alertServer, alertTunnel] = await Promise.all([alertServerPromise, alertTunnelPromise])
       await Promise.all([disposeTradingIpc(), marketDataManager?.stop(), alertTunnel?.stop(), alertServer?.stop()])
     },

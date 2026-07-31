@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { CANONICAL_ORDER_FLOW_CONFIGURATION } from '@trade-god/contracts'
+import { buildDiscordManagementMessage } from '@trade-god/execution'
 import { loadEsDemoFixture } from '@trade-god/testkit'
 
 import { TRADE_GOD_IPC } from '../trading-ipc.ts'
@@ -23,8 +24,11 @@ class FakeIpcMain {
 const repoRoot = path.resolve(import.meta.dir, '../../../../../..')
 
 test('resolves and runs the development sidecar from an explicit RunnerOS root', async () => {
+  const runtimeNow = new Date().toISOString()
   const contextDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-agent-context-'))
   const alertDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-alerts-'))
+  const connectionDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-connections-'))
+  const executionDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-execution-'))
   const launch = resolveOrderFlowLaunch({ rootCandidates: [repoRoot], runtimeExecutable: process.execPath })
   expect(launch.command).toEqual([process.execPath, path.join(repoRoot, 'sidecars/order-flow-engine/src/cli.ts')])
   const marketLaunch = resolveMarketDataLaunch({ rootCandidates: [repoRoot], platform: process.platform })
@@ -39,9 +43,11 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     ipcMain: ipc,
     rootCandidates: [repoRoot],
     runtimeExecutable: process.execPath,
-    now: () => new Date().toISOString(),
+    now: () => runtimeNow,
     contextDirectory,
     alertDirectory,
+    connectionDirectory,
+    executionDirectory,
     alertPort: -1,
   })
 
@@ -121,9 +127,33 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     public_relay_connected: false,
   })
 
+  const managementMessage = buildDiscordManagementMessage({
+    message_id: 'runtime-followup-1',
+    author_id: 'discord-user-1',
+    channel_id: 'discord-channel-1',
+    raw_text: 'all out',
+    posted_at: runtimeNow,
+    observed_at: runtimeNow,
+    is_edit: false,
+  })
+  expect(runtime.ingestDiscordManagementPush).toBeDefined()
+  expect(await runtime.ingestDiscordManagementPush!({
+    kind: 'management',
+    severity: 'action_required',
+    summary: 'Discord trade follow-up',
+    management: managementMessage,
+    at: runtimeNow,
+  })).toMatchObject({
+    status: 'blocked',
+    candidate_intent_ids: [],
+    error: 'No active trade matches this author and Discord channel context.',
+  })
+
   await runtime.dispose()
   rmSync(contextDirectory, { recursive: true, force: true })
   rmSync(alertDirectory, { recursive: true, force: true })
+  rmSync(connectionDirectory, { recursive: true, force: true })
+  rmSync(executionDirectory, { recursive: true, force: true })
   expect(ipc.handlers.size).toBe(0)
 })
 

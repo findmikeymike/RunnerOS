@@ -583,6 +583,7 @@ app.whenReady().then(async () => {
           interpretationDirectory: join(app.getPath('userData'), 'trade-god', 'interpretations'),
           alertDirectory: join(app.getPath('userData'), 'trade-god', 'alerts'),
           connectionDirectory: join(app.getPath('userData'), 'trade-god', 'connections'),
+          executionDirectory: join(app.getPath('userData'), 'trade-god', 'execution'),
           credentialVault: {
             getSecret: (name) => getCredentialManager().getTradingConnectionSecret(name),
             setSecret: (name, value) => getCredentialManager().setTradingConnectionSecret(name, value),
@@ -902,6 +903,58 @@ app.whenReady().then(async () => {
             port: triggerPort,
             host: process.env.CRAFT_TRIGGER_HOST ?? '127.0.0.1',
             resolver: instance.sessionManager,
+            replayProtectedSlugs: ['discotrader-management'],
+            authenticatedDeliveryHandler: async (delivery) => {
+              if (delivery.slug !== 'discotrader-management') return { handled: false }
+              if (!specialistWorkspace || delivery.workspaceId !== specialistWorkspace.id) {
+                return {
+                  handled: true,
+                  status: 403,
+                  body: { error: 'trading_workspace_required' },
+                }
+              }
+              if (!delivery.authenticated) {
+                return {
+                  handled: true,
+                  status: 401,
+                  body: { error: 'authentication_required' },
+                }
+              }
+              if (!tradeGodRuntime?.ingestDiscordManagementPush) {
+                return {
+                  handled: true,
+                  status: 503,
+                  body: { error: 'trade_management_unavailable' },
+                }
+              }
+              try {
+                const receipt = await tradeGodRuntime.ingestDiscordManagementPush(delivery.body)
+                return {
+                  handled: true,
+                  status: 202,
+                  body: {
+                    ok: true,
+                    receipt_id: receipt.receipt_id,
+                    status: receipt.status,
+                  },
+                }
+              } catch (error) {
+                const isPayloadError = (
+                  error instanceof Error
+                  && (error.name === 'ZodError' || error.name === 'ExecutionGatewayError')
+                )
+                mainLog.warn('[trade-god] Discord management push rejected:', error)
+                return {
+                  handled: true,
+                  status: isPayloadError ? 422 : 503,
+                  body: {
+                    error: isPayloadError
+                      ? 'invalid_management_payload'
+                      : 'trade_management_unavailable',
+                  },
+                }
+              }
+            },
             logger: {
               info: (m, ...a) => mainLog.info(m, ...a),
               warn: (m, ...a) => mainLog.warn(m, ...a),

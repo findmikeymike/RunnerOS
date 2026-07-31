@@ -116,6 +116,12 @@ export class ExecutionGateway {
       )
     }
     const stop = stops[0]!
+    if (!receipt.open_quantity || stop.quantity !== receipt.open_quantity) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Stop movement requires protection sized to the confirmed open position.',
+      )
+    }
     const stopPrice = target === 'breakeven' ? receipt.average_fill_price : target
     if (!stopPrice) {
       throw new ExecutionGatewayError(
@@ -723,9 +729,13 @@ export class ExecutionGateway {
       const activeStops = record.receipt?.protection_orders?.filter(
         (order) => order.role === 'stop-loss' && isActiveProtectionOrder(order),
       ) ?? []
-      const openQuantity = activeStops.length === 1
-        ? activeStops[0]!.quantity
-        : record.receipt?.filled_quantity ?? 0
+      const openQuantity = record.receipt?.open_quantity ?? 0
+      if (activeStops.length !== 1 || activeStops[0]!.quantity !== openQuantity) {
+        throw new ExecutionGatewayError(
+          'RECONCILIATION_DIVERGENCE',
+          'Partial close requires one stop sized to the confirmed open position.',
+        )
+      }
       if (payload.quantity >= openQuantity) {
         throw new ExecutionGatewayError(
           'CAPABILITY_UNAVAILABLE',
@@ -867,6 +877,7 @@ export class ExecutionGateway {
         providerOrderIds: result.provider_order_ids,
         result: 'reconcile-halted',
         filledQuantity: result.filled_quantity,
+        openQuantity: result.open_quantity,
         averageFillPrice: result.average_fill_price,
         protectionVerified: result.protection_verified,
         protectionOrders: result.protection_orders,
@@ -924,6 +935,7 @@ export class ExecutionGateway {
           providerOrderIds: result.provider_order_ids,
           result: 'reconcile-halted',
           filledQuantity: result.filled_quantity,
+          openQuantity: result.open_quantity,
           averageFillPrice: result.average_fill_price,
           protectionVerified: false,
           protectionOrders: result.protection_orders,
@@ -996,6 +1008,7 @@ export class ExecutionGateway {
         providerOrderIds: result.provider_order_ids,
         result: receiptResult,
         filledQuantity: result.filled_quantity,
+        openQuantity: result.open_quantity,
         averageFillPrice: result.average_fill_price,
         protectionVerified: result.protection_verified,
         protectionOrders: result.protection_orders,
@@ -1012,6 +1025,7 @@ export class ExecutionGateway {
     providerOrderIds: string[]
     result: ExecutionReceipt['result']
     filledQuantity: number
+    openQuantity?: number
     averageFillPrice?: string
     protectionVerified: boolean
     protectionOrders?: ExecutionProtectionOrder[]
@@ -1031,6 +1045,7 @@ export class ExecutionGateway {
       provider_order_ids: input.providerOrderIds,
       result: input.result,
       filled_quantity: input.filledQuantity,
+      ...(input.openQuantity !== undefined ? { open_quantity: input.openQuantity } : {}),
       ...(input.averageFillPrice ? { average_fill_price: input.averageFillPrice } : {}),
       protection_verified: input.protectionVerified,
       ...(input.protectionOrders ? { protection_orders: input.protectionOrders } : {}),

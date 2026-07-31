@@ -546,6 +546,7 @@ export const executionReconciliationSchema = z.object({
   ]),
   provider_order_ids: z.array(identifierSchema).max(100),
   filled_quantity: z.number().int().nonnegative().max(10_000),
+  open_quantity: z.number().int().nonnegative().max(10_000).optional(),
   average_fill_price: decimalStringSchema.optional(),
   protection_verified: z.boolean(),
   protection_orders: z.array(executionProtectionOrderSchema).max(20).optional(),
@@ -566,6 +567,20 @@ export const executionReconciliationSchema = z.object({
       path: ['protection_verified'],
       message: 'Filled-protected reconciliation requires verified protection',
     })
+  }
+  if (result.status === 'filled-protected') {
+    const stops = result.protection_orders?.filter((order) => order.role === 'stop-loss') ?? []
+    if (
+      !result.open_quantity
+      || stops.length !== 1
+      || stops[0]?.quantity !== result.open_quantity
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['open_quantity'],
+        message: 'Filled-protected reconciliation requires one stop sized to the confirmed open position',
+      })
+    }
   }
 })
 
@@ -625,6 +640,7 @@ export const executionReceiptSchema = z.object({
   provider_order_ids: z.array(identifierSchema).max(100),
   result: executionReceiptResultSchema,
   filled_quantity: z.number().int().nonnegative().max(10_000),
+  open_quantity: z.number().int().nonnegative().max(10_000).optional(),
   average_fill_price: decimalStringSchema.optional(),
   protection_verified: z.boolean(),
   protection_orders: z.array(executionProtectionOrderSchema).max(20).optional(),
@@ -645,6 +661,20 @@ export const executionReceiptSchema = z.object({
       path: ['protection_verified'],
       message: 'Filled-protected receipts require verified protection',
     })
+  }
+  if (receipt.result === 'filled-protected') {
+    const stops = receipt.protection_orders?.filter((order) => order.role === 'stop-loss') ?? []
+    if (
+      !receipt.open_quantity
+      || stops.length !== 1
+      || stops[0]?.quantity !== receipt.open_quantity
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['open_quantity'],
+        message: 'Filled-protected receipts require one stop sized to the confirmed open position',
+      })
+    }
   }
 })
 

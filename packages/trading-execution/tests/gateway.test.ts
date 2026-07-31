@@ -171,6 +171,7 @@ class FakeAdapter implements ExecutionAdapter {
       status: 'filled-protected',
       provider_order_ids: ['provider-order-1', 'provider-stop-1'],
       filled_quantity: 1,
+      open_quantity: 1,
       average_fill_price: '5600.25',
       protection_verified: true,
       protection_orders: [{
@@ -236,6 +237,7 @@ class FakeAdapter implements ExecutionAdapter {
       this.reconciliation = {
         ...this.reconciliation,
         status: 'closed',
+        open_quantity: 0,
         protection_verified: false,
         reason: 'Fake provider is flat after emergency liquidation.',
       }
@@ -398,10 +400,9 @@ describe('execution gateway', () => {
         },
       ],
     }
-    await gateway.reconcile(intent.intent_id)
-    await expect(gateway.prepareStopMove(intent.intent_id, 'breakeven')).rejects.toMatchObject({
-      code: 'RECONCILIATION_DIVERGENCE',
-    })
+    await expect(gateway.reconcile(intent.intent_id)).rejects.toThrow(
+      'Filled-protected reconciliation requires one stop sized to the confirmed open position',
+    )
   })
 
   test('kills new entry and automatically flattens an unprotected fill', async () => {
@@ -509,6 +510,7 @@ describe('execution gateway', () => {
       ...adapter.reconciliation,
       status: 'working',
       filled_quantity: 0,
+      open_quantity: 0,
       average_fill_price: undefined,
       protection_verified: false,
       reason: 'Provider reports the original order working.',

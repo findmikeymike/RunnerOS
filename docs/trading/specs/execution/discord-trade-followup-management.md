@@ -280,12 +280,23 @@ Integrity:
 ## External Integration Gate
 
 The current DiscoTrader v2 webhook sends entry tickets but does not yet push its
-management result. Trade God now exposes and tests the complete management
-handoff contract and durable manager, but Electron does not yet instantiate a
-receiver. A later donor-side change must send the raw follow-up message plus
-immutable author/channel/reply/thread fields through the same signed local
-handoff. No real Discord or broker claim is made until that sender, the desktop
-receiver, and one paper-certified adapter are connected.
+management result. Trade God now instantiates the durable manager in Electron
+and routes the dedicated `discotrader-management` slug directly from the
+existing trigger server after HMAC, timestamp, body, rate, and exact-replay
+gates. Pending receipts recover before new delivery. The runtime attaches zero
+provider adapters until a real paper connection is certified.
+
+The Trading workspace still needs an enabled `WebhookReceive` matcher for
+`discotrader-management`, with `secretEnv` set to an exported Runner-side
+secret containing the same value as DiscoTrader's `DT_RUNNER_HMAC_SECRET`.
+The donor must send `kind: "management"` plus the full immutable management
+message to:
+
+`http://127.0.0.1:9101/v1/triggers/<trading-workspace-id>/discotrader-management`
+
+No real Discord or broker claim is made until the donor sender, matcher,
+running Electron receiver, and one paper-certified adapter are exercised
+together.
 
 ## Primary Sources
 

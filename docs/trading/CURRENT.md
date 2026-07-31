@@ -10,9 +10,9 @@ source_of_truth: true
 ## Snapshot
 
 - Date: 2026-07-30
-- Stage: the provider-neutral execution and Discord follow-up management foundations are implemented; sender/runtime wiring and real-provider paper certification are the next gates
-- Current goal: connect the signed DiscoTrader management sender and certify one real paper adapter without enabling consequential execution
-- Overall state: Trade God now has durable execution contracts and lifecycle storage, exact account/environment connection records, isolated trading browser sessions, a Tradovate demo API adapter foundation, a named WealthCharts browser driver foundation, DiscordTrader ticket convergence, version-bound certification evidence, restart reconciliation, kill switches, checksum-bound cancel/modify/partial-close/flatten commands, and a durable Discord follow-up manager. Follow-ups resolve by immutable author plus reply/thread/channel/symbol evidence, require exactly one protected gateway trade, and persist exact compound action plans. No desktop receiver currently instantiates this manager, no donor management message is sent yet, and no real adapter is paper-certified or enabled for consequential entry. Tradovate still lacks certified partial-close/protection-resize behavior; WealthCharts management actions remain disabled until its live paper DOM is inspected. The existing Futures command center, synthetic chart, alerts, Order Flow specialist, and health-only IBKR connector remain intact.
+- Stage: the provider-neutral execution and Discord follow-up receiver are implemented; donor sender wiring and real-provider paper certification are the next gates
+- Current goal: add the signed DiscoTrader management sender and certify one real paper adapter without enabling consequential execution
+- Overall state: Trade God now has durable execution contracts and lifecycle storage, exact account/environment connection records, isolated trading browser sessions, a Tradovate demo API adapter foundation, a named WealthCharts browser driver foundation, DiscoTrader ticket convergence, version-bound certification evidence, restart reconciliation, kill switches, checksum-bound cancel/modify/partial-close/flatten commands, and a durable Discord follow-up manager. Electron instantiates that manager at startup, recovers pending receipts before new delivery, and exposes it only behind the existing HMAC-authenticated `discotrader-management` trigger path. Exact signed replays are rejected, transient receiver failures remain retryable, and the runtime currently attaches zero execution adapters deliberately. No donor management message is sent yet, no runtime matcher has been installed/smoked, and no real adapter is paper-certified or enabled for consequential entry. Tradovate still lacks certified partial-close/protection-resize behavior; WealthCharts management actions remain disabled until its live paper DOM is inspected. The existing Futures command center, synthetic chart, alerts, Order Flow specialist, and health-only IBKR connector remain intact.
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -136,11 +136,11 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Next Actions
 
-1. Add the donor-side signed management push and an observe-only desktop receiver that instantiates the durable manager; do not grant broker authority through the donor.
+1. Add the donor-side signed management push and install/smoke the `discotrader-management` matcher in the Trading workspace; do not grant broker authority through the donor.
 2. Confirm Apex-issued Tradovate API eligibility and supply a demo credential bound to the exact paper account.
 3. Implement and certify Tradovate partial-close/protection-resize behavior.
 4. Run and retain the 50-lifecycle real paper soak plus forced-failure matrix.
-5. After one adapter passes the paper gate, test the follow-up manager in paper mode before defining any bounded consequential canary.
+5. After one adapter passes the paper gate, attach it to the desktop gateway and test follow-up management in paper mode before defining any bounded consequential canary.
 
 ## Blockers / Decisions Needed
 
@@ -158,7 +158,7 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Unified gateway closure: 175 passed, 0 failed across 31 trading/Electron files with 582 expectations.
 - Repository-wide `bun run typecheck:all` passed after replacing one unsupported Campaign Calendar `findLast` call with the equivalent target-compatible reverse search.
 - Real Tradovate/WealthCharts paper lifecycle, 50-run provider soak, and consequential canary remain unproven and disabled.
-- Discord follow-up management closure: 110 package tests passed with 288 expectations; both package typechecks, repository-wide `typecheck:all`, and Electron main/preload/renderer production builds passed. The donor sender, desktop receiver, and real paper mutation remain unproven and disabled.
+- Discord follow-up management receiver: 29 trigger-server tests, 110 contract/execution tests, and 4 Electron runtime tests pass; repository-wide typecheck plus Electron main/preload/renderer production builds pass. The donor sender, installed matcher/runtime smoke, and real paper mutation remain unproven and disabled.
 - JSONL policy and rival-fix proof: Python market-data suite 27 passed; two-trial observation evidence is reproducible; three enforced trials admit 750 events at 713,568 bytes and reject 800 events with typed `STREAMING_TRANSPORT_REQUIRED`; real Electron tests prove oversized direct loads fail typed without process death and replay pacing above the default request timeout succeeds.
 - Electron `build:main`, `build:preload`, and `build:renderer` passed.
 - The generated packaged sidecar bundle launched independently and answered a schema-valid health request.

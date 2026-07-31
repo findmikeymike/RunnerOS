@@ -31,20 +31,22 @@ export const parseDiscordManagementText = (rawText: string): ParsedDiscordManage
     || /^(?:should|could|would|can|do)\b/.test(normalized)
     || /\b(?:if|when|unless|maybe|might|consider|thinking about)\b/.test(normalized)
     || /\b(?:earlier|yesterday|last week|already (?:closed|moved|took))\b/.test(normalized)
-    || /\b(?:(?:do not|don't|dont|not)\s+(?:close|closing|flatten|move|moving|take|taking|trim|trimming))\b/.test(normalized)
-    || /\b(?:later|tomorrow|in \d+\s+(?:seconds?|minutes?|hours?))\b/.test(normalized)
+    || /\b(?:(?:do not|don't|dont|not|never|cannot|can't|cant|won't|wont|shouldn't|shouldnt|no longer)\s+(?:close|closing|flatten|move|moving|take|taking|trim|trimming))\b/.test(normalized)
+    || /\b(?:later|tomorrow|soon|in \d+\s+(?:seconds?|minutes?|hours?)|(?:after|before)\s+\S+)\b/.test(normalized)
   ) {
     return { actions: [], symbol, error: 'Conditional, interrogative, or retrospective text is not executable.' }
   }
 
   const stoppedOut = /\b(?:stopped out|stop(?:ped)? (?:was )?hit|hit my stop)\b/.exec(normalized)
-  const fullExit = /\b(?:all out|flatten(?: me)?|flat now|i(?:'m| am) out|done here|closing (?:it|this|everything|all|here|now)|close (?:it|this|everything|all|here|now))\b/.exec(normalized)
+  const fullExit = /\b(?:all out|flatten(?: me)?|flat now|i(?:'m| am) (?:out|flat|done)|we(?:'re| are) flat|done here|closing (?:it|this|everything|all|here|now)|close (?:it|this|everything|all|here|now))\b/.exec(normalized)
+    ?? /^(?:flat|done)$/.exec(normalized)
   const half = /\b(?:taking|take|closing|close|trim(?:ming)?|scal(?:e|ing)) (?:off |out )?(?:my )?half\b/.exec(normalized)
     ?? /\bhalf off\b/.exec(normalized)
     ?? /\bone of (?:my )?two\b/.exec(normalized)
   const percent = /\b(?:taking|take|closing|close|trim(?:ming)?|scal(?:e|ing)) (?:off |out )?(\d{1,3})\s*%\b/.exec(normalized)
   const quantity = /\b(?:taking|take|closing|close|trim(?:ming)?|scal(?:e|ing)) (?:off |out )?(\d{1,4})\s*(?:contracts?|lots?)\b/.exec(normalized)
-  const breakeven = /\b(?:move|moving|raise|raising|set|setting)\s+(?:my |the )?stops?\s+(?:to )?(?:be|b\/e|breakeven|break even|entry|cost basis)\b/.exec(normalized)
+  const breakeven = /\b(?:move|moving|raise|raising|set|setting)\s+(?:my |the )?stops?\s+(?:to )?(?:b\/e|breakeven|break even|entry|cost basis)\b/.exec(normalized)
+    ?? /\b(?:move|moving|raise|raising|set|setting)\s+(?:my |the )?stops?\s+(?:to )?be(?=$|[,.!;:]|\s+(?:and|then)\b)/.exec(normalized)
   const explicitStop = /\b(?:move|moving|raise|raising|lower|lowering|set|setting)\s+(?:my |the )?stops?\s+(?:to|at)\s+\$?(\d+(?:\.\d+)?)\b/.exec(normalized)
 
   const partialMatches = [half, percent, quantity].filter(Boolean)

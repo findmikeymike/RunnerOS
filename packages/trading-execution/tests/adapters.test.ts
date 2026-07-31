@@ -373,6 +373,14 @@ describe('Tradovate API adapter', () => {
         timeInForce: 'Day',
       },
     ]
+    client.positions = [{
+      id: 1,
+      accountId: 123456,
+      contractId: 9001,
+      netPos: 1,
+      netPrice: 5600,
+      symbol: 'ESU6',
+    }]
 
     expect(await adapter.reconcile({
       connection: targetConnection,
@@ -382,6 +390,7 @@ describe('Tradovate API adapter', () => {
       status: 'filled-protected',
       provider_order_ids: ['100', '101', '102'],
       filled_quantity: 1,
+      open_quantity: 1,
       protection_verified: true,
       protection_orders: [
         {
@@ -397,6 +406,17 @@ describe('Tradovate API adapter', () => {
           limit_price: '5603',
         },
       ],
+    })
+
+    client.positions[0] = { ...client.positions[0]!, netPos: 2 }
+    expect(await adapter.reconcile({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+    })).toMatchObject({
+      status: 'filled',
+      open_quantity: 2,
+      protection_verified: false,
     })
   })
 

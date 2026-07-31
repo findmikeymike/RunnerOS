@@ -86,6 +86,8 @@ export const discordManagementActionReceiptSchema = z.object({
   concrete_payload: executionManagementPayloadSchema.optional(),
   status: z.enum(['pending', 'executing', 'completed', 'failed']),
   management_command_id: identifierSchema.optional(),
+  gateway_receipt_id: identifierSchema.optional(),
+  evidence_refs: z.array(identifierSchema).max(100).optional(),
   completed_at: utcTimestampSchema.optional(),
   error: z.string().trim().min(1).max(1_000).optional(),
 }).strict().superRefine((action, context) => {
@@ -112,6 +114,20 @@ export const discordManagementActionReceiptSchema = z.object({
       code: 'custom',
       path: ['concrete_payload'],
       message: 'Issued trade mutations require their exact concrete gateway payload',
+    })
+  }
+  if (
+    action.status === 'completed'
+    && (
+      !action.gateway_receipt_id
+      || !action.evidence_refs
+      || action.evidence_refs.length === 0
+    )
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['gateway_receipt_id'],
+      message: 'Completed actions require the reconciled gateway receipt and provider evidence',
     })
   }
   if (

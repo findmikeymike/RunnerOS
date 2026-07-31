@@ -270,6 +270,167 @@ describe('trigger HTTP server', () => {
     delete process.env[SECRET_ENV]
   })
 
+  test('HMAC verification — rejects an exact signed replay before dispatch', async () => {
+    const SECRET_ENV = 'CRAFT_WH_TEST_REPLAY_SECRET'
+    const SECRET = 'replay-secret'
+    process.env[SECRET_ENV] = SECRET
+
+    const matcher: AutomationMatcher = {
+      id: 'matcher-replay',
+      slug: 'signed-replay',
+      secretEnv: SECRET_ENV,
+      actions: [{ type: 'prompt', prompt: 'noop' }],
+    }
+    const { stub, fireCalls } = makeStubAutomationSystem(matcher)
+    const { records, recorder } = makeDeliveryRecorder()
+    handle = await startWithResolver(makeResolver({ ws1: stub }), {
+      deliveryRecorder: recorder,
+      replayProtectedSlugs: ['signed-replay'],
+    })
+    const body = JSON.stringify({ message_id: 'message-1' })
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const headers = {
+      'content-type': 'application/json',
+      'x-craft-timestamp': timestamp,
+      'x-craft-signature': signBody(SECRET, timestamp, body),
+    }
+
+    const first = await fetch(`${handle.url}/v1/triggers/ws1/signed-replay`, {
+      method: 'POST',
+      headers,
+      body,
+    })
+    const replay = await fetch(`${handle.url}/v1/triggers/ws1/signed-replay`, {
+      method: 'POST',
+      headers,
+      body,
+    })
+
+    expect(first.status).toBe(202)
+    expect(replay.status).toBe(409)
+    expect(await replay.json()).toEqual({ error: 'replay_detected' })
+    expect(fireCalls).toHaveLength(1)
+    expect(records.map((record) => record.outcome)).toEqual(['accepted', 'replay_detected'])
+
+    delete process.env[SECRET_ENV]
+  })
+
+  test('trusted delivery handler receives authenticated JSON and bypasses automation dispatch', async () => {
+    const SECRET_ENV = 'CRAFT_WH_TEST_HANDLER_SECRET'
+    const SECRET = 'handler-secret'
+    process.env[SECRET_ENV] = SECRET
+    const matcher: AutomationMatcher = {
+      slug: 'direct-handler',
+      secretEnv: SECRET_ENV,
+      actions: [{ type: 'prompt', prompt: 'must-not-run' }],
+    }
+    const { stub, fireCalls } = makeStubAutomationSystem(matcher)
+    const deliveries: unknown[] = []
+    handle = await startWithResolver(makeResolver({ ws1: stub }), {
+      authenticatedDeliveryHandler: async (delivery) => {
+        deliveries.push(delivery)
+        return {
+          handled: true,
+          body: { ok: true, receipt_id: 'receipt-1' },
+        }
+      },
+    })
+    const body = JSON.stringify({ kind: 'management' })
+    const timestamp = String(Math.floor(Date.now() / 1000))
+
+    const response = await fetch(`${handle.url}/v1/triggers/ws1/direct-handler`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-craft-timestamp': timestamp,
+        'x-craft-signature': signBody(SECRET, timestamp, body),
+      },
+      body,
+    })
+
+    expect(response.status).toBe(202)
+    expect(await response.json()).toEqual({ ok: true, receipt_id: 'receipt-1' })
+    expect(fireCalls).toHaveLength(0)
+    expect(deliveries).toHaveLength(1)
+    expect(deliveries[0]).toMatchObject({
+      workspaceId: 'ws1',
+      slug: 'direct-handler',
+      authenticated: true,
+      body: { kind: 'management' },
+    })
+
+    delete process.env[SECRET_ENV]
+  })
+
+  test('trusted delivery handler failures return 503 instead of false acceptance', async () => {
+    const matcher: AutomationMatcher = {
+      slug: 'failed-handler',
+      allowUnauthenticated: true,
+      actions: [{ type: 'prompt', prompt: 'must-not-run' }],
+    }
+    const { stub, fireCalls } = makeStubAutomationSystem(matcher)
+    handle = await startWithResolver(makeResolver({ ws1: stub }), {
+      authenticatedDeliveryHandler: async () => {
+        throw new Error('receiver unavailable')
+      },
+    })
+
+    const response = await fetch(`${handle.url}/v1/triggers/ws1/failed-handler`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ error: 'delivery_handler_unavailable' })
+    expect(fireCalls).toHaveLength(0)
+  })
+
+  test('transient handler failure releases the signed replay reservation for retry', async () => {
+    const SECRET_ENV = 'CRAFT_WH_TEST_HANDLER_RETRY_SECRET'
+    const SECRET = 'handler-retry-secret'
+    process.env[SECRET_ENV] = SECRET
+    const matcher: AutomationMatcher = {
+      slug: 'retry-handler',
+      secretEnv: SECRET_ENV,
+      actions: [{ type: 'prompt', prompt: 'must-not-run' }],
+    }
+    const { stub } = makeStubAutomationSystem(matcher)
+    let attempts = 0
+    handle = await startWithResolver(makeResolver({ ws1: stub }), {
+      replayProtectedSlugs: ['retry-handler'],
+      authenticatedDeliveryHandler: async () => {
+        attempts += 1
+        if (attempts === 1) throw new Error('temporary receiver failure')
+        return { handled: true, body: { ok: true } }
+      },
+    })
+    const body = '{}'
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const headers = {
+      'content-type': 'application/json',
+      'x-craft-timestamp': timestamp,
+      'x-craft-signature': signBody(SECRET, timestamp, body),
+    }
+
+    const failed = await fetch(`${handle.url}/v1/triggers/ws1/retry-handler`, {
+      method: 'POST',
+      headers,
+      body,
+    })
+    const retried = await fetch(`${handle.url}/v1/triggers/ws1/retry-handler`, {
+      method: 'POST',
+      headers,
+      body,
+    })
+
+    expect(failed.status).toBe(503)
+    expect(retried.status).toBe(202)
+    expect(attempts).toBe(2)
+
+    delete process.env[SECRET_ENV]
+  })
+
   test('HMAC verification — rejects bad signature with 401', async () => {
     const SECRET_ENV = 'CRAFT_WH_TEST_SECRET2'
     process.env[SECRET_ENV] = 'expected-secret'

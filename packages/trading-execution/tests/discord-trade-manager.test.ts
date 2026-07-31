@@ -121,6 +121,7 @@ const protectedRecord = (
     provider_order_ids: ['entry-1', 'stop-1', 'target-1'],
     result: 'filled-protected',
     filled_quantity: quantity,
+    open_quantity: quantity,
     average_fill_price: '5600',
     protection_verified: true,
     protection_orders: [{
@@ -174,7 +175,13 @@ class FakeGateway implements DiscordTradeManagementGateway {
     const record = this.required(intentId)
     if (this.stoppedOut) {
       record.state = 'closed'
-      record.receipt = { ...record.receipt!, result: 'closed', filled_quantity: 0, protection_verified: false }
+      record.receipt = {
+        ...record.receipt!,
+        result: 'closed',
+        filled_quantity: 0,
+        open_quantity: 0,
+        protection_verified: false,
+      }
     }
     return record
   }
@@ -189,6 +196,7 @@ class FakeGateway implements DiscordTradeManagementGateway {
       record.receipt = {
         ...record.receipt!,
         filled_quantity: remaining,
+        open_quantity: remaining,
         protection_orders: record.receipt!.protection_orders!.map((order) => ({
           ...order,
           quantity: remaining,
@@ -206,7 +214,13 @@ class FakeGateway implements DiscordTradeManagementGateway {
       this.delivered.add(key)
       this.log.push('flatten')
       record.state = 'closed'
-      record.receipt = { ...record.receipt!, result: 'closed', filled_quantity: 0, protection_verified: false }
+      record.receipt = {
+        ...record.receipt!,
+        result: 'closed',
+        filled_quantity: 0,
+        open_quantity: 0,
+        protection_verified: false,
+      }
       this.journal(record, { operation: 'flatten', reason })
     }
     return record
@@ -310,8 +324,13 @@ describe('Discord management-only parser', () => {
     expect(parseDiscordManagementText('should I close here?').actions).toHaveLength(0)
     expect(parseDiscordManagementText('take some off').actions).toHaveLength(0)
     expect(parseDiscordManagementText("don't close here").actions).toHaveLength(0)
+    expect(parseDiscordManagementText("I can't close here").actions).toHaveLength(0)
     expect(parseDiscordManagementText('do not move stop to BE').actions).toHaveLength(0)
+    expect(parseDiscordManagementText('moving stops to be safe').actions).toHaveLength(0)
     expect(parseDiscordManagementText('close here in 5 minutes').actions).toHaveLength(0)
+    expect(parseDiscordManagementText('close here after CPI').actions).toHaveLength(0)
+    expect(parseDiscordManagementText('flat').actions[0]).toMatchObject({ operation: 'flatten' })
+    expect(parseDiscordManagementText('done').actions[0]).toMatchObject({ operation: 'flatten' })
   })
 })
 
@@ -328,6 +347,10 @@ describe('Discord trade manager', () => {
       operation: 'modify',
       quantity: 2,
       stop_price: '5600',
+    })
+    expect(receipt.actions[1]).toMatchObject({
+      gateway_receipt_id: expect.any(String),
+      evidence_refs: ['fake-evidence'],
     })
   })
 
@@ -445,5 +468,9 @@ describe('Discord trade manager', () => {
     expect(receipt.status).toBe('completed')
     expect(gateway.log).toEqual(['reconcile'])
     expect(receipt.actions[0]!.concrete_payload).toBeUndefined()
+    expect(receipt.actions[0]).toMatchObject({
+      gateway_receipt_id: expect.any(String),
+      evidence_refs: ['fake-evidence'],
+    })
   })
 })
