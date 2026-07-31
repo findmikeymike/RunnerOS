@@ -72,6 +72,10 @@ export class ExecutionGateway {
     return this.options.store.create(intent, traceId)
   }
 
+  get(intentId: string): Promise<ExecutionRecord> {
+    return this.options.store.get(intentId)
+  }
+
   async approve(
     intentId: string,
     riskInput: RiskDecision,
