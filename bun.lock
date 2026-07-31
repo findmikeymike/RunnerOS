@@ -388,6 +388,13 @@
         "zod": "^4.3.5",
       },
     },
+    "packages/trading-execution": {
+      "name": "@trade-god/execution",
+      "version": "0.0.1",
+      "dependencies": {
+        "@trade-god/contracts": "workspace:*",
+      },
+    },
     "packages/trading-market-state": {
       "name": "@trade-god/market-state",
       "version": "0.0.1",
@@ -1548,6 +1555,8 @@
     "@trade-god/client": ["@trade-god/client@workspace:packages/trading-client"],
 
     "@trade-god/contracts": ["@trade-god/contracts@workspace:packages/trading-contracts"],
+
+    "@trade-god/execution": ["@trade-god/execution@workspace:packages/trading-execution"],
 
     "@trade-god/market-state": ["@trade-god/market-state@workspace:packages/trading-market-state"],
 

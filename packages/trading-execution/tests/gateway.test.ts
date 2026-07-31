@@ -1,0 +1,438 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+
+import {
+  EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
+  EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
+  EXECUTION_RECONCILIATION_SCHEMA_VERSION,
+  EXECUTION_SUBMIT_ACK_SCHEMA_VERSION,
+  ORDER_INTENT_SCHEMA_VERSION,
+  RISK_DECISION_SCHEMA_VERSION,
+  TRADING_CONNECTION_SCHEMA_VERSION,
+  type ExecutionAccountSnapshot,
+  type ExecutionAuthorization,
+  type ExecutionReconciliation,
+  type ExecutionSubmitAcknowledgment,
+  type OrderIntent,
+  type RiskDecision,
+  type TradingConnection,
+} from '@trade-god/contracts'
+import {
+  ExecutionAdapterError,
+  ExecutionGateway,
+  ExecutionGatewayError,
+  FileExecutionStore,
+  computeActionDigest,
+  computeExecutionReceiptChecksum,
+  computeOrderIntentChecksum,
+  type ExecutionAdapter,
+} from '../src/index.ts'
+
+const NOW = '2026-07-30T15:05:00.000Z'
+const roots: string[] = []
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+})
+
+const capabilities = {
+  read_accounts: true,
+  read_orders: true,
+  read_positions: true,
+  read_executions: true,
+  submit_market: true,
+  submit_limit: true,
+  submit_stop: true,
+  submit_stop_limit: true,
+  native_bracket: true,
+  native_oco: true,
+  modify_order: true,
+  cancel_order: true,
+  partial_close: true,
+  flatten: true,
+  streaming_events: true,
+}
+
+const makeConnection = (
+  overrides: Partial<TradingConnection> = {},
+): TradingConnection => ({
+  connection_schema_version: TRADING_CONNECTION_SCHEMA_VERSION,
+  connection_id: 'connection-apex-paper',
+  display_name: 'Apex Paper',
+  firm: { slug: 'apex', name: 'Apex Trader Funding' },
+  platform: { slug: 'tradovate', name: 'Tradovate' },
+  environment: 'paper',
+  environment_class: 'rehearsal',
+  transport_preference: 'auto',
+  account_ref: 'account-apex-paper',
+  account_display: { label: 'APEX-1234', last4: '1234' },
+  credential_ref: 'credential-tradovate',
+  browser_session_ref: 'session-wealthcharts',
+  risk_policy_ref: 'risk-policy-paper',
+  authorization_basis_ref: 'authorization-basis-apex',
+  approval_policy_ref: 'approval-policy-paper',
+  state: 'ready',
+  capabilities,
+  certifications: [
+    'read-certified',
+    'paper-entry-certified',
+    'paper-lifecycle-certified',
+  ],
+  enabled: true,
+  created_at: '2026-07-30T14:00:00.000Z',
+  updated_at: '2026-07-30T14:00:00.000Z',
+  ...overrides,
+})
+
+const makeIntent = (
+  connection: TradingConnection,
+  overrides: Partial<Omit<OrderIntent, 'content_checksum'>> = {},
+): OrderIntent => {
+  const unsigned: Omit<OrderIntent, 'content_checksum'> = {
+    intent_schema_version: ORDER_INTENT_SCHEMA_VERSION,
+    intent_id: 'intent-es-long-1',
+    source: {
+      type: 'discord',
+      source_id: 'discord-message-123',
+      author_id: 'discord-user-456',
+    },
+    connection_id: connection.connection_id,
+    instrument: {
+      canonical_id: 'CME:ESU6',
+      symbol: 'ESU6',
+      exchange: 'XCME',
+      expiry: '2026-09',
+    },
+    side: 'buy',
+    quantity: 1,
+    entry: { type: 'market' },
+    protection: {
+      stop_loss: { type: 'ticks', value: '8' },
+      take_profit: { type: 'ticks', value: '12' },
+    },
+    time_in_force: 'day',
+    created_at: '2026-07-30T15:04:00.000Z',
+    valid_until: '2026-07-30T15:10:00.000Z',
+    ...overrides,
+  }
+  return { ...unsigned, content_checksum: computeOrderIntentChecksum(unsigned) }
+}
+
+class FakeAdapter implements ExecutionAdapter {
+  submitCount = 0
+  connectCount = 0
+  reconciliation: ExecutionReconciliation
+  submitError?: Error
+  snapshotOverrides: Partial<ExecutionAccountSnapshot> = {}
+
+  readonly descriptor
+
+  constructor(
+    transport: 'api' | 'browser' = 'api',
+    adapterId = `fake-${transport}`,
+  ) {
+    this.descriptor = {
+      adapter_id: adapterId,
+      adapter_version: '1.0.0',
+      transport,
+      capabilities,
+    }
+    this.reconciliation = {
+      reconciliation_schema_version: EXECUTION_RECONCILIATION_SCHEMA_VERSION,
+      reconciliation_id: 'reconciliation-1',
+      command_id: 'pending-command',
+      connection_id: 'connection-apex-paper',
+      status: 'filled-protected',
+      provider_order_ids: ['provider-order-1', 'provider-stop-1'],
+      filled_quantity: 1,
+      average_fill_price: '5600.25',
+      protection_verified: true,
+      evidence_refs: ['evidence-fill-1'],
+      reconciled_at: NOW,
+      reason: 'Provider reports a protected fill.',
+    }
+  }
+
+  supports(): boolean {
+    return true
+  }
+
+  async connect(): Promise<void> {
+    this.connectCount += 1
+  }
+
+  async snapshotAccount(connection: TradingConnection): Promise<ExecutionAccountSnapshot> {
+    return {
+      account_snapshot_schema_version: EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
+      account_snapshot_id: 'snapshot-1',
+      connection_id: connection.connection_id,
+      account_ref: connection.account_ref,
+      environment: connection.environment,
+      captured_at: NOW,
+      can_trade: true,
+      balance: '50000',
+      realized_pnl: '0',
+      open_pnl: '0',
+      positions: [],
+      working_orders: [],
+      ...this.snapshotOverrides,
+    }
+  }
+
+  async submit(input: Parameters<ExecutionAdapter['submit']>[0]): Promise<ExecutionSubmitAcknowledgment> {
+    this.submitCount += 1
+    if (this.submitError) throw this.submitError
+    return {
+      submit_ack_schema_version: EXECUTION_SUBMIT_ACK_SCHEMA_VERSION,
+      command_id: input.command.command_id,
+      status: 'acknowledged',
+      provider_order_ids: ['provider-order-1'],
+      acknowledged_at: NOW,
+    }
+  }
+
+  async reconcile(input: Parameters<ExecutionAdapter['reconcile']>[0]) {
+    return {
+      ...this.reconciliation,
+      command_id: input.command.command_id,
+      connection_id: input.connection.connection_id,
+    }
+  }
+}
+
+const setup = async (
+  connection = makeConnection(),
+  adapters: ExecutionAdapter[] = [new FakeAdapter()],
+) => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trade-god-execution-'))
+  roots.push(root)
+  const store = new FileExecutionStore(root, () => NOW)
+  const gateway = new ExecutionGateway({
+    store,
+    adapters,
+    resolveConnection: async () => connection,
+    now: () => NOW,
+  })
+  return { root, store, gateway, connection }
+}
+
+const approve = async (
+  gateway: ExecutionGateway,
+  connection: TradingConnection,
+  intent: OrderIntent,
+) => {
+  const risk: RiskDecision = {
+    risk_decision_schema_version: RISK_DECISION_SCHEMA_VERSION,
+    decision_id: `risk-${intent.intent_id}`,
+    intent_id: intent.intent_id,
+    account_snapshot_id: 'snapshot-1',
+    risk_policy_version: '1.0.0',
+    result: 'allow' as const,
+    reasons: ['Intent is within the paper risk envelope.'],
+    evaluated_at: NOW,
+    valid_until: '2026-07-30T15:09:00.000Z',
+  }
+  const authorization: ExecutionAuthorization = {
+    authorization_schema_version: EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
+    authorization_id: `authorization-${intent.intent_id}`,
+    connection_id: connection.connection_id,
+    mode: 'per-order' as const,
+    intent_id: intent.intent_id,
+    action_digest: computeActionDigest(intent, connection),
+    scope: {
+      symbols: [intent.instrument.symbol],
+      max_contracts: intent.quantity,
+      allowed_sides: [intent.side],
+      allowed_order_types: [intent.entry.type],
+      session_start: '2026-07-30T15:00:00.000Z',
+      session_end: '2026-07-30T16:00:00.000Z',
+      max_daily_loss: '500',
+      max_open_risk: '200',
+    },
+    issued_by: 'operator-michael',
+    issued_at: NOW,
+    expires_at: '2026-07-30T15:09:00.000Z',
+  }
+  await gateway.registerIntent(intent)
+  return gateway.approve(intent.intent_id, risk, authorization)
+}
+
+describe('execution gateway', () => {
+  test('persists one paper lifecycle through a protected fill and valid receipt', async () => {
+    const adapter = new FakeAdapter()
+    const { root, gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    const result = await gateway.execute(intent.intent_id)
+
+    expect(result.state).toBe('protected')
+    expect(adapter.submitCount).toBe(1)
+    expect(result.command?.adapter_id).toBe('fake-api')
+    expect(result.receipt?.result).toBe('filled-protected')
+    if (!result.receipt) throw new Error('Expected execution receipt.')
+    expect(computeExecutionReceiptChecksum(result.receipt)).toBe(result.receipt.content_checksum)
+
+    const reloaded = await new FileExecutionStore(root, () => NOW).get(intent.intent_id)
+    expect(reloaded.state).toBe('protected')
+    expect(reloaded.command?.idempotency_key).toBe(result.command?.idempotency_key)
+  })
+
+  test('auto selects API before browser and never submits through both', async () => {
+    const browser = new FakeAdapter('browser')
+    const api = new FakeAdapter('api')
+    const connection = makeConnection({ transport_preference: 'auto' })
+    const { gateway } = await setup(connection, [browser, api])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    await gateway.execute(intent.intent_id)
+
+    expect(api.submitCount).toBe(1)
+    expect(browser.submitCount).toBe(0)
+  })
+
+  test('atomically permits only one submit under concurrent execution', async () => {
+    const adapter = new FakeAdapter()
+    const { root, gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    const secondGateway = new ExecutionGateway({
+      store: new FileExecutionStore(root, () => NOW),
+      adapters: [adapter],
+      resolveConnection: async () => connection,
+      now: () => NOW,
+    })
+
+    const outcomes = await Promise.allSettled([
+      gateway.execute(intent.intent_id),
+      secondGateway.execute(intent.intent_id),
+    ])
+
+    expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1)
+    expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toHaveLength(1)
+    expect(adapter.submitCount).toBe(1)
+  })
+
+  test('blocks a killed source before claim and leaves the approved intent retryable', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    await gateway.setSourceKill(intent.source.source_id, true)
+
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({
+      code: 'KILL_SWITCH_ENABLED',
+    })
+    expect((await store.get(intent.intent_id)).state).toBe('approved')
+    expect(adapter.connectCount).toBe(0)
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('halts an uncertain submit without retry and later adopts broker truth', async () => {
+    const adapter = new FakeAdapter()
+    adapter.submitError = new ExecutionAdapterError(
+      'NETWORK_AFTER_SEND',
+      'Connection dropped after bytes may have been sent.',
+      true,
+    )
+    adapter.reconciliation = {
+      ...adapter.reconciliation,
+      status: 'working',
+      filled_quantity: 0,
+      average_fill_price: undefined,
+      protection_verified: false,
+      reason: 'Provider reports the original order working.',
+    }
+    const { root, gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    expect((await gateway.execute(intent.intent_id)).state).toBe('submit-unknown')
+    expect(adapter.submitCount).toBe(1)
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({ code: 'INVALID_STATE' })
+    expect(adapter.submitCount).toBe(1)
+    const restarted = new ExecutionGateway({
+      store: new FileExecutionStore(root, () => NOW),
+      adapters: [adapter],
+      resolveConnection: async () => connection,
+      now: () => NOW,
+    })
+    expect(await restarted.recoverNonTerminal()).toMatchObject([{
+      intent_id: intent.intent_id,
+      initial_state: 'submit-unknown',
+      final_state: 'acknowledged',
+      outcome: 'reconciled',
+    }])
+    expect(adapter.submitCount).toBe(1)
+  })
+
+  test('does not claim or submit when the provider account identity is wrong', async () => {
+    const adapter = new FakeAdapter()
+    adapter.snapshotOverrides = { account_ref: 'wrong-account' }
+    const { gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({ code: 'ACCOUNT_MISMATCH' })
+    expect((await store.get(intent.intent_id)).state).toBe('approved')
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('requires consequential certification and expiring activation', async () => {
+    const adapter = new FakeAdapter()
+    const connection = makeConnection({
+      environment: 'evaluation',
+      environment_class: 'consequential',
+      certifications: ['read-certified', 'paper-lifecycle-certified'],
+      consequential_enabled_until: undefined,
+    })
+    const { gateway, store } = await setup(connection, [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({
+      code: 'CERTIFICATION_REQUIRED',
+    })
+    expect((await store.get(intent.intent_id)).state).toBe('approved')
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('records a denied risk decision without demanding authorization', async () => {
+    const { gateway, connection } = await setup()
+    const intent = makeIntent(connection)
+    await gateway.registerIntent(intent)
+
+    const result = await gateway.approve(intent.intent_id, {
+      risk_decision_schema_version: RISK_DECISION_SCHEMA_VERSION,
+      decision_id: 'risk-deny-1',
+      intent_id: intent.intent_id,
+      account_snapshot_id: 'snapshot-1',
+      risk_policy_version: '1.0.0',
+      result: 'deny',
+      reasons: ['Daily loss limit reached.'],
+      evaluated_at: NOW,
+      valid_until: '2026-07-30T15:09:00.000Z',
+    })
+
+    expect(result.state).toBe('risk-denied')
+    expect(result.authorization).toBeUndefined()
+  })
+
+  test('detects persisted intent tampering before returning execution truth', async () => {
+    const { root, gateway, store, connection } = await setup()
+    const intent = makeIntent(connection)
+    await gateway.registerIntent(intent)
+    const recordFile = path.join(root, 'records', `${intent.intent_id}.json`)
+    const record = JSON.parse(await readFile(recordFile, 'utf8'))
+    record.intent.quantity = 2
+    await writeFile(recordFile, `${JSON.stringify(record, null, 2)}\n`)
+
+    await expect(store.get(intent.intent_id)).rejects.toBeInstanceOf(ExecutionGatewayError)
+    await expect(store.get(intent.intent_id)).rejects.toMatchObject({
+      code: 'RECORD_INTEGRITY_FAILURE',
+    })
+  })
+})
