@@ -1,7 +1,7 @@
 /**
  * Secure Storage Backend
  *
- * Stores credentials in an encrypted file at ~/.craft-agent/credentials.enc
+ * Stores credentials in an encrypted file inside the active Runner config dir.
  * Uses AES-256-GCM for authenticated encryption.
  *
  * Encryption key is derived from an OS-protected random key when Electron
@@ -38,11 +38,7 @@ import { join, dirname } from 'path';
 import type { CredentialBackend } from './types.ts';
 import type { CredentialId, StoredCredential } from '../types.ts';
 import { credentialIdToAccount, accountToCredentialId } from '../types.ts';
-
-// File location
-const CREDENTIALS_DIR = join(homedir(), '.craft-agent');
-const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.enc');
-const CREDENTIALS_KEY_FILE = join(CREDENTIALS_DIR, 'credentials.key');
+import { CONFIG_DIR } from '../../config/paths.ts';
 
 // File format constants
 const MAGIC_BYTES = Buffer.from('CRAFT01\0');
@@ -127,10 +123,19 @@ export class SecureStorageBackend implements CredentialBackend {
   readonly name = 'secure-storage';
   readonly priority = 100;
 
+  private readonly credentialsDir: string;
+  private readonly credentialsFile: string;
+  private readonly credentialsKeyFile: string;
   private cachedStore: CredentialStore | null = null;
   private encryptionKey: Buffer | null = null;
   private salt: Buffer | null = null;
   private storeLocked = false;
+
+  constructor(credentialsDir = CONFIG_DIR) {
+    this.credentialsDir = credentialsDir;
+    this.credentialsFile = join(credentialsDir, 'credentials.enc');
+    this.credentialsKeyFile = join(credentialsDir, 'credentials.key');
+  }
 
   async isAvailable(): Promise<boolean> {
     // File backend is always available - we can always write to filesystem
@@ -217,11 +222,11 @@ export class SecureStorageBackend implements CredentialBackend {
     // Return cached store if available
     if (this.cachedStore) return this.cachedStore;
 
-    if (!existsSync(CREDENTIALS_FILE)) return null;
+    if (!existsSync(this.credentialsFile)) return null;
 
     let fileData: Buffer;
     try {
-      fileData = readFileSync(CREDENTIALS_FILE);
+      fileData = readFileSync(this.credentialsFile);
     } catch {
       return null;
     }
@@ -284,7 +289,7 @@ export class SecureStorageBackend implements CredentialBackend {
     // A safeStorage-backed file may be unreadable in a headless/non-Electron
     // runtime. Do not delete it as "corrupted" just because this process cannot
     // unlock the OS-protected sidecar key.
-    if (existsSync(CREDENTIALS_KEY_FILE)) {
+    if (existsSync(this.credentialsKeyFile)) {
       this.storeLocked = true;
       return null;
     }
@@ -315,8 +320,8 @@ export class SecureStorageBackend implements CredentialBackend {
 
   private async saveStore(store: CredentialStore): Promise<void> {
     // Ensure directory exists
-    if (!existsSync(CREDENTIALS_DIR)) {
-      mkdirSync(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
+    if (!existsSync(this.credentialsDir)) {
+      mkdirSync(this.credentialsDir, { recursive: true, mode: 0o700 });
     }
 
     // Use existing salt or generate new one
@@ -347,10 +352,10 @@ export class SecureStorageBackend implements CredentialBackend {
     const fileData = Buffer.concat([header, iv, authTag, ciphertext]);
 
     // Atomic replace with restrictive permissions (owner read/write only).
-    const tempFile = join(CREDENTIALS_DIR, `.credentials.enc.${process.pid}.${Date.now()}.${randomBytes(4).toString('hex')}.tmp`);
+    const tempFile = join(this.credentialsDir, `.credentials.enc.${process.pid}.${Date.now()}.${randomBytes(4).toString('hex')}.tmp`);
     try {
       writeFileSync(tempFile, fileData, { mode: 0o600 });
-      renameSync(tempFile, CREDENTIALS_FILE);
+      renameSync(tempFile, this.credentialsFile);
     } catch (err) {
       rmSync(tempFile, { force: true });
       throw err;
@@ -362,7 +367,10 @@ export class SecureStorageBackend implements CredentialBackend {
   private async getEncryptionKey(salt: Buffer): Promise<Buffer> {
     if (this.encryptionKey) return this.encryptionKey;
 
-    const safeStorageKeyMaterial = await getSafeStorageKeyMaterial();
+    const safeStorageKeyMaterial = await getSafeStorageKeyMaterial(
+      this.credentialsDir,
+      this.credentialsKeyFile,
+    );
     const keyMaterial = safeStorageKeyMaterial ?? getHardwareFallbackKeyMaterial();
 
     // Derive key using PBKDF2
@@ -393,8 +401,8 @@ export class SecureStorageBackend implements CredentialBackend {
   private handleCorruptedFile(): void {
     // Delete corrupted file - user will need to re-enter credentials
     try {
-      if (existsSync(CREDENTIALS_FILE)) {
-        unlinkSync(CREDENTIALS_FILE);
+      if (existsSync(this.credentialsFile)) {
+        unlinkSync(this.credentialsFile);
       }
     } catch {
       // Ignore deletion errors
@@ -421,25 +429,28 @@ function getHardwareFallbackKeyMaterial(): Buffer {
     .digest();
 }
 
-async function getSafeStorageKeyMaterial(): Promise<Buffer | null> {
+async function getSafeStorageKeyMaterial(
+  credentialsDir: string,
+  credentialsKeyFile: string,
+): Promise<Buffer | null> {
   try {
     const electron = await import('electron');
     const safeStorage = electron.safeStorage;
     if (!safeStorage?.isEncryptionAvailable()) return null;
 
-    if (existsSync(CREDENTIALS_KEY_FILE)) {
-      const encryptedKey = readFileSync(CREDENTIALS_KEY_FILE);
+    if (existsSync(credentialsKeyFile)) {
+      const encryptedKey = readFileSync(credentialsKeyFile);
       const decrypted = safeStorage.decryptString(encryptedKey);
       return Buffer.from(decrypted, 'base64');
     }
 
-    if (!existsSync(CREDENTIALS_DIR)) {
-      mkdirSync(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
+    if (!existsSync(credentialsDir)) {
+      mkdirSync(credentialsDir, { recursive: true, mode: 0o700 });
     }
 
     const keyMaterial = randomBytes(KEY_SIZE);
     const encryptedKey = safeStorage.encryptString(keyMaterial.toString('base64'));
-    writeFileSync(CREDENTIALS_KEY_FILE, encryptedKey, { mode: 0o600 });
+    writeFileSync(credentialsKeyFile, encryptedKey, { mode: 0o600 });
     return keyMaterial;
   } catch {
     return null;

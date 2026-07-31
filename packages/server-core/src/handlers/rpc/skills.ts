@@ -17,6 +17,15 @@ export const HANDLED_CHANNELS = [
 ] as const
 
 export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): void {
+  const excludedLegacySkillSlugs = async (): Promise<Set<string>> => {
+    const { TRADE_GOD_EXCLUDED_BUNDLED_SKILL_SLUGS } = await import('@craft-agent/shared/skills')
+    return new Set<string>([
+      ...TRADE_GOD_EXCLUDED_BUNDLED_SKILL_SLUGS,
+      'artist-os-guide',
+      'raw-video-editor',
+    ])
+  }
+
   // Get all skills for a workspace (and optionally project-level skills from workingDirectory)
   server.handle(RPC_CHANNELS.skills.GET, async (_ctx, workspaceId: string, workingDirectory?: string) => {
     deps.platform.logger?.info(`SKILLS_GET: Loading skills for workspace: ${workspaceId}${workingDirectory ? `, workingDirectory: ${workingDirectory}` : ''}`)
@@ -31,7 +40,9 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
       ? workingDirectory
       : undefined
     const { loadAllSkills } = await import('@craft-agent/shared/skills')
+    const excluded = await excludedLegacySkillSlugs()
     const skills = loadAllSkills(workspace.rootPath, effectiveWorkingDir)
+      .filter(skill => !excluded.has(skill.slug))
     deps.platform.logger?.info(`SKILLS_GET: Loaded ${skills.length} skills from ${workspace.rootPath}`)
     return skills
   })
@@ -44,7 +55,10 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     }
 
     const { isSystemGlobalSkillSlug, loadGlobalSkills } = await import('@craft-agent/shared/skills')
-    return loadGlobalSkills().filter((skill) => !isSystemGlobalSkillSlug(skill.slug))
+    const excluded = await excludedLegacySkillSlugs()
+    return loadGlobalSkills().filter((skill) =>
+      !isSystemGlobalSkillSlug(skill.slug) && !excluded.has(skill.slug)
+    )
   })
 
   server.handle(RPC_CHANNELS.skills.GET_ENABLED_GLOBAL, async (_ctx, workspaceId: string) => {
@@ -55,7 +69,9 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     }
 
     const { listEnabledGlobalSkillSlugs } = await import('@craft-agent/shared/skills')
+    const excluded = await excludedLegacySkillSlugs()
     return listEnabledGlobalSkillSlugs(workspace.rootPath)
+      .filter(slug => !excluded.has(slug))
   })
 
   server.handle(RPC_CHANNELS.skills.SET_GLOBAL_ENABLED, async (_ctx, workspaceId: string, skillSlug: string, enabled: boolean) => {
@@ -73,12 +89,19 @@ export function registerSkillsHandlers(server: RpcServer, deps: HandlerDeps): vo
     }
 
     const enabledGlobalSkills = setGlobalSkillEnabled(workspace.rootPath, skillSlug, enabled)
+    const excluded = await excludedLegacySkillSlugs()
     const skills = loadAllSkills(workspace.rootPath)
+      .filter(skill => !excluded.has(skill.slug))
     deps.sessionManager.broadcastSkillsChanged(workspaceId, skills)
     deps.platform.logger?.info(
       `SKILLS_SET_GLOBAL_ENABLED: ${enabled ? 'Enabled' : 'Disabled'} global skill ${skillSlug} for ${workspaceId}`
     )
-    return enabledGlobalSkills.length > 0 ? enabledGlobalSkills : listEnabledGlobalSkillSlugs(workspace.rootPath)
+    const visibleEnabled = (
+      enabledGlobalSkills.length > 0
+        ? enabledGlobalSkills
+        : listEnabledGlobalSkillSlugs(workspace.rootPath)
+    ).filter(slug => !excluded.has(slug))
+    return visibleEnabled
   })
 
   // Get files in a skill directory

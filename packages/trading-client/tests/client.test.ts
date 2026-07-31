@@ -148,7 +148,7 @@ describe('TradingClient', () => {
     const batch = await Bun.file(new URL('../../trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
     const artifact = await client(realHandlerTransport()).analyzeMarketBatch({
       batch,
-      session: { exchange_timezone: 'America/Chicago', session_id: 'CME-2026-07-11-RTH' },
+      session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-synthetic' },
       analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
       timeoutMs: 5_000,
       traceId: 'trace-client-canonical',
@@ -174,7 +174,7 @@ describe('TradingClient', () => {
 
     await expect(client(transport).analyzeMarketBatch({
       batch,
-      session: { exchange_timezone: 'America/Chicago', session_id: 'CME-2026-07-11-RTH' },
+      session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-synthetic' },
       analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
       timeoutMs: 5_000,
     })).rejects.toBeInstanceOf(InvalidTradingResponseError)
@@ -198,7 +198,7 @@ describe('MarketDataClient', () => {
               service: 'trade-god-market-data-engine', version: '0.1.0', state: 'ready',
               protocol_version: 'market-data-rpc@1', artifact_versions: ['market-trade-batch@1'],
               capabilities: {
-                commands: ['market.health', 'market.capabilities', 'market.load_fixture', 'market.shutdown'],
+                commands: ['market.health', 'market.capabilities', 'market.ibkr_gateway_health', 'market.load_fixture', 'market.shutdown'],
                 fixture_mode: true, fixture_ids: ['es-demo-2026-07-11'], live_data: false,
                 broker_access: false, trade_execution: false,
                 transport_policy: {

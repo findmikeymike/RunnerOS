@@ -193,7 +193,14 @@ client.handleCapability(CLIENT_OPEN_FILE_DIALOG, async (spec: FileDialogSpec) =>
 
 const api = buildClientApi(client, CHANNEL_MAP, (ch) => client.isChannelAvailable(ch))
 
-Object.assign(api, createTradingPreloadApi((channel, ...args) => ipcRenderer.invoke(channel, ...args)))
+Object.assign(api, createTradingPreloadApi(
+  (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+  (channel, callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: unknown) => callback(payload)
+    ipcRenderer.on(channel, listener)
+    return () => ipcRenderer.removeListener(channel, listener)
+  },
+))
 
 ;(api as any).getRuntimeEnvironment = (): 'electron' | 'web' => 'electron'
 

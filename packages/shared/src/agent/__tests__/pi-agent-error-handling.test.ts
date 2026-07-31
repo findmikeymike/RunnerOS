@@ -21,6 +21,37 @@ function createConfig(): BackendConfig {
 }
 
 describe('PiAgent subprocess error handling', () => {
+  it('refreshes OAuth and retries a one-shot LLM query once after token expiry', async () => {
+    const agent = new PiAgent({ ...createConfig(), authType: 'oauth' })
+    let sends = 0
+    let refreshes = 0
+    ;(agent as any).ensureSubprocess = async () => {}
+    ;(agent as any).refreshAndPushTokens = async () => { refreshes += 1 }
+    ;(agent as any).send = (message: { id: string }) => {
+      sends += 1
+      queueMicrotask(() => {
+        if (sends === 1) {
+          ;(agent as any).handleLine(JSON.stringify({
+            type: 'error',
+            code: 'llm_query_error',
+            message: 'Provided authentication token is expired.',
+          }))
+        } else {
+          ;(agent as any).handleLine(JSON.stringify({
+            type: 'llm_query_result',
+            id: message.id,
+            result: { text: '{"ok":true}' },
+          }))
+        }
+      })
+    }
+
+    await expect(agent.queryLlm({ prompt: 'test' })).resolves.toEqual({ text: '{"ok":true}' })
+    expect(refreshes).toBeGreaterThanOrEqual(1)
+    expect(sends).toBe(2)
+    agent.destroy()
+  })
+
   it('parses JSONL with terminal notification noise before the JSON object', () => {
     const agent = new PiAgent(createConfig())
 

@@ -8,7 +8,7 @@ import {
 const reference = {
   reference_schema_version: 'agent-context-reference@1' as const,
   context_id: `market-context-${'a'.repeat(64)}`,
-  context_schema_version: 'agent-market-snapshot@1' as const,
+  context_schema_version: 'agent-market-snapshot@2' as const,
   content_sha256: 'a'.repeat(64),
   snapshot_id: 'snapshot-agent-context-1',
   trace_id: 'trace-agent-context-1',

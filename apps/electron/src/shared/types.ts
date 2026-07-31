@@ -463,7 +463,15 @@ export interface ElectronAPI {
   // Trade God local desktop runtime (never routed to remote workspace servers)
   getTradeGodHealth(): Promise<import('@trade-god/contracts').HealthResponse>
   analyzeTradeGodFixture(input: import('@trade-god/client').AnalyzeFixtureInput): Promise<import('@trade-god/contracts').OrderFlowArtifact>
+  interpretTradeGodFixture(input: import('../main/trading/order-flow-specialist-pipeline').InterpretFixtureInput): Promise<import('@trade-god/contracts').OrderFlowInterpretation>
   cancelTradeGodAnalysis(cancellationId: string): Promise<import('@trade-god/contracts').CancelAnalysisResponse>
+  listTradeGodAlerts(limit?: number): Promise<import('@trade-god/contracts').TradeAlert[]>
+  acknowledgeTradeGodAlert(alertId: string): Promise<import('@trade-god/contracts').TradeAlert | null>
+  getTradeGodAlertIngestionStatus(): Promise<import('@trade-god/contracts').TradeAlertIngestionStatus>
+  getTradeGodAlertWebhookSetup(): Promise<import('@trade-god/contracts').TradeAlertWebhookSetup>
+  onTradeGodAlert(callback: (alert: import('@trade-god/contracts').TradeAlert) => void): () => void
+  getIbkrGatewayHealth(environment?: import('@trade-god/contracts').IbkrGatewayEnvironment): Promise<import('@trade-god/contracts').IbkrGatewayHealth>
+  getSyntheticTradeGodChartFixture(input: import('../main/trading/synthetic-chart-fixture').SyntheticChartFixtureInput): Promise<import('@trade-god/contracts').MarketCandleSeries | null>
 
   // Session management
   getSessions(): Promise<Session[]>

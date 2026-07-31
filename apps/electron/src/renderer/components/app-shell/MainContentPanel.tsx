@@ -62,13 +62,12 @@ import OutputDetailPage from '@/pages/OutputDetailPage'
 import VideoStudioPage from '@/pages/VideoStudioPage'
 import { AgentsLaunchpad } from './AgentsLaunchpad'
 import { ArtistHQHome } from './ArtistHQHome'
-import { ArtistCommandCenterHome } from './ArtistCommandCenterHome'
 import { CampaignCalendarPage } from './CampaignCalendarPage'
 import { AgendaPage } from './AgendaPage'
 import { AGENDA_LABEL } from './agenda-utils'
 import { CommunityPage } from './CommunityPage'
 import { VaultPage } from './VaultPage'
-import TradeGodWorkbenchPage from '@/features/trading/TradeGodWorkbenchPage'
+import TradeGodHomePage from '@/features/trading/TradeGodHomePage'
 import { getSettingsPageComponent } from '@/pages/settings/settings-pages'
 import { SettingsPageSwitcher } from '@/pages/settings/SettingsPageSwitcher'
 import {
@@ -283,9 +282,9 @@ export function MainContentPanel({
         {navState.subpage === 'calendar' ? (
           <CampaignCalendarPage workspaceId={activeWorkspaceId || ''} />
         ) : (
-          <ArtistCommandCenterHome
+          <TradeGodHomePage
             workspaceId={activeWorkspaceId || ''}
-            artistProfileWorkspaceId={artistHQWorkspace?.id}
+            workspaceName={activeWorkspace?.name}
           />
         )}
       </Panel>
@@ -295,7 +294,10 @@ export function MainContentPanel({
   if (isTradeGodNavigation(navState)) {
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <TradeGodWorkbenchPage />
+        <TradeGodHomePage
+          workspaceId={activeWorkspaceId || undefined}
+          workspaceName={activeWorkspace?.name}
+        />
       </Panel>
     )
   }
@@ -656,9 +658,9 @@ export function MainContentPanel({
 
     return wrapWithStoplight(
       <Panel variant="grow" className={className}>
-        <ArtistCommandCenterHome
+        <TradeGodHomePage
           workspaceId={activeWorkspaceId || ''}
-          artistProfileWorkspaceId={artistHQWorkspace?.id}
+          workspaceName={activeWorkspace?.name}
         />
       </Panel>
     )

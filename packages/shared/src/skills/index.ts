@@ -32,7 +32,10 @@ export type { MirrorSkillResult, BackfillResult } from './storage.ts';
 
 export { STARTER_SKILLS } from './starter-templates.ts';
 export type { StarterSkill, StarterSkillFile } from './starter-templates.ts';
-export { BUNDLED_STARTER_SKILLS } from './bundled.generated.ts';
+export {
+  BUNDLED_STARTER_SKILLS,
+  TRADE_GOD_EXCLUDED_BUNDLED_SKILL_SLUGS,
+} from './bundled.generated.ts';
 export {
   CONCIERGE_SYSTEM_SKILL_SLUGS,
   CREATOR_SYSTEM_SKILL_SLUGS,

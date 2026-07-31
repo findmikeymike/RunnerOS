@@ -31,7 +31,15 @@ type ApiToChannelMapKeys = Exclude<
   | 'getFilePath' // renderer-local — webUtils.getPathForFile, no IPC round-trip
   | 'getTradeGodHealth' // direct local Trade God sidecar IPC
   | 'analyzeTradeGodFixture' // direct local Trade God sidecar IPC
+  | 'interpretTradeGodFixture' // direct local Trade God specialist IPC
   | 'cancelTradeGodAnalysis' // direct local Trade God sidecar IPC
+  | 'listTradeGodAlerts' // direct local Trade God alert ledger IPC
+  | 'acknowledgeTradeGodAlert' // direct local Trade God alert ledger IPC
+  | 'getTradeGodAlertIngestionStatus' // direct local Trade God receiver IPC
+  | 'getTradeGodAlertWebhookSetup' // direct local Trade God receiver IPC
+  | 'getIbkrGatewayHealth' // direct local IB Gateway health IPC
+  | 'getSyntheticTradeGodChartFixture' // direct local synthetic chart fixture IPC
+  | 'onTradeGodAlert' // direct local Trade God alert listener
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string
 

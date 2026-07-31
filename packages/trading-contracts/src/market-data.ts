@@ -12,8 +12,11 @@ import { instrumentSchema } from './analysis.ts'
 import {
   MARKET_QUALITY_REPORT_SCHEMA_VERSION,
   MARKET_DATA_RPC_PROTOCOL_VERSION,
+  IBKR_GATEWAY_HEALTH_SCHEMA_VERSION,
   MARKET_CANDLE_SCHEMA_VERSION,
   MARKET_CANDLE_SERIES_SCHEMA_VERSION,
+  MARKET_FEED_CONTINUITY_SCHEMA_VERSION,
+  MARKET_SESSION_WINDOW_SCHEMA_VERSION,
   AGENT_MARKET_SNAPSHOT_SCHEMA_VERSION,
   MARKET_TRADE_BATCH_SCHEMA_VERSION,
   MARKET_TRADE_EVENT_SCHEMA_VERSION,
@@ -108,6 +111,7 @@ const marketProducerSchema = z.object({
 const marketSourceSchema = z.object({
   provider: identifierSchema,
   record_id: identifierSchema,
+  sequence: positiveIntegerStringSchema.optional(),
   mode: z.enum(['replay', 'live']),
   fixture_id: identifierSchema.optional(),
   fixture_sha256: sha256Schema.optional(),
@@ -289,6 +293,7 @@ export const marketTradeBatchSchema = z.object({
 export const marketDataCommandSchema = z.enum([
   'market.health',
   'market.capabilities',
+  'market.ibkr_gateway_health',
   'market.load_fixture',
   'market.replay_batch',
   'market.replay_next',
@@ -299,9 +304,46 @@ export const marketDataCommandSchema = z.enum([
 const requiredMarketDataCommands = [
   'market.health',
   'market.capabilities',
+  'market.ibkr_gateway_health',
   'market.load_fixture',
   'market.shutdown',
 ] as const
+
+export const ibkrGatewayEnvironmentSchema = z.enum(['paper', 'live'])
+
+export const ibkrGatewayHealthRequestSchema = z.object({
+  environment: ibkrGatewayEnvironmentSchema,
+}).strict()
+
+export const ibkrGatewayHealthSchema = z.object({
+  health_schema_version: z.literal(IBKR_GATEWAY_HEALTH_SCHEMA_VERSION),
+  provider: z.literal('interactive-brokers'),
+  environment: ibkrGatewayEnvironmentSchema,
+  state: z.enum(['ready', 'unavailable']),
+  host: z.enum(['127.0.0.1', '::1', 'localhost']),
+  port: z.union([z.literal(4001), z.literal(4002)]),
+  client_id: z.number().int().min(1).max(999),
+  api_session_authenticated: z.boolean(),
+  server_version: z.number().int().positive().optional(),
+  market_data_entitlement: z.literal('unverified'),
+  gateway_read_only_setting: z.literal('unverified'),
+  connector_authority: z.literal('health-only'),
+  failure: z.enum(['connection-failed', 'authentication-timeout']).optional(),
+}).strict().superRefine((health, context) => {
+  const expectedPort = health.environment === 'paper' ? 4002 : 4001
+  if (health.port !== expectedPort) {
+    context.addIssue({ code: 'custom', path: ['port'], message: 'IB Gateway port must match its environment' })
+  }
+  if (health.state === 'ready' && (!health.api_session_authenticated || !health.server_version || health.failure)) {
+    context.addIssue({ code: 'custom', path: ['state'], message: 'Ready IB Gateway health requires an authenticated API session' })
+  }
+  if (health.state === 'unavailable' && (health.api_session_authenticated || health.server_version || !health.failure)) {
+    context.addIssue({ code: 'custom', path: ['state'], message: 'Unavailable IB Gateway health must fail closed with a reason' })
+  }
+})
+
+export type IbkrGatewayEnvironment = z.infer<typeof ibkrGatewayEnvironmentSchema>
+export type IbkrGatewayHealth = z.infer<typeof ibkrGatewayHealthSchema>
 
 export const marketDataCapabilitiesSchema = z.object({
   commands: z.array(marketDataCommandSchema).min(requiredMarketDataCommands.length).max(marketDataCommandSchema.options.length),
@@ -619,6 +661,102 @@ export const AGENT_MARKET_SNAPSHOT_MAX_TRADES = 500
 export const AGENT_MARKET_SNAPSHOT_MAX_CLOSED_CANDLES = 200
 export const AGENT_MARKET_SNAPSHOT_MAX_ISSUES = 100
 
+export const marketSessionWindowSchema = z.object({
+  session_window_schema_version: z.literal(MARKET_SESSION_WINDOW_SCHEMA_VERSION),
+  session_id: identifierSchema,
+  exchange_timezone: z.string().min(1).max(100),
+  calendar_id: identifierSchema,
+  calendar_version: semverSchema,
+  trade_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  kind: z.enum(['rth', 'eth', 'custom', 'synthetic']),
+  segments: z.array(z.object({
+    open_ns: nanosecondTimestampSchema,
+    close_ns: nanosecondTimestampSchema,
+  }).strict()).min(1).max(8),
+}).strict().superRefine((window, context) => {
+  let priorClose: bigint | undefined
+  for (const [index, segment] of window.segments.entries()) {
+    const open = BigInt(segment.open_ns)
+    const close = BigInt(segment.close_ns)
+    if (close <= open) {
+      context.addIssue({ code: 'custom', path: ['segments', index, 'close_ns'], message: 'Session segment close must follow open' })
+    }
+    if (priorClose !== undefined && open < priorClose) {
+      context.addIssue({ code: 'custom', path: ['segments', index, 'open_ns'], message: 'Session segments must be ordered and non-overlapping' })
+    }
+    priorClose = close
+  }
+})
+
+const marketSequenceGapSchema = z.object({
+  start_sequence: positiveIntegerStringSchema,
+  end_sequence: positiveIntegerStringSchema,
+}).strict().superRefine((gap, context) => {
+  if (BigInt(gap.end_sequence) < BigInt(gap.start_sequence)) {
+    context.addIssue({ code: 'custom', path: ['end_sequence'], message: 'Sequence gap end cannot precede start' })
+  }
+})
+
+export const marketFeedContinuitySchema = z.object({
+  continuity_schema_version: z.literal(MARKET_FEED_CONTINUITY_SCHEMA_VERSION),
+  provider: identifierSchema,
+  instrument_id: identifierSchema,
+  state: z.enum(['healthy', 'recovering', 'gapped', 'stale', 'unavailable']),
+  connection_epoch: z.number().int().nonnegative(),
+  observed_at_ns: nanosecondTimestampSchema,
+  stale_after_ns: z.string().regex(/^[1-9]\d*$/, 'Expected a positive nanosecond duration string'),
+  last_event_ns: nanosecondTimestampSchema.optional(),
+  last_sequence: positiveIntegerStringSchema.optional(),
+  resynchronized_at_ns: nanosecondTimestampSchema.optional(),
+  missing_ranges: z.array(marketSequenceGapSchema).max(64),
+  faults: z.array(identifierSchema).max(64),
+}).strict().superRefine((continuity, context) => {
+  const hasCursor = continuity.last_event_ns !== undefined && continuity.last_sequence !== undefined
+  if ((continuity.last_event_ns === undefined) !== (continuity.last_sequence === undefined)) {
+    context.addIssue({ code: 'custom', path: ['last_sequence'], message: 'Continuity event time and sequence cursor must appear together' })
+  }
+  if (continuity.last_event_ns && BigInt(continuity.last_event_ns) > BigInt(continuity.observed_at_ns)) {
+    context.addIssue({ code: 'custom', path: ['last_event_ns'], message: 'Continuity event time cannot exceed observation time' })
+  }
+  if (continuity.resynchronized_at_ns && BigInt(continuity.resynchronized_at_ns) > BigInt(continuity.observed_at_ns)) {
+    context.addIssue({ code: 'custom', path: ['resynchronized_at_ns'], message: 'Resynchronization time cannot exceed observation time' })
+  }
+  if (continuity.state === 'healthy' && (!hasCursor || !continuity.resynchronized_at_ns || continuity.missing_ranges.length > 0 || continuity.faults.length > 0)) {
+    context.addIssue({ code: 'custom', path: ['state'], message: 'Healthy continuity requires a resynchronized cursor with no unresolved defects' })
+  }
+  if (
+    continuity.state === 'healthy'
+    && continuity.last_event_ns
+    && BigInt(continuity.observed_at_ns) - BigInt(continuity.last_event_ns) > BigInt(continuity.stale_after_ns)
+  ) {
+    context.addIssue({ code: 'custom', path: ['state'], message: 'Healthy continuity cannot exceed its event-age threshold' })
+  }
+  if (continuity.state === 'gapped' && continuity.missing_ranges.length === 0 && continuity.faults.length === 0) {
+    context.addIssue({ code: 'custom', path: ['state'], message: 'Gapped continuity must identify an unresolved defect' })
+  }
+  if (continuity.state === 'stale') {
+    if (!hasCursor || BigInt(continuity.observed_at_ns) - BigInt(continuity.last_event_ns!) <= BigInt(continuity.stale_after_ns)) {
+      context.addIssue({ code: 'custom', path: ['state'], message: 'Stale continuity must exceed its event-age threshold' })
+    }
+  }
+  if (continuity.state === 'unavailable' && (hasCursor || continuity.resynchronized_at_ns || continuity.missing_ranges.length > 0)) {
+    context.addIssue({ code: 'custom', path: ['state'], message: 'Unavailable continuity cannot claim a sequence cursor or resynchronization' })
+  }
+  let priorEnd: bigint | undefined
+  for (const [index, gap] of continuity.missing_ranges.entries()) {
+    const start = BigInt(gap.start_sequence)
+    if (priorEnd !== undefined && start <= priorEnd) {
+      context.addIssue({ code: 'custom', path: ['missing_ranges', index], message: 'Sequence gaps must be ordered and non-overlapping' })
+    }
+    priorEnd = BigInt(gap.end_sequence)
+  }
+})
+
+export const marketSessionAdmissionSchema = z.object({
+  state: z.enum(['inside', 'outside', 'no-data']),
+  window: marketSessionWindowSchema,
+}).strict()
+
 export const agentMarketSnapshotSchema = z.object({
   snapshot_schema_version: z.literal(AGENT_MARKET_SNAPSHOT_SCHEMA_VERSION),
   snapshot_id: identifierSchema,
@@ -641,6 +779,10 @@ export const agentMarketSnapshotSchema = z.object({
     age_ns: nanosecondTimestampSchema.optional(),
     stale_after_ns: positiveNanosecondDurationSchema,
   }),
+  readiness: z.object({
+    continuity: marketFeedContinuitySchema,
+    session: marketSessionAdmissionSchema,
+  }).strict(),
   candles: z.object({
     interval_ns: positiveNanosecondDurationSchema,
     alignment: z.literal('unix-epoch'),
@@ -704,6 +846,24 @@ export const agentMarketSnapshotSchema = z.object({
   } else if (snapshot.freshness.state !== 'no-data' || snapshot.freshness.age_ns !== undefined) {
     context.addIssue({ code: 'custom', path: ['freshness'], message: 'No-data context cannot claim freshness age' })
   }
+  if (snapshot.readiness.continuity.instrument_id !== snapshot.instrument.id) {
+    context.addIssue({ code: 'custom', path: ['readiness', 'continuity', 'instrument_id'], message: 'Continuity instrument must match snapshot instrument' })
+  }
+  if (snapshot.readiness.continuity.observed_at_ns !== snapshot.watermark_ns) {
+    context.addIssue({ code: 'custom', path: ['readiness', 'continuity', 'observed_at_ns'], message: 'Continuity observation must match snapshot watermark' })
+  }
+  if (snapshot.readiness.continuity.stale_after_ns !== snapshot.freshness.stale_after_ns) {
+    context.addIssue({ code: 'custom', path: ['readiness', 'continuity', 'stale_after_ns'], message: 'Continuity and freshness thresholds must match' })
+  }
+  const sessionContains = (timestamp: string): boolean => snapshot.readiness.session.window.segments.some(
+    (segment) => BigInt(timestamp) >= BigInt(segment.open_ns) && BigInt(timestamp) < BigInt(segment.close_ns),
+  )
+  const expectedSessionState = snapshot.as_of_event_ns
+    ? snapshot.trades.events.every((event) => sessionContains(event.ts_event_ns)) ? 'inside' : 'outside'
+    : 'no-data'
+  if (snapshot.readiness.session.state !== expectedSessionState) {
+    context.addIssue({ code: 'custom', path: ['readiness', 'session', 'state'], message: 'Session admission state does not match the current event time' })
+  }
 
   if (
     snapshot.trades.returned_count !== snapshot.trades.events.length
@@ -735,6 +895,19 @@ export const agentMarketSnapshotSchema = z.object({
   }
   if (latestTrade && snapshot.current && compareFixedPoint(snapshot.current.price, latestTrade.price) !== 0) {
     context.addIssue({ code: 'custom', path: ['current', 'price'], message: 'Current price must equal the latest returned trade' })
+  }
+  if (
+    latestTrade
+    && (
+      snapshot.readiness.continuity.provider !== latestTrade.source.provider
+      || snapshot.readiness.continuity.last_event_ns !== latestTrade.ts_event_ns
+      || snapshot.readiness.continuity.last_sequence !== latestTrade.source.sequence
+    )
+  ) {
+    context.addIssue({ code: 'custom', path: ['readiness', 'continuity'], message: 'Continuity cursor must match the latest returned market event' })
+  }
+  if (!latestTrade && snapshot.readiness.continuity.state !== 'unavailable') {
+    context.addIssue({ code: 'custom', path: ['readiness', 'continuity', 'state'], message: 'Context without market events must report unavailable continuity' })
   }
 
   if (
@@ -819,4 +992,7 @@ export type MarketReplayCancellation = z.infer<typeof marketReplayCancellationSc
 export type NonNegativeFixedPointValue = z.infer<typeof nonNegativeFixedPointValueSchema>
 export type MarketCandle = z.infer<typeof marketCandleSchema>
 export type MarketCandleSeries = z.infer<typeof marketCandleSeriesSchema>
+export type MarketSessionWindow = z.infer<typeof marketSessionWindowSchema>
+export type MarketFeedContinuity = z.infer<typeof marketFeedContinuitySchema>
+export type MarketSessionAdmission = z.infer<typeof marketSessionAdmissionSchema>
 export type AgentMarketSnapshot = z.infer<typeof agentMarketSnapshotSchema>

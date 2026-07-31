@@ -119,7 +119,7 @@ Electron checkpoint: the development Python process is now resolved, supervised,
 
 Replay/candle checkpoint: canonical replay now produces checksum-verified current price, closed candle history, and at most one developing candle under an explicit watermark. V1 is Unix-epoch aligned, omits empty candles, and is synchronously bounded to 10,000 events; session-aligned and streamed history remain future work.
 
-Agent-context checkpoint: `agent-market-snapshot@1` bounds recent trades/candles/issues, carries freshness/quality/mapped checksums/truncation, hashes its deterministic content, and denies execution/order authority. The supervised manager can emit it; actual agent delivery remains separate work.
+Agent-context checkpoint: `agent-market-snapshot@2` bounds recent trades/candles/issues, carries freshness/quality/mapped checksums/truncation plus continuity/session admission, hashes its deterministic content, and denies execution/order authority. The supervised manager emits it through checksum-bound addressed delivery to the Order Flow specialist.
 
 Order Flow checkpoint: `trade.analyze_market_batch` accepts a bounded replay-only canonical batch and emits `order-flow-artifact@2` plus `trade-run-receipt@2`. A real supervised Python market-data child -> real supervised Order Flow child proof produces exact `28 / 17 / 11 / 6 / 5592.25` output. The calculator has no Nautilus/provider dependency; the truncated agent snapshot is intentionally not its input.
 
@@ -175,6 +175,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 - [x] Bad timestamps, sizes, price increments, checksums, malformed records/payloads, and instrument metadata produce typed quality outcomes.
 - [x] Bounded replay produces deterministic current price, closed history, and a developing candle without future-event leakage.
 - [x] Bounded analysis-only agent context validates with freshness, quality, provenance, truncation, and content integrity.
+- [x] Provider-neutral connect/reconnect, sticky sequence gaps, explicit resynchronization, staleness, and explicit session-window admission fail closed before specialist analysis.
 - [x] The Order Flow engine consumes only Trade God canonical input on the new replay path.
 - [ ] Trace joins source batch, adapter logs, quality report, feature artifact, and receipt.
 - [x] Paced replay cancellation and deadline are typed domain outcomes while sidecar crash remains a distinct supervisor/transport failure.
@@ -193,7 +194,7 @@ Harvest Apache-licensed provider resilience, retry/circuit-breaker, ledger, and 
 
 ## Go/No-Go Gate
 
-The canonical Order Flow seam, pull-based paced replay, and measured JSONL threshold satisfy the initial replay/cancellation/backpressure gate. Do not proceed to live/provider operation until reconnect/gap/staleness behavior, session correctness, a dedicated stream, and packaged-runtime gates are also proven.
+The canonical Order Flow seam, pull-based paced replay, measured JSONL threshold, and provider-neutral readiness guard satisfy the replay-side continuity/session gate. Do not claim live readiness until a real provider proves reconnect/resynchronization behavior, an authoritative exchange calendar proves holiday/rollover windows, and dedicated-stream plus packaged-runtime gates pass.
 
 ## Grounding
 

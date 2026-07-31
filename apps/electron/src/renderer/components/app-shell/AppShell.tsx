@@ -33,6 +33,9 @@ import {
   Workflow as WorkflowIcon,
   Sparkles,
   Users,
+  Activity,
+  LayoutDashboard,
+  CandlestickChart,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -113,6 +116,7 @@ import {
   isAgendaNavigation,
   isCommunityNavigation,
   isVaultNavigation,
+  isTradeGodNavigation,
   isOutputsNavigation,
   type NavigationState,
 } from "@/contexts/NavigationContext"
@@ -153,6 +157,11 @@ import { findArtistHQWorkspace, isArtistHQWorkspace as getIsArtistHQWorkspace } 
 import { getArtistHqNavActiveState, isReusableConciergeSession } from "@/lib/artist-hq-nav-state"
 import { openAgentSessionComposer } from "@/lib/run-agent"
 import { CONCIERGE_SLUG } from "@craft-agent/shared/agent-definitions/types"
+import {
+  TRADE_GOD_VIEW_EVENT,
+  TRADE_GOD_VIEW_STORAGE_KEY,
+  type TradeGodView,
+} from "@/features/trading/TradeGodHomePage"
 
 /**
  * AppShellProps - Minimal props interface for AppShell component
@@ -2113,24 +2122,40 @@ function AppShellContent({
     || isAutomationsNavigation(navState)
     || isWorkflowsNavigation(navState)
     || isWorkflowRunNavigation(navState)
+    || isTradeGodNavigation(navState)
   const brainActive = isArtistHQWorkspace
     && (
       vaultActive
       || (isSessionsNavigation(navState) && ['#artist-hq/profile', '#artist-hq/voice', '#artist-hq/research', '#artist-hq/branding'].includes(artistHqHash))
     )
 
+  const [tradeGodView, setTradeGodView] = useState<TradeGodView>(() => {
+    if (typeof window === 'undefined') return 'overview'
+    return window.sessionStorage.getItem(TRADE_GOD_VIEW_STORAGE_KEY) === 'order-flow'
+      ? 'order-flow'
+      : 'overview'
+  })
+
+  const openTradeGodView = useCallback((view: TradeGodView) => {
+    setTradeGodView(view)
+    window.sessionStorage.setItem(TRADE_GOD_VIEW_STORAGE_KEY, view)
+    navigate(routes.view.tradeGod())
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent<TradeGodView>(TRADE_GOD_VIEW_EVENT, { detail: view }))
+    }, 0)
+  }, [navigate])
+
   const unifiedSidebarItems = React.useMemo((): KeyboardSidebarItem[] => {
     const result: KeyboardSidebarItem[] = []
 
     if (!isArtistHQWorkspace) {
-      result.push({ id: 'nav:campaign', type: 'nav', action: handleCampaignHomeClick })
-      result.push({ id: 'nav:calendar', type: 'nav', action: handleCampaignCalendarClick })
+      result.push({ id: 'nav:trade-god-overview', type: 'nav', action: () => openTradeGodView('overview') })
+      result.push({ id: 'nav:trade-god-order-flow', type: 'nav', action: () => openTradeGodView('order-flow') })
       result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
       result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
       if (workExpanded) {
         result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
         result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
-        result.push({ id: 'nav:trade-god', type: 'nav', action: () => navigate(routes.view.tradeGod()) })
         result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
       }
       return result
@@ -2429,22 +2454,22 @@ function AppShellContent({
     if (!isArtistHQWorkspace) {
       return [
         {
-          id: "nav:campaign",
-          title: "Campaign",
-          icon: Globe,
-          variant: campaignHomeActive ? "default" : "ghost",
-          onClick: handleCampaignHomeClick,
+          id: "nav:trade-god-overview",
+          title: "Futures Overview",
+          icon: LayoutDashboard,
+          variant: isTradeGodNavigation(navState) && tradeGodView === 'overview' ? "default" : "ghost",
+          onClick: () => openTradeGodView('overview'),
         },
         {
-          id: "nav:calendar",
-          title: "Calendar",
-          icon: Calendar,
-          variant: campaignCalendarActive ? "default" : "ghost",
-          onClick: handleCampaignCalendarClick,
+          id: "nav:trade-god-order-flow",
+          title: "Order Flow",
+          icon: CandlestickChart,
+          variant: isTradeGodNavigation(navState) && tradeGodView === 'order-flow' ? "default" : "ghost",
+          onClick: () => openTradeGodView('order-flow'),
         },
         {
           id: "nav:work",
-          title: "Work",
+          title: "Operations",
           icon: Briefcase,
           variant: workActive ? "default" : "ghost",
           onClick: () => toggleMainNavGroup('work'),
@@ -2647,7 +2672,7 @@ function AppShellContent({
         ],
       },
     ]
-  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleChatHistoryToggle, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, navigate, navState, openAddAutomation, peopleActive, peopleExpanded, planActive, planExpanded, sessionsNavExpanded, t, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
+  }, [artistHqHash, automations.length, brainActive, brainExpanded, campaignActive, campaignCalendarActive, campaignHomeActive, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleChatHistoryToggle, handleWorkChatClick, hqHomeActive, isArtistHQWorkspace, navigate, navState, openAddAutomation, openTradeGodView, peopleActive, peopleExpanded, planActive, planExpanded, sessionsNavExpanded, t, tradeGodView, vaultActive, workActive, workChatActive, workExpanded, workspaceSessionMetas.length])
 
   const sidebarSessionHistory = React.useMemo(() => {
     if (!sessionsNavExpanded || !workChatActive) return null

@@ -24,6 +24,7 @@ const repoRoot = path.resolve(import.meta.dir, '../../../../../..')
 
 test('resolves and runs the development sidecar from an explicit RunnerOS root', async () => {
   const contextDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-agent-context-'))
+  const alertDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-alerts-'))
   const launch = resolveOrderFlowLaunch({ rootCandidates: [repoRoot], runtimeExecutable: process.execPath })
   expect(launch.command).toEqual([process.execPath, path.join(repoRoot, 'sidecars/order-flow-engine/src/cli.ts')])
   const marketLaunch = resolveMarketDataLaunch({ rootCandidates: [repoRoot], platform: process.platform })
@@ -40,6 +41,8 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     runtimeExecutable: process.execPath,
     now: () => new Date().toISOString(),
     contextDirectory,
+    alertDirectory,
+    alertPort: -1,
   })
 
   const health = await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})
@@ -47,7 +50,17 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
   expect(runtime.marketDataManager).toBeDefined()
   expect(runtime.canonicalPipeline).toBeDefined()
   expect(runtime.specialistContextPipeline).toBeDefined()
+  expect(runtime.alertLedger).toBeDefined()
   expect(await runtime.marketDataManager!.health()).toMatchObject({ state: 'ready' })
+  const chartPreview = await ipc.handlers.get(TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE)!({}, {
+    symbol: 'ES', timeframe: '5m', sessionMode: 'RTH',
+  })
+  expect(chartPreview).toMatchObject({
+    instrument_id: 'CME:ESU6',
+    interval_ns: '300000000000',
+    quality_flags: ['synthetic-project-fixture'],
+  })
+  expect(chartPreview.closed).toHaveLength(78)
 
   const fixture = await loadEsDemoFixture()
   const artifact = await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, {
@@ -72,6 +85,7 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     intervalNs: '20000000000',
     watermarkNs: '1783780230000000000',
     staleAfterNs: '5000000000',
+    sessionWindow: fixture.manifest.session_window,
     recentTradeLimit: 2,
     closedCandleLimit: 1,
     consumerAgentId: 'order-flow-specialist',
@@ -81,7 +95,7 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     delivery_mode: 'reference', status: 'queued',
     consumer: { agent_id: 'order-flow-specialist', capability: 'order-flow-interpretation' },
     context: {
-      context_schema_version: 'agent-market-snapshot@1',
+      context_schema_version: 'agent-market-snapshot@2',
       trace_id: 'trace-specialist-context',
       authority: { purpose: 'analysis', execution_allowed: false, order_submission_allowed: false },
     },
@@ -94,8 +108,22 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     trades: { returned_count: 2, visible_count: 4, truncated: true },
   })
 
+  await runtime.alertLedger!.ingestTradingView({
+    secret: '1234567890abcdef',
+    ticker: 'CME_MINI:ES1!',
+    message: 'Runtime alert proof',
+  })
+  expect(await ipc.handlers.get(TRADE_GOD_IPC.LIST_ALERTS)!({}, 10)).toMatchObject([
+    { source: 'tradingview', symbol: 'CME_MINI:ES1-', title: 'Runtime alert proof' },
+  ])
+  expect(await ipc.handlers.get(TRADE_GOD_IPC.ALERT_INGESTION_STATUS)!({})).toMatchObject({
+    state: 'disabled',
+    public_relay_connected: false,
+  })
+
   await runtime.dispose()
   rmSync(contextDirectory, { recursive: true, force: true })
+  rmSync(alertDirectory, { recursive: true, force: true })
   expect(ipc.handlers.size).toBe(0)
 })
 

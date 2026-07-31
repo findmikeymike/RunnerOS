@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import { MarketDataClientError } from '@trade-god/client'
+import { loadEsDemoFixture } from '@trade-god/testkit'
 
 import { MarketDataSidecarManager } from '../market-data-sidecar-manager.ts'
 
@@ -35,6 +36,7 @@ describe('MarketDataSidecarManager', () => {
   test('supervises the real Python sidecar through validated health, fixture load, and shutdown', async () => {
     const sidecar = manager()
     try {
+      const fixture = await loadEsDemoFixture()
       const health = await sidecar.health()
       const batch = await sidecar.loadFixture({
         fixtureId: 'es-demo-2026-07-11',
@@ -57,6 +59,7 @@ describe('MarketDataSidecarManager', () => {
         intervalNs: '20000000000',
         watermarkNs: '1783780230000000000',
         staleAfterNs: '5000000000',
+        sessionWindow: fixture.manifest.session_window,
         recentTradeLimit: 2,
         closedCandleLimit: 1,
       })
@@ -153,7 +156,7 @@ describe('MarketDataSidecarManager', () => {
         id: 'CME:ESU6', symbol: 'ESU6', venue: 'XCME', asset_class: 'future', currency: 'USD',
         tick_size: '0.25', multiplier: '50',
       },
-      session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-rth' },
+      session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-synthetic' },
     }
     await Promise.all([
       writeFile(path.join(directory, 'events.json'), events),

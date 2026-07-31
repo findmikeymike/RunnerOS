@@ -16,7 +16,6 @@ import {
   statSync,
   writeFileSync,
 } from 'fs';
-import { homedir } from 'os';
 import { dirname, join } from 'path';
 import { randomUUID } from 'crypto';
 import matter from 'gray-matter';
@@ -27,6 +26,7 @@ import {
 } from './categories.ts';
 import { isSystemGlobalSkillSlug } from './system.ts';
 import { getWorkspaceSkillsPath } from '../workspaces/storage.ts';
+import { CONFIG_DIR } from '../config/paths.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -39,8 +39,8 @@ import {
 // Agent Skills Paths (Issue #171)
 // ============================================================
 
-/** Global agent skills directory: ~/.agents/skills/ */
-export const GLOBAL_AGENT_SKILLS_DIR = join(homedir(), '.agents', 'skills');
+/** Trade God skill library, isolated from RunnerOS and Artist OS installs. */
+export const GLOBAL_AGENT_SKILLS_DIR = join(CONFIG_DIR, 'skills');
 
 /** Project-level agent skills relative directory name */
 export const PROJECT_AGENT_SKILLS_DIR = '.agents/skills';

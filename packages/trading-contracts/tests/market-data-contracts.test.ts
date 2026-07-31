@@ -5,6 +5,7 @@ import {
   MARKET_JSONL_REPLAY_SAFE_COMPLETION_BYTES,
   MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES,
   canonicalJson,
+  ibkrGatewayHealthSchema,
   marketDataCapabilitiesSchema,
   marketDataCapabilitiesResponseSchema,
   marketDataErrorSchema,
@@ -18,6 +19,8 @@ import {
   canonicalOrderFlowArtifactSchema,
   marketLoadFixtureRequestSchema,
   marketQualityReportSchema,
+  marketFeedContinuitySchema,
+  marketSessionWindowSchema,
   marketTradeBatchSchema,
   marketTradeEventSchema,
 } from '../src/index.ts'
@@ -35,6 +38,36 @@ const transportPolicy = {
 } as const
 
 describe('canonical market-data contracts', () => {
+  test('rejects overlapping session windows and unsupported healthy continuity claims', () => {
+    const window = {
+      session_window_schema_version: 'market-session-window@1',
+      session_id: 'cme-es-2026-07-10-rth',
+      exchange_timezone: 'America/Chicago',
+      calendar_id: 'cme-equity-index',
+      calendar_version: '1.0.0',
+      trade_date: '2026-07-10',
+      kind: 'rth',
+      segments: [
+        { open_ns: '1783693800000000000', close_ns: '1783697400000000000' },
+        { open_ns: '1783695600000000000', close_ns: '1783701000000000000' },
+      ],
+    }
+    expect(marketSessionWindowSchema.safeParse(window).success).toBe(false)
+    expect(marketFeedContinuitySchema.safeParse({
+      continuity_schema_version: 'market-feed-continuity@1',
+      provider: 'test-feed',
+      instrument_id: 'CME:ESU6',
+      state: 'healthy',
+      connection_epoch: 1,
+      observed_at_ns: '100',
+      stale_after_ns: '5',
+      last_event_ns: '100',
+      last_sequence: '1',
+      missing_ranges: [{ start_sequence: '2', end_sequence: '2' }],
+      faults: [],
+    }).success).toBe(false)
+  })
+
   test('keeps measured JSONL replay headroom below the supervisor line ceiling', () => {
     expect(MARKET_JSONL_REPLAY_SAFE_COMPLETION_BYTES).toBe(750_000)
     expect(MARKET_JSONL_REPLAY_SAFE_COMPLETION_BYTES).toBeLessThan(MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES)
@@ -134,7 +167,7 @@ describe('canonical market-data contracts', () => {
 
   test('requires replay-only market-data RPC capability truth', () => {
     const capabilities = {
-      commands: ['market.health', 'market.capabilities', 'market.load_fixture', 'market.shutdown'],
+      commands: ['market.health', 'market.capabilities', 'market.ibkr_gateway_health', 'market.load_fixture', 'market.shutdown'],
       fixture_mode: true,
       fixture_ids: ['es-demo-2026-07-11'],
       live_data: false,
@@ -171,11 +204,25 @@ describe('canonical market-data contracts', () => {
     expect(marketLoadFixtureRequestSchema.safeParse({
       fixture_id: 'es-demo-2026-07-11', trace_id: 'trace-valid', batch_id: 'batch-valid',
     }).success).toBe(true)
+    expect(ibkrGatewayHealthSchema.safeParse({
+      health_schema_version: 'ibkr-gateway-health@1',
+      provider: 'interactive-brokers',
+      environment: 'paper',
+      state: 'ready',
+      host: '127.0.0.1',
+      port: 4002,
+      client_id: 71,
+      api_session_authenticated: true,
+      server_version: 192,
+      market_data_entitlement: 'unverified',
+      gateway_read_only_setting: 'unverified',
+      connector_authority: 'health-only',
+    }).success).toBe(true)
   })
 
   test('requires a complete paced-replay capability and lifecycle contract', async () => {
     const batch = await Bun.file(new URL('../examples/market-trade-batch.v1.json', import.meta.url)).json()
-    const replayCommands = ['market.health', 'market.capabilities', 'market.load_fixture', 'market.replay_batch', 'market.replay_next', 'market.cancel', 'market.shutdown']
+    const replayCommands = ['market.health', 'market.capabilities', 'market.ibkr_gateway_health', 'market.load_fixture', 'market.replay_batch', 'market.replay_next', 'market.cancel', 'market.shutdown']
     expect(marketDataCapabilitiesSchema.safeParse({
       commands: replayCommands, fixture_mode: true, fixture_ids: ['es-demo-2026-07-11'],
       live_data: false, broker_access: false, trade_execution: false,
@@ -264,11 +311,40 @@ describe('canonical market-data contracts', () => {
     const batch = await example('market-trade-batch.v1.json')
     const price = batch.events.at(-1).price
     const snapshot = {
-      snapshot_schema_version: 'agent-market-snapshot@1', snapshot_id: 'agent-market-001', trace_id: 'trace-agent-market',
+      snapshot_schema_version: 'agent-market-snapshot@2', snapshot_id: 'agent-market-001', trace_id: 'trace-agent-market',
       mode: 'replay', authority: { purpose: 'analysis', execution_allowed: false, order_submission_allowed: false },
       instrument: batch.events[0].instrument, watermark_ns: '1783780230000000000', as_of_event_ns: '1783780230000000000',
       current: { price, event_id: batch.events.at(-1).event_id },
       freshness: { state: 'fresh', age_ns: '0', stale_after_ns: '5000000000' },
+      readiness: {
+        continuity: {
+          continuity_schema_version: 'market-feed-continuity@1',
+          provider: 'trade-god-fixture',
+          instrument_id: 'CME:ESU6',
+          state: 'healthy',
+          connection_epoch: 1,
+          observed_at_ns: '1783780230000000000',
+          stale_after_ns: '5000000000',
+          last_event_ns: '1783780230000000000',
+          last_sequence: '4',
+          resynchronized_at_ns: '1783780200000000000',
+          missing_ranges: [],
+          faults: [],
+        },
+        session: {
+          state: 'inside',
+          window: {
+            session_window_schema_version: 'market-session-window@1',
+            session_id: '2026-07-11-synthetic',
+            exchange_timezone: 'America/Chicago',
+            calendar_id: 'trade-god-synthetic',
+            calendar_version: '1.0.0',
+            trade_date: '2026-07-11',
+            kind: 'synthetic',
+            segments: [{ open_ns: '1783780200000000000', close_ns: '1783780260000000000' }],
+          },
+        },
+      },
       candles: {
         interval_ns: '20000000000', alignment: 'unix-epoch', closed: [],
         total_closed_count: 0, returned_closed_count: 0, truncated: false,
@@ -314,7 +390,7 @@ describe('canonical market-data contracts', () => {
     const request = analyzeMarketBatchRequestSchema.parse({
       meta,
       input: { schema_version: 'order-flow-market-input@1', kind: 'canonical-market-batch', batch },
-      session: { exchange_timezone: 'America/Chicago', session_id: 'CME-2026-07-11-RTH' },
+      session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-synthetic' },
       analysis: { name: 'order-flow-summary', version: '0.2.0', configuration_hash: 'b'.repeat(64) },
       deadline_at: '2026-07-13T12:00:05.000Z', cancellation_id: 'cancel-canonical-contract',
     })

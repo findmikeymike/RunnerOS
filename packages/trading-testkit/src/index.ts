@@ -2,6 +2,7 @@ import {
   ANALYSIS_ARTIFACT_SCHEMA_VERSION,
   analysisArtifactSchema,
   instrumentSchema,
+  marketSessionWindowSchema,
   sessionSchema,
   sha256Schema,
   type AnalysisArtifact,
@@ -19,6 +20,7 @@ interface FixtureManifest {
   event_count: number
   instrument: ReturnType<typeof instrumentSchema.parse>
   session: ReturnType<typeof sessionSchema.parse>
+  session_window: ReturnType<typeof marketSessionWindowSchema.parse>
 }
 
 interface TradeEvent {
@@ -83,6 +85,7 @@ export async function loadEsDemoFixture(): Promise<LoadedTradeFixture> {
     event_count: Number(manifestValue.event_count),
     instrument: instrumentSchema.parse(manifestValue.instrument),
     session: sessionSchema.parse(manifestValue.session),
+    session_window: marketSessionWindowSchema.parse(manifestValue.session_window),
   }
 
   if (manifest.kind !== 'synthetic-trades' || manifest.redistribution !== 'project-owned') {

@@ -222,6 +222,12 @@ let pendingDeepLink: string | null = null
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Runner [1]")
 app.setName(process.env.CRAFT_APP_NAME || 'Runner')
 
+// Give parallel development worktrees independent Electron locks and runtime
+// state without separating the shared Runner workspace/provider configuration.
+if (process.env.CRAFT_USER_DATA_DIR) {
+  app.setPath('userData', process.env.CRAFT_USER_DATA_DIR)
+}
+
 // Register as default protocol client for craftagents:// URLs
 // This must be done before app.whenReady() on some platforms
 if (process.defaultApp) {
@@ -575,6 +581,23 @@ app.whenReady().then(async () => {
           receiptDirectory: join(app.getPath('userData'), 'trade-god', 'run-receipts'),
           contextDirectory: join(app.getPath('userData'), 'trade-god', 'agent-context'),
           interpretationDirectory: join(app.getPath('userData'), 'trade-god', 'interpretations'),
+          alertDirectory: join(app.getPath('userData'), 'trade-god', 'alerts'),
+          alertPort: Number.parseInt(process.env.TRADE_GOD_ALERT_PORT ?? '9102', 10),
+          alertHost: process.env.TRADE_GOD_ALERT_HOST ?? '127.0.0.1',
+          ...(process.env.TRADE_GOD_ALERT_TOKEN ? { alertToken: process.env.TRADE_GOD_ALERT_TOKEN } : {}),
+          alertTunnelEnabled: process.env.TRADE_GOD_ALERT_TUNNEL === '1',
+          ...(process.env.TRADE_GOD_CLOUDFLARED_PATH
+            ? { alertTunnelExecutable: process.env.TRADE_GOD_CLOUDFLARED_PATH }
+            : {}),
+          alertTunnelLogger: {
+            info: (message) => mainLog.info(message),
+            warn: (message) => mainLog.warn(message),
+          },
+          onAlert: (alert) => {
+            for (const window of BrowserWindow.getAllWindows()) {
+              if (!window.isDestroyed()) window.webContents.send('trade-god:alerts:received', alert)
+            }
+          },
           log: (entry) => mainLog.info('[trade-god:run]', JSON.stringify(entry)),
           now: () => new Date().toISOString(),
         })

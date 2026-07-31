@@ -12,6 +12,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 from trade_god_market_data.rpc import MarketDataRpcHandler
+from trade_god_market_data.ibkr_gateway import IBGatewayProbeResult
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -74,6 +75,33 @@ class MarketDataRpcHandlerTest(unittest.TestCase):
 
         self.assertEqual(response["result"]["state"], "degraded")
         self.assertEqual(response["result"]["dependencies"][0]["state"], "unavailable")
+
+    def test_probes_ibkr_gateway_without_exposing_broker_or_execution_authority(self) -> None:
+        with patch("trade_god_market_data.rpc.probe_ib_gateway", return_value=IBGatewayProbeResult(
+            provider="interactive-brokers",
+            environment="paper",
+            state="ready",
+            host="127.0.0.1",
+            port=4002,
+            client_id=71,
+            api_session_authenticated=True,
+            server_version=192,
+            market_data_entitlement="unverified",
+            gateway_read_only_setting="unverified",
+            connector_authority="health-only",
+        )):
+            response = self.handler.handle(request(98, "market.ibkr_gateway_health", {
+                "environment": "paper",
+            }))
+
+        self.assertEqual(response["result"]["health_schema_version"], "ibkr-gateway-health@1")
+        self.assertEqual(response["result"]["state"], "ready")
+        self.assertEqual(response["result"]["connector_authority"], "health-only")
+        self.assertNotIn("account", response["result"])
+        invalid = self.handler.handle(request(97, "market.ibkr_gateway_health", {
+            "environment": "production",
+        }))
+        self.assertEqual(invalid["error"]["data"]["market_error"]["code"], "INVALID_REQUEST")
 
     def test_loads_only_the_owned_fixture_and_emits_the_exact_golden_batch(self) -> None:
         response = self.handler.handle(request(2, "market.load_fixture", {

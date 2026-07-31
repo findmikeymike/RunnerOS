@@ -2891,13 +2891,21 @@ export class SessionManager implements ISessionManager {
         const {
           seedGlobalLibraryIfEmpty,
           ensureRequiredAgents,
-          STARTER_AGENTS,
+          STARTER_AGENTS: RUNNER_STARTER_AGENTS,
           ORCHESTRATOR_SLUG,
           CONCIERGE_SLUG,
           SETUP_CONCIERGE_SLUG,
           SOCIAL_PUBLISHER_SLUG,
-          DEFAULT_ACTIVATED_AGENT_SLUGS,
         } = await import('@craft-agent/shared/agent-definitions')
+        const {
+          TRADE_GOD_STARTER_AGENT_SLUGS,
+          TRADE_GOD_DEFAULT_ACTIVATED_AGENT_SLUGS,
+        } = await import('@craft-agent/shared/product-profile')
+        const starterAgentSlugs = new Set<string>(TRADE_GOD_STARTER_AGENT_SLUGS)
+        const defaultActivatedAgentSlugs = new Set<string>(TRADE_GOD_DEFAULT_ACTIVATED_AGENT_SLUGS)
+        const STARTER_AGENTS = RUNNER_STARTER_AGENTS.filter(agent => starterAgentSlugs.has(agent.slug))
+        const DEFAULT_ACTIVATED_AGENT_SLUGS = [...defaultActivatedAgentSlugs]
+        const autoActivateStarterAgents = false
         const { seeded } = seedGlobalLibraryIfEmpty(STARTER_AGENTS)
         if (seeded > 0) {
           sessionLog.info(`[agent-definitions] Seeded ${seeded} starter agent(s) into global library`)
@@ -3055,7 +3063,7 @@ export class SessionManager implements ISessionManager {
           const setupConciergeAgent = STARTER_AGENTS.find(agent => agent.slug === SETUP_CONCIERGE_SLUG)
           const setupConciergeSkillSlugs = setupConciergeAgent?.metadata.skills ?? []
           const missingSetupConciergeSkills = setupConciergeSkillSlugs.filter(slug => !loadGlobalSkillBySlug(slug))
-          if (setupConciergeAgent && missingSetupConciergeSkills.length === 0) {
+          if (autoActivateStarterAgents && setupConciergeAgent && missingSetupConciergeSkills.length === 0) {
             const { getWorkspaces } = await import('@craft-agent/shared/config')
             const { readActivatedAgents, setAgentActive } = await import('@craft-agent/shared/agent-definitions')
             let updatedWorkspaces = 0

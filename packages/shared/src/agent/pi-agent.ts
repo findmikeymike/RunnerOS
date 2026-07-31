@@ -620,7 +620,13 @@ export class PiAgent extends BaseAgent {
         // NOTE: authType === 'environment' (e.g. Bedrock with ~/.aws/credentials)
         // intentionally falls through here, finds no API key, and returns null.
         // The subprocess inherits process.env which contains the AWS credential chain.
-        const apiKey = await credentialManager.getLlmApiKey(slug);
+        // Setup-generated connection slugs can be generic (for example
+        // "pi-api-key"), so the environment backend cannot infer provider
+        // aliases such as OPENROUTER_API_KEY from the slug alone.
+        const apiKey = await credentialManager.getLlmApiKey(slug)
+          ?? (slug !== piAuthProvider
+            ? await credentialManager.getLlmApiKey(piAuthProvider)
+            : null);
         if (apiKey) {
           this.debug(`Retrieved API key credential for Pi provider: ${piAuthProvider}`);
           return {
@@ -923,14 +929,7 @@ export class PiAgent extends BaseAgent {
         const errorMsg = rawMessage.toLowerCase();
 
         // Detect auth errors and attempt token refresh for OAuth connections
-        if (this.config.authType === 'oauth' && (
-          errorMsg.includes('401') ||
-          errorMsg.includes('421') ||
-          errorMsg.includes('unauthorized') ||
-          errorMsg.includes('misdirected') ||
-          (errorMsg.includes('token') && errorMsg.includes('expired')) ||
-          errorMsg.includes('authentication')
-        )) {
+        if (this.isOAuthAuthError(errorMsg)) {
           this.debug('Auth error detected from subprocess, attempting token refresh');
           this.refreshAndPushTokens().catch(err => {
             this.debug(`Token refresh after auth error failed: ${err}`);
@@ -2246,6 +2245,19 @@ export class PiAgent extends BaseAgent {
 
     await this.ensureSubprocess();
 
+    try {
+      return await this.queryLlmOnce(request);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!this.isOAuthAuthError(message)) throw error;
+
+      this.debug('[PiAgent.queryLlm] Waiting for OAuth refresh before one retry');
+      await this.refreshAndPushTokens();
+      return this.queryLlmOnce(request);
+    }
+  }
+
+  private async queryLlmOnce(request: LLMQueryRequest): Promise<LLMQueryResult> {
     const id = `llm-${++this.rpcIdCounter}`;
     const resultPromise = new Promise<LLMQueryResult>((resolve, reject) => {
       this.pendingLlmQueries.set(id, { resolve, reject });
@@ -2264,6 +2276,17 @@ export class PiAgent extends BaseAgent {
     });
 
     return Promise.race([resultPromise, timeout]);
+  }
+
+  private isOAuthAuthError(message: string): boolean {
+    if (this.config.authType !== 'oauth') return false;
+    const normalized = message.toLowerCase();
+    return normalized.includes('401')
+      || normalized.includes('421')
+      || normalized.includes('unauthorized')
+      || normalized.includes('misdirected')
+      || (normalized.includes('token') && normalized.includes('expired'))
+      || normalized.includes('authentication');
   }
 
   // ============================================================

@@ -114,7 +114,7 @@ describe('fixture analysis contracts', () => {
       },
       session: {
         exchange_timezone: 'America/Chicago',
-        session_id: '2026-07-11-rth',
+        session_id: '2026-07-11-synthetic',
       },
       analysis: { name: 'order-flow-summary', version: '0.1.0', configuration_hash: 'b'.repeat(64) },
       deadline_at: '2026-07-11T15:30:05.000Z',
@@ -133,7 +133,7 @@ describe('fixture analysis contracts', () => {
         id: 'CME:ESU6', symbol: 'ESU6', venue: 'XCME', asset_class: 'future', currency: 'USD',
         tick_size: 0.25, multiplier: 50,
       },
-      session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-rth' },
+      session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-synthetic' },
       analysis: { name: 'order-flow-summary', version: '0.1.0', configuration_hash: 'b'.repeat(64) },
       deadline_at: '2026-07-11T15:30:05.000Z',
       cancellation_id: 'cancel-01JABCDEF0123456789ABCD',
@@ -151,7 +151,7 @@ describe('fixture analysis contracts', () => {
       algorithm: { name: 'order-flow-summary', version: '0.1.0', configuration_hash: 'b'.repeat(64) },
       input: { fixture_id: 'es-demo-2026-07-11', fixture_sha256: 'a'.repeat(64) },
       instrument_id: 'CME:ESU6',
-      session_id: '2026-07-11-rth',
+      session_id: '2026-07-11-synthetic',
       event_time_range: {
         start: '2026-07-11T14:30:00.000Z',
         end: '2026-07-11T14:31:00.000Z',

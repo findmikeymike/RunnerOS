@@ -1,7 +1,12 @@
 import { existsSync } from 'node:fs'
 import path from 'node:path'
 
-import { MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES } from '@trade-god/contracts'
+import {
+  MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES,
+  type TradeAlert,
+  type TradeAlertIngestionStatus,
+  type TradeAlertWebhookSetup,
+} from '@trade-god/contracts'
 
 import { OrderFlowSidecarManager } from './order-flow-sidecar-manager.ts'
 import { MarketDataSidecarManager } from './market-data-sidecar-manager.ts'
@@ -13,6 +18,17 @@ import { AgentContextStore } from './agent-context-store.ts'
 import { SpecialistContextPipeline } from './specialist-context-pipeline.ts'
 import { OrderFlowSpecialist, type SpecialistModel } from './order-flow-specialist.ts'
 import { OrderFlowSpecialistPipeline } from './order-flow-specialist-pipeline.ts'
+import { TradeAlertLedger } from './trade-alert-ledger.ts'
+import {
+  startTradeAlertServer,
+  toTradeAlertIngestionStatus,
+  type TradeAlertServerHandle,
+} from './trade-alert-server.ts'
+import {
+  startTradeAlertTunnel,
+  type TradeAlertTunnelHandle,
+} from './trade-alert-tunnel.ts'
+import { buildSyntheticEsChartFixture } from './synthetic-chart-fixture.ts'
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
@@ -30,6 +46,17 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   receiptDirectory?: string
   contextDirectory?: string
   interpretationDirectory?: string
+  alertDirectory?: string
+  alertPort?: number
+  alertHost?: string
+  alertToken?: string
+  alertTunnelEnabled?: boolean
+  alertTunnelExecutable?: string
+  alertTunnelLogger?: {
+    info(message: string): void
+    warn(message: string): void
+  }
+  onAlert?: (alert: TradeAlert) => void
   specialistModel?: SpecialistModel
   log?: (entry: { event: string; traceId: string; receiptId: string; artifactId?: string; errorCode?: string }) => void
 }
@@ -115,6 +142,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   specialistContextPipeline?: SpecialistContextPipeline
   orderFlowSpecialist?: OrderFlowSpecialist
   orderFlowSpecialistPipeline?: OrderFlowSpecialistPipeline
+  alertLedger?: TradeAlertLedger
   setSpecialistModel: (model: SpecialistModel) => void
   dispose: () => Promise<void>
 } {
@@ -166,14 +194,89 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const orderFlowSpecialistPipeline = canonicalPipeline && specialistContextPipeline && contextStore && orderFlowSpecialist
     ? new OrderFlowSpecialistPipeline(canonicalPipeline, contextStore, orderFlowSpecialist, options.now)
     : undefined
-  const ipcManager: TradingIpcManager = canonicalPipeline
-    ? {
-        health: () => manager.health(),
-        analyzeFixture: (input) => canonicalPipeline.analyzeFixture(input),
-        cancelAnalysis: (cancellationId) => manager.cancelAnalysis(cancellationId),
-        stop: () => manager.stop(),
-      }
-    : manager
+  const alertLedger = options.alertDirectory
+    ? new TradeAlertLedger(options.alertDirectory, options.now)
+    : undefined
+  const unsubscribeAlert = alertLedger && options.onAlert
+    ? alertLedger.subscribe(options.onAlert)
+    : undefined
+  let alertServerError: unknown
+  const alertPort = Number.isFinite(options.alertPort) ? Number(options.alertPort) : 9102
+  const alertServerPromise: Promise<TradeAlertServerHandle | null> = alertLedger
+    ? startTradeAlertServer({
+        port: alertPort,
+        host: options.alertHost ?? '127.0.0.1',
+        ledger: alertLedger,
+        ...(options.alertToken ? { token: options.alertToken } : {}),
+      }).catch((error) => {
+        alertServerError = error
+        return null
+      })
+    : Promise.resolve(null)
+  let alertTunnelError: unknown
+  const alertTunnelPromise: Promise<TradeAlertTunnelHandle | null> = options.alertTunnelEnabled
+    ? alertServerPromise.then((server) => {
+        if (!server) return null
+        return startTradeAlertTunnel({
+          localUrl: server.url,
+          webhookPath: new URL(server.webhookUrl).pathname,
+          ...(options.alertTunnelExecutable ? { executable: options.alertTunnelExecutable } : {}),
+          ...(options.alertDirectory ? { configDirectory: options.alertDirectory } : {}),
+          ...(options.alertTunnelLogger ? { logger: options.alertTunnelLogger } : {}),
+        })
+      }).catch((error) => {
+        alertTunnelError = error
+        return null
+      })
+    : Promise.resolve(null)
+
+  const getAlertStatus = async (): Promise<TradeAlertIngestionStatus> => {
+    const [server, tunnel] = await Promise.all([alertServerPromise, alertTunnelPromise])
+    return toTradeAlertIngestionStatus(server, alertServerError, tunnel, alertTunnelError)
+  }
+  const getAlertSetup = async (): Promise<TradeAlertWebhookSetup> => {
+    const [server, tunnel] = await Promise.all([alertServerPromise, alertTunnelPromise])
+    if (!server) throw new Error('Trade God alert receiver is unavailable.')
+    const publicUrl = tunnel?.isConnected() ? tunnel.webhookUrl : undefined
+    return {
+      delivery_url: publicUrl ?? server.webhookUrl,
+      local_url: server.webhookUrl,
+      ...(publicUrl ? { public_url: publicUrl } : {}),
+      json_body_template: JSON.stringify({
+        secret: server.token,
+        ticker: '{{ticker}}',
+        exchange: '{{exchange}}',
+        interval: '{{interval}}',
+        price: '{{close}}',
+        time: '{{time}}',
+        message: 'TradingView alert for {{ticker}} at {{close}}',
+      }, null, 2),
+    }
+  }
+
+  const ipcManager: TradingIpcManager = {
+    health: () => manager.health(),
+    analyzeFixture: (input) => canonicalPipeline
+      ? canonicalPipeline.analyzeFixture(input)
+      : manager.analyzeFixture(input),
+    ...(orderFlowSpecialistPipeline
+      ? { interpretFixture: (input) => orderFlowSpecialistPipeline.interpretFixture(input) }
+      : {}),
+    cancelAnalysis: (cancellationId) => manager.cancelAnalysis(cancellationId),
+    ...(alertLedger
+      ? {
+          listAlerts: (limit) => alertLedger.list(limit),
+          acknowledgeAlert: (alertId) => alertLedger.acknowledge(alertId),
+          getAlertIngestionStatus: getAlertStatus,
+          getAlertWebhookSetup: getAlertSetup,
+        }
+      : {}),
+    ...(marketDataManager
+      ? { getIbkrGatewayHealth: (environment) => marketDataManager.ibkrGatewayHealth(environment) }
+      : {}),
+    getSyntheticChartFixture: (input) => Promise.resolve(buildSyntheticEsChartFixture(input)),
+    stop: () => manager.stop(),
+  }
   const disposeTradingIpc = registerTradingIpc(options.ipcMain, ipcManager)
   return {
     manager,
@@ -183,9 +286,12 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(specialistContextPipeline ? { specialistContextPipeline } : {}),
     ...(orderFlowSpecialist ? { orderFlowSpecialist } : {}),
     ...(orderFlowSpecialistPipeline ? { orderFlowSpecialistPipeline } : {}),
+    ...(alertLedger ? { alertLedger } : {}),
     setSpecialistModel: (model) => { specialistModel = model },
     dispose: async () => {
-      await Promise.all([disposeTradingIpc(), marketDataManager?.stop()])
+      unsubscribeAlert?.()
+      const [alertServer, alertTunnel] = await Promise.all([alertServerPromise, alertTunnelPromise])
+      await Promise.all([disposeTradingIpc(), marketDataManager?.stop(), alertTunnel?.stop(), alertServer?.stop()])
     },
   }
 }

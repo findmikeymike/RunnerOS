@@ -32,6 +32,7 @@
   "source": {
     "provider": "trade-god-fixture",
     "record_id": "es-demo-2026-07-11:1",
+    "sequence": "1",
     "mode": "replay",
     "fixture_id": "es-demo-2026-07-11",
     "fixture_sha256": "ccf7063cf2b19a0e876b3117860d823e55f06af683714f857633bf05f40cb774"

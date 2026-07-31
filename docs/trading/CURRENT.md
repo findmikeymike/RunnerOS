@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-14
+last_verified: 2026-07-30
 source_of_truth: true
 ---
 
@@ -9,10 +9,10 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-14
-- Stage: Phase 1 now has its first bounded specialist runtime; Phase 0 still awaits real visual Electron smoke
-- Current goal: adversarially close and visually expose the first Order Flow specialist, then move to reconnect/gap/session correctness before live data
-- Overall state: the Order Flow specialist now joins deterministic artifacts with addressed context, runs through Runner's provider-neutral structured-model seam, validates and stores typed analysis-only interpretations, and refuses stale/invalid evidence; a real provider call was attempted but local saved credentials were unavailable to the headless evaluator, while reconnect/gap behavior, packaged Python assets, the visual Electron path, and a built installer remain unverified
+- Date: 2026-07-30
+- Stage: Phase 1 provider onboarding scaffold and the first native Futures chart surface are implemented
+- Current goal: visually smoke the synthetic ES chart controls, then replace the preview source with entitlement-valid IBKR candles
+- Overall state: the Order Flow specialist and GPT provider path have been visually smoked in Electron. The Market Command Center exposes a persistent watch pad, a real normalized alert feed, and a project-owned synthetic ES chart session for pre-provider UI testing. IBKR is the selected economical first provider: the official Apple Silicon IB Gateway 10.45 is installed and a loopback-only, health-only connector is typed through the Python sidecar, client, Electron IPC, and preload. The Gateway has not yet been logged into or proven listening on paper port `4002`, so no live quote is claimed. Discord ingestion, authenticated provider reconnect/resync, exchange calendar/rollover, packaged Python assets, and a built installer remain unverified.
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -32,13 +32,21 @@ source_of_truth: true
 
 `real supervised Python market child -> canonical batch -> real supervised Order Flow child -> order-flow-artifact@2 + trade-run-receipt@2`
 
-`agent-market-snapshot@1 -> atomic local context store -> checksum-bound reference -> addressed specialist delivery receipt -> authorized resolution`
+`agent-market-snapshot@2 -> explicit continuity/session admission -> atomic local context store -> checksum-bound reference -> addressed specialist delivery receipt -> authorized resolution`
 
 `market.replay_batch -> bounded replay session -> consumer-paced market.replay_next pulls -> completed canonical batch or typed cancel/timeout`
 
 `bounded JSONL policy -> declared <=1,000 requested events/sec + measured <=750 KB response -> otherwise STREAMING_TRANSPORT_REQUIRED`
 
 `canonical Order Flow artifact + resolved agent snapshot -> order-flow-specialist-request@1 -> bounded structured model -> validated/stored order-flow-interpretation@1`
+
+`authenticated TradingView JSON -> bounded/rate-limited local HTTP receiver -> trade-alert@1 -> deduplicated local ledger -> Electron IPC push -> Market Command Center`
+
+`opt-in Cloudflare Quick Tunnel -> session-only public HTTPS URL -> authenticated local TradingView receiver`
+
+`local IB Gateway -> loopback-only health handshake -> typed market.ibkr_gateway_health -> Electron IPC/preload`
+
+`project-owned synthetic ES candles -> validated market-candle-series@1 -> local IPC/preload -> native chart`
 
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
@@ -93,19 +101,34 @@ The workbench can request engine health, run the known fixture, and display tota
 - Added atomic interpretation storage and a hidden one-shot Runner model carrier that uses the configured provider, structured output, no sources, safe permissions, and guaranteed session deletion.
 - Added and bundled `order-flow-specialist@0.1.0` doctrine plus primary-source research on CME MBO/MDP aggression, trade classification uncertainty, order-flow impact, and spoofing/intent limits.
 - Added a real-provider evaluation harness. Both saved Runner connections reached their backend initialization but lacked credentials in the headless evaluator; no real-model reasoning result is claimed yet.
+- Replaced the inherited HQ surface with the Trade God Market Command Center: market pulse, unified alerts, headlines, persistent watch pad, session schedule, breadth, sectors, and honest connection states.
+- Added `trade-alert@1`, a dedicated authenticated TradingView receiver on loopback, bounded JSON validation, body-secret authentication compatible with TradingView, rate limiting, deterministic deduplication, atomic local persistence, acknowledgement, typed IPC/preload methods, and live renderer delivery.
+- Proved the running Electron app accepted and displayed a real local webhook alert while persisting no authentication secret.
+- Added opt-in `cloudflared` Quick Tunnel lifecycle ownership, bounded startup diagnostics, clean shutdown, public/local typed status, and public-first setup copying. The live tunnel registered one connection and its public health endpoint returned HTTP 200.
+- Proved the live public HTTPS endpoint accepted an authenticated alert with HTTP 201, persisted the expected `CME_MINI:NQ1-` alert, and did not persist the webhook secret.
+- Added `market-feed-continuity@1` and `market-session-window@1`, plus provider sequence on canonical events. Connect/reconnect begins in recovery, gaps remain unresolved until explicit resynchronization, stale feeds fail closed, and session windows are explicit bounded segments.
+- Upgraded specialist context to `agent-market-snapshot@2`; continuity, freshness, and session admission are checksum-bound into the snapshot and the specialist refuses before model invocation unless all gates pass.
+- Corrected the project fixture's false Saturday `RTH` label. It is now explicitly a project-owned synthetic session rather than a claim about CME market hours.
+- Selected IBKR through the standalone IB Gateway as the first economical provider path, avoiding a requirement to keep Trader Workstation open.
+- Installed the official notarized Apple Silicon IB Gateway 10.45 application and added a health-only Nautilus IB adapter. It discards account IDs and has no market-data request, account query, order, execution, or broker-write authority.
+- Wired `market.ibkr_gateway_health` through contracts, the typed trading client, Electron supervision/IPC/preload, and runtime exposure. The live probe currently fails closed because the Gateway has not been manually authenticated and port `4002` is not listening.
+- Replaced the legacy Campaign/non-HQ home path with a futures-first overview: data trust, attention queue, core index-futures board, desk priorities, alerts, news, workspace-scoped watchlist, session reference, breadth, sectors, and cross-asset drivers. Workers remains the agent home.
+- Added a lazy-loaded TradingView Lightweight Charts 5.2 surface at the center of Futures Overview with ES/NQ/YM/RTY selection, timeframe and ETH/RTH controls, candlesticks, volume pane, responsive sizing, attribution, and an explicit offline state that invents no prices.
+- Added a deterministic project-owned synthetic ES chart session through validated `market-candle-series@1`, local IPC/preload, and a fixed-point renderer adapter. It supports 1m/5m/15m/1h plus ETH/RTH density changes, labels itself synthetic, and returns no preview prices for NQ/YM/RTY.
+- Added canonical `chart-annotation@1` contracts for attributable user/agent/system levels, markers, trend lines, and price zones. The first renderer slice supports active horizontal levels and markers; agents emit contracts rather than canvas/DOM commands.
 
 ## Next Actions
 
-1. Complete one real-provider evaluation after an approved credential is available; do not represent scripted-model proof as model-quality proof.
-2. Add reconnect/gap/staleness and session-correctness gates before any live-data work.
-3. Design the dedicated live/unbounded streaming transport only when live-data work begins; keep JSONL as the bounded control/replay path.
-4. Add an operator-facing interpretation surface only after the contract/runtime is accepted.
-5. **Required at first possible desktop opportunity:** visually smoke Trade God Ready, fixture `28 / 6 / 5592.25`, cancellation, one visible failure, and specialist-provider attachment.
-6. Build and smoke the packaged installer separately.
+1. Visually smoke the synthetic ES chart across timeframes and ETH/RTH, then correct any sizing/density issues.
+2. Complete the manual IB Gateway paper login/API setup, then feed entitlement-valid canonical candles into the chart.
+3. Inventory the user-selected agents, assign each a bounded Workers role, and connect their typed chart annotations.
+4. Add an authoritative exchange calendar/rollover adapter and the dedicated live streaming transport.
+5. Add the Discord adapter to the existing `trade-alert@1` ledger, then package and smoke the app.
 
 ## Blockers / Decisions Needed
 
-- Physical access or reliable Computer Use access for the real visual Electron smoke.
+- Quick Tunnel URLs change whenever the app/tunnel restarts and are development-only. Stable production TradingView alerts require a named tunnel/custom hostname or a hosted relay.
+- IB Gateway requires a manual Paper Trading login/2FA and API configuration: socket clients enabled, port `4002`, Read-Only API, and Auto Restart. Until then the health probe correctly reports `connection-failed`.
 
 The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compatibility policy are no longer open blockers. Phase 1 canonical market contracts are active work, not an external blocker.
 
@@ -145,15 +168,22 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 - Real-provider evaluator reached both configured Runner connection backends. Neither saved credential was available to the headless process, so real-model output remains unverified.
 - Paced replay proof: complete real fixture replay respects the configured pace and consumer backpressure; active cancel and deadline return typed domain errors while the same Python process remains healthy. Process exit remains a separate supervisor error.
 - Real Electron interaction and a fully built packaged installer are not yet verified.
+- Trade-alert slice: 17 focused tests pass across contracts, authentication, HTTP ingestion, deduplication, persistence, IPC/preload parity, runtime wiring, and renderer output. Electron main, preload, and renderer production builds pass. The running app accepted both local and public HTTPS authenticated deliveries and persisted neither secret.
+- Market-readiness closure: contract suite 36 passed; market-state suite 16 passed; Python market-data suite 27 passed; focused Electron trading suite 32 passed, including 20 specialist cases. Contract, market-state, testkit, and Electron standalone typechecks pass; Electron main, preload, and renderer builds pass. Tests prove sticky gaps, explicit resync, reconnect recovery, staleness recovery, missing-sequence failure, session-identity binding, out-of-window refusal, and pre-model admission.
+- IBKR onboarding scaffold: 31 Python tests, 36 contract tests, 12 client tests, and 15 focused Electron tests passed (94 total). Contract/client/Electron typechecks and Electron main/preload builds passed. The live health probe fails closed while port `4002` is unavailable; authenticated Gateway and quote proof remain pending. Full monorepo typecheck still stops on the pre-existing campaign-calendar error at `packages/shared/src/campaign-calendar/index.ts:632`.
+- Native chart slice: 14 focused contract tests and 6 focused renderer tests pass; contract and Electron typechecks pass; the production renderer build passes. The chart bundle is lazy-loaded. Visual Electron smoke and live candle rendering remain pending.
+- Synthetic chart fixture slice: 19 focused Electron tests pass across schema-valid deterministic generation, IPC/preload, runtime wiring, fixed-point chart mapping, source labeling, overview rendering, and channel parity. Electron typecheck plus main, preload, and renderer production builds pass. Visual smoke and live broker candles remain pending.
 - Canonical Python emission, replay quality, fixture RPC, typed supervision, bounded deterministic candles/context, replay-only canonical Order Flow, reference-only specialist delivery, typed specialist interpretation enforcement, paced replay/cancel, and measured JSONL transport limits are implemented; packaged Python assets and real-model quality remain unverified.
 
 ## Explicitly Not In Scope Yet
 
-- Live broker connectivity, order placement, or autonomous execution.
+- Live market-data subscription/streaming, account access, order placement, or autonomous execution. The current IBKR path is a health-only connectivity scaffold.
+- A stable hosted TradingView hostname; the development Quick Tunnel URL changes on restart.
 - Production-grade order-flow intelligence or real-time tick streaming.
 - Full agent roster, charting workspace, or generalized plugin marketplace.
+- Full drawing toolbar, trend/zone renderer primitives, multi-chart layouts, and order-flow visualization.
 - Broad donor-code porting without license, provenance, and boundary review.
 
 ## Notes for the Next Agent
 
-Read this file, `HANDOFF.md`, the Phase 0 spec, and `development/VERIFICATION.md`. Do not call bundle-level proof an installed-app smoke. At the first reliable desktop opportunity, verify Ready, run the fixture, confirm `28 / 6 / 5592.25`, and force one visible failure.
+Read this file, `HANDOFF.md`, `product/FUTURES-HUB.md`, the Phase 0 spec, and `development/VERIFICATION.md`. The active product lane is the Futures Hub conversion. Keep IBKR health-only until the user completes the manual Gateway login/API setup; do not call it live market data.

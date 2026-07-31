@@ -13,6 +13,17 @@ import {
   buildMarketReplaySnapshot,
 } from '../src/index.ts'
 
+const sessionWindow = {
+  session_window_schema_version: 'market-session-window@1' as const,
+  session_id: '2026-07-11-synthetic',
+  exchange_timezone: 'America/Chicago',
+  calendar_id: 'trade-god-synthetic',
+  calendar_version: '1.0.0',
+  trade_date: '2026-07-11',
+  kind: 'synthetic' as const,
+  segments: [{ open_ns: '1783780200000000000', close_ns: '1783780260000000000' }],
+}
+
 
 async function fixtureBatch(): Promise<MarketTradeBatch> {
   return Bun.file(new URL('../../trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)).json()
@@ -177,7 +188,7 @@ describe('bounded agent market context', () => {
     const snapshot = buildAgentMarketSnapshot({
       snapshotId: 'agent-market-fixture-001', traceId: 'trace-agent-market-fixture',
       intervalNs: '20000000000', watermarkNs: '1783780230000000000', staleAfterNs: '5000000000',
-      recentTradeLimit: 2, closedCandleLimit: 1, batches: [await fixtureBatch()],
+      sessionWindow, recentTradeLimit: 2, closedCandleLimit: 1, batches: [await fixtureBatch()],
     })
 
     expect(agentMarketSnapshotSchema.parse(snapshot)).toEqual(snapshot)
@@ -202,7 +213,7 @@ describe('bounded agent market context', () => {
     const snapshot = buildAgentMarketSnapshot({
       snapshotId: 'agent-market-stale', traceId: 'trace-agent-market-stale',
       intervalNs: '10000000000', watermarkNs: '1783780240000000000', staleAfterNs: '5000000000',
-      recentTradeLimit: 4, closedCandleLimit: 2, batches: [await fixtureBatch()],
+      sessionWindow, recentTradeLimit: 4, closedCandleLimit: 2, batches: [await fixtureBatch()],
     })
 
     expect(snapshot.freshness.state).toBe('stale')
@@ -219,7 +230,7 @@ describe('bounded agent market context', () => {
     const input = {
       snapshotId: 'agent-market-bounds', traceId: 'trace-agent-market-bounds',
       intervalNs: '20000000000', watermarkNs: '1783780230000000000', staleAfterNs: '5000000000',
-      batches: [await fixtureBatch()],
+      sessionWindow, batches: [await fixtureBatch()],
     }
     expect(() => buildAgentMarketSnapshot({ ...input, recentTradeLimit: 501 })).toThrow('recentTradeLimit')
     expect(() => buildAgentMarketSnapshot({ ...input, closedCandleLimit: 201 })).toThrow('closedCandleLimit')
@@ -229,7 +240,7 @@ describe('bounded agent market context', () => {
     const snapshot = buildAgentMarketSnapshot({
       snapshotId: 'agent-market-no-data', traceId: 'trace-agent-market-no-data',
       intervalNs: '20000000000', watermarkNs: '1783780190000000000', staleAfterNs: '5000000000',
-      batches: [await fixtureBatch()],
+      sessionWindow, batches: [await fixtureBatch()],
     })
 
     expect(snapshot.instrument.id).toBe('CME:ESU6')
@@ -238,5 +249,26 @@ describe('bounded agent market context', () => {
     expect(snapshot.quality.state).toBe('unavailable')
     expect(snapshot.trades).toMatchObject({ visible_count: 0, returned_count: 0, truncated: false })
     expect(snapshot.provenance.batches).toEqual([])
+  })
+
+  test('marks sequence gaps and out-of-window evidence inadmissible', async () => {
+    const batch = await fixtureBatch()
+    batch.events[3]!.source.sequence = '6'
+    rehash(batch)
+    const outsideWindow = {
+      ...sessionWindow,
+      segments: [{ open_ns: '1783780000000000000', close_ns: '1783780210000000000' }],
+    }
+    const snapshot = buildAgentMarketSnapshot({
+      snapshotId: 'agent-market-gap', traceId: 'trace-agent-market-gap',
+      intervalNs: '20000000000', watermarkNs: '1783780230000000000', staleAfterNs: '5000000000',
+      sessionWindow: outsideWindow, batches: [batch],
+    })
+
+    expect(snapshot.readiness.continuity).toMatchObject({
+      state: 'gapped',
+      missing_ranges: [{ start_sequence: '4', end_sequence: '5' }],
+    })
+    expect(snapshot.readiness.session.state).toBe('outside')
   })
 })

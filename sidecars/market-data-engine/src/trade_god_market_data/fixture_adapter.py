@@ -427,6 +427,7 @@ def build_canonical_batch(
             "source": {
                 "provider": "trade-god-fixture",
                 "record_id": f"{fixture_id}:{sequence}",
+                "sequence": sequence,
                 "mode": "replay",
                 "fixture_id": fixture_id,
                 "fixture_sha256": fixture_sha256,

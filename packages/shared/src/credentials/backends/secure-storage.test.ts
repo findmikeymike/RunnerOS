@@ -1,11 +1,12 @@
 import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import * as os from 'os';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { randomBytes } from 'crypto';
 
 const sandboxHome = mkdtempSync(join(tmpdir(), 'secure-storage-home-'));
+const sandboxConfigDir = mkdtempSync(join(tmpdir(), 'secure-storage-config-'));
 
 mock.module('os', () => ({
   ...os,
@@ -16,14 +17,16 @@ const { SecureStorageBackend } = await import(`./secure-storage.ts?secure-storag
 
 afterAll(() => {
   rmSync(sandboxHome, { recursive: true, force: true });
+  rmSync(sandboxConfigDir, { recursive: true, force: true });
 });
 
 beforeEach(() => {
   rmSync(join(sandboxHome, '.craft-agent'), { recursive: true, force: true });
+  rmSync(sandboxConfigDir, { recursive: true, force: true });
 });
 
 function writeUnreadableSafeStorageStore(): { credentialsFile: string; original: Buffer } {
-  const credentialsDir = join(sandboxHome, '.craft-agent');
+  const credentialsDir = sandboxConfigDir;
   const credentialsFile = join(credentialsDir, 'credentials.enc');
   const keyFile = join(credentialsDir, 'credentials.key');
   mkdirSync(credentialsDir, { recursive: true });
@@ -44,9 +47,20 @@ function writeUnreadableSafeStorageStore(): { credentialsFile: string; original:
 }
 
 describe('SecureStorageBackend', () => {
+  test('stores credentials inside the configured multi-instance directory', async () => {
+    const backend = new SecureStorageBackend(sandboxConfigDir);
+    await backend.set(
+      { type: 'user_secret', name: 'INSTANCE_SECRET' },
+      { value: 'isolated-secret', source: 'user' },
+    );
+
+    expect(readFileSync(join(sandboxConfigDir, 'credentials.enc')).length).toBeGreaterThan(0);
+    expect(existsSync(join(sandboxHome, '.craft-agent', 'credentials.enc'))).toBe(false);
+  });
+
   test('refuses to overwrite an existing store that cannot be unlocked', async () => {
     const { credentialsFile, original } = writeUnreadableSafeStorageStore();
-    const backend = new SecureStorageBackend();
+    const backend = new SecureStorageBackend(sandboxConfigDir);
 
     await expect(backend.get({ type: 'user_secret', name: 'EXISTING_SECRET' })).resolves.toBeNull();
     await expect(backend.set(
@@ -57,8 +71,8 @@ describe('SecureStorageBackend', () => {
   });
 
   test('serializes concurrent writes without dropping credentials', async () => {
-    const backendA = new SecureStorageBackend();
-    const backendB = new SecureStorageBackend();
+    const backendA = new SecureStorageBackend(sandboxConfigDir);
+    const backendB = new SecureStorageBackend(sandboxConfigDir);
 
     await Promise.all([
       backendA.set(
@@ -71,7 +85,7 @@ describe('SecureStorageBackend', () => {
       ),
     ]);
 
-    const reader = new SecureStorageBackend();
+    const reader = new SecureStorageBackend(sandboxConfigDir);
     await expect(reader.get({ type: 'source_apikey', workspaceId: 'ws-test', sourceId: 'source-a' })).resolves.toMatchObject({ value: 'secret-a' });
     await expect(reader.get({ type: 'source_apikey', workspaceId: 'ws-test', sourceId: 'source-b' })).resolves.toMatchObject({ value: 'secret-b' });
   });

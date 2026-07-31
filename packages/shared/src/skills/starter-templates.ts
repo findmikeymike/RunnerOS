@@ -839,9 +839,7 @@ export const STARTER_SKILLS: StarterSkill[] = [
   { slug: 'automation-creator', files: [{ path: 'SKILL.md', content: AUTOMATION_CREATOR_SKILL }] },
   { slug: 'workflow-creator', files: [{ path: 'SKILL.md', content: WORKFLOW_CREATOR_SKILL }] },
   { slug: 'source-recipe', files: [{ path: 'SKILL.md', content: SOURCE_RECIPE_SKILL }] },
-  { slug: 'artist-os-guide', files: [{ path: 'SKILL.md', content: ARTIST_OS_GUIDE_SKILL }] },
   { slug: 'runneros-self-edit', files: [{ path: 'SKILL.md', content: RUNNEROS_SELF_EDIT_SKILL }] },
-  { slug: 'raw-video-editor', files: [{ path: 'SKILL.md', content: RAW_VIDEO_EDITOR_SKILL }] },
 ];
 
 export { SYSTEM_GLOBAL_SKILL_SLUGS } from './system.ts';

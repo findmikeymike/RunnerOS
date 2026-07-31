@@ -10,6 +10,7 @@ import threading
 from typing import Any
 
 from .fixture_adapter import FixtureQualityError, build_canonical_batch, canonical_json
+from .ibkr_gateway import IBGatewayProbeConfig, probe_ib_gateway
 from .paced_replay import PacedReplayRegistry, ReplayLifecycleError
 from .transport_policy import (
     JSONL_REPLAY_PROTOCOL_MAX_TARGET_EVENTS_PER_SECOND,
@@ -26,6 +27,7 @@ BATCH_SCHEMA_VERSION = "market-trade-batch@1"
 COMMANDS = (
     "market.health",
     "market.capabilities",
+    "market.ibkr_gateway_health",
     "market.load_fixture",
     "market.replay_batch",
     "market.replay_next",
@@ -279,6 +281,25 @@ class MarketDataRpcHandler:
                 "protocol_version": RPC_PROTOCOL_VERSION,
                 "artifact_versions": [BATCH_SCHEMA_VERSION],
                 **self._capabilities(),
+            })
+
+        if method == "market.ibkr_gateway_health":
+            if (
+                not isinstance(params, Mapping)
+                or set(params) != {"environment"}
+                or params["environment"] not in ("paper", "live")
+            ):
+                return self._failure(
+                    request_id, -32600, "INVALID_REQUEST", "validation",
+                    "IB Gateway health requires a paper or live environment.",
+                )
+            result = probe_ib_gateway(IBGatewayProbeConfig(
+                environment=params["environment"],
+                timeout_seconds=2.0,
+            )).to_dict()
+            return self._success(request_id, {
+                "health_schema_version": "ibkr-gateway-health@1",
+                **result,
             })
 
         if method == "market.load_fixture":

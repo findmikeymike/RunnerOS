@@ -1,7 +1,7 @@
 ---
 status: current
 owner: team
-last_verified: 2026-07-11
+last_verified: 2026-07-30
 source_of_truth: true
 ---
 
@@ -31,6 +31,12 @@ This is the routing table for humans and agents. Read only what the current job 
 | `development/SPEC-TEMPLATE.md` | Contract for a build-ready feature spec | Spec quality bar changes |
 | `development/VERIFICATION.md` | Evidence and release gates | Runtime/test strategy changes |
 | `operations/DOC-GOVERNANCE.md` | Freshness, ownership, archiving rules | Documentation policy changes |
+
+## Active Design Specifications
+
+- `specs/execution/unified-broker-entry-gateway.md` — draft contract for
+  certified API/browser order entry, protection, and reconciliation. It grants
+  no runtime execution authority yet.
 
 ## Supporting Vision Library
 

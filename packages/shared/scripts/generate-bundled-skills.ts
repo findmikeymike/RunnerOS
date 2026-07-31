@@ -15,6 +15,7 @@
  */
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { join, relative, sep } from 'path';
+import { TRADE_GOD_BUNDLED_SKILL_SLUGS } from '../src/product-profile.ts';
 
 const HERE = new URL('.', import.meta.url).pathname;
 const BUNDLED_DIR = join(HERE, '..', 'src', 'skills', 'bundled');
@@ -54,11 +55,13 @@ interface SkillEntry {
   files: { path: string; content: string }[];
 }
 
-function collectSkills(): SkillEntry[] {
+function collectSkills(): { included: SkillEntry[]; excludedSlugs: string[] } {
   const skills: SkillEntry[] = [];
-  const dirEntries = readdirSync(BUNDLED_DIR, { withFileTypes: true })
+  const allDirEntries = readdirSync(BUNDLED_DIR, { withFileTypes: true })
     .filter(e => e.isDirectory())
     .sort((a, b) => a.name.localeCompare(b.name));
+  const includedSlugs = new Set<string>(TRADE_GOD_BUNDLED_SKILL_SLUGS);
+  const dirEntries = allDirEntries.filter(entry => includedSlugs.has(entry.name));
 
   for (const entry of dirEntries) {
     const slug = entry.name;
@@ -71,10 +74,15 @@ function collectSkills(): SkillEntry[] {
       .sort((a, b) => a.path.localeCompare(b.path));
     skills.push({ slug, files });
   }
-  return skills;
+  return {
+    included: skills,
+    excludedSlugs: allDirEntries
+      .map(entry => entry.name)
+      .filter(slug => !includedSlugs.has(slug)),
+  };
 }
 
-function render(skills: SkillEntry[]): string {
+function render(skills: SkillEntry[], excludedSlugs: string[]): string {
   const lines: string[] = [];
   lines.push('// AUTO-GENERATED — do not edit by hand. Run `bun run generate:bundled-skills` to update.');
   lines.push('// Source: packages/shared/src/skills/bundled/');
@@ -97,12 +105,18 @@ function render(skills: SkillEntry[]): string {
   }
   lines.push('];');
   lines.push('');
+  lines.push('export const TRADE_GOD_EXCLUDED_BUNDLED_SKILL_SLUGS = [');
+  for (const slug of excludedSlugs) {
+    lines.push(`  ${JSON.stringify(slug)},`);
+  }
+  lines.push('] as const;');
+  lines.push('');
   return lines.join('\n');
 }
 
 function main() {
-  const skills = collectSkills();
-  const output = render(skills);
+  const { included: skills, excludedSlugs } = collectSkills();
+  const output = render(skills, excludedSlugs);
   writeFileSync(OUTPUT_FILE, output, 'utf-8');
   const totalFiles = skills.reduce((acc, s) => acc + s.files.length, 0);
   const totalBytes = skills.reduce(

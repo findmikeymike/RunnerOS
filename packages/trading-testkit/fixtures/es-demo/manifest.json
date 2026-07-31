@@ -18,6 +18,21 @@
   },
   "session": {
     "exchange_timezone": "America/Chicago",
-    "session_id": "2026-07-11-rth"
+    "session_id": "2026-07-11-synthetic"
+  },
+  "session_window": {
+    "session_window_schema_version": "market-session-window@1",
+    "session_id": "2026-07-11-synthetic",
+    "exchange_timezone": "America/Chicago",
+    "calendar_id": "trade-god-synthetic",
+    "calendar_version": "1.0.0",
+    "trade_date": "2026-07-11",
+    "kind": "synthetic",
+    "segments": [
+      {
+        "open_ns": "1783780200000000000",
+        "close_ns": "1783780260000000000"
+      }
+    ]
   }
 }

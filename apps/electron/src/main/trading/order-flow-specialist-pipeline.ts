@@ -31,6 +31,12 @@ export class OrderFlowSpecialistPipeline {
   ) {}
 
   async interpretFixture(input: InterpretFixtureInput): Promise<OrderFlowInterpretation> {
+    if (
+      input.context.sessionWindow.session_id !== input.analysis.session.session_id
+      || input.context.sessionWindow.exchange_timezone !== input.analysis.session.exchange_timezone
+    ) {
+      throw new TypeError('Specialist session window must match the requested analysis session.')
+    }
     const traceId = input.analysis.traceId ?? `trace-order-flow-specialist-${randomUUID()}`
     const { batch, artifact } = await this.canonical.analyzeFixtureEvidence({ ...input.analysis, traceId })
     const snapshot = buildAgentMarketSnapshot({
@@ -39,6 +45,7 @@ export class OrderFlowSpecialistPipeline {
       intervalNs: input.context.intervalNs,
       watermarkNs: input.context.watermarkNs,
       staleAfterNs: input.context.staleAfterNs,
+      sessionWindow: input.context.sessionWindow,
       ...(input.context.recentTradeLimit === undefined ? {} : { recentTradeLimit: input.context.recentTradeLimit }),
       ...(input.context.closedCandleLimit === undefined ? {} : { closedCandleLimit: input.context.closedCandleLimit }),
       ...(input.context.qualityIssueLimit === undefined ? {} : { qualityIssueLimit: input.context.qualityIssueLimit }),

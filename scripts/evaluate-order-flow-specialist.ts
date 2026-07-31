@@ -10,6 +10,7 @@ import { loadEsDemoFixture } from '@trade-god/testkit'
 
 import { createTradeGodRuntime } from '../apps/electron/src/main/trading/trading-runtime.ts'
 import { evaluateOrderFlowInterpretation } from '../apps/electron/src/main/trading/order-flow-specialist-evaluation.ts'
+import type { SpecialistModel } from '../apps/electron/src/main/trading/order-flow-specialist.ts'
 
 class EvalIpcMain {
   handle(): void {}
@@ -21,6 +22,46 @@ const temporaryRoot = mkdtempSync(path.join(tmpdir(), 'trade-god-real-model-eval
 setSessionPlatform(createHeadlessPlatform({ appVersion: 'trade-god-eval' }))
 const sessionManager = new SessionManager()
 let runtime: ReturnType<typeof createTradeGodRuntime> | undefined
+
+function createGeminiModel(apiKey: string, model = 'gemini-3.5-flash'): SpecialistModel {
+  return async (request) => {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: request.systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: request.prompt }] }],
+          generationConfig: {
+            // Gemini 3.x is tuned for its default temperature and counts hidden
+            // reasoning against this ceiling. Minimal thinking keeps the bounded
+            // evaluation focused while leaving room for the full JSON contract.
+            temperature: 1,
+            maxOutputTokens: Math.max(request.maxTokens, 8_192),
+            thinkingConfig: { thinkingLevel: 'minimal' },
+            responseMimeType: 'application/json',
+          },
+        }),
+      },
+    )
+    const payload = await response.json() as {
+      error?: { message?: string }
+      candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
+    }
+    if (!response.ok) throw new Error(`Gemini evaluation failed (${response.status}): ${payload.error?.message ?? 'unknown provider error'}`)
+    if (process.env.TRADE_GOD_EVAL_DEBUG_RESPONSE === '1') {
+      console.error(JSON.stringify(payload.candidates ?? [], null, 2))
+    }
+    const text = payload.candidates?.[0]?.content?.parts
+      ?.filter((part) => part.thought !== true)
+      .map((part) => part.text ?? '')
+      .join('')
+      .trim()
+    if (!text) throw new Error('Gemini evaluation returned no text.')
+    return { text, model }
+  }
+}
 
 try {
   await sessionManager.initialize()
@@ -35,8 +76,15 @@ try {
     contextDirectory: path.join(temporaryRoot, 'context'),
     interpretationDirectory: path.join(temporaryRoot, 'interpretations'),
   })
-  const llmConnection = process.env.TRADE_GOD_EVAL_LLM_CONNECTION ?? 'pi-api-key'
-  runtime.setSpecialistModel((request) => sessionManager.runOneShotLlmQuery(workspace.id, request, { llmConnection }))
+  const provider = process.env.TRADE_GOD_EVAL_PROVIDER ?? 'runner'
+  if (provider === 'gemini') {
+    const apiKey = process.env.GEMINI_API_KEY
+    if (!apiKey) throw new Error('GEMINI_API_KEY is required for the Gemini evaluation provider.')
+    runtime.setSpecialistModel(createGeminiModel(apiKey, process.env.TRADE_GOD_EVAL_MODEL))
+  } else {
+    const llmConnection = process.env.TRADE_GOD_EVAL_LLM_CONNECTION ?? 'pi-api-key'
+    runtime.setSpecialistModel((request) => sessionManager.runOneShotLlmQuery(workspace.id, request, { llmConnection }))
+  }
 
   const fixture = await loadEsDemoFixture()
   const output = await runtime.orderFlowSpecialistPipeline!.interpretFixture({

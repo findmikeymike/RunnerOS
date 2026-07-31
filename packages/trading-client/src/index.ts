@@ -11,6 +11,8 @@ import {
   healthResponseSchema,
   canonicalJson,
   marketDataCapabilitiesResponseSchema,
+  ibkrGatewayHealthRequestSchema,
+  ibkrGatewayHealthSchema,
   marketDataErrorSchema,
   marketDataHealthSchema,
   marketLoadFixtureRequestSchema,
@@ -31,6 +33,8 @@ import {
   type CancelAnalysisResponse,
   type TradingError,
   type MarketDataCapabilitiesResponse,
+  type IbkrGatewayEnvironment,
+  type IbkrGatewayHealth,
   type MarketDataError,
   type MarketDataHealth,
   type MarketQualityReport,
@@ -293,6 +297,11 @@ export class MarketDataClient {
 
   capabilities(): Promise<MarketDataCapabilitiesResponse> {
     return this.request('market.capabilities', {}, marketDataCapabilitiesResponseSchema)
+  }
+
+  ibkrGatewayHealth(environment: IbkrGatewayEnvironment = 'paper'): Promise<IbkrGatewayHealth> {
+    const params = ibkrGatewayHealthRequestSchema.parse({ environment })
+    return this.request('market.ibkr_gateway_health', params, ibkrGatewayHealthSchema)
   }
 
   async loadFixture(input: LoadMarketFixtureInput): Promise<MarketTradeBatch> {

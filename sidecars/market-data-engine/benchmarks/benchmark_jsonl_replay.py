@@ -72,7 +72,7 @@ def write_fixture(root: Path, event_count: int) -> None:
         },
         "session": {
             "exchange_timezone": "America/Chicago",
-            "session_id": "2026-07-11-rth",
+            "session_id": "2026-07-11-synthetic",
         },
     }
     (root / "manifest.json").write_text(

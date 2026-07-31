@@ -9,4 +9,5 @@ test('renders the diagnostic shell before runtime health resolves', () => {
   expect(html).toContain('Order Flow Engine')
   expect(html).toContain('Checking runtime')
   expect(html).toContain('Run ES fixture')
+  expect(html).toContain('Run GPT specialist')
 })

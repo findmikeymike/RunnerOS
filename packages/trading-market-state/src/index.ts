@@ -20,7 +20,11 @@ import {
   type MarketTradeBatch,
   type MarketTradeEvent,
   type NonNegativeFixedPointValue,
+  type MarketSessionWindow,
 } from '@trade-god/contracts'
+import { buildReplayContinuity } from './continuity.ts'
+
+export { MarketFeedContinuityGuard, buildReplayContinuity } from './continuity.ts'
 
 
 export interface BuildMarketReplaySnapshotInput {
@@ -36,6 +40,7 @@ export const MARKET_REPLAY_MAX_EVENTS = 10_000
 
 export interface BuildAgentMarketSnapshotInput extends BuildMarketReplaySnapshotInput {
   staleAfterNs: string
+  sessionWindow: MarketSessionWindow
   recentTradeLimit?: number
   closedCandleLimit?: number
   qualityIssueLimit?: number
@@ -339,6 +344,19 @@ export function buildAgentMarketSnapshot(input: BuildAgentMarketSnapshotInput): 
         }
       })()
     : { state: 'no-data' as const, stale_after_ns: staleAfterNs.toString() }
+  const continuity = buildReplayContinuity(orderedEvents, {
+    provider: contributingBatches[0]?.source.provider ?? [...uniqueBatches.values()][0]!.source.provider,
+    instrumentId: instrument.id,
+    staleAfterNs: staleAfterNs.toString(),
+    observedAtNs: series.watermark_ns,
+  })
+  const sessionWindow = input.sessionWindow
+  const sessionState = series.as_of_event_ns
+    ? orderedEvents.every((event) => sessionWindow.segments.some((segment) => (
+        BigInt(event.ts_event_ns) >= BigInt(segment.open_ns)
+        && BigInt(event.ts_event_ns) < BigInt(segment.close_ns)
+      ))) ? 'inside' as const : 'outside' as const
+    : 'no-data' as const
 
   const content = {
     snapshot_schema_version: AGENT_MARKET_SNAPSHOT_SCHEMA_VERSION,
@@ -357,6 +375,10 @@ export function buildAgentMarketSnapshot(input: BuildAgentMarketSnapshotInput): 
       current: { price: series.current_price, event_id: series.current_event_id },
     } : {}),
     freshness,
+    readiness: {
+      continuity,
+      session: { state: sessionState, window: sessionWindow },
+    },
     candles: {
       interval_ns: series.interval_ns,
       alignment: series.alignment,

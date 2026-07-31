@@ -3,20 +3,44 @@ import { expect, test } from 'bun:test'
 import { TRADE_GOD_IPC } from '../trading-ipc.ts'
 import { createTradingPreloadApi } from '../trading-preload.ts'
 
-test('preload adapter invokes only the three local Trade God channels', async () => {
+test('preload adapter invokes only the local Trade God channels', async () => {
   const calls: Array<{ channel: string; args: unknown[] }> = []
+  let subscribedChannel = ''
+  let subscribedPayload: unknown
   const api = createTradingPreloadApi(async (channel, ...args) => {
     calls.push({ channel, args })
     return channel === TRADE_GOD_IPC.HEALTH ? { state: 'ready' } : { artifact_id: 'artifact-preload' }
+  }, (channel, callback) => {
+    subscribedChannel = channel
+    callback({ id: 'tv-preload' })
+    return () => {}
   })
   const input = { timeoutMs: 500 } as any
+  const chartInput = { symbol: 'ES', timeframe: '5m', sessionMode: 'RTH' } as const
 
   expect(await api.getTradeGodHealth() as any).toEqual({ state: 'ready' })
   expect(await api.analyzeTradeGodFixture(input) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.interpretTradeGodFixture(input) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.cancelTradeGodAnalysis('cancel-preload') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.listTradeGodAlerts(20) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.acknowledgeTradeGodAlert('tv-preload') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.getTradeGodAlertIngestionStatus() as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.getTradeGodAlertWebhookSetup() as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.getIbkrGatewayHealth() as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.getSyntheticTradeGodChartFixture(chartInput) as any).toEqual({ artifact_id: 'artifact-preload' })
+  api.onTradeGodAlert((payload) => { subscribedPayload = payload })
+  expect(subscribedChannel).toBe(TRADE_GOD_IPC.ALERT_RECEIVED)
+  expect(subscribedPayload).toEqual({ id: 'tv-preload' })
   expect(calls).toEqual([
     { channel: TRADE_GOD_IPC.HEALTH, args: [] },
     { channel: TRADE_GOD_IPC.ANALYZE_FIXTURE, args: [input] },
+    { channel: TRADE_GOD_IPC.INTERPRET_FIXTURE, args: [input] },
     { channel: TRADE_GOD_IPC.CANCEL_ANALYSIS, args: ['cancel-preload'] },
+    { channel: TRADE_GOD_IPC.LIST_ALERTS, args: [20] },
+    { channel: TRADE_GOD_IPC.ACKNOWLEDGE_ALERT, args: ['tv-preload'] },
+    { channel: TRADE_GOD_IPC.ALERT_INGESTION_STATUS, args: [] },
+    { channel: TRADE_GOD_IPC.ALERT_WEBHOOK_SETUP, args: [] },
+    { channel: TRADE_GOD_IPC.IBKR_GATEWAY_HEALTH, args: ['paper'] },
+    { channel: TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE, args: [chartInput] },
   ])
 })

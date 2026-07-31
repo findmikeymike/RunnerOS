@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { Activity, AlertTriangle, Database, Play, ShieldCheck, Square } from 'lucide-react'
-import { CANONICAL_ORDER_FLOW_CONFIGURATION, type HealthResponse, type OrderFlowArtifact } from '@trade-god/contracts'
+import { Activity, AlertTriangle, BrainCircuit, Database, Play, ShieldCheck, Square } from 'lucide-react'
+import { CANONICAL_ORDER_FLOW_CONFIGURATION, type HealthResponse, type OrderFlowArtifact, type OrderFlowInterpretation } from '@trade-god/contracts'
 
 type RuntimeState = 'checking' | 'ready' | 'error'
 
@@ -13,7 +13,7 @@ const fixtureInput = {
     id: 'CME:ESU6', symbol: 'ESU6', venue: 'XCME', asset_class: 'future' as const,
     currency: 'USD', tick_size: '0.25', multiplier: '50',
   },
-  session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-rth' },
+  session: { exchange_timezone: 'America/Chicago', session_id: '2026-07-11-synthetic' },
   analysis: CANONICAL_ORDER_FLOW_CONFIGURATION,
   timeoutMs: 5_000,
 }
@@ -22,8 +22,10 @@ const TradeGodWorkbenchPage: React.FC = () => {
   const [runtimeState, setRuntimeState] = useState<RuntimeState>('checking')
   const [health, setHealth] = useState<HealthResponse | null>(null)
   const [artifact, setArtifact] = useState<OrderFlowArtifact | null>(null)
+  const [interpretation, setInterpretation] = useState<OrderFlowInterpretation | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [running, setRunning] = useState(false)
+  const [interpreting, setInterpreting] = useState(false)
   const [cancellationId, setCancellationId] = useState<string | null>(null)
   const [canceling, setCanceling] = useState(false)
 
@@ -49,6 +51,7 @@ const TradeGodWorkbenchPage: React.FC = () => {
     setRunning(true)
     setCancellationId(runCancellationId)
     setError(null)
+    setInterpretation(null)
     try {
       setArtifact(await window.electronAPI.analyzeTradeGodFixture({ ...fixtureInput, cancellationId: runCancellationId, traceId: runTraceId }))
     } catch (cause) {
@@ -57,6 +60,47 @@ const TradeGodWorkbenchPage: React.FC = () => {
       setRunning(false)
       setCancellationId(null)
       setCanceling(false)
+    }
+  }, [])
+
+  const runSpecialist = useCallback(async () => {
+    setInterpreting(true)
+    setError(null)
+    try {
+      const runId = crypto.randomUUID()
+      setInterpretation(await window.electronAPI.interpretTradeGodFixture({
+        analysis: {
+          ...fixtureInput,
+          cancellationId: `specialist-${runId}`,
+          traceId: `trace-specialist-workbench-${runId}`,
+        },
+        context: {
+          snapshotId: `snapshot-specialist-workbench-${runId}`,
+          intervalNs: '20000000000',
+          watermarkNs: '1783780230000000000',
+          staleAfterNs: '5000000000',
+          sessionWindow: {
+            session_window_schema_version: 'market-session-window@1',
+            session_id: '2026-07-11-synthetic',
+            exchange_timezone: 'America/Chicago',
+            calendar_id: 'trade-god-synthetic',
+            calendar_version: '1.0.0',
+            trade_date: '2026-07-11',
+            kind: 'synthetic',
+            segments: [{ open_ns: '1783780200000000000', close_ns: '1783780260000000000' }],
+          },
+          recentTradeLimit: 4,
+          closedCandleLimit: 2,
+        },
+        assignment: {
+          question: 'What does this tiny sample support, what does it not support, and what fresh evidence would change the read?',
+          horizon: 'immediate',
+        },
+      }))
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      setInterpreting(false)
     }
   }, [])
 
@@ -127,8 +171,40 @@ const TradeGodWorkbenchPage: React.FC = () => {
               <div>content: {artifact?.content_hash ?? '—'}</div>
               <div>producer: {health?.meta.producer.name ?? '—'} {health?.meta.producer.version ?? ''}</div>
             </div>
+            <button type="button" onClick={runSpecialist} disabled={!artifact || interpreting} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-sky-300/20 bg-sky-300/[0.09] px-4 py-3 text-sm font-semibold text-sky-100 transition hover:bg-sky-300/[0.14] disabled:cursor-not-allowed disabled:opacity-35">
+              <BrainCircuit className="h-4 w-4" /> {interpreting ? 'Running GPT specialist…' : 'Run GPT specialist'}
+            </button>
           </div>
         </section>
+
+        {interpretation ? (
+          <section className="rounded-2xl border border-sky-300/15 bg-sky-300/[0.045] p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-sm font-medium"><BrainCircuit className="h-4 w-4 text-sky-300" /> Specialist interpretation</div>
+              <span className="font-mono text-[10px] text-white/40">{interpretation.model.provider_model}</span>
+            </div>
+            {interpretation.status === 'analyzed' ? (
+              <div className="mt-4 space-y-4 text-sm leading-6 text-white/68">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Metric label="Classification" value={interpretation.thesis.classification} />
+                  <Metric label="Confidence" value={String(interpretation.thesis.confidence)} />
+                  <Metric label="Evidence quality" value={interpretation.quality.state} />
+                </div>
+                <p>{interpretation.thesis.rationale}</p>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-white/38">Alternative hypothesis</div>
+                  <p className="mt-1">{interpretation.alternative_hypotheses[0]?.hypothesis ?? '—'}</p>
+                </div>
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-white/38">Why no trade instruction</div>
+                  <p className="mt-1">{interpretation.no_trade_reasons.join(' ')}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-white/68">{interpretation.refusal.reason}</p>
+            )}
+          </section>
+        ) : null}
 
         {error ? <div className="flex items-start gap-3 rounded-xl border border-red-400/20 bg-red-400/[0.07] p-4 text-sm text-red-100"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div><div className="font-medium">Runtime failure</div><div className="mt-1 text-xs text-red-100/65">{error}</div></div></div> : null}
       </div>

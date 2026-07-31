@@ -18,11 +18,14 @@ class FakeIpcMain {
 
 const repoRoot = path.resolve(import.meta.dir, '../../../../../..')
 
-function validModel(mutate?: (output: any) => void): SpecialistModel {
+function validModel(mutate?: (output: any, prompt: any) => void): SpecialistModel {
   return async (request) => {
     const prompt = JSON.parse(request.prompt)
     if (!prompt.output_contract || prompt.doctrine?.sha256 !== prompt.immutable_output_identity.agent.doctrine_sha256) {
       throw new Error('Specialist prompt is missing its versioned doctrine or output contract.')
+    }
+    if (!prompt.allowed_evidence_refs?.includes('artifact:summary.delta') || !prompt.allowed_evidence_refs?.includes('snapshot:current')) {
+      throw new Error('Specialist prompt is missing its exact evidence-reference allowlist.')
     }
     const output = {
       ...prompt.immutable_output_identity,
@@ -60,12 +63,16 @@ function validModel(mutate?: (output: any) => void): SpecialistModel {
       no_trade_reasons: ['Sample is too small and lacks depth-of-book evidence.'],
       warnings: ['No inference about spoofing, absorption, or hidden liquidity is supported.'],
     }
-    mutate?.(output)
+    mutate?.(output, prompt)
     return { text: JSON.stringify(output), model: 'scripted-eval-model' }
   }
 }
 
-async function runFixture(model: SpecialistModel, watermarkNs = '1783780230000000000') {
+async function runFixture(
+  model: SpecialistModel,
+  watermarkNs = '1783780230000000000',
+  sessionWindow?: Awaited<ReturnType<typeof loadEsDemoFixture>>['manifest']['session_window'],
+) {
   const root = mkdtempSync(path.join(tmpdir(), 'trade-god-specialist-'))
   const runtime = createTradeGodRuntime({
     ipcMain: new FakeIpcMain(), rootCandidates: [repoRoot], runtimeExecutable: process.execPath,
@@ -82,6 +89,7 @@ async function runFixture(model: SpecialistModel, watermarkNs = '178378023000000
     context: {
       snapshotId: 'snapshot-specialist-e2e',
       intervalNs: '20000000000', watermarkNs, staleAfterNs: '5000000000',
+      sessionWindow: sessionWindow ?? fixture.manifest.session_window,
       recentTradeLimit: 4, closedCandleLimit: 2,
     },
     assignment: { question: 'What does this evidence support?', horizon: 'immediate' },
@@ -120,6 +128,31 @@ describe('OrderFlowSpecialist', () => {
     const { root, runtime, operation } = await runFixture(validModel((output) => { output.observations[0].evidence_refs = ['broker:secret-order'] }))
     try {
       await expect(operation).rejects.toThrow('cited unknown evidence')
+    } finally {
+      await runtime.dispose(); rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('accepts exact trade and candle IDs that exist in the supplied snapshot', async () => {
+    const { root, runtime, operation } = await runFixture(validModel((output, prompt) => {
+      output.observations[0].evidence_refs = [
+        prompt.snapshot.trades.events[0].event_id,
+        prompt.snapshot.candles.closed[0].candle_id,
+      ]
+    }))
+    try {
+      await expect(operation).resolves.toMatchObject({ status: 'analyzed' })
+    } finally {
+      await runtime.dispose(); rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('allows descriptive measurements and buy-volume terminology in analyst prose', async () => {
+    const { root, runtime, operation } = await runFixture(validModel((output) => {
+      output.observations[0].statement = 'Buy volume at 17 exceeded sell volume at 11; 2 sell events occurred at supplied prices.'
+    }))
+    try {
+      await expect(operation).resolves.toMatchObject({ status: 'analyzed' })
     } finally {
       await runtime.dispose(); rmSync(root, { recursive: true, force: true })
     }
@@ -201,6 +234,42 @@ describe('OrderFlowSpecialist', () => {
     const { root, runtime, operation } = await runFixture(async (request) => { calls += 1; return model(request) }, '1783780240000000000')
     try {
       expect(await operation).toMatchObject({ status: 'refused', refusal: { code: 'context-not-fresh' } })
+      expect(calls).toBe(0)
+    } finally {
+      await runtime.dispose(); rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('refuses evidence outside the declared session before calling a model', async () => {
+    let calls = 0
+    const model = validModel()
+    const fixture = await loadEsDemoFixture()
+    const { root, runtime, operation } = await runFixture(
+      async (request) => { calls += 1; return model(request) },
+      '1783780230000000000',
+      {
+        ...fixture.manifest.session_window,
+        segments: [{ open_ns: '1783780000000000000', close_ns: '1783780210000000000' }],
+      },
+    )
+    try {
+      expect(await operation).toMatchObject({ status: 'refused', refusal: { code: 'session-not-active' } })
+      expect(calls).toBe(0)
+    } finally {
+      await runtime.dispose(); rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  test('rejects a session window that does not match the deterministic artifact request', async () => {
+    let calls = 0
+    const fixture = await loadEsDemoFixture()
+    const { root, runtime, operation } = await runFixture(
+      async (request) => { calls += 1; return validModel()(request) },
+      '1783780230000000000',
+      { ...fixture.manifest.session_window, session_id: 'different-session' },
+    )
+    try {
+      await expect(operation).rejects.toThrow('session window must match')
       expect(calls).toBe(0)
     } finally {
       await runtime.dispose(); rmSync(root, { recursive: true, force: true })

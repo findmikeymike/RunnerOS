@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-14
+last_verified: 2026-07-30
 source_of_truth: false
 ---
 
@@ -31,13 +31,17 @@ Build a local-first desktop trading intelligence system where deterministic anal
 
 The Phase 0 walking skeleton is implemented for development and packaged-sidecar resolution. A project-owned ES fixture travels through a standalone Order Flow sidecar, validated contracts, a typed client, Electron supervision, narrow IPC/preload methods, and a visible Trade God workbench. The build now emits a self-contained sidecar bundle and packaged mode selects RunnerOS's bundled Bun.
 
-This is not yet a trading system. It has no live data, broker, account, order, or autonomous-execution capability. The real visual Electron user path and a fully built packaged installer have not been proven.
+This is not yet a live trading system. It has no live quote stream, account access, order, or autonomous-execution capability. The real visual Electron user path has been smoked for the command center and GPT Order Flow specialist, but a fully built packaged installer has not been proven.
 
-Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent event, quality, batch, candle, series, and agent-snapshot contracts. Python emits the exact TypeScript golden/checksum; typed client/Electron supervision validates it; the replay engine produces current price and candle history under a no-lookahead watermark. One canonical batch now produces both the checksum-verified `order-flow-artifact@2` and the addressed snapshot reference consumed by `order-flow-specialist@0.1.0`. The specialist injects SHA-256-pinned doctrine, calls Runner's provider-neutral one-shot model seam, rejects unsafe or ungrounded output, and atomically stores `order-flow-interpretation@1`. Scripted-model orchestration is proven; authenticated real-model quality is not.
+Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent event, quality, batch, candle, series, and agent-snapshot contracts. Python emits the exact TypeScript golden/checksum; typed client/Electron supervision validates it; the replay engine produces current price and candle history under a no-lookahead watermark. `agent-market-snapshot@2` now binds explicit provider sequence, continuity, freshness, and session-window admission into its checksum. One canonical batch produces both the checksum-verified `order-flow-artifact@2` and the addressed snapshot reference consumed by `order-flow-specialist@0.1.0`. The specialist refuses reconnecting, gapped, stale, unavailable, invalid, or out-of-window evidence before invoking the model. The GPT path has been user-smoked in Electron.
+
+IBKR through standalone IB Gateway is the selected first economical provider path. The official notarized Apple Silicon IB Gateway 10.45 app is installed, and a loopback-only health handshake is typed through the Python sidecar, contracts, client, Electron IPC, and preload. It is deliberately health-only and discards account IDs. The Gateway is not yet authenticated or listening on paper port `4002`, so no live provider or quote proof is claimed.
+
+Futures Overview now receives a deterministic project-owned synthetic ES session as validated `market-candle-series@1` through local IPC/preload. It supports 1m/5m/15m/1h and ETH/RTH preview densities and is visibly labeled synthetic. NQ/YM/RTY remain empty rather than receiving invented prices.
 
 ## Immediate Assignment
 
-Complete one authenticated real-model evaluation, then add reconnect/gap/staleness and session-correctness gates before live data. JSONL remains limited to bounded control/replay: at most 1,000 requested events/sec and a measured 750,000-byte response frame. At the first reliable desktop opportunity, run the real Electron success/cancel/failure/provider-attachment smoke and record the evidence.
+Visually smoke the synthetic ES candles, volume, timeframe, and ETH/RTH controls in Futures Overview, then connect entitlement-valid IBKR candles and typed Workers annotations. The legacy Campaign/non-HQ home routes to the futures-first overview while preserving workspace-scoped sessions, workers, sources, skills, context, and storage. Agent roles and authority must remain explicit.
 
 ## Known Expected Artifact
 
@@ -72,11 +76,14 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Agent market context: 46 tests passed, 126 expectations; typechecks and Electron main build passed. Fresh/stale/no-data, limits/truncation, quality aggregation, exact batch/checksum mapping, content integrity, and analysis-only authority are proven. The scripted Order Flow specialist now consumes this path; authenticated-provider consumption is still unverified.
 - Canonical Order Flow: 64 tests passed, 137 expectations across ten focused files. Contract/market-state typechecks, Electron main build, packaged sidecar build/health, exact mixed-precision math, bounded framing/cache behavior, corrupt/live rejection, v2 provenance/receipts, and the real Python-child -> Order-Flow-child path passed.
 - Specialist context delivery: full snapshots persist atomically under `<userData>/trade-god/agent-context/`; specialists receive `agent-context-reference@1`, not copied market payloads; queue and authorized resolution produce `agent-context-delivery-receipt@1`. Concurrency, tamper, wrong-consumer, and path traversal checks pass. This seam alone did not prove consumption; the scripted specialist path below now does.
-- Order Flow specialist: one real canonical batch binds artifact, snapshot, delivery receipt, trace, instrument, and checksums. A hash-pinned doctrine and structured output contract reach the model. Runtime gates reject stale/invalid evidence, changed measurements/identity, false feed claims, invented evidence, excessive confidence, conservative execution-policy matches, malformed JSON, and provider failure. Scenarios use evidence enums instead of executable prose; the model has no tools or broker route; stored interpretations use runtime-owned path-safe IDs.
-- Evaluation: the scripted model passes a 6/6 deterministic rubric. The real-provider harness reached both configured Runner connections, but their credentials were unavailable to the headless process; no authenticated model result or quality claim exists.
+- Order Flow specialist: one real canonical batch binds artifact, snapshot, delivery receipt, trace, instrument, and checksums. A hash-pinned doctrine and structured output contract reach the model. Runtime gates reject reconnecting, gapped, stale, unavailable, invalid, or out-of-window evidence before the model, then reject changed measurements/identity, false feed claims, invented evidence, excessive confidence, conservative execution-policy matches, malformed JSON, and provider failure.
+- Market readiness: `market-feed-continuity@1` and `market-session-window@1` are enforced in `agent-market-snapshot@2`. Focused closure is 36 contract tests, 16 market-state tests, 27 Python market-data tests, and 32 Electron trading tests including 20 specialist cases, all passing. Session identity is joined across artifact and snapshot. This proves provider-neutral rules and replay/runtime admission, not a live vendor reconnect or a real CME holiday/rollover calendar.
+- Evaluation: the scripted model passes a 6/6 deterministic rubric. The standalone headless harness previously lacked credentials, but the user later authenticated and visually smoked the GPT specialist path in Electron. No claim about production trading quality is made.
 - Paced replay: `market.replay_batch`, `market.replay_next`, and `market.cancel` are typed through contracts, client, real Python stdio, and Electron supervision. Pulls serialize per replay for natural backpressure; deadlines/cancellation interrupt waits without crashing the process; active sessions are capped at 64; final batch identity/checksum must match every emitted event.
 - Measured JSONL policy: the real Darwin ARM64/Python 3.12.9 child sustained 966–978 events/sec in two observation trials at the protocol's fastest 1 ms pace; this is not claimed as raw transport capacity. A 750-event completion was 713,568 bytes; 800 was 761,067 bytes; 10,000 was 9,608,099 bytes. Replay completion and direct load now reject estimated responses above 750,000 bytes with typed `STREAMING_TRANSPORT_REQUIRED`; Electron's hard frame ceiling remains 1,000,000 bytes. Replay-next timeouts are pace-aware, so valid intervals above the default 5-second control timeout remain supported.
 - Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
+- IBKR onboarding scaffold: 94 focused tests passed across Python, contracts, client, and Electron; contract/client/Electron typechecks and Electron main/preload builds passed. Live paper login, port `4002`, entitlement, and first quote remain unverified.
+- Synthetic chart fixture: 19 focused Electron tests passed across deterministic generation, schema validation, IPC/preload/runtime wiring, fixed-point chart mapping, source labeling, overview output, and channel parity. Electron typecheck plus main, preload, and renderer builds passed. Visual smoke remains pending.
 
 ## Non-Negotiable Boundaries
 
@@ -90,15 +97,15 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Next Smallest Actions
 
-1. Run the real-provider harness after an approved credential is available and retain the scored receipt.
-2. Add reconnect/gap/staleness and session-correctness gates.
-3. Package the Python/Nautilus runtime after the delivery seam is stable.
-4. Real visual success/cancel/failure smoke at the first desktop opportunity.
-5. Actual packaged-app build/resource-layout smoke.
+1. Visually smoke synthetic ES across all timeframe/session controls and correct any sizing/layout issues.
+2. Complete manual IB Gateway paper login/API setup and feed the first entitlement-valid canonical candles into the chart.
+3. Inventory the user's agents and map each to a bounded Workers role plus `chart-annotation@1` output.
+4. Add the authoritative exchange calendar/rollover adapter and dedicated live streaming transport.
+5. Package and smoke the app.
 
 ## Do Not Do Yet
 
 - Do not merge unrelated upstream changes.
-- Do not build dozens of agents or the final UI.
+- Do not bulk-import agents before their role, inputs, outputs, and authority are defined.
 - Do not add brokers or live execution.
 - Do not describe tests or builds as runtime verification.

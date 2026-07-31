@@ -7,7 +7,8 @@ import {
 } from '@trade-god/client'
 import type {
   AgentMarketSnapshot, MarketCandleSeries, MarketDataHealth, MarketReplayCancellation,
-  MarketReplaySession, MarketReplayStep, MarketTradeBatch, MarketTradeEvent,
+  MarketReplaySession, MarketReplayStep, MarketSessionWindow, MarketTradeBatch, MarketTradeEvent,
+  IbkrGatewayEnvironment, IbkrGatewayHealth,
 } from '@trade-god/contracts'
 import { buildAgentMarketSnapshot, buildMarketReplaySnapshot } from '@trade-god/market-state'
 
@@ -28,6 +29,7 @@ export interface LoadFixtureSnapshotInput extends LoadMarketFixtureInput {
 
 export interface LoadFixtureAgentSnapshotInput extends LoadFixtureSnapshotInput {
   staleAfterNs: string
+  sessionWindow: MarketSessionWindow
   recentTradeLimit?: number
   closedCandleLimit?: number
   qualityIssueLimit?: number
@@ -52,6 +54,10 @@ export class MarketDataSidecarManager implements RpcTransport {
 
   health(): Promise<MarketDataHealth> {
     return this.client.health()
+  }
+
+  ibkrGatewayHealth(environment: IbkrGatewayEnvironment = 'paper'): Promise<IbkrGatewayHealth> {
+    return this.client.ibkrGatewayHealth(environment)
   }
 
   loadFixture(input: LoadMarketFixtureInput): Promise<MarketTradeBatch> {
@@ -123,6 +129,7 @@ export class MarketDataSidecarManager implements RpcTransport {
       intervalNs: input.intervalNs,
       watermarkNs: input.watermarkNs,
       staleAfterNs: input.staleAfterNs,
+      sessionWindow: input.sessionWindow,
       ...(input.recentTradeLimit === undefined ? {} : { recentTradeLimit: input.recentTradeLimit }),
       ...(input.closedCandleLimit === undefined ? {} : { closedCandleLimit: input.closedCandleLimit }),
       ...(input.qualityIssueLimit === undefined ? {} : { qualityIssueLimit: input.qualityIssueLimit }),

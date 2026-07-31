@@ -8,6 +8,16 @@ import { buildAgentMarketSnapshot } from '@trade-god/market-state'
 import { AgentContextStore } from '../agent-context-store.ts'
 
 const batchUrl = new URL('../../../../../../packages/trading-contracts/examples/market-trade-batch.v1.json', import.meta.url)
+const sessionWindow = {
+  session_window_schema_version: 'market-session-window@1' as const,
+  session_id: '2026-07-11-synthetic',
+  exchange_timezone: 'America/Chicago',
+  calendar_id: 'trade-god-synthetic',
+  calendar_version: '1.0.0',
+  trade_date: '2026-07-11',
+  kind: 'synthetic' as const,
+  segments: [{ open_ns: '1783780200000000000', close_ns: '1783780260000000000' }],
+}
 
 test('stores market context once, queues only its reference, and resolves only for the addressed specialist', async () => {
   const root = mkdtempSync(path.join(tmpdir(), 'trade-god-context-store-'))
@@ -21,7 +31,7 @@ test('stores market context once, queues only its reference, and resolves only f
   const snapshot = buildAgentMarketSnapshot({
     snapshotId: 'snapshot-context-store-1', traceId: 'trace-context-store-1',
     intervalNs: '20000000000', watermarkNs: '1783780230000000000', staleAfterNs: '5000000000',
-    recentTradeLimit: 2, closedCandleLimit: 1, batches: [batch],
+    sessionWindow, recentTradeLimit: 2, closedCandleLimit: 1, batches: [batch],
   })
 
   try {
@@ -48,7 +58,7 @@ test('fails closed when a reference is tampered', async () => {
   const batch = await Bun.file(batchUrl).json()
   const snapshot = buildAgentMarketSnapshot({
     snapshotId: 'snapshot-context-tamper', traceId: 'trace-context-tamper', intervalNs: '20000000000',
-    watermarkNs: '1783780230000000000', staleAfterNs: '5000000000', batches: [batch],
+    watermarkNs: '1783780230000000000', staleAfterNs: '5000000000', sessionWindow, batches: [batch],
   })
   try {
     const reference = await store.publish(snapshot)

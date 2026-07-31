@@ -80,6 +80,9 @@ export const orderFlowSpecialistRequestSchema = z.object({
   if (request.snapshot.instrument.id !== request.artifact.instrument_id) {
     context.addIssue({ code: 'custom', path: ['artifact', 'instrument_id'], message: 'Snapshot and artifact instruments must match' })
   }
+  if (request.snapshot.readiness.session.window.session_id !== request.artifact.session_id) {
+    context.addIssue({ code: 'custom', path: ['snapshot', 'readiness', 'session'], message: 'Snapshot and artifact sessions must match' })
+  }
   if (!request.snapshot.provenance.batches.some((batch) => (
     batch.batch_id === request.artifact.input.batch_id
     &&
