@@ -303,50 +303,53 @@ export default function TradingConnectionsSettingsPage() {
             <div className="space-y-3">
               {connections.map((status) => (
                 <SettingsCard key={status.connection.connection_id}>
-                  <SettingsCardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
-                      {status.connection.transport_preference === 'browser'
-                        ? <ExternalLink className="size-4 text-cyan-300" />
-                        : <KeyRound className="size-4 text-amber-300" />}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium">{status.connection.display_name}</p>
-                        <Badge>{status.connection.environment}</Badge>
-                        <Badge>{status.connection.state}</Badge>
-                        <Badge>{status.connection.enabled ? 'enabled' : 'disabled'}</Badge>
+                  <SettingsCardContent className="space-y-4 p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
+                        {status.connection.transport_preference === 'browser'
+                          ? <ExternalLink className="size-4 text-cyan-300" />
+                          : <KeyRound className="size-4 text-amber-300" />}
                       </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {status.connection.firm.name} · {status.connection.platform.name} · {status.connection.account_display.label}
-                      </p>
-                      <p className="mt-1 text-[11px] text-muted-foreground">
-                        {status.credential_configured ? 'Credential configured' : ''}
-                        {status.browser_session_configured ? 'Dedicated browser session configured' : ''}
-                        {' · '}{status.connection.certifications.length} certifications
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      {status.connection.transport_preference !== 'api' && (
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">{status.connection.display_name}</p>
+                          <Badge>{status.connection.environment}</Badge>
+                          <Badge>{status.connection.state}</Badge>
+                          <Badge>{status.connection.enabled ? 'enabled' : 'disabled'}</Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {status.connection.firm.name} · {status.connection.platform.name} · {status.connection.account_display.label}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {status.credential_configured ? 'Credential configured' : ''}
+                          {status.browser_session_configured ? 'Dedicated browser session configured' : ''}
+                          {' · '}{status.connection.certifications.length} certifications
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        {status.connection.transport_preference !== 'api' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={busy === `login:${status.connection.connection_id}`}
+                            onClick={() => void openLogin(status.connection.connection_id)}
+                          >
+                            <ExternalLink className="mr-1.5 size-3.5" />
+                            Open login
+                          </Button>
+                        )}
                         <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={busy === `login:${status.connection.connection_id}`}
-                          onClick={() => void openLogin(status.connection.connection_id)}
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`Remove ${status.connection.display_name}`}
+                          disabled={busy === `remove:${status.connection.connection_id}`}
+                          onClick={() => void remove(status.connection.connection_id)}
                         >
-                          <ExternalLink className="mr-1.5 size-3.5" />
-                          Open login
+                          <Trash2 className="size-4" />
                         </Button>
-                      )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Remove ${status.connection.display_name}`}
-                        disabled={busy === `remove:${status.connection.connection_id}`}
-                        onClick={() => void remove(status.connection.connection_id)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
+                      </div>
                     </div>
+                    <CertificationMatrix evidence={status.certification_evidence[0]} />
                   </SettingsCardContent>
                 </SettingsCard>
               ))}
@@ -364,6 +367,52 @@ export default function TradingConnectionsSettingsPage() {
           </div>
         </div>
       </ScrollArea>
+    </div>
+  )
+}
+
+function CertificationMatrix(props: {
+  evidence?: Awaited<
+    ReturnType<typeof window.electronAPI.listTradingConnections>
+  >[number]['certification_evidence'][number]
+}) {
+  if (!props.evidence) {
+    return (
+      <div className="rounded-lg border border-white/10 bg-black/10 px-3 py-2 text-[11px] text-muted-foreground">
+        No adapter certification evidence. Connection remains disabled.
+      </div>
+    )
+  }
+  const passed = props.evidence.scenarios.filter((scenario) => scenario.status === 'pass').length
+  return (
+    <div className="grid gap-2 rounded-lg border border-white/10 bg-black/10 p-3 text-[11px] md:grid-cols-4">
+      <div>
+        <p className="text-muted-foreground">Adapter evidence</p>
+        <p className="mt-1 font-mono">{props.evidence.adapter_id} {props.evidence.adapter_version}</p>
+      </div>
+      <div>
+        <p className="text-muted-foreground">Forced failures</p>
+        <p className="mt-1">{passed}/{props.evidence.scenarios.length} passed</p>
+      </div>
+      <div>
+        <p className="text-muted-foreground">Paper lifecycle soak</p>
+        <p className="mt-1">
+          {props.evidence.soak.completed_lifecycles}/50 attempted · {
+            props.evidence.soak.duplicate_submissions
+            + props.evidence.soak.unprotected_positions
+            + props.evidence.soak.unresolved_divergences
+            + props.evidence.soak.incomplete_closes
+          } critical defects
+        </p>
+      </div>
+      <div>
+        <p className="text-muted-foreground">Gate</p>
+        <p className="mt-1">
+          {props.evidence.eligible_certifications.includes('paper-lifecycle-certified')
+            ? 'Paper lifecycle certified'
+            : `${props.evidence.blockers.length} blockers`}
+        </p>
+      </div>
     </div>
   )
 }

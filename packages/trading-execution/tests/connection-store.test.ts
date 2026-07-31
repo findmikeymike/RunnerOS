@@ -79,6 +79,13 @@ describe('trading connection store', () => {
       account_ref: 'different-account',
       account_display: { label: 'APEX-9999', last4: '9999' },
     })).rejects.toBeInstanceOf(ExecutionGatewayError)
+
+    await expect(store.save({
+      ...connection(),
+      transport_preference: 'browser',
+      credential_ref: undefined,
+      browser_session_ref: 'session-apex-paper',
+    })).rejects.toBeInstanceOf(ExecutionGatewayError)
   })
 
   test('removes metadata without affecting unrelated connections', async () => {

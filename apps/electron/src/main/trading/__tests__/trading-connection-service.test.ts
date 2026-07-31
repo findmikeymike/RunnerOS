@@ -4,10 +4,16 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import {
+  type CertificationScenarioId,
   TRADING_CONNECTION_SCHEMA_VERSION,
   type TradingConnection,
 } from '@trade-god/contracts'
-import { FileTradingConnectionStore } from '@trade-god/execution'
+import {
+  FileAdapterCertificationStore,
+  FileTradingConnectionStore,
+  runAdapterCertification,
+  type AdapterCertificationRunner,
+} from '@trade-god/execution'
 
 import {
   TradingConnectionService,
@@ -16,6 +22,7 @@ import {
   secretName,
   type TradingBrowserSessionLauncher,
   type TradingCredentialVault,
+  type TradingAdapterCertificationRegistry,
 } from '../trading-connection-service.ts'
 
 const roots: string[] = []
@@ -86,17 +93,22 @@ const connection = (
   updated_at: NOW,
 })
 
-const setup = async () => {
+const setup = async (registry?: TradingAdapterCertificationRegistry) => {
   const root = await mkdtemp(path.join(tmpdir(), 'trade-god-connection-service-'))
   roots.push(root)
   const vault = new Vault()
   const browser = new Browser()
+  const connectionStore = new FileTradingConnectionStore(root, () => NOW)
+  const certificationStore = new FileAdapterCertificationStore(root, () => NOW)
   const service = new TradingConnectionService(
-    new FileTradingConnectionStore(root, () => NOW),
+    connectionStore,
     vault,
     browser,
+    certificationStore,
+    registry,
+    () => NOW,
   )
-  return { service, vault, browser }
+  return { service, vault, browser, certificationStore, connectionStore }
 }
 
 describe('trading connection service', () => {
@@ -108,6 +120,138 @@ describe('trading connection service', () => {
     expect(saved.credential_configured).toBe(true)
     expect(JSON.stringify(saved)).not.toContain('top-secret')
     expect(vault.values.get(secretName(saved.connection.connection_id))).toBe('top-secret')
+    expect(saved.certification_evidence).toEqual([])
+  })
+
+  test('does not trust renderer-supplied execution state or certification claims', async () => {
+    const { service } = await setup()
+    const hostile = {
+      ...connection('api'),
+      state: 'ready' as const,
+      capabilities: { ...capabilities, submit_market: true, flatten: true },
+      certifications: ['paper-lifecycle-certified' as const],
+      enabled: true,
+    }
+    const saved = await service.save({ connection: hostile, api_secret: 'top-secret' })
+
+    expect(saved.connection).toMatchObject({
+      state: 'auth-required',
+      capabilities,
+      certifications: [],
+      enabled: false,
+    })
+
+    const updated = await service.save({
+      connection: {
+        ...saved.connection,
+        display_name: 'Renamed by renderer',
+        transport_preference: 'browser',
+        credential_ref: undefined,
+        browser_session_ref: 'renderer-browser-session',
+        risk_policy_ref: 'weaker-risk-policy',
+        authorization_basis_ref: 'different-authorization',
+        approval_policy_ref: 'no-approval',
+        state: 'ready',
+        capabilities: { ...capabilities, submit_market: true },
+        certifications: ['paper-entry-certified'],
+        enabled: true,
+      },
+    })
+    expect(updated.connection).toMatchObject({
+      display_name: 'Renamed by renderer',
+      transport_preference: 'api',
+      risk_policy_ref: 'risk-policy-paper',
+      authorization_basis_ref: 'authorization-basis-apex',
+      approval_policy_ref: 'approval-policy-paper',
+      state: 'auth-required',
+      capabilities,
+      certifications: [],
+      enabled: false,
+    })
+  })
+
+  test('applies only exact installed-adapter evidence and still leaves paper disabled', async () => {
+    const registry: TradingAdapterCertificationRegistry = {
+      resolve: () => ({
+        adapter_id: 'tradovate-api',
+        adapter_version: '0.1.0',
+        provider_contract_version: 'tradovate-demo-rest-2026-07',
+      }),
+    }
+    const { service, certificationStore } = await setup(registry)
+    const saved = await service.save({ connection: connection('api'), api_secret: 'top-secret' })
+    const runner: AdapterCertificationRunner = {
+      connection_id: saved.connection.connection_id,
+      account_ref: saved.connection.account_ref,
+      provider_slug: saved.connection.platform.slug,
+      adapter_id: 'tradovate-api',
+      adapter_version: '0.1.0',
+      transport: 'api',
+      environment: 'paper',
+      provider_contract_version: 'tradovate-demo-rest-2026-07',
+      certified_capabilities: {
+        ...capabilities,
+        read_accounts: true,
+        read_orders: true,
+        read_positions: true,
+        submit_market: true,
+        native_bracket: true,
+        native_oco: true,
+        modify_order: true,
+        cancel_order: true,
+        partial_close: true,
+        flatten: true,
+      },
+      async runScenario(scenarioId: CertificationScenarioId) {
+        return { status: 'pass', evidence_ref: `evidence-${scenarioId}` }
+      },
+      async runPaperLifecycle(iteration: number) {
+        return {
+          entry_submissions: 1,
+          protected_throughout: true,
+          divergence_resolved: true,
+          closed: true,
+          evidence_ref: `lifecycle-${iteration}`,
+        }
+      },
+    }
+    const evidence = await runAdapterCertification(runner, () => NOW)
+    await certificationStore.save(evidence)
+
+    const certified = await service.applyCertification(evidence.certification_id)
+    expect(certified.connection).toMatchObject({
+      state: 'ready',
+      enabled: false,
+      certifications: [
+        'read-certified',
+        'paper-entry-certified',
+        'paper-lifecycle-certified',
+      ],
+    })
+
+    const staleSetup = await setup({
+      resolve: () => ({
+        adapter_id: 'tradovate-api',
+        adapter_version: '0.2.0',
+        provider_contract_version: 'tradovate-demo-rest-2026-07',
+      }),
+    })
+    const staleSaved = await staleSetup.service.save({
+      connection: {
+        ...connection('api'),
+        connection_id: 'connection-apex-api-stale',
+        account_ref: 'account-apex-api-stale',
+      },
+      api_secret: 'top-secret',
+    })
+    const staleEvidence = await runAdapterCertification({
+      ...runner,
+      connection_id: staleSaved.connection.connection_id,
+      account_ref: staleSaved.connection.account_ref,
+    }, () => NOW)
+    await staleSetup.certificationStore.save(staleEvidence)
+    await expect(staleSetup.service.applyCertification(staleEvidence.certification_id))
+      .rejects.toThrow('installed adapter contract')
   })
 
   test('refuses an API connection without an existing or newly supplied secret', async () => {

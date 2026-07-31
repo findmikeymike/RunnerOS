@@ -34,7 +34,10 @@ import {
   type TradingBrowserSessionLauncher,
   type TradingCredentialVault,
 } from './trading-connection-service.ts'
-import { FileTradingConnectionStore } from '@trade-god/execution'
+import {
+  FileAdapterCertificationStore,
+  FileTradingConnectionStore,
+} from '@trade-god/execution'
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
@@ -215,6 +218,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         new FileTradingConnectionStore(options.connectionDirectory, options.now),
         options.credentialVault,
         options.tradingBrowserSessionLauncher,
+        new FileAdapterCertificationStore(options.connectionDirectory, options.now),
+        undefined,
+        options.now,
       )
     : undefined
   const unsubscribeAlert = alertLedger && options.onAlert

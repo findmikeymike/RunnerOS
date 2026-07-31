@@ -65,11 +65,12 @@ export class FileTradingConnectionStore {
           || existing.environment !== connection.environment
           || existing.firm.slug !== connection.firm.slug
           || existing.platform.slug !== connection.platform.slug
+          || existing.transport_preference !== connection.transport_preference
         )
       ) {
         throw new ExecutionGatewayError(
           'CONNECTION_UNAVAILABLE',
-          'Firm, platform, account, and environment identity are immutable; create a new connection.',
+          'Firm, platform, transport, account, and environment identity are immutable; create a new connection.',
         )
       }
       const next = {
