@@ -225,6 +225,7 @@ function buildScheduledWorkAgentPrompt(
 function buildArtistIntelReportContext(input: {
   reportOutput: OutputManifest
   sessionId: string
+  videoCount: number
   nuggetCount: number
   sourceCount: number
   existing: ReturnType<typeof loadContextDoc>
@@ -239,6 +240,7 @@ function buildArtistIntelReportContext(input: {
     title: input.reportOutput.title,
     summary: input.reportOutput.summary,
     generatedAt: input.reportOutput.completedAt ?? input.reportOutput.updatedAt,
+    videoCount: input.videoCount,
     nuggetCount: input.nuggetCount,
   }
   const report = {
@@ -249,6 +251,7 @@ function buildArtistIntelReportContext(input: {
     sessionId: input.sessionId,
     outputId: input.reportOutput.id,
     sourceCount: input.sourceCount || (Number.isInteger(previous?.sourceCount) ? Number(previous?.sourceCount) : 0),
+    videoCount: input.videoCount,
     nuggetCount: input.nuggetCount,
     generatedAt: run.generatedAt,
     updatedAt: now,
@@ -2682,6 +2685,7 @@ export class SessionManager implements ISessionManager {
       upsertContextDoc(input.workspaceRootPath, buildArtistIntelReportContext({
         reportOutput,
         sessionId: input.sessionId,
+        videoCount: reportData.processedVideos.length,
         nuggetCount: docs.length,
         sourceCount: artistIntelSourceCount(loadContextDoc(input.workspaceRootPath, 'artist-intel-config')?.body),
         existing: loadContextDoc(input.workspaceRootPath, 'artist-intel-report'),
@@ -4140,11 +4144,11 @@ user a clickable link to where the thing now lives.`
         for (const workspace of workspaces) {
           const newDefaults = workspace.artistWorkspaceScope === 'hq'
             ? [INDUSTRY_OUTREACH_PIPELINE_SLUG]
-            : [
+            : workspace.artistWorkspaceScope === 'campaign' ? [
                 INDUSTRY_OUTREACH_PIPELINE_SLUG,
                 COLLEGE_RADIO_CAMPAIGN_SLUG,
                 MERCH_PRODUCT_BUILDER_SLUG,
-              ]
+              ] : []
           const { activated } = ensureDefaultWorkflowActivations(workspace.rootPath, newDefaults)
           if (activated > 0) {
             sessionLog.info(`[workflows] Activated ${activated} new default workflow(s) in ${workspace.name}`)

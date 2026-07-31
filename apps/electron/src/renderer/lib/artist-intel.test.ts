@@ -10,6 +10,7 @@ import {
   emptyArtistIntelReport,
   isValidYouTubeChannelUrl,
   parseArtistIntelConfigDocResult,
+  parseArtistIntelReportDocResult,
   serializeArtistIntelConfigBody,
 } from './artist-intel'
 
@@ -115,5 +116,31 @@ describe('artist-intel', () => {
     expect(next.runs).toHaveLength(2)
     expect(next.runs[0].sessionId).toBe('s2')
     expect(next.runs[1].sessionId).toBe('s1')
+  })
+
+  test('retains processed video counts in completed report history', () => {
+    const result = parseArtistIntelReportDocResult(makeDoc([
+      '```json',
+      JSON.stringify({
+        version: 1,
+        status: 'ready',
+        sourceCount: 5,
+        videoCount: 4,
+        nuggetCount: 9,
+        runs: [{
+          id: 'run-1',
+          status: 'ready',
+          generatedAt: '2026-07-30T00:00:00.000Z',
+          videoCount: 4,
+          nuggetCount: 9,
+        }],
+        updatedAt: '2026-07-30T00:00:00.000Z',
+      }),
+      '```',
+    ].join('\n')))
+
+    expect(result.ok).toBe(true)
+    expect(result.report.videoCount).toBe(4)
+    expect(result.report.runs[0]?.videoCount).toBe(4)
   })
 })

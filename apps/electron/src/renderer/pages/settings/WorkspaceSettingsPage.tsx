@@ -104,6 +104,7 @@ export default function WorkspaceSettingsPage() {
   const [permissionMode, setPermissionMode] = useState<PermissionMode>('ask')
   const [workingDirectory, setWorkingDirectory] = useState('')
   const [localMcpEnabled, setLocalMcpEnabled] = useState(true)
+  const [artistWorkspaceScope, setArtistWorkspaceScope] = useState<'hq' | 'campaign' | 'general'>('general')
   const [isLoadingWorkspace, setIsLoadingWorkspace] = useState(true)
 
   // Default sources state
@@ -129,6 +130,7 @@ export default function WorkspaceSettingsPage() {
         if (settings) {
           setWsName(settings.name || '')
           setWsNameEditing(settings.name || '')
+          setArtistWorkspaceScope(settings.artistWorkspaceScope ?? (isHQWorkspace ? 'hq' : 'general'))
           setPermissionMode(settings.permissionMode || 'ask')
           setWorkingDirectory(settings.workingDirectory || '')
           setLocalMcpEnabled(settings.localMcpEnabled ?? true)
@@ -186,7 +188,7 @@ export default function WorkspaceSettingsPage() {
     }
 
     loadWorkspaceSettings()
-  }, [activeWorkspaceId])
+  }, [activeWorkspaceId, isHQWorkspace])
 
   // Subscribe to live source changes (additions/removals)
   useEffect(() => {
@@ -226,6 +228,15 @@ export default function WorkspaceSettingsPage() {
     },
     [activeWorkspaceId, t]
   )
+
+  const handleWorkspaceTypeChange = useCallback(async (value: string) => {
+    if (value !== 'campaign' && value !== 'general') return
+    const saved = await updateWorkspaceSetting('artistWorkspaceScope', value)
+    if (!saved) return
+    setArtistWorkspaceScope(value)
+    await Promise.resolve(onRefreshWorkspaces?.())
+    toast.success(value === 'campaign' ? 'Workspace set as an artist campaign' : 'Workspace set as general')
+  }, [onRefreshWorkspaces, updateWorkspaceSetting])
 
   // Workspace icon upload handler
   const handleIconUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -420,6 +431,21 @@ export default function WorkspaceSettingsPage() {
                       </button>
                     )
                   }
+                />
+                <SettingsMenuSelectRow
+                  label="Workspace type"
+                  description={isHQWorkspace
+                    ? 'Global artist context and operations.'
+                    : 'Controls whether this workspace appears as a campaign in Artist HQ.'}
+                  value={artistWorkspaceScope}
+                  onValueChange={handleWorkspaceTypeChange}
+                  disabled={isHQWorkspace}
+                  options={isHQWorkspace ? [
+                    { value: 'hq', label: 'Artist HQ', description: 'The protected global artist workspace.' },
+                  ] : [
+                    { value: 'general', label: 'General', description: 'Labs, operations, trading, and non-release projects.' },
+                    { value: 'campaign', label: 'Artist campaign', description: 'A release, rollout, single, album, or tour.' },
+                  ]}
                 />
                 <SettingsRow
                   label={t("settings.workspace.icon")}

@@ -67,7 +67,9 @@ export function registerServerHandlers(
       if (!rootExistedBeforeAdd) {
         const defaultSlugs = workspace.artistWorkspaceScope === 'hq'
           ? HQ_DEFAULT_WORKFLOW_SLUGS
-          : CAMPAIGN_DEFAULT_WORKFLOW_SLUGS
+          : workspace.artistWorkspaceScope === 'campaign'
+            ? CAMPAIGN_DEFAULT_WORKFLOW_SLUGS
+            : []
         for (const slug of defaultSlugs) {
           try { setWorkflowActive(workspace.rootPath, slug, true) } catch { /* ignore */ }
         }

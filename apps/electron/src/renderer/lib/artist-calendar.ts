@@ -162,6 +162,25 @@ export function calendarEventsForWorkspace(events: ArtistCalendarEvent[], worksp
   return events.filter((event) => event.workspaceLinks.some((link) => link.workspaceId === workspaceId))
 }
 
+export function calendarNeedsGoogleSync(events: ArtistCalendarEvent[]): boolean {
+  return events.some((event) => {
+    if (event.deletedAt) return Boolean(event.google?.eventId)
+    if (!event.google?.eventId) return true
+    return event.google.syncStatus !== 'synced'
+  })
+}
+
+export function shouldAutoSyncGoogleCalendar(
+  calendar: ArtistCalendar,
+  lastAttemptAt: number | null,
+  now = Date.now(),
+): boolean {
+  if (calendar.events.length === 0) return false
+  const dirty = calendarNeedsGoogleSync(calendar.events)
+  const cooldown = dirty ? 60_000 : 6 * 60 * 60 * 1000
+  return !lastAttemptAt || now - lastAttemptAt >= cooldown
+}
+
 export function attachPersonToCalendarEvent(event: ArtistCalendarEvent, personId: string): ArtistCalendarEvent {
   return {
     ...event,

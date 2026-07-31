@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { ScheduledWorkOrder } from '@craft-agent/shared/scheduled-work'
 import type { AutomationListItem } from '@/components/automations/types'
 import type { ArtistCalendarEvent } from '@/lib/artist-calendar'
+import type { SessionMeta } from '@/atoms/sessions'
 import {
   buildHqProjectColumns,
   buildHqThisWeekItems,
@@ -50,6 +51,38 @@ describe('Artist HQ home feed', () => {
 
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ kind: 'scheduled-work', status: 'running' })
+  })
+
+  test('includes live manually launched agent sessions but excludes ordinary chats', () => {
+    const sessions: SessionMeta[] = [
+      {
+        id: 'agent-run',
+        workspaceId: 'hq',
+        name: 'Manual Spotify Snapshot',
+        isProcessing: true,
+        launchReceipt: {
+          createdAt: Date.now(),
+          origin: 'automation',
+          summary: 'Manual Spotify Snapshot',
+          agent: { slug: 'spotify-analyst', name: 'Spotify Analyst' },
+          automation: { name: 'Manual Spotify Snapshot' },
+          config: {},
+          injected: { skills: [], sources: [], contextDocs: [] },
+        },
+      },
+      { id: 'chat', workspaceId: 'hq', name: 'Normal chat', isProcessing: true },
+    ]
+
+    const items = buildHqWorkerItems([], [], sessions)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      id: 'session:agent-run',
+      title: 'Manual Spotify Snapshot',
+      detail: '@spotify-analyst',
+      kind: 'session',
+      status: 'running',
+    })
   })
 
   test('sorts scheduled work by the displayed timezone rather than its UTC timestamp', () => {

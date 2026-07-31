@@ -6,6 +6,7 @@
 export type {
   WorkspaceInfo,
   Workspace,
+  ArtistWorkspaceScope,
   RemoteServerConfig,
   McpAuthType,
   AuthType,

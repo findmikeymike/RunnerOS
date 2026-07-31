@@ -68,10 +68,15 @@ export function WorkspaceCreationScreen({
     }
   }, [isCreating, onClose])
 
-  const handleCreateWorkspace = useCallback(async (folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }) => {
+  const handleCreateWorkspace = useCallback(async (
+    folderPath: string,
+    name: string,
+    remoteServer?: { url: string; token: string; remoteWorkspaceId: string },
+    artistWorkspaceScope?: 'campaign' | 'general',
+  ) => {
     setIsCreating(true)
     try {
-      const workspace = await window.electronAPI.createWorkspace(folderPath, name, remoteServer)
+      const workspace = await window.electronAPI.createWorkspace(folderPath, name, remoteServer, artistWorkspaceScope)
       onWorkspaceCreated(workspace)
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
@@ -111,7 +116,7 @@ export function WorkspaceCreationScreen({
         return (
           <AddWorkspaceStep_CreateNew
             onBack={() => setStep('choice')}
-            onCreate={handleCreateWorkspace}
+            onCreate={(folderPath, name, purpose) => handleCreateWorkspace(folderPath, name, undefined, purpose)}
             isCreating={isCreating}
           />
         )

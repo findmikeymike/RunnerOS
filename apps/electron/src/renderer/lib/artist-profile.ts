@@ -10,6 +10,7 @@ export interface ArtistProfile {
   themes?: string
   sound?: string
   visualWorld?: string
+  bannerImagePath?: string
   brandWords?: string
   audience?: string
   similarArtists?: string
@@ -121,6 +122,7 @@ function normalizeProfile(profile: Partial<ArtistProfile>): ArtistProfile {
     themes: clean(profile.themes),
     sound: clean(profile.sound),
     visualWorld: clean(profile.visualWorld),
+    bannerImagePath: clean(profile.bannerImagePath),
     brandWords: clean(profile.brandWords),
     audience: clean(profile.audience),
     similarArtists: clean(profile.similarArtists),

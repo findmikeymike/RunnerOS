@@ -9,9 +9,11 @@ import {
   ExternalLink,
   FileText,
   FolderKanban,
+  ImagePlus,
   MessageSquareText,
   Music2,
   Pencil,
+  Play,
   Plus,
   RefreshCw,
   Radio,
@@ -34,6 +36,7 @@ import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
 import { collectFinalRows, FinalsWidget } from '@/components/outputs/FinalsWidget'
 import { skillsAtom } from '@/atoms/skills'
 import { sourcesAtom } from '@/atoms/sources'
+import { sessionMetaMapAtom } from '@/atoms/sessions'
 import {
   dedupeAgentsBySlug,
   proactiveHqModeStorageKey,
@@ -60,6 +63,7 @@ import {
   HQ_STATE_CONTEXT_SLUG,
   parseHqStateOfPlay,
   type HqStateOfPlay,
+  type HqStateAttentionItem,
   type HqRecommendationDetail,
   type HqStateEntityRef,
   type HqStateRouteHint,
@@ -70,6 +74,7 @@ import {
   createCalendarEvent,
   parseArtistCalendarDocResult,
   serializeArtistCalendarBody,
+  shouldAutoSyncGoogleCalendar,
   type ArtistCalendar,
   type ArtistCalendarEvent,
 } from '@/lib/artist-calendar'
@@ -112,7 +117,11 @@ import {
 } from '@/lib/artist-voice'
 import {
   ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG,
+  buildArtistSpotifyStreamHistory,
   parseArtistSpotifySnapshotDocResult,
+  parseArtistSpotifySnapshotJsonResult,
+  type ArtistSpotifyHistoryPoint,
+  type ArtistSpotifySnapshot,
 } from '@/lib/artist-spotify'
 import {
   ARTIST_INTEL_CONFIG_CONTEXT_SLUG,
@@ -129,6 +138,7 @@ import {
   serializeArtistIntelConfigBody,
   serializeArtistIntelReportBody,
   type ArtistIntelConfig,
+  type ArtistIntelRun,
   type ArtistIntelSource,
   YOUTUBE_INTELLIGENCE_AGENT_SLUG,
 } from '@/lib/artist-intel'
@@ -257,10 +267,12 @@ export function ArtistHQHome({
 }: ArtistHQHomeProps) {
   const {
     activeAgents: shellActiveAgents = [],
+    workspaces,
   } = useAppShellContext()
   const { activeAgents: workspaceActiveAgents, allAgents } = useAgents(workspaceId)
   const skills = useAtomValue(skillsAtom)
   const sources = useAtomValue(sourcesAtom)
+  const sessionMetaMap = useAtomValue(sessionMetaMapAtom)
   const [tab, setTab] = React.useState<ArtistHQTab>(() => readTabFromHash())
   const [query, setQuery] = React.useState('')
   const [draftOpen, setDraftOpen] = React.useState(false)
@@ -281,12 +293,17 @@ export function ArtistHQHome({
   const [voiceDraft, setVoiceDraft] = React.useState<VoiceDraft>(emptyVoiceDraft)
   const [automations, setAutomations] = React.useState<AutomationListItem[]>([])
   const [spotifySyncBusy, setSpotifySyncBusy] = React.useState(false)
+  const [spotifyHistory, setSpotifyHistory] = React.useState<ArtistSpotifyHistoryPoint[]>([])
   const [googleCalendarBusy, setGoogleCalendarBusy] = React.useState(false)
   const [googleCalendarConnected, setGoogleCalendarConnected] = React.useState(false)
+  const [bannerImageDataUrl, setBannerImageDataUrl] = React.useState<string | null>(null)
+  const [bannerImageBusy, setBannerImageBusy] = React.useState(false)
   const [proactiveMode, setProactiveMode] = React.useState(() => readBooleanLocalStorage(proactiveHqModeStorageKey(workspaceId), false))
   const [homeDetailsOpen, setHomeDetailsOpen] = React.useState(() => readBooleanLocalStorage(hqHomeDetailsStorageKey(workspaceId), false))
+  const [homeUtilitiesOpen, setHomeUtilitiesOpen] = React.useState(() => readBooleanLocalStorage(hqHomeUtilitiesStorageKey(workspaceId), false))
   const [hqRouteBusy, setHqRouteBusy] = React.useState(false)
   const [hqRefreshBusy, setHqRefreshBusy] = React.useState(false)
+  const googleAutoSyncInFlightRef = React.useRef(false)
   const { docs, loading, upsert, refresh: refreshContext } = useWorkspaceContext(workspaceId)
   const { outputs, loading: outputsLoading } = useOutputs(workspaceId)
   const profileResult = React.useMemo(
@@ -294,6 +311,10 @@ export function ArtistHQHome({
     [docs],
   )
   const profile = profileResult.profile
+  const workspaceRootPath = React.useMemo(
+    () => workspaces.find((workspace) => workspace.id === workspaceId)?.rootPath ?? null,
+    [workspaces, workspaceId],
+  )
   const profilePercent = profileCompletion(profile)
   const voiceResult = React.useMemo(
     () => parseArtistVoiceDocResult(docs.find((doc) => doc.slug === ARTIST_VOICE_CONTEXT_SLUG)),
@@ -360,6 +381,11 @@ export function ArtistHQHome({
       .find((agent) => agent.slug === YOUTUBE_INTELLIGENCE_AGENT_SLUG),
     [allAgents, shellActiveAgents, workspaceActiveAgents],
   )
+  const spotifyAnalyst = React.useMemo(
+    () => [...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]
+      .find((agent) => agent.slug === 'spotify-analyst'),
+    [allAgents, shellActiveAgents, workspaceActiveAgents],
+  )
   const availableAgents = React.useMemo(
     () => dedupeAgentsBySlug([...shellActiveAgents, ...workspaceActiveAgents, ...allAgents]),
     [allAgents, shellActiveAgents, workspaceActiveAgents],
@@ -380,16 +406,20 @@ export function ArtistHQHome({
     () => buildHqThisWeekItems(activeCalendarEvents, scheduledWorkResult.work.items),
     [activeCalendarEvents, scheduledWorkResult.work.items],
   )
+  const workspaceWorkerSessions = React.useMemo(
+    () => [...sessionMetaMap.values()].filter((session) => session.workspaceId === workspaceId),
+    [sessionMetaMap, workspaceId],
+  )
   const workerItems = React.useMemo(
-    () => buildHqWorkerItems(automations, scheduledWorkResult.work.items),
-    [automations, scheduledWorkResult.work.items],
+    () => buildHqWorkerItems(automations, scheduledWorkResult.work.items, workspaceWorkerSessions),
+    [automations, scheduledWorkResult.work.items, workspaceWorkerSessions],
   )
   const projectColumns = React.useMemo(
     () => buildHqProjectColumns(campaignWorkspaces, scheduledWorkResult.work.items),
     [campaignWorkspaces, scheduledWorkResult.work.items],
   )
-  const hqFinalCount = React.useMemo(
-    () => collectFinalRows(outputs, 'hq').length,
+  const hqFinalRows = React.useMemo(
+    () => collectFinalRows(outputs, 'hq'),
     [outputs],
   )
   const selectedDateEvents = React.useMemo(
@@ -424,6 +454,52 @@ export function ArtistHQHome({
   React.useEffect(() => {
     writeBooleanLocalStorage(hqHomeDetailsStorageKey(workspaceId), homeDetailsOpen)
   }, [homeDetailsOpen, workspaceId])
+
+  React.useEffect(() => {
+    setHomeUtilitiesOpen(readBooleanLocalStorage(hqHomeUtilitiesStorageKey(workspaceId), false))
+  }, [workspaceId])
+
+  React.useEffect(() => {
+    writeBooleanLocalStorage(hqHomeUtilitiesStorageKey(workspaceId), homeUtilitiesOpen)
+  }, [homeUtilitiesOpen, workspaceId])
+
+  React.useEffect(() => {
+    let cancelled = false
+    if (!workspaceRootPath) {
+      setSpotifyHistory([])
+      return
+    }
+
+    const snapshotsPath = `${workspaceRootPath}/data/spotify/snapshots`
+    void window.electronAPI.searchFiles(snapshotsPath, '.json')
+      .then(async (files) => {
+        const snapshotFiles = files
+          .filter((file) => file.type === 'file' && /^\d{4}-\d{2}-\d{2}(?:-(?:s4a|web-api))?\.json$/.test(file.name))
+          .sort((left, right) => left.name.localeCompare(right.name))
+          .slice(-24)
+        const parsed = await Promise.all(snapshotFiles.map(async (file) => {
+          try {
+            const result = parseArtistSpotifySnapshotJsonResult(await window.electronAPI.readFile(file.path))
+            return result.ok ? result.snapshot : null
+          } catch {
+            return null
+          }
+        }))
+        if (cancelled) return
+        const snapshots = parsed.filter((snapshot): snapshot is ArtistSpotifySnapshot => Boolean(snapshot))
+        if (spotifySnapshot) snapshots.push(spotifySnapshot)
+        setSpotifyHistory(buildArtistSpotifyStreamHistory(snapshots))
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSpotifyHistory(spotifySnapshot ? buildArtistSpotifyStreamHistory([spotifySnapshot]) : [])
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [spotifySnapshot, workspaceRootPath])
 
   const refreshGoogleCalendarStatus = React.useCallback(async () => {
     try {
@@ -495,6 +571,31 @@ export function ArtistHQHome({
   }, [calendarResult.ok, refreshContext, refreshGoogleCalendarStatus, workspaceId])
 
   React.useEffect(() => {
+    if (!googleCalendarConnected || !calendarResult.ok || googleAutoSyncInFlightRef.current) return
+    const storageKey = googleCalendarAutoSyncStorageKey(workspaceId)
+    const storedAttempt = Number(window.localStorage.getItem(storageKey))
+    const lastAttemptAt = Number.isFinite(storedAttempt) && storedAttempt > 0 ? storedAttempt : null
+    if (!shouldAutoSyncGoogleCalendar(calendar, lastAttemptAt)) return
+
+    googleAutoSyncInFlightRef.current = true
+    window.localStorage.setItem(storageKey, String(Date.now()))
+    void window.electronAPI.syncGoogleCalendar(workspaceId)
+      .then(async (result) => {
+        if (!result.ok && /not connected/i.test(result.error ?? '')) {
+          setGoogleCalendarConnected(false)
+          return
+        }
+        if (result.ok) await refreshContext()
+      })
+      .catch(() => {
+        // Background refresh stays silent; the explicit Sync action reports errors.
+      })
+      .finally(() => {
+        googleAutoSyncInFlightRef.current = false
+      })
+  }, [calendar, calendarResult.ok, googleCalendarConnected, refreshContext, workspaceId])
+
+  React.useEffect(() => {
     const onHashChange = () => setTab(readTabFromHash())
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
@@ -508,6 +609,21 @@ export function ArtistHQHome({
   React.useEffect(() => {
     setProfileDraft(profileToDraft(profile))
   }, [profile])
+
+  React.useEffect(() => {
+    let cancelled = false
+    setBannerImageDataUrl(null)
+    if (!profile.bannerImagePath || !workspaceRootPath) return
+    const path = joinWorkspacePath(workspaceRootPath, profile.bannerImagePath)
+    window.electronAPI.readFileDataUrl(path)
+      .then((dataUrl) => {
+        if (!cancelled && dataUrl.startsWith('data:image/')) setBannerImageDataUrl(dataUrl)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [profile.bannerImagePath, workspaceRootPath])
 
   React.useEffect(() => {
     setVoiceDraft(voiceToDraft(voice))
@@ -602,6 +718,69 @@ export function ArtistHQHome({
       toast.error(err instanceof Error ? err.message : String(err))
     }
   }, [profileDraft, profileResult, upsert])
+
+  const saveBannerImagePath = React.useCallback(async (bannerImagePath?: string) => {
+    if (!profileResult.ok) {
+      throw new Error(`${profileResult.error} Open Workspace Context to recover it before changing the banner.`)
+    }
+    await upsert({
+      slug: ARTIST_PROFILE_CONTEXT_SLUG,
+      metadata: artistProfileMetadata(),
+      body: serializeArtistProfileBody({
+        ...profile,
+        bannerImagePath,
+        updatedAt: new Date().toISOString(),
+      }),
+    })
+  }, [profile, profileResult, upsert])
+
+  const chooseBannerImage = React.useCallback(async () => {
+    if (!workspaceRootPath) {
+      toast.error('This HQ does not have a local workspace folder.')
+      return
+    }
+    setBannerImageBusy(true)
+    try {
+      const paths = await window.electronAPI.chooseMissionAssetFiles(workspaceId, 'cover-art')
+      const sourcePath = paths[0]
+      if (!sourcePath) return
+      if (!isPreviewableBannerImage(sourcePath)) {
+        toast.error('Choose a PNG, JPG, JPEG, or WebP image.')
+        return
+      }
+      const result = await window.electronAPI.importMissionAssets(workspaceId, [sourcePath], { kindHint: 'cover-art' })
+      const imported = result.imported[0]
+      if (!imported?.relativePath) {
+        throw new Error(result.skipped[0]?.reason ?? 'The image could not be copied into this HQ.')
+      }
+      const dataUrl = await window.electronAPI.readFileDataUrl(joinWorkspacePath(workspaceRootPath, imported.relativePath))
+      if (!dataUrl.startsWith('data:image/')) throw new Error('The selected file is not a previewable image.')
+      await saveBannerImagePath(imported.relativePath)
+      setBannerImageDataUrl(dataUrl)
+      toast.success(profile.bannerImagePath ? 'HQ banner replaced' : 'HQ banner added')
+    } catch (error) {
+      toast.error('Could not update the HQ banner', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBannerImageBusy(false)
+    }
+  }, [profile.bannerImagePath, saveBannerImagePath, workspaceId, workspaceRootPath])
+
+  const removeBannerImage = React.useCallback(async () => {
+    setBannerImageBusy(true)
+    try {
+      await saveBannerImagePath(undefined)
+      setBannerImageDataUrl(null)
+      toast.success('HQ banner removed')
+    } catch (error) {
+      toast.error('Could not remove the HQ banner', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setBannerImageBusy(false)
+    }
+  }, [saveBannerImagePath])
 
   const saveVoice = React.useCallback(async () => {
     if (!voiceResult.ok) {
@@ -852,6 +1031,36 @@ export function ArtistHQHome({
       setSpotifySyncBusy(false)
     }
   }, [refreshAutomations, spotifySyncAutomation, workspaceId])
+
+  const runSpotifyPulse = React.useCallback(async () => {
+    if (!spotifyAnalyst) {
+      toast.error('Spotify Analyst is not active in this workspace')
+      return
+    }
+    setSpotifySyncBusy(true)
+    try {
+      const result = await window.electronAPI.testAutomation({
+        workspaceId,
+        automationName: 'Manual Spotify Snapshot',
+        actions: [{
+          type: 'prompt',
+          agentSlug: 'spotify-analyst',
+          prompt: createSpotifySyncPrompt(),
+        }],
+        permissionMode: 'safe',
+        labels: ['spotify', 'artist-hq', 'manual'],
+      })
+      const action = result.actions.find((candidate) => candidate.type === 'prompt')
+      if (!action?.success) throw new Error(action?.stderr || 'Spotify snapshot did not start.')
+      toast.success('Spotify Pulse started')
+    } catch (error) {
+      toast.error('Failed to start Spotify Pulse', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      setSpotifySyncBusy(false)
+    }
+  }, [spotifyAnalyst, workspaceId])
 
   const submitCalendarWork = React.useCallback(async (draft: ScheduledWorkComposerDraft) => {
     if (draft.type === 'event') {
@@ -1124,47 +1333,70 @@ export function ArtistHQHome({
   return (
     <div className="h-full overflow-y-auto bg-[#050505] text-foreground">
       <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-3 px-5 py-4 xl:px-8 xl:py-5">
-        {tab === 'home' ? (
-          <section className="rounded-[14px] border border-white/[0.06] bg-[#0C0D0F] px-4 py-3.5 shadow-minimal">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.18em] text-orange-200/62">
-                  <Sparkles className="h-3 w-3" />
-                  Artist HQ
-                </div>
-                <div className="mt-1.5 flex min-w-0 items-baseline gap-3">
-                  <h1 className="truncate text-2xl font-semibold tracking-tight text-white/92">{artistName}</h1>
-                  <p className="hidden truncate text-xs text-white/34 lg:block">Career command center</p>
-                </div>
+        <section className="relative min-h-[230px] overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A]">
+          {tab === 'home' && bannerImageDataUrl ? (
+            <>
+              <img
+                src={bannerImageDataUrl}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover"
+              />
+              <div className="absolute inset-0 bg-black/55" />
+              <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/55 to-transparent" />
+            </>
+          ) : (
+            <>
+              <div className={cn('absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full blur-[110px]', headerProps.orb1)} />
+              <div className={cn('absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full blur-[120px]', headerProps.orb2)} />
+            </>
+          )}
+          <div className="relative z-10 flex min-h-[230px] flex-col justify-between p-6 lg:p-8">
+            <div className="flex items-start justify-between gap-4">
+              <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.08] bg-black/25 px-3 py-1.5 pr-4 backdrop-blur-md">
+                {headerProps.icon}
+                <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/72">{headerProps.label}</span>
               </div>
-              <div className="min-w-0 md:max-w-[44%] md:text-right">
-                <p className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/30">Next</p>
-                <p className="mt-1 truncate text-xs font-medium text-white/68">{nextDate}</p>
-              </div>
-            </div>
-          </section>
-        ) : (
-          <section className="relative overflow-hidden rounded-[24px] border border-white/[0.05] bg-[#0A0A0A] p-6 lg:p-8">
-            <div className={cn('absolute -left-[18%] -top-[50%] h-[520px] w-[520px] rounded-full blur-[110px]', headerProps.orb1)} />
-            <div className={cn('absolute -bottom-[50%] -right-[12%] h-[520px] w-[520px] rounded-full blur-[120px]', headerProps.orb2)} />
-            <div className="relative z-10">
-              <div className="flex items-start justify-between gap-4">
-                <div className="inline-flex items-center gap-2.5 rounded-full border border-white/[0.05] bg-white/[0.02] px-3 py-1.5 pr-4">
-                  {headerProps.icon}
-                  <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/70">{headerProps.label}</span>
-                </div>
-              </div>
-              <div className="mt-8 max-w-3xl">
-                <h1 className="text-4xl font-medium tracking-tighter text-white/90 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
-                  {headerProps.title}
-                </h1>
-                <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                  {headerProps.description}
-                </p>
+              <div className="hidden min-w-0 text-right sm:block">
+                <p className="text-[10px] font-medium uppercase tracking-[0.2em] text-white/38">Next</p>
+                <p className="mt-1.5 max-w-56 line-clamp-2 text-xs font-medium text-white/72">{nextDate}</p>
               </div>
             </div>
-          </section>
-        )}
+            <div className="max-w-3xl">
+              <h1 className="text-4xl font-medium tracking-tighter text-white/92 sm:text-5xl lg:text-[56px] lg:leading-[0.96]">
+                {headerProps.title}
+              </h1>
+              <p className="mt-3 max-w-3xl text-sm font-light leading-relaxed text-white/58">
+                {headerProps.description}
+              </p>
+            </div>
+          </div>
+          {tab === 'home' ? (
+            <div className="absolute bottom-4 right-4 z-20 flex items-center gap-1.5">
+              {bannerImageDataUrl ? (
+                <button
+                  type="button"
+                  onClick={removeBannerImage}
+                  disabled={bannerImageBusy}
+                  aria-label="Remove HQ banner"
+                  title="Remove HQ banner"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-white/[0.1] bg-black/35 text-white/48 backdrop-blur-md transition-colors hover:bg-black/55 hover:text-red-100/80 disabled:cursor-wait disabled:opacity-45"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                onClick={chooseBannerImage}
+                disabled={bannerImageBusy}
+                aria-label={bannerImageDataUrl ? 'Replace HQ banner' : 'Add HQ banner'}
+                title={bannerImageDataUrl ? 'Replace HQ banner' : 'Add HQ banner'}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-[8px] border border-white/[0.1] bg-black/35 text-white/58 backdrop-blur-md transition-colors hover:bg-black/55 hover:text-white/90 disabled:cursor-wait disabled:opacity-45"
+              >
+                <ImagePlus className="h-4 w-4" />
+              </button>
+            </div>
+          ) : null}
+        </section>
 
         {tab === 'home' && (
           <>
@@ -1182,54 +1414,6 @@ export function ArtistHQHome({
               onRefresh={refreshHqState}
             />
 
-            <HomeMetricStrip
-              thisWeekCount={thisWeekItems.length}
-              workerCount={workerItems.length}
-              attentionCount={hqState?.attention.length ?? 0}
-              finalCount={hqFinalCount}
-            />
-
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.35fr_0.85fr]">
-              <HomeOperationsCard
-                thisWeekItems={thisWeekItems}
-                workerItems={workerItems}
-              />
-              <PulseSummaryCard
-                spotifyValue={spotifyIsPublicApi
-                  ? formatMetric(spotifySnapshot?.metrics.popularity)
-                  : formatMetric(spotifySnapshot?.metrics.streams)}
-                spotifyMeta={spotifySnapshot ? spotifySnapshot.snapshotDate : 'Needs setup'}
-                spotifyActive={spotifySyncActive}
-                spotifyBusy={spotifySyncBusy}
-                intelValue={`${intelConfig.sources.length} channel${intelConfig.sources.length === 1 ? '' : 's'}`}
-                intelMeta={intelReport.generatedAt ? formatShortDate(intelReport.generatedAt) : 'Not run'}
-                intelActive={intelSyncActive}
-                intelBusy={intelBusy}
-                onToggleSpotify={toggleSpotifySync}
-                onToggleIntel={toggleIntelPulse}
-                onRunIntel={runIntelPulse}
-                intelRunDisabled={!youtubeIntelligenceAgent || intelConfig.sources.length === 0 || intelReport.status === 'queued'}
-                onShowDetails={() => setHomeDetailsOpen(true)}
-              />
-            </div>
-
-            <HQCard className="p-0">
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <SectionTitle icon={FolderKanban} title="Projects" meta="global" compact />
-              </div>
-              <div className="border-t border-white/[0.045] px-4 pb-4 pt-3">
-                <ProjectBoard
-                  columns={projectColumns}
-                  onOpenCampaignWorkspace={onOpenCampaignWorkspace ?? (
-                    primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
-                      ? () => onOpenPrimaryCampaignWorkspace()
-                      : undefined
-                  )}
-                  onOpenScheduledWork={() => { window.location.hash = '#artist-hq/calendar' }}
-                />
-              </div>
-            </HQCard>
-
             <section className="rounded-[12px] border border-white/[0.05] bg-[#090A0C]">
               <button
                 type="button"
@@ -1245,44 +1429,18 @@ export function ArtistHQHome({
                 </span>
               </button>
               {homeDetailsOpen ? (
-                <div id="hq-home-details" className="grid grid-cols-1 gap-3 border-t border-white/[0.05] p-3 lg:grid-cols-3">
-                  <HQCard>
-                    <div className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.04] pb-2.5">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Music2 className="h-3 w-3 shrink-0 text-white/40" />
-                        <h3 className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/48">Spotify Pulse</h3>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={toggleSpotifySync}
-                        disabled={spotifySyncBusy}
-                        className={cn(
-                          'inline-flex h-7 w-7 items-center justify-center rounded-[7px] border transition-colors',
-                          spotifySyncActive
-                            ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
-                            : 'border-white/[0.07] bg-white/[0.02] text-white/35 hover:text-white/65',
-                          spotifySyncBusy && 'cursor-wait opacity-60',
-                        )}
-                        aria-label={spotifySyncActive ? 'Pause weekly Spotify sync' : 'Enable weekly Spotify sync'}
-                      >
-                        <RefreshCw className={cn('h-3.5 w-3.5', spotifySyncBusy && 'animate-spin')} />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Metric label={spotifyIsPublicApi ? 'Popularity' : 'Streams'} value={spotifyIsPublicApi ? formatMetric(spotifySnapshot?.metrics.popularity) : formatMetric(spotifySnapshot?.metrics.streams)} />
-                      <Metric label={spotifyIsPublicApi ? 'Top track' : 'Listeners'} value={spotifyIsPublicApi ? spotifySnapshot?.tracks?.[0]?.name ?? '--' : formatMetric(spotifySnapshot?.metrics.listeners)} />
-                      <Metric label="Followers" value={formatMetric(spotifySnapshot?.metrics.followers)} />
-                      <Metric label={spotifyIsPublicApi ? 'Genres' : 'Top city'} value={spotifyIsPublicApi ? spotifySnapshot?.artist.genres?.[0] ?? '--' : spotifySnapshot?.geo?.topCities?.[0]?.city ?? '--'} />
-                    </div>
-                    <p className="mt-3 text-xs leading-5 text-white/38">
-                      {spotifySnapshot
-                        ? spotifyIsPublicApi
-                          ? 'Latest public Spotify API snapshot.'
-                          : `Latest ${spotifySnapshot.windowDays}-day Spotify for Artists snapshot.`
-                        : 'Run Spotify Analyst to create the first snapshot.'}
-                    </p>
-                    {!spotifyResult.ok ? <p className="mt-2 text-xs leading-5 text-red-100/65">{spotifyResult.error}</p> : null}
-                  </HQCard>
+                <div id="hq-home-details" className="grid grid-cols-1 items-start gap-3 border-t border-white/[0.05] p-3 lg:grid-cols-3">
+                  <SpotifyPulseCard
+                    snapshot={spotifySnapshot}
+                    history={spotifyHistory}
+                    publicApi={spotifyIsPublicApi}
+                    active={spotifySyncActive}
+                    busy={spotifySyncBusy}
+                    runDisabled={!spotifyAnalyst}
+                    error={spotifyResult.ok ? null : spotifyResult.error}
+                    onToggle={toggleSpotifySync}
+                    onRun={runSpotifyPulse}
+                  />
 
                   <IntelPulseCard
                     config={intelConfig}
@@ -1307,6 +1465,70 @@ export function ArtistHQHome({
                 </div>
               ) : null}
             </section>
+
+            <HomeWeekOverviewCard
+              thisWeekItems={thisWeekItems}
+              attentionItems={hqState?.attention ?? []}
+              finals={hqFinalRows}
+              finalsLoading={outputsLoading}
+              onOpenFinal={(outputId) => navigate(routes.view.output(outputId))}
+            />
+
+            <HQCard className="p-0">
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <SectionTitle icon={FolderKanban} title="Projects" meta="global" compact />
+              </div>
+              <div className="border-t border-white/[0.045] px-4 pb-4 pt-3">
+                <ProjectBoard
+                  columns={projectColumns}
+                  onOpenCampaignWorkspace={onOpenCampaignWorkspace ?? (
+                    primaryCampaignWorkspaceId && onOpenPrimaryCampaignWorkspace
+                      ? () => onOpenPrimaryCampaignWorkspace()
+                      : undefined
+                  )}
+                  onOpenScheduledWork={() => { window.location.hash = '#artist-hq/calendar' }}
+                />
+              </div>
+            </HQCard>
+
+            <section className="rounded-[12px] border border-white/[0.05] bg-[#090A0C]">
+              <button
+                type="button"
+                onClick={() => setHomeUtilitiesOpen((open) => !open)}
+                aria-expanded={homeUtilitiesOpen}
+                aria-controls="hq-home-utilities"
+                className="flex h-11 w-full items-center justify-between gap-3 px-4 text-left text-xs font-medium text-white/48 transition-colors hover:bg-white/[0.025] hover:text-white/72"
+              >
+                <span>Workers &amp; signals</span>
+                <span className="flex items-center gap-2 text-[9px] uppercase tracking-[0.14em] text-white/28">
+                  {workerItems.length} active
+                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', homeUtilitiesOpen && 'rotate-180')} />
+                </span>
+              </button>
+              {homeUtilitiesOpen ? (
+                <div id="hq-home-utilities" className="grid grid-cols-1 gap-3 border-t border-white/[0.05] p-3 xl:grid-cols-[1.2fr_0.8fr]">
+                  <WorkersSummaryCard workerItems={workerItems} />
+                  <PulseSummaryCard
+                    spotifyValue={spotifyIsPublicApi
+                      ? formatMetric(spotifySnapshot?.metrics.popularity)
+                      : formatMetric(spotifySnapshot?.metrics.streams)}
+                    spotifyMeta={spotifySnapshot ? spotifySnapshot.snapshotDate : 'Needs setup'}
+                    spotifyActive={spotifySyncActive}
+                    spotifyBusy={spotifySyncBusy}
+                    intelValue={`${intelConfig.sources.length} channel${intelConfig.sources.length === 1 ? '' : 's'}`}
+                    intelMeta={intelReport.generatedAt ? formatShortDate(intelReport.generatedAt) : 'Not run'}
+                    intelActive={intelSyncActive}
+                    intelBusy={intelBusy}
+                    onToggleSpotify={toggleSpotifySync}
+                    onToggleIntel={toggleIntelPulse}
+                    onRunIntel={runIntelPulse}
+                    intelRunDisabled={!youtubeIntelligenceAgent || intelConfig.sources.length === 0 || intelReport.status === 'queued'}
+                    onShowDetails={() => setHomeDetailsOpen(true)}
+                  />
+                </div>
+              ) : null}
+            </section>
+
           </>
         )}
 
@@ -1630,11 +1852,175 @@ function SectionTitle({
   )
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function SpotifyPulseCard({
+  snapshot,
+  history,
+  publicApi,
+  active,
+  busy,
+  runDisabled,
+  error,
+  onToggle,
+  onRun,
+}: {
+  snapshot: ArtistSpotifySnapshot | null
+  history: ArtistSpotifyHistoryPoint[]
+  publicApi: boolean
+  active: boolean
+  busy: boolean
+  runDisabled: boolean
+  error: string | null
+  onToggle: () => void
+  onRun: () => void
+}) {
+  const headlineLabel = publicApi ? 'Artist popularity' : 'Streams'
+  const headlineValue = publicApi ? snapshot?.metrics.popularity : snapshot?.metrics.streams
+  const popularity = publicApi && typeof headlineValue === 'number'
+    ? Math.max(0, Math.min(100, headlineValue))
+    : null
+  const sourceLabel = snapshot?.dataSource === 'spotify-web-api'
+    ? 'Public API'
+    : snapshot?.dataSource === 'spotify-for-artists-browser'
+      ? 'Spotify for Artists'
+      : snapshot?.dataSource === 'manual'
+        ? 'Manual'
+        : 'No snapshot'
+
   return (
-    <div className="rounded-[13px] border border-white/[0.045] bg-white/[0.018] p-3">
-      <div className="text-[9px] font-medium uppercase tracking-[0.14em] text-white/32">{label}</div>
-      <div title={value} className="mt-2 truncate text-lg font-medium text-white/80">{value}</div>
+    <HQCard className="overflow-hidden p-0">
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.05] px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1ED760]/10">
+            <Music2 className="h-3 w-3 text-[#1ED760]" />
+          </span>
+          <div>
+            <h3 className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">Spotify Pulse</h3>
+            <p className="mt-0.5 text-[9px] text-white/28">{sourceLabel}</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={busy || runDisabled}
+            title="Run Spotify Pulse now"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.025] text-white/42 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label="Run Spotify Pulse now"
+          >
+            <Play className="h-3 w-3 fill-current" />
+          </button>
+          <button
+            type="button"
+            onClick={onToggle}
+            disabled={busy}
+            title={active ? 'Pause weekly Spotify sync' : 'Enable weekly Spotify sync'}
+            className={cn(
+              'inline-flex h-7 w-7 items-center justify-center rounded-[7px] border transition-colors',
+              active
+                ? 'border-[#1ED760]/30 bg-[#1ED760]/10 text-[#1ED760]'
+                : 'border-white/[0.07] bg-white/[0.02] text-white/35 hover:text-white/65',
+              busy && 'cursor-wait opacity-60',
+            )}
+            aria-label={active ? 'Pause weekly Spotify sync' : 'Enable weekly Spotify sync'}
+          >
+            <RefreshCw className={cn('h-3.5 w-3.5', busy && 'animate-spin')} />
+          </button>
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="flex h-[160px] flex-col rounded-[14px] border border-[#1ED760]/10 bg-[linear-gradient(135deg,rgba(30,215,96,0.09),rgba(30,215,96,0.015)_58%,transparent)] p-4">
+          <div className="flex items-end justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-[#8DEFB0]/55">{headlineLabel}</p>
+              <p className="mt-1.5 truncate text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
+                {formatMetric(headlineValue)}
+              </p>
+            </div>
+            <p className="shrink-0 text-right text-[10px] leading-4 text-white/34">
+              {snapshot ? formatShortDate(snapshot.snapshotDate) : 'Awaiting data'}
+            </p>
+          </div>
+          {popularity !== null ? (
+            <SignalProgress value={popularity} tone="bg-[#1ED760]" label={`${Math.round(popularity)} of 100`} />
+          ) : (
+            <SpotifyPerformanceChart history={history} />
+          )}
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 divide-x divide-white/[0.05] rounded-[12px] border border-white/[0.045] bg-white/[0.015] py-3">
+          <SignalStat label="Listeners" value={formatMetric(snapshot?.metrics.listeners)} />
+          <SignalStat label="Followers" value={formatMetric(snapshot?.metrics.followers)} />
+          <SignalStat
+            label={publicApi ? 'Top genre' : 'Top city'}
+            value={publicApi
+              ? snapshot?.artist.genres?.[0] ?? '--'
+              : snapshot?.geo?.topCities?.[0]?.city ?? '--'}
+          />
+        </div>
+
+        {error ? <p className="mt-2 text-xs leading-5 text-red-100/65">{error}</p> : null}
+      </div>
+    </HQCard>
+  )
+}
+
+function SpotifyPerformanceChart({ history }: { history: ArtistSpotifyHistoryPoint[] }) {
+  const values = history.map((point) => point.streams)
+  const max = Math.max(1, ...values)
+
+  return (
+    <div className="mt-auto">
+      <div className="flex h-12 items-end gap-1.5" aria-label={history.length > 0 ? 'Historical Spotify streams' : 'No Spotify stream history yet'}>
+        {history.length > 0 ? history.map((point) => (
+          <span
+            key={point.date}
+            title={`${formatShortDate(point.date)}: ${formatMetric(point.streams)} streams`}
+            className="min-w-0 flex-1 rounded-t-[3px] bg-[#1ED760]/55"
+            style={{ height: `${Math.max(14, (point.streams / max) * 100)}%` }}
+          />
+        )) : (
+          <span className="mb-1 text-[9px] text-white/28">Run twice to build a trend</span>
+        )}
+      </div>
+      {history.length > 0 ? (
+        <div className="mt-2 flex items-center justify-between text-[9px] text-white/24">
+          <span>{formatShortDate(history[0]!.date)}</span>
+          <span>{history.length} snapshot{history.length === 1 ? '' : 's'}</span>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+function SignalStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 px-3 first:pl-3 last:pr-3">
+      <p className="text-[8px] font-medium uppercase tracking-[0.13em] text-white/28">{label}</p>
+      <p title={value} className="mt-1.5 truncate text-[13px] font-medium text-white/72">{value}</p>
+    </div>
+  )
+}
+
+function SignalProgress({
+  value,
+  label,
+  tone,
+}: {
+  value: number
+  label: string
+  tone: string
+}) {
+  const normalized = Math.max(0, Math.min(100, value))
+  return (
+    <div className="mt-auto">
+      <div className="mb-1.5 flex items-center justify-between text-[9px] text-white/34">
+        <span>{label}</span>
+        <span>{Math.round(normalized)}%</span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-white/[0.07]">
+        <div className={cn('h-full rounded-full', tone)} style={{ width: `${normalized}%` }} />
+      </div>
     </div>
   )
 }
@@ -2108,6 +2494,58 @@ function Pill({ label, muted }: { label: string; muted?: boolean }) {
   )
 }
 
+function IntelActivityChart({ runs }: { runs: ArtistIntelRun[] }) {
+  const recentRuns = runs.slice(0, 8).reverse()
+  const values = recentRuns.map((run) => run.nuggetCount ?? run.videoCount ?? 1)
+  const max = Math.max(1, ...values)
+
+  if (recentRuns.length === 0) {
+    return (
+      <div className="mt-auto">
+        <div className="flex h-12 items-end gap-1.5" aria-label="No Intel Pulse runs yet">
+          {[20, 34, 27, 48, 31, 56, 39, 46].map((height, index) => (
+            <span
+              key={`${height}-${index}`}
+              className="min-w-0 flex-1 rounded-t-[3px] bg-white/[0.055]"
+              style={{ height: `${height}%` }}
+            />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-auto">
+      <div className="flex h-12 items-end gap-1.5" aria-label={`Intel Pulse activity across ${recentRuns.length} recent runs`}>
+        {recentRuns.map((run, index) => {
+          const value = values[index] ?? 1
+          const height = Math.max(14, (value / max) * 100)
+          return (
+            <span
+              key={run.id}
+              title={`${formatShortDate(run.generatedAt)} · ${value} ${run.nuggetCount !== undefined ? 'nuggets' : run.videoCount !== undefined ? 'videos' : 'run'}`}
+              className={cn(
+                'min-w-0 flex-1 rounded-t-[3px]',
+                run.status === 'ready'
+                  ? 'bg-orange-300/70'
+                  : run.status === 'failed'
+                    ? 'bg-red-300/60'
+                    : 'bg-white/20',
+              )}
+              style={{ height: `${height}%` }}
+            />
+          )
+        })}
+      </div>
+      <div className="mt-2 flex items-center justify-between text-[9px] text-white/24">
+        <span>{formatShortDate(recentRuns[0]?.generatedAt ?? '')}</span>
+        <span>{formatShortDate(recentRuns[recentRuns.length - 1]?.generatedAt ?? '')}</span>
+      </div>
+    </div>
+  )
+}
+
 function IntelPulseCard({
   config,
   report,
@@ -2131,6 +2569,9 @@ function IntelPulseCard({
   onRun: () => void
   onEdit: () => void
 }) {
+  const latestRun = report.runs[0]
+  const videoCount = report.videoCount ?? latestRun?.videoCount
+  const nuggetCount = report.nuggetCount ?? latestRun?.nuggetCount
   const latestLabel = report.generatedAt ? formatShortDate(report.generatedAt) : 'not run'
   const running = report.status === 'queued'
   const statusLabel = report.status === 'queued'
@@ -2142,27 +2583,59 @@ function IntelPulseCard({
         : config.enabled ? scheduled ? 'Scheduled' : 'Manual' : 'Off'
 
   return (
-    <HQCard>
-      <div className="mb-3 flex items-center justify-between gap-3 border-b border-white/[0.04] pb-2.5">
+    <HQCard className="overflow-hidden p-0">
+      <div className="flex items-center justify-between gap-3 border-b border-white/[0.05] px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Radio className="h-3 w-3 shrink-0 text-white/40" />
-          <h3 className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-white/48">
-            Intel Pulse
-          </h3>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="text-[10px] font-medium uppercase tracking-[0.12em] text-white/24">
-            {statusLabel}
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-orange-300/10">
+            <Radio className="h-3 w-3 text-orange-200/75" />
           </span>
+          <div>
+            <h3 className="truncate text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">Intel Pulse</h3>
+            <p className="mt-0.5 text-[9px] text-white/28">{statusLabel}</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {report.outputId || report.sessionId ? (
+            <button
+              type="button"
+              onClick={() => report.outputId
+                ? navigate(routes.view.output(report.outputId))
+                : navigate(routes.view.allSessions(report.sessionId!))}
+              title="Open latest Intel report"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:text-white/65"
+              aria-label="Open latest Intel report"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onEdit}
+            title="Edit Intel channels"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:text-white/65"
+            aria-label="Edit Intel channels"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={busy || running || !agentReady || config.sources.length === 0}
+            title="Run Intel Pulse now"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-[7px] border border-white/[0.07] bg-white/[0.025] text-white/42 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:cursor-not-allowed disabled:opacity-35"
+            aria-label="Run Intel Pulse now"
+          >
+            <Play className="h-3 w-3 fill-current" />
+          </button>
           <button
             type="button"
             onClick={onToggle}
             disabled={busy}
             title={config.enabled ? 'Pause Intel Pulse' : 'Activate Intel Pulse'}
             className={cn(
-              'inline-flex h-6 w-6 items-center justify-center rounded-full border transition-colors',
+              'inline-flex h-7 w-7 items-center justify-center rounded-[7px] border transition-colors',
               config.enabled
-                ? 'border-emerald-400/35 bg-emerald-500/12 text-emerald-300'
+                ? 'border-orange-300/30 bg-orange-300/10 text-orange-200/80'
                 : 'border-white/[0.07] bg-white/[0.02] text-white/28 hover:text-white/60',
               busy && 'cursor-wait opacity-60',
             )}
@@ -2170,67 +2643,37 @@ function IntelPulseCard({
           >
             <RefreshCw className={cn('h-3.5 w-3.5', busy && 'animate-spin')} />
           </button>
-          <button
-            type="button"
-            onClick={onEdit}
-            title="Edit Intel channels"
-            className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white/[0.07] bg-white/[0.02] text-white/28 transition-colors hover:text-white/65"
-            aria-label="Edit Intel channels"
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
-        <Metric label="Channels" value={String(config.sources.length)} />
-        <Metric label="Latest" value={latestLabel} />
-      </div>
-      <p className="mt-3 line-clamp-2 text-xs leading-5 text-white/38">
-        {report.summary || 'Watches selected YouTube channels and turns new videos into artist-facing research.'}
-      </p>
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onRun}
-          disabled={busy || running || !agentReady || config.sources.length === 0}
-          className="h-8 rounded-full bg-white/90 px-4 text-xs font-semibold text-black hover:bg-white disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          {busy ? 'Starting...' : running ? 'Running' : 'Run'}
-        </button>
-        {report.outputId || report.sessionId ? (
-          <button
-            type="button"
-            onClick={() => report.outputId
-              ? navigate(routes.view.output(report.outputId))
-              : navigate(routes.view.allSessions(report.sessionId!))}
-            className="h-8 rounded-full border border-white/[0.08] px-3 text-xs font-medium text-white/55 hover:bg-white/[0.04]"
-          >
-            Open report
-          </button>
+      <div className="p-4">
+        <div className="flex h-[160px] flex-col rounded-[14px] border border-orange-300/10 bg-[linear-gradient(135deg,rgba(251,146,60,0.08),rgba(251,146,60,0.012)_58%,transparent)] p-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[9px] font-medium uppercase tracking-[0.15em] text-orange-200/48">Research captured</p>
+              <p className="mt-1.5 text-[28px] font-medium leading-none tracking-[-0.04em] text-white/90">
+                {formatMetric(nuggetCount ?? videoCount)}
+              </p>
+            </div>
+            <p className="text-right text-[10px] leading-4 text-white/34">
+              {nuggetCount !== undefined ? 'Nuggets' : videoCount !== undefined ? 'Videos' : 'Awaiting run'}
+              <br />
+              {latestLabel}
+            </p>
+          </div>
+          <IntelActivityChart runs={report.runs} />
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 divide-x divide-white/[0.05] rounded-[12px] border border-white/[0.045] bg-white/[0.015] py-3">
+          <SignalStat label="Channels" value={String(config.sources.length)} />
+          <SignalStat label="Videos" value={formatMetric(videoCount)} />
+          <SignalStat label="Nuggets" value={formatMetric(nuggetCount)} />
+        </div>
+
+        {configError || reportError ? (
+          <p className="mt-2 text-xs leading-5 text-red-100/65">{configError || reportError}</p>
         ) : null}
       </div>
-      <p className="mt-2 text-[10px] font-medium uppercase tracking-[0.12em] text-white/25">
-        {config.enabled
-          ? scheduled ? 'Weekly automation active' : 'Manual radar active'
-          : 'Radar off'}
-      </p>
-      {report.runs.length > 0 ? (
-        <div className="mt-3 space-y-1.5 border-t border-white/[0.04] pt-2">
-          {report.runs.slice(0, 3).map((run) => (
-            <div key={run.id} className="flex items-center justify-between gap-3 text-[11px] leading-4">
-              <span className="truncate text-white/38">{run.summary || run.title || run.status}</span>
-              <span className="shrink-0 uppercase tracking-[0.1em] text-white/22">{run.status}</span>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {!agentReady ? (
-        <p className="mt-2 text-xs leading-5 text-yellow-100/65">YouTube Intelligence Agent is not active in this workspace.</p>
-      ) : null}
-      {configError || reportError ? (
-        <p className="mt-2 text-xs leading-5 text-red-100/65">{configError || reportError}</p>
-      ) : null}
     </HQCard>
   )
 }
@@ -2400,86 +2843,129 @@ function formatShortDate(value: string): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date)
 }
 
-function HomeMetricStrip({
-  thisWeekCount,
-  workerCount,
-  attentionCount,
-  finalCount,
+function HomeWeekOverviewCard({
+  thisWeekItems,
+  attentionItems,
+  finals,
+  finalsLoading,
+  onOpenFinal,
 }: {
-  thisWeekCount: number
-  workerCount: number
-  attentionCount: number
-  finalCount: number
+  thisWeekItems: HqHomeTimelineItem[]
+  attentionItems: HqStateAttentionItem[]
+  finals: ReturnType<typeof collectFinalRows>
+  finalsLoading: boolean
+  onOpenFinal: (outputId: string) => void
 }) {
-  const metrics = [
-    { label: 'This week', value: thisWeekCount, tone: 'bg-white/30' },
-    { label: 'Active workers', value: workerCount, tone: workerCount > 0 ? 'bg-emerald-300' : 'bg-white/25' },
-    { label: 'Needs attention', value: attentionCount, tone: attentionCount > 0 ? 'bg-amber-300' : 'bg-emerald-300' },
-    { label: 'Finals', value: finalCount, tone: 'bg-orange-300' },
-  ]
+  const nextItem = thisWeekItems[0]
+  const attention = attentionItems[0]
+  const latestFinal = finals[0]
 
   return (
-    <section aria-label="HQ summary" className="grid grid-cols-2 overflow-hidden rounded-[12px] border border-white/[0.055] bg-[#090A0C] sm:grid-cols-4">
-      {metrics.map((metric, index) => (
-        <div key={metric.label} className={cn('flex min-h-16 items-center gap-3 px-4 py-3', index > 0 && 'border-l border-white/[0.05]', index === 2 && 'max-sm:border-l-0', index > 1 && 'max-sm:border-t')}>
-          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', metric.tone)} />
-          <div className="min-w-0">
-            <div className="text-lg font-semibold tabular-nums text-white/84">{metric.value}</div>
-            <div className="truncate text-[9px] font-medium uppercase tracking-[0.14em] text-white/32">{metric.label}</div>
-          </div>
+    <HQCard className="p-0">
+      <div className="flex h-11 items-center justify-between gap-3 px-4">
+        <SectionTitle icon={CalendarDays} title="This Week" meta={`${thisWeekItems.length} scheduled`} compact />
+        <button
+          type="button"
+          onClick={() => { window.location.hash = '#artist-hq/calendar' }}
+          className="text-[10px] font-medium text-white/32 transition-colors hover:text-white/65"
+        >
+          Calendar
+        </button>
+      </div>
+      <div className="grid grid-cols-1 divide-y divide-white/[0.05] border-t border-white/[0.05] md:grid-cols-3 md:divide-x md:divide-y-0">
+        <button
+          type="button"
+          onClick={() => { window.location.hash = '#artist-hq/calendar' }}
+          className="min-w-0 px-4 py-3 text-left transition-colors hover:bg-white/[0.025]"
+        >
+          <WeekSummaryHeading label="Next up" value={thisWeekItems.length} tone="bg-white/30" />
+          <p className="mt-2 truncate text-xs font-medium text-white/66">{nextItem?.title ?? 'Nothing scheduled'}</p>
+          <p className="mt-1 truncate text-[9px] uppercase tracking-[0.11em] text-white/25">{nextItem?.when ?? 'Calendar clear'}</p>
+        </button>
+        <div className="min-w-0 px-4 py-3">
+          <WeekSummaryHeading
+            label="Needs attention"
+            value={attentionItems.length}
+            tone={attentionItems.length > 0 ? 'bg-amber-300' : 'bg-emerald-300'}
+          />
+          <p className="mt-2 truncate text-xs font-medium text-white/66">{attention?.text ?? 'Nothing urgent'}</p>
+          <p className="mt-1 truncate text-[9px] uppercase tracking-[0.11em] text-white/25">{attention?.source ?? 'All clear'}</p>
         </div>
-      ))}
-    </section>
+        <button
+          type="button"
+          disabled={!latestFinal}
+          onClick={() => latestFinal && onOpenFinal(latestFinal.output.id)}
+          className="min-w-0 px-4 py-3 text-left transition-colors hover:bg-white/[0.025] disabled:cursor-default"
+        >
+          <WeekSummaryHeading label="Finals" value={finals.length} tone="bg-orange-300" />
+          <p className="mt-2 truncate text-xs font-medium text-white/66">
+            {finalsLoading ? 'Loading finals' : latestFinal?.output.title ?? 'No finals yet'}
+          </p>
+          <p className="mt-1 truncate text-[9px] uppercase tracking-[0.11em] text-white/25">
+            {latestFinal ? latestFinal.final.slot.replaceAll('-', ' ') : 'Ready output appears here'}
+          </p>
+        </button>
+      </div>
+    </HQCard>
   )
 }
 
-function HomeOperationsCard({
-  thisWeekItems,
-  workerItems,
+function WeekSummaryHeading({
+  label,
+  value,
+  tone,
 }: {
-  thisWeekItems: HqHomeTimelineItem[]
-  workerItems: HqHomeWorkerItem[]
+  label: string
+  value: number
+  tone: string
 }) {
   return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="flex min-w-0 items-center gap-2">
+        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', tone)} />
+        <span className="truncate text-[9px] font-medium uppercase tracking-[0.14em] text-white/32">{label}</span>
+      </span>
+      <span className="text-sm font-semibold tabular-nums text-white/72">{value}</span>
+    </div>
+  )
+}
+
+function WorkersSummaryCard({ workerItems }: { workerItems: HqHomeWorkerItem[] }) {
+  return (
     <HQCard className="p-0">
-      <div className="grid grid-cols-1 divide-y divide-white/[0.05] md:grid-cols-[1.2fr_0.8fr] md:divide-x md:divide-y-0">
-        <div className="p-4">
-          <SectionTitle icon={CalendarDays} title="This Week" meta="calendar" />
-          {thisWeekItems.length > 0 ? (
-            <div className="space-y-0.5">
-              {thisWeekItems.slice(0, 3).map((item) => (
-                <TimelineItem key={item.id} time={item.when} title={item.title} />
-              ))}
-            </div>
-          ) : (
-            <CompactEmptyRow title="Nothing scheduled this week" action="Open calendar" onClick={() => { window.location.hash = '#artist-hq/calendar' }} />
-          )}
-        </div>
-        <div className="p-4">
-          <SectionTitle icon={Bot} title="Workers" meta={workerItems.length ? `${workerItems.length} active` : 'quiet'} />
-          {workerItems.length > 0 ? (
-            <div className="space-y-1.5">
-              {workerItems.slice(0, 3).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => item.kind === 'automation'
-                    ? navigate(routes.view.automations())
-                    : (window.location.hash = '#artist-hq/calendar')}
-                  className="flex h-10 w-full items-center justify-between gap-3 rounded-[8px] border border-white/[0.045] bg-white/[0.018] px-3 text-left transition-colors hover:bg-white/[0.045]"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-xs font-medium text-white/66">{item.title}</span>
-                    <span className="block truncate text-[9px] text-white/28">{item.detail}</span>
-                  </span>
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-300" title={item.status} />
-                </button>
-              ))}
-            </div>
-          ) : (
-            <CompactEmptyRow title="No active workers" action="View automations" onClick={() => navigate(routes.view.automations())} />
-          )}
-        </div>
+      <div className="flex h-11 items-center justify-between gap-3 px-4">
+        <SectionTitle icon={Bot} title="Workers" meta={workerItems.length ? `${workerItems.length} active` : 'quiet'} compact />
+        <button
+          type="button"
+          onClick={() => navigate(routes.view.automations())}
+          className="text-[10px] font-medium text-white/32 transition-colors hover:text-white/65"
+        >
+          Automations
+        </button>
+      </div>
+      <div className="border-t border-white/[0.05] p-3">
+        {workerItems.length > 0 ? (
+          <div className="space-y-1.5">
+            {workerItems.slice(0, 4).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => item.kind === 'automation'
+                  ? navigate(routes.view.automations())
+                  : (window.location.hash = '#artist-hq/calendar')}
+                className="flex h-10 w-full items-center justify-between gap-3 rounded-[8px] border border-white/[0.045] bg-white/[0.018] px-3 text-left transition-colors hover:bg-white/[0.045]"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-xs font-medium text-white/66">{item.title}</span>
+                  <span className="block truncate text-[9px] text-white/28">{item.detail}</span>
+                </span>
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-300" title={item.status} />
+              </button>
+            ))}
+          </div>
+        ) : (
+          <CompactEmptyRow title="No active workers" action="View automations" onClick={() => navigate(routes.view.automations())} />
+        )}
       </div>
     </HQCard>
   )
@@ -2613,16 +3099,6 @@ function PulseSummaryRow({
       >
         <RefreshCw className={cn('h-3 w-3', busy && 'animate-spin')} />
       </button>
-    </div>
-  )
-}
-
-function TimelineItem({ time, title }: { time: string; title: string }) {
-  return (
-    <div className="flex min-h-10 items-center gap-3 rounded-[8px] px-1 py-1">
-      <div className="w-16 shrink-0 truncate text-[9px] font-medium uppercase tracking-[0.1em] text-white/28">{time}</div>
-      <Circle className="h-1.5 w-1.5 shrink-0 fill-orange-300 text-orange-300" />
-      <div className="truncate text-xs font-medium text-white/68">{title}</div>
     </div>
   )
 }
@@ -3330,6 +3806,7 @@ function profileToDraft(profile: ArtistProfile): ProfileDraft {
     themes: profile.themes ?? '',
     sound: profile.sound ?? '',
     visualWorld: profile.visualWorld ?? '',
+    bannerImagePath: profile.bannerImagePath ?? '',
     brandWords: profile.brandWords ?? '',
     audience: profile.audience ?? '',
     similarArtists: profile.similarArtists ?? '',
@@ -3379,6 +3856,23 @@ function hqHomeDetailsStorageKey(workspaceId: string): string {
   return `runneros:hq-home:${workspaceId}:details-open`
 }
 
+function hqHomeUtilitiesStorageKey(workspaceId: string): string {
+  return `runneros:hq-home:${workspaceId}:utilities-open`
+}
+
+function googleCalendarAutoSyncStorageKey(workspaceId: string): string {
+  return `runneros:hq-google-calendar:${workspaceId}:last-auto-sync-at`
+}
+
+function joinWorkspacePath(rootPath: string, relativePath: string): string {
+  const separator = rootPath.includes('\\') ? '\\' : '/'
+  return `${rootPath.replace(/[\\/]$/, '')}${separator}${relativePath.replace(/^[\\/]/, '')}`
+}
+
+function isPreviewableBannerImage(path: string): boolean {
+  return /\.(png|jpe?g|webp)$/i.test(path)
+}
+
 function readBooleanLocalStorage(key: string, fallback: boolean): boolean {
   try {
     const value = window.localStorage.getItem(key)
@@ -3398,6 +3892,18 @@ function writeBooleanLocalStorage(key: string, value: boolean): void {
   }
 }
 
+function createSpotifySyncPrompt(): string {
+  return `Run the Spotify snapshot for this Artist HQ workspace.
+
+Use Artist Profile first, then resolve the exact connected Spotify profile with Printing Press Social. Verify the live account, request the bounded Spotify for Artists snapshot browser plan, capture only visible values, and normalize the capture through \`snapshot spotify\` into this workspace.
+
+If the Spotify browser profile is missing, logged out, or points at the wrong account, stop with that exact setup issue. Do not ask for Spotify client credentials and do not fabricate unavailable metrics.
+
+Write the returned context payload to Artist HQ workspace context slug ${ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG} so Spotify Pulse turns current.
+
+Keep the final note short: snapshot date, key movement, any missing setup.`
+}
+
 function createSpotifySyncMatcher(): Record<string, unknown> {
   return {
     name: SPOTIFY_SYNC_AUTOMATION_NAME,
@@ -3409,15 +3915,7 @@ function createSpotifySyncMatcher(): Record<string, unknown> {
       {
         type: 'prompt',
         agentSlug: 'spotify-analyst',
-        prompt: `Run the weekly Spotify snapshot for this Artist HQ workspace.
-
-Use Artist Profile first, then resolve the exact connected Spotify profile with Printing Press Social. Verify the live account, request the bounded Spotify for Artists snapshot browser plan, capture only visible values, and normalize the capture through \`snapshot spotify\` into this workspace.
-
-If the Spotify browser profile is missing, logged out, or points at the wrong account, stop with that exact setup issue. Do not ask for Spotify client credentials and do not fabricate unavailable metrics.
-
-Write the returned context payload to Artist HQ workspace context slug ${ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG} so Spotify Pulse turns current.
-
-Keep the final note short: snapshot date, key movement, any missing setup.`,
+        prompt: createSpotifySyncPrompt(),
       },
     ],
   }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistHQWorkspace } from './artist-workspace'
+import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistCampaignWorkspace, isArtistHQWorkspace } from './artist-workspace'
 
 describe('artist workspace helpers', () => {
   test('prefers persisted scope over a misleading workspace name', () => {
@@ -17,7 +17,7 @@ describe('artist workspace helpers', () => {
     expect(findArtistHQWorkspace(workspaces)?.id).toBe('hq')
   })
 
-  test('leaves normal campaign workspaces campaign-scoped', () => {
+  test('does not infer arbitrary general workspaces as campaigns', () => {
     const workspaces = [
       { id: 'song-1', name: 'Night Drive' },
       { id: 'song-2', name: 'Album Rollout' },
@@ -25,13 +25,15 @@ describe('artist workspace helpers', () => {
 
     expect(isArtistHQWorkspace(workspaces[0], workspaces)).toBe(false)
     expect(findArtistHQWorkspace(workspaces)).toBeUndefined()
+    expect(isArtistCampaignWorkspace(workspaces[0])).toBe(false)
+    expect(isArtistCampaignWorkspace(workspaces[1])).toBe(true)
   })
 
-  test('selects the first non-HQ workspace as the primary campaign workspace', () => {
+  test('selects only explicit campaign workspaces', () => {
     const workspaces = [
       { id: 'hq', name: 'My Workspace' },
-      { id: 'release', name: 'Current Release' },
-      { id: 'next', name: 'Next Campaign' },
+      { id: 'general', name: 'Creative Lab', artistWorkspaceScope: 'general' as const },
+      { id: 'release', name: 'Current Release', artistWorkspaceScope: 'campaign' as const },
     ]
 
     expect(findPrimaryCampaignWorkspace(workspaces)?.id).toBe('release')
@@ -40,7 +42,7 @@ describe('artist workspace helpers', () => {
   test('prefers campaign-like workspace names before the plain fallback', () => {
     const workspaces = [
       { id: 'hq', name: 'My Workspace' },
-      { id: 'trading', name: 'Trading' },
+      { id: 'trading', name: 'Trading', artistWorkspaceScope: 'general' as const },
       { id: 'single', name: 'Next Single Rollout' },
     ]
 

@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { dirname } from 'path'
 import { promisify } from 'node:util'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
-import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, validateSelfEditRepo } from '@craft-agent/shared/config'
+import { getPreferencesPath, getSessionDraft, setSessionDraft, deleteSessionDraft, getAllSessionDrafts, getWorkspaceByNameOrId, getDefaultThinkingLevel, setDefaultThinkingLevel, resolveSelfEditTarget, updateWorkspaceArtistScope, validateSelfEditRepo } from '@craft-agent/shared/config'
 import { loadStoredConfig } from '@craft-agent/shared/config/storage'
 import { isValidThinkingLevel, normalizeThinkingLevel, THINKING_LEVEL_IDS } from '@craft-agent/shared/agent/thinking-levels'
 import { getCredentialManager, isValidUserSecretName, normalizeUserSecretName } from '@craft-agent/shared/credentials'
@@ -276,6 +276,7 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
 
     return {
       name: config?.name,
+      artistWorkspaceScope: workspace.artistWorkspaceScope,
       model: config?.defaults?.model,
       permissionMode: config?.defaults?.permissionMode,
       cyclablePermissionModes: config?.defaults?.cyclablePermissionModes,
@@ -295,9 +296,18 @@ export function registerSettingsHandlers(server: RpcServer, deps: HandlerDeps): 
       : value
 
     // Validate key is a known workspace setting
-    const validKeys = ['name', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection']
+    const validKeys = ['name', 'artistWorkspaceScope', 'model', 'enabledSourceSlugs', 'permissionMode', 'cyclablePermissionModes', 'thinkingLevel', 'workingDirectory', 'localMcpEnabled', 'defaultLlmConnection']
     if (!validKeys.includes(key)) {
       throw new Error(`Invalid workspace setting key: ${key}. Valid keys: ${validKeys.join(', ')}`)
+    }
+
+    if (key === 'artistWorkspaceScope') {
+      if (normalizedValue !== 'campaign' && normalizedValue !== 'general') {
+        throw new Error('Workspace type must be either campaign or general.')
+      }
+      updateWorkspaceArtistScope(workspaceId, normalizedValue)
+      deps.platform.logger.info(`Workspace type updated: ${workspaceId} = ${normalizedValue}`)
+      return
     }
 
     // Validate defaultLlmConnection exists before saving

@@ -1,6 +1,7 @@
 import type { ScheduledWorkOrder, ScheduledWorkStatus } from '@craft-agent/shared/scheduled-work'
 import type { AutomationListItem } from '@/components/automations/types'
 import type { ArtistCalendarEvent } from '@/lib/artist-calendar'
+import type { SessionMeta } from '@/atoms/sessions'
 
 export interface HqCampaignSummary {
   id: string
@@ -22,7 +23,7 @@ export interface HqHomeWorkerItem {
   title: string
   detail: string
   status: string
-  kind: 'automation' | 'scheduled-work'
+  kind: 'automation' | 'scheduled-work' | 'session'
 }
 
 export interface HqHomeProjectCard {
@@ -88,6 +89,7 @@ export function buildHqThisWeekItems(
 export function buildHqWorkerItems(
   automations: AutomationListItem[],
   work: ScheduledWorkOrder[],
+  sessions: SessionMeta[] = [],
   limit = 5,
 ): HqHomeWorkerItem[] {
   const items: HqHomeWorkerItem[] = []
@@ -117,6 +119,40 @@ export function buildHqWorkerItems(
       detail: worker,
       status: order.status,
       kind: 'scheduled-work',
+    })
+  }
+
+  for (const session of sessions) {
+    if (!session.isProcessing || session.isArchived) continue
+    const receipt = session.launchReceipt
+    const isWorker = Boolean(
+      session.spawnedFromAgent
+      || receipt?.agent
+      || receipt?.workflow
+      || receipt?.automation
+      || receipt?.scheduledWork,
+    )
+    if (!isWorker) continue
+    const title = session.name?.trim()
+      || receipt?.summary?.trim()
+      || receipt?.agent?.name
+      || receipt?.workflow?.slug
+      || 'Active worker'
+    const detail = receipt?.agent?.slug
+      ? `@${receipt.agent.slug}`
+      : session.spawnedFromAgent?.agentSlug
+        ? `@${session.spawnedFromAgent.agentSlug}`
+        : receipt?.workflow?.slug
+          ? `Workflow · ${receipt.workflow.slug}`
+          : receipt?.automation?.name
+            ? `Automation · ${receipt.automation.name}`
+            : 'Manual worker'
+    items.push({
+      id: `session:${session.id}`,
+      title,
+      detail,
+      status: 'running',
+      kind: 'session',
     })
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { parseArtistProfileDocResult, profileCompletion } from './artist-profile'
+import { parseArtistProfileDocResult, profileCompletion, serializeArtistProfileBody } from './artist-profile'
 import type { ContextDocDTO } from '../../shared/types'
 
 function doc(body: string): ContextDocDTO {
@@ -74,5 +74,19 @@ This is the source-of-truth artist profile. Answer what you can; leave blanks fo
     expect(result.profile.audience).toContain('People rebuilding')
     expect(result.profile.similarArtists).toContain('SZA')
     expect(result.profile.rules).toBe('Generic mysterious girl.')
+  })
+
+  it('round trips a workspace-relative HQ banner reference', () => {
+    const body = serializeArtistProfileBody({
+      version: 1,
+      artistName: 'Nova Saint',
+      bannerImagePath: 'assets/images/cover-art/hq-banner.webp',
+      updatedAt: '2026-07-30T00:00:00.000Z',
+    })
+
+    const result = parseArtistProfileDocResult(doc(body))
+
+    expect(result.ok).toBe(true)
+    expect(result.profile.bannerImagePath).toBe('assets/images/cover-art/hq-banner.webp')
   })
 })

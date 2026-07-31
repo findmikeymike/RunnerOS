@@ -18,6 +18,8 @@ export interface RemoteServerConfig {
   remoteWorkspaceId: string; // ID of the workspace on the remote server
 }
 
+export type ArtistWorkspaceScope = 'hq' | 'campaign' | 'general';
+
 /**
  * Client-facing workspace DTO — safe to send over RPC to remote clients.
  * Does not expose server-internal filesystem paths.
@@ -26,7 +28,7 @@ export interface WorkspaceInfo {
   id: string;
   name: string;
   slug: string;              // Server-computed from rootPath basename
-  artistWorkspaceScope?: 'hq' | 'campaign';
+  artistWorkspaceScope?: ArtistWorkspaceScope;
   lastAccessedAt?: number;
   iconUrl?: string;
   mcpUrl?: string;

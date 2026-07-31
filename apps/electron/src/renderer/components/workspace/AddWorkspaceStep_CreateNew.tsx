@@ -11,10 +11,11 @@ import { useDirectoryPicker } from "@/hooks/useDirectoryPicker"
 import { ServerDirectoryBrowser } from "@/components/ServerDirectoryBrowser"
 
 type LocationOption = 'default' | 'custom'
+type WorkspacePurpose = 'general' | 'campaign'
 
 interface AddWorkspaceStep_CreateNewProps {
   onBack: () => void
-  onCreate: (folderPath: string, name: string) => Promise<void>
+  onCreate: (folderPath: string, name: string, purpose: WorkspacePurpose) => Promise<void>
   isCreating: boolean
 }
 
@@ -32,6 +33,7 @@ export function AddWorkspaceStep_CreateNew({
 }: AddWorkspaceStep_CreateNewProps) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
+  const [purpose, setPurpose] = useState<WorkspacePurpose>('general')
   const [locationOption, setLocationOption] = useState<LocationOption>('default')
   const [customPath, setCustomPath] = useState<string | null>(null)
   const [homeDir, setHomeDir] = useState('')
@@ -93,8 +95,8 @@ export function AddWorkspaceStep_CreateNew({
 
   const handleCreate = useCallback(async () => {
     if (!name.trim() || !finalPath || error) return
-    await onCreate(finalPath, name.trim())
-  }, [name, finalPath, error, onCreate])
+    await onCreate(finalPath, name.trim(), purpose)
+  }, [name, finalPath, error, onCreate, purpose])
 
   const canCreate = name.trim() && finalPath && !error && !isValidating && !isCreating
 
@@ -138,6 +140,28 @@ export function AddWorkspaceStep_CreateNew({
           {error && (
             <p className="text-xs text-destructive">{error}</p>
           )}
+        </div>
+
+        <div className="space-y-3">
+          <label className="block text-sm font-medium text-foreground">
+            Workspace type
+          </label>
+          <AddWorkspace_RadioOption
+            name="purpose"
+            checked={purpose === 'general'}
+            onChange={() => setPurpose('general')}
+            disabled={isCreating}
+            title="General workspace"
+            subtitle="A neutral space for labs, operations, trading, or other projects."
+          />
+          <AddWorkspace_RadioOption
+            name="purpose"
+            checked={purpose === 'campaign'}
+            onChange={() => setPurpose('campaign')}
+            disabled={isCreating}
+            title="Artist campaign"
+            subtitle="A specific release, rollout, single, album, or tour."
+          />
         </div>
 
         {/* Location selection */}

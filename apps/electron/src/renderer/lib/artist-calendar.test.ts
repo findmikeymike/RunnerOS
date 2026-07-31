@@ -6,6 +6,7 @@ import {
   linkCalendarEventToWorkspace,
   parseArtistCalendarDocResult,
   serializeArtistCalendarBody,
+  shouldAutoSyncGoogleCalendar,
 } from './artist-calendar'
 
 function makeDoc(body: string): ContextDocDTO {
@@ -96,5 +97,25 @@ describe('artist calendar utilities', () => {
       role: 'release deadline',
       notes: 'lock assets',
     })
+  })
+
+  test('automatically syncs dirty connected calendars and throttles clean refreshes', () => {
+    const event = createCalendarEvent({ date: '2026-07-31', title: 'Release check' })
+    const dirtyCalendar = { version: 1 as const, events: [event], updatedAt: '2026-07-30T00:00:00.000Z' }
+    const now = Date.parse('2026-07-30T12:00:00.000Z')
+
+    expect(shouldAutoSyncGoogleCalendar(dirtyCalendar, null, now)).toBe(true)
+    expect(shouldAutoSyncGoogleCalendar(dirtyCalendar, now - 30_000, now)).toBe(false)
+    expect(shouldAutoSyncGoogleCalendar(dirtyCalendar, now - 61_000, now)).toBe(true)
+
+    const cleanCalendar = {
+      ...dirtyCalendar,
+      events: [{
+        ...event,
+        google: { eventId: 'google-1', syncStatus: 'synced' as const, lastSyncedAt: '2026-07-30T11:00:00.000Z' },
+      }],
+    }
+    expect(shouldAutoSyncGoogleCalendar(cleanCalendar, now - 60 * 60 * 1000, now)).toBe(false)
+    expect(shouldAutoSyncGoogleCalendar(cleanCalendar, now - 7 * 60 * 60 * 1000, now)).toBe(true)
   })
 })

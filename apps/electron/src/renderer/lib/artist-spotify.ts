@@ -4,9 +4,9 @@ export const ARTIST_SPOTIFY_SNAPSHOT_CONTEXT_SLUG = 'artist-spotify-snapshot'
 
 export interface ArtistSpotifySnapshot {
   version: 1
-  dataSource?: 'spotify-web-api' | 'spotify-for-artists' | 'manual'
+  dataSource?: 'spotify-web-api' | 'spotify-for-artists-browser' | 'manual'
   snapshotDate: string
-  windowDays: number
+  windowDays?: number
   artist: {
     name?: string
     spotifyArtistId?: string
@@ -18,6 +18,7 @@ export interface ArtistSpotifySnapshot {
     streams?: number
     listeners?: number
     followers?: number
+    saves?: number
     popularity?: number
     saveRate?: number
     skipRate?: number
@@ -40,6 +41,11 @@ export type ArtistSpotifySnapshotParseResult =
   | { ok: true; snapshot: ArtistSpotifySnapshot | null }
   | { ok: false; snapshot: null; error: string }
 
+export interface ArtistSpotifyHistoryPoint {
+  date: string
+  streams: number
+}
+
 export function artistSpotifySnapshotMetadata(): ContextDocMetadata {
   return {
     name: 'Artist Spotify Snapshot',
@@ -51,7 +57,11 @@ export function artistSpotifySnapshotMetadata(): ContextDocMetadata {
 
 export function parseArtistSpotifySnapshotDocResult(doc: ContextDocDTO | undefined): ArtistSpotifySnapshotParseResult {
   if (!doc?.body.trim()) return { ok: true, snapshot: null }
-  const json = extractJson(doc.body)
+  return parseArtistSpotifySnapshotJsonResult(doc.body)
+}
+
+export function parseArtistSpotifySnapshotJsonResult(body: string): ArtistSpotifySnapshotParseResult {
+  const json = extractJson(body)
   if (!json) {
     return { ok: false, snapshot: null, error: 'Spotify Snapshot exists, but no JSON block could be read.' }
   }
@@ -66,7 +76,7 @@ export function parseArtistSpotifySnapshotDocResult(doc: ContextDocDTO | undefin
       snapshot: {
         version: 1,
         snapshotDate,
-        windowDays: toNumber(parsed.windowDays) ?? 28,
+        windowDays: toNumber(parsed.windowDays),
         artist: {
           name: clean(parsed.artist?.name),
           spotifyArtistId: clean(parsed.artist?.spotifyArtistId),
@@ -78,6 +88,7 @@ export function parseArtistSpotifySnapshotDocResult(doc: ContextDocDTO | undefin
           streams: toNumber(parsed.metrics.streams),
           listeners: toNumber(parsed.metrics.listeners),
           followers: toNumber(parsed.metrics.followers),
+          saves: toNumber(parsed.metrics.saves),
           popularity: toNumber(parsed.metrics.popularity),
           saveRate: toNumber(parsed.metrics.saveRate),
           skipRate: toNumber(parsed.metrics.skipRate),
@@ -95,6 +106,30 @@ export function parseArtistSpotifySnapshotDocResult(doc: ContextDocDTO | undefin
   } catch {
     return { ok: false, snapshot: null, error: 'Spotify Snapshot JSON is malformed.' }
   }
+}
+
+export function buildArtistSpotifyStreamHistory(
+  snapshots: ArtistSpotifySnapshot[],
+  limit = 8,
+): ArtistSpotifyHistoryPoint[] {
+  const ordered = [...snapshots]
+    .filter((snapshot) => typeof snapshot.metrics.streams === 'number')
+    .sort((left, right) => left.snapshotDate.localeCompare(right.snapshotDate))
+  const latest = ordered.at(-1)
+  if (!latest) return []
+
+  const compatible = ordered.filter((snapshot) =>
+    snapshot.dataSource === latest.dataSource
+    && snapshot.windowDays === latest.windowDays,
+  )
+  const byDate = new Map<string, ArtistSpotifyHistoryPoint>()
+  for (const snapshot of compatible) {
+    byDate.set(snapshot.snapshotDate, {
+      date: snapshot.snapshotDate,
+      streams: snapshot.metrics.streams!,
+    })
+  }
+  return [...byDate.values()].slice(-Math.max(1, limit))
 }
 
 export function serializeArtistSpotifySnapshotBody(snapshot: Omit<ArtistSpotifySnapshot, 'version' | 'updatedAt'> | ArtistSpotifySnapshot): string {
@@ -133,9 +168,9 @@ function toNumber(value: unknown): number | undefined {
 }
 
 function normalizeDataSource(value: unknown): ArtistSpotifySnapshot['dataSource'] {
-  return value === 'spotify-web-api' || value === 'spotify-for-artists' || value === 'manual'
-    ? value
-    : undefined
+  if (value === 'spotify-web-api' || value === 'spotify-for-artists-browser' || value === 'manual') return value
+  if (value === 'spotify-for-artists') return 'spotify-for-artists-browser'
+  return undefined
 }
 
 function normalizeGeo(value: unknown): ArtistSpotifySnapshot['geo'] {

@@ -104,6 +104,12 @@ const LEGACY_HQ_WORKSPACE_NAMES = new Set([
   'my workspace',
   'my-workspace',
 ]);
+const ARTIST_WORKSPACE_SCOPE_MIGRATION = 'artist-workspace-general-scope-v1';
+
+function looksLikeCampaignWorkspace(workspace: Pick<Workspace, 'name' | 'slug'>): boolean {
+  const text = `${workspace.name} ${workspace.slug ?? ''}`.toLowerCase();
+  return /\b(campaign|release|rollout|single|album|ep|mixtape|tour)\b/.test(text);
+}
 
 export function assignMissingArtistWorkspaceScopes(workspaces: Workspace[]): boolean {
   const missing = workspaces.filter(workspace => !workspace.artistWorkspaceScope);
@@ -117,8 +123,25 @@ export function assignMissingArtistWorkspaceScopes(workspaces: Workspace[]): boo
   }) ?? [...missing].sort((a, b) => a.createdAt - b.createdAt)[0];
 
   for (const workspace of missing) {
-    workspace.artistWorkspaceScope = workspace.id === legacyHq?.id ? 'hq' : 'campaign';
+    workspace.artistWorkspaceScope = workspace.id === legacyHq?.id
+      ? 'hq'
+      : looksLikeCampaignWorkspace(workspace)
+        ? 'campaign'
+        : 'general';
   }
+  return true;
+}
+
+export function repairLegacyInferredArtistWorkspaceScopes(config: StoredConfig): boolean {
+  const applied = config.migrationsApplied ?? [];
+  if (applied.includes(ARTIST_WORKSPACE_SCOPE_MIGRATION)) return false;
+
+  for (const workspace of config.workspaces) {
+    if (workspace.artistWorkspaceScope === 'campaign' && !looksLikeCampaignWorkspace(workspace)) {
+      workspace.artistWorkspaceScope = 'general';
+    }
+  }
+  config.migrationsApplied = [...applied, ARTIST_WORKSPACE_SCOPE_MIGRATION];
   return true;
 }
 
@@ -269,7 +292,9 @@ export function loadStoredConfig(): StoredConfig | null {
       workspace.rootPath = expandPath(workspace.rootPath);
     }
 
-    if (assignMissingArtistWorkspaceScopes(config.workspaces)) {
+    const assignedScopes = assignMissingArtistWorkspaceScopes(config.workspaces);
+    const repairedScopes = repairLegacyInferredArtistWorkspaceScopes(config);
+    if (assignedScopes || repairedScopes) {
       saveConfig(config);
     }
 
@@ -692,6 +717,21 @@ export function updateWorkspaceRemoteServer(
   saveConfig(config);
 }
 
+export function updateWorkspaceArtistScope(
+  workspaceId: string,
+  artistWorkspaceScope: 'campaign' | 'general',
+): void {
+  const config = loadStoredConfig();
+  if (!config) throw new Error('No config found');
+  const workspace = config.workspaces.find(item => item.id === workspaceId);
+  if (!workspace) throw new Error('Workspace not found');
+  if (workspace.artistWorkspaceScope === 'hq') {
+    throw new Error('Artist HQ cannot be converted into another workspace type.');
+  }
+  workspace.artistWorkspaceScope = artistWorkspaceScope;
+  saveConfig(config);
+}
+
 export function setActiveWorkspace(workspaceId: string): void {
   const config = loadStoredConfig();
   if (!config) return;
@@ -759,7 +799,7 @@ export function addWorkspace(workspace: Omit<Workspace, 'id' | 'createdAt' | 'sl
 
   const newWorkspace: Workspace = {
     ...workspace,
-    artistWorkspaceScope: workspace.artistWorkspaceScope ?? (config.workspaces.length === 0 ? 'hq' : 'campaign'),
+    artistWorkspaceScope: config.workspaces.length === 0 ? 'hq' : workspace.artistWorkspaceScope ?? 'general',
     slug,
     id: generateWorkspaceId(),
     createdAt: Date.now(),
@@ -806,7 +846,7 @@ export function syncWorkspaces(): void {
       name: wsConfig.name,
       slug: extractWorkspaceSlugFromPath(rootPath, ''),
       rootPath,
-      artistWorkspaceScope: config.workspaces.length === 0 ? 'hq' : 'campaign',
+      artistWorkspaceScope: config.workspaces.length === 0 ? 'hq' : 'general',
       createdAt: wsConfig.createdAt || Date.now(),
     };
 

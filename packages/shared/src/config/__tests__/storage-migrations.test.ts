@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'bun:test'
-import { assignMissingArtistWorkspaceScopes, inferModelSelectionMode, shouldMigratePiOpenAiProvider, shouldRepairPiApiKeyCodexProvider } from '../storage'
+import { assignMissingArtistWorkspaceScopes, inferModelSelectionMode, repairLegacyInferredArtistWorkspaceScopes, shouldMigratePiOpenAiProvider, shouldRepairPiApiKeyCodexProvider } from '../storage'
 import type { Workspace } from '@craft-agent/core/types'
+import type { StoredConfig } from '../storage'
 
 describe('assignMissingArtistWorkspaceScopes', () => {
-  it('persists one legacy HQ and does not misclassify campaign labels', () => {
+  it('persists one legacy HQ and leaves unrelated global labels neutral', () => {
     const workspaces = [
       { id: 'campaign', name: 'Global Launch', slug: 'global-launch', rootPath: '/tmp/global-launch', createdAt: 1 },
       { id: 'hq', name: 'My Workspace', slug: 'my-workspace', rootPath: '/tmp/hq', createdAt: 2 },
@@ -11,7 +12,7 @@ describe('assignMissingArtistWorkspaceScopes', () => {
 
     expect(assignMissingArtistWorkspaceScopes(workspaces)).toBe(true)
     expect(workspaces.map(workspace => [workspace.id, workspace.artistWorkspaceScope])).toEqual([
-      ['campaign', 'campaign'],
+      ['campaign', 'general'],
       ['hq', 'hq'],
     ])
     expect(assignMissingArtistWorkspaceScopes(workspaces)).toBe(false)
@@ -25,7 +26,22 @@ describe('assignMissingArtistWorkspaceScopes', () => {
 
     assignMissingArtistWorkspaceScopes(workspaces)
     expect(workspaces.find(workspace => workspace.id === 'older')?.artistWorkspaceScope).toBe('hq')
-    expect(workspaces.find(workspace => workspace.id === 'newer')?.artistWorkspaceScope).toBe('campaign')
+    expect(workspaces.find(workspace => workspace.id === 'newer')?.artistWorkspaceScope).toBe('general')
+  })
+
+  it('repairs the old blanket campaign inference once while preserving campaign-like names', () => {
+    const config: StoredConfig = {
+      workspaces: [
+        { id: 'trading', name: 'Trading', slug: 'trading', rootPath: '/tmp/trading', createdAt: 1, artistWorkspaceScope: 'campaign' as const },
+        { id: 'release', name: 'Album Rollout', slug: 'album-rollout', rootPath: '/tmp/release', createdAt: 2, artistWorkspaceScope: 'campaign' as const },
+      ],
+      activeWorkspaceId: 'trading',
+      activeSessionId: null,
+    }
+
+    expect(repairLegacyInferredArtistWorkspaceScopes(config)).toBe(true)
+    expect(config.workspaces.map(workspace => workspace.artistWorkspaceScope)).toEqual(['general', 'campaign'])
+    expect(repairLegacyInferredArtistWorkspaceScopes(config)).toBe(false)
   })
 })
 

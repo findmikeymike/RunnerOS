@@ -82,7 +82,7 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useOutputs, type OutputSummaryDTO } from '@/hooks/useOutputs'
 import { navigate, routes } from '@/lib/navigate'
-import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistHQWorkspace } from '@/lib/artist-workspace'
+import { findArtistHQWorkspace, findPrimaryCampaignWorkspace, isArtistCampaignWorkspace, isArtistHQWorkspace } from '@/lib/artist-workspace'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
 import { TemplatesGalleryDialog } from '@/components/automations/TemplatesGalleryDialog'
 import { ChevronDown, ChevronRight, Plus, Sparkles, X } from 'lucide-react'
@@ -131,7 +131,7 @@ export function MainContentPanel({
     [activeWorkspaceId, workspaces],
   )
   const activeCampaignId = useMemo(
-    () => activeWorkspaceId && !isArtistHQWorkspace(activeWorkspace, workspaces) ? activeWorkspaceId : undefined,
+    () => activeWorkspaceId && isArtistCampaignWorkspace(activeWorkspace) ? activeWorkspaceId : undefined,
     [activeWorkspace, activeWorkspaceId, workspaces],
   )
   const artistHQWorkspace = useMemo(
@@ -144,7 +144,7 @@ export function MainContentPanel({
   )
   const campaignWorkspaces = useMemo(
     () => workspaces
-      .filter((workspace) => !isArtistHQWorkspace(workspace, workspaces))
+      .filter((workspace) => isArtistCampaignWorkspace(workspace))
       .map((workspace) => ({
         id: workspace.id,
         name: workspace.name,

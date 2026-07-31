@@ -44,7 +44,13 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
   })
 
   // Create a new workspace at a folder path (Obsidian-style: folder IS the workspace)
-  server.handle(RPC_CHANNELS.workspaces.CREATE, async (_ctx, folderPath: string, name: string, remoteServer?: { url: string; token: string; remoteWorkspaceId: string }) => {
+  server.handle(RPC_CHANNELS.workspaces.CREATE, async (
+    _ctx,
+    folderPath: string,
+    name: string,
+    remoteServer?: { url: string; token: string; remoteWorkspaceId: string },
+    artistWorkspaceScope?: 'campaign' | 'general',
+  ) => {
     const rootPath = folderPath.trim()
     const validation = isValidWorkspaceRootPath(rootPath)
     if (!validation.valid) {
@@ -52,7 +58,7 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
     }
 
     const rootExistedBeforeAdd = existsSync(rootPath)
-    const workspace = addWorkspace({ name, rootPath, ...(remoteServer && { remoteServer }) })
+    const workspace = addWorkspace({ name, rootPath, artistWorkspaceScope, ...(remoteServer && { remoteServer }) })
     // Make it active
     setActiveWorkspace(workspace.id)
     // Auto-activate starter workflows only for app-created roots. Existing
@@ -66,7 +72,9 @@ export function registerWorkspaceCoreHandlers(server: RpcServer, deps: HandlerDe
       if (!rootExistedBeforeAdd) {
         const defaultSlugs = workspace.artistWorkspaceScope === 'hq'
           ? HQ_DEFAULT_WORKFLOW_SLUGS
-          : CAMPAIGN_DEFAULT_WORKFLOW_SLUGS
+          : workspace.artistWorkspaceScope === 'campaign'
+            ? CAMPAIGN_DEFAULT_WORKFLOW_SLUGS
+            : []
         for (const slug of defaultSlugs) {
           try { setWorkflowActive(workspace.rootPath, slug, true) } catch { /* ignore */ }
         }
