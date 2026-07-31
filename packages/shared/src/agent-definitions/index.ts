@@ -46,6 +46,6 @@ export {
   type CreateAgentInput,
 } from './storage.ts';
 
-export { STARTER_AGENTS } from './trade-god-starter-templates.ts';
+export { STARTER_AGENTS, TRADE_DESK_AGENT } from './trade-god-starter-templates.ts';
 export { DEFAULT_ACTIVATED_AGENT_SLUGS } from './defaults.ts';
 export { CANVAS_GUIDANCE_HEADER, buildCanvasGuidanceSection } from './canvas-guidance.ts';

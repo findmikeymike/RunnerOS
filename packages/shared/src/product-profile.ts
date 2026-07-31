@@ -20,5 +20,7 @@ export const TRADE_GOD_STARTER_AGENT_SLUGS = [
 export const TRADE_GOD_DEFAULT_ACTIVATED_AGENT_SLUGS = [] as const;
 
 export const TRADE_GOD_BUNDLED_SKILL_SLUGS = [
+  'incident-recovery',
   'order-flow-specialist',
+  'trade-desk-operator',
 ] as const;

@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-30
+last_verified: 2026-07-31
 source_of_truth: false
 ---
 
@@ -42,6 +42,14 @@ Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provide
 IBKR through standalone IB Gateway is the selected first economical provider path. The official notarized Apple Silicon IB Gateway 10.45 app is installed, and a loopback-only health handshake is typed through the Python sidecar, contracts, client, Electron IPC, and preload. It is deliberately health-only and discards account IDs. The Gateway is not yet authenticated or listening on paper port `4002`, so no live provider or quote proof is claimed.
 
 Futures Overview now receives a deterministic project-owned synthetic ES session as validated `market-candle-series@1` through local IPC/preload. It supports 1m/5m/15m/1h and ETH/RTH preview densities and is visibly labeled synthetic. NQ/YM/RTY remain empty rather than receiving invented prices.
+
+The Futures sidebar now includes a dedicated DiscoTrader Control Center. It
+uses the existing workspace source/credential APIs to configure the local
+`http://127.0.0.1:8788/mcp` bridge, proves reachability by loading its tool
+catalog, and explicitly installs/activates the audited `trade-desk` worker in
+the current workspace. The global definition is never silently seeded, a
+conflicting existing definition is not activated, and the worker remains
+approval-gated. See `docs/trading/integrations/DISCOTRADER-CONTROL-CENTER.md`.
 
 ## Immediate Assignment
 
@@ -94,6 +102,10 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 - Windows and Linux runtime/package compatibility: locked wheels exist but remain unverified.
 - IBKR onboarding scaffold: 94 focused tests passed across Python, contracts, client, and Electron; contract/client/Electron typechecks and Electron main/preload builds passed. Live paper login, port `4002`, entitlement, and first quote remain unverified.
 - Synthetic chart fixture: 19 focused Electron tests passed across deterministic generation, schema validation, IPC/preload/runtime wiring, fixed-point chart mapping, source labeling, overview output, and channel parity. Electron typecheck plus main, preload, and renderer builds passed. Visual smoke remains pending.
+- DiscoTrader Control Center: 15 focused renderer/catalog tests passed with 86
+  expectations; repository-wide typecheck and Electron main/preload/renderer
+  production builds passed. The user has not yet clicked the live source/worker
+  setup path in the running app.
 
 ## Non-Negotiable Boundaries
 

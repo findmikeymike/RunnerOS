@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { STARTER_AGENTS } from './agent-definitions/index.ts';
+import { STARTER_AGENTS, TRADE_DESK_AGENT } from './agent-definitions/index.ts';
 import { BUNDLED_STARTER_SKILLS } from './skills/bundled.generated.ts';
 import { GLOBAL_AGENT_SKILLS_DIR } from './skills/storage.ts';
 import { GLOBAL_AGENTS_DIR } from './agent-definitions/storage.ts';
@@ -19,6 +19,16 @@ describe('Trade God product catalog', () => {
     expect(selected.map(agent => agent.slug)).toEqual([...TRADE_GOD_STARTER_AGENT_SLUGS]);
     expect(selected.some(agent => /artist|music|spotify|lyric|radio/i.test(agent.slug))).toBe(false);
     expect(selected.some(agent => agent.slug === 'researcher')).toBe(true);
+  });
+
+  test('keeps Trade Desk explicit and approval-gated', () => {
+    expect(STARTER_AGENTS.some(agent => agent.slug === TRADE_DESK_AGENT.slug)).toBe(false);
+    expect(TRADE_DESK_AGENT.metadata.permissionMode).toBe('ask');
+    expect(TRADE_DESK_AGENT.metadata.sources).toEqual(['discotrader']);
+    expect(TRADE_DESK_AGENT.metadata.skills).toEqual([
+      'trade-desk-operator',
+      'incident-recovery',
+    ]);
   });
 
   test('ships only Trade God bundled skills', () => {

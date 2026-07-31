@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-30
+last_verified: 2026-07-31
 source_of_truth: true
 ---
 
@@ -9,7 +9,7 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-30
+- Date: 2026-07-31
 - Stage: signed Discord entry and follow-up paths are wired through the durable gateway boundary; real-provider paper certification is the next gate
 - Current goal: certify one exact paper adapter and its partial-close/protection-resize lifecycle without enabling consequential execution
 - Overall state: Trade God now has durable execution contracts and lifecycle storage, exact account/environment connection records, isolated trading browser sessions, a Tradovate demo API adapter foundation, a named WealthCharts browser driver foundation, DiscoTrader ticket convergence, version-bound certification evidence, restart reconciliation, kill switches, checksum-bound cancel/modify/partial-close/flatten commands, and a durable Discord follow-up manager. Electron directly handles both HMAC-authenticated `discotrader` entry tickets and `discotrader-management` follow-ups. Entry routing requires one explicitly configured connection or exactly one enabled, ready connection; it never guesses an account. Management command identity is scoped to the immutable Discord message and action index, so a retry cannot repeat an action while two separate identical reductions remain separate actions. DiscoTrader persists both envelope types in a SQLite outbox before network delivery and retries Runner outages; management authority is queued before Chrome receives HTTP 200. Its extension supplies thread context only from an exact cross-channel reply or an explicit thread-parent mapping. The runtime still attaches zero execution adapters deliberately. No real adapter is paper-certified or enabled for consequential entry. Tradovate still lacks certified partial-close/protection-resize behavior; WealthCharts management actions remain disabled until its live paper DOM is inspected. The existing Futures command center, synthetic chart, alerts, Order Flow specialist, and health-only IBKR connector remain intact.
@@ -64,6 +64,16 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
+- Added a dedicated DiscoTrader Control Center to the Futures sidebar. It
+  reports the real workspace MCP-source, Trade Desk activation, and Trading
+  Connection states; saves `DT_MCP_TOKEN` through encrypted source credentials;
+  and installs the audited `trade-desk` definition only after an explicit
+  workspace action. The worker remains `ask` permissioned and its live tools
+  are not exposed as dashboard buttons.
+- Bundled the `trade-desk-operator` and `incident-recovery` skills. Replaced
+  inherited music-worker defaults and launchpad copy with the focused trading
+  roster. `trade-desk` is deliberately absent from automatic starter/default
+  activation.
 - Established the isolated RunnerOS worktree without modifying the other 23 protected worktrees.
 - Added versioned trading contracts and a project-owned deterministic ES fixture/testkit.
 - Added the standalone Order Flow JSON-RPC sidecar and typed trading client boundary.

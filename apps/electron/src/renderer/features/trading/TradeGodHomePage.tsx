@@ -26,12 +26,13 @@ import type {
 } from '@trade-god/contracts'
 
 import TradeGodWorkbenchPage from './TradeGodWorkbenchPage'
+import DiscoTraderControlCenterPage from './DiscoTraderControlCenterPage'
 import { marketCandleSeriesToChartBars } from './chart-series-adapter'
 import type { SyntheticChartTimeframe } from '../../../main/trading/synthetic-chart-fixture'
 
 const FuturesChartPanel = React.lazy(() => import('./FuturesChartPanel'))
 
-export type TradeGodView = 'overview' | 'order-flow'
+export type TradeGodView = 'overview' | 'discotrader' | 'order-flow'
 
 export const TRADE_GOD_VIEW_EVENT = 'trade-god:view'
 export const TRADE_GOD_VIEW_STORAGE_KEY = 'trade-god:active-view'
@@ -69,9 +70,8 @@ export const normalizeWatchTicker = (value: string): string =>
 
 const readStoredView = (): TradeGodView => {
   if (typeof window === 'undefined') return 'overview'
-  return window.sessionStorage.getItem(TRADE_GOD_VIEW_STORAGE_KEY) === 'order-flow'
-    ? 'order-flow'
-    : 'overview'
+  const stored = window.sessionStorage.getItem(TRADE_GOD_VIEW_STORAGE_KEY)
+  return stored === 'discotrader' || stored === 'order-flow' ? stored : 'overview'
 }
 
 export const readWatchlistPreference = (content: string, workspaceId?: string): string[] | undefined => {
@@ -115,7 +115,7 @@ const TradeGodHomePage: React.FC<TradeGodHomePageProps> = ({ workspaceId, worksp
   useEffect(() => {
     const handleViewChange = (event: Event) => {
       const view = (event as CustomEvent<TradeGodView>).detail
-      if (view === 'overview' || view === 'order-flow') setActiveView(view)
+      if (view === 'overview' || view === 'discotrader' || view === 'order-flow') setActiveView(view)
     }
     window.addEventListener(TRADE_GOD_VIEW_EVENT, handleViewChange)
     return () => window.removeEventListener(TRADE_GOD_VIEW_EVENT, handleViewChange)
@@ -291,8 +291,7 @@ const TradeGodHomePage: React.FC<TradeGodHomePageProps> = ({ workspaceId, worksp
       })
   }, [])
 
-  if (activeView === 'order-flow') return <TradeGodWorkbenchPage />
-
+  const chartBars = useMemo(() => marketCandleSeriesToChartBars(chartSeries), [chartSeries])
   const newAlertCount = alerts.filter((alert) => alert.status === 'new').length
   const gatewayReady = ibkrHealth?.state === 'ready'
   const receiverReady = alertStatus?.state === 'ready'
@@ -300,7 +299,9 @@ const TradeGodHomePage: React.FC<TradeGodHomePageProps> = ({ workspaceId, worksp
     ? workspaceName
     : 'Futures Desk'
   const selectedMarket = futuresBoard.find((market) => market.symbol === selectedSymbol) ?? futuresBoard[0]
-  const chartBars = useMemo(() => marketCandleSeriesToChartBars(chartSeries), [chartSeries])
+
+  if (activeView === 'order-flow') return <TradeGodWorkbenchPage />
+  if (activeView === 'discotrader') return <DiscoTraderControlCenterPage workspaceId={workspaceId} />
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto bg-[#090c0f] text-[#eaecef]">

@@ -36,6 +36,7 @@ import {
   Activity,
   LayoutDashboard,
   CandlestickChart,
+  RadioTower,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -2131,9 +2132,8 @@ function AppShellContent({
 
   const [tradeGodView, setTradeGodView] = useState<TradeGodView>(() => {
     if (typeof window === 'undefined') return 'overview'
-    return window.sessionStorage.getItem(TRADE_GOD_VIEW_STORAGE_KEY) === 'order-flow'
-      ? 'order-flow'
-      : 'overview'
+    const stored = window.sessionStorage.getItem(TRADE_GOD_VIEW_STORAGE_KEY)
+    return stored === 'discotrader' || stored === 'order-flow' ? stored : 'overview'
   })
 
   const openTradeGodView = useCallback((view: TradeGodView) => {
@@ -2143,13 +2143,14 @@ function AppShellContent({
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent<TradeGodView>(TRADE_GOD_VIEW_EVENT, { detail: view }))
     }, 0)
-  }, [navigate])
+  }, [])
 
   const unifiedSidebarItems = React.useMemo((): KeyboardSidebarItem[] => {
     const result: KeyboardSidebarItem[] = []
 
     if (!isArtistHQWorkspace) {
       result.push({ id: 'nav:trade-god-overview', type: 'nav', action: () => openTradeGodView('overview') })
+      result.push({ id: 'nav:trade-god-discotrader', type: 'nav', action: () => openTradeGodView('discotrader') })
       result.push({ id: 'nav:trade-god-order-flow', type: 'nav', action: () => openTradeGodView('order-flow') })
       result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
       result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
@@ -2189,7 +2190,7 @@ function AppShellContent({
     }
 
     return result
-  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleWorkChatClick, isArtistHQWorkspace, navigate, peopleExpanded, planExpanded, toggleMainNavGroup, vaultActive, workExpanded])
+  }, [brainExpanded, handleAgentsClick, handleAgendaNavClick, handleArtistHQNavClick, handleCampaignCalendarClick, handleCampaignHomeClick, handleWorkChatClick, isArtistHQWorkspace, openTradeGodView, peopleExpanded, planExpanded, toggleMainNavGroup, vaultActive, workExpanded])
 
   const sidebarProjectGroups = React.useMemo(() => {
     const groups = new Map<string, { key: string; label: string; value?: string; items: SessionMeta[] }>()
@@ -2459,6 +2460,13 @@ function AppShellContent({
           icon: LayoutDashboard,
           variant: isTradeGodNavigation(navState) && tradeGodView === 'overview' ? "default" : "ghost",
           onClick: () => openTradeGodView('overview'),
+        },
+        {
+          id: "nav:trade-god-discotrader",
+          title: "DiscoTrader",
+          icon: RadioTower,
+          variant: isTradeGodNavigation(navState) && tradeGodView === 'discotrader' ? "default" : "ghost",
+          onClick: () => openTradeGodView('discotrader'),
         },
         {
           id: "nav:trade-god-order-flow",

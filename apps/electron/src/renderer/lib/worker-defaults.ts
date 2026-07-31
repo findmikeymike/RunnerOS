@@ -1,22 +1,12 @@
 export const BASE_DEFAULT_WORKER_SLUGS = [
-  'branding-agent',
-  'world-builder',
-  'college-radio-agent',
-  'spotify-playlist-creator',
+  'researcher',
+  'triager',
+  'critic',
 ] as const
 
 export const CAMPAIGN_DEFAULT_WORKER_SLUGS = [
-  'content-genius',
-  'scroll-stopper',
-  'art-director',
-  'ad-creative-agent',
-  'ads-strategist',
-  'ads-agent',
-  'ig-trending-power-up',
-  'influencer-campaign-power-up',
-  'playlisting-power-up',
-  'record-doctor',
-  'industry-hunter',
+  'writer',
+  'coder',
 ] as const
 
 export function defaultWorkerSlugs(includeCampaignWorkers: boolean): readonly string[] {

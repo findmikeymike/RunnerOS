@@ -42,6 +42,9 @@ This is the routing table for humans and agents. Read only what the current job 
   foundation for exact Discord follow-up resolution, durable compound trade
   management, and crash recovery. Donor push, desktop runtime wiring, and real
   paper mutation remain external gates.
+- `integrations/DISCOTRADER-CONTROL-CENTER.md` — operator setup and safety
+  contract for connecting the local daemon and explicitly installing the Trade
+  Desk worker in one Trading workspace.
 
 ## Supporting Vision Library
 

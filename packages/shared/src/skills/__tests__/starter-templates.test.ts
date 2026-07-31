@@ -29,16 +29,20 @@ describe('Trade God starter skills', () => {
     }
   });
 
-  it('ships only the Order Flow Specialist product skill', () => {
+  it('ships the focused trading product skills', () => {
     expect(BUNDLED_STARTER_SKILLS.map(skill => skill.slug)).toEqual([
+      'incident-recovery',
       'order-flow-specialist',
+      'trade-desk-operator',
     ]);
 
-    const skillMd = BUNDLED_STARTER_SKILLS[0]?.files.find(file => file.path === 'SKILL.md');
-    expect(skillMd).toBeDefined();
-    const parsed = matter(skillMd!.content);
-    expect(parsed.data.name).toBeTruthy();
-    expect(parsed.data.description).toBeTruthy();
-    expect(parsed.content.toLowerCase()).toContain('order flow');
+    for (const skill of BUNDLED_STARTER_SKILLS) {
+      const skillMd = skill.files.find(file => file.path === 'SKILL.md');
+      expect(skillMd).toBeDefined();
+      const parsed = matter(skillMd!.content);
+      expect(parsed.data.name).toBeTruthy();
+      expect(parsed.data.description).toBeTruthy();
+      expect(parsed.content.trim().length).toBeGreaterThan(0);
+    }
   });
 });

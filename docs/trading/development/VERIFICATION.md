@@ -378,6 +378,28 @@ A lower rung does not prove a higher rung.
   automated-test proven. A running-app smoke and any provider mutation remain
   unproven.
 
+## DiscoTrader Control Center — 2026-07-31
+
+- Page contract: source, worker, broker-route, and approval states come from
+  existing trusted APIs; the renderer does not own execution truth.
+- Installation contract: `trade-desk` is absent from automatic starters and
+  defaults. The explicit action writes the audited definition and activates it
+  only in the selected workspace. A conflicting definition fails closed.
+- Credential contract: `DT_MCP_TOKEN` is sent only to the encrypted
+  source-credential API. It is not stored in the agent definition or docs.
+- Authority contract: the worker uses `permissionMode: ask`; halt, flatten, and
+  other live tools are not direct dashboard controls.
+- Focused proof: 15 tests passed with 86 expectations, including hostile
+  same-slug source and worker authority cases.
+- Build proof: repository-wide typecheck plus Electron main, preload, and
+  renderer production builds passed.
+- Not proven: live user click-through, daemon authentication, worker chat, or
+  any provider mutation.
+- Broad-suite note: root `bun test` also traverses unrelated Artist OS tooling
+  and Electron-only test harnesses. This run hit an Ads Operator route
+  expectation plus missing Electron named exports and was stopped; it is not
+  claimed as green.
+
 ## Completion Language
 
 Use exact claims:

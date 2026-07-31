@@ -134,7 +134,7 @@ export function AgentsLaunchpad({ workspaceId, includeCampaignDefaultWorkers = f
                   Workers
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-white/50">
-                  Music operators for release planning, content, ads, audience intelligence, and creative execution.
+                  Trading operators for research, alert triage, system work, and approval-gated execution.
                 </p>
               </div>
             </div>
@@ -1311,6 +1311,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
   }
 
   const joined = `${slug} ${name} ${description ?? ''} ${(tags ?? []).join(' ')}`.toLowerCase()
+  if (matchesAny(joined, ['trade desk', 'trading', 'execution', 'futures', 'broker', 'position'])) return 'Execution'
   if (matchesAny(joined, ['social publisher', 'trypost', 'socials', 'social posting', 'posting', 'publisher'])) return 'Socials'
   if (matchesAny(joined, ['scroll stopper', 'scroll-stopper', 'content genius', 'hypermotion', 'lottie', 'video director', 'video editor', '3d agent', '3dcellforge', 'motion', 'caption', 'clip', 'shortform'])) return 'Content Creation'
   if (matchesAny(joined, ['anr', 'a&r', 'industry', 'artist development', 'label operator', 'labels', 'sync', 'outreach', 'comms', 'press', 'email'])) return 'Outreach'
@@ -1325,6 +1326,7 @@ function getAgentDomain(tags: string[] | undefined, slug: string, name: string, 
 
 function agentDomainRank(domain: string) {
   const order = [
+    'Execution',
     'Creative',
     'Brand & Story',
     'Content Creation',
@@ -1354,7 +1356,6 @@ const HIDDEN_WORKER_HOME_AGENT_SLUGS = new Set([
   'hypermotion-agent',
   'lottie-animation-agent',
   'open-slide-agent',
-  'researcher',
 ])
 
 function dedupeLaunchpadAgents(agents: AgentDefinitionDTO[]): AgentDefinitionDTO[] {
