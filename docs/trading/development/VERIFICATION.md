@@ -333,7 +333,7 @@ A lower rung does not prove a higher rung.
 - Futures rollover/corporate action assumptions are encoded where relevant.
 - Fees, slippage, latency, and fill assumptions are explicit in backtests.
 
-## Unified Broker Entry Gateway — 2026-07-31
+## Unified Broker Entry Gateway — 2026-07-30
 
 - Complete focused suite: 175 passed, 0 failed across 31 files with 582 expectations.
 - Repository-wide `bun run typecheck:all`: passed.
@@ -342,7 +342,7 @@ A lower rung does not prove a higher rung.
 - Runtime/provider proof not claimed: no real Tradovate paper credential, WealthCharts selector bundle, 50-run real-provider paper soak, packaged installer smoke, or consequential canary.
 - Activation remains impossible from renderer state alone. Certification evidence must match the installed adapter ID, adapter version, provider-contract version, connection, transport, and environment.
 
-## Discord Follow-Up End-to-End Handoff — 2026-07-31
+## Discord Follow-Up End-to-End Handoff — 2026-07-30
 
 - Rival findings fixed: negated/delayed close false positives, unsafe `to be` breakeven matching, missing `flat`/`done`, stop quantity not bound to provider open quantity, and completed actions without provider evidence.
 - Existing port 9101 is reused. HMAC/timestamp/body/rate gates run before the dedicated trusted handler; the `discotrader-management` slug rejects exact signed replay while releasing its reservation after transient failure.

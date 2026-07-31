@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-31
+last_verified: 2026-07-30
 source_of_truth: true
 ---
 
@@ -9,7 +9,7 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-31
+- Date: 2026-07-30
 - Stage: the signed Discord follow-up path is runtime-proven in observe-only; real-provider paper certification is the next gate
 - Current goal: certify one exact paper adapter and its partial-close/protection-resize lifecycle without enabling consequential execution
 - Overall state: Trade God now has durable execution contracts and lifecycle storage, exact account/environment connection records, isolated trading browser sessions, a Tradovate demo API adapter foundation, a named WealthCharts browser driver foundation, DiscoTrader ticket convergence, version-bound certification evidence, restart reconciliation, kill switches, checksum-bound cancel/modify/partial-close/flatten commands, and a durable Discord follow-up manager. Electron instantiates that manager at startup, recovers pending receipts before new delivery, and exposes it only behind the HMAC-authenticated `discotrader-management` trigger path. DiscoTrader now emits one immutable signed envelope per source message, the Trading workspace matcher is installed, a running Electron instance accepted the real local handoff, persisted a blocked/orphaned receipt, and rejected an exact signed replay. The runtime still attaches zero execution adapters deliberately, and the receipt records that no gateway mutation was attempted. No real adapter is paper-certified or enabled for consequential entry. Tradovate still lacks certified partial-close/protection-resize behavior; WealthCharts management actions remain disabled until its live paper DOM is inspected. The existing Futures command center, synthetic chart, alerts, Order Flow specialist, and health-only IBKR connector remain intact.
