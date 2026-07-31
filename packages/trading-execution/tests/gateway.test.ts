@@ -241,6 +241,21 @@ class FakeAdapter implements ExecutionAdapter {
         protection_verified: false,
         reason: 'Fake provider is flat after emergency liquidation.',
       }
+    } else if (input.managementCommand.payload.operation === 'partial-close') {
+      const remaining = Math.max(
+        0,
+        this.reconciliation.open_quantity - input.managementCommand.payload.quantity,
+      )
+      this.reconciliation = {
+        ...this.reconciliation,
+        open_quantity: remaining,
+        protection_verified: remaining > 0,
+        protection_orders: this.reconciliation.protection_orders?.map((order) => ({
+          ...order,
+          quantity: remaining,
+        })),
+        reason: 'Fake provider reduced and re-protected the position.',
+      }
     }
     const unsigned = {
       management_ack_schema_version: EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
@@ -403,6 +418,32 @@ describe('execution gateway', () => {
     await expect(gateway.reconcile(intent.intent_id)).rejects.toThrow(
       'Filled-protected reconciliation requires one stop sized to the confirmed open position',
     )
+  })
+
+  test('distinguishes two requested partial closes while replaying each exactly once', async () => {
+    const adapter = new FakeAdapter()
+    adapter.reconciliation = {
+      ...adapter.reconciliation,
+      filled_quantity: 3,
+      open_quantity: 3,
+      protection_orders: adapter.reconciliation.protection_orders?.map((order) => ({
+        ...order,
+        quantity: 3,
+      })),
+    }
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection, { quantity: 3 })
+    await approve(gateway, connection, intent)
+    expect((await gateway.execute(intent.intent_id)).state).toBe('protected')
+
+    await gateway.closePosition(intent.intent_id, 1, 'discord-partial-one')
+    await gateway.closePosition(intent.intent_id, 1, 'discord-partial-one')
+    const final = await gateway.closePosition(intent.intent_id, 1, 'discord-partial-two')
+
+    expect(adapter.manageCount).toBe(2)
+    expect(final.receipt?.open_quantity).toBe(1)
+    expect(final.management_actions.map(({ command }) => command.request_id))
+      .toEqual(['discord-partial-one', 'discord-partial-two'])
   })
 
   test('kills new entry and automatically flattens an unprotected fill', async () => {

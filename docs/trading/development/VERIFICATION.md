@@ -354,6 +354,30 @@ A lower rung does not prove a higher rung.
 - Replay proof: the exact byte-signed delivery returned HTTP 202 once and HTTP 409 `replay_detected` on the second request. An intentionally non-byte-exact probe failed closed with HTTP 401 `invalid_signature`.
 - Still not proven: any certified paper adapter, provider mutation, 50-lifecycle soak, or consequential canary.
 
+## DiscoTrader Rival Closure — 2026-07-30
+
+- Entry tickets no longer stop at a library seam: the authenticated
+  `discotrader` trigger validates the full ticket and registers it through the
+  gateway intent source. Account routing is explicit or uniquely ready; it
+  never guesses.
+- Management idempotency is event-scoped. A retry of one Discord action is
+  suppressed, while two distinct messages requesting the same reduction each
+  execute once.
+- DiscoTrader now persists entry and management handoffs in a SQLite outbox
+  before network delivery, queues management authority before acknowledging
+  Chrome, retries transient Runner failures, and does not resend rows already
+  marked delivered. Direct entry tickets fail before network I/O when the HMAC
+  secret is missing.
+- Thread context is inferred only from an exact cross-channel reply or an
+  operator-configured thread-parent mapping.
+- Trade God focused proof: 210 tests passed across 33 files with 712
+  expectations. Repository-wide typecheck and Electron main/preload/renderer
+  builds passed.
+- DiscoTrader proof: 283 tests passed; typecheck and production build passed.
+- The direct entry route, retry recovery, and thread-parent mapping are
+  automated-test proven. A running-app smoke and any provider mutation remain
+  unproven.
+
 ## Completion Language
 
 Use exact claims:

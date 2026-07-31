@@ -382,6 +382,9 @@ export const executionManagementPayloadSchema = z.discriminatedUnion('operation'
 export const executionManagementCommandSchema = z.object({
   management_command_schema_version: z.literal(EXECUTION_MANAGEMENT_COMMAND_SCHEMA_VERSION),
   management_command_id: identifierSchema,
+  // New commands carry the durable caller operation identity. Optional keeps
+  // existing on-disk records readable while event-scoped idempotency rolls out.
+  request_id: identifierSchema.optional(),
   parent_command_id: identifierSchema,
   intent_id: identifierSchema,
   claim_id: identifierSchema,

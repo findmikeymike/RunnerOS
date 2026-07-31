@@ -97,6 +97,7 @@ export const computeManagementActionDigest = (input: {
   connection: TradingConnection
   parentCommandId: string
   payload: ExecutionManagementPayload
+  requestId?: string
 }): string => {
   const payload = input.payload.operation === 'flatten'
     ? { operation: 'flatten' as const }
@@ -113,6 +114,7 @@ export const computeManagementActionDigest = (input: {
     account_ref: input.connection.account_ref,
     environment: input.connection.environment,
     parent_command_id: input.parentCommandId,
+    request_id: input.requestId,
     payload,
   })
 }

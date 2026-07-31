@@ -584,6 +584,9 @@ app.whenReady().then(async () => {
           alertDirectory: join(app.getPath('userData'), 'trade-god', 'alerts'),
           connectionDirectory: join(app.getPath('userData'), 'trade-god', 'connections'),
           executionDirectory: join(app.getPath('userData'), 'trade-god', 'execution'),
+          ...(process.env.TRADE_GOD_DISCOTRADER_CONNECTION_ID
+            ? { discoTraderConnectionId: process.env.TRADE_GOD_DISCOTRADER_CONNECTION_ID }
+            : {}),
           credentialVault: {
             getSecret: (name) => getCredentialManager().getTradingConnectionSecret(name),
             setSecret: (name, value) => getCredentialManager().setTradingConnectionSecret(name, value),
@@ -903,9 +906,14 @@ app.whenReady().then(async () => {
             port: triggerPort,
             host: process.env.CRAFT_TRIGGER_HOST ?? '127.0.0.1',
             resolver: instance.sessionManager,
-            replayProtectedSlugs: ['discotrader-management'],
+            replayProtectedSlugs: ['discotrader', 'discotrader-management'],
             authenticatedDeliveryHandler: async (delivery) => {
-              if (delivery.slug !== 'discotrader-management') return { handled: false }
+              if (
+                delivery.slug !== 'discotrader'
+                && delivery.slug !== 'discotrader-management'
+              ) {
+                return { handled: false }
+              }
               if (!specialistWorkspace || delivery.workspaceId !== specialistWorkspace.id) {
                 return {
                   handled: true,
@@ -918,6 +926,42 @@ app.whenReady().then(async () => {
                   handled: true,
                   status: 401,
                   body: { error: 'authentication_required' },
+                }
+              }
+              if (delivery.slug === 'discotrader') {
+                if (!tradeGodRuntime?.ingestDiscoTraderTicketPush) {
+                  return {
+                    handled: true,
+                    status: 503,
+                    body: { error: 'trade_entry_unavailable' },
+                  }
+                }
+                try {
+                  const record = await tradeGodRuntime.ingestDiscoTraderTicketPush(delivery.body)
+                  return {
+                    handled: true,
+                    status: 202,
+                    body: {
+                      ok: true,
+                      intent_id: record.intent.intent_id,
+                      state: record.state,
+                    },
+                  }
+                } catch (error) {
+                  const isPayloadError = (
+                    error instanceof Error
+                    && (error.name === 'ZodError' || error.name === 'ExecutionGatewayError')
+                  )
+                  mainLog.warn('[trade-god] DiscoTrader entry push rejected:', error)
+                  return {
+                    handled: true,
+                    status: isPayloadError ? 422 : 503,
+                    body: {
+                      error: isPayloadError
+                        ? 'invalid_discotrader_ticket'
+                        : 'trade_entry_unavailable',
+                    },
+                  }
                 }
               }
               if (!tradeGodRuntime?.ingestDiscordManagementPush) {

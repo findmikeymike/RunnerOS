@@ -2,8 +2,11 @@ import { existsSync } from 'node:fs'
 import path from 'node:path'
 
 import {
+  discoTraderPushPayloadSchema,
   MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES,
+  type DiscoTraderTicket,
   type DiscordManagementReceipt,
+  type ExecutionRecord,
   type TradeAlert,
   type TradeAlertIngestionStatus,
   type TradeAlertWebhookSetup,
@@ -37,11 +40,13 @@ import {
 } from './trading-connection-service.ts'
 import {
   ExecutionGateway,
+  ExecutionGatewayError,
   FileAdapterCertificationStore,
   FileDiscoTraderIntentSource,
   FileDiscordTradeManager,
   FileExecutionStore,
   FileTradingConnectionStore,
+  type DiscoTraderIntentRoute,
 } from '@trade-god/execution'
 
 interface ResolveLaunchOptions {
@@ -63,6 +68,8 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   alertDirectory?: string
   connectionDirectory?: string
   executionDirectory?: string
+  discoTraderConnectionId?: string
+  discoTraderIntentValidityMs?: number
   credentialVault?: TradingCredentialVault
   tradingBrowserSessionLauncher?: TradingBrowserSessionLauncher
   alertPort?: number
@@ -161,6 +168,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   orderFlowSpecialist?: OrderFlowSpecialist
   orderFlowSpecialistPipeline?: OrderFlowSpecialistPipeline
   alertLedger?: TradeAlertLedger
+  ingestDiscoTraderTicketPush?: (input: unknown) => Promise<ExecutionRecord>
   ingestDiscordManagementPush?: (input: unknown) => Promise<DiscordManagementReceipt>
   setSpecialistModel: (model: SpecialistModel) => void
   dispose: () => Promise<void>
@@ -249,6 +257,50 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         executionGateway,
         options.now,
       )
+    : undefined
+  const resolveDiscoTraderRoute = discordManagementSource && tradingConnectionStore
+    ? async (ticket: DiscoTraderTicket): Promise<DiscoTraderIntentRoute> => {
+        const connections = await tradingConnectionStore.list()
+        const selected = options.discoTraderConnectionId
+          ? connections.find(({ connection_id }) => (
+              connection_id === options.discoTraderConnectionId
+            ))
+          : connections.filter(({ enabled, state }) => enabled && state === 'ready').length === 1
+            ? connections.find(({ enabled, state }) => enabled && state === 'ready')
+            : undefined
+        if (!selected) {
+          throw new ExecutionGatewayError(
+            'CONNECTION_UNAVAILABLE',
+            options.discoTraderConnectionId
+              ? `Configured DiscoTrader connection ${options.discoTraderConnectionId} was not found.`
+              : 'DiscoTrader entry requires exactly one enabled ready connection or TRADE_GOD_DISCOTRADER_CONNECTION_ID.',
+          )
+        }
+        if (!selected.enabled || selected.state !== 'ready') {
+          throw new ExecutionGatewayError(
+            'CONNECTION_UNAVAILABLE',
+            'Configured DiscoTrader connection is not enabled and ready.',
+          )
+        }
+        const symbol = ticket.tradedSymbol.toUpperCase()
+        const instrument = DISCOTRADER_FUTURES_INSTRUMENT[symbol]
+        if (!instrument) {
+          throw new ExecutionGatewayError(
+            'CAPABILITY_UNAVAILABLE',
+            `DiscoTrader symbol ${symbol} has no configured Trade God instrument route.`,
+          )
+        }
+        return {
+          connection_id: selected.connection_id,
+          instrument: {
+            canonical_id: `${instrument.venue}:${symbol}`,
+            symbol,
+            exchange: instrument.exchange,
+            tick_size: instrument.tickSize,
+          },
+          valid_for_ms: options.discoTraderIntentValidityMs ?? 60_000,
+        }
+      }
     : undefined
   const discordTradeManager = executionGateway && discordManagementSource && options.executionDirectory
     ? new FileDiscordTradeManager({
@@ -366,6 +418,18 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(alertLedger ? { alertLedger } : {}),
     ...(discordTradeManager
       ? {
+          ingestDiscoTraderTicketPush: async (input: unknown) => {
+            const payload = discoTraderPushPayloadSchema.parse(input)
+            if (payload.kind !== 'ticket' || !payload.ticket || !resolveDiscoTraderRoute) {
+              throw new ExecutionGatewayError(
+                'CAPABILITY_UNAVAILABLE',
+                'Only a configured DiscoTrader ticket push can create a gateway intent.',
+              )
+            }
+            const route = await resolveDiscoTraderRoute(payload.ticket)
+            const result = await discordManagementSource!.ingestPush(input, route)
+            return result.record
+          },
           ingestDiscordManagementPush: async (input: unknown) => {
             await discordManagementReady
             if (discordManagementRecoveryError) throw discordManagementRecoveryError
@@ -382,3 +446,17 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     },
   }
 }
+
+const DISCOTRADER_FUTURES_INSTRUMENT: Readonly<Record<
+  string,
+  { venue: string; exchange: string; tickSize: string }
+>> = Object.freeze({
+  ES: { venue: 'CME', exchange: 'XCME', tickSize: '0.25' },
+  MES: { venue: 'CME', exchange: 'XCME', tickSize: '0.25' },
+  NQ: { venue: 'CME', exchange: 'XCME', tickSize: '0.25' },
+  MNQ: { venue: 'CME', exchange: 'XCME', tickSize: '0.25' },
+  YM: { venue: 'CBOT', exchange: 'XCBT', tickSize: '1' },
+  MYM: { venue: 'CBOT', exchange: 'XCBT', tickSize: '1' },
+  RTY: { venue: 'CME', exchange: 'XCME', tickSize: '0.1' },
+  M2K: { venue: 'CME', exchange: 'XCME', tickSize: '0.1' },
+})

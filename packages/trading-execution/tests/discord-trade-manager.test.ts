@@ -186,8 +186,8 @@ class FakeGateway implements DiscordTradeManagementGateway {
     return record
   }
 
-  async closePosition(intentId: string, quantity: number) {
-    const key = `partial:${intentId}:${quantity}`
+  async closePosition(intentId: string, quantity: number, requestId?: string) {
+    const key = requestId ?? `partial:${intentId}:${quantity}`
     const record = this.required(intentId)
     if (!this.delivered.has(key)) {
       this.delivered.add(key)
@@ -202,13 +202,13 @@ class FakeGateway implements DiscordTradeManagementGateway {
           quantity: remaining,
         })),
       }
-      this.journal(record, { operation: 'partial-close', quantity })
+      this.journal(record, { operation: 'partial-close', quantity }, requestId)
     }
     return record
   }
 
-  async flatten(intentId: string, reason: string) {
-    const key = `flatten:${intentId}:${reason}`
+  async flatten(intentId: string, reason: string, requestId?: string) {
+    const key = requestId ?? `flatten:${intentId}:${reason}`
     const record = this.required(intentId)
     if (!this.delivered.has(key)) {
       this.delivered.add(key)
@@ -221,7 +221,7 @@ class FakeGateway implements DiscordTradeManagementGateway {
         open_quantity: 0,
         protection_verified: false,
       }
-      this.journal(record, { operation: 'flatten', reason })
+      this.journal(record, { operation: 'flatten', reason }, requestId)
     }
     return record
   }
@@ -241,14 +241,15 @@ class FakeGateway implements DiscordTradeManagementGateway {
   async modifyOrder(
     intentId: string,
     input: Omit<Extract<ExecutionManagementPayload, { operation: 'modify' }>, 'operation'>,
+    requestId?: string,
   ) {
     const payload = { operation: 'modify' as const, ...input }
-    const key = `modify:${intentId}:${sha256(payload)}`
+    const key = requestId ?? `modify:${intentId}:${sha256(payload)}`
     const record = this.required(intentId)
     if (!this.delivered.has(key)) {
       this.delivered.add(key)
       this.log.push(`stop:${input.stop_price}`)
-      this.journal(record, payload)
+      this.journal(record, payload, requestId)
     }
     return record
   }
@@ -259,11 +260,16 @@ class FakeGateway implements DiscordTradeManagementGateway {
     return found
   }
 
-  private journal(record: ExecutionRecord, payload: ExecutionManagementPayload): void {
+  private journal(
+    record: ExecutionRecord,
+    payload: ExecutionManagementPayload,
+    requestId?: string,
+  ): void {
     record.management_actions.push({
       command: {
         management_command_schema_version: 'execution-management-command@1',
         management_command_id: `management-${this.delivered.size}`,
+        ...(requestId ? { request_id: requestId } : {}),
         parent_command_id: record.command!.command_id,
         intent_id: record.intent.intent_id,
         claim_id: record.claim!.claim_id,
@@ -456,6 +462,23 @@ describe('Discord trade manager', () => {
     const replay = await manager.ingestMessage(sourceMessage)
     expect(replay).toEqual(recovered[0]!)
     expect(gateway.log).toEqual(['reconcile', 'partial:2', 'stop:5600'])
+  })
+
+  test('executes the same explicit reduction from two distinct Discord messages', async () => {
+    const { gateway, manager } = await setup([artifact()], [3])
+
+    const first = await manager.ingestMessage(message('taking off 1 contract', {
+      message_id: 'distinct-partial-1',
+    }))
+    const second = await manager.ingestMessage(message('taking off 1 contract', {
+      message_id: 'distinct-partial-2',
+    }))
+
+    expect(first.status).toBe('completed')
+    expect(second.status).toBe('completed')
+    expect(gateway.log).toEqual(['reconcile', 'partial:1', 'reconcile', 'partial:1'])
+    expect(first.actions[0]!.management_command_id)
+      .not.toBe(second.actions[0]!.management_command_id)
   })
 
   test('treats stopped out as reconciliation only', async () => {

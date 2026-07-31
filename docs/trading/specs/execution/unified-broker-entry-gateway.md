@@ -92,6 +92,13 @@ Verified in this checkout:
   switches.
 - IBKR is currently a market-data onboarding path only. It is not an execution
   adapter.
+- The authenticated `discotrader` trigger now validates a complete immutable
+  ticket and registers it through the gateway's sole DiscoTrader intent source.
+  It requires either `TRADE_GOD_DISCOTRADER_CONNECTION_ID` or exactly one
+  enabled, ready trading connection; ambiguous account routing fails closed.
+- Direct ticket ingestion creates durable gateway intent truth but cannot
+  submit an order while the Electron runtime intentionally exposes zero
+  provider adapters.
 
 Assumptions:
 
@@ -1168,6 +1175,7 @@ Reversal:
 | 2026-07-30 | Tradovate demo adapter foundation | Official entry, cancel, modify, liquidate, identity, and reconciliation paths are implemented and fixture-tested | Apex API eligibility, real demo credential, partial-close/protection-resize proof, and 50-run paper soak |
 | 2026-07-30 | WealthCharts named browser driver foundation | Dedicated session, draft re-read, selector-drift stop, one-click submit, and evidence capture are fixture-tested | Authenticated paper DOM inspection and all management actions |
 | 2026-07-30 | DiscordTrader convergence | Signed ticket evidence persists once and deterministically becomes an immutable gateway intent | Real paper end-to-end source-to-receipt run |
+| 2026-07-30 | Authenticated direct ticket receiver | The `discotrader` trigger validates the signed ticket and requires an explicit or uniquely ready connection before gateway registration | Runtime smoke and a paper-certified provider adapter |
 
 ## Primary Sources
 

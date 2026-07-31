@@ -213,7 +213,10 @@ If any step is rejected, unknown, divergent, unprotected, or unsupported:
 - Duplicate message IDs return the durable receipt.
 - Every logical action obtains a concrete payload before its gateway call.
 - Restart resumes the same persisted action plan.
-- Gateway semantic idempotency suppresses a duplicate concrete mutation.
+- Each gateway command is keyed by the immutable Discord message checksum plus
+  action index. Retrying one source action reuses its command, while an
+  identical instruction from a different Discord message remains a distinct
+  requested action.
 - Receipt and source tampering fail closed.
 
 ## Test Matrix
@@ -246,6 +249,7 @@ Execution:
 - odd-quantity half refusal;
 - close-now flatten;
 - duplicate message replay;
+- identical reductions from two different Discord messages both execute once;
 - crash after partial close and resume without a second partial;
 - first-action failure prevents the second;
 - ambiguous management acknowledgment halts;
@@ -280,11 +284,17 @@ Integrity:
 ## External Integration Gate
 
 DiscoTrader v2 now pushes one immutable signed management envelope per source
-message. Trade God instantiates the durable manager in Electron and routes the
+message. The sender writes that envelope to a SQLite outbox before acknowledging
+the Chrome delivery and retries transient Runner outages. Trade God instantiates
+the durable manager in Electron and routes the
 dedicated `discotrader-management` slug directly from the existing trigger
 server after HMAC, timestamp, body, rate, and exact-replay gates. Pending
 receipts recover before new delivery. The runtime attaches zero provider
 adapters until a real paper connection is certified.
+
+Thread identity is accepted only when the extension observes an exact
+cross-channel reply or the operator supplies an explicit thread-to-parent
+channel mapping. Unknown thread styling remains empty rather than guessed.
 
 The Trading workspace now has an enabled `WebhookReceive` matcher for
 `discotrader-management`, with `secretEnv` set to the same secret value as

@@ -359,31 +359,41 @@ export class ExecutionGateway {
     return this.applyReconciliation(intentId, connection, adapter, result)
   }
 
-  cancelOrder(intentId: string, providerOrderIds: string[]): Promise<ExecutionRecord> {
+  cancelOrder(
+    intentId: string,
+    providerOrderIds: string[],
+    requestId?: string,
+  ): Promise<ExecutionRecord> {
     return this.manage(intentId, {
       operation: 'cancel',
       provider_order_ids: providerOrderIds,
-    })
+    }, requestId)
   }
 
   modifyOrder(
     intentId: string,
     input: Omit<Extract<ExecutionManagementPayload, { operation: 'modify' }>, 'operation'>,
+    requestId?: string,
   ): Promise<ExecutionRecord> {
-    return this.manage(intentId, { operation: 'modify', ...input })
+    return this.manage(intentId, { operation: 'modify', ...input }, requestId)
   }
 
-  closePosition(intentId: string, quantity: number): Promise<ExecutionRecord> {
-    return this.manage(intentId, { operation: 'partial-close', quantity })
+  closePosition(
+    intentId: string,
+    quantity: number,
+    requestId?: string,
+  ): Promise<ExecutionRecord> {
+    return this.manage(intentId, { operation: 'partial-close', quantity }, requestId)
   }
 
-  flatten(intentId: string, reason: string): Promise<ExecutionRecord> {
-    return this.manage(intentId, { operation: 'flatten', reason })
+  flatten(intentId: string, reason: string, requestId?: string): Promise<ExecutionRecord> {
+    return this.manage(intentId, { operation: 'flatten', reason }, requestId)
   }
 
   private async manage(
     intentId: string,
     payloadInput: ExecutionManagementPayload,
+    requestIdInput?: string,
   ): Promise<ExecutionRecord> {
     const parsedPayload = executionManagementPayloadSchema.parse(payloadInput)
     const payload: ExecutionManagementPayload = parsedPayload.operation === 'cancel'
@@ -392,6 +402,9 @@ export class ExecutionGateway {
           provider_order_ids: [...new Set(parsedPayload.provider_order_ids)].sort(),
         }
       : parsedPayload
+    const requestId = requestIdInput ?? `management-semantic-${sha256(
+      payload.operation === 'flatten' ? { operation: 'flatten' } : payload,
+    ).slice(0, 32)}`
     const record = await this.options.store.get(intentId)
     if (!record.command || !record.claim) {
       throw new ExecutionGatewayError(
@@ -407,6 +420,7 @@ export class ExecutionGateway {
       connection,
       parentCommandId: record.command.command_id,
       payload,
+      requestId,
     })
     if (
       record.management_actions.some(
@@ -434,6 +448,7 @@ export class ExecutionGateway {
       const unsigned = {
         management_command_schema_version: EXECUTION_MANAGEMENT_COMMAND_SCHEMA_VERSION,
         management_command_id: `management-${randomUUID()}`,
+        request_id: requestId,
         parent_command_id: current.command!.command_id,
         intent_id: current.intent.intent_id,
         claim_id: current.claim!.claim_id,

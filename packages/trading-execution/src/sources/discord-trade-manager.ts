@@ -33,11 +33,12 @@ export interface DiscordTradeManagementGateway {
   list(): Promise<ExecutionRecord[]>
   get(intentId: string): Promise<ExecutionRecord>
   reconcile(intentId: string): Promise<ExecutionRecord>
-  closePosition(intentId: string, quantity: number): Promise<ExecutionRecord>
-  flatten(intentId: string, reason: string): Promise<ExecutionRecord>
+  closePosition(intentId: string, quantity: number, requestId?: string): Promise<ExecutionRecord>
+  flatten(intentId: string, reason: string, requestId?: string): Promise<ExecutionRecord>
   modifyOrder(
     intentId: string,
     input: Omit<Extract<ExecutionManagementPayload, { operation: 'modify' }>, 'operation'>,
+    requestId?: string,
   ): Promise<ExecutionRecord>
   prepareStopMove(
     intentId: string,
@@ -377,10 +378,12 @@ export class FileDiscordTradeManager {
       }
 
       let record: ExecutionRecord
+      const requestId = managementRequestId(receipt, planned.index)
       try {
         record = await this.executeAction(
           resolvedIntentId,
           receipt.actions[planned.index]!,
+          requestId,
         )
         this.assertActionOutcome(receipt.actions[planned.index]!, record)
       } catch (error) {
@@ -388,7 +391,11 @@ export class FileDiscordTradeManager {
       }
 
       await this.options.afterGatewayAction?.(receipt, receipt.actions[planned.index]!, record)
-      const commandId = managementCommandId(record, receipt.actions[planned.index]!.concrete_payload)
+      const commandId = managementCommandId(
+        record,
+        receipt.actions[planned.index]!.concrete_payload,
+        requestId,
+      )
       const gatewayReceipt = record.receipt
       if (!gatewayReceipt || gatewayReceipt.evidence_refs.length === 0) {
         return this.failAction(
@@ -427,6 +434,7 @@ export class FileDiscordTradeManager {
   private async executeAction(
     intentId: string,
     action: DiscordManagementActionReceipt,
+    requestId: string,
   ): Promise<ExecutionRecord> {
     if (action.logical_action.operation === 'reconcile') {
       return this.options.gateway.reconcile(intentId)
@@ -434,14 +442,14 @@ export class FileDiscordTradeManager {
     const payload = action.concrete_payload
     if (!payload) throw new Error('Concrete gateway payload was not persisted.')
     if (payload.operation === 'partial-close') {
-      return this.options.gateway.closePosition(intentId, payload.quantity)
+      return this.options.gateway.closePosition(intentId, payload.quantity, requestId)
     }
     if (payload.operation === 'flatten') {
-      return this.options.gateway.flatten(intentId, payload.reason)
+      return this.options.gateway.flatten(intentId, payload.reason, requestId)
     }
     if (payload.operation === 'modify') {
       const { operation: _operation, ...input } = payload
-      return this.options.gateway.modifyOrder(intentId, input)
+      return this.options.gateway.modifyOrder(intentId, input, requestId)
     }
     throw new Error('Discord management cannot issue cancellation commands.')
   }
@@ -666,13 +674,29 @@ const discordChannelId = (channelUrl: string): string => {
 const managementCommandId = (
   record: ExecutionRecord,
   payload?: ExecutionManagementPayload,
+  requestId?: string,
 ): string | undefined => {
   if (!payload) return undefined
+  if (requestId) {
+    const exact = record.management_actions.findLast(
+      ({ command }) => command.request_id === requestId,
+    )
+    if (exact) return exact.command.management_command_id
+  }
   const digest = sha256(payload)
   return record.management_actions.findLast(
     ({ command }) => sha256(command.payload) === digest,
   )?.command.management_command_id
 }
+
+const managementRequestId = (
+  receipt: DiscordManagementReceipt,
+  actionIndex: number,
+): string => `discord-management-${sha256({
+  source_message_id: receipt.source_message.message_id,
+  source_checksum: receipt.source_message.content_checksum,
+  action_index: actionIndex,
+}).slice(0, 32)}`
 
 const instrumentMatchesRoot = (instrument: string, root: string): boolean => {
   const normalized = instrument.toUpperCase()

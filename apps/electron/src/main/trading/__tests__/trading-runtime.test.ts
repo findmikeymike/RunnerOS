@@ -3,8 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import { CANONICAL_ORDER_FLOW_CONFIGURATION } from '@trade-god/contracts'
-import { buildDiscordManagementMessage } from '@trade-god/execution'
+import {
+  CANONICAL_ORDER_FLOW_CONFIGURATION,
+  TRADING_CONNECTION_SCHEMA_VERSION,
+  type TradingConnection,
+} from '@trade-god/contracts'
+import {
+  buildDiscordManagementMessage,
+  FileTradingConnectionStore,
+} from '@trade-god/execution'
 import { loadEsDemoFixture } from '@trade-god/testkit'
 
 import { TRADE_GOD_IPC } from '../trading-ipc.ts'
@@ -126,6 +133,131 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     state: 'disabled',
     public_relay_connected: false,
   })
+
+  const connection: TradingConnection = {
+    connection_schema_version: TRADING_CONNECTION_SCHEMA_VERSION,
+    connection_id: 'connection-discotrader-paper',
+    display_name: 'DiscoTrader Paper',
+    firm: { slug: 'apex', name: 'Apex Trader Funding' },
+    platform: { slug: 'tradovate', name: 'Tradovate' },
+    environment: 'paper',
+    environment_class: 'rehearsal',
+    transport_preference: 'api',
+    account_ref: 'account-paper',
+    account_display: { label: 'Paper account' },
+    credential_ref: 'credential-paper',
+    risk_policy_ref: 'risk-paper',
+    authorization_basis_ref: 'authorization-paper',
+    approval_policy_ref: 'approval-paper',
+    state: 'ready',
+    capabilities: {
+      read_accounts: true,
+      read_orders: true,
+      read_positions: true,
+      read_executions: true,
+      submit_market: true,
+      submit_limit: true,
+      submit_stop: true,
+      submit_stop_limit: true,
+      native_bracket: true,
+      native_oco: true,
+      modify_order: true,
+      cancel_order: true,
+      partial_close: true,
+      flatten: true,
+      streaming_events: true,
+    },
+    certifications: ['read-certified', 'paper-entry-certified', 'paper-lifecycle-certified'],
+    enabled: true,
+    created_at: runtimeNow,
+    updated_at: runtimeNow,
+  }
+  await new FileTradingConnectionStore(connectionDirectory, () => runtimeNow).save(connection)
+  expect(runtime.ingestDiscoTraderTicketPush).toBeDefined()
+  const entryPush = {
+    kind: 'ticket',
+    severity: 'action_required',
+    summary: 'LONG 2xMNQ',
+    ticket: {
+      id: 'ticket-runtime-entry-1',
+      createdAt: runtimeNow,
+      mode: 'alert-only',
+      action: {
+        intent: 'entry',
+        symbol: 'NQ',
+        side: 'long',
+        entry: 21450,
+        stop: 21440,
+        targets: [21470],
+        confidence: 0.9,
+        evidence: ['entry phrase'],
+      },
+      symbol: 'NQ',
+      tradedSymbol: 'MNQ',
+      side: 'long',
+      contracts: 2,
+      entry: 21450,
+      stop: 21440,
+      stopDistancePoints: 10,
+      targets: [21470],
+      riskUsd: 40,
+      provenance: {
+        messageId: 'discord-entry-runtime-1',
+        author: 'Jordan V',
+        authorId: 'discord-user-1',
+        channelUrl: 'https://discord.com/channels/1/2',
+        rawText: 'NQ long 21450 stop 21440 target 21470',
+        postedAt: runtimeNow,
+        observedAt: runtimeNow,
+        latencyMs: 0,
+      },
+      gateTrail: ['sizing:pass(2xMNQ, $40)'],
+      llmVeto: {
+        decision: 'accept',
+        reason: 'No deterministic objection.',
+        model: 'gpt-test',
+        ms: 1,
+      },
+    },
+    at: runtimeNow,
+  }
+  const entry = await runtime.ingestDiscoTraderTicketPush!(entryPush)
+  expect(entry).toMatchObject({
+    state: 'created',
+    intent: {
+      source: { type: 'discord', source_id: 'discord-entry-runtime-1' },
+      connection_id: connection.connection_id,
+      instrument: { canonical_id: 'CME:MNQ', symbol: 'MNQ', exchange: 'XCME' },
+      quantity: 2,
+    },
+  })
+  const cbotEntry = await runtime.ingestDiscoTraderTicketPush!({
+    ...entryPush,
+    summary: 'LONG 1xMYM',
+    ticket: {
+      ...entryPush.ticket,
+      id: 'ticket-runtime-entry-2',
+      action: {
+        ...entryPush.ticket.action,
+        symbol: 'YM',
+      },
+      symbol: 'YM',
+      tradedSymbol: 'MYM',
+      contracts: 1,
+      stop: undefined,
+      provenance: {
+        ...entryPush.ticket.provenance,
+        messageId: 'discord-entry-runtime-2',
+        rawText: 'YM long 21450 stop 21440 target 21470',
+      },
+    },
+  })
+  expect(cbotEntry.intent.instrument).toEqual({
+    canonical_id: 'CBOT:MYM',
+    symbol: 'MYM',
+    exchange: 'XCBT',
+  })
+  expect(cbotEntry.intent.protection.stop_loss).toEqual({ type: 'ticks', value: '10' })
 
   const managementMessage = buildDiscordManagementMessage({
     message_id: 'runtime-followup-1',
