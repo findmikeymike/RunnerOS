@@ -22,7 +22,7 @@ test('serves an authenticated alert endpoint on an ephemeral port', async () => 
   const root = await mkdtemp(path.join(tmpdir(), 'trade-alert-server-'))
   const ledger = new TradeAlertLedger(root, () => '2026-07-30T15:30:01.000Z')
   const server = await startTradeAlertServer({
-    port: 20_000 + Math.floor(Math.random() * 10_000),
+    port: 0,
     host: '127.0.0.1',
     ledger,
     token: '1234567890abcdef1234567890abcdef',

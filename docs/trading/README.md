@@ -34,9 +34,10 @@ This is the routing table for humans and agents. Read only what the current job 
 
 ## Active Design Specifications
 
-- `specs/execution/unified-broker-entry-gateway.md` — draft contract for
-  certified API/browser order entry, protection, and reconciliation. It grants
-  no runtime execution authority yet.
+- `specs/execution/unified-broker-entry-gateway.md` — implemented execution
+  foundation for certified API/browser entry, protection, and reconciliation.
+  Real connections remain disabled until external paper certification; it
+  grants no consequential execution authority.
 
 ## Supporting Vision Library
 

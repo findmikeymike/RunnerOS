@@ -41,4 +41,3 @@ test('persists, deduplicates, lists, and acknowledges alerts', async () => {
   expect(acknowledged?.status).toBe('acknowledged')
   expect(await readFile(path.join(root, 'alerts.json'), 'utf8')).not.toContain(payload.secret)
 })
-

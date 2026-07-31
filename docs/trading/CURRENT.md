@@ -10,13 +10,25 @@ source_of_truth: true
 ## Snapshot
 
 - Date: 2026-07-30
-- Stage: Phase 1 provider onboarding scaffold and the first native Futures chart surface are implemented
-- Current goal: visually smoke the synthetic ES chart controls, then replace the preview source with entitlement-valid IBKR candles
-- Overall state: the Order Flow specialist and GPT provider path have been visually smoked in Electron. The Market Command Center exposes a persistent watch pad, a real normalized alert feed, and a project-owned synthetic ES chart session for pre-provider UI testing. IBKR is the selected economical first provider: the official Apple Silicon IB Gateway 10.45 is installed and a loopback-only, health-only connector is typed through the Python sidecar, client, Electron IPC, and preload. The Gateway has not yet been logged into or proven listening on paper port `4002`, so no live quote is claimed. Discord ingestion, authenticated provider reconnect/resync, exchange calendar/rollover, packaged Python assets, and a built installer remain unverified.
+- Stage: the provider-neutral execution foundation and safe-exit lifecycle are implemented; real-provider paper certification is the next gate
+- Current goal: certify one real paper adapter without enabling consequential execution
+- Overall state: Trade God now has durable execution contracts and lifecycle storage, exact account/environment connection records, isolated trading browser sessions, a Tradovate demo API adapter foundation, a named WealthCharts browser driver foundation, DiscordTrader ticket convergence, version-bound certification evidence, restart reconciliation, kill switches, and checksum-bound cancel/modify/partial-close/flatten commands. No real adapter is paper-certified or enabled for consequential entry. Tradovate still lacks certified partial-close/protection-resize behavior; WealthCharts management actions remain disabled until its live paper DOM is inspected. The existing Futures command center, synthetic chart, alerts, Order Flow specialist, and health-only IBKR connector remain intact.
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
-- Implementation head entering this slice: `f5e71ba6`
+- Implementation head after the execution foundation: `068ad136`
+
+## Unified Broker Entry Gateway
+
+`signed Discord ticket or approved intent -> immutable order-intent@1 -> durable gateway claim -> exact connection/certification gate -> one adapter submit -> reconciliation -> protected terminal receipt`
+
+- Entry retry is forbidden after an ambiguous submit.
+- Credentials remain in the trusted vault; renderer and agents receive opaque references only.
+- Browser execution is limited to versioned named WealthCharts operations in a dedicated trading session.
+- Certification is bound to adapter ID, adapter version, provider-contract version, connection, transport, and environment.
+- Protection failure enables the connection kill switch and attempts an emergency flatten.
+- Renderer-supplied capabilities, certification, and enabled state are ignored.
+- Real provider activation requires external paper evidence; no UI path can self-certify a connection.
 
 ## Working Capability
 
@@ -119,14 +131,18 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Next Actions
 
-1. Visually smoke the synthetic ES chart across timeframes and ETH/RTH, then correct any sizing/density issues.
-2. Complete the manual IB Gateway paper login/API setup, then feed entitlement-valid canonical candles into the chart.
-3. Inventory the user-selected agents, assign each a bounded Workers role, and connect their typed chart annotations.
-4. Add an authoritative exchange calendar/rollover adapter and the dedicated live streaming transport.
-5. Add the Discord adapter to the existing `trade-alert@1` ledger, then package and smoke the app.
+1. Confirm Apex-issued Tradovate API eligibility and supply a demo credential bound to the exact paper account.
+2. Implement and certify Tradovate partial-close/protection-resize behavior.
+3. Run and retain the 50-lifecycle real paper soak plus forced-failure matrix.
+4. Inspect an authenticated WealthCharts paper session and version its exact DOM selector bundle.
+5. After one adapter passes the paper gate, define one bounded consequential canary; keep it disabled until explicit operator approval.
 
 ## Blockers / Decisions Needed
 
+- Tradovate activation needs Apex API eligibility confirmation, an exact demo credential, and real paper evidence.
+- WealthCharts activation needs a user-authenticated paper session for live DOM inspection; its management controls intentionally remain disabled.
+- The written Apex authorization evidence reference must be stored before any Apex consequential entry.
+- No adapter may inherit certification across versions, transports, connections, or environments.
 - Quick Tunnel URLs change whenever the app/tunnel restarts and are development-only. Stable production TradingView alerts require a named tunnel/custom hostname or a hosted relay.
 - IB Gateway requires a manual Paper Trading login/2FA and API configuration: socket clients enabled, port `4002`, Read-Only API, and Auto Restart. Until then the health probe correctly reports `connection-failed`.
 
@@ -134,6 +150,9 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 
 ## Verification State
 
+- Unified gateway closure: 175 passed, 0 failed across 31 trading/Electron files with 582 expectations.
+- Repository-wide `bun run typecheck:all` passed after replacing one unsupported Campaign Calendar `findLast` call with the equivalent target-compatible reverse search.
+- Real Tradovate/WealthCharts paper lifecycle, 50-run provider soak, and consequential canary remain unproven and disabled.
 - JSONL policy and rival-fix proof: Python market-data suite 27 passed; two-trial observation evidence is reproducible; three enforced trials admit 750 events at 713,568 bytes and reject 800 events with typed `STREAMING_TRANSPORT_REQUIRED`; real Electron tests prove oversized direct loads fail typed without process death and replay pacing above the default request timeout succeeds.
 - Electron `build:main`, `build:preload`, and `build:renderer` passed.
 - The generated packaged sidecar bundle launched independently and answered a schema-valid health request.

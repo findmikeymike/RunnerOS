@@ -629,11 +629,19 @@ export function findApprovedScheduledJobApproval(
   now: Date = new Date(),
   campaignId?: string,
 ): CampaignScheduleApproval | undefined {
-  return (item.approvals ?? []).findLast((approval) => (
-    approval.status === 'approved'
-    && !isApprovalExpired(approval, now)
-    && approvalMatchesJob(approval, item, job, campaignId)
-  ));
+  const approvals = item.approvals ?? [];
+  for (let index = approvals.length - 1; index >= 0; index -= 1) {
+    const approval = approvals[index];
+    if (!approval) continue;
+    if (
+      approval.status === 'approved'
+      && !isApprovalExpired(approval, now)
+      && approvalMatchesJob(approval, item, job, campaignId)
+    ) {
+      return approval;
+    }
+  }
+  return undefined;
 }
 
 export function createCampaignJobRun(input: {

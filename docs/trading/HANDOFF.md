@@ -16,7 +16,7 @@ Build a local-first desktop trading intelligence system where deterministic anal
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` `e7e96be3`
-- Implementation head before the active slice: `f5e71ba6`
+- Execution-foundation head before documentation closure: `068ad136`
 - Other RunnerOS worktrees: intentionally untouched
 
 ## Read First
@@ -31,7 +31,9 @@ Build a local-first desktop trading intelligence system where deterministic anal
 
 The Phase 0 walking skeleton is implemented for development and packaged-sidecar resolution. A project-owned ES fixture travels through a standalone Order Flow sidecar, validated contracts, a typed client, Electron supervision, narrow IPC/preload methods, and a visible Trade God workbench. The build now emits a self-contained sidecar bundle and packaged mode selects RunnerOS's bundled Bun.
 
-This is not yet a live trading system. It has no live quote stream, account access, order, or autonomous-execution capability. The real visual Electron user path has been smoked for the command center and GPT Order Flow specialist, but a fully built packaged installer has not been proven.
+This is not yet a live trading system. It has no live quote stream or certified real-provider order path. The real visual Electron user path has been smoked for the command center and GPT Order Flow specialist, but a fully built packaged installer has not been proven.
+
+The Unified Broker Entry Gateway foundation is implemented locally. Provider-neutral contracts, durable single-claim state, reconciliation, kill switches, checksum-bound management commands, exact adapter certification, and protected-fill recovery are covered by automated tests. Tradovate demo/API and WealthCharts browser foundations implement the same normalized adapter boundary, but neither is paper-certified. DiscordTrader tickets now become immutable gateway intents rather than retaining a second execution authority.
 
 Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent event, quality, batch, candle, series, and agent-snapshot contracts. Python emits the exact TypeScript golden/checksum; typed client/Electron supervision validates it; the replay engine produces current price and candle history under a no-lookahead watermark. `agent-market-snapshot@2` now binds explicit provider sequence, continuity, freshness, and session-window admission into its checksum. One canonical batch produces both the checksum-verified `order-flow-artifact@2` and the addressed snapshot reference consumed by `order-flow-specialist@0.1.0`. The specialist refuses reconnecting, gapped, stale, unavailable, invalid, or out-of-window evidence before invoking the model. The GPT path has been user-smoked in Electron.
 
@@ -41,7 +43,7 @@ Futures Overview now receives a deterministic project-owned synthetic ES session
 
 ## Immediate Assignment
 
-Visually smoke the synthetic ES candles, volume, timeframe, and ETH/RTH controls in Futures Overview, then connect entitlement-valid IBKR candles and typed Workers annotations. The legacy Campaign/non-HQ home routes to the futures-first overview while preserving workspace-scoped sessions, workers, sources, skills, context, and storage. Agent roles and authority must remain explicit.
+Certify one real paper connection. First confirm Apex/Tradovate API eligibility and obtain a demo credential bound to the exact account; then implement/prove partial-close protection resizing and run the 50-lifecycle paper soak. In parallel, inspect a user-authenticated WealthCharts paper session to create and certify its exact DOM selector bundle. Do not enable consequential execution before either paper gate passes.
 
 ## Known Expected Artifact
 
@@ -55,8 +57,11 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
-- Paced replay focused closure: 93 passed, 0 failed across 14 TypeScript files; Python market-data suite: 21 passed, 0 failed.
+- Unified gateway closure: 175 tests passed, 0 failed across 31 trading/Electron files with 582 expectations.
+- Repository-wide `bun run typecheck:all` passed.
 - Electron main, preload, and renderer production builds passed.
+- Real Tradovate paper lifecycle, WealthCharts paper lifecycle, 50-run provider soak, and consequential canary: not run.
+- Paced replay focused closure: 93 passed, 0 failed across 14 TypeScript files; Python market-data suite: 21 passed, 0 failed.
 - Real Electron smoke: not run.
 - Packaged sidecar bundle and resolution: implemented and integration-tested; actual packaged installer not built/smoked.
 - Crash policy: failed work is not replayed; the sidecar restarts only on the next explicit request.

@@ -1009,24 +1009,24 @@ Core properties:
 ## Acceptance Criteria
 
 - [ ] All execution callers use `packages/trading-client`.
-- [ ] Provider-independent contracts live in `packages/trading-contracts`.
-- [ ] One durable gateway state machine owns execution truth.
-- [ ] Agents cannot access credentials or generic consequential browser
+- [x] Provider-independent contracts live in `packages/trading-contracts`.
+- [x] One durable gateway state machine owns execution truth.
+- [x] Agents cannot access credentials or generic consequential browser
       controls.
-- [ ] API and browser adapters implement the same normalized contract.
-- [ ] Each connection verifies exact firm, platform, account, and environment.
-- [ ] `auto` prefers a healthy certified API and never switches after submit.
-- [ ] Acknowledgment, fill, position, and protection are distinct states.
-- [ ] Every external mutation is checksum-bound and idempotent.
-- [ ] `submit_unknown` blocks retry until reconciliation.
-- [ ] Standing mandates are bounded and expire.
+- [x] API and browser adapters implement the same normalized contract.
+- [x] Each connection verifies exact firm, platform, account, and environment.
+- [x] `auto` prefers a healthy certified API and never switches after submit.
+- [x] Acknowledgment, fill, position, and protection are distinct states.
+- [x] Every external mutation is checksum-bound and idempotent.
+- [x] `submit_unknown` blocks retry until reconciliation.
+- [x] Standing mandates are bounded and expire.
 - [ ] Risk policy is account/program-specific.
-- [ ] Browser sessions are isolated from social/general browsing.
-- [ ] Browser selector drift stops before consequential submission.
-- [ ] Protection failure flattens and enables the kill switch.
-- [ ] Restart recovery reconciles every non-terminal lifecycle.
-- [ ] The adapter certification matrix and evidence are visible in Settings.
-- [ ] Consequential activation is impossible before paper lifecycle
+- [x] Browser sessions are isolated from social/general browsing.
+- [x] Browser selector drift stops before consequential submission.
+- [x] Protection failure flattens and enables the kill switch.
+- [x] Restart recovery reconciles every non-terminal lifecycle.
+- [x] The adapter certification matrix and evidence are visible in Settings.
+- [x] Consequential activation is impossible before paper lifecycle
       certification.
 - [ ] The first Tradovate API and WealthCharts browser adapters pass the paper
       gate before any consequential canary.
@@ -1164,6 +1164,10 @@ Reversal:
 | 2026-07-30 | WealthCharts DOM and Broker Portfolio reviewed | Named browser adapter has observable entry/reconciliation surfaces | Live DOM selector inspection |
 | 2026-07-30 | ProjectX API/realtime documentation reviewed | Existing DiscoTrader adapter ideas fit the gateway | Live integration remains unproven |
 | 2026-07-30 | IBKR official API documentation reviewed | Later API adapter is feasible | Current work remains market-data only |
+| 2026-07-30 | Provider-neutral contracts, durable gateway, connection vault boundary, exact certification registry, and safe-exit lifecycle | 175 focused trading/Electron tests pass; trading contracts, execution, and Electron typechecks pass | Real-provider paper evidence remains absent |
+| 2026-07-30 | Tradovate demo adapter foundation | Official entry, cancel, modify, liquidate, identity, and reconciliation paths are implemented and fixture-tested | Apex API eligibility, real demo credential, partial-close/protection-resize proof, and 50-run paper soak |
+| 2026-07-30 | WealthCharts named browser driver foundation | Dedicated session, draft re-read, selector-drift stop, one-click submit, and evidence capture are fixture-tested | Authenticated paper DOM inspection and all management actions |
+| 2026-07-30 | DiscordTrader convergence | Signed ticket evidence persists once and deterministically becomes an immutable gateway intent | Real paper end-to-end source-to-receipt run |
 
 ## Primary Sources
 
