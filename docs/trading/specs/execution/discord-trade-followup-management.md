@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-30
+last_verified: 2026-07-31
 source_of_truth: true
 ---
 
@@ -279,24 +279,24 @@ Integrity:
 
 ## External Integration Gate
 
-The current DiscoTrader v2 webhook sends entry tickets but does not yet push its
-management result. Trade God now instantiates the durable manager in Electron
-and routes the dedicated `discotrader-management` slug directly from the
-existing trigger server after HMAC, timestamp, body, rate, and exact-replay
-gates. Pending receipts recover before new delivery. The runtime attaches zero
-provider adapters until a real paper connection is certified.
+DiscoTrader v2 now pushes one immutable signed management envelope per source
+message. Trade God instantiates the durable manager in Electron and routes the
+dedicated `discotrader-management` slug directly from the existing trigger
+server after HMAC, timestamp, body, rate, and exact-replay gates. Pending
+receipts recover before new delivery. The runtime attaches zero provider
+adapters until a real paper connection is certified.
 
-The Trading workspace still needs an enabled `WebhookReceive` matcher for
-`discotrader-management`, with `secretEnv` set to an exported Runner-side
-secret containing the same value as DiscoTrader's `DT_RUNNER_HMAC_SECRET`.
-The donor must send `kind: "management"` plus the full immutable management
-message to:
+The Trading workspace now has an enabled `WebhookReceive` matcher for
+`discotrader-management`, with `secretEnv` set to the same secret value as
+DiscoTrader's `DT_RUNNER_HMAC_SECRET`. The donor sends `kind: "management"`
+plus the full immutable management message to:
 
 `http://127.0.0.1:9101/v1/triggers/<trading-workspace-id>/discotrader-management`
 
-No real Discord or broker claim is made until the donor sender, matcher,
-running Electron receiver, and one paper-certified adapter are exercised
-together.
+The end-to-end local observe-only path is now runtime-proven: the donor sender,
+installed matcher, and running Electron receiver accepted live local messages,
+persisted durable blocked receipts, and explicitly attempted no gateway
+mutation. No broker or paper-certified adapter claim is made yet.
 
 ## Primary Sources
 
