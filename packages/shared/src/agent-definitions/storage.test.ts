@@ -540,17 +540,22 @@ body
     expect(missing).toEqual([])
   })
 
-  test('starter library includes the social publisher with the Printing Press source', () => {
+  test('starter library includes the social publisher as the Finals-aware posting front door', () => {
     const socialPublisher = STARTER_AGENTS.find((agent) => agent.slug === SOCIAL_PUBLISHER_SLUG)
 
     expect(socialPublisher?.metadata.skills).toEqual(['social-publishing'])
     expect(socialPublisher?.metadata.sources).toEqual(['printing-press-social'])
+    expect(socialPublisher?.metadata.optionalSources).toEqual(['postiz', 'trypost'])
     expect(socialPublisher?.systemPrompt).toContain('browser_tool')
     expect(socialPublisher?.systemPrompt).toContain('chrome-cdp')
     expect(socialPublisher?.systemPrompt).toContain('browserPlan.accountVerification')
     expect(socialPublisher?.systemPrompt).toContain('social.mjs execute')
     expect(socialPublisher?.systemPrompt).toContain('bounded engagement mandate')
     expect(socialPublisher?.systemPrompt).toContain('without asking again for every item')
+    expect(socialPublisher?.systemPrompt).toContain('context/finals/CONTEXT.md')
+    expect(socialPublisher?.systemPrompt).toContain('outputs/<outputId>/output.json')
+    expect(socialPublisher?.systemPrompt).toContain('Artist OS native posting, Postiz, or TryPost')
+    expect(socialPublisher?.systemPrompt).toContain('A launch announcement is part of the rollout plan')
   })
 
   test('starter library includes the TryPost social publisher as approval-gated', () => {

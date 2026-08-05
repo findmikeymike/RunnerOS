@@ -665,7 +665,7 @@ export function ensureBuiltInAgentMetadataSlugs(
   required: Partial<Pick<AgentMetadata, 'skills' | 'sources' | 'optionalSources'>>,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'print-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'video-director', 'spotify-playlist-creator', 'spotify-analyst', 'trypost-agent', 'print-agent']);
   if (!builtIns.has(slug)) return { updated: false };
 
   const loaded = loadGlobalAgent(slug, options);
@@ -722,6 +722,7 @@ export function replaceBuiltInAgentMetadata(
   const builtIns = new Set([
     'concierge',
     'orchestrator',
+    'social-publisher',
     'ads-agent',
     'ads-strategist',
     'ad-creative-agent',
@@ -778,7 +779,7 @@ export function replaceBuiltInAgentPromptText(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'trypost-agent', 'content-director', 'print-agent']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'college-radio-agent', 'outreach-agent', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'lyric-video-agent', 'art-director', 'video-director', 'spotify-playlist-creator', 'trypost-agent', 'content-director', 'print-agent']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !loaded.systemPrompt.includes(oldText)) return { updated: false };
@@ -808,7 +809,7 @@ export function replaceBuiltInAgentPromptPattern(
   newText: string,
   options?: AgentStorageOptions,
 ): { updated: boolean } {
-  const builtIns = new Set(['concierge', 'orchestrator', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'art-director', 'spotify-analyst']);
+  const builtIns = new Set(['concierge', 'orchestrator', 'social-publisher', 'industry-hunter', 'ads-agent', 'ads-strategist', 'ad-creative-agent', 'art-director', 'spotify-analyst']);
   if (!builtIns.has(slug)) return { updated: false };
   const loaded = loadGlobalAgent(slug, options);
   if (!loaded || !pattern.test(loaded.systemPrompt)) return { updated: false };

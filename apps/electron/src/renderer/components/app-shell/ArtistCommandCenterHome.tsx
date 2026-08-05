@@ -8,8 +8,10 @@ import {
   ClipboardCheck,
   Disc3,
   Eye,
+  Loader2,
   Megaphone,
   Pencil,
+  Play,
   Plus,
   Settings2,
   ShieldCheck,
@@ -27,7 +29,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { useWorkspaceContext } from '@/hooks/useWorkspaceContext'
-import type { MissionAssetKindHint, MissionAssetManifest } from '../../../shared/types'
+import { useAgents } from '@/hooks/useAgents'
+import { useWorkflows } from '@/hooks/useWorkflows'
+import { useAppShellContext } from '@/context/AppShellContext'
+import { openAgentSessionComposer } from '@/lib/run-agent'
+import { WorkflowRunInputDialog } from '@/pages/WorkflowRunInputDialog'
+import type { MissionAssetKindHint, MissionAssetManifest, WorkflowDTO } from '../../../shared/types'
 import {
   ARTIST_PROFILE_CONTEXT_SLUG,
   parseArtistProfileDocResult,
@@ -67,16 +74,22 @@ import {
 } from '@/lib/mission-brief'
 import {
   RELEASE_BOARD_CONTEXT_SLUG,
+  buildReleaseBoardItemActionPrompt,
+  buildReleaseBoardWorkflowInputs,
   buildDefaultReleaseBoard,
   getBoardTotals,
   getCategoryProgress,
+  getReleaseBoardItemAction,
   mergeReleaseBoardWithAssets,
   parseReleaseBoardDoc,
   releaseBoardMetadata,
   serializeReleaseBoardBody,
   toggleReleaseBoardItem,
+  updateReleaseBoardItemStatus,
   type ReleaseBoard,
   type ReleaseBoardCategory,
+  type ReleaseBoardItem,
+  type ReleaseBoardItemStatus,
 } from '@/lib/release-board'
 import { MissionBriefDrawer } from './MissionBriefDrawer'
 
@@ -133,9 +146,23 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
   const [assetManifest, setAssetManifest] = React.useState<MissionAssetManifest | null>(null)
   const [assetBusy, setAssetBusy] = React.useState(false)
   const [selectedReleaseCategoryId, setSelectedReleaseCategoryId] = React.useState<ReleaseBoardCategory['id'] | null>(null)
+  const [launchingReleaseItemKey, setLaunchingReleaseItemKey] = React.useState<string | null>(null)
+  const [pendingReleaseWorkflow, setPendingReleaseWorkflow] = React.useState<{
+    workflow: WorkflowDTO
+    initialInputs: Record<string, unknown>
+  } | null>(null)
   const lastAutoSavedReleaseBoardBody = React.useRef<string | null>(null)
   const lastAutoSavedWorkerContextBody = React.useRef<string | null>(null)
   const { docs, loading, upsert } = useWorkspaceContext(workspaceId)
+  const { allAgents } = useAgents(workspaceId)
+  const { allWorkflows } = useWorkflows(workspaceId)
+  const {
+    onCreateSession,
+    onInputChange,
+    onSendMessage,
+    skills = [],
+    enabledSources = [],
+  } = useAppShellContext()
   const inheritedArtistProfileWorkspaceId = artistProfileWorkspaceId && artistProfileWorkspaceId !== workspaceId
     ? artistProfileWorkspaceId
     : null
@@ -379,6 +406,96 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
     [releaseBoard, saveReleaseBoard],
   )
 
+  const setReleaseItemStatus = React.useCallback(
+    (categoryId: ReleaseBoardCategory['id'], itemId: string, status: ReleaseBoardItemStatus) => {
+      void saveReleaseBoard(updateReleaseBoardItemStatus(releaseBoard, categoryId, itemId, status))
+    },
+    [releaseBoard, saveReleaseBoard],
+  )
+
+  const launchReleaseItem = React.useCallback(async (
+    category: ReleaseBoardCategory,
+    item: ReleaseBoardItem,
+  ) => {
+    const action = getReleaseBoardItemAction(category.id, item.id)
+    if (!action) return
+    if (!hasMission) {
+      setDrawerOpen(true)
+      toast.info('Create the campaign first, then start an asset worker.')
+      return
+    }
+
+    const itemKey = `${category.id}:${item.id}`
+    const campaignBrief = buildReleaseBoardItemActionPrompt({
+      campaignTitle: mission.title || 'Untitled Campaign',
+      categoryLabel: category.label,
+      itemLabel: item.label,
+      action,
+    })
+    setLaunchingReleaseItemKey(itemKey)
+    try {
+      if (action.kind === 'tool') {
+        if (action.targetSlug !== 'transcribe-lyrics') {
+          throw new Error(`${action.targetName} is not available.`)
+        }
+        await transcribeLyrics()
+        return
+      }
+      if (action.kind === 'workflow') {
+        const workflow = allWorkflows.find((candidate) => candidate.slug === action.targetSlug)
+          ?? await window.electronAPI.getWorkflow(action.targetSlug)
+        if (!workflow) {
+          throw new Error(`${action.targetName} is not installed in the workflow library.`)
+        }
+        setSelectedReleaseCategoryId(null)
+        setPendingReleaseWorkflow({
+          workflow,
+          initialInputs: buildReleaseBoardWorkflowInputs(action, campaignBrief),
+        })
+        return
+      } else {
+        const agent = allAgents.find((candidate) => candidate.slug === action.targetSlug)
+          ?? (await window.electronAPI.listAllAgentDefinitions())
+            .find((candidate) => candidate.slug === action.targetSlug)
+        if (!agent) {
+          throw new Error(`${action.targetName} is not installed in the worker library.`)
+        }
+        await openAgentSessionComposer({
+          agent,
+          workspaceId,
+          onCreateSession,
+          onInputChange,
+          onSendMessage,
+          skills,
+          sources: enabledSources,
+          draftInput: campaignBrief,
+          autoSendDraft: true,
+        })
+      }
+      toast.success(`${action.targetName} started`, {
+        description: `Creating ${item.label.toLowerCase()} for this campaign.`,
+      })
+    } catch (err) {
+      toast.error(`Could not start ${action.targetName}`, {
+        description: err instanceof Error ? err.message : String(err),
+      })
+    } finally {
+      setLaunchingReleaseItemKey(null)
+    }
+  }, [
+    allAgents,
+    allWorkflows,
+    enabledSources,
+    hasMission,
+    mission.title,
+    onCreateSession,
+    onInputChange,
+    onSendMessage,
+    skills,
+    transcribeLyrics,
+    workspaceId,
+  ])
+
   const saveArtistNetwork = React.useCallback(async (nextNetwork: ArtistNetwork) => {
     if (!inheritedArtistProfileWorkspaceId) {
       toast.error('No Artist HQ workspace found for Network.')
@@ -617,11 +734,26 @@ export function ArtistCommandCenterHome({ workspaceId, artistProfileWorkspaceId 
 
       <ReleaseBoardDialog
         category={selectedReleaseCategory}
+        launchingItemKey={launchingReleaseItemKey}
         onOpenChange={(open) => {
           if (!open) setSelectedReleaseCategoryId(null)
         }}
+        onLaunchItem={launchReleaseItem}
+        onSetItemStatus={setReleaseItemStatus}
         onToggleItem={toggleReleaseItem}
       />
+
+      {pendingReleaseWorkflow ? (
+        <WorkflowRunInputDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setPendingReleaseWorkflow(null)
+          }}
+          workflow={pendingReleaseWorkflow.workflow}
+          workspaceId={workspaceId}
+          initialInputs={pendingReleaseWorkflow.initialInputs}
+        />
+      ) : null}
 
       <TeamPickerDialog
         open={teamPickerOpen}
@@ -741,11 +873,21 @@ function ReleaseBoardTile({
 
 function ReleaseBoardDialog({
   category,
+  launchingItemKey,
   onOpenChange,
+  onLaunchItem,
+  onSetItemStatus,
   onToggleItem,
 }: {
   category: ReleaseBoardCategory | null
+  launchingItemKey: string | null
   onOpenChange: (open: boolean) => void
+  onLaunchItem: (category: ReleaseBoardCategory, item: ReleaseBoardItem) => void
+  onSetItemStatus: (
+    categoryId: ReleaseBoardCategory['id'],
+    itemId: string,
+    status: ReleaseBoardItemStatus,
+  ) => void
   onToggleItem: (categoryId: ReleaseBoardCategory['id'], itemId: string) => void
 }) {
   const Icon = category ? releaseCategoryIcons[category.id] : CheckCircle2
@@ -770,9 +912,13 @@ function ReleaseBoardDialog({
               </div>
             </DialogHeader>
 
-            <div className="space-y-2">
+            <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
               {category.items.map((item) => {
                 const done = item.status === 'done'
+                const skipped = item.status === 'skipped'
+                const action = getReleaseBoardItemAction(category.id, item.id)
+                const itemKey = `${category.id}:${item.id}`
+                const launching = launchingItemKey === itemKey
                 return (
                   <div
                     key={item.id}
@@ -781,15 +927,29 @@ function ReleaseBoardDialog({
                     <button
                       type="button"
                       onClick={() => onToggleItem(category.id, item.id)}
-                      aria-label={done ? `Mark ${item.label} as needed` : `Mark ${item.label} as done`}
+                      aria-label={
+                        skipped
+                          ? `Restore ${item.label} as needed`
+                          : done
+                            ? `Mark ${item.label} as needed`
+                            : `Mark ${item.label} as done`
+                      }
                       className={cn(
                         'flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors',
                         done
                           ? 'border-emerald-400/30 bg-emerald-400/14 text-emerald-300'
+                          : skipped
+                            ? 'border-white/[0.07] bg-white/[0.012] text-white/24'
                           : 'border-white/[0.10] bg-white/[0.018] text-white/28 hover:border-white/20 hover:text-white/60',
                       )}
                     >
-                      {done ? <Check className="h-3.5 w-3.5" /> : <Circle className="h-3.5 w-3.5" />}
+                      {done ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : skipped ? (
+                        <X className="h-3.5 w-3.5" />
+                      ) : (
+                        <Circle className="h-3.5 w-3.5" />
+                      )}
                     </button>
                     <div className="min-w-0 flex-1">
                       <p className={cn('truncate text-sm font-medium', done ? 'text-white/78' : 'text-white/84')}>
@@ -799,12 +959,38 @@ function ReleaseBoardDialog({
                         <p className="mt-0.5 truncate text-[10px] text-emerald-300/48">Matched from campaign vault</p>
                       ) : null}
                     </div>
-                    <span className={cn(
-                      'shrink-0 rounded-full px-2 py-1 text-[9px] font-medium uppercase tracking-[0.14em]',
-                      done ? 'bg-emerald-400/10 text-emerald-300/75' : 'bg-white/[0.035] text-white/32',
-                    )}>
-                      {done ? 'Done' : 'Needed'}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onSetItemStatus(category.id, item.id, skipped ? 'needed' : 'skipped')}
+                      title={skipped ? 'Restore this task' : 'Mark this task not applicable'}
+                      aria-label={skipped ? `Restore ${item.label}` : `Mark ${item.label} not applicable`}
+                      className={cn(
+                        'shrink-0 rounded-full px-2 py-1 text-[9px] font-medium uppercase tracking-[0.14em] transition-colors hover:bg-white/[0.07] hover:text-white/60',
+                        done
+                          ? 'bg-emerald-400/10 text-emerald-300/75'
+                          : skipped
+                            ? 'bg-white/[0.025] text-white/22'
+                            : 'bg-white/[0.035] text-white/32',
+                      )}
+                    >
+                      {done ? 'Done' : skipped ? 'N/A' : 'Needed'}
+                    </button>
+                    {action ? (
+                      <button
+                        type="button"
+                        onClick={() => onLaunchItem(category, item)}
+                        disabled={launchingItemKey !== null}
+                        title={`Create with ${action.targetName}`}
+                        aria-label={`Create ${item.label} with ${action.targetName}`}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-orange-300/15 bg-orange-400/[0.08] text-orange-200/80 transition-colors hover:border-orange-300/30 hover:bg-orange-400/[0.14] hover:text-orange-100 disabled:cursor-wait disabled:opacity-40"
+                      >
+                        {launching ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5 fill-current" />
+                        )}
+                      </button>
+                    ) : null}
                   </div>
                 )
               })}

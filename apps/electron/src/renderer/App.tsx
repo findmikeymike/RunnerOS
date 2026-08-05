@@ -1301,6 +1301,7 @@ export default function App() {
         badges: badges.length > 0 ? badges : undefined,
         optimisticMessageId: userMessage.id,
       })
+      return true
     } catch (error) {
       console.error('Failed to send message:', error)
       updateSessionById(sessionId, (s) => ({
@@ -1315,6 +1316,7 @@ export default function App() {
           }
         ]
       }))
+      return false
     }
   }, [store, sessionOptions, updateSessionById, skills, sources, windowWorkspaceId])
 

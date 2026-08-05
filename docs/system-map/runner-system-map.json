@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-30",
+  "generatedAt": "2026-08-02",
   "sourceFiles": {
     "starterAgents": "packages/shared/src/agent-definitions/starter-templates.ts",
     "agentTypes": "packages/shared/src/agent-definitions/types.ts",
@@ -1844,7 +1844,7 @@
     {
       "slug": "social-publisher",
       "name": "Social Publisher",
-      "description": "Post content and handle authorized comments or messages on Instagram, TikTok, X, and YouTube.",
+      "description": "Plan social rollouts and route approved Finals through Artist OS, Postiz, or TryPost.",
       "domain": "Socials",
       "permissionMode": "ask",
       "thinkingLevel": "high",
@@ -1854,7 +1854,10 @@
       "sources": [
         "printing-press-social"
       ],
-      "optionalSources": [],
+      "optionalSources": [
+        "postiz",
+        "trypost"
+      ],
       "trustedWorkerTools": [],
       "visualAgent": false,
       "tags": [
@@ -1872,10 +1875,12 @@
         "bounded-engagement-mandate",
         "explicit-approval-required",
         "external-action-boundary",
+        "memory-scope-instructions",
+        "optional-source-aware",
         "requires-source-activation"
       ],
-      "inputs": "A social action request: post, reply/comment, DM, profile login, or channel readiness check.",
-      "outputs": "A dry-run plan, browser execution, and a publish/send receipt when approved."
+      "inputs": "Campaign Finals, release timing, target platforms and profiles, or a social post, reply, DM, login, or readiness request.",
+      "outputs": "A launch-ready social rollout, validated drafts, exact approval packet, and provider or browser receipts after approved actions."
     },
     {
       "slug": "trypost-agent",

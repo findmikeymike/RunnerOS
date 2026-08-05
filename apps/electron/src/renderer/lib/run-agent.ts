@@ -172,6 +172,15 @@ export async function openAgentSessionComposer(params: {
    * Optional draft to prefill instead of the agent's saved greeting.
    */
   draftInput?: string
+  /**
+   * Immediately start the worker with draftInput instead of leaving it in the
+   * composer. Intended for explicit "run this worker" controls.
+   */
+  autoSendDraft?: boolean
+  onSendMessage?: (
+    sessionId: string,
+    message: string,
+  ) => boolean | void | Promise<boolean | void>
 }): Promise<Session> {
   const contextDocs = params.contextDocs
     ?? await window.electronAPI.listWorkspaceContextDocsForAgent(params.workspaceId, params.agent.slug)
@@ -213,10 +222,26 @@ export async function openAgentSessionComposer(params: {
 
   const draft = params.draftInput?.trim()
   if (draft) {
-    setTimeout(() => params.onInputChange(session.id, draft), 100)
+    if (params.autoSendDraft && params.onSendMessage) {
+      await sendAgentDraft(params.onSendMessage, session.id, draft, params.agent.metadata.name)
+    } else {
+      setTimeout(() => params.onInputChange(session.id, draft), 100)
+    }
   }
 
   return session
+}
+
+export async function sendAgentDraft(
+  onSendMessage: (sessionId: string, message: string) => boolean | void | Promise<boolean | void>,
+  sessionId: string,
+  draft: string,
+  agentName: string,
+): Promise<void> {
+  const sent = await onSendMessage(sessionId, draft)
+  if (sent === false) {
+    throw new Error(`${agentName} opened, but its first message failed to send. Retry it from the worker session.`)
+  }
 }
 
 /**

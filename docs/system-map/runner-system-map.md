@@ -1,13 +1,13 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-30
+last_verified: 2026-08-02
 source_of_truth: true
 ---
 
 # Runner System Map
 
-Generated: 2026-07-30
+Generated: 2026-08-02
 
 ## Why This Exists
 
@@ -796,17 +796,17 @@ This map captures Runner-specific wiring that future agents often miss: worker v
 
 #### Social Publisher (`social-publisher`)
 
-- Description: Post content and handle authorized comments or messages on Instagram, TikTok, X, and YouTube.
+- Description: Plan social rollouts and route approved Finals through Artist OS, Postiz, or TryPost.
 - Permission: `ask`; thinking: `high`
 - Launch surfaces: `workspace-workers-when-active`
 - Skills: `social-publishing`
 - Sources: `printing-press-social`
-- Optional sources: none
+- Optional sources: `postiz`, `trypost`
 - Trusted tools: none
 - Tags: `social`, `posting`, `browser`, `marketing`
-- Signals: `approval-capable`, `artifact-output-aware`, `bounded-engagement-mandate`, `explicit-approval-required`, `external-action-boundary`, `requires-source-activation`
-- Inputs: A social action request: post, reply/comment, DM, profile login, or channel readiness check.
-- Outputs: A dry-run plan, browser execution, and a publish/send receipt when approved.
+- Signals: `approval-capable`, `artifact-output-aware`, `bounded-engagement-mandate`, `explicit-approval-required`, `external-action-boundary`, `memory-scope-instructions`, `optional-source-aware`, `requires-source-activation`
+- Inputs: Campaign Finals, release timing, target platforms and profiles, or a social post, reply, DM, login, or readiness request.
+- Outputs: A launch-ready social rollout, validated drafts, exact approval packet, and provider or browser receipts after approved actions.
 
 #### TryPost (`trypost-agent`)
 

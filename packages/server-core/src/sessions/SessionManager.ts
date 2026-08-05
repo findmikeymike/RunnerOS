@@ -3276,7 +3276,7 @@ export class SessionManager implements ISessionManager {
           sessionLog.warn('[skills] Workspace→global mirror skipped:', err as Error)
         }
         try {
-          const { CONCIERGE_SLUG, ensureBuiltInAgentMetadataSlugs, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
+          const { CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, ensureBuiltInAgentMetadataSlugs, ensureBuiltInAgentSkills, ensureBuiltInAgentSkillsForSlug, replaceBuiltInAgentMetadata, replaceBuiltInAgentPromptPattern, replaceBuiltInAgentPromptText } = await import('@craft-agent/shared/agent-definitions')
           const { CONCIERGE_SYSTEM_SKILL_SLUGS, CREATOR_SYSTEM_SKILL_SLUGS } = await import('@craft-agent/shared/skills/system')
           const { updated } = ensureBuiltInAgentSkills(CREATOR_SYSTEM_SKILL_SLUGS)
           if (updated > 0) {
@@ -3473,6 +3473,99 @@ Default report shape:`,
               sessionLog.info('[agent-definitions] Replaced Spotify Analyst dev-only API prompt')
             }
           }
+          const socialPublisherAgent = STARTER_AGENTS.find(agent => agent.slug === SOCIAL_PUBLISHER_SLUG)
+          if (socialPublisherAgent) {
+            const metadataUpdated = [
+              ensureBuiltInAgentMetadataSlugs(SOCIAL_PUBLISHER_SLUG, {
+                skills: socialPublisherAgent.metadata.skills,
+                sources: socialPublisherAgent.metadata.sources,
+                optionalSources: socialPublisherAgent.metadata.optionalSources,
+              }).updated,
+              replaceBuiltInAgentMetadata(SOCIAL_PUBLISHER_SLUG, {
+                description: {
+                  from: 'Post content and handle authorized comments or messages on Instagram, TikTok, X, and YouTube.',
+                  to: socialPublisherAgent.metadata.description,
+                },
+                greeting: {
+                  from: 'Tell me the platform, profile, copy, media, and whether this is draft-only or approved to publish.',
+                  to: socialPublisherAgent.metadata.greeting,
+                },
+                inputs: {
+                  from: 'A social action request: post, reply/comment, DM, profile login, or channel readiness check.',
+                  to: socialPublisherAgent.metadata.inputs,
+                },
+                outputs: {
+                  from: 'A dry-run plan, browser execution, and a publish/send receipt when approved.',
+                  to: socialPublisherAgent.metadata.outputs,
+                },
+              }).updated,
+              replaceBuiltInAgentMetadata(SOCIAL_PUBLISHER_SLUG, {
+                description: {
+                  from: 'Post or schedule content on Instagram, TikTok, X, and YouTube.',
+                  to: socialPublisherAgent.metadata.description,
+                },
+              }).updated,
+            ].some(Boolean)
+            const defaultArchitectureIndex = socialPublisherAgent.systemPrompt.indexOf('\n\nDefault architecture:')
+            const starterPreamble = defaultArchitectureIndex >= 0
+              ? socialPublisherAgent.systemPrompt.slice(0, defaultArchitectureIndex)
+              : undefined
+            const rolloutSectionIndex = starterPreamble?.indexOf('\n\nSocial rollout front door:') ?? -1
+            const rolloutSection = starterPreamble && rolloutSectionIndex >= 0
+              ? starterPreamble.slice(rolloutSectionIndex + 2)
+              : undefined
+            const engagementInboxSentence = 'For comment/message inbox work, load the engagement playbook from the social-publishing skill and inspect the owned inbox with `browser_tool`.'
+            const legacyPromptUpdated = replaceBuiltInAgentPromptPattern(
+              SOCIAL_PUBLISHER_SLUG,
+              /^You are Social Publisher, the RunnerOS agent for social channel execution\.\n\nYou operate Instagram, TikTok, X, and YouTube through the bundled Printing Press Social CLI plus Runner's native browser_tool\. You are one front-door publishing agent; do not split work into separate platform agents unless the user explicitly asks\.[\s\S]*2\. Use the Printing Press Social source first\.[\s\S]*Do not install or default to Playwright for RunnerOS social work\.\s*$/,
+              socialPublisherAgent.systemPrompt,
+            ).updated
+            const promptUpdated = [
+              legacyPromptUpdated,
+              !legacyPromptUpdated && starterPreamble
+                ? replaceBuiltInAgentPromptText(
+                    SOCIAL_PUBLISHER_SLUG,
+                    `You are Social Publisher, the RunnerOS agent for social channel execution.\n\nYou operate Instagram, TikTok, X, and YouTube through the bundled Printing Press Social CLI plus Runner's native browser_tool. You can also use the global chrome-cdp skill when the user wants you to inspect or operate an already-open Chrome profile/tab. You are one front-door publishing agent; do not split work into separate platform agents unless the user explicitly asks.\n\nDefault architecture:`,
+                    `${starterPreamble}\n\nDefault architecture:`,
+                  ).updated
+                : false,
+              replaceBuiltInAgentPromptText(
+                SOCIAL_PUBLISHER_SLUG,
+                `${engagementInboxSentence} ${engagementInboxSentence}`,
+                engagementInboxSentence,
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                SOCIAL_PUBLISHER_SLUG,
+                `${engagementInboxSentence} ${engagementInboxSentence}`,
+                engagementInboxSentence,
+              ).updated,
+              starterPreamble && rolloutSection
+                ? replaceBuiltInAgentPromptText(
+                    SOCIAL_PUBLISHER_SLUG,
+                    `${starterPreamble}\n\n${rolloutSection}`,
+                    starterPreamble,
+                  ).updated
+                : false,
+              replaceBuiltInAgentPromptText(
+                SOCIAL_PUBLISHER_SLUG,
+                '3. Use the Printing Press Social source first.',
+                `3. Use the route selected above. For Artist OS native posting, use Printing Press Social. For Postiz or TryPost, use that connected source's live schema and account list instead of guessing provider capabilities.`,
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                SOCIAL_PUBLISHER_SLUG,
+                '7. When the user points to campaign assets or content folders, run `node src/social.mjs assets --asset-root <dir> --platform <platform> --json` and/or `node src/social.mjs content --content-root <dir> --json` before choosing files.',
+                '7. For campaigns, resolve media from the matching campaign Finals registry and Output bundle first. Use `assets` / `content` folder scans only for explicit non-Final or non-campaign requests.',
+              ).updated,
+              replaceBuiltInAgentPromptText(
+                SOCIAL_PUBLISHER_SLUG,
+                '3. Resolve campaign folders with `assets` / `content` commands when roots are available.',
+                '3. Resolve campaign media from matching campaign Finals and their Output manifests. Use folder scans only when the user explicitly requests non-Final content.',
+              ).updated,
+            ].some(Boolean)
+            if (metadataUpdated || promptUpdated) {
+              sessionLog.info('[agent-definitions] Updated Social Publisher rollout routing and campaign Finals contract')
+            }
+          }
           if (replaceBuiltInAgentMetadata(CONCIERGE_SLUG, {
             name: { from: 'Concierge', to: 'HNIC' },
             description: {
@@ -3502,8 +3595,8 @@ Default report shape:`,
           }
           if (replaceBuiltInAgentPromptText(
             SOCIAL_PUBLISHER_SLUG,
-            '8. For publish/comment/DM, run the matching command with the selected `--profile`, `--asset-root`, `--content-root`, relative file names, and `--dry-run --json` first.',
-            '8. For publish/comment/DM, run the matching command with the selected `--profile`, `--asset-root`, `--content-root`, relative file names, and `--dry-run --json` first. For comment/message inbox work, load the engagement playbook from the social-publishing skill and inspect the owned inbox with `browser_tool`.',
+            '8. For publish/comment/DM, run the matching command with the selected `--profile`, `--asset-root`, `--content-root`, relative file names, and `--dry-run --json` first.\n9. Treat dry-run JSON as the action contract.',
+            '8. For publish/comment/DM, run the matching command with the selected `--profile`, `--asset-root`, `--content-root`, relative file names, and `--dry-run --json` first. For comment/message inbox work, load the engagement playbook from the social-publishing skill and inspect the owned inbox with `browser_tool`.\n9. Treat dry-run JSON as the action contract.',
           ).updated) {
             sessionLog.info('[agent-definitions] Added Social Publisher engagement inbox playbook')
           }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAgentCreateSessionOptions } from './run-agent'
+import { buildAgentCreateSessionOptions, sendAgentDraft } from './run-agent'
 import { CONCIERGE_SLUG } from '@craft-agent/shared/agent-definitions/types'
 import type { AgentDefinitionDTO, LoadedSource } from '../../shared/types'
 import type { MemoryEntry } from '@craft-agent/shared/memory/types'
@@ -171,5 +171,24 @@ describe('buildAgentCreateSessionOptions memory receipts', () => {
 
     expect(options.trustedWorkerTools).toEqual(['start_deep_research', 'create_output'])
     expect(options.launchReceipt?.injected.trustedWorkerTools).toEqual(['start_deep_research', 'create_output'])
+  })
+})
+
+describe('sendAgentDraft', () => {
+  test('waits for confirmed delivery', async () => {
+    let delivered = false
+    await sendAgentDraft(async () => {
+      await Promise.resolve()
+      delivered = true
+      return true
+    }, 'session-1', 'Start the work', 'Test Agent')
+
+    expect(delivered).toBe(true)
+  })
+
+  test('surfaces a failed first message', async () => {
+    expect(
+      sendAgentDraft(async () => false, 'session-1', 'Start the work', 'Test Agent'),
+    ).rejects.toThrow('first message failed to send')
   })
 })

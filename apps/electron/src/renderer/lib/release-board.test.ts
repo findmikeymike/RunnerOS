@@ -1,7 +1,12 @@
 import { describe, expect, test } from 'bun:test'
+import { STARTER_AGENTS } from '@craft-agent/shared/agent-definitions/starter-templates'
+import { STARTER_WORKFLOWS } from '@craft-agent/shared/workflows/starter-templates'
 import {
+  buildReleaseBoardItemActionPrompt,
+  buildReleaseBoardWorkflowInputs,
   buildDefaultReleaseBoard,
   getBoardTotals,
+  getReleaseBoardItemAction,
   mergeReleaseBoardWithAssets,
   parseReleaseBoardDoc,
   serializeReleaseBoardBody,
@@ -21,18 +26,36 @@ describe('release board utilities', () => {
       'setup',
       'promotion',
     ])
-    expect(getBoardTotals(board)).toEqual({ done: 0, total: 21 })
+    expect(getBoardTotals(board)).toEqual({ done: 0, total: 26 })
+    expect(board.categories.find((category) => category.id === 'music')?.label).toBe('Foundation')
+    expect(board.categories.find((category) => category.id === 'music')?.items.map((item) => item.label)).toEqual([
+      'Master File',
+      'Clean Version',
+      'Lyrics',
+      'Creative World',
+      'Campaign Branding',
+    ])
     expect(board.categories.find((category) => category.id === 'content')?.items.map((item) => item.label)).toEqual([
-      'Idea generation',
-      'Lyric clips',
-      'Viral clips',
-      'UGC clips',
-      'Lyric video',
+      'Idea Generation',
+      'Lyric Clips',
+      'Viral Clips',
+      'UGC Clips',
+      'Video Extras',
+    ])
+    expect(board.categories.find((category) => category.id === 'setup')?.items.map((item) => item.label)).toEqual([
+      'Distributor Upload',
+      'Pre-Save Link',
+      'Credits and Metadata',
+      'Social Rollout',
     ])
   })
 
   test('round-trips through a workspace context doc body', () => {
     const board = toggleReleaseBoardItem(buildDefaultReleaseBoard('workspace-1'), 'visuals', 'cover-art')
+    const savedCoverArt = board.categories
+      .find((category) => category.id === 'visuals')
+      ?.items.find((item) => item.id === 'cover-art')
+    if (savedCoverArt) savedCoverArt.label = 'Single art'
     const parsed = parseReleaseBoardDoc({
       slug: 'release-board',
       metadata: { name: 'Release Board', routing: { mode: 'broadcast' }, enabled: true },
@@ -43,6 +66,43 @@ describe('release board utilities', () => {
 
     const visuals = parsed?.categories.find((category) => category.id === 'visuals')
     expect(visuals?.items.find((item) => item.id === 'cover-art')?.status).toBe('done')
+    expect(visuals?.items.find((item) => item.id === 'cover-art')?.label).toBe('Single Art')
+  })
+
+  test('adds new tasks as not applicable when loading an existing campaign', () => {
+    const addedItemIds = new Set([
+      'song-world',
+      'release-identity',
+      'announcement',
+      'social-schedule',
+      'video-production',
+      'paid-campaign',
+      'college-radio',
+      'influencer-campaign',
+      'ig-trending',
+      'artist-playlist',
+    ])
+    const legacyBoard = buildDefaultReleaseBoard('workspace-1')
+    legacyBoard.categories = legacyBoard.categories.map((category) => ({
+      ...category,
+      items: category.items
+        .filter((item) => !addedItemIds.has(item.id))
+        .map((item) => ({ ...item, status: 'done' as const })),
+    }))
+
+    const parsed = parseReleaseBoardDoc({
+      slug: 'release-board',
+      metadata: { name: 'Release Board', routing: { mode: 'broadcast' }, enabled: true },
+      body: serializeReleaseBoardBody(legacyBoard),
+      path: '/tmp/context/release-board',
+      workspaceRootPath: '/tmp/workspace',
+    } as ContextDocDTO)
+
+    expect(parsed).not.toBeNull()
+    expect(getBoardTotals(parsed!)).toEqual({ done: 17, total: 17 })
+    expect(itemStatus(parsed!, 'music', 'song-world')).toBe('skipped')
+    expect(itemStatus(parsed!, 'promotion', 'college-radio')).toBe('skipped')
+    expect(parsed!.categories.find((category) => category.id === 'setup')?.items.some((item) => item.id === 'announcement')).toBe(false)
   })
 
   test('marks asset-backed items done when matching files exist', () => {
@@ -71,7 +131,7 @@ describe('release board utilities', () => {
 
     expect(itemStatus(merged, 'visuals', 'canvas')).toBe('needed')
     expect(itemStatus(merged, 'content', 'viral-clips')).toBe('needed')
-    expect(itemStatus(merged, 'content', 'lyric-video')).toBe('needed')
+    expect(itemStatus(merged, 'content', 'lyric-clips')).toBe('needed')
   })
 
   test('does not override skipped items from asset auto-fill', () => {
@@ -88,6 +148,91 @@ describe('release board utilities', () => {
 
     expect(itemStatus(done, 'setup', 'presave')).toBe('done')
     expect(itemStatus(needed, 'setup', 'presave')).toBe('needed')
+  })
+
+  test('restores a skipped item to needed before it can be completed', () => {
+    const skipped = updateReleaseBoardItemStatus(buildDefaultReleaseBoard('workspace-1'), 'promotion', 'college-radio', 'skipped')
+    const restored = toggleReleaseBoardItem(skipped, 'promotion', 'college-radio')
+
+    expect(itemStatus(restored, 'promotion', 'college-radio')).toBe('needed')
+  })
+
+  test('routes only in-app deliverables to the right workers', () => {
+    expect(getReleaseBoardItemAction('music', 'master')).toBeNull()
+    expect(getReleaseBoardItemAction('music', 'song-notes')).toBeNull()
+    expect(getReleaseBoardItemAction('music', 'lyrics')).toMatchObject({
+      kind: 'tool',
+      targetSlug: 'transcribe-lyrics',
+    })
+    expect(getReleaseBoardItemAction('music', 'song-world')?.targetSlug).toBe('world-builder')
+    expect(getReleaseBoardItemAction('visuals', 'cover-art')?.targetSlug).toBe('art-director')
+    expect(getReleaseBoardItemAction('visuals', 'canvas')?.targetSlug).toBe('hypermotion-agent')
+    expect(getReleaseBoardItemAction('setup', 'metadata')).toMatchObject({
+      kind: 'agent',
+      targetSlug: 'comms-agent',
+    })
+    expect(getReleaseBoardItemAction('content', 'viral-clips')?.targetSlug).toBe('scroll-stopper')
+    expect(getReleaseBoardItemAction('content', 'idea-generation')).toMatchObject({
+      kind: 'workflow',
+      targetSlug: 'content-mastermind',
+    })
+    expect(getReleaseBoardItemAction('promotion', 'playlist-targets')).toMatchObject({
+      kind: 'agent',
+      targetSlug: 'industry-hunter',
+    })
+    expect(getReleaseBoardItemAction('promotion', 'press-list')).toMatchObject({
+      kind: 'agent',
+      targetSlug: 'industry-hunter',
+    })
+  })
+
+  test('keeps every release-board action wired to an installed target', () => {
+    const agentSlugs = new Set(STARTER_AGENTS.map((agent) => agent.slug))
+    const workflowSlugs = new Set(STARTER_WORKFLOWS.map((workflow) => workflow.slug))
+    const board = buildDefaultReleaseBoard('workspace-1')
+
+    for (const category of board.categories) {
+      for (const item of category.items) {
+        const action = getReleaseBoardItemAction(category.id, item.id)
+        if (action?.kind === 'agent') expect(agentSlugs.has(action.targetSlug)).toBe(true)
+        if (action?.kind === 'workflow') expect(workflowSlugs.has(action.targetSlug)).toBe(true)
+      }
+    }
+  })
+
+  test('builds a campaign-scoped, non-public worker brief', () => {
+    const action = getReleaseBoardItemAction('visuals', 'cover-art')
+    expect(action).not.toBeNull()
+
+    const prompt = buildReleaseBoardItemActionPrompt({
+      campaignTitle: 'Coming Home',
+      categoryLabel: 'Visuals',
+      itemLabel: 'Single Art',
+      action: action!,
+    })
+
+    expect(prompt).toContain('Coming Home')
+    expect(prompt).toContain('Single Art')
+    expect(prompt).toContain('existing Artist HQ and campaign context')
+    expect(prompt).toContain('Do not publish')
+  })
+
+  test('builds required workflow inputs from campaign context', () => {
+    const contentAction = getReleaseBoardItemAction('content', 'idea-generation')
+    const radioAction = getReleaseBoardItemAction('promotion', 'college-radio')
+    const paidAction = getReleaseBoardItemAction('promotion', 'paid-campaign')
+
+    expect(buildReleaseBoardWorkflowInputs(contentAction!, 'Campaign brief')).toMatchObject({
+      campaign_brief: 'Campaign brief',
+      locked_elements: expect.any(String),
+      production_context: expect.any(String),
+    })
+    expect(buildReleaseBoardWorkflowInputs(radioAction!, 'Release brief')).toEqual({
+      release_brief: 'Release brief',
+    })
+    expect(buildReleaseBoardWorkflowInputs(paidAction!, 'Campaign brief')).toEqual({
+      campaign_brief: 'Campaign brief',
+    })
   })
 })
 

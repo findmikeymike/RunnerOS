@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-07-30
+last_verified: 2026-08-02
 source_of_truth: true
 ---
 
