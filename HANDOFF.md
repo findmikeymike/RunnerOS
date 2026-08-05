@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-10
+last_verified: 2026-08-04
 source_of_truth: true
 ---
 
@@ -10,10 +10,10 @@ source_of_truth: true
 ## Start Here
 
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
-- Branch: `codex/creator-social-integration`
-- Implementation head before this docs refresh: `bfc184cd Enable delegated social engagement`
-- Remote state before this docs refresh: ahead of `origin/codex/creator-social-integration` by 38 commits; do not assume this stack is published.
-- Preserve unrelated local pitch work in `docs/pitch/README.md` and `docs/pitch/packets/`. It was already dirty before this refresh.
+- Branch: `codex/hq-home-compact-ui`
+- Current implementation head: `fa5c7d5b feat(campaign): connect release tasks to workers`
+- Remote comparison: 10 commits ahead of `origin/codex/creator-social-integration`; this local stack is not pushed.
+- Worktree was clean after `fa5c7d5b`. Trade God remains a separate worktree and isolated runtime under `~/.trade-god`; do not re-register it as an Artist OS workspace.
 
 Read in this order:
 
@@ -25,6 +25,31 @@ Read in this order:
 6. `packages/shared/src/skills/bundled/youtube-intelligence/SKILL.md`
 
 ## Product State
+
+### Artist HQ Home
+
+- HQ Home is now a compact operational dashboard instead of a long status page.
+- The restored campaign-style header supports an optional user banner image.
+- State of Play, Spotify Pulse, Intel Pulse, Artist Kit / Finals, Calendar, needs-attention, projects, workers, and signals read persisted app data instead of fixture counts.
+- Spotify and Intel use matching compact cards with manual Run controls; weekly schedules remain optional.
+- Workers and signals are folded into a lower details area so the primary page stays focused.
+
+### Campaign Release Board
+
+- Campaign categories are Foundation, Visuals, Content, Release Setup, and Promotion.
+- Redundant tasks were removed or consolidated. Existing campaigns receive newly introduced checklist items as skipped so historical completion totals do not silently regress.
+- In-app deliverables expose a play control that launches the correct worker, workflow, or bounded tool with existing Artist HQ and campaign context.
+- Content ideas launch `content-mastermind`; paid promotion launches `paid-campaign-builder`; College Radio launches `college-radio-campaign`; other deliverables route to their narrow worker.
+- Starting a worker does not mark the item done. Workers are instructed to create a durable reviewable Output and cannot publish, send outreach, spend money, or take another public action from the board launch.
+- Release-board status supports needed, done, and skipped / not-applicable states.
+
+### Default Artist Workflows
+
+- `content-mastermind`: Content Genius, Anticipation Director, and Scroll Stopper ideate independently; Content Director selects, strengthens, and fuses the strongest portfolio.
+- `paid-campaign-builder`: Ads Strategist -> Ad Creative -> Ads Agent execution packet.
+- `industry-outreach-pipeline`: Industry Hunter -> Outreach Agent approval-ready packet.
+- `college-radio-campaign`: College Radio -> Outreach Agent; default in Campaign and addable to HQ.
+- `merch-product-builder`: Print Agent creates one bounded private Printify draft path, mockups, conditional Shopify analysis, and an approval-gated final kit.
 
 ### Calendars And Scheduling
 
@@ -76,6 +101,13 @@ Primary files:
 - `apps/electron/src/renderer/lib/campaign-worker-context.ts`
 - `sources/printing-press-social/guide.md`
 
+### Social Rollout Front Door
+
+- Social Publisher plans from matching Campaign Finals, resolving Final pointers through their Output manifests instead of guessing raw folders.
+- It supports Artist OS native posting, Postiz, or TryPost. It checks live connection availability, asks once when both external providers are ready, and never claims provider work without a receipt.
+- Launch announcements are part of the rollout schedule rather than a separate Release Board deliverable.
+- Public posts, schedules, or provider writes still require exact approval; bounded inbound reply mandates retain their separate rules.
+
 ### Weekly YouTube Intelligence
 
 - Artist HQ Intel Pulse ships with Managers Playbook, Viral VSN, No Labels Necessary, Neighborhood Art Supply, and Its21Master preloaded.
@@ -120,26 +152,22 @@ Primary files:
 
 ## Verification Truth
 
-Recently passed for delegated social engagement:
+Passed on 2026-08-04 for the current Release Board and Social Publisher slice:
 
 ```bash
-cd tools/printing-press-social && npm test
-# 64 pass, 0 fail
+bun test apps/electron/src/renderer/lib/release-board.test.ts \
+  apps/electron/src/renderer/lib/run-agent.test.ts \
+  packages/shared/src/agent-definitions/storage.test.ts
+# 105 pass, 0 fail
 
-cd packages/shared && bun run tsc --noEmit
-cd packages/shared && bun test src/skills/__tests__/starter-templates.test.ts
-# 25 pass, 0 fail
+bun run typecheck:all
+# passed
 
-cd apps/electron && bun run typecheck
-cd apps/electron && bun test src/renderer/lib/campaign-worker-context.test.ts src/renderer/lib/artist-voice.test.ts
-# 5 pass, 0 fail
-
-cd packages/server-core && bun run typecheck
+git diff --check
+# passed
 ```
 
-Earlier Scheduled Work/Automation commits include focused runner, RPC, queue, HNIC-tool, composer, protocol, and social-executor tests. Re-run the affected suites before changing those contracts; do not rely only on this handoff.
-
-Known test noise: the full `packages/shared/src/agent-definitions/storage.test.ts` suite has one stale HNIC wording assertion for `suggest an automation`; the focused Social Publisher test passes. Treat that as test text drift, not delegated-engagement failure.
+The app also launched successfully from this exact worktree and restored Artist HQ. Only the three Artist OS workspaces were loaded; the legacy Trading registration was removed without deleting Trade God data.
 
 Useful commands:
 
@@ -152,16 +180,17 @@ git status -sb
 
 ## Next Best Moves
 
-1. Real-app smoke all HQ/Campaign day-menu and progressive composer paths.
-2. Smoke HNIC `schedule_work` for one Calendar task and one hidden background Automation.
-3. Live-account smoke scheduled publishing on each supported platform, including approval invalidation, duplicate ticks, and visible receipt.
-4. Live-account smoke Social Publisher inbox triage and exact replies for Instagram, TikTok, X, and YouTube comments.
-5. Connect a real YouTube Data API key and smoke one manual plus one scheduled Intel Pulse run.
-6. Fix the stale HNIC storage-test assertion, then run the complete shared suite.
-7. Review the full 38-commit local stack before any push or merge.
+1. Smoke every Campaign Release Board play control: correct target, inherited context, immediate first message, workflow input dialog, no accidental completion, and no public action.
+2. Smoke HQ Home live cards: persisted counts, banner upload, Spotify / Intel manual Run, weekly toggles, Calendar / needs-attention / Finals links, projects, and the lower workers/signals details area.
+3. Smoke the five new artist workflows from their intended HQ/Campaign libraries and confirm one durable final Output per run.
+4. Run the five-step Daily Social Comment Replies checklist in `docs/backlog/external-integration-live-verification.md`.
+5. Continue the live-provider queue in that same document: Social Publisher, YouTube Intelligence, Spotify, Printify/Shopify, TryPost/Postiz, and paid ads.
+6. Record passes in `docs/development/vetted.md`; fix failures before expanding scope.
+7. Update `docs/CURRENT.md` and this handoff after the smoke round, then commit the docs/results as a separate coherent slice.
 
 ## Known Gaps
 
+- The current Release Board and compact HQ UI have automated coverage but still need the manual Electron smoke above.
 - Real social accounts have not been smoke-tested for the new delegated engagement flow.
 - Scheduled publishing has automated executor coverage but still needs per-platform live-account proof; selector drift must fail closed.
 - YouTube Shorts remain blocked until media classification is proven before submit.
@@ -169,6 +198,7 @@ git status -sb
 - Hidden Calendar runs support standalone agent/workflow work only.
 - YouTube Intelligence has automated packet/routing coverage but still needs a live API/transcript smoke in the packaged app.
 - Team Mode and Creative Lab remain separate held branches.
+- Windows packaging, clean-machine installation, and packaged runtime proof remain release gates.
 
 ## Invariants
 

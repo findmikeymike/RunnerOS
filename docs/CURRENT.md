@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-07-10
+last_verified: 2026-08-04
 source_of_truth: true
 ---
 
@@ -9,15 +9,25 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-10
+- Date: 2026-08-04
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
-- Branch: `codex/creator-social-integration`
-- Implementation head: current `codex/creator-social-integration` HEAD; use `git log -1 --oneline` for the exact commit.
-- Remote: the local integration branch remains intentionally ahead and unpushed.
-- Unrelated local work: preserve `docs/pitch/README.md` and `docs/pitch/packets/`.
+- Branch: `codex/hq-home-compact-ui`
+- Implementation head: `fa5c7d5b feat(campaign): connect release tasks to workers`
+- Remote: 10 commits ahead of `origin/codex/creator-social-integration`; intentionally unpushed.
+- Current goal: manual Electron smoke of HQ Home, Campaign Release Board routing, default workflows, and the daily social-reply automation.
+- Overall state: integrated beta. Core product foundations are built; live-provider proof, packaging, Creative Lab, Team Mode, and Windows remain.
 
 ## Recently Completed
 
+- Compacted Artist HQ Home into a focused operational dashboard backed by persisted State of Play, Spotify, YouTube Intel, Calendar, Finals, projects, workers, signals, and needs-attention data.
+- Restored the stronger campaign-style HQ header, added optional banner upload, and aligned Spotify / Intel pulse cards with matching manual Run controls.
+- Removed the stale Trading workspace registration from Artist OS while preserving the isolated Trade God store and legacy data backup.
+- Cleaned the Campaign Release Board categories and tasks across Foundation, Visuals, Content, Release Setup, and Promotion.
+- Added play controls for in-app campaign deliverables, routing each item to its narrow worker, workflow, or bounded tool with existing campaign context.
+- Added needed / done / skipped board states and safe migration behavior for existing campaigns.
+- Added Content Mastermind, Paid Campaign Builder, Industry Outreach, College Radio, and Merch Product Builder workflows with conservative approval boundaries.
+- Made Social Publisher the campaign rollout front door for matching Finals through Artist OS, Postiz, or TryPost; launch announcements now live inside the rollout.
+- Added the disabled-by-default Daily Social Comment Replies automation template for 4:00 PM America/Chicago across saved profile packs.
 - Recovered prior TryPost/Postiz work across RunnerOS worktrees and MikeyOS. RunnerOS retains its official TryPost MCP source; the provider-neutral media/account lessons were carried forward without importing MikeyOS's Supabase scheduler.
 - Added a required Postiz agent and official hosted Postiz MCP source, with schema-first account/media validation, exact approval boundaries, provider receipt requirements, and an honest no-comments/DM boundary.
 - Hardened TryPost's built-in agent around platform content types, media compatibility, drafts, exact approvals, and provider receipts; existing shipped prompts migrate conservatively.
@@ -52,48 +62,36 @@ source_of_truth: true
 
 ## Verification State
 
-Passed for the latest social-engagement and YouTube Intelligence slices:
+Passed for the latest Campaign Release Board and Social Publisher slice:
 
 ```bash
-cd tools/printing-press-social && npm test
-# 64 pass, 0 fail
+bun test apps/electron/src/renderer/lib/release-board.test.ts \
+  apps/electron/src/renderer/lib/run-agent.test.ts \
+  packages/shared/src/agent-definitions/storage.test.ts
+# 105 pass, 0 fail
 
-cd packages/shared && bun run tsc --noEmit
-cd packages/shared && bun test src/skills/__tests__/starter-templates.test.ts
-# 25 pass, 0 fail
+bun run typecheck:all
+# passed
 
-cd apps/electron && bun run typecheck
-cd apps/electron && bun test src/renderer/lib/campaign-worker-context.test.ts src/renderer/lib/artist-voice.test.ts
-# 5 pass, 0 fail
-
-cd packages/server-core && bun run typecheck
-cd packages/server-core && bun test src/scheduled-work/ScheduledWorkRunner.test.ts
-# 21 pass, 0 fail
-
-cd tools/youtube-intelligence && npm test
-# 8 pass, 0 fail
-
-cd packages/shared && bun test src/shared-intel/youtube-intel.test.ts src/scheduled-work/index.test.ts src/automations/validation.test.ts src/sources/__tests__/storage.test.ts
-# 136 pass, 0 fail
-
-cd apps/electron && bun test src/renderer/lib/artist-intel.test.ts
-# 7 pass, 0 fail
+git diff --check
+# passed
 ```
 
-One known unrelated failure remains in the full shared storage suite: a stale HNIC prompt wording assertion expects `suggest an automation`. The focused Social Publisher storage test passes.
+The development app launched successfully from this worktree, restored Artist HQ, and loaded three Artist OS workspaces with no Trading workspace.
 
 ## Next Actions
 
-1. Smoke HQ/Campaign Calendar creation and item-detail flows in the running app.
-2. Smoke the Intel Pulse against all five preloaded channels in the packaged app.
-3. Smoke HNIC Calendar scheduling and hidden background Automations.
-4. Live-account smoke scheduled publishing and delegated inbox replies platform by platform.
-5. Fix the stale HNIC storage assertion and run the complete shared suite.
-6. Review the full local stack before pushing or merging.
+1. Smoke every Campaign Release Board play control and verify the correct worker/workflow, inherited context, immediate first message, and non-public boundary.
+2. Smoke HQ Home banner, live cards, manual pulse runs, weekly toggles, detail links, and compact lower sections.
+3. Smoke Content Mastermind, Paid Campaign, Industry Outreach, College Radio, and Merch Product Builder from their intended libraries.
+4. Run the Daily Social Comment Replies five-step checklist in `docs/backlog/external-integration-live-verification.md`.
+5. Continue live-account/provider smoke for Social Publisher, YouTube Intelligence, Spotify, Printify/Shopify, TryPost/Postiz, and paid ads.
+6. Record verified workers in `docs/development/vetted.md` and fix failures before adding more surface area.
+7. Review the full 10-commit local stack before any push or merge.
 
 ## Notes For Next Agent
 
-- Start with `../HANDOFF.md`, then spec 13, then the generated system map.
+- Start with `../HANDOFF.md`, then this file, then the generated system map.
 - Regenerate maps with `bun run docs:system-map`; never hand-edit generated map outputs.
-- Preserve unrelated pitch docs and the stacked branch history.
+- Preserve the stacked branch history and keep Trade God isolated.
 - Treat real-account smoke as unfinished even though focused automated checks pass.
