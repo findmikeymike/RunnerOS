@@ -5,7 +5,10 @@ import path from 'node:path'
 import {
   EXECUTION_RECORD_SCHEMA_VERSION,
   executionRecordSchema,
+  mirrorOwnershipReleaseJournalSchema,
   type ExecutionRecord,
+  type ExecutionNoExposureProof,
+  type MirrorOwnershipReleaseJournal,
   type OrderIntent,
 } from '@trade-god/contracts'
 
@@ -15,6 +18,7 @@ import {
   computeManagementAcknowledgmentChecksum,
   computeManagementCommandChecksum,
   computeOrderIntentChecksum,
+  sha256,
 } from './canonical.ts'
 
 export interface ExecutionControlState {
@@ -49,15 +53,18 @@ export class FileExecutionStore {
   private readonly controlFile: string
   private readonly ownershipDirectory: string
   private readonly providerMutationDirectory: string
+  private readonly mirrorReleaseDirectory: string
 
   constructor(
     private readonly root: string,
     private readonly now: () => string = () => new Date().toISOString(),
+    private readonly processInstanceId: string = randomUUID(),
   ) {
     this.recordsDirectory = path.join(root, 'records')
     this.controlFile = path.join(root, 'control.json')
     this.ownershipDirectory = path.join(root, 'ownership')
     this.providerMutationDirectory = path.join(root, 'provider-mutations')
+    this.mirrorReleaseDirectory = path.join(root, 'mirror-ownership-releases')
   }
 
   async create(intent: OrderIntent, traceId: string): Promise<ExecutionRecord> {
@@ -132,6 +139,7 @@ export class FileExecutionStore {
           claim_id: next.claim?.claim_id,
           claimed_at: next.claim?.claimed_at,
           process_id: process.pid,
+          process_instance_id: this.processInstanceId,
         }, null, 2)}\n`, {
           encoding: 'utf8',
           flag: 'wx',
@@ -139,30 +147,10 @@ export class FileExecutionStore {
         })
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-          const stale = await readFile(marker, 'utf8').then((value) => JSON.parse(value) as {
-            process_id?: number
-          })
-          if (
-            typeof stale.process_id !== 'number'
-            || stale.process_id === process.pid
-            || processIsAlive(stale.process_id)
-          ) {
-            throw new ExecutionGatewayError(
-              'EXECUTION_BUSY',
-              `Intent ${intentId} already has a durable execution claim.`,
-            )
-          }
-          await unlink(marker)
-          await writeFile(marker, `${JSON.stringify({
-            intent_id: intentId,
-            claim_id: next.claim?.claim_id,
-            claimed_at: next.claim?.claimed_at,
-            process_id: process.pid,
-          }, null, 2)}\n`, {
-            encoding: 'utf8',
-            flag: 'wx',
-            mode: 0o600,
-          })
+          throw new ExecutionGatewayError(
+            'EXECUTION_BUSY',
+            `Intent ${intentId} already has a durable execution claim.`,
+          )
         }
         else throw error
       }
@@ -195,6 +183,7 @@ export class FileExecutionStore {
           action_digest: actionDigest,
           claimed_at: this.now(),
           process_id: process.pid,
+          process_instance_id: this.processInstanceId,
         }, null, 2)}\n`, {
           encoding: 'utf8',
           flag: 'wx',
@@ -208,27 +197,7 @@ export class FileExecutionStore {
           )) {
             return { record: latest, claimed: false }
           }
-          const stale = await readFile(marker, 'utf8').then((value) => JSON.parse(value) as {
-            process_id?: number
-          })
-          if (
-            typeof stale.process_id !== 'number'
-            || stale.process_id === process.pid
-            || processIsAlive(stale.process_id)
-          ) {
-            return { record: latest, claimed: false }
-          }
-          await unlink(marker)
-          await writeFile(marker, `${JSON.stringify({
-            intent_id: intentId,
-            action_digest: actionDigest,
-            claimed_at: this.now(),
-            process_id: process.pid,
-          }, null, 2)}\n`, {
-            encoding: 'utf8',
-            flag: 'wx',
-            mode: 0o600,
-          })
+          return { record: latest, claimed: false }
         }
         else throw error
       }
@@ -359,6 +328,158 @@ export class FileExecutionStore {
     }
   }
 
+  /**
+   * Startup-only repair. The caller must already own Electron's OS-level
+   * single-instance authority and must call this before any execution work.
+   * Normal lock acquisition never performs stale takeover.
+   */
+  async recoverStaleLocks(): Promise<number> {
+    return this.withLock('startup-stale-lock-recovery', async () => {
+      const markers: string[] = [path.join(this.ownershipDirectory, '_ownership-set.lock.json')]
+      for (const [directory, suffix] of [
+        [this.providerMutationDirectory, '.lock.json'],
+        [this.recordsDirectory, '.claim.json'],
+      ] as const) {
+        try {
+          markers.push(...(await readdir(directory))
+            .filter((file) => file.endsWith(suffix))
+            .map((file) => path.join(directory, file)))
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      }
+      let recovered = 0
+      for (const marker of markers) {
+        let claim: { process_id?: number; process_instance_id?: string; operation_id?: string }
+        try {
+          claim = JSON.parse(await readFile(marker, 'utf8')) as typeof claim
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+          throw error
+        }
+        if (
+          typeof claim.process_id !== 'number'
+          || !Number.isSafeInteger(claim.process_id)
+          || claim.process_id <= 0
+        ) {
+          throw new ExecutionGatewayError(
+            'RECORD_INTEGRITY_FAILURE',
+            `Execution lock ${path.basename(marker)} has invalid owner identity.`,
+          )
+        }
+        if (claim.process_instance_id === this.processInstanceId) {
+          throw new ExecutionGatewayError(
+            'EXECUTION_BUSY',
+            `Execution lock ${path.basename(marker)} is owned by this active app instance.`,
+          )
+        }
+        // New markers are bound to an app-instance UUID, so a reused OS PID
+        // cannot make a crashed marker look live. Legacy PID-only markers stay
+        // fail-closed when that PID is alive and require operator review.
+        if (!claim.process_instance_id && processIsAlive(claim.process_id)) {
+          throw new ExecutionGatewayError(
+            'EXECUTION_BUSY',
+            `Legacy execution lock ${path.basename(marker)} appears live and requires operator review.`,
+          )
+        }
+        await unlink(marker)
+        recovered += 1
+      }
+      return recovered
+    })
+  }
+
+  async getMirrorOwnershipRelease(
+    mirrorExecutionId: string,
+  ): Promise<MirrorOwnershipReleaseJournal | null> {
+    try {
+      const journal = mirrorOwnershipReleaseJournalSchema.parse(JSON.parse(
+        await readFile(this.mirrorReleaseFile(mirrorExecutionId), 'utf8'),
+      ))
+      const { content_checksum: _checksum, ...unsigned } = journal
+      if (sha256(unsigned) !== journal.content_checksum) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Mirror ownership release journal failed checksum validation.',
+        )
+      }
+      return journal
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
+    }
+  }
+
+  async prepareMirrorOwnershipRelease(input: {
+    mirror_execution_id: string
+    intent_ids: string[]
+    proofs: ExecutionNoExposureProof[]
+  }): Promise<MirrorOwnershipReleaseJournal> {
+    return this.withLock(`mirror-release:${input.mirror_execution_id}`, async () => {
+      const existing = await this.getMirrorOwnershipRelease(input.mirror_execution_id)
+      if (existing) {
+        if (existing.intent_ids.join('\n') !== input.intent_ids.join('\n')) {
+          throw new ExecutionGatewayError(
+            'RECORD_INTEGRITY_FAILURE',
+            'Mirror ownership release evidence conflicts with its durable journal.',
+          )
+        }
+        if (existing.state === 'released') {
+          if (sha256(existing.proofs) !== sha256(input.proofs)) {
+            throw new ExecutionGatewayError(
+              'RECORD_INTEGRITY_FAILURE',
+              'Released Mirror ownership evidence is immutable.',
+            )
+          }
+          return existing
+        }
+        const { content_checksum: _checksum, ...body } = existing
+        const unsigned = { ...body, proofs: input.proofs, updated_at: this.now() }
+        const refreshed = mirrorOwnershipReleaseJournalSchema.parse({
+          ...unsigned, content_checksum: sha256(unsigned),
+        })
+        await this.atomicWrite(this.mirrorReleaseFile(input.mirror_execution_id), refreshed)
+        return refreshed
+      }
+      const timestamp = this.now()
+      const unsigned = {
+        release_journal_schema_version: 'mirror-ownership-release-journal@1' as const,
+        journal_id: `mirror-release-${sha256(input.mirror_execution_id).slice(0, 32)}`,
+        ...input,
+        state: 'prepared' as const,
+        created_at: timestamp,
+        updated_at: timestamp,
+      }
+      const journal = mirrorOwnershipReleaseJournalSchema.parse({
+        ...unsigned, content_checksum: sha256(unsigned),
+      })
+      await this.atomicWrite(this.mirrorReleaseFile(input.mirror_execution_id), journal)
+      return journal
+    })
+  }
+
+  async markMirrorOwnershipReleased(
+    mirrorExecutionId: string,
+  ): Promise<MirrorOwnershipReleaseJournal> {
+    return this.withLock(`mirror-release:${mirrorExecutionId}`, async () => {
+      const current = await this.getMirrorOwnershipRelease(mirrorExecutionId)
+      if (!current) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Mirror ownership cannot release without durable provider-flat evidence.',
+        )
+      }
+      if (current.state === 'released') return current
+      const { content_checksum: _checksum, ...body } = current
+      const unsigned = { ...body, state: 'released' as const, updated_at: this.now() }
+      const released = mirrorOwnershipReleaseJournalSchema.parse({
+        ...unsigned, content_checksum: sha256(unsigned),
+      })
+      await this.atomicWrite(this.mirrorReleaseFile(mirrorExecutionId), released)
+      return released
+    })
+  }
+
   async withProviderMutationLock<T>(
     providerAccountKey: string,
     operationId: string,
@@ -378,6 +499,7 @@ export class FileExecutionStore {
         provider_account_key: providerAccountKey,
         operation_id: operationId,
         process_id: process.pid,
+        process_instance_id: this.processInstanceId,
         acquired_at: this.now(),
       }
       try {
@@ -386,20 +508,14 @@ export class FileExecutionStore {
         })
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-        const stale = JSON.parse(await readFile(marker, 'utf8')) as {
+        const current = JSON.parse(await readFile(marker, 'utf8')) as {
           process_id?: number
           operation_id?: string
         }
-        if (typeof stale.process_id !== 'number' || processIsAlive(stale.process_id)) {
-          throw new ExecutionGatewayError(
-            'EXECUTION_BUSY',
-            `Provider account already has an active mutation (${stale.operation_id ?? 'unknown'}).`,
-          )
-        }
-        await unlink(marker)
-        await writeFile(marker, `${JSON.stringify(claim, null, 2)}\n`, {
-          encoding: 'utf8', flag: 'wx', mode: 0o600,
-        })
+        throw new ExecutionGatewayError(
+          'EXECUTION_BUSY',
+          `Provider account already has an active mutation (${current.operation_id ?? 'unknown'}).`,
+        )
       }
       try {
         return await operation()
@@ -513,6 +629,14 @@ export class FileExecutionStore {
     return path.join(this.providerMutationDirectory, `${digest}.lock.json`)
   }
 
+  private mirrorReleaseFile(mirrorExecutionId: string): string {
+    if (!mirrorExecutionId.trim() || mirrorExecutionId.length > 1_000) {
+      throw new Error('Mirror execution ID is invalid.')
+    }
+    const digest = createHash('sha256').update(mirrorExecutionId, 'utf8').digest('hex')
+    return path.join(this.mirrorReleaseDirectory, `${digest}.json`)
+  }
+
   private async withOwnershipSetFileLock<T>(
     leases: ExecutionOwnershipLease[],
     operation: () => Promise<T>,
@@ -522,6 +646,7 @@ export class FileExecutionStore {
     const claim = {
       ownership_set_lock_schema_version: 'ownership-set-lock@1',
       process_id: process.pid,
+      process_instance_id: this.processInstanceId,
       operation_id: `ownership-set-${randomUUID()}`,
       leases,
       acquired_at: this.now(),
@@ -534,7 +659,7 @@ export class FileExecutionStore {
       if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
       throw new ExecutionGatewayError(
         'EXECUTION_BUSY',
-        'Provider ownership admission is locked; stale locks require explicit startup recovery.',
+        'Provider ownership admission is already locked.',
       )
     }
     try { return await operation() } finally {

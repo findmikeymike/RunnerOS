@@ -16,6 +16,7 @@ import {
   type MirrorExecution,
   type MirrorGroup,
   type MirrorRiskReservation,
+  type ExecutionNoExposureProof,
 } from '@trade-god/contracts'
 
 import { sha256 } from './canonical.ts'
@@ -27,7 +28,58 @@ export class FileMirrorExecutionStore {
   constructor(
     private readonly root: string,
     private readonly now: () => string = () => new Date().toISOString(),
+    private readonly processInstanceId: string = randomUUID(),
   ) {}
+
+  /** Startup-only repair under the app's OS-level single-instance authority. */
+  async recoverStaleLocks(): Promise<number> {
+    return this.withLock(async () => {
+      let files: string[]
+      try {
+        files = (await readdir(this.reservationDirectory()))
+          .filter((file) => file.endsWith('.lock.json'))
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 0
+        throw error
+      }
+      let recovered = 0
+      for (const name of files) {
+        const file = path.join(this.reservationDirectory(), name)
+        let claim: { process_id?: number; process_instance_id?: string }
+        try {
+          claim = JSON.parse(await readFile(file, 'utf8')) as typeof claim
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue
+          throw error
+        }
+        if (
+          typeof claim.process_id !== 'number'
+          || !Number.isSafeInteger(claim.process_id)
+          || claim.process_id <= 0
+        ) {
+          throw new ExecutionGatewayError(
+            'RECORD_INTEGRITY_FAILURE',
+            `Mirror risk lock ${name} has invalid owner identity.`,
+          )
+        }
+        if (claim.process_instance_id === this.processInstanceId) {
+          throw new ExecutionGatewayError(
+            'EXECUTION_BUSY',
+            `Mirror risk lock ${name} is owned by this active app instance.`,
+          )
+        }
+        if (!claim.process_instance_id && processIsAlive(claim.process_id)) {
+          throw new ExecutionGatewayError(
+            'EXECUTION_BUSY',
+            `Legacy Mirror risk lock ${name} appears live and requires operator review.`,
+          )
+        }
+        await unlink(file)
+        recovered += 1
+      }
+      return recovered
+    })
+  }
 
   persistChildSource(source: MirrorChildSource): Promise<MirrorChildSource> {
     return this.withLock(async () => {
@@ -66,6 +118,34 @@ export class FileMirrorExecutionStore {
 
   getParent(mirrorExecutionId: string): Promise<MirrorExecution> {
     return this.withLock(() => this.readParent(mirrorExecutionId))
+  }
+
+  getReservation(mirrorExecutionId: string): Promise<MirrorRiskReservation | null> {
+    return this.withLock(() => this.readOptional(
+      this.reservationPath(mirrorExecutionId),
+      mirrorRiskReservationSchema,
+      'Mirror risk reservation',
+    ))
+  }
+
+  listParents(): Promise<MirrorExecution[]> {
+    return this.withLock(async () => {
+      let entries
+      try { entries = await readdir(this.base(), { withFileTypes: true }) } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
+        throw error
+      }
+      const parents: MirrorExecution[] = []
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !/^[a-f0-9]{64}$/.test(entry.name)) continue
+        parents.push(await this.readRequired(
+          path.join(this.base(), entry.name, 'parent.json'),
+          mirrorExecutionSchema,
+          'Mirror parent',
+        ))
+      }
+      return parents.sort((left, right) => left.mirror_execution_id.localeCompare(right.mirror_execution_id))
+    })
   }
 
   getProjectionsForParent(parent: MirrorExecution): Promise<MirrorChildRiskProjection[]> {
@@ -294,6 +374,90 @@ export class FileMirrorExecutionStore {
     })
   }
 
+  releaseTerminalReservation(
+    mirrorExecutionId: string,
+    proofs: ExecutionNoExposureProof[],
+  ): Promise<MirrorRiskReservation | null> {
+    return this.withLock(async () => {
+      const parent = await this.readParent(mirrorExecutionId)
+      if (
+        parent.state !== 'closed'
+        || parent.children.some((child) => child.state !== 'terminal')
+      ) {
+        throw new ExecutionGatewayError(
+          'INVALID_STATE',
+          'Mirror risk may release only after every child is durably terminal.',
+        )
+      }
+      const proofByIntent = new Map(proofs.map((proof) => [proof.intent_id, proof]))
+      if (proofByIntent.size !== parent.children.length || proofs.length !== parent.children.length) {
+        throw new ExecutionGatewayError(
+          'RECONCILIATION_DIVERGENCE',
+          'Mirror risk release requires one unique no-exposure proof for every frozen child.',
+        )
+      }
+      for (const child of parent.children) {
+        const proof = proofByIntent.get(child.intent_id)
+        if (
+          !proof
+          || proof.connection_id !== child.connection_id
+          || proof.execution_record_checksum !== child.execution_record_checksum
+          || proof.positions_count !== 0
+          || proof.working_orders_count !== 0
+        ) {
+          throw new ExecutionGatewayError(
+            'RECONCILIATION_DIVERGENCE',
+            'Mirror risk release proof does not match frozen child provider truth.',
+          )
+        }
+        const { content_checksum: _checksum, ...unsigned } = proof
+        if (sha256(unsigned) !== proof.content_checksum) {
+          throw new ExecutionGatewayError(
+            'RECORD_INTEGRITY_FAILURE',
+            'Mirror risk release proof failed integrity validation.',
+          )
+        }
+      }
+      const file = this.reservationPath(mirrorExecutionId)
+      const current = await this.readOptional(file, mirrorRiskReservationSchema, 'Mirror risk reservation')
+      if (!current) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Closed Mirror parent is missing its exact aggregate risk reservation.',
+        )
+      }
+      if (
+        !parent.reservation_id
+        || current.reservation_id !== parent.reservation_id
+        || current.mirror_execution_id !== parent.mirror_execution_id
+        || current.mirror_group_id !== parent.mirror_group_id
+        || current.mirror_group_revision !== parent.mirror_group_revision
+        || current.group_snapshot_checksum !== parent.group_snapshot_checksum
+      ) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Mirror risk reservation does not match the closed frozen parent.',
+        )
+      }
+      if (current.state === 'released') return current
+      const releasingUnsigned: Omit<MirrorRiskReservation, 'content_checksum'> = {
+        ...withoutChecksum(current), state: 'releasing', updated_at: this.now(),
+      }
+      const releasing = mirrorRiskReservationSchema.parse({
+        ...releasingUnsigned, content_checksum: sha256(releasingUnsigned),
+      })
+      await this.writeAtomic(file, releasing)
+      const releasedUnsigned: Omit<MirrorRiskReservation, 'content_checksum'> = {
+        ...withoutChecksum(releasing), state: 'released', updated_at: this.now(),
+      }
+      const released = mirrorRiskReservationSchema.parse({
+        ...releasedUnsigned, content_checksum: sha256(releasedUnsigned),
+      })
+      await this.writeAtomic(file, released)
+      return released
+    })
+  }
+
   getGrant(grantId: string): Promise<MirrorDispatchGrant> {
     return this.withLock(async () => {
       const grant = await this.readOptional(
@@ -402,7 +566,12 @@ export class FileMirrorExecutionStore {
   private async withGroupReservationLock<T>(groupId: string, operation: () => Promise<T>): Promise<T> {
     const file = path.join(this.reservationDirectory(), `${sha256(groupId)}.lock.json`)
     await mkdir(path.dirname(file), { recursive: true })
-    const claim = { group_id: groupId, process_id: process.pid, claimed_at: this.now() }
+    const claim = {
+      group_id: groupId,
+      process_id: process.pid,
+      process_instance_id: this.processInstanceId,
+      claimed_at: this.now(),
+    }
     let claimed = false
     for (let attempt = 0; attempt < 2 && !claimed; attempt += 1) {
       try {
@@ -503,7 +672,7 @@ const usdCents = (value: string): bigint => {
     throw new ExecutionGatewayError('RISK_DENIED', 'Mirror USD risk must have at most two decimal places.')
   }
   const [whole, decimals = ''] = value.split('.')
-  return BigInt(whole) * 100n + BigInt(decimals.padEnd(2, '0'))
+  return BigInt(whole!) * 100n + BigInt(decimals.padEnd(2, '0'))
 }
 
 const usdLimitCentsFloor = (value: string): bigint => {
@@ -511,7 +680,16 @@ const usdLimitCentsFloor = (value: string): bigint => {
     throw new ExecutionGatewayError('RISK_DENIED', 'Mirror USD capacity must be a positive decimal.')
   }
   const [whole, decimals = ''] = value.split('.')
-  return BigInt(whole) * 100n + BigInt(decimals.slice(0, 2).padEnd(2, '0'))
+  return BigInt(whole!) * 100n + BigInt(decimals.slice(0, 2).padEnd(2, '0'))
+}
+
+const processIsAlive = (processId: number): boolean => {
+  try {
+    process.kill(processId, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
+  }
 }
 
 const parentIdentity = (parent: MirrorExecution) => ({

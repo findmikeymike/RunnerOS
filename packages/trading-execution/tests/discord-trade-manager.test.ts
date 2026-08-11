@@ -489,8 +489,9 @@ describe('Discord trade manager', () => {
     expect(gateway.log).toEqual([])
 
     Object.assign(pendingEntry, protectedEntry)
-    const recovered = await manager.recoverPending()
-    expect(recovered[0]).toMatchObject({ status: 'completed' })
+    expect(await manager.recoverPending()).toEqual([])
+    const recovered = await manager.ingestMessage(followUp)
+    expect(recovered).toMatchObject({ status: 'completed' })
     expect(gateway.log).toEqual(['reconcile', 'flatten'])
   })
 

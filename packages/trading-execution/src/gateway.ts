@@ -5,6 +5,7 @@ import {
   EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
   EXECUTION_MANAGEMENT_COMMAND_SCHEMA_VERSION,
   EXECUTION_RECEIPT_SCHEMA_VERSION,
+  EXECUTION_NO_EXPOSURE_PROOF_SCHEMA_VERSION,
   executionAccountSnapshotSchema,
   executionAuthorizationSchema,
   executionCommandSchema,
@@ -12,6 +13,7 @@ import {
   executionManagementCommandSchema,
   executionManagementPayloadSchema,
   executionReceiptSchema,
+  executionNoExposureProofSchema,
   executionReconciliationSchema,
   executionSubmitAcknowledgmentSchema,
   mirrorDispatchGrantSchema,
@@ -24,11 +26,13 @@ import {
   type ExecutionManagementCommand,
   type ExecutionManagementPayload,
   type ExecutionReceipt,
+  type ExecutionNoExposureProof,
   type ExecutionProtectionOrder,
   type ExecutionRecord,
   type ExecutionReconciliation,
   type OrderIntent,
   type MirrorDispatchGrant,
+  type MirrorOwnershipReleaseJournal,
   type RiskDecision,
   type TradingConnection,
 } from '@trade-god/contracts'
@@ -100,6 +104,18 @@ export class ExecutionGateway {
 
   list(): Promise<ExecutionRecord[]> {
     return this.options.store.list()
+  }
+
+  async verifyNoExposure(intentId: string): Promise<ExecutionNoExposureProof> {
+    const initial = await this.options.store.get(intentId)
+    const connection = tradingConnectionSchema.parse(
+      await this.options.resolveConnection(initial.intent.connection_id),
+    )
+    return this.options.store.withProviderMutationLock(
+      this.providerAccountKey(connection),
+      `verify-no-exposure:${intentId}`,
+      () => this.verifyNoExposureWithProviderLock(intentId, connection),
+    )
   }
 
   async prepareStopMove(
@@ -328,6 +344,94 @@ export class ExecutionGateway {
       })
     }
     await this.options.store.releaseOwnershipSet(leases)
+  }
+
+  async proveAndReleaseMirrorOwnership(intentIds: string[]): Promise<MirrorOwnershipReleaseJournal> {
+    const ids = [...new Set(intentIds)].sort()
+    if (ids.length !== intentIds.length || ids.length < 2) {
+      throw new ExecutionGatewayError(
+        'RECORD_INTEGRITY_FAILURE',
+        'Mirror closure requires every unique frozen child intent.',
+      )
+    }
+    const records = await Promise.all(ids.map((intentId) => this.options.store.get(intentId)))
+    if (records.some((record) => !record.intent.mirror_lineage)) {
+      throw new ExecutionGatewayError('AUTHORIZATION_MISMATCH', 'Mirror closure requires child lineage.')
+    }
+    const mirrorExecutionIds = new Set(records.map(
+      (record) => record.intent.mirror_lineage!.mirror_execution_id,
+    ))
+    if (mirrorExecutionIds.size !== 1) {
+      throw new ExecutionGatewayError(
+        'AUTHORIZATION_MISMATCH',
+        'Mirror closure children do not share one immutable parent.',
+      )
+    }
+    const mirrorExecutionId = [...mirrorExecutionIds][0]!
+    const completedJournal = await this.options.store.getMirrorOwnershipRelease(mirrorExecutionId)
+    if (completedJournal?.state === 'released') {
+      if (completedJournal.intent_ids.join('\n') !== ids.join('\n')) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Released Mirror ownership journal does not match the frozen child set.',
+        )
+      }
+      return completedJournal
+    }
+    const entries = (await Promise.all(records.map(async (record) => {
+      const intentId = record.intent.intent_id
+      const connection = tradingConnectionSchema.parse(
+        await this.options.resolveConnection(record.intent.connection_id),
+      )
+      return { intentId, record, connection, providerKey: this.providerAccountKey(connection) }
+    }))).sort((left, right) => (
+      left.providerKey.localeCompare(right.providerKey)
+      || left.intentId.localeCompare(right.intentId)
+    ))
+    if (new Set(entries.map(({ providerKey }) => providerKey)).size !== entries.length) {
+      throw new ExecutionGatewayError(
+        'ACCOUNT_MISMATCH',
+        'Mirror closure requires one independently owned provider account per child.',
+      )
+    }
+    const owner = `prove-release-mirror:${sha256(ids).slice(0, 32)}`
+    const withLocks = <T>(index: number, operation: () => Promise<T>): Promise<T> => {
+      const entry = entries[index]
+      return entry
+        ? this.options.store.withProviderMutationLock(
+            entry.providerKey,
+            owner,
+            () => withLocks(index + 1, operation),
+          )
+        : operation()
+    }
+    return withLocks(0, async () => {
+      let journal = await this.options.store.getMirrorOwnershipRelease(mirrorExecutionId)
+      if (journal?.state === 'released') return journal
+      if (!journal || journal.state === 'prepared') {
+        const proofs: ExecutionNoExposureProof[] = []
+        for (const entry of entries) {
+          proofs.push(await this.verifyNoExposureWithProviderLock(entry.intentId, entry.connection))
+        }
+        const proofByIntent = new Map(proofs.map((proof) => [proof.intent_id, proof]))
+        journal = await this.options.store.prepareMirrorOwnershipRelease({
+          mirror_execution_id: mirrorExecutionId,
+          intent_ids: ids,
+          proofs: ids.map((intentId) => proofByIntent.get(intentId)!),
+        })
+      }
+      if (journal.intent_ids.join('\n') !== ids.join('\n')) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Mirror ownership release journal does not match the frozen child set.',
+        )
+      }
+      await this.options.store.releaseOwnershipSet(entries.map(({ intentId, record, connection }) => ({
+        ownership_key: this.ownershipKey(connection, record.intent),
+        intent_id: intentId,
+      })))
+      return this.options.store.markMirrorOwnershipReleased(mirrorExecutionId)
+    })
   }
 
   async revalidateMirrorAdmission(intentIds: string[]): Promise<void> {
@@ -1149,6 +1253,54 @@ export class ExecutionGateway {
         'Authorization monetary risk limits must be positive.',
       )
     }
+  }
+
+  private async verifyNoExposureWithProviderLock(
+    intentId: string,
+    connection: TradingConnection,
+  ): Promise<ExecutionNoExposureProof> {
+    const record = await this.options.store.get(intentId)
+    const adapter = record.command
+      ? this.options.adapters.find((candidate) => (
+          candidate.descriptor.adapter_id === record.command?.adapter_id
+          && candidate.descriptor.adapter_version === record.command?.adapter_version
+          && candidate.supports(connection)
+        ))
+      : this.resolveAdapter(connection, record.intent)
+    if (!adapter) {
+      throw new ExecutionGatewayError(
+        'CONNECTION_UNAVAILABLE',
+        'The exact adapter needed to prove provider-flat state is unavailable.',
+      )
+    }
+    await adapter.connect(connection)
+    const snapshot = executionAccountSnapshotSchema.parse(await adapter.snapshotAccount(connection))
+    this.assertAccountSnapshot(connection, snapshot, false)
+    this.assertNoUnownedExposure(snapshot)
+    const current = await this.options.store.get(intentId)
+    const unsigned = {
+      proof_schema_version: EXECUTION_NO_EXPOSURE_PROOF_SCHEMA_VERSION,
+      proof_id: `no-exposure-${sha256({
+        intent_id: intentId,
+        snapshot_id: snapshot.account_snapshot_id,
+        snapshot_checksum: sha256(snapshot),
+        record_checksum: sha256(current),
+      }).slice(0, 32)}`,
+      intent_id: intentId,
+      connection_id: connection.connection_id,
+      account_ref: connection.account_ref,
+      account_snapshot_id: snapshot.account_snapshot_id,
+      account_snapshot_checksum: sha256(snapshot),
+      execution_record_checksum: sha256(current),
+      positions_count: 0 as const,
+      working_orders_count: 0 as const,
+      captured_at: snapshot.captured_at,
+      evidence_refs: [snapshot.account_snapshot_id],
+    } satisfies Omit<ExecutionNoExposureProof, 'content_checksum'>
+    return executionNoExposureProofSchema.parse({
+      ...unsigned,
+      content_checksum: sha256(unsigned),
+    })
   }
 
   private assertAccountSnapshot(

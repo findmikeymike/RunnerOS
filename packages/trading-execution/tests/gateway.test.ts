@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -509,6 +510,96 @@ describe('execution gateway', () => {
     expect(adapter.submitCount).toBe(0)
   })
 
+  test('proves every Mirror account flat while holding provider locks, then releases ownership', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-god-mirror-release-'))
+    roots.push(root)
+    const store = new FileExecutionStore(root, () => NOW)
+    await store.setGlobalKill(false)
+    const left = makeConnection({ connection_id: 'connection-release-left', account_ref: 'account-release-left' })
+    const right = makeConnection({ connection_id: 'connection-release-right', account_ref: 'account-release-right' })
+    const connections = new Map([[left.connection_id, left], [right.connection_id, right]])
+    const adapter = new FakeAdapter()
+    const gateway = new ExecutionGateway({
+      store, adapters: [adapter], now: () => NOW,
+      resolveConnection: async (id) => connections.get(id)!,
+    })
+    const intents = [left, right].map((connection, index) => makeIntent(connection, {
+      intent_id: `intent-mirror-release-${index}`,
+      mirror_lineage: {
+        mirror_execution_id: 'mirror-parent-release', mirror_group_id: 'mirror-group-release',
+        mirror_group_revision: 1, member_id: `mirror-release-member-${index}`,
+        mirror_child_source_id: `mirror-release-source-${index}`,
+        mirror_child_source_checksum: `${index + 7}`.repeat(64),
+      },
+    }))
+    for (const intent of intents) await approve(gateway, connections.get(intent.connection_id)!, intent)
+    const ids = intents.map((intent) => intent.intent_id)
+    await gateway.reserveMirrorOwnership(ids)
+
+    const preparedProofs = await Promise.all(ids.map((intentId) => gateway.verifyNoExposure(intentId)))
+    const prepared = await store.prepareMirrorOwnershipRelease({
+      mirror_execution_id: 'mirror-parent-release',
+      intent_ids: [...ids].sort(),
+      proofs: [...preparedProofs].sort((left, right) => left.intent_id.localeCompare(right.intent_id)),
+    })
+
+    adapter.snapshotOverrides = {
+      positions: [{
+        instrument_id: 'CME:ESU6', symbol: 'ESU6', side: 'buy', quantity: 1, average_price: '5600',
+      }],
+    }
+    await expect(gateway.proveAndReleaseMirrorOwnership(ids)).rejects.toMatchObject({
+      code: 'RECONCILIATION_DIVERGENCE',
+    })
+    expect((await store.getMirrorOwnershipRelease('mirror-parent-release'))?.state).toBe('prepared')
+    adapter.snapshotOverrides = {}
+
+    const ownershipDirectory = path.join(root, 'ownership')
+    const leaseFiles = (await readdir(ownershipDirectory)).filter((file) => (
+      file.endsWith('.json') && !file.startsWith('_')
+    ))
+    await unlink(path.join(ownershipDirectory, leaseFiles[0]!))
+    await writeFile(path.join(ownershipDirectory, '_ownership-set.lock.json'), JSON.stringify({
+      ownership_set_lock_schema_version: 'ownership-set-lock@1',
+      process_id: 2_147_483_647,
+      operation_id: 'crashed-partial-release',
+      leases: [],
+      acquired_at: NOW,
+    }))
+    await store.recoverStaleLocks()
+
+    const journal = await gateway.proveAndReleaseMirrorOwnership(ids)
+    const proofs = journal.proofs
+
+    expect(journal.state).toBe('released')
+    expect(journal.journal_id).toBe(prepared.journal_id)
+    expect(journal.proofs).toEqual(prepared.proofs)
+    expect(proofs.map((proof) => proof.intent_id).sort()).toEqual([...ids].sort())
+    expect(proofs.every((proof) => proof.positions_count === 0 && proof.working_orders_count === 0)).toBe(true)
+    expect((await store.getMirrorOwnershipRelease('mirror-parent-release'))?.content_checksum)
+      .toBe(journal.content_checksum)
+
+    const nextIntents = [left, right].map((connection, index) => makeIntent(connection, {
+      intent_id: `intent-mirror-next-${index}`,
+      mirror_lineage: {
+        mirror_execution_id: 'mirror-parent-next', mirror_group_id: 'mirror-group-release',
+        mirror_group_revision: 1, member_id: `mirror-next-member-${index}`,
+        mirror_child_source_id: `mirror-next-source-${index}`,
+        mirror_child_source_checksum: (index === 0 ? '9' : 'a').repeat(64),
+      },
+    }))
+    for (const intent of nextIntents) await approve(gateway, connections.get(intent.connection_id)!, intent)
+    const nextIds = nextIntents.map((intent) => intent.intent_id)
+    await gateway.reserveMirrorOwnership(nextIds)
+    expect(await gateway.proveAndReleaseMirrorOwnership(ids)).toEqual(journal)
+    const restartedWithoutConnections = new ExecutionGateway({
+      store, adapters: [adapter], now: () => NOW,
+      resolveConnection: async () => { throw new Error('Connection was archived after release.') },
+    })
+    expect(await restartedWithoutConnections.proveAndReleaseMirrorOwnership(ids)).toEqual(journal)
+    await expect(gateway.reserveMirrorOwnership(nextIds)).resolves.toBeUndefined()
+  })
+
   test('persists one paper lifecycle through a protected fill and valid receipt', async () => {
     const adapter = new FakeAdapter()
     const { root, store, gateway, connection } = await setup(makeConnection(), [adapter])
@@ -788,6 +879,7 @@ describe('execution gateway', () => {
       })}\n`,
       'utf8',
     )
+    await store.recoverStaleLocks()
 
     expect(await store.claimManagement(intent.intent_id, actionDigest, (record) => record))
       .toMatchObject({ claimed: true })
@@ -795,7 +887,7 @@ describe('execution gateway', () => {
 
   test('recovers an entry claim marker left by a dead process before journaling', async () => {
     const adapter = new FakeAdapter()
-    const { root, gateway, connection } = await setup(makeConnection(), [adapter])
+    const { root, store, gateway, connection } = await setup(makeConnection(), [adapter])
     const intent = makeIntent(connection)
     await approve(gateway, connection, intent)
     await writeFile(
@@ -808,9 +900,59 @@ describe('execution gateway', () => {
       })}\n`,
       'utf8',
     )
+    await store.recoverStaleLocks()
 
     expect(await gateway.execute(intent.intent_id)).toMatchObject({ state: 'protected' })
     expect(adapter.submitCount).toBe(1)
+  })
+
+  test('never performs concurrent stale takeover of a provider mutation lock', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-god-stale-provider-lock-'))
+    roots.push(root)
+    const store = new FileExecutionStore(root, () => NOW)
+    const providerKey = 'tradovate:paper:account-apex-paper'
+    const digest = createHash('sha256').update(providerKey, 'utf8').digest('hex')
+    const directory = path.join(root, 'provider-mutations')
+    await mkdir(directory, { recursive: true })
+    await writeFile(path.join(directory, `${digest}.lock.json`), JSON.stringify({
+      mutation_lock_schema_version: 'provider-mutation-lock@1',
+      provider_account_key: providerKey,
+      operation_id: 'dead-provider-mutation',
+      process_id: 2_147_483_647,
+      acquired_at: NOW,
+    }))
+
+    const attempts = await Promise.allSettled([
+      store.withProviderMutationLock(providerKey, 'contender-a', async () => 'a'),
+      store.withProviderMutationLock(providerKey, 'contender-b', async () => 'b'),
+    ])
+    expect(attempts.every((attempt) => attempt.status === 'rejected')).toBe(true)
+
+    expect(await store.recoverStaleLocks()).toBe(1)
+    await expect(store.withProviderMutationLock(providerKey, 'startup-owner', async () => 'safe'))
+      .resolves.toBe('safe')
+  })
+
+  test('repairs a crashed app-instance lock even when its PID has been reused', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-god-reused-pid-lock-'))
+    roots.push(root)
+    const store = new FileExecutionStore(root, () => NOW, 'current-app-instance')
+    const providerKey = 'tradovate:paper:account-reused-pid'
+    const digest = createHash('sha256').update(providerKey, 'utf8').digest('hex')
+    const directory = path.join(root, 'provider-mutations')
+    await mkdir(directory, { recursive: true })
+    await writeFile(path.join(directory, `${digest}.lock.json`), JSON.stringify({
+      mutation_lock_schema_version: 'provider-mutation-lock@1',
+      provider_account_key: providerKey,
+      operation_id: 'crashed-app-mutation',
+      process_id: process.pid,
+      process_instance_id: 'crashed-app-instance',
+      acquired_at: NOW,
+    }))
+
+    expect(await store.recoverStaleLocks()).toBe(1)
+    await expect(store.withProviderMutationLock(providerKey, 'current-operation', async () => 'safe'))
+      .resolves.toBe('safe')
   })
 
   test('halts an uncertain submit without retry and later adopts broker truth', async () => {
@@ -1184,6 +1326,38 @@ describe('execution gateway', () => {
 
     await expect(store.get(intent.intent_id)).rejects.toMatchObject({
       code: 'RECORD_INTEGRITY_FAILURE',
+    })
+  })
+
+  test('creates a checksum-bound no-exposure proof from a fresh provider snapshot', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await gateway.registerIntent(intent)
+
+    const proof = await gateway.verifyNoExposure(intent.intent_id)
+
+    expect(proof.intent_id).toBe(intent.intent_id)
+    expect(proof.positions_count).toBe(0)
+    expect(proof.working_orders_count).toBe(0)
+    const { content_checksum: _checksum, ...unsigned } = proof
+    expect(proof.content_checksum).toBe(sha256(unsigned))
+  })
+
+  test('refuses no-exposure proof while the provider reports any account exposure', async () => {
+    const adapter = new FakeAdapter()
+    adapter.snapshotOverrides = {
+      positions: [{
+        instrument_id: 'contract-esu6', symbol: 'ESU6', side: 'buy',
+        quantity: 1, average_price: '5600',
+      }],
+    }
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await gateway.registerIntent(intent)
+
+    await expect(gateway.verifyNoExposure(intent.intent_id)).rejects.toMatchObject({
+      code: 'RECONCILIATION_DIVERGENCE',
     })
   })
 })

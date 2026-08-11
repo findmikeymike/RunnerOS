@@ -23,9 +23,14 @@ depends_on:
 - Stage 2 grants are explicitly `fake-provider-test-only` and are rejected by a
   normal gateway. The desktop runtime does not instantiate this coordinator and
   still attaches zero execution adapters.
-- Group-aware follow-up management, verified closure/release, startup lock
-  recovery, real-provider grant authority, and paper certification remain
-  pending.
+- The dormant group-management foundation is implemented: joint
+  standalone-versus-Mirror family resolution, frozen per-child management
+  matrices, ordered recovery, bounded child execution, truthful parent rollup,
+  and provider-flat-proof-gated ownership/reservation release. It is reachable
+  only for already-materialized parents; the desktop does not instantiate the
+  entry coordinator.
+- Adapter-certified post-partial stop resizing, real-provider grant authority,
+  runtime Mirror entry activation, and paper certification remain pending.
 
 ## Decision Summary
 
@@ -653,9 +658,11 @@ Required fields:
 - timestamps and content checksum.
 
 The reservation is released only after every child is broker-confirmed flat
-with no working orders. Recovery rebuilds and validates reservations before new
-admission. Unknown exposure keeps the reservation and halts rather than freeing
-capacity optimistically.
+with no working orders. The exact proof set is checksum-journaled before any
+ownership lease is deleted; a missing or mismatched aggregate reservation is a
+durable-state integrity failure, never a successful no-op. Recovery rebuilds
+and validates reservations before new admission. Unknown exposure keeps the
+reservation and halts rather than freeing capacity optimistically.
 
 ### Position ownership `position-ownership-lease@1`
 

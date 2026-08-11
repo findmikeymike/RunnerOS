@@ -4,10 +4,15 @@ import {
   DISCORD_MANAGEMENT_MESSAGE_SCHEMA_VERSION,
   DISCORD_MANAGEMENT_RECEIPT_SCHEMA_VERSION,
   EXECUTION_PROTECTION_ORDER_SCHEMA_VERSION,
+  EXECUTION_NO_EXPOSURE_PROOF_SCHEMA_VERSION,
+  DISCORD_MANAGEMENT_FAMILY_RECEIPT_SCHEMA_VERSION,
+  MIRROR_MANAGEMENT_RECEIPT_SCHEMA_VERSION,
   discordManagementMessageSchema,
   discordManagementReceiptSchema,
   discoTraderPushPayloadSchema,
   executionProtectionOrderSchema,
+  discordManagementFamilyReceiptSchema,
+  mirrorManagementReceiptSchema,
 } from '../src/index.ts'
 
 const checksum = 'a'.repeat(64)
@@ -130,6 +135,50 @@ describe('Discord trade-management contracts', () => {
         status: 'completed',
         completed_at: '2026-07-30T15:10:02.000Z',
       }],
+    }).success).toBe(false)
+  })
+
+  test('freezes one single-or-Mirror family before management dispatch', () => {
+    const receipt = {
+      family_receipt_schema_version: DISCORD_MANAGEMENT_FAMILY_RECEIPT_SCHEMA_VERSION,
+      receipt_id: 'management-family-receipt-1', source_message: message,
+      status: 'resolved',
+      candidates: [{ family: 'mirror', mirror_execution_id: 'mirror-parent-1' }],
+      target: { family: 'mirror', mirror_execution_id: 'mirror-parent-1' },
+      resolution_strategy: 'reply-entry',
+      evidence: ['Frozen before dispatch.'],
+      created_at: message.observed_at, content_checksum: checksum,
+    }
+    expect(discordManagementFamilyReceiptSchema.safeParse(receipt).success).toBe(true)
+    expect(discordManagementFamilyReceiptSchema.safeParse({ ...receipt, target: undefined }).success).toBe(false)
+  })
+
+  test('requires broker-flat proof for every terminal Mirror child', () => {
+    const proof = {
+      proof_schema_version: EXECUTION_NO_EXPOSURE_PROOF_SCHEMA_VERSION,
+      proof_id: 'proof-child-1', intent_id: 'intent-child-1', connection_id: 'connection-child-1',
+      account_ref: 'account-child-1', account_snapshot_id: 'snapshot-child-1',
+      account_snapshot_checksum: checksum, execution_record_checksum: checksum,
+      positions_count: 0, working_orders_count: 0,
+      captured_at: message.observed_at, evidence_refs: ['snapshot-child-1'], content_checksum: checksum,
+    }
+    const receipt = {
+      mirror_management_receipt_schema_version: MIRROR_MANAGEMENT_RECEIPT_SCHEMA_VERSION,
+      receipt_id: 'mirror-management-receipt-1', source_message: message,
+      resolution_strategy: 'reply-entry', candidate_mirror_execution_ids: ['mirror-parent-1'],
+      mirror_execution_id: 'mirror-parent-1', status: 'completed', logical_actions: [],
+      children: [{
+        parent_child_index: 0, member_id: 'member-child-1', connection_id: 'connection-child-1',
+        intent_id: 'intent-child-1', status: 'terminal', actions: [],
+        execution_record_checksum: checksum, no_exposure_proof: proof,
+      }],
+      evidence: ['Provider flat proved.'], created_at: message.observed_at,
+      updated_at: message.observed_at, content_checksum: checksum,
+    }
+    expect(mirrorManagementReceiptSchema.safeParse(receipt).success).toBe(true)
+    expect(mirrorManagementReceiptSchema.safeParse({
+      ...receipt,
+      children: [{ ...receipt.children[0], no_exposure_proof: undefined }],
     }).success).toBe(false)
   })
 })

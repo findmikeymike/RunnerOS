@@ -414,9 +414,9 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
   await expect(runtime.ingestDiscordManagementPush!({
     kind: 'management', severity: 'action_required', summary: 'Mirror follow-up',
     management: mirrorContextManagement, at: runtimeNow,
-  })).rejects.toMatchObject({
-    code: 'CAPABILITY_UNAVAILABLE',
-    message: 'Mirror Group follow-up management is disabled during the preview-only rollout.',
+  })).resolves.toMatchObject({
+    status: 'deferred',
+    error: expect.stringContaining('Reply target is not an accepted entry'),
   })
 
   const managementMessage = buildDiscordManagementMessage({
@@ -437,7 +437,7 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     at: runtimeNow,
   })).toMatchObject({
     status: 'blocked',
-    candidate_intent_ids: [],
+    candidates: [],
     error: 'No active trade matches this author and Discord channel context.',
   })
 

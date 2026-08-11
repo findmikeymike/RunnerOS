@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -495,5 +495,42 @@ describe('Mirror Stage 2 coordinator', () => {
     expect(parents.filter((parent) => parent.state === 'admitted')).toHaveLength(1)
     expect(parents.filter((parent) => parent.state === 'blocked')).toHaveLength(1)
     expect(fixture.gateway.executeCount).toBe(0)
+  })
+
+  test('repairs a crashed Mirror risk-admission lock before accepting new work', async () => {
+    const fixture = await setup()
+    const reservationDirectory = path.join(fixture.root, 'mirror-groups', 'risk-reservations')
+    await mkdir(reservationDirectory, { recursive: true })
+    await writeFile(
+      path.join(reservationDirectory, `${sha256(fixture.group.mirror_group_id)}.lock.json`),
+      JSON.stringify({
+        group_id: fixture.group.mirror_group_id,
+        process_id: process.pid,
+        process_instance_id: 'crashed-app-instance',
+        claimed_at: NOW,
+      }),
+    )
+
+    const restartedStore = new FileMirrorExecutionStore(
+      fixture.root,
+      () => NOW,
+      'current-app-instance',
+    )
+    expect(await restartedStore.recoverStaleLocks()).toBe(1)
+    const restartedCoordinator = new MirrorExecutionCoordinator({
+      store: restartedStore,
+      gateway: fixture.gateway,
+      resolveConnection: async (id) => connection(id),
+      resolveAuthorization: async (id) => fixture.authorizations.get(id) ?? null,
+      now: () => NOW,
+      riskPolicy: {
+        policy_version: 'mirror-risk@1', fees_policy_version: 'fees@1', fee_per_contract_usd: '5',
+      },
+    })
+    const parent = await restartedCoordinator.coordinate({
+      ticket: ticket(), binding: fixture.binding, group: fixture.group,
+      instrument: fixture.binding.instrument, dispatch: false,
+    })
+    expect(parent.state).toBe('admitted')
   })
 })

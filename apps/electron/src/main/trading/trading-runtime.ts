@@ -1,11 +1,11 @@
 import { existsSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 
 import {
   discoTraderPushPayloadSchema,
   MARKET_JSONL_SUPERVISOR_MAX_LINE_BYTES,
   type DiscoTraderTicket,
-  type DiscordManagementReceipt,
   type ExecutionRecord,
   type TradeAlert,
   type TradeAlertIngestionStatus,
@@ -51,6 +51,8 @@ import {
   FileAdapterCertificationStore,
   FileDiscoTraderIntentSource,
   FileDiscordTradeManager,
+  FileMirrorDiscordTradeManager,
+  FileDiscordManagementFamilyResolver,
   FileExecutionStore,
   FileTradingConnectionStore,
   FileStandingAuthorizationStore,
@@ -65,6 +67,7 @@ import {
   ExecutionReconciliationSupervisor,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
+  type DiscordManagementDispatchResult,
   type SaveMirrorGroupInput,
 } from '@trade-god/execution'
 import type {
@@ -278,7 +281,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   orderFlowSpecialistPipeline?: OrderFlowSpecialistPipeline
   alertLedger?: TradeAlertLedger
   ingestDiscoTraderTicketPush?: (input: unknown) => Promise<ExecutionRecord | MirrorExecutionPreview>
-  ingestDiscordManagementPush?: (input: unknown) => Promise<DiscordManagementReceipt>
+  ingestDiscordManagementPush?: (input: unknown) => Promise<DiscordManagementDispatchResult>
   emergencyHalt: () => Promise<void>
   setSpecialistModel: (model: SpecialistModel) => void
   dispose: () => Promise<void>
@@ -356,8 +359,12 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const sourceExecutionBindingStore = options.executionDirectory
     ? new FileSourceExecutionBindingStore(options.executionDirectory, options.now)
     : undefined
+  const executionProcessInstanceId = randomUUID()
   const mirrorExecutionStore = options.executionDirectory
-    ? new FileMirrorExecutionStore(options.executionDirectory, options.now)
+    ? new FileMirrorExecutionStore(options.executionDirectory, options.now, executionProcessInstanceId)
+    : undefined
+  const executionStore = options.executionDirectory
+    ? new FileExecutionStore(options.executionDirectory, options.now, executionProcessInstanceId)
     : undefined
   const tradingConnectionService = (
     tradingConnectionStore
@@ -373,9 +380,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         options.now,
       )
     : undefined
-  const executionGateway = options.executionDirectory && tradingConnectionStore
+  const executionGateway = executionStore && tradingConnectionStore
     ? new ExecutionGateway({
-        store: new FileExecutionStore(options.executionDirectory, options.now),
+        store: executionStore,
         resolveConnection: (connectionId) => tradingConnectionStore.get(connectionId),
         // Observe-only receiver foundation. Provider adapters are attached only
         // after their exact paper connection has passed certification.
@@ -571,9 +578,30 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         now: options.now,
       })
     : undefined
+  const mirrorDiscordTradeManager = executionGateway && mirrorExecutionStore && options.executionDirectory
+    ? new FileMirrorDiscordTradeManager({
+        directory: path.join(options.executionDirectory, 'discord-mirror-management'),
+        gateway: executionGateway,
+        store: mirrorExecutionStore,
+        now: options.now,
+      })
+    : undefined
+  const discordManagementFamilyResolver = (
+    discordTradeManager
+    && mirrorDiscordTradeManager
+    && options.executionDirectory
+  ) ? new FileDiscordManagementFamilyResolver({
+      directory: path.join(options.executionDirectory, 'discord-management-families'),
+      single: discordTradeManager,
+      mirror: mirrorDiscordTradeManager,
+      now: options.now,
+    }) : undefined
   let executionRecoveryError: unknown
-  const executionRecoveryReady = executionGateway
-    ? executionGateway.recoverNonTerminal().catch((error) => {
+  const executionRecoveryReady = executionGateway && executionStore
+    ? Promise.all([
+        executionStore.recoverStaleLocks(),
+        mirrorExecutionStore?.recoverStaleLocks() ?? Promise.resolve(0),
+      ]).then(() => executionGateway.recoverNonTerminal()).catch((error) => {
         executionRecoveryError = error
       })
     : Promise.resolve()
@@ -582,10 +610,12 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     reconciliationSupervisor?.start()
   })
   let discordManagementRecoveryError: unknown
-  const discordManagementReady = discordTradeManager
+  const discordManagementReady = discordTradeManager && mirrorDiscordTradeManager && discordManagementFamilyResolver
     ? executionSupervisionReady.then(async () => {
         if (executionRecoveryError) throw executionRecoveryError
         await discordTradeManager.recoverPending()
+        await mirrorDiscordTradeManager.recoverPending()
+        await discordManagementFamilyResolver.recoverPending()
       }).catch((error) => {
           discordManagementRecoveryError = error
         })
@@ -774,7 +804,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(orderFlowSpecialist ? { orderFlowSpecialist } : {}),
     ...(orderFlowSpecialistPipeline ? { orderFlowSpecialistPipeline } : {}),
     ...(alertLedger ? { alertLedger } : {}),
-    ...(discordTradeManager
+    ...(discordTradeManager && discordManagementFamilyResolver
       ? {
           ingestDiscoTraderTicketPush: async (input: unknown) => {
             await executionSupervisionReady
@@ -893,31 +923,11 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             if (payload.kind !== 'management' || !payload.management) {
               return discordTradeManager.ingestPush(payload)
             }
-            const message = payload.management
-            const channelIds = [...new Set([
-              message.channel_id,
-              ...(message.parent_channel_id ? [message.parent_channel_id] : []),
-            ])]
-            const currentRoute = await tradingSignalRouteStore?.resolveIdentity({
-              ...(message.guild_id ? { server_id: message.guild_id } : {}),
-              channel_id: message.parent_channel_id ?? message.channel_id,
-              author_id: message.author_id,
-            })
-            const hasFrozenMirrorContext = message.reply_to_message_id
-              ? await sourceExecutionBindingStore?.hasMirrorBindingForContext({
-                  ...(message.guild_id ? { server_id: message.guild_id } : {}),
-                  channel_ids: channelIds,
-                  author_id: message.author_id,
-                  reply_to_message_id: message.reply_to_message_id,
-                })
-              : false
-            if (currentRoute?.target.type === 'mirror-group' || hasFrozenMirrorContext) {
-              throw new ExecutionGatewayError(
-                'CAPABILITY_UNAVAILABLE',
-                'Mirror Group follow-up management is disabled during the preview-only rollout.',
-              )
-            }
-            return discordTradeManager.ingestPush(payload)
+            return tradingRouteMutations
+              ? tradingRouteMutations.captureRoutingSnapshot(() => (
+                  discordManagementFamilyResolver.ingestPush(payload)
+                ))
+              : discordManagementFamilyResolver.ingestPush(payload)
           },
         }
       : {}),

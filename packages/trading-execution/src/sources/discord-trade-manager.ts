@@ -28,6 +28,7 @@ import {
   parseDiscordManagementText,
   type ParsedDiscordManagementAction,
 } from './discord-management-parser.ts'
+import type { DiscordManagementFamilyProbe } from './discord-management-family-resolver.ts'
 
 export interface DiscordTradeManagementGateway {
   list(): Promise<ExecutionRecord[]>
@@ -118,7 +119,36 @@ export class FileDiscordTradeManager {
     return this.withLock(() => this.ingestMessageUnlocked(input))
   }
 
-  private async ingestMessageUnlocked(input: unknown): Promise<DiscordManagementReceipt> {
+  async ingestResolvedMessage(
+    input: DiscordManagementMessage,
+    expectedIntentId: string,
+    strategy: DiscordManagementResolutionStrategy,
+  ): Promise<DiscordManagementReceipt> {
+    return this.withLock(() => this.ingestMessageUnlocked(input, expectedIntentId, strategy))
+  }
+
+  async probe(input: DiscordManagementMessage): Promise<DiscordManagementFamilyProbe> {
+    const message = discordManagementMessageSchema.parse(input)
+    this.verifyMessage(message)
+    const parsed = parseDiscordManagementText(message.raw_text)
+    const policyError = this.messagePolicyError(message) ?? parsed.error
+    if (policyError) return { family: 'single', candidates: [], error: policyError }
+    const resolution = await this.resolve(message, parsed.symbol)
+    return {
+      family: 'single',
+      candidates: resolution.candidates.map(({ record }) => record.intent.intent_id),
+      ...(resolution.resolved ? { resolved: resolution.resolved.record.intent.intent_id } : {}),
+      ...(resolution.strategy ? { strategy: resolution.strategy } : {}),
+      ...(resolution.retryable ? { retryable: true } : {}),
+      ...(resolution.error ? { error: resolution.error } : {}),
+    }
+  }
+
+  private async ingestMessageUnlocked(
+    input: unknown,
+    expectedIntentId?: string,
+    expectedStrategy?: DiscordManagementResolutionStrategy,
+  ): Promise<DiscordManagementReceipt> {
     const message = discordManagementMessageSchema.parse(input)
     this.verifyMessage(message)
     const existing = await this.readReceiptIfPresent(message.message_id)
@@ -127,6 +157,12 @@ export class FileDiscordTradeManager {
         throw new ExecutionGatewayError(
           'RECORD_INTEGRITY_FAILURE',
           'Discord message ID conflicts with a different immutable payload.',
+        )
+      }
+      if (expectedIntentId && existing.resolved_intent_id !== expectedIntentId) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Durable single-trade receipt does not match the frozen family target.',
         )
       }
       if (existing.status === 'prepared' || existing.status === 'executing') {
@@ -149,7 +185,19 @@ export class FileDiscordTradeManager {
       })
     }
 
-    const resolution = await this.resolve(message, parsed.symbol)
+    let resolution = await this.resolve(message, parsed.symbol)
+    if (expectedIntentId) {
+      const expected = resolution.candidates.find(({ record }) => (
+        record.intent.intent_id === expectedIntentId && isManagementEligible(record)
+      ))
+      if (!expected || !expectedStrategy) {
+        throw new ExecutionGatewayError(
+          'AUTHORIZATION_MISMATCH',
+          'Frozen single-trade family target is no longer valid for this immutable message context.',
+        )
+      }
+      resolution = { ...resolution, resolved: expected, strategy: expectedStrategy, error: undefined }
+    }
     if (!resolution.resolved || !resolution.strategy) {
       return this.createReceipt(message, {
         status: resolution.retryable ? 'deferred' : 'blocked',
@@ -230,8 +278,6 @@ export class FileDiscordTradeManager {
     for (const receipt of receipts) {
       if (receipt.status === 'prepared' || receipt.status === 'executing') {
         recovered.push(await this.executeReceipt(receipt))
-      } else if (receipt.status === 'deferred') {
-        recovered.push(await this.retryDeferred(receipt))
       }
     }
     return recovered
