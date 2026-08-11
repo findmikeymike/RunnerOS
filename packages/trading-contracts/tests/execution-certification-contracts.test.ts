@@ -2,7 +2,9 @@ import { describe, expect, test } from 'bun:test'
 
 import {
   ADAPTER_CERTIFICATION_EVIDENCE_SCHEMA_VERSION,
+  PROVIDER_READ_VERIFICATION_SCHEMA_VERSION,
   adapterCertificationEvidenceSchema,
+  providerReadVerificationSchema,
 } from '../src/index.ts'
 
 const scenario = {
@@ -72,6 +74,38 @@ describe('adapter certification evidence contract', () => {
     expect(adapterCertificationEvidenceSchema.safeParse({
       ...evidence,
       soak: { ...evidence.soak, completed_lifecycles: 51 },
+    }).success).toBe(false)
+  })
+
+  test('requires a checksum-bound tradable snapshot with valid chronology', () => {
+    const verification = {
+      verification_schema_version: PROVIDER_READ_VERIFICATION_SCHEMA_VERSION,
+      verification_id: 'provider-read-one',
+      connection_id: 'connection-apex-paper',
+      account_ref: 'account-apex-paper',
+      provider_slug: 'tradovate',
+      environment: 'paper',
+      adapter_id: 'tradovate-api',
+      adapter_version: '1.0.0',
+      provider_contract_version: 'tradovate-demo-rest-2026-07',
+      capabilities_checksum: 'b'.repeat(64),
+      account_snapshot_id: 'snapshot-one',
+      account_snapshot_checksum: 'c'.repeat(64),
+      captured_at: '2026-07-30T15:05:00.000Z',
+      can_trade: true,
+      position_count: 0,
+      working_order_count: 0,
+      verified_at: '2026-07-30T15:05:01.000Z',
+      content_checksum: 'd'.repeat(64),
+    }
+    expect(providerReadVerificationSchema.safeParse(verification).success).toBe(true)
+    expect(providerReadVerificationSchema.safeParse({
+      ...verification,
+      can_trade: false,
+    }).success).toBe(false)
+    expect(providerReadVerificationSchema.safeParse({
+      ...verification,
+      verified_at: '2026-07-30T15:04:59.000Z',
     }).success).toBe(false)
   })
 })

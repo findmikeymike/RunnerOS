@@ -47,6 +47,7 @@ export interface TradingPreloadApi {
     session_ref: string
   }>
   confirmTradingConnectionLogin(connectionId: string): Promise<TradingConnectionStatus>
+  verifyTradingConnection(connectionId: string): Promise<TradingConnectionStatus>
   listTradingSignalRoutes(): Promise<TradingSignalRoute[]>
   saveTradingSignalRoute(
     route: TradingSignalRoute,
@@ -113,6 +114,9 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     ),
     confirmTradingConnectionLogin: (connectionId) => (
       invoke(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN, connectionId) as Promise<TradingConnectionStatus>
+    ),
+    verifyTradingConnection: (connectionId) => (
+      invoke(TRADE_GOD_IPC.VERIFY_CONNECTION, connectionId) as Promise<TradingConnectionStatus>
     ),
     listTradingSignalRoutes: () => invoke(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES) as Promise<TradingSignalRoute[]>,
     saveTradingSignalRoute: (route, expectedPreviousTargetKey) => (

@@ -44,6 +44,7 @@ type ApiToChannelMapKeys = Exclude<
   | 'removeTradingConnection' // direct local Trading Connections IPC
   | 'openTradingConnectionLogin' // direct local isolated browser-session IPC
   | 'confirmTradingConnectionLogin' // direct local isolated browser-session IPC
+  | 'verifyTradingConnection' // direct local read-only provider verification IPC
   | 'listTradingSignalRoutes' // direct local trading signal-route IPC
   | 'saveTradingSignalRoute' // direct local trading signal-route IPC
   | 'removeTradingSignalRoute' // direct local trading signal-route IPC

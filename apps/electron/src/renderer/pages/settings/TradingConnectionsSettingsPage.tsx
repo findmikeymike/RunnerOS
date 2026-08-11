@@ -317,6 +317,23 @@ export default function TradingConnectionsSettingsPage({
     }
   }
 
+  const verifyProvider = async (connectionId: string) => {
+    setBusy(`verify:${connectionId}`)
+    try {
+      await window.electronAPI.verifyTradingConnection(connectionId)
+      await load()
+      onConnectionsChanged?.()
+      toast.success('Tradovate paper account verified', {
+        description: 'This was read-only. Order entry remains locked pending lifecycle certification and explicit activation.',
+      })
+    } catch (error) {
+      await load()
+      toast.error(error instanceof Error ? error.message : 'Could not verify provider account')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const saveSignalRoute = async (expectedPreviousTargetKey?: string) => {
     if (!signalDraft.displayName.trim() || !signalDraft.connectionId
       || !/^\d{1,25}$/.test(signalDraft.serverId)
@@ -784,6 +801,15 @@ export default function TradingConnectionsSettingsPage({
                               ? status.browser_login_confirmed ? 'Provider page saved' : 'Sign-in needed'
                               : status.credential_configured ? 'Credential saved' : 'Credential needed'}
                           </StatusBadge>
+                          {status.connection.transport_preference === 'api' && (
+                            <StatusBadge positive={status.provider_read_fresh}>
+                              {status.provider_read_fresh
+                                ? 'Provider verified'
+                                : status.provider_read_verified
+                                  ? 'Verification stale'
+                                  : 'Verify needed'}
+                            </StatusBadge>
+                          )}
                           <StatusBadge positive={isExecutionReady(status)}>
                             {isExecutionReady(status)
                               ? 'Paper certified'
@@ -798,8 +824,26 @@ export default function TradingConnectionsSettingsPage({
                         <p className="mt-1 text-[11px] text-muted-foreground">
                           Dedicated identity: {status.connection.account_ref} · {status.connection.certifications.length} certifications
                         </p>
+                        {status.provider_read_verification && (
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            Last read-only proof {new Date(status.provider_read_verification.verified_at).toLocaleString()} · {status.provider_read_verification.position_count} positions · {status.provider_read_verification.working_order_count} working orders
+                          </p>
+                        )}
                       </div>
                       <div className="flex gap-2">
+                        {status.connection.transport_preference === 'api' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!status.credential_configured || busy === `verify:${status.connection.connection_id}`}
+                            onClick={() => void verifyProvider(status.connection.connection_id)}
+                          >
+                            {busy === `verify:${status.connection.connection_id}`
+                              ? <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                              : <ShieldCheck className="mr-1.5 size-3.5" />}
+                            Verify account
+                          </Button>
+                        )}
                         {status.connection.transport_preference !== 'api' && (
                           <>
                             <Button

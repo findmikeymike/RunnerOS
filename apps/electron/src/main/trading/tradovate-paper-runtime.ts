@@ -1,4 +1,11 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
+
+import {
+  PROVIDER_READ_VERIFICATION_SCHEMA_VERSION,
+  providerReadVerificationSchema,
+  type ProviderReadVerification,
+  type TradingConnection,
+} from '@trade-god/contracts'
 
 import {
   ExecutionGatewayError,
@@ -7,6 +14,7 @@ import {
   TradovateSessionManager,
   parseTradovateCredential,
   serializeTradovateCredential,
+  sha256,
   tokenFingerprint,
   type FileTradingConnectionStore,
   type TradovateFetch,
@@ -22,6 +30,7 @@ import {
 export interface TradovatePaperRuntime {
   adapter: TradovateApiAdapter
   certificationRegistry: TradingAdapterCertificationRegistry
+  verifyReadOnly(connection: TradingConnection): Promise<ProviderReadVerification>
   stop(): void
 }
 
@@ -99,6 +108,50 @@ export const createTradovatePaperRuntime = (options: {
         provider_contract_version: adapter.descriptor.provider_contract_version,
         capabilities: adapter.descriptor.capabilities,
       } : null,
+    },
+    verifyReadOnly: async (connection) => {
+      if (!adapter.supports(connection)) {
+        throw new ExecutionGatewayError(
+          'CONNECTION_UNAVAILABLE',
+          'Read-only verification requires the attached Tradovate paper adapter.',
+        )
+      }
+      await adapter.connect(connection)
+      const snapshot = await adapter.snapshotAccount(connection)
+      if (
+        snapshot.connection_id !== connection.connection_id
+        || snapshot.account_ref !== connection.account_ref
+        || snapshot.environment !== connection.environment
+        || !snapshot.can_trade
+      ) {
+        throw new ExecutionGatewayError(
+          'ACCOUNT_MISMATCH',
+          'Tradovate read-only verification did not prove the exact tradable paper account.',
+        )
+      }
+      const unsigned = {
+        verification_schema_version: PROVIDER_READ_VERIFICATION_SCHEMA_VERSION,
+        verification_id: `provider-read-${randomUUID()}`,
+        connection_id: connection.connection_id,
+        account_ref: connection.account_ref,
+        provider_slug: connection.platform.slug,
+        environment: connection.environment,
+        adapter_id: adapter.descriptor.adapter_id,
+        adapter_version: adapter.descriptor.adapter_version,
+        provider_contract_version: adapter.descriptor.provider_contract_version,
+        capabilities_checksum: sha256(adapter.descriptor.capabilities),
+        account_snapshot_id: snapshot.account_snapshot_id,
+        account_snapshot_checksum: sha256(snapshot),
+        captured_at: snapshot.captured_at,
+        can_trade: true as const,
+        position_count: snapshot.positions.length,
+        working_order_count: snapshot.working_orders.length,
+        verified_at: options.now(),
+      }
+      return providerReadVerificationSchema.parse({
+        ...unsigned,
+        content_checksum: sha256(unsigned),
+      })
     },
     stop: () => sessionManager.stop(),
   }

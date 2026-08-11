@@ -14,6 +14,9 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
 - Verdict: not ready for automated provider execution.
 - Runtime truth: Trade God explicitly attaches one Tradovate paper adapter, but
   certification, account enablement, mandate, and halt gates keep it inert.
+- The account UI can run a trusted read-only provider verification. Its
+  append-only proof confirms exact account/environment/tradability and safe
+  position/order counts, but grants no certification or execution authority.
 - Live isolated workspace now contains both signed DiscoTrader receivers.
 - Trade Desk is read-only and cannot call donor execution/management tools.
 - Exact Discord routing is mandatory; no default/single-account fallback exists.
@@ -29,10 +32,10 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
 - The previously copied Artist OS vault was moved into a recoverable Trade
   God-only quarantine. Fresh Trade God login/secrets are required.
 - Time-bounded paper arming and execution coordination are implemented locally;
-  no provider adapter is attached. Coalesced token renewal, provider backoff,
-  and low-rate stale-truth supervision are implemented but dormant. Next build
-  gate: encrypted-vault binding, event-driven user-sync truth, and exact-account
-  paper certification.
+  one paper-only Tradovate adapter is attached but inert. Coalesced token
+  renewal, provider backoff, low-rate stale-truth supervision, and trusted
+  read-only account verification are implemented. Next build gate: event-driven
+  user-sync truth and exact-account lifecycle certification.
 
 ## Mission
 
@@ -127,8 +130,8 @@ obtain a demo credential bound to one exact account. Trade God now explicitly
 attaches one paper-only Tradovate adapter with structured encrypted-vault
 credentials, CAS token rotation, exact descriptor binding, and adapter-change
 halt quarantine. It remains inert behind lifecycle certification, explicit
-account enablement, a current mandate, and persistent halt controls. Add trusted
-read-only provider verification and event-driven truth, then prove partial-close
+account enablement, a current mandate, and persistent halt controls. Run the new
+read-only `Verify account` action, add event-driven truth, then prove partial-close
 protection resizing and the 50-lifecycle paper soak before enabling the account.
 Before a multi-target smoke, update DiscoTrader to emit
 `targetLegs: [{ legId, quantity, target }]`; the legacy `targets` array remains
@@ -146,6 +149,12 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
+- Provider read-verification slice: 49 focused tests pass across contracts,
+  append-only evidence, Tradovate read runtime, connection lifecycle,
+  IPC/preload, UI helpers, channel parity, and runtime. Repository typecheck and
+  Electron production builds pass. Credential replacement/removal revoke before
+  mutation and cannot erase retained proof history. This is account-read proof,
+  not lifecycle certification or execution activation.
 - Mirror management foundation: 111 focused contract, gateway, Mirror,
   Discord-management, and Electron runtime tests pass with 402 expectations.
 - Startup-only, app-instance-bound recovery repairs crashed execution and

@@ -50,6 +50,7 @@ import {
   resolveFuturesContractIdentity,
   resolveFuturesEconomicSpec,
   FileAdapterCertificationStore,
+  FileProviderReadVerificationStore,
   FileDiscoTraderIntentSource,
   FileDiscordTradeManager,
   FileMirrorDiscordTradeManager,
@@ -407,6 +408,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       }
     },
   }
+  const providerReadVerificationStore = options.connectionDirectory
+    ? new FileProviderReadVerificationStore(options.connectionDirectory, options.now)
+    : undefined
   const tradingConnectionService = (
     tradingConnectionStore
     && options.credentialVault
@@ -419,6 +423,10 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         new FileAdapterCertificationStore(options.connectionDirectory!, options.now),
         certificationRegistry,
         options.now,
+        providerReadVerificationStore,
+        tradovatePaperRuntime
+          ? { verify: (connection) => tradovatePaperRuntime!.verifyReadOnly(connection) }
+          : undefined,
       )
     : undefined
   const executionGateway = executionStore && tradingConnectionStore
@@ -758,6 +766,10 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           confirmTradingConnectionLogin: (connectionId) => tradingRouteMutations!.saveConnection(
             connectionId,
             () => tradingConnectionService.confirmBrowserLogin(connectionId),
+          ),
+          verifyTradingConnection: (connectionId) => tradingRouteMutations!.saveConnection(
+            connectionId,
+            () => tradingConnectionService.verifyProviderRead(connectionId),
           ),
           listTradingSignalRoutes: () => tradingSignalRouteStore!.list(),
           saveTradingSignalRoute: (route, expectedPreviousTargetKey) => (

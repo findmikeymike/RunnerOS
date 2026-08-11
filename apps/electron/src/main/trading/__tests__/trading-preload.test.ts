@@ -33,6 +33,7 @@ test('preload adapter invokes only the local Trade God channels', async () => {
   expect(await api.removeTradingConnection('connection-1') as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.openTradingConnectionLogin('connection-1') as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.confirmTradingConnectionLogin('connection-1') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.verifyTradingConnection('connection-1') as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.listTradingSignalRoutes() as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.saveTradingSignalRoute(
     { route_id: 'route-1' } as any,
@@ -70,6 +71,7 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.REMOVE_CONNECTION, args: ['connection-1'] },
     { channel: TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN, args: ['connection-1'] },
     { channel: TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN, args: ['connection-1'] },
+    { channel: TRADE_GOD_IPC.VERIFY_CONNECTION, args: ['connection-1'] },
     { channel: TRADE_GOD_IPC.LIST_SIGNAL_ROUTES, args: [] },
     { channel: TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, args: [{ route_id: 'route-1' }, 'connection-old'] },
     { channel: TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, args: ['route-1'] },

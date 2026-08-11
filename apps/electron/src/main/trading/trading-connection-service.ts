@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto'
 
 import {
   type AdapterCertificationEvidence,
+  type ProviderReadVerification,
   tradingConnectionSchema,
   type TradingConnection,
 } from '@trade-god/contracts'
 import {
   FileAdapterCertificationStore,
+  FileProviderReadVerificationStore,
   FileTradingConnectionStore,
   parseTradovateCredential,
   serializeTradovateCredential,
@@ -42,6 +44,9 @@ export interface TradingConnectionStatus {
   browser_session_configured: boolean
   browser_login_confirmed: boolean
   certification_evidence: AdapterCertificationEvidence[]
+  provider_read_verification?: ProviderReadVerification
+  provider_read_verified: boolean
+  provider_read_fresh: boolean
 }
 
 export interface TradingAdapterCertificationBinding {
@@ -53,6 +58,10 @@ export interface TradingAdapterCertificationBinding {
 
 export interface TradingAdapterCertificationRegistry {
   resolve(connection: TradingConnection): TradingAdapterCertificationBinding | null
+}
+
+export interface TradingProviderReadVerifier {
+  verify(connection: TradingConnection): Promise<ProviderReadVerification>
 }
 
 const EMPTY_CAPABILITIES: TradingConnection['capabilities'] = {
@@ -74,6 +83,8 @@ const EMPTY_CAPABILITIES: TradingConnection['capabilities'] = {
 }
 
 export class TradingConnectionService {
+  private mutationQueue: Promise<void> = Promise.resolve()
+
   constructor(
     private readonly store: FileTradingConnectionStore,
     private readonly vault: TradingCredentialVault,
@@ -81,6 +92,8 @@ export class TradingConnectionService {
     private readonly certificationStore?: FileAdapterCertificationStore,
     private readonly certificationRegistry?: TradingAdapterCertificationRegistry,
     private readonly now: () => string = () => new Date().toISOString(),
+    private readonly providerReadVerificationStore?: FileProviderReadVerificationStore,
+    private readonly providerReadVerifier?: TradingProviderReadVerifier,
   ) {}
 
   async list(): Promise<TradingConnectionStatus[]> {
@@ -88,6 +101,10 @@ export class TradingConnectionService {
   }
 
   async save(input: SaveTradingConnectionInput): Promise<TradingConnectionStatus> {
+    return this.withMutationLock(() => this.saveUnlocked(input))
+  }
+
+  private async saveUnlocked(input: SaveTradingConnectionInput): Promise<TradingConnectionStatus> {
     const suppliedSecret = input.api_secret?.trim()
     const expectedCredentialRef = credentialRef(input.connection.connection_id)
     const expectedSessionRef = browserSessionRef(input.connection.connection_id)
@@ -148,6 +165,11 @@ export class TradingConnectionService {
     ) {
         throw new Error('API transport requires credentials before the connection can be saved.')
     }
+    if (suppliedSecret) {
+      // Invalidate first. If any later write fails, the old proof stays safely revoked
+      // while its append-only evidence remains available for audit.
+      await this.providerReadVerificationStore?.removeForConnection(connection.connection_id)
+    }
     const saved = await this.store.save(connection)
     if (canonicalSecretToStore) {
       if (existingSecretRaw) {
@@ -166,7 +188,51 @@ export class TradingConnectionService {
     return this.status(saved)
   }
 
+  async verifyProviderRead(connectionId: string): Promise<TradingConnectionStatus> {
+    return this.withMutationLock(() => this.verifyProviderReadUnlocked(connectionId))
+  }
+
+  private async verifyProviderReadUnlocked(connectionId: string): Promise<TradingConnectionStatus> {
+    if (!this.providerReadVerificationStore || !this.providerReadVerifier) {
+      throw new Error('Trusted provider verification is unavailable.')
+    }
+    // A new check replaces the active assertion. Revoke first so failure cannot
+    // leave a stale green status while preserving the prior evidence for audit.
+    await this.providerReadVerificationStore.removeForConnection(connectionId)
+    const connection = await this.store.get(connectionId)
+    const installed = this.certificationRegistry?.resolve(connection)
+    if (!installed) throw new Error('No attached read-only adapter supports this connection.')
+    const verification = await this.providerReadVerifier.verify(connection)
+    const current = await this.store.get(connectionId)
+    const currentInstalled = this.certificationRegistry?.resolve(current)
+    if (
+      JSON.stringify(current) !== JSON.stringify(connection)
+      || !currentInstalled
+      || JSON.stringify(currentInstalled) !== JSON.stringify(installed)
+    ) {
+      throw new Error('Trading account or adapter changed during provider verification; verify again.')
+    }
+    if (
+      verification.connection_id !== connection.connection_id
+      || verification.account_ref !== connection.account_ref
+      || verification.provider_slug !== connection.platform.slug
+      || verification.environment !== connection.environment
+      || verification.adapter_id !== installed.adapter_id
+      || verification.adapter_version !== installed.adapter_version
+      || verification.provider_contract_version !== installed.provider_contract_version
+      || verification.capabilities_checksum !== sha256(installed.capabilities)
+    ) {
+      throw new Error('Provider verification does not match the exact saved account and adapter contract.')
+    }
+    await this.providerReadVerificationStore.save(verification)
+    return this.status(current)
+  }
+
   async applyCertification(certificationId: string): Promise<TradingConnectionStatus> {
+    return this.withMutationLock(() => this.applyCertificationUnlocked(certificationId))
+  }
+
+  private async applyCertificationUnlocked(certificationId: string): Promise<TradingConnectionStatus> {
     if (!this.certificationStore) {
       throw new Error('Adapter certification evidence store is not configured.')
     }
@@ -221,6 +287,12 @@ export class TradingConnectionService {
   }
 
   async remove(connectionId: string): Promise<boolean> {
+    return this.withMutationLock(() => this.removeUnlocked(connectionId))
+  }
+
+  private async removeUnlocked(connectionId: string): Promise<boolean> {
+    // Always invalidate first, including retries after a partially completed removal.
+    await this.providerReadVerificationStore?.removeForConnection(connectionId)
     const connection = await this.store.get(connectionId).catch(() => null)
     if (connection?.browser_session_ref) {
       await this.browser.clear({
@@ -255,6 +327,10 @@ export class TradingConnectionService {
   }
 
   async confirmBrowserLogin(connectionId: string): Promise<TradingConnectionStatus> {
+    return this.withMutationLock(() => this.confirmBrowserLoginUnlocked(connectionId))
+  }
+
+  private async confirmBrowserLoginUnlocked(connectionId: string): Promise<TradingConnectionStatus> {
     const connection = await this.store.get(connectionId)
     if (connection.transport_preference !== 'browser' || !connection.browser_session_ref) {
       throw new Error('This trading connection does not have a browser route.')
@@ -298,6 +374,30 @@ export class TradingConnectionService {
         } else credentialConfigured = true
       }
     }
+    const providerReadVerification = await this.providerReadVerificationStore?.getLatest(
+      connection.connection_id,
+    )
+    const installed = this.certificationRegistry?.resolve(connection)
+    const providerReadVerified = Boolean(
+      providerReadVerification
+      && installed
+      && credentialConfigured
+      && providerReadVerification.account_ref === connection.account_ref
+      && providerReadVerification.provider_slug === connection.platform.slug
+      && providerReadVerification.environment === connection.environment
+      && providerReadVerification.adapter_id === installed.adapter_id
+      && providerReadVerification.adapter_version === installed.adapter_version
+      && providerReadVerification.provider_contract_version === installed.provider_contract_version
+      && providerReadVerification.capabilities_checksum === sha256(installed.capabilities)
+    )
+    const providerReadFresh = Boolean(
+      providerReadVerified
+      && providerReadVerification
+      && Date.parse(this.now()) - Date.parse(providerReadVerification.verified_at) <= 2 * 60_000
+      && Date.parse(this.now()) - Date.parse(providerReadVerification.captured_at) <= 2 * 60_000
+      && Date.parse(this.now()) >= Date.parse(providerReadVerification.verified_at)
+      && Date.parse(this.now()) >= Date.parse(providerReadVerification.captured_at)
+    )
     return {
       connection,
       credential_configured: credentialConfigured,
@@ -309,6 +409,23 @@ export class TradingConnectionService {
       certification_evidence: this.certificationStore
         ? await this.certificationStore.list(connection.connection_id)
         : [],
+      ...(providerReadVerification ? { provider_read_verification: providerReadVerification } : {}),
+      provider_read_verified: providerReadVerified,
+      provider_read_fresh: providerReadFresh,
+    }
+  }
+
+  private async withMutationLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.mutationQueue
+    let release!: () => void
+    this.mutationQueue = previous.catch(() => undefined).then(() => new Promise<void>((resolve) => {
+      release = resolve
+    }))
+    await previous.catch(() => undefined)
+    try {
+      return await operation()
+    } finally {
+      release()
     }
   }
 }

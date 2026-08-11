@@ -11,6 +11,7 @@ import {
 } from '@trade-god/contracts'
 import {
   FileAdapterCertificationStore,
+  FileProviderReadVerificationStore,
   FileTradingConnectionStore,
   runAdapterCertification,
   sha256,
@@ -25,6 +26,7 @@ import {
   type TradingBrowserSessionLauncher,
   type TradingCredentialVault,
   type TradingAdapterCertificationRegistry,
+  type TradingProviderReadVerifier,
 } from '../trading-connection-service.ts'
 
 const roots: string[] = []
@@ -121,13 +123,17 @@ const apiSecret = (
   expires_at: '2026-07-30T16:00:00.000Z',
 })
 
-const setup = async (registry?: TradingAdapterCertificationRegistry) => {
+const setup = async (
+  registry?: TradingAdapterCertificationRegistry,
+  providerReadVerifier?: TradingProviderReadVerifier,
+) => {
   const root = await mkdtemp(path.join(tmpdir(), 'trade-god-connection-service-'))
   roots.push(root)
   const vault = new Vault()
   const browser = new Browser()
   const connectionStore = new FileTradingConnectionStore(root, () => NOW)
   const certificationStore = new FileAdapterCertificationStore(root, () => NOW)
+  const providerReadVerificationStore = new FileProviderReadVerificationStore(root, () => NOW)
   const service = new TradingConnectionService(
     connectionStore,
     vault,
@@ -135,8 +141,17 @@ const setup = async (registry?: TradingAdapterCertificationRegistry) => {
     certificationStore,
     registry,
     () => NOW,
+    providerReadVerificationStore,
+    providerReadVerifier,
   )
-  return { service, vault, browser, certificationStore, connectionStore }
+  return {
+    service,
+    vault,
+    browser,
+    certificationStore,
+    providerReadVerificationStore,
+    connectionStore,
+  }
 }
 
 describe('trading connection service', () => {
@@ -149,6 +164,147 @@ describe('trading connection service', () => {
     expect(JSON.stringify(saved)).not.toContain('top-secret')
     expect(vault.values.get(secretName(saved.connection.connection_id))).toBe(apiSecret())
     expect(saved.certification_evidence).toEqual([])
+  })
+
+  test('persists exact read-only proof and invalidates it on credential replacement', async () => {
+    const installedCapabilities = { ...capabilities, read_accounts: true, read_positions: true }
+    let verifierFails = false
+    let verificationSequence = 0
+    const registry: TradingAdapterCertificationRegistry = {
+      resolve: () => ({
+        adapter_id: 'tradovate-api',
+        adapter_version: '1.0.0',
+        provider_contract_version: 'tradovate-demo-rest-2026-07',
+        capabilities: installedCapabilities,
+      }),
+    }
+    const verifier: TradingProviderReadVerifier = {
+      verify: async (target) => {
+        if (verifierFails) throw new Error('provider read failed')
+        verificationSequence += 1
+        const unsigned = {
+          verification_schema_version: 'provider-read-verification@1' as const,
+          verification_id: `provider-read-service-${verificationSequence}`,
+          connection_id: target.connection_id,
+          account_ref: target.account_ref,
+          provider_slug: target.platform.slug,
+          environment: target.environment,
+          adapter_id: 'tradovate-api',
+          adapter_version: '1.0.0',
+          provider_contract_version: 'tradovate-demo-rest-2026-07',
+          capabilities_checksum: sha256(installedCapabilities),
+          account_snapshot_id: 'snapshot-service',
+          account_snapshot_checksum: 'a'.repeat(64),
+          captured_at: NOW,
+          can_trade: true as const,
+          position_count: 0,
+          working_order_count: 0,
+          verified_at: NOW,
+        }
+        return { ...unsigned, content_checksum: sha256(unsigned) }
+      },
+    }
+    const { service, vault, providerReadVerificationStore } = await setup(registry, verifier)
+    const saved = await service.save({ connection: connection('api'), api_secret: apiSecret() })
+    const verified = await service.verifyProviderRead(saved.connection.connection_id)
+    expect(verified).toMatchObject({
+      provider_read_verified: true,
+      provider_read_fresh: true,
+      provider_read_verification: {
+        account_ref: saved.connection.account_ref,
+        position_count: 0,
+        working_order_count: 0,
+      },
+    })
+    expect(JSON.stringify(verified)).not.toContain('top-secret-access-token')
+
+    verifierFails = true
+    await expect(service.verifyProviderRead(saved.connection.connection_id))
+      .rejects.toThrow('provider read failed')
+    expect((await service.list())[0]).toMatchObject({
+      provider_read_verified: false,
+      provider_read_fresh: false,
+    })
+    verifierFails = false
+    await service.verifyProviderRead(saved.connection.connection_id)
+
+    vault.values.set(secretName(saved.connection.connection_id), JSON.stringify({
+      ...JSON.parse(apiSecret()),
+      expires_at: '2026-07-30T15:04:59.000Z',
+    }))
+    expect((await service.list())[0]).toMatchObject({
+      credential_configured: false,
+      provider_read_verified: false,
+      provider_read_fresh: false,
+    })
+    vault.values.set(secretName(saved.connection.connection_id), apiSecret())
+
+    const replaced = await service.save({
+      connection: saved.connection,
+      api_secret: apiSecret('replacement-access-token'),
+    })
+    expect(replaced.provider_read_verified).toBe(false)
+    expect(replaced.provider_read_verification).toBeUndefined()
+    expect(await providerReadVerificationStore.list(saved.connection.connection_id)).toHaveLength(2)
+  })
+
+  test('serializes provider verification against credential replacement', async () => {
+    const installedCapabilities = { ...capabilities, read_accounts: true, read_positions: true }
+    let releaseVerification!: () => void
+    let markStarted!: () => void
+    const verificationGate = new Promise<void>((resolve) => { releaseVerification = resolve })
+    const verificationStarted = new Promise<void>((resolve) => { markStarted = resolve })
+    const registry: TradingAdapterCertificationRegistry = {
+      resolve: () => ({
+        adapter_id: 'tradovate-api',
+        adapter_version: '1.0.0',
+        provider_contract_version: 'tradovate-demo-rest-2026-07',
+        capabilities: installedCapabilities,
+      }),
+    }
+    const verifier: TradingProviderReadVerifier = {
+      verify: async (target) => {
+        markStarted()
+        await verificationGate
+        const unsigned = {
+          verification_schema_version: 'provider-read-verification@1' as const,
+          verification_id: 'provider-read-race',
+          connection_id: target.connection_id,
+          account_ref: target.account_ref,
+          provider_slug: target.platform.slug,
+          environment: target.environment,
+          adapter_id: 'tradovate-api',
+          adapter_version: '1.0.0',
+          provider_contract_version: 'tradovate-demo-rest-2026-07',
+          capabilities_checksum: sha256(installedCapabilities),
+          account_snapshot_id: 'snapshot-race',
+          account_snapshot_checksum: 'b'.repeat(64),
+          captured_at: NOW,
+          can_trade: true as const,
+          position_count: 0,
+          working_order_count: 0,
+          verified_at: NOW,
+        }
+        return { ...unsigned, content_checksum: sha256(unsigned) }
+      },
+    }
+    const { service, providerReadVerificationStore } = await setup(registry, verifier)
+    const saved = await service.save({ connection: connection('api'), api_secret: apiSecret() })
+    const verification = service.verifyProviderRead(saved.connection.connection_id)
+    await verificationStarted
+    const replacement = service.save({
+      connection: saved.connection,
+      api_secret: apiSecret('replacement-after-read'),
+    })
+    releaseVerification()
+    expect((await verification).provider_read_verified).toBe(true)
+    expect(await replacement).toMatchObject({
+      credential_configured: true,
+      provider_read_verified: false,
+      provider_read_fresh: false,
+    })
+    expect(await providerReadVerificationStore.getLatest(saved.connection.connection_id)).toBeNull()
+    expect(await providerReadVerificationStore.list(saved.connection.connection_id)).toHaveLength(1)
   })
 
   test('rejects malformed or wrong-account Tradovate credentials before vault storage', async () => {

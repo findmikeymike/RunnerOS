@@ -7,10 +7,13 @@ import type {
   CertificationScenarioId,
   ExecutionCapabilities,
 } from '@trade-god/contracts'
+import { PROVIDER_READ_VERIFICATION_SCHEMA_VERSION } from '@trade-god/contracts'
 
 import {
   FileAdapterCertificationStore,
+  FileProviderReadVerificationStore,
   runAdapterCertification,
+  sha256,
   type AdapterCertificationRunner,
   type CertificationScenarioObservation,
   type PaperLifecycleObservation,
@@ -185,5 +188,45 @@ describe('adapter certification', () => {
 
     const restarted = new FileAdapterCertificationStore(root, () => NOW)
     await expect(restarted.list()).rejects.toThrow('checksum validation')
+  })
+
+  test('persists immutable provider-read proof and append-only invalidates it', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-god-provider-read-'))
+    roots.push(root)
+    const unsigned = {
+      verification_schema_version: PROVIDER_READ_VERIFICATION_SCHEMA_VERSION,
+      verification_id: 'provider-read-one',
+      connection_id: 'connection-apex-paper',
+      account_ref: 'account-apex-paper',
+      provider_slug: 'tradovate',
+      environment: 'paper' as const,
+      adapter_id: 'tradovate-api',
+      adapter_version: '1.0.0',
+      provider_contract_version: 'tradovate-demo-rest-2026-07',
+      capabilities_checksum: 'a'.repeat(64),
+      account_snapshot_id: 'snapshot-one',
+      account_snapshot_checksum: 'b'.repeat(64),
+      captured_at: NOW,
+      can_trade: true as const,
+      position_count: 0,
+      working_order_count: 0,
+      verified_at: NOW,
+    }
+    const verification = { ...unsigned, content_checksum: sha256(unsigned) }
+    const store = new FileProviderReadVerificationStore(root, () => NOW)
+    await store.save(verification)
+    expect(await store.getLatest(verification.connection_id)).toEqual(verification)
+    expect(await store.removeForConnection(verification.connection_id)).toBe(1)
+    expect(await store.getLatest(verification.connection_id)).toBeNull()
+    expect(await store.list(verification.connection_id)).toEqual([verification])
+    expect(await store.removeForConnection(verification.connection_id)).toBe(0)
+
+    const file = path.join(root, 'provider-read-verifications.json')
+    const persisted = JSON.parse(await readFile(file, 'utf8'))
+    delete persisted.invalidations
+    await writeFile(file, `${JSON.stringify(persisted, null, 2)}\n`)
+    await expect(new FileProviderReadVerificationStore(root, () => NOW).getLatest(
+      verification.connection_id,
+    )).rejects.toThrow('invalid')
   })
 })

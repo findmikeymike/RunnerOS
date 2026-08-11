@@ -309,6 +309,8 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
       action: {
         ...entryPush.ticket.action,
         symbol: 'YM',
+        stop: undefined,
+        stopPoints: 10,
       },
       symbol: 'YM',
       tradedSymbol: 'MYMU6',

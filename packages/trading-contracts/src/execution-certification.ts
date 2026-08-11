@@ -14,6 +14,7 @@ import {
 } from './execution.ts'
 
 export const ADAPTER_CERTIFICATION_EVIDENCE_SCHEMA_VERSION = 'adapter-certification-evidence@1'
+export const PROVIDER_READ_VERIFICATION_SCHEMA_VERSION = 'provider-read-verification@1'
 
 export const certificationScenarioIdSchema = z.enum([
   'correct-account-and-environment',
@@ -100,3 +101,34 @@ export const adapterCertificationEvidenceSchema = z.object({
 export type CertificationScenarioId = z.infer<typeof certificationScenarioIdSchema>
 export type CertificationScenarioResult = z.infer<typeof certificationScenarioResultSchema>
 export type AdapterCertificationEvidence = z.infer<typeof adapterCertificationEvidenceSchema>
+
+export const providerReadVerificationSchema = z.object({
+  verification_schema_version: z.literal(PROVIDER_READ_VERIFICATION_SCHEMA_VERSION),
+  verification_id: identifierSchema,
+  connection_id: identifierSchema,
+  account_ref: identifierSchema,
+  provider_slug: identifierSchema,
+  environment: executionEnvironmentSchema,
+  adapter_id: identifierSchema,
+  adapter_version: semverSchema,
+  provider_contract_version: z.string().trim().min(1).max(120),
+  capabilities_checksum: sha256Schema,
+  account_snapshot_id: identifierSchema,
+  account_snapshot_checksum: sha256Schema,
+  captured_at: utcTimestampSchema,
+  can_trade: z.literal(true),
+  position_count: z.number().int().nonnegative().max(10_000),
+  working_order_count: z.number().int().nonnegative().max(100_000),
+  verified_at: utcTimestampSchema,
+  content_checksum: sha256Schema,
+}).strict().superRefine((verification, context) => {
+  if (Date.parse(verification.verified_at) < Date.parse(verification.captured_at)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['verified_at'],
+      message: 'Provider verification cannot precede its account snapshot',
+    })
+  }
+})
+
+export type ProviderReadVerification = z.infer<typeof providerReadVerificationSchema>

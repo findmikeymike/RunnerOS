@@ -41,6 +41,7 @@ export const TRADE_GOD_IPC = {
   REMOVE_CONNECTION: 'trade-god:connections:remove',
   OPEN_CONNECTION_LOGIN: 'trade-god:connections:open-login',
   CONFIRM_CONNECTION_LOGIN: 'trade-god:connections:confirm-login',
+  VERIFY_CONNECTION: 'trade-god:connections:verify',
   LIST_SIGNAL_ROUTES: 'trade-god:signal-routes:list',
   SAVE_SIGNAL_ROUTE: 'trade-god:signal-routes:save',
   REMOVE_SIGNAL_ROUTE: 'trade-god:signal-routes:remove',
@@ -75,6 +76,7 @@ export interface TradingIpcManager {
     session_ref: string
   }>
   confirmTradingConnectionLogin?(connectionId: string): Promise<TradingConnectionStatus>
+  verifyTradingConnection?(connectionId: string): Promise<TradingConnectionStatus>
   listTradingSignalRoutes?(): Promise<TradingSignalRoute[]>
   saveTradingSignalRoute?(
     route: TradingSignalRoute,
@@ -173,6 +175,13 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (!manager.confirmTradingConnectionLogin) throw new Error('Trading Connections are unavailable.')
     return manager.confirmTradingConnectionLogin(String(connectionId))
   })
+  ipcMain.handle(TRADE_GOD_IPC.VERIFY_CONNECTION, (_event, connectionId: unknown) => {
+    if (!manager.verifyTradingConnection) throw new Error('Trusted provider verification is unavailable.')
+    if (typeof connectionId !== 'string' || !connectionId.trim()) {
+      throw new Error('Trading connection id is invalid.')
+    }
+    return manager.verifyTradingConnection(connectionId)
+  })
   ipcMain.handle(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES, () => {
     if (!manager.listTradingSignalRoutes) throw new Error('Trading signal routes are unavailable.')
     return manager.listTradingSignalRoutes()
@@ -264,6 +273,7 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN)
     ipcMain.removeHandler(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN)
+    ipcMain.removeHandler(TRADE_GOD_IPC.VERIFY_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE)

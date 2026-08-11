@@ -44,6 +44,10 @@ describe('Trade God IPC registration', () => {
         calls.push(`connections:confirm-login:${id}`)
         return { browser_login_confirmed: true } as any
       },
+      verifyTradingConnection: async (id) => {
+        calls.push(`connections:verify:${id}`)
+        return { provider_read_verified: true } as any
+      },
       listTradingSignalRoutes: async () => { calls.push('routes:list'); return [] },
       saveTradingSignalRoute: async (route, expectedPreviousConnectionId) => {
         calls.push(`routes:save:${expectedPreviousConnectionId ?? 'new'}`)
@@ -102,6 +106,7 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.REMOVE_CONNECTION,
       TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN,
       TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN,
+      TRADE_GOD_IPC.VERIFY_CONNECTION,
       TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
       TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
       TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,
@@ -138,6 +143,8 @@ describe('Trade God IPC registration', () => {
       .toEqual({ browser_instance_id: 'browser-1', session_ref: 'session-1' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN)!({}, 'connection-1'))
       .toEqual({ browser_login_confirmed: true })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.VERIFY_CONNECTION)!({}, 'connection-1'))
+      .toEqual({ provider_read_verified: true })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)!({})).toEqual([])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)!(
       {},
@@ -176,6 +183,7 @@ describe('Trade God IPC registration', () => {
       'connections:remove:connection-1',
       'connections:login:connection-1',
       'connections:confirm-login:connection-1',
+      'connections:verify:connection-1',
       'routes:list',
       'routes:save:connection-old',
       'routes:remove:route-1',
@@ -234,6 +242,7 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.REMOVE_CONNECTION,
       TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN,
       TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN,
+      TRADE_GOD_IPC.VERIFY_CONNECTION,
       TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
       TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
       TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,

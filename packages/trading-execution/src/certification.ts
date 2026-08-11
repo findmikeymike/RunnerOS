@@ -5,12 +5,14 @@ import path from 'node:path'
 import {
   ADAPTER_CERTIFICATION_EVIDENCE_SCHEMA_VERSION,
   adapterCertificationEvidenceSchema,
+  providerReadVerificationSchema,
   type AdapterCertificationEvidence,
   type CertificationScenarioId,
   type CertificationScenarioResult,
   type ExecutionCapabilities,
   type ExecutionEnvironment,
   type ExecutionTransport,
+  type ProviderReadVerification,
 } from '@trade-god/contracts'
 
 import { canonicalJson, sha256 } from './canonical.ts'
@@ -321,6 +323,226 @@ export class FileAdapterCertificationStore {
     await mkdir(path.dirname(this.file), { recursive: true })
     const temporary = `${this.file}.${process.pid}.${randomUUID()}.tmp`
     await writeFile(temporary, `${JSON.stringify(store, null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600,
+    })
+    await rename(temporary, this.file)
+  }
+
+  private async withLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.queue
+    let release!: () => void
+    this.queue = previous.catch(() => undefined).then(() => new Promise<void>((resolve) => {
+      release = resolve
+    }))
+    await previous.catch(() => undefined)
+    try {
+      return await operation()
+    } finally {
+      release()
+    }
+  }
+}
+
+interface ProviderReadVerificationInvalidation {
+  invalidation_id: string
+  connection_id: string
+  verification_ids: string[]
+  invalidated_at: string
+  content_checksum: string
+}
+
+interface ProviderReadVerificationStoreBody {
+  verification_store_schema_version: 'provider-read-verification-store@2'
+  verifications: ProviderReadVerification[]
+  invalidations: ProviderReadVerificationInvalidation[]
+  updated_at: string
+}
+
+interface ProviderReadVerificationStoreFile extends ProviderReadVerificationStoreBody {
+  content_checksum: string
+}
+
+const parseVerifiedProviderReadVerification = (input: unknown): ProviderReadVerification => {
+  const verification = providerReadVerificationSchema.parse(input)
+  const { content_checksum: _checksum, ...unsigned } = verification
+  if (sha256(unsigned) !== verification.content_checksum) {
+    throw new Error(`Provider verification ${verification.verification_id} failed checksum validation.`)
+  }
+  return verification
+}
+
+const parseProviderReadInvalidation = (input: unknown): ProviderReadVerificationInvalidation => {
+  if (!input || typeof input !== 'object') {
+    throw new Error('Provider verification invalidation ledger is invalid.')
+  }
+  const candidate = input as Partial<ProviderReadVerificationInvalidation>
+  if (
+    typeof candidate.invalidation_id !== 'string'
+    || typeof candidate.connection_id !== 'string'
+    || !Array.isArray(candidate.verification_ids)
+    || candidate.verification_ids.some((id) => typeof id !== 'string')
+    || typeof candidate.invalidated_at !== 'string'
+    || !Number.isFinite(Date.parse(candidate.invalidated_at))
+    || typeof candidate.content_checksum !== 'string'
+  ) throw new Error('Provider verification invalidation ledger is invalid.')
+  const { content_checksum: _checksum, ...unsigned } = candidate as ProviderReadVerificationInvalidation
+  if (sha256(unsigned) !== candidate.content_checksum) {
+    throw new Error(`Provider verification invalidation ${candidate.invalidation_id} failed checksum validation.`)
+  }
+  return candidate as ProviderReadVerificationInvalidation
+}
+
+export class FileProviderReadVerificationStore {
+  private readonly file: string
+  private queue: Promise<void> = Promise.resolve()
+
+  constructor(
+    root: string,
+    private readonly now: () => string = () => new Date().toISOString(),
+  ) {
+    this.file = path.join(root, 'provider-read-verifications.json')
+  }
+
+  async list(connectionId?: string): Promise<ProviderReadVerification[]> {
+    return (await this.read()).verifications
+      .filter((verification) => !connectionId || verification.connection_id === connectionId)
+      .map((verification) => structuredClone(verification))
+      .sort((left, right) => right.verified_at.localeCompare(left.verified_at))
+  }
+
+  async getLatest(connectionId: string): Promise<ProviderReadVerification | null> {
+    const current = await this.read()
+    const invalidated = new Set(current.invalidations.flatMap((entry) => entry.verification_ids))
+    return current.verifications
+      .filter((verification) => (
+        verification.connection_id === connectionId
+        && !invalidated.has(verification.verification_id)
+      ))
+      .sort((left, right) => right.verified_at.localeCompare(left.verified_at))[0] ?? null
+  }
+
+  async save(input: ProviderReadVerification): Promise<ProviderReadVerification> {
+    const verification = parseVerifiedProviderReadVerification(input)
+    return this.withLock(async () => {
+      const current = await this.read()
+      const existing = current.verifications.find(
+        (candidate) => candidate.verification_id === verification.verification_id,
+      )
+      if (existing && canonicalJson(existing) !== canonicalJson(verification)) {
+        throw new Error(`Provider verification ${verification.verification_id} is immutable.`)
+      }
+      if (!existing) {
+        await this.write({
+          verification_store_schema_version: 'provider-read-verification-store@2',
+          verifications: [...current.verifications, verification],
+          invalidations: current.invalidations,
+          updated_at: this.now(),
+        })
+      }
+      return structuredClone(verification)
+    })
+  }
+
+  async removeForConnection(connectionId: string): Promise<number> {
+    return this.withLock(async () => {
+      const current = await this.read()
+      const alreadyInvalidated = new Set(
+        current.invalidations.flatMap((entry) => entry.verification_ids),
+      )
+      const verificationIds = current.verifications
+        .filter((verification) => (
+          verification.connection_id === connectionId
+          && !alreadyInvalidated.has(verification.verification_id)
+        ))
+        .map((verification) => verification.verification_id)
+      if (verificationIds.length > 0) {
+        const unsignedInvalidation = {
+          invalidation_id: `provider-read-invalidation-${randomUUID()}`,
+          connection_id: connectionId,
+          verification_ids: verificationIds,
+          invalidated_at: this.now(),
+        }
+        await this.write({
+          verification_store_schema_version: 'provider-read-verification-store@2',
+          verifications: current.verifications,
+          invalidations: [...current.invalidations, {
+            ...unsignedInvalidation,
+            content_checksum: sha256(unsignedInvalidation),
+          }],
+          updated_at: this.now(),
+        })
+      }
+      return verificationIds.length
+    })
+  }
+
+  private async read(): Promise<ProviderReadVerificationStoreFile> {
+    try {
+      const raw = JSON.parse(await readFile(this.file, 'utf8')) as Record<string, unknown>
+      if (!Array.isArray(raw.verifications)) {
+        throw new Error('Provider verification store is invalid.')
+      }
+      const verifications = raw.verifications.map(parseVerifiedProviderReadVerification)
+      if (raw.verification_store_schema_version === 'provider-read-verification-store@1') {
+        const unsignedInvalidation = {
+          invalidation_id: `provider-read-legacy-${sha256(verifications.map((item) => item.verification_id)).slice(0, 32)}`,
+          connection_id: 'legacy-provider-read-store',
+          verification_ids: verifications.map((item) => item.verification_id),
+          invalidated_at: this.now(),
+        }
+        const body: ProviderReadVerificationStoreBody = {
+          verification_store_schema_version: 'provider-read-verification-store@2',
+          verifications,
+          invalidations: verifications.length === 0 ? [] : [{
+            ...unsignedInvalidation,
+            content_checksum: sha256(unsignedInvalidation),
+          }],
+          updated_at: this.now(),
+        }
+        return { ...body, content_checksum: sha256(body) }
+      }
+      if (
+        raw.verification_store_schema_version !== 'provider-read-verification-store@2'
+        || !Array.isArray(raw.invalidations)
+        || typeof raw.updated_at !== 'string'
+        || !Number.isFinite(Date.parse(raw.updated_at))
+        || typeof raw.content_checksum !== 'string'
+      ) {
+        throw new Error('Provider verification store is invalid.')
+      }
+      const body: ProviderReadVerificationStoreBody = {
+        verification_store_schema_version: 'provider-read-verification-store@2',
+        verifications,
+        invalidations: raw.invalidations.map(parseProviderReadInvalidation),
+        updated_at: raw.updated_at,
+      }
+      if (sha256(body) !== raw.content_checksum) {
+        throw new Error('Provider verification store failed checksum validation.')
+      }
+      return { ...body, content_checksum: raw.content_checksum }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        const body: ProviderReadVerificationStoreBody = {
+          verification_store_schema_version: 'provider-read-verification-store@2',
+          verifications: [],
+          invalidations: [],
+          updated_at: this.now(),
+        }
+        return { ...body, content_checksum: sha256(body) }
+      }
+      throw error
+    }
+  }
+
+  private async write(store: ProviderReadVerificationStoreBody): Promise<void> {
+    await mkdir(path.dirname(this.file), { recursive: true })
+    const temporary = `${this.file}.${process.pid}.${randomUUID()}.tmp`
+    const persisted: ProviderReadVerificationStoreFile = {
+      ...store,
+      content_checksum: sha256(store),
+    }
+    await writeFile(temporary, `${JSON.stringify(persisted, null, 2)}\n`, {
       encoding: 'utf8',
       mode: 0o600,
     })

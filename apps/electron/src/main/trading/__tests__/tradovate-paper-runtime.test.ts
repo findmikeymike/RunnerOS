@@ -92,6 +92,15 @@ describe('Tradovate paper runtime', () => {
         if (url.endsWith('/account/list')) return Response.json([{
           id: 123, name: 'DEMO-123', active: true, readonly: false,
         }])
+        if (url.endsWith('/cashBalance/getcashbalancesnapshot')) return Response.json({
+          netLiq: 50_000, realizedPnL: 0, openPnL: 0,
+        })
+        if (url.endsWith('/order/list')) return Response.json([])
+        if (url.endsWith('/orderVersion/list')) return Response.json([])
+        if (url.endsWith('/command/list')) return Response.json([])
+        if (url.endsWith('/executionReport/list')) return Response.json([])
+        if (url.endsWith('/position/list')) return Response.json([])
+        if (url.endsWith('/contract/list')) return Response.json([])
         return new Response('not found', { status: 404 })
       },
     })
@@ -106,6 +115,16 @@ describe('Tradovate paper runtime', () => {
     expect(vault.casCount).toBe(1)
     expect(parseTradovateCredential(vault.values.get(secretName(target.connection_id))!).access_token)
       .toBe('renewed-paper-access-token')
+    const verification = await runtime.verifyReadOnly(target)
+    expect(verification).toMatchObject({
+      connection_id: target.connection_id,
+      account_ref: target.account_ref,
+      provider_slug: 'tradovate',
+      can_trade: true,
+      position_count: 0,
+      working_order_count: 0,
+    })
+    expect(JSON.stringify(verification)).not.toContain('renewed-paper-access-token')
     runtime.stop()
     await expect(runtime.adapter.connect(target)).rejects.toMatchObject({ code: 'CONNECTION_UNAVAILABLE' })
   })
