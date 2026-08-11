@@ -482,8 +482,9 @@ export interface ElectronAPI {
   removeTradingSignalRoute(routeId: string): Promise<boolean>
   getDiscoTraderWebhookSecretStatus(): Promise<{ configured: boolean }>
   saveDiscoTraderWebhookSecret(secret: string): Promise<{ configured: true }>
-  getTradeGodExecutionControl(): Promise<{ global_kill: boolean; connection_kills: string[]; source_kills: string[]; updated_at: string; provider_adapters_attached: boolean }>
+  getTradeGodExecutionControl(): Promise<{ global_kill: boolean; connection_kills: string[]; source_kills: string[]; updated_at: string; provider_adapters_attached: boolean; reconciliation_health?: { running: boolean; cycle_in_progress: boolean; last_cycle_started_at?: string; last_success_at?: string; consecutive_failures: number; stale_connection_ids: string[]; fresh_connection_ids: string[] } }>
   setTradeGodGlobalExecutionKill(enabled: boolean): Promise<{ global_kill: boolean }>
+  setTradeGodConnectionExecutionKill(connectionId: string, enabled: boolean): Promise<{ connection_id: string; killed: boolean }>
   listTradeGodStandingAuthorizations(): Promise<import('@trade-god/contracts').ExecutionAuthorization[]>
   saveTradeGodStandingAuthorization(authorization: import('@trade-god/contracts').ExecutionAuthorization): Promise<import('@trade-god/contracts').ExecutionAuthorization>
   revokeTradeGodStandingAuthorization(connectionId: string): Promise<boolean>

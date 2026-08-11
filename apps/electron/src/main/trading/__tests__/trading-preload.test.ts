@@ -41,6 +41,8 @@ test('preload adapter invokes only the local Trade God channels', async () => {
   expect(await api.removeTradingSignalRoute('route-1') as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.getTradeGodExecutionControl() as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.setTradeGodGlobalExecutionKill(true) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.setTradeGodConnectionExecutionKill('connection-1', false) as any)
+    .toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.listTradeGodStandingAuthorizations() as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.saveTradeGodStandingAuthorization({ authorization_id: 'mandate-1' } as any) as any)
     .toEqual({ artifact_id: 'artifact-preload' })
@@ -70,6 +72,7 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, args: ['route-1'] },
     { channel: TRADE_GOD_IPC.EXECUTION_CONTROL, args: [] },
     { channel: TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL, args: [true] },
+    { channel: TRADE_GOD_IPC.SET_CONNECTION_EXECUTION_KILL, args: ['connection-1', false] },
     { channel: TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS, args: [] },
     { channel: TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION, args: [{ authorization_id: 'mandate-1' }] },
     { channel: TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION, args: ['connection-1'] },

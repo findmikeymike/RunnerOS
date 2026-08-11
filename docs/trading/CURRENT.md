@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-08-10
+last_verified: 2026-08-11
 source_of_truth: true
 ---
 
@@ -9,10 +9,10 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-08-10
+- Date: 2026-08-11
 - Stage: adversarial safety closure before real-provider paper connectivity
 - Current goal: complete the P0 gates in `audits/discord-signal-system-readiness-2026-08-10.md`, then smoke one exact Tradovate paper lifecycle
-- Overall state: signed Discord entry and management receivers, exact source-to-account routing, durable event/ticket lineage, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute maximum loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. Per-account automatic paper authority is now an explicit, durable, expiring mandate with exact contracts and hard risk/quantity limits; the coordinator can advance a signed intent through gateway risk approval only when that mandate, a certified attached adapter, and the released global halt all agree. The desktop runtime still attaches zero execution adapters, so incoming tickets remain `created`. Multiple targets fail closed, Mirror Groups remain design-only, browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
+- Overall state: signed Discord entry and management receivers, exact source-to-account routing, durable event/ticket lineage, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute maximum loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. Per-account automatic paper authority is an explicit, durable, expiring mandate with exact contracts and hard risk/quantity limits. A provider session layer now coalesces Tradovate renewal, persists rotation before reuse, and backs off penalty/captcha responses; a low-rate supervisor continuously reconciles active records and connection-halts stale truth. The desktop runtime still attaches zero execution adapters, so these lifecycle controls remain inert and incoming tickets remain `created`. Multiple targets fail closed, Mirror Groups remain design-only, browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -179,13 +179,20 @@ The workbench can request engine health, run the known fixture, and display tota
   order at ten contracts, and carry open-risk/daily-loss ceilings. Replacement
   or revocation invalidates previously approved work. The account UI exposes
   activation and revocation while stating that no provider adapter is attached.
+- Added the dormant provider lifecycle layer: coalesced token renewal with
+  compare-and-rotate persistence, 401/429/penalty/captcha refusal, low-rate
+  restart-safe reconciliation, stale-truth connection halts, and operator UI
+  visibility. Account halts can be released only after the main process has
+  fresh reconciled truth for that exact connection. No production adapter was
+  attached.
 
 ## Next Actions
 
 1. Enroll fresh Trade God credentials and confirm Apex/Tradovate API eligibility
    for one exact demo account.
-2. Add Tradovate token refresh plus bounded polling/reconnect reconciliation,
-   then certify one exact demo/paper connection.
+2. Bind the new token/session layer to the encrypted Trade God credential vault,
+   add event-driven Tradovate user-sync truth, then certify one exact demo/paper
+   connection.
 3. Provider-certify the contract economics/calendar path, run the forced-
    failure matrix, and attach only that exact paper adapter.
 4. Approve the four Mirror Group defaults in the draft spec, then implement
@@ -208,6 +215,10 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 
 ## Verification State
 
+- Provider lifecycle closure: 318 trading, trigger, IPC, UI, and sidecar tests
+  passed across 50 files; repository typecheck, Electron main/preload/renderer
+  production builds, and diff check passed. Rival repros prove record-enumeration
+  failure emergency-halts and stopped renewal cannot rotate or distribute a token.
 - Automatic paper mandate/coordinator closure: 244 tests passed across 42
   trading/Electron files; repository typecheck, Electron main/preload/renderer
   production builds, and diff check passed. Adversarial deferred-read tests

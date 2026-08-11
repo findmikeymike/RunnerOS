@@ -59,8 +59,18 @@ export interface TradingPreloadApi {
     source_kills: string[]
     updated_at: string
     provider_adapters_attached: boolean
+    reconciliation_health?: {
+      running: boolean
+      cycle_in_progress: boolean
+      last_cycle_started_at?: string
+      last_success_at?: string
+      consecutive_failures: number
+      stale_connection_ids: string[]
+      fresh_connection_ids: string[]
+    }
   }>
   setTradeGodGlobalExecutionKill(enabled: boolean): Promise<{ global_kill: boolean }>
+  setTradeGodConnectionExecutionKill(connectionId: string, enabled: boolean): Promise<{ connection_id: string; killed: boolean }>
   listTradeGodStandingAuthorizations(): Promise<ExecutionAuthorization[]>
   saveTradeGodStandingAuthorization(authorization: ExecutionAuthorization): Promise<ExecutionAuthorization>
   revokeTradeGodStandingAuthorization(connectionId: string): Promise<boolean>
@@ -117,9 +127,24 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
       source_kills: string[]
       updated_at: string
       provider_adapters_attached: boolean
+      reconciliation_health?: {
+        running: boolean
+        cycle_in_progress: boolean
+        last_cycle_started_at?: string
+        last_success_at?: string
+        consecutive_failures: number
+        stale_connection_ids: string[]
+        fresh_connection_ids: string[]
+      }
     }>,
     setTradeGodGlobalExecutionKill: (enabled) => (
       invoke(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL, enabled) as Promise<{ global_kill: boolean }>
+    ),
+    setTradeGodConnectionExecutionKill: (connectionId, enabled) => (
+      invoke(TRADE_GOD_IPC.SET_CONNECTION_EXECUTION_KILL, connectionId, enabled) as Promise<{
+        connection_id: string
+        killed: boolean
+      }>
     ),
     listTradeGodStandingAuthorizations: () => (
       invoke(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS) as Promise<ExecutionAuthorization[]>

@@ -99,6 +99,10 @@ export default function DiscoTraderControlCenterPage({
   const [webhookSecretConfigured, setWebhookSecretConfigured] = useState(false)
   const [globalExecutionKill, setGlobalExecutionKill] = useState<boolean | null>(null)
   const [providerAdaptersAttached, setProviderAdaptersAttached] = useState<boolean | null>(null)
+  const [reconciliationStaleCount, setReconciliationStaleCount] = useState(0)
+  const [connectionKillCount, setConnectionKillCount] = useState(0)
+  const [connectionKills, setConnectionKills] = useState<string[]>([])
+  const [freshConnectionIds, setFreshConnectionIds] = useState<string[]>([])
   const [sourceBusy, setSourceBusy] = useState(false)
   const [workerBusy, setWorkerBusy] = useState(false)
   const [readyConnections, setReadyConnections] = useState(0)
@@ -183,22 +187,40 @@ export default function DiscoTraderControlCenterPage({
     }
   }, [])
 
+  const refreshExecutionControl = useCallback(async () => {
+    try {
+      const {
+        global_kill,
+        connection_kills,
+        provider_adapters_attached,
+        reconciliation_health,
+      } = await window.electronAPI.getTradeGodExecutionControl()
+      setGlobalExecutionKill(global_kill)
+      setProviderAdaptersAttached(provider_adapters_attached)
+      setReconciliationStaleCount(reconciliation_health?.stale_connection_ids.length ?? 0)
+      setConnectionKillCount(connection_kills.length)
+      setConnectionKills(connection_kills)
+      setFreshConnectionIds(reconciliation_health?.fresh_connection_ids ?? [])
+    } catch {
+      setGlobalExecutionKill(null)
+      setProviderAdaptersAttached(null)
+      setReconciliationStaleCount(0)
+      setConnectionKillCount(0)
+      setConnectionKills([])
+      setFreshConnectionIds([])
+    }
+  }, [])
+
   useEffect(() => {
     void probeSource()
     void refreshConnections()
     void window.electronAPI.getDiscoTraderWebhookSecretStatus()
       .then(({ configured }) => setWebhookSecretConfigured(configured))
       .catch(() => setWebhookSecretConfigured(false))
-    void window.electronAPI.getTradeGodExecutionControl()
-      .then(({ global_kill, provider_adapters_attached }) => {
-        setGlobalExecutionKill(global_kill)
-        setProviderAdaptersAttached(provider_adapters_attached)
-      })
-      .catch(() => {
-        setGlobalExecutionKill(null)
-        setProviderAdaptersAttached(null)
-      })
-  }, [probeSource, refreshConnections])
+    void refreshExecutionControl()
+    const controlPoll = window.setInterval(() => void refreshExecutionControl(), 5_000)
+    return () => window.clearInterval(controlPoll)
+  }, [probeSource, refreshConnections, refreshExecutionControl])
 
   const handleGlobalExecutionKill = useCallback(async () => {
     if (globalExecutionKill === null) return
@@ -217,6 +239,29 @@ export default function DiscoTraderControlCenterPage({
       })
     }
   }, [globalExecutionKill])
+
+  const handleReleaseConnectionHalts = useCallback(async () => {
+    if (
+      connectionKills.length === 0
+      || reconciliationStaleCount > 0
+      || !connectionKills.every((connectionId) => freshConnectionIds.includes(connectionId))
+    ) return
+    if (!window.confirm(
+      `Release new-entry halts for ${connectionKills.join(', ')}? Only continue after verifying each broker account has fresh, reconciled provider truth.`,
+    )) return
+    try {
+      for (const connectionId of connectionKills) {
+        await window.electronAPI.setTradeGodConnectionExecutionKill(connectionId, false)
+      }
+      await refreshExecutionControl()
+      toast.success('Recovered account halts released')
+    } catch (error) {
+      await refreshExecutionControl()
+      toast.error('Could not release every account halt', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }, [connectionKills, freshConnectionIds, reconciliationStaleCount, refreshExecutionControl])
 
   const handleConnectSource = useCallback(async () => {
     if (!workspaceId) return
@@ -382,13 +427,19 @@ export default function DiscoTraderControlCenterPage({
             label="Live actions"
             value={globalExecutionKill
               ? 'Gateway halted'
+              : connectionKillCount > 0
+                ? `${connectionKillCount} account halt${connectionKillCount === 1 ? '' : 's'}`
               : providerAdaptersAttached
                 ? 'Account mandates control entry'
                 : 'Execution unavailable'}
             detail={providerAdaptersAttached
-              ? 'Read-only worker; certified adapter + mandate + risk gates required'
+              ? reconciliationStaleCount > 0
+                ? `${reconciliationStaleCount} account truth feed stale; new entries halted`
+                : connectionKillCount > 0
+                  ? 'Provider divergence or uncertainty halted affected accounts'
+                : 'Read-only worker; certified adapter + mandate + risk gates required'
               : 'No provider adapter attached; gateway halt is persistent'}
-            tone="muted"
+            tone={reconciliationStaleCount > 0 || connectionKillCount > 0 ? 'danger' : 'muted'}
           />
         </section>
 
@@ -553,6 +604,23 @@ export default function DiscoTraderControlCenterPage({
                   detail={globalExecutionKill ? 'New entries halted. Select to release.' : 'Persistently halt all new gateway entries. Flatten is not implemented.'}
                   enabled={globalExecutionKill !== null}
                   onClick={handleGlobalExecutionKill}
+                />
+                <OperationRow
+                  icon={<LockKeyhole className="h-4 w-4" />}
+                  title="Recovered account halts"
+                  detail={connectionKillCount === 0
+                    ? 'No account-level execution halts.'
+                    : reconciliationStaleCount > 0
+                      ? 'Provider truth is still stale; release is blocked.'
+                      : !connectionKills.every((connectionId) => freshConnectionIds.includes(connectionId))
+                        ? 'Waiting for fresh provider reconciliation before release.'
+                      : `${connectionKillCount} halted account${connectionKillCount === 1 ? '' : 's'}. Select to review and release.`}
+                  enabled={
+                    connectionKillCount > 0
+                    && reconciliationStaleCount === 0
+                    && connectionKills.every((connectionId) => freshConnectionIds.includes(connectionId))
+                  }
+                  onClick={handleReleaseConnectionHalts}
                 />
               </div>
             </div>

@@ -72,6 +72,10 @@ describe('Trade God IPC registration', () => {
         calls.push(`execution-control:set:${enabled}`)
         return { global_kill: enabled }
       },
+      setConnectionExecutionKill: async (connectionId, enabled) => {
+        calls.push(`execution-control:set-connection:${connectionId}:${enabled}`)
+        return { connection_id: connectionId, killed: enabled }
+      },
       stop: async () => { calls.push('stop') },
     }
 
@@ -100,6 +104,7 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET,
       TRADE_GOD_IPC.EXECUTION_CONTROL,
       TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL,
+      TRADE_GOD_IPC.SET_CONNECTION_EXECUTION_KILL,
       TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS,
       TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION,
       TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION,
@@ -223,6 +228,7 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET,
       TRADE_GOD_IPC.EXECUTION_CONTROL,
       TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL,
+      TRADE_GOD_IPC.SET_CONNECTION_EXECUTION_KILL,
       TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS,
       TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION,
       TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION,

@@ -55,6 +55,7 @@ import {
   FileTradingConnectionStore,
   FileStandingAuthorizationStore,
   PaperExecutionCoordinator,
+  ExecutionReconciliationSupervisor,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
 } from '@trade-god/execution'
@@ -334,6 +335,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         () => Boolean(options.executionAdapters?.length),
       )
     : undefined
+  const reconciliationSupervisor = executionGateway && options.executionAdapters?.length
+    ? new ExecutionReconciliationSupervisor({ gateway: executionGateway, now: options.now })
+    : undefined
   const removableExecutionStates = new Set([
     'risk-denied', 'closed', 'rejected', 'canceled', 'expired', 'error',
   ])
@@ -428,9 +432,13 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         executionRecoveryError = error
       })
     : Promise.resolve()
+  const executionSupervisionReady = executionRecoveryReady.then(() => {
+    if (executionRecoveryError) throw executionRecoveryError
+    reconciliationSupervisor?.start()
+  })
   let discordManagementRecoveryError: unknown
   const discordManagementReady = discordTradeManager
-    ? executionRecoveryReady.then(async () => {
+    ? executionSupervisionReady.then(async () => {
         if (executionRecoveryError) throw executionRecoveryError
         await discordTradeManager.recoverPending()
       }).catch((error) => {
@@ -552,11 +560,28 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           getExecutionControl: async () => ({
             ...await executionGateway.readControl(),
             provider_adapters_attached: Boolean(options.executionAdapters?.length),
+            ...(reconciliationSupervisor
+              ? { reconciliation_health: reconciliationSupervisor.health() }
+              : {}),
           }),
           setGlobalExecutionKill: async (enabled: boolean) => {
             await executionGateway.setGlobalKill(enabled)
             if (!enabled) await paperExecutionCoordinator?.coordinatePending()
             return { global_kill: enabled }
+          },
+          setConnectionExecutionKill: async (connectionId: string, enabled: boolean) => {
+            await tradingConnectionStore!.get(connectionId)
+            if (
+              !enabled
+              && !reconciliationSupervisor?.canReleaseConnectionHalt(connectionId)
+            ) {
+              throw new ExecutionGatewayError(
+                'CONNECTION_UNAVAILABLE',
+                'Account halt release requires fresh reconciled provider truth from the active adapter.',
+              )
+            }
+            await executionGateway.setConnectionKill(connectionId, enabled)
+            return { connection_id: connectionId, killed: enabled }
           },
         }
       : {}),
@@ -601,7 +626,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(discordTradeManager
       ? {
           ingestDiscoTraderTicketPush: async (input: unknown) => {
-            await executionRecoveryReady
+            await executionSupervisionReady
             if (executionRecoveryError) throw executionRecoveryError
             const payload = discoTraderPushPayloadSchema.parse(input)
             if (payload.kind !== 'ticket' || !payload.ticket || !resolveDiscoTraderRoute) {
@@ -630,6 +655,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     dispose: async () => {
       unsubscribeAlert?.()
       await discordManagementReady
+      await reconciliationSupervisor?.stop()
       const [alertServer, alertTunnel] = await Promise.all([alertServerPromise, alertTunnelPromise])
       await Promise.all([disposeTradingIpc(), marketDataManager?.stop(), alertTunnel?.stop(), alertServer?.stop()])
     },

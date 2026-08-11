@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-08-10
+last_verified: 2026-08-11
 source_of_truth: false
 ---
 
@@ -27,8 +27,10 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
 - The previously copied Artist OS vault was moved into a recoverable Trade
   God-only quarantine. Fresh Trade God login/secrets are required.
 - Time-bounded paper arming and execution coordination are implemented locally;
-  no provider adapter is attached. Next build gate: Tradovate token lifecycle,
-  continuous truth, and exact-account paper certification.
+  no provider adapter is attached. Coalesced token renewal, provider backoff,
+  and low-rate stale-truth supervision are implemented but dormant. Next build
+  gate: encrypted-vault binding, event-driven user-sync truth, and exact-account
+  paper certification.
 
 ## Mission
 
@@ -100,11 +102,12 @@ approval-gated. See `docs/trading/integrations/DISCOTRADER-CONTROL-CENTER.md`.
 ## Immediate Assignment
 
 Enroll fresh Trade God credentials, confirm Apex/Tradovate API eligibility, and
-obtain a demo credential bound to one exact account. Paper mandates and the
-created-to-approved coordinator are implemented, but remain inert because the
-runtime attaches zero adapters. Implement/prove token refresh, continuous
-reconciliation, partial-close protection resizing, and the 50-lifecycle paper
-soak before attaching the certified adapter.
+obtain a demo credential bound to one exact account. Paper mandates, the
+created-to-approved coordinator, renewable token owner, provider backoff, and
+low-rate reconciliation supervisor are implemented, but remain inert because
+the runtime attaches zero adapters. Bind renewal to the encrypted vault, add
+event-driven provider truth, then prove partial-close protection resizing and
+the 50-lifecycle paper soak before attaching the certified adapter.
 
 ## Known Expected Artifact
 
@@ -118,6 +121,10 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
+- Provider lifecycle closure: 318 focused/system tests passed across 50 files;
+  repository typecheck, all three Electron production builds, and diff check
+  passed. Rival repros for blind enumeration and post-stop token distribution
+  are closed. Account-halt release requires fresh exact-connection truth in main.
 - Automatic paper mandate closure: 244 tests passed across 42 trading/Electron
   files; typecheck, all three Electron production builds, and diff check passed.
   Rival tests prove revoke/replace races cannot cross into execute.

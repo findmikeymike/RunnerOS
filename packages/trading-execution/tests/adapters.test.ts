@@ -767,6 +767,50 @@ describe('Tradovate API adapter', () => {
     expect(fixture.calls.find((call) => call.url.endsWith('/order/liquidateposition'))?.body)
       .toMatchObject({ accountId: 123456, contractId: 9001, admin: false })
   })
+
+  test('never mistakes provider penalty or captcha bodies for successful truth', async () => {
+    const targetConnection = connection('tradovate')
+    const credential: TradovateCredential = {
+      access_token: 'test-access-token',
+      account_id: 123456,
+      account_spec: 'APEX-1234',
+    }
+    let penaltyCalls = 0
+    const penalty = new TradovateFetchClient({
+      resolveCredential: async () => credential,
+      fetch: async () => {
+        penaltyCalls += 1
+        return Response.json({
+          'p-ticket': 'penalty-one',
+          'p-time': 15,
+          'p-message': 'Slow down',
+        })
+      },
+      now: () => NOW,
+    })
+    await expect(penalty.connect(targetConnection)).rejects.toMatchObject({
+      code: 'TRADOVATE_PENALTY_TICKET',
+      submissionMayHaveOccurred: false,
+    })
+    await expect(penalty.connect(targetConnection)).rejects.toMatchObject({
+      code: 'TRADOVATE_RATE_LIMITED',
+    })
+    expect(penaltyCalls).toBe(1)
+
+    const captcha = new TradovateFetchClient({
+      resolveCredential: async () => credential,
+      fetch: async () => Response.json({
+        'p-ticket': 'captcha-one',
+        'p-time': 3_600,
+        'p-captcha': true,
+      }),
+      now: () => NOW,
+    })
+    await expect(captcha.connect(targetConnection)).rejects.toMatchObject({
+      code: 'TRADOVATE_CAPTCHA_REQUIRED',
+      submissionMayHaveOccurred: false,
+    })
+  })
 })
 
 class TradovateFetchFixture {

@@ -21,6 +21,7 @@ import {
 import type { ExecutionAdapter } from '../adapter.ts'
 import { computeManagementAcknowledgmentChecksum, sha256 } from '../canonical.ts'
 import { ExecutionAdapterError, ExecutionGatewayError } from '../errors.ts'
+import type { TradovateSessionManager } from './tradovate-session-manager.ts'
 
 export interface TradovateCredential {
   access_token: string
@@ -100,7 +101,8 @@ export type TradovateFetch = (
 ) => Promise<Response>
 
 export interface TradovateFetchClientOptions {
-  resolveCredential: TradovateCredentialResolver
+  resolveCredential?: TradovateCredentialResolver
+  sessionManager?: Pick<TradovateSessionManager, 'credential'>
   fetch?: TradovateFetch
   now?: () => string
   timeoutMs?: number
@@ -172,8 +174,12 @@ export class TradovateFetchClient implements TradovateRestClient {
   private readonly fetchImpl: TradovateFetch
   private readonly now: () => string
   private readonly timeoutMs: number
+  private readonly backoffUntil = new Map<string, number>()
 
   constructor(private readonly options: TradovateFetchClientOptions) {
+    if (!options.resolveCredential && !options.sessionManager) {
+      throw new Error('Tradovate client requires a credential resolver or session manager.')
+    }
     this.fetchImpl = options.fetch ?? fetch
     this.now = options.now ?? (() => new Date().toISOString())
     this.timeoutMs = Math.max(1_000, options.timeoutMs ?? 15_000)
@@ -555,7 +561,9 @@ export class TradovateFetchClient implements TradovateRestClient {
     if (!connection.credential_ref) {
       throw new ExecutionGatewayError('CONNECTION_UNAVAILABLE', 'Tradovate credential reference is missing.')
     }
-    const credential = await this.options.resolveCredential(connection.credential_ref)
+    const credential = this.options.sessionManager
+      ? await this.options.sessionManager.credential(connection)
+      : await this.options.resolveCredential!(connection.credential_ref)
     if (!credential || !credential.access_token.trim()) {
       throw new ExecutionGatewayError('CONNECTION_UNAVAILABLE', 'Tradovate credential is unavailable.')
     }
@@ -577,6 +585,18 @@ export class TradovateFetchClient implements TradovateRestClient {
     init: RequestInit,
     submissionMayHaveOccurred: boolean,
   ): Promise<T> {
+    const backoffKey = sha256({
+      account_id: credential.account_id,
+      account_spec: credential.account_spec,
+    })
+    const blockedUntil = this.backoffUntil.get(backoffKey) ?? 0
+    if (blockedUntil > Date.parse(this.now())) {
+      throw new ExecutionAdapterError(
+        'TRADOVATE_RATE_LIMITED',
+        `Tradovate requests are paused until ${new Date(blockedUntil).toISOString()}.`,
+        false,
+      )
+    }
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs)
     try {
@@ -590,15 +610,38 @@ export class TradovateFetchClient implements TradovateRestClient {
         },
       })
       if (!response.ok) {
+        if (response.status === 429) {
+          this.backoffUntil.set(backoffKey, Date.parse(this.now()) + 60 * 60_000)
+        }
         throw new ExecutionAdapterError(
-          'TRADOVATE_HTTP_ERROR',
+          response.status === 429
+            ? 'TRADOVATE_RATE_LIMITED'
+            : response.status === 401
+              ? 'TRADOVATE_AUTH_REQUIRED'
+              : 'TRADOVATE_HTTP_ERROR',
           `Tradovate returned HTTP ${response.status}.`,
           submissionMayHaveOccurred,
         )
       }
       try {
-        return await response.json() as T
-      } catch {
+        const body = await response.json() as T
+        const penalty = tradovatePenalty(body)
+        if (penalty) {
+          this.backoffUntil.set(
+            backoffKey,
+            Date.parse(this.now()) + (penalty.captcha ? 60 * 60_000 : penalty.waitSeconds * 1_000),
+          )
+          throw new ExecutionAdapterError(
+            penalty.captcha ? 'TRADOVATE_CAPTCHA_REQUIRED' : 'TRADOVATE_PENALTY_TICKET',
+            penalty.captcha
+              ? 'Tradovate requires user intervention before requests can resume.'
+              : `Tradovate deferred the request for ${penalty.waitSeconds} seconds.`,
+            false,
+          )
+        }
+        return body
+      } catch (error) {
+        if (error instanceof ExecutionAdapterError) throw error
         throw new ExecutionAdapterError(
           'TRADOVATE_INVALID_JSON',
           'Tradovate returned invalid JSON.',
@@ -615,6 +658,21 @@ export class TradovateFetchClient implements TradovateRestClient {
     } finally {
       clearTimeout(timeout)
     }
+  }
+}
+
+const tradovatePenalty = (body: unknown): {
+  captcha: boolean
+  waitSeconds: number
+} | null => {
+  if (!body || typeof body !== 'object') return null
+  const value = body as Record<string, unknown>
+  if (typeof value['p-ticket'] !== 'string' || !value['p-ticket']) return null
+  return {
+    captcha: value['p-captcha'] === true,
+    waitSeconds: typeof value['p-time'] === 'number' && Number.isFinite(value['p-time'])
+      ? Math.max(0, value['p-time'])
+      : 0,
   }
 }
 
