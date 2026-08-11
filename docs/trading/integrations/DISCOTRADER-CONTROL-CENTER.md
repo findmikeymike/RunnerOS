@@ -1,7 +1,7 @@
 ---
-status: implemented
+status: active
 owner: team
-last_verified: 2026-07-31
+last_verified: 2026-08-10
 ---
 
 # DiscoTrader Control Center
@@ -46,11 +46,24 @@ The worker:
   `discotrader` source;
 - uses immutable ticket IDs rather than choosing size;
 - stops on unconfirmed fills or reconciliation mismatch;
-- requires approval for live tools;
+- has no broker mutation tools;
 - reports receipts rather than inventing state.
 
-Halt, release, partial close, stop movement, close, and flatten remain deliberate
-Trade Desk tools. They are not direct dashboard buttons.
+The worker is read-only. Broker mutation tools are deliberately excluded; all
+order and management authority must pass through Trade God's gateway.
+
+## Automatic Paper Authority
+
+Each eligible account card can save or revoke one automatic paper mandate. The
+operator must enter exact active contracts, maximum contracts per order, open
+risk, daily loss, and a session duration. The mandate lasts no more than four
+hours and survives restart so a crash cannot silently broaden or forget it.
+
+A mandate is only one key. Execution also requires the exact signed Discord
+route, a matching paper-lifecycle-certified adapter attached to the desktop
+runtime, gateway risk approval, and a released persistent global halt. The
+current desktop runtime attaches zero adapters, so saving a mandate cannot place
+an order.
 
 ## Current Boundary
 
@@ -61,8 +74,8 @@ its certification and soak gates.
 
 ## Verification
 
-- 15 focused page, roster, worker-contract, and bundled-skill tests pass with 86
-  expectations.
+- 8 focused Control Center/account renderer tests pass; the broader
+  trading/Electron gate passes 244 tests across 42 files.
 - Repository-wide typecheck passes.
 - Electron main, preload, and renderer production builds pass.
 - Live page setup/activation smoke remains a user action.

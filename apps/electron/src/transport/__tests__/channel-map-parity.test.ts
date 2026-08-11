@@ -51,6 +51,9 @@ type ApiToChannelMapKeys = Exclude<
   | 'saveDiscoTraderWebhookSecret' // direct local encrypted-vault IPC
   | 'getTradeGodExecutionControl' // direct local execution-control IPC
   | 'setTradeGodGlobalExecutionKill' // direct local execution-control IPC
+  | 'listTradeGodStandingAuthorizations' // direct local paper-mandate IPC
+  | 'saveTradeGodStandingAuthorization' // direct local paper-mandate IPC
+  | 'revokeTradeGodStandingAuthorization' // direct local paper-mandate IPC
   | 'onTradeGodAlert' // direct local Trade God alert listener
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string

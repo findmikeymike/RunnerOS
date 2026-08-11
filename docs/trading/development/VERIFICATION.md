@@ -7,6 +7,26 @@ source_of_truth: true
 
 # Verification System
 
+## 2026-08-10 Automatic Paper Mandate Coordinator
+
+- Broad trading/Electron gate: 244 passed, 0 failed across 42 files.
+- `bun run typecheck:all`: passed.
+- Electron `build:main`, `build:preload`, and `build:renderer`: passed.
+- `git diff --check`: passed.
+- Proven locally: one durable standing mandate per account; restart persistence;
+  explicit activation/revocation; exact active supported contracts; positive
+  open-risk/daily-loss limits; ten-contract ceiling; four-hour maximum; no
+  coordination without an attached adapter, released global halt, and active
+  mandate; risk denial; mandate replacement/revocation invalidation; and full
+  canonical mandate equality before execute.
+- Rival regression proof covers revocation during risk evaluation and same-ID
+  limit replacement during the final mandate read. Neither reaches execute.
+- Runtime truth remains fail-closed: desktop startup supplies zero adapters, so
+  a saved mandate and released halt still leave signed tickets at `created`.
+- Not proven: real Tradovate authentication/token refresh, attached paper
+  adapter, provider order, continuous reconciliation, partial-close protection
+  resize, crash soak, or 50 clean paper lifecycles.
+
 ## 2026-08-10 Discord Execution Safety Closure
 
 - Trade God/trading/security suite excluding the two ephemeral-port suites:

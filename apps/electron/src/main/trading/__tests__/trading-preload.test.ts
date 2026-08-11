@@ -39,6 +39,13 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     'connection-old',
   ) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.removeTradingSignalRoute('route-1') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.getTradeGodExecutionControl() as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.setTradeGodGlobalExecutionKill(true) as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.listTradeGodStandingAuthorizations() as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.saveTradeGodStandingAuthorization({ authorization_id: 'mandate-1' } as any) as any)
+    .toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.revokeTradeGodStandingAuthorization('connection-1') as any)
+    .toEqual({ artifact_id: 'artifact-preload' })
   api.onTradeGodAlert((payload) => { subscribedPayload = payload })
   expect(subscribedChannel).toBe(TRADE_GOD_IPC.ALERT_RECEIVED)
   expect(subscribedPayload).toEqual({ id: 'tv-preload' })
@@ -61,5 +68,10 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.LIST_SIGNAL_ROUTES, args: [] },
     { channel: TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, args: [{ route_id: 'route-1' }, 'connection-old'] },
     { channel: TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, args: ['route-1'] },
+    { channel: TRADE_GOD_IPC.EXECUTION_CONTROL, args: [] },
+    { channel: TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL, args: [true] },
+    { channel: TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS, args: [] },
+    { channel: TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION, args: [{ authorization_id: 'mandate-1' }] },
+    { channel: TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION, args: ['connection-1'] },
   ])
 })

@@ -26,7 +26,7 @@ test('renders an honest approval-gated DiscoTrader setup path', () => {
   expect(html).toContain('One-time setup')
   expect(html).toContain('Connect the signed local source')
   expect(html).toContain('Install the Trade Desk worker')
-  expect(html).toContain('Mutation tools are not exposed; gateway halt is persistent')
+  expect(html).toContain('No provider adapter attached; gateway halt is persistent')
   expect(html).toContain('New-entry safety halt')
   expect(html).toContain('Flatten is not implemented')
   expect(html).not.toContain('Autonomous execution enabled')

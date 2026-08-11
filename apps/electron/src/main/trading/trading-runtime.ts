@@ -53,8 +53,12 @@ import {
   FileDiscordTradeManager,
   FileExecutionStore,
   FileTradingConnectionStore,
+  FileStandingAuthorizationStore,
+  PaperExecutionCoordinator,
   type DiscoTraderIntentRoute,
+  type ExecutionAdapter,
 } from '@trade-god/execution'
+import type { ExecutionAuthorization } from '@trade-god/contracts'
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
@@ -75,6 +79,7 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   alertDirectory?: string
   connectionDirectory?: string
   executionDirectory?: string
+  executionAdapters?: ExecutionAdapter[]
   discoTraderConnectionId?: string
   discoTraderIntentValidityMs?: number
   credentialVault?: TradingCredentialVault
@@ -312,9 +317,22 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         resolveConnection: (connectionId) => tradingConnectionStore.get(connectionId),
         // Observe-only receiver foundation. Provider adapters are attached only
         // after their exact paper connection has passed certification.
-        adapters: [],
+        adapters: options.executionAdapters ?? [],
         now: options.now,
       })
+    : undefined
+  const standingAuthorizationStore = options.executionDirectory
+    ? new FileStandingAuthorizationStore(
+        path.join(options.executionDirectory, 'authorizations'),
+        options.now,
+      )
+    : undefined
+  const paperExecutionCoordinator = executionGateway && standingAuthorizationStore
+    ? new PaperExecutionCoordinator(
+        executionGateway,
+        standingAuthorizationStore,
+        () => Boolean(options.executionAdapters?.length),
+      )
     : undefined
   const removableExecutionStates = new Set([
     'risk-denied', 'closed', 'rejected', 'canceled', 'expired', 'error',
@@ -531,11 +549,41 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       : {}),
     ...(executionGateway
       ? {
-          getExecutionControl: () => executionGateway.readControl(),
+          getExecutionControl: async () => ({
+            ...await executionGateway.readControl(),
+            provider_adapters_attached: Boolean(options.executionAdapters?.length),
+          }),
           setGlobalExecutionKill: async (enabled: boolean) => {
             await executionGateway.setGlobalKill(enabled)
+            if (!enabled) await paperExecutionCoordinator?.coordinatePending()
             return { global_kill: enabled }
           },
+        }
+      : {}),
+    ...(standingAuthorizationStore && tradingConnectionStore
+      ? {
+          listStandingAuthorizations: () => standingAuthorizationStore.list(),
+          saveStandingAuthorization: async (authorization: ExecutionAuthorization) => {
+            const connection = await tradingConnectionStore.get(authorization.connection_id)
+            if (
+              connection.environment !== 'paper'
+              || connection.environment_class !== 'rehearsal'
+              || !connection.enabled
+              || connection.state !== 'ready'
+              || !connection.certifications.includes('paper-lifecycle-certified')
+            ) {
+              throw new ExecutionGatewayError(
+                'CERTIFICATION_REQUIRED',
+                'Standing mandates require an enabled, ready, paper-lifecycle-certified paper account.',
+              )
+            }
+            const saved = await paperExecutionCoordinator!.saveAuthorization(authorization)
+            await paperExecutionCoordinator?.coordinatePending()
+            return saved
+          },
+          revokeStandingAuthorization: (connectionId: string) => (
+            paperExecutionCoordinator!.revokeAuthorization(connectionId)
+          ),
         }
       : {}),
     stop: () => manager.stop(),
@@ -564,7 +612,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             }
             const route = await resolveDiscoTraderRoute(payload.ticket)
             const result = await discordManagementSource!.ingestPush(input, route)
-            return result.record
+            return paperExecutionCoordinator
+              ? paperExecutionCoordinator.coordinate(result.record.intent.intent_id)
+              : result.record
           },
           ingestDiscordManagementPush: async (input: unknown) => {
             await discordManagementReady

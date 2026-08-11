@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import {
   CANONICAL_ORDER_FLOW_CONFIGURATION,
+  EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
   TRADING_CONNECTION_SCHEMA_VERSION,
   type TradingConnection,
 } from '@trade-god/contracts'
@@ -189,6 +190,30 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     created_at: runtimeNow,
     updated_at: runtimeNow,
   })
+  const mandateEnd = new Date(Date.parse(runtimeNow) + 60 * 60 * 1_000).toISOString()
+  await ipc.handlers.get(TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION)!({}, {
+    authorization_schema_version: EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
+    authorization_id: 'mandate-runtime-paper',
+    connection_id: connection.connection_id,
+    mode: 'standing-mandate',
+    scope: {
+      symbols: ['ESZ27'],
+      max_contracts: 2,
+      allowed_sides: ['buy', 'sell'],
+      allowed_order_types: ['market', 'limit'],
+      session_start: runtimeNow,
+      session_end: mandateEnd,
+      max_daily_loss: '500',
+      max_open_risk: '100',
+    },
+    issued_by: 'operator-test',
+    issued_at: runtimeNow,
+    expires_at: mandateEnd,
+  })
+  expect(await ipc.handlers.get(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS)!({}))
+    .toMatchObject([{ authorization_id: 'mandate-runtime-paper' }])
+  expect(await ipc.handlers.get(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL)!({}, false))
+    .toEqual({ global_kill: false })
   expect(runtime.ingestDiscoTraderTicketPush).toBeDefined()
   const entryPush = {
     kind: 'ticket',
@@ -247,6 +272,8 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
       quantity: 2,
     },
   })
+  expect(await ipc.handlers.get(TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION)!({}, connection.connection_id))
+    .toBe(true)
   const cbotEntry = await runtime.ingestDiscoTraderTicketPush!({
     ...entryPush,
     summary: 'LONG 1xMYM',

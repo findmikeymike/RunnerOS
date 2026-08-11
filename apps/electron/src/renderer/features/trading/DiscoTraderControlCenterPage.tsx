@@ -98,6 +98,7 @@ export default function DiscoTraderControlCenterPage({
   const [webhookSecret, setWebhookSecret] = useState('')
   const [webhookSecretConfigured, setWebhookSecretConfigured] = useState(false)
   const [globalExecutionKill, setGlobalExecutionKill] = useState<boolean | null>(null)
+  const [providerAdaptersAttached, setProviderAdaptersAttached] = useState<boolean | null>(null)
   const [sourceBusy, setSourceBusy] = useState(false)
   const [workerBusy, setWorkerBusy] = useState(false)
   const [readyConnections, setReadyConnections] = useState(0)
@@ -189,8 +190,14 @@ export default function DiscoTraderControlCenterPage({
       .then(({ configured }) => setWebhookSecretConfigured(configured))
       .catch(() => setWebhookSecretConfigured(false))
     void window.electronAPI.getTradeGodExecutionControl()
-      .then(({ global_kill }) => setGlobalExecutionKill(global_kill))
-      .catch(() => setGlobalExecutionKill(null))
+      .then(({ global_kill, provider_adapters_attached }) => {
+        setGlobalExecutionKill(global_kill)
+        setProviderAdaptersAttached(provider_adapters_attached)
+      })
+      .catch(() => {
+        setGlobalExecutionKill(null)
+        setProviderAdaptersAttached(null)
+      })
   }, [probeSource, refreshConnections])
 
   const handleGlobalExecutionKill = useCallback(async () => {
@@ -337,7 +344,7 @@ export default function DiscoTraderControlCenterPage({
           }`}>
             {setupComplete ? <ShieldCheck className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
             {setupComplete
-              ? 'Local monitor ready · webhook sender unverified · execution disabled'
+              ? `Local monitor ready · webhook sender unverified · ${providerAdaptersAttached ? 'paper adapter attached; account gates apply' : 'execution disabled'}`
               : 'Setup required · execution disabled'}
           </div>
         </header>
@@ -363,14 +370,24 @@ export default function DiscoTraderControlCenterPage({
             icon={<PlugZap className="h-4 w-4" />}
             label="Broker route"
             value={brokerLabel}
-            detail={readyConnections > 0 ? 'Account configured; no runtime adapter attached' : 'Add or connect an account below'}
+            detail={readyConnections > 0
+              ? providerAdaptersAttached
+                ? 'Certified account configured; mandate + halt gates apply'
+                : 'Account configured; no runtime adapter attached'
+              : 'Add or connect an account below'}
             tone={readyConnections > 0 ? 'warning' : 'muted'}
           />
           <StatusCard
             icon={<LockKeyhole className="h-4 w-4" />}
             label="Live actions"
-            value={globalExecutionKill ? 'Gateway halted' : 'Worker blocked'}
-            detail="Mutation tools are not exposed; gateway halt is persistent"
+            value={globalExecutionKill
+              ? 'Gateway halted'
+              : providerAdaptersAttached
+                ? 'Account mandates control entry'
+                : 'Execution unavailable'}
+            detail={providerAdaptersAttached
+              ? 'Read-only worker; certified adapter + mandate + risk gates required'
+              : 'No provider adapter attached; gateway halt is persistent'}
             tone="muted"
           />
         </section>

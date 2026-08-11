@@ -21,7 +21,9 @@ import {
   type DiscoTraderSignalSourceCatalog,
 } from '@/features/trading/discotrader-signal-sources'
 import {
+  EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
   TRADING_CONNECTION_SCHEMA_VERSION,
+  type ExecutionAuthorization,
   type ExecutionEnvironment,
   type ExecutionTransportPreference,
   type TradingConnection,
@@ -70,6 +72,14 @@ type SignalDraft = {
 
 type SignalRoute = Awaited<ReturnType<typeof window.electronAPI.listTradingSignalRoutes>>[number]
 
+type MandateDraft = {
+  symbols: string
+  maxContracts: string
+  maxOpenRisk: string
+  maxDailyLoss: string
+  durationMinutes: string
+}
+
 interface TradingConnectionsSettingsPageProps {
   embedded?: boolean
   onConnectionsChanged?: () => void
@@ -92,6 +102,14 @@ const EMPTY_DRAFT: Draft = {
   apiSecret: '',
 }
 
+const EMPTY_MANDATE_DRAFT: MandateDraft = {
+  symbols: '',
+  maxContracts: '',
+  maxOpenRisk: '',
+  maxDailyLoss: '',
+  durationMinutes: '60',
+}
+
 export default function TradingConnectionsSettingsPage({
   embedded = false,
   onConnectionsChanged,
@@ -102,6 +120,7 @@ export default function TradingConnectionsSettingsPage({
   const [connections, setConnections] = React.useState<
     Awaited<ReturnType<typeof window.electronAPI.listTradingConnections>>
   >([])
+  const [standingAuthorizations, setStandingAuthorizations] = React.useState<ExecutionAuthorization[]>([])
   const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
   const [editing, setEditing] = React.useState(false)
   const [routes, setRoutes] = React.useState<SignalRoute[]>([])
@@ -113,12 +132,14 @@ export default function TradingConnectionsSettingsPage({
   const load = React.useCallback(async () => {
     setBusy('load')
     try {
-      const [nextConnections, nextRoutes] = await Promise.all([
+      const [nextConnections, nextRoutes, nextAuthorizations] = await Promise.all([
         window.electronAPI.listTradingConnections(),
         window.electronAPI.listTradingSignalRoutes(),
+        window.electronAPI.listTradeGodStandingAuthorizations(),
       ])
       setConnections(nextConnections)
       setRoutes(nextRoutes)
+      setStandingAuthorizations(nextAuthorizations)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load trading connections')
     } finally {
@@ -446,7 +467,7 @@ export default function TradingConnectionsSettingsPage({
                           </StatusBadge>
                           <StatusBadge positive={isExecutionReady(status)}>
                             {isExecutionReady(status)
-                              ? 'Execution ready'
+                              ? 'Paper certified'
                               : status.connection.state === 'ready'
                                 ? 'Ready · disabled'
                                 : 'Execution locked'}
@@ -499,6 +520,15 @@ export default function TradingConnectionsSettingsPage({
                       </div>
                     </div>
                     <CertificationMatrix evidence={status.certification_evidence[0]} />
+                    <PaperMandateControl
+                      status={status}
+                      authorization={standingAuthorizations.find((authorization) => (
+                        authorization.connection_id === status.connection.connection_id
+                      ))}
+                      busy={busy}
+                      onBusyChange={setBusy}
+                      onChanged={load}
+                    />
                     <AccountDiscordRoutes
                       connectionId={status.connection.connection_id}
                       routes={routes}
@@ -600,6 +630,213 @@ export default function TradingConnectionsSettingsPage({
         )}
       />
       <ScrollArea className="min-h-0 flex-1">{body}</ScrollArea>
+    </div>
+  )
+}
+
+function PaperMandateControl({
+  status,
+  authorization,
+  busy,
+  onBusyChange,
+  onChanged,
+}: {
+  status: Awaited<ReturnType<typeof window.electronAPI.listTradingConnections>>[number]
+  authorization?: ExecutionAuthorization
+  busy: string | null
+  onBusyChange: (value: string | null) => void
+  onChanged: () => Promise<void>
+}) {
+  const [draft, setDraft] = React.useState<MandateDraft>(EMPTY_MANDATE_DRAFT)
+  const connection = status.connection
+  const eligible = isPaperMandateEligible(status)
+  const now = Date.now()
+  const active = Boolean(
+    authorization
+    && authorization.mode === 'standing-mandate'
+    && Date.parse(authorization.scope.session_start) <= now
+    && Date.parse(authorization.scope.session_end) > now
+    && Date.parse(authorization.expires_at) > now,
+  )
+  const busyKey = `mandate:${connection.connection_id}`
+
+  const activate = async () => {
+    const symbols = [...new Set(draft.symbols
+      .split(/[\s,]+/)
+      .map((value) => value.trim().toUpperCase())
+      .filter(Boolean))]
+    const maxContracts = Number(draft.maxContracts)
+    const maxOpenRisk = Number(draft.maxOpenRisk)
+    const maxDailyLoss = Number(draft.maxDailyLoss)
+    const durationMinutes = Number(draft.durationMinutes)
+    if (!symbols.length) {
+      toast.error('Enter at least one exact active contract, such as ESU6')
+      return
+    }
+    if (
+      !Number.isInteger(maxContracts)
+      || maxContracts < 1
+      || maxContracts > 10
+      || !Number.isFinite(maxOpenRisk)
+      || maxOpenRisk <= 0
+      || !Number.isFinite(maxDailyLoss)
+      || maxDailyLoss <= 0
+      || !Number.isInteger(durationMinutes)
+      || durationMinutes < 1
+      || durationMinutes > 240
+    ) {
+      toast.error('Use 1–10 contracts, positive dollar limits, and a 1–240 minute session')
+      return
+    }
+    const issuedAt = new Date()
+    const expiresAt = new Date(issuedAt.getTime() + durationMinutes * 60_000)
+    if (!window.confirm(formatPaperMandateConfirmation({
+      accountName: connection.display_name,
+      symbols,
+      maxContracts,
+      maxOpenRisk,
+      maxDailyLoss,
+      expiresAt,
+    }))) return
+
+    onBusyChange(busyKey)
+    try {
+      const expiresAtIso = expiresAt.toISOString()
+      const mandate: ExecutionAuthorization = {
+        authorization_schema_version: EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
+        authorization_id: `paper-mandate-${crypto.randomUUID()}`,
+        connection_id: connection.connection_id,
+        mode: 'standing-mandate',
+        scope: {
+          symbols,
+          max_contracts: maxContracts,
+          allowed_sides: ['buy', 'sell'],
+          allowed_order_types: ['market', 'limit', 'stop', 'stop-limit'],
+          session_start: issuedAt.toISOString(),
+          session_end: expiresAtIso,
+          max_daily_loss: String(maxDailyLoss),
+          max_open_risk: String(maxOpenRisk),
+        },
+        issued_by: 'operator-local',
+        issued_at: issuedAt.toISOString(),
+        expires_at: expiresAtIso,
+      }
+      await window.electronAPI.saveTradeGodStandingAuthorization(mandate)
+      setDraft(EMPTY_MANDATE_DRAFT)
+      await onChanged()
+      toast.success('Paper mandate saved', {
+        description: 'Provider execution is still unavailable until this exact adapter is attached.',
+      })
+    } catch (error) {
+      toast.error('Could not activate paper mandate', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      onBusyChange(null)
+    }
+  }
+
+  const revoke = async () => {
+    if (!window.confirm(`Revoke new-entry authority for ${connection.display_name}?`)) return
+    onBusyChange(busyKey)
+    try {
+      await window.electronAPI.revokeTradeGodStandingAuthorization(connection.connection_id)
+      await onChanged()
+      toast.success('Paper mandate revoked')
+    } catch (error) {
+      toast.error('Could not revoke paper mandate', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      onBusyChange(null)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-amber-400/15 bg-amber-400/[0.025] p-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-medium">Automatic paper authority</p>
+            <StatusBadge positive={active}>{active ? 'Mandate active' : 'Mandate inactive'}</StatusBadge>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {active && authorization
+              ? `New-entry authority expires ${new Date(authorization.expires_at).toLocaleString()}.`
+              : eligible
+                ? 'Set narrow limits for this account. Nothing starts until you confirm.'
+                : 'Requires an enabled, ready, paper-lifecycle-certified paper account.'}
+          </p>
+        </div>
+        {authorization && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy === busyKey}
+            onClick={() => void revoke()}
+          >
+            Revoke mandate
+          </Button>
+        )}
+      </div>
+
+      {!active && eligible && (
+        <div className="mt-3 grid gap-3 md:grid-cols-5">
+          <Field label="Exact contracts" className="md:col-span-2">
+            <input
+              className={inputClass}
+              value={draft.symbols}
+              onChange={(event) => setDraft({ ...draft, symbols: event.target.value })}
+              placeholder="ESU6, NQU6"
+            />
+          </Field>
+          <Field label="Max contracts/order">
+            <input
+              className={inputClass}
+              inputMode="numeric"
+              value={draft.maxContracts}
+              onChange={(event) => setDraft({ ...draft, maxContracts: event.target.value })}
+              placeholder="1"
+            />
+          </Field>
+          <Field label="Max open risk ($)">
+            <input
+              className={inputClass}
+              inputMode="decimal"
+              value={draft.maxOpenRisk}
+              onChange={(event) => setDraft({ ...draft, maxOpenRisk: event.target.value })}
+              placeholder="100"
+            />
+          </Field>
+          <Field label="Max daily loss ($)">
+            <input
+              className={inputClass}
+              inputMode="decimal"
+              value={draft.maxDailyLoss}
+              onChange={(event) => setDraft({ ...draft, maxDailyLoss: event.target.value })}
+              placeholder="500"
+            />
+          </Field>
+          <Field label="Session minutes">
+            <input
+              className={inputClass}
+              inputMode="numeric"
+              value={draft.durationMinutes}
+              onChange={(event) => setDraft({ ...draft, durationMinutes: event.target.value })}
+            />
+          </Field>
+          <div className="flex items-end md:col-span-4">
+            <Button disabled={busy === busyKey} onClick={() => void activate()}>
+              {busy === busyKey && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+              Activate paper mandate
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <p className="mt-3 text-[10px] leading-4 text-amber-100/60">
+        A mandate is only one key. A matching signed route, certified attached adapter, gateway risk approval, and released global halt are all still required.
+      </p>
     </div>
   )
 }
@@ -739,6 +976,37 @@ export function isExecutionReady(
   status: Awaited<ReturnType<typeof window.electronAPI.listTradingConnections>>[number],
 ): boolean {
   return status.connection.enabled && status.connection.state === 'ready'
+}
+
+export function isPaperMandateEligible(
+  status: Awaited<ReturnType<typeof window.electronAPI.listTradingConnections>>[number],
+): boolean {
+  const connection = status.connection
+  return connection.enabled
+    && connection.state === 'ready'
+    && connection.environment === 'paper'
+    && connection.environment_class === 'rehearsal'
+    && connection.certifications.includes('paper-lifecycle-certified')
+}
+
+export function formatPaperMandateConfirmation(input: {
+  accountName: string
+  symbols: string[]
+  maxContracts: number
+  maxOpenRisk: number
+  maxDailyLoss: number
+  expiresAt: Date
+}): string {
+  return [
+    `Activate this PAPER mandate for ${input.accountName}?`,
+    `Contracts: ${input.symbols.join(', ')}`,
+    `Max contracts/order: ${input.maxContracts}`,
+    `Max open risk: $${input.maxOpenRisk}`,
+    `Max daily loss: $${input.maxDailyLoss}`,
+    `Expires: ${input.expiresAt.toLocaleString()}`,
+    '',
+    'New entries remain blocked unless the exact provider adapter is certified, attached, and the global halt is released.',
+  ].join('\n')
 }
 
 export function findSignalRouteByIdentity(

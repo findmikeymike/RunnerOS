@@ -65,6 +65,7 @@ describe('Trade God IPC registration', () => {
           connection_kills: [],
           source_kills: [],
           updated_at: '2026-08-10T00:00:00.000Z',
+          provider_adapters_attached: false,
         }
       },
       setGlobalExecutionKill: async (enabled) => {
@@ -99,6 +100,9 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET,
       TRADE_GOD_IPC.EXECUTION_CONTROL,
       TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL,
+      TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS,
+      TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION,
+      TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION,
     ])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})).toEqual({ state: 'ready' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, { timeoutMs: 500 })).toEqual({ artifact_id: 'artifact-ipc' })
@@ -219,6 +223,9 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET,
       TRADE_GOD_IPC.EXECUTION_CONTROL,
       TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL,
+      TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS,
+      TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION,
+      TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION,
     ])
     expect(stops).toBe(1)
   })

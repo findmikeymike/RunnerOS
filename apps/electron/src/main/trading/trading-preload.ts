@@ -10,6 +10,7 @@ import type {
   IbkrGatewayEnvironment,
   IbkrGatewayHealth,
   MarketCandleSeries,
+  ExecutionAuthorization,
 } from '@trade-god/contracts'
 
 import { TRADE_GOD_IPC } from './trading-ipc.ts'
@@ -57,8 +58,12 @@ export interface TradingPreloadApi {
     connection_kills: string[]
     source_kills: string[]
     updated_at: string
+    provider_adapters_attached: boolean
   }>
   setTradeGodGlobalExecutionKill(enabled: boolean): Promise<{ global_kill: boolean }>
+  listTradeGodStandingAuthorizations(): Promise<ExecutionAuthorization[]>
+  saveTradeGodStandingAuthorization(authorization: ExecutionAuthorization): Promise<ExecutionAuthorization>
+  revokeTradeGodStandingAuthorization(connectionId: string): Promise<boolean>
 }
 
 export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): TradingPreloadApi {
@@ -111,9 +116,19 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
       connection_kills: string[]
       source_kills: string[]
       updated_at: string
+      provider_adapters_attached: boolean
     }>,
     setTradeGodGlobalExecutionKill: (enabled) => (
       invoke(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL, enabled) as Promise<{ global_kill: boolean }>
+    ),
+    listTradeGodStandingAuthorizations: () => (
+      invoke(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS) as Promise<ExecutionAuthorization[]>
+    ),
+    saveTradeGodStandingAuthorization: (authorization) => (
+      invoke(TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION, authorization) as Promise<ExecutionAuthorization>
+    ),
+    revokeTradeGodStandingAuthorization: (connectionId) => (
+      invoke(TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION, connectionId) as Promise<boolean>
     ),
     onTradeGodAlert: (callback) => subscribe
       ? subscribe(TRADE_GOD_IPC.ALERT_RECEIVED, (payload) => callback(payload as TradeAlert))

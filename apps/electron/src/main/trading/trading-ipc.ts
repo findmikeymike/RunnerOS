@@ -11,6 +11,7 @@ import type {
   IbkrGatewayHealth,
   MarketCandleSeries,
   TradingConnection,
+  ExecutionAuthorization,
 } from '@trade-god/contracts'
 
 import type { InterpretFixtureInput } from './order-flow-specialist-pipeline.ts'
@@ -45,6 +46,9 @@ export const TRADE_GOD_IPC = {
   SAVE_DISCOTRADER_WEBHOOK_SECRET: 'trade-god:discotrader:save-webhook-secret',
   EXECUTION_CONTROL: 'trade-god:execution:control',
   SET_GLOBAL_EXECUTION_KILL: 'trade-god:execution:set-global-kill',
+  LIST_STANDING_AUTHORIZATIONS: 'trade-god:execution:authorizations:list',
+  SAVE_STANDING_AUTHORIZATION: 'trade-god:execution:authorizations:save',
+  REVOKE_STANDING_AUTHORIZATION: 'trade-god:execution:authorizations:revoke',
 } as const
 
 export interface TradingIpcManager {
@@ -79,8 +83,12 @@ export interface TradingIpcManager {
     connection_kills: string[]
     source_kills: string[]
     updated_at: string
+    provider_adapters_attached: boolean
   }>
   setGlobalExecutionKill?(enabled: boolean): Promise<{ global_kill: boolean }>
+  listStandingAuthorizations?(): Promise<ExecutionAuthorization[]>
+  saveStandingAuthorization?(authorization: ExecutionAuthorization): Promise<ExecutionAuthorization>
+  revokeStandingAuthorization?(connectionId: string): Promise<boolean>
   resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
   stop(): Promise<void>
 }
@@ -190,6 +198,18 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (typeof enabled !== 'boolean') throw new Error('Execution halt state is invalid.')
     return manager.setGlobalExecutionKill(enabled)
   })
+  ipcMain.handle(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS, () => {
+    if (!manager.listStandingAuthorizations) throw new Error('Standing paper mandates are unavailable.')
+    return manager.listStandingAuthorizations()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION, (_event, authorization: unknown) => {
+    if (!manager.saveStandingAuthorization) throw new Error('Standing paper mandates are unavailable.')
+    return manager.saveStandingAuthorization(authorization as ExecutionAuthorization)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION, (_event, connectionId: unknown) => {
+    if (!manager.revokeStandingAuthorization) throw new Error('Standing paper mandates are unavailable.')
+    return manager.revokeStandingAuthorization(String(connectionId))
+  })
 
   let disposed = false
   return async () => {
@@ -217,6 +237,9 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET)
     ipcMain.removeHandler(TRADE_GOD_IPC.EXECUTION_CONTROL)
     ipcMain.removeHandler(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL)
+    ipcMain.removeHandler(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION)
     await manager.stop()
   }
 }

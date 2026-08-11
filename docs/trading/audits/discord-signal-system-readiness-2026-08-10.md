@@ -103,14 +103,19 @@ not yet a nonstop trade copier.
   rename, so a crash cannot leave a half-migrated final store.
 - Repaired the live isolated Trading workspace so both signed `discotrader` and
   `discotrader-management` receivers exist.
+- Added one durable, expiring automatic paper mandate per account plus a
+  serialized risk/execute coordinator. Mandates bind exact contracts, quantity,
+  open-risk, daily-loss, and session limits. Revoke or replacement during risk
+  evaluation or the final mandate read invalidates the pending execution,
+  including a replacement that reuses the same authorization ID.
 
 ## P0 — Blocks Any Automated Paper Order
 
 | Gate | Current truth | Required proof |
 |---|---|---|
 | Provider runtime | `adapters: []`; no order I/O | Attach one exact paper adapter only after certification |
-| Admission | webhook creates `created` intent only | Deterministic risk decision + explicit bounded authorization + execute coordinator |
-| Risk | gateway independently computes supported-futures loss and can issue a provider-bound decision; ingestion does not invoke a time-bounded arming coordinator | Provider-certify economic specs, wire paper arming, and prove budget rollover/session expiry |
+| Admission | durable per-account paper mandates and the risk/execute coordinator are wired, but remain inert with zero adapters | Attach only one exact certified paper adapter and prove the complete runtime path |
+| Risk | gateway independently computes supported-futures loss; mandates expire in at most four hours and bind exact contracts, quantity, open risk, and daily loss | Provider-certify economic specs and prove real P&L budget rollover/session expiry |
 | Contract identity | past-month/root symbols fail closed and Tradovate requires exact provider ID/name plus unexpired maturity | Add authoritative rollover policy for root signals and real provider evidence |
 | Position ownership | durable provider-account lease and flat-account preflight now exist | Add lease visibility and real-provider restart/adverse proof |
 | Provider queue | durable per-account mutation lock serializes commands through reconciliation | Real-provider crash, stale-lock, cross-process, and adverse ordering proof |
@@ -206,19 +211,18 @@ receipts before activation can be offered:
 
 ## Next Build Order
 
-1. Implement time-bounded paper arming and the created-to-approved execution coordinator.
-2. Add Tradovate credential/token lifecycle and real-time/poll reconciliation.
-3. Provider-certify contract economics/calendar behavior, then attach the exact
+1. Add Tradovate credential/token lifecycle and real-time/poll reconciliation.
+2. Provider-certify contract economics/calendar behavior, then attach the exact
    paper adapter behind certification only.
-4. Run one-account paper lifecycle evidence, including restart and mutation locks.
-5. Implement partial-close/protection resize and multiple target allocations.
-6. Implement Mirror Group contracts/parent coordinator/UI.
-7. Certify multi-account paper mirroring.
-8. Build one browser provider only if API access is unavailable.
+3. Run one-account paper lifecycle evidence, including restart and mutation locks.
+4. Implement partial-close/protection resize and multiple target allocations.
+5. Implement Mirror Group contracts/parent coordinator/UI.
+6. Certify multi-account paper mirroring.
+7. Build one browser provider only if API access is unavailable.
 
 ## Honest Completion Boundary
 
 This audit closes dangerous false-ready paths. It does not claim provider-ready
 automation. The next intelligent pivot is real Tradovate paper connectivity;
 it requires the user's Tradovate API credential/account access and explicit
-paper-only authorization after the remaining P0 runtime work is implemented.
+paper-only authorization before an exact certified adapter is attached.

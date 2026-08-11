@@ -26,8 +26,9 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
   tickets, stale contracts, and root symbols fail closed.
 - The previously copied Artist OS vault was moved into a recoverable Trade
   God-only quarantine. Fresh Trade God login/secrets are required.
-- Next build gate: time-bounded paper arming/execution coordination, Tradovate
-  token lifecycle and continuous truth, then real paper certification.
+- Time-bounded paper arming and execution coordination are implemented locally;
+  no provider adapter is attached. Next build gate: Tradovate token lifecycle,
+  continuous truth, and exact-account paper certification.
 
 ## Mission
 
@@ -98,11 +99,12 @@ approval-gated. See `docs/trading/integrations/DISCOTRADER-CONTROL-CENTER.md`.
 
 ## Immediate Assignment
 
-Enroll fresh Trade God credentials, wire time-bounded paper arming and the
-created-to-approved coordinator, then confirm Apex/Tradovate API eligibility
-and obtain a demo credential bound to the exact account. Implement/prove token
-refresh, continuous reconciliation, partial-close protection resizing, and the
-50-lifecycle paper soak before attaching an adapter.
+Enroll fresh Trade God credentials, confirm Apex/Tradovate API eligibility, and
+obtain a demo credential bound to one exact account. Paper mandates and the
+created-to-approved coordinator are implemented, but remain inert because the
+runtime attaches zero adapters. Implement/prove token refresh, continuous
+reconciliation, partial-close protection resizing, and the 50-lifecycle paper
+soak before attaching the certified adapter.
 
 ## Known Expected Artifact
 
@@ -116,6 +118,9 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
+- Automatic paper mandate closure: 244 tests passed across 42 trading/Electron
+  files; typecheck, all three Electron production builds, and diff check passed.
+  Rival tests prove revoke/replace races cannot cross into execute.
 - 2026-08-10 safety closure: 356 relevant tests passed across 50 files; full
   typecheck, Electron main/preload/renderer builds, and diff check passed.
 - Unified gateway closure: 175 tests passed, 0 failed across 31 trading/Electron files with 582 expectations.
