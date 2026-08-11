@@ -67,6 +67,30 @@ Status values: proposed, accepted, superseded, rejected. Accepted decisions guid
 - Decision: use JSON-RPC over stdio for command/control; keep high-volume streaming out of the protocol until measurement justifies a separate channel.
 - Open question: exact envelope, compatibility window, and stream threshold.
 
+## ADR-010 — Parent-Child Coordination for Multi-Account Mirroring
+
+- Status: proposed
+- Date: 2026-08-03
+- Context: one authenticated Discord signal may target multiple exact futures
+  accounts, while fills, positions, protection orders, risk, and provider state
+  remain account-specific.
+- Decision: add a durable parent Mirror Coordinator above the existing gateway;
+  create one independently reconciled child intent per account. The existing
+  gateway remains the only per-account execution authority.
+- Why: preserves exact account/order ownership, idempotency, failure isolation,
+  and follow-up lineage without pretending cross-account execution is atomic.
+- Consequences: route and management contracts require versioned parent/group
+  support; the gateway requires parent dispatch grants; group risk requires
+  durable reservations; netted accounts require provider-account/instrument
+  ownership leases and provider-account queues; partial outcomes remain
+  visible.
+- Alternatives rejected: duplicating routes manually, one synthetic provider
+  order for many accounts, agent-memory routing, or automatic compensating
+  flatten after a partial entry.
+- Migration/reversal path: current routes migrate to single-account v2 targets;
+  group execution can be disabled while single-account routing remains intact.
+- Evidence: `specs/execution/multi-account-mirror-groups.md`.
+
 ## ADR Template
 
 ```markdown

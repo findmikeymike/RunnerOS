@@ -478,8 +478,12 @@ export interface ElectronAPI {
   openTradingConnectionLogin(connectionId: string): Promise<{ browser_instance_id: string; session_ref: string }>
   confirmTradingConnectionLogin(connectionId: string): Promise<import('../main/trading/trading-connection-service').TradingConnectionStatus>
   listTradingSignalRoutes(): Promise<import('../main/trading/trading-signal-route-store').TradingSignalRoute[]>
-  saveTradingSignalRoute(route: import('../main/trading/trading-signal-route-store').TradingSignalRoute): Promise<import('../main/trading/trading-signal-route-store').TradingSignalRoute>
+  saveTradingSignalRoute(route: import('../main/trading/trading-signal-route-store').TradingSignalRoute, expectedPreviousConnectionId?: string): Promise<import('../main/trading/trading-signal-route-store').TradingSignalRoute>
   removeTradingSignalRoute(routeId: string): Promise<boolean>
+  getDiscoTraderWebhookSecretStatus(): Promise<{ configured: boolean }>
+  saveDiscoTraderWebhookSecret(secret: string): Promise<{ configured: true }>
+  getTradeGodExecutionControl(): Promise<{ global_kill: boolean; connection_kills: string[]; source_kills: string[]; updated_at: string }>
+  setTradeGodGlobalExecutionKill(enabled: boolean): Promise<{ global_kill: boolean }>
 
   // Session management
   getSessions(): Promise<Session[]>
@@ -750,6 +754,7 @@ export interface ElectronAPI {
   getWorkspacePermissionsConfig(workspaceId: string): Promise<import('@craft-agent/shared/agent').PermissionsConfigFile | null>
   getDefaultPermissionsConfig(): Promise<{ config: import('@craft-agent/shared/agent').PermissionsConfigFile | null; path: string }>
   getMcpTools(workspaceId: string, sourceSlug: string): Promise<McpToolsResult>
+  getDiscoTraderSignalSources(workspaceId: string): Promise<unknown>
 
   // OAuth (server-owned credentials, client-orchestrated flow)
   performOAuth(args: { sourceSlug: string; sessionId?: string; authRequestId?: string; credentialScope?: 'workspace' | 'global' | 'workspace-override' }): Promise<{ success: boolean; error?: string; email?: string }>

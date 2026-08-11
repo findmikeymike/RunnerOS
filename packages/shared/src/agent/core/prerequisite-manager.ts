@@ -11,10 +11,10 @@
  */
 
 import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { expandPath } from './path-processor.ts';
 import { getBrowserToolEnabled } from '../../config/storage.ts';
+import { CONFIG_DIR } from '../../config/paths.ts';
 
 // ============================================================
 // Types
@@ -49,7 +49,7 @@ export interface PrerequisiteManagerConfig {
 const EXEMPT_SLUGS = new Set(['session', 'runner-docs']);
 
 /** Global browser tools docs path required before browser tool usage. */
-const BROWSER_TOOLS_DOC_PATH = resolve(join(homedir(), '.craft-agent', 'docs', 'browser-tools.md'));
+const BROWSER_TOOLS_DOC_PATH = resolve(join(CONFIG_DIR, 'docs', 'browser-tools.md'));
 
 /** Read-only catalog/introspection tools should not be blocked by skill docs. */
 const SKILL_PREREQUISITE_BYPASS_TOOLS = new Set([

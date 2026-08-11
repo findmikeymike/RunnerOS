@@ -58,7 +58,7 @@ function WebhookReceivePanel({ automation, editActions }: ExternalTriggerSection
   // Build URL from the live server info when available; fall back to a
   // sensible localhost guess so users still see *some* URL when the server
   // hasn't started yet (e.g. another process bound the port).
-  const baseUrl = triggerInfo.url ?? 'http://127.0.0.1:9101'
+  const baseUrl = triggerInfo.url ?? 'http://127.0.0.1:9201'
   const url = automation.slug && workspace?.id
     ? `${baseUrl}/v1/triggers/${encodeURIComponent(workspace.id)}/${encodeURIComponent(automation.slug)}`
     : null
@@ -77,7 +77,7 @@ function WebhookReceivePanel({ automation, editActions }: ExternalTriggerSection
           <Info_Alert.Title>Trigger server not running</Info_Alert.Title>
           <Info_Alert.Description>
             The HTTP server that receives webhooks is disabled or failed to start.
-            By default it auto-starts on <code>127.0.0.1:9101</code>. Set{' '}
+            By default it auto-starts on <code>127.0.0.1:9201</code>. Set{' '}
             <code className="font-mono">CRAFT_TRIGGER_PORT</code> to a free port and restart the app,
             or set <code className="font-mono">CRAFT_TRIGGER_PORT=0</code> to keep it off.
           </Info_Alert.Description>

@@ -21,6 +21,11 @@ import { toast } from 'sonner'
 
 import { useAgents } from '@/hooks/useAgents'
 import { navigate, routes } from '@/lib/navigate'
+import TradingConnectionsSettingsPage from '@/pages/settings/TradingConnectionsSettingsPage'
+import {
+  discoTraderSignalSourceCatalogSchema,
+  type DiscoTraderSignalSourceCatalog,
+} from './discotrader-signal-sources'
 import type { AgentDefinitionDTO, FolderSourceConfig } from '../../../shared/types'
 
 type SourceState = 'checking' | 'unconfigured' | 'ready' | 'offline' | 'conflict'
@@ -32,6 +37,13 @@ interface DiscoTraderControlCenterPageProps {
 const SOURCE_SLUG = 'discotrader'
 const WORKER_SLUG = 'trade-desk'
 const DISCOTRADER_MCP_URL = 'http://127.0.0.1:8788/mcp'
+const DISCOTRADER_READ_ONLY_TOOLS = [
+  'dt_status',
+  'dt_signal_sources',
+  'dt_positions',
+  'dt_pending_tickets',
+  'dt_recent_alerts',
+] as const
 
 export function isAuditedDiscoTraderSource(config: FolderSourceConfig): boolean {
   return config.slug === SOURCE_SLUG
@@ -41,6 +53,7 @@ export function isAuditedDiscoTraderSource(config: FolderSourceConfig): boolean 
     && config.mcp?.transport === 'http'
     && config.mcp.url === DISCOTRADER_MCP_URL
     && config.mcp.authType === 'bearer'
+    && JSON.stringify(config.mcp.allowedTools) === JSON.stringify(DISCOTRADER_READ_ONLY_TOOLS)
 }
 
 export function isAuditedTradeDeskWorker(worker: AgentDefinitionDTO | undefined): boolean {
@@ -82,10 +95,15 @@ export default function DiscoTraderControlCenterPage({
   const [sourceError, setSourceError] = useState<string | null>(null)
   const [toolCount, setToolCount] = useState(0)
   const [token, setToken] = useState('')
+  const [webhookSecret, setWebhookSecret] = useState('')
+  const [webhookSecretConfigured, setWebhookSecretConfigured] = useState(false)
+  const [globalExecutionKill, setGlobalExecutionKill] = useState<boolean | null>(null)
   const [sourceBusy, setSourceBusy] = useState(false)
   const [workerBusy, setWorkerBusy] = useState(false)
   const [readyConnections, setReadyConnections] = useState(0)
   const [connectionCount, setConnectionCount] = useState(0)
+  const [signalSourceCatalog, setSignalSourceCatalog] = useState<DiscoTraderSignalSourceCatalog | null>(null)
+  const [signalSourceCatalogError, setSignalSourceCatalogError] = useState<string | null>(null)
 
   const worker = useMemo(
     () => allAgents.find((agent) => agent.slug === WORKER_SLUG),
@@ -94,6 +112,18 @@ export default function DiscoTraderControlCenterPage({
   const workerMatchesTemplate = isAuditedTradeDeskWorker(worker)
   const workerConflict = Boolean(worker && !workerMatchesTemplate)
   const workerActive = activeSlugs.includes(WORKER_SLUG)
+
+  const refreshSignalSources = useCallback(async () => {
+    if (!workspaceId) return
+    try {
+      const result = await window.electronAPI.getDiscoTraderSignalSources(workspaceId)
+      setSignalSourceCatalog(discoTraderSignalSourceCatalogSchema.parse(result))
+      setSignalSourceCatalogError(null)
+    } catch (error) {
+      setSignalSourceCatalog(null)
+      setSignalSourceCatalogError(error instanceof Error ? error.message : String(error))
+    }
+  }, [workspaceId])
 
   const probeSource = useCallback(async (): Promise<SourceState> => {
     if (!workspaceId) {
@@ -129,6 +159,7 @@ export default function DiscoTraderControlCenterPage({
 
       setSourceState('ready')
       setToolCount(result.tools?.length ?? 0)
+      void refreshSignalSources()
       return 'ready'
     } catch (error) {
       setSourceState('offline')
@@ -136,7 +167,7 @@ export default function DiscoTraderControlCenterPage({
       setToolCount(0)
       return 'offline'
     }
-  }, [workspaceId])
+  }, [refreshSignalSources, workspaceId])
 
   const refreshConnections = useCallback(async () => {
     try {
@@ -154,7 +185,31 @@ export default function DiscoTraderControlCenterPage({
   useEffect(() => {
     void probeSource()
     void refreshConnections()
+    void window.electronAPI.getDiscoTraderWebhookSecretStatus()
+      .then(({ configured }) => setWebhookSecretConfigured(configured))
+      .catch(() => setWebhookSecretConfigured(false))
+    void window.electronAPI.getTradeGodExecutionControl()
+      .then(({ global_kill }) => setGlobalExecutionKill(global_kill))
+      .catch(() => setGlobalExecutionKill(null))
   }, [probeSource, refreshConnections])
+
+  const handleGlobalExecutionKill = useCallback(async () => {
+    if (globalExecutionKill === null) return
+    try {
+      const next = !globalExecutionKill
+      if (
+        !next
+        && !window.confirm('Release the persistent Trade God new-entry halt? This only removes one safety gate; it does not certify or start provider execution.')
+      ) return
+      await window.electronAPI.setTradeGodGlobalExecutionKill(next)
+      setGlobalExecutionKill(next)
+      toast.success(next ? 'Trade God new entries halted' : 'Trade God new-entry halt released')
+    } catch (error) {
+      toast.error('Could not change Trade God execution halt', {
+        description: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }, [globalExecutionKill])
 
   const handleConnectSource = useCallback(async () => {
     if (!workspaceId) return
@@ -162,6 +217,10 @@ export default function DiscoTraderControlCenterPage({
     try {
       const sources = await window.electronAPI.getSources(workspaceId)
       const existing = sources.find((entry) => entry.config.slug === SOURCE_SLUG)
+
+      if (!webhookSecretConfigured && !webhookSecret.trim()) {
+        throw new Error('Paste DT_SHARED_SECRET from DiscoTrader v2/.env first.')
+      }
 
       if (existing && !isAuditedDiscoTraderSource(existing.config)) {
         navigate(routes.view.sourcesMcp(SOURCE_SLUG))
@@ -183,6 +242,7 @@ export default function DiscoTraderControlCenterPage({
             transport: 'http',
             url: DISCOTRADER_MCP_URL,
             authType: 'bearer',
+            allowedTools: [...DISCOTRADER_READ_ONLY_TOOLS],
           },
         })
         if (created.slug !== SOURCE_SLUG) {
@@ -195,9 +255,18 @@ export default function DiscoTraderControlCenterPage({
         await window.electronAPI.saveSourceCredentials(workspaceId, SOURCE_SLUG, token.trim())
         setToken('')
       }
+      if (webhookSecret.trim()) {
+        await window.electronAPI.saveDiscoTraderWebhookSecret(webhookSecret.trim())
+        setWebhookSecret('')
+        setWebhookSecretConfigured(true)
+      }
 
       const state = await probeSource()
-      if (state === 'ready') toast.success('DiscoTrader source connected')
+      if (state === 'ready') {
+        toast.success('DiscoTrader MCP connected', {
+          description: 'Webhook secret is saved but sender delivery is not yet verified.',
+        })
+      }
       else toast.error('DiscoTrader source saved but the daemon is not reachable')
     } catch (error) {
       toast.error('Could not connect DiscoTrader', {
@@ -206,7 +275,7 @@ export default function DiscoTraderControlCenterPage({
     } finally {
       setSourceBusy(false)
     }
-  }, [probeSource, token, workspaceId])
+  }, [probeSource, token, webhookSecret, webhookSecretConfigured, workspaceId])
 
   const handleInstallWorker = useCallback(async () => {
     if (!workspaceId) return
@@ -238,7 +307,10 @@ export default function DiscoTraderControlCenterPage({
     }
   }, [setActive, upsert, worker, workerActive, workerConflict, workspaceId])
 
-  const setupComplete = sourceState === 'ready' && workerActive && workerMatchesTemplate
+  const setupComplete = sourceState === 'ready'
+    && webhookSecretConfigured
+    && workerActive
+    && workerMatchesTemplate
   const brokerLabel = readyConnections > 0
     ? `${readyConnections} ready`
     : connectionCount > 0
@@ -255,7 +327,7 @@ export default function DiscoTraderControlCenterPage({
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">DiscoTrader Control Center</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[#929aa5]">
-              Connect the local daemon, install its Trade Desk worker, and see which execution gates are actually ready.
+              Connect the local daemon, install its read-only Trade Desk monitor, and see which gateway gates remain blocked.
             </p>
           </div>
           <div className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
@@ -264,7 +336,9 @@ export default function DiscoTraderControlCenterPage({
               : 'border-amber-300/20 bg-amber-300/[0.06] text-amber-100'
           }`}>
             {setupComplete ? <ShieldCheck className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
-            {setupComplete ? 'Desk connected · actions still approval-gated' : 'Setup required · no autonomous execution'}
+            {setupComplete
+              ? 'Local monitor ready · webhook sender unverified · execution disabled'
+              : 'Setup required · execution disabled'}
           </div>
         </header>
 
@@ -272,8 +346,10 @@ export default function DiscoTraderControlCenterPage({
           <StatusCard
             icon={<Server className="h-4 w-4" />}
             label="Daemon bridge"
-            value={sourceState === 'ready' ? 'Online' : sourceState === 'checking' ? 'Checking' : sourceState === 'offline' ? 'Offline' : sourceState === 'conflict' ? 'Config conflict' : 'Not connected'}
-            detail={sourceState === 'ready' ? `${toolCount} MCP tools available` : '127.0.0.1:8788'}
+            value={sourceState === 'ready' ? 'MCP online' : sourceState === 'checking' ? 'Checking' : sourceState === 'offline' ? 'Offline' : sourceState === 'conflict' ? 'Config conflict' : 'Not connected'}
+            detail={sourceState === 'ready'
+              ? `${toolCount} MCP tools · webhook ${webhookSecretConfigured ? 'saved, sender unverified' : 'secret missing'}`
+              : '127.0.0.1:8788'}
             tone={sourceState === 'ready' ? 'positive' : sourceState === 'offline' || sourceState === 'conflict' ? 'danger' : 'warning'}
           />
           <StatusCard
@@ -287,15 +363,25 @@ export default function DiscoTraderControlCenterPage({
             icon={<PlugZap className="h-4 w-4" />}
             label="Broker route"
             value={brokerLabel}
-            detail={readyConnections > 0 ? 'Connection ready; adapter certification still applies' : 'Settings → Trading Connections'}
-            tone={readyConnections > 0 ? 'positive' : 'muted'}
+            detail={readyConnections > 0 ? 'Account configured; no runtime adapter attached' : 'Add or connect an account below'}
+            tone={readyConnections > 0 ? 'warning' : 'muted'}
           />
           <StatusCard
             icon={<LockKeyhole className="h-4 w-4" />}
             label="Live actions"
-            value="Ask first"
-            detail="Every tool call remains approval-gated"
+            value={globalExecutionKill ? 'Gateway halted' : 'Worker blocked'}
+            detail="Mutation tools are not exposed; gateway halt is persistent"
             tone="muted"
+          />
+        </section>
+
+        <section className="rounded-xl border border-[#252b33] bg-[#0d1115]">
+          <TradingConnectionsSettingsPage
+            embedded
+            onConnectionsChanged={() => void refreshConnections()}
+            signalSourceCatalog={signalSourceCatalog}
+            signalSourceCatalogError={signalSourceCatalogError}
+            onRefreshSignalSources={() => void refreshSignalSources()}
           />
         </section>
 
@@ -323,7 +409,7 @@ export default function DiscoTraderControlCenterPage({
               number="2"
               title="Connect the signed local source"
               state={sourceState === 'ready' ? 'complete' : sourceState === 'offline' || sourceState === 'conflict' ? 'error' : 'pending'}
-              description="Use DT_MCP_TOKEN from DiscoTrader v2/.env. Shell and file secrets are never shown here after save."
+              description="Use DT_MCP_TOKEN and DT_SHARED_SECRET from DiscoTrader v2/.env. Both are encrypted and never shown after save."
             >
               <div className="flex flex-col gap-2 sm:flex-row">
                 <label className="relative min-w-0 flex-1">
@@ -340,13 +426,27 @@ export default function DiscoTraderControlCenterPage({
                 <button
                   type="button"
                   onClick={handleConnectSource}
-                  disabled={sourceBusy || !workspaceId || (sourceState === 'unconfigured' && !token.trim())}
+                  disabled={sourceBusy || !workspaceId || (
+                    sourceState === 'unconfigured'
+                    && (!token.trim() || (!webhookSecretConfigured && !webhookSecret.trim()))
+                  )}
                   className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-300 px-4 text-xs font-semibold text-black transition-colors hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {sourceBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlugZap className="h-3.5 w-3.5" />}
-                  {sourceState === 'unconfigured' ? 'Connect source' : sourceState === 'conflict' ? 'Review conflicting source' : token.trim() ? 'Save token + test' : 'Test connection'}
+                  {sourceState === 'unconfigured' ? 'Connect source' : sourceState === 'conflict' ? 'Review conflicting source' : token.trim() || webhookSecret.trim() ? 'Save secrets + test' : 'Test connection'}
                 </button>
               </div>
+              <label className="relative mt-2 block">
+                <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#687382]" />
+                <input
+                  aria-label="DiscoTrader shared webhook secret"
+                  type="password"
+                  value={webhookSecret}
+                  onChange={(event) => setWebhookSecret(event.target.value)}
+                  placeholder={webhookSecretConfigured ? 'DT_SHARED_SECRET saved · paste to replace' : 'Paste DT_SHARED_SECRET'}
+                  className="h-10 w-full rounded-md border border-[#2a3038] bg-[#090c0f] pl-9 pr-3 text-xs text-white outline-none placeholder:text-[#545d69] focus:border-amber-300/40"
+                />
+              </label>
               {sourceError && (
                 <div className="mt-2 flex items-start gap-2 text-[11px] leading-5 text-[#ff9b9b]">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -407,7 +507,7 @@ export default function DiscoTraderControlCenterPage({
               <div className="mt-5 grid gap-2">
                 <FlowRow label="Discord signal" detail="DiscoTrader parses + risk-gates" />
                 <FlowRow label="Sized ticket" detail="Immutable ticket ID" />
-                <FlowRow label="Trade Desk" detail="Status, exceptions, approvals" />
+                <FlowRow label="Trade Desk" detail="Read-only status and exceptions" />
                 <FlowRow label="Trade God gateway" detail="Connection + certification gates" />
                 <FlowRow label="Provider" detail="Paper first; live requires explicit arming" last />
               </div>
@@ -432,10 +532,10 @@ export default function DiscoTraderControlCenterPage({
                 />
                 <OperationRow
                   icon={<CircleOff className="h-4 w-4" />}
-                  title="Halt / flatten"
-                  detail="Deliberate Trade Desk tools; never automatic from this dashboard."
-                  enabled={workerActive && workerMatchesTemplate && sourceState === 'ready'}
-                  onClick={() => workerActive && workerMatchesTemplate && navigate(routes.view.agents(WORKER_SLUG))}
+                  title="New-entry safety halt"
+                  detail={globalExecutionKill ? 'New entries halted. Select to release.' : 'Persistently halt all new gateway entries. Flatten is not implemented.'}
+                  enabled={globalExecutionKill !== null}
+                  onClick={handleGlobalExecutionKill}
                 />
               </div>
             </div>

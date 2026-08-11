@@ -1,11 +1,33 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-31
+last_verified: 2026-08-10
 source_of_truth: false
 ---
 
 # Trade God Handoff
+
+## 2026-08-10 Safety Audit Handoff
+
+Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
+
+- Verdict: not ready for automated provider execution.
+- Runtime truth: `adapters: []`; signed tickets create durable intents only.
+- Live isolated workspace now contains both signed DiscoTrader receivers.
+- Trade Desk is read-only and cannot call donor execution/management tools.
+- Exact Discord routing is mandatory; no default/single-account fallback exists.
+- Multiple targets are rejected rather than truncated; Mirror Groups are still
+  specification only.
+- Packaged Trade God identity is forced before main-process import, independent
+  of Artist OS shell variables.
+- Provider-account admission and provider mutations are durably serialized
+  across instruments and through normal/restart reconciliation.
+- Gateway-owned futures economics independently recompute loss; understated
+  tickets, stale contracts, and root symbols fail closed.
+- The previously copied Artist OS vault was moved into a recoverable Trade
+  God-only quarantine. Fresh Trade God login/secrets are required.
+- Next build gate: time-bounded paper arming/execution coordination, Tradovate
+  token lifecycle and continuous truth, then real paper certification.
 
 ## Mission
 
@@ -22,12 +44,28 @@ Build a local-first desktop trading intelligence system where deterministic anal
 ## Read First
 
 1. `docs/trading/CURRENT.md`
-2. `docs/trading/specs/foundation/phase-0-contract-kernel.md`
-3. `docs/trading/specs/market-data/phase-1-nautilus-market-data-spine.md`
-4. `docs/trading/development/VERIFICATION.md`
-5. `docs/trading/architecture/OVERVIEW.md`
+2. `docs/trading/specs/execution/multi-account-mirror-groups.md`
+3. `docs/trading/specs/foundation/phase-0-contract-kernel.md`
+4. `docs/trading/specs/market-data/phase-1-nautilus-market-data-spine.md`
+5. `docs/trading/development/VERIFICATION.md`
+6. `docs/trading/architecture/OVERVIEW.md`
 
 ## Current Truth
+
+Trade God is now a separate desktop product rather than a Runner workspace
+profile. Its packaged identity is `com.findmikeymike.tradegod`; runtime state,
+credentials, workspace registry, browser partitions, logs, and deep links are
+rooted under `~/.trade-god` and `tradegod://`. Future migration copies no
+credential vault. The old byte-identical Trade God vault copy was quarantined
+without changing Artist OS under `~/.craft-agent`; Trade God must re-enroll its
+own credentials.
+New workspace flows stay under `~/.trade-god/workspaces`. Auto-update is
+disabled until a dedicated Trade God release feed exists, preventing RunnerOS
+or Artist OS packages from crossing the product boundary. The live DiscoTrader
+management webhook is configured for Trade God's isolated port `9201`.
+Migration remains a deliberate one-time operation (`bun run
+trade-god:migrate-data`), not an automatic read from Artist OS on every clean
+Trade God install. It is already complete on this machine.
 
 The Phase 0 walking skeleton is implemented for development and packaged-sidecar resolution. A project-owned ES fixture travels through a standalone Order Flow sidecar, validated contracts, a typed client, Electron supervision, narrow IPC/preload methods, and a visible Trade God workbench. The build now emits a self-contained sidecar bundle and packaged mode selects RunnerOS's bundled Bun.
 
@@ -35,7 +73,14 @@ This is not yet a live trading system. It has no live quote stream or certified 
 
 The Unified Broker Entry Gateway foundation is implemented locally. Provider-neutral contracts, durable single-claim state, reconciliation, kill switches, checksum-bound management commands, exact adapter certification, and protected-fill recovery are covered by automated tests. Tradovate demo/API and WealthCharts browser foundations implement the same normalized adapter boundary, but neither is paper-certified. DiscordTrader tickets now become immutable gateway intents rather than retaining a second execution authority.
 
-Discord entry and follow-up management both enter through the existing HMAC-authenticated 9101 trigger server. The `discotrader` path validates the complete immutable ticket and registers it through the single gateway intent source; it binds only to an explicitly configured connection or one uniquely enabled, ready connection. The `discotrader-management` path resolves a checksum-bound message only by immutable author plus reply/thread/channel/symbol evidence to exactly one protected gateway trade. Its command identity includes the immutable Discord message and action index, so retries are idempotent without collapsing two separate identical reductions. Startup recovery runs before new delivery. DiscoTrader persists both kinds of signed envelope in a SQLite outbox before network delivery, queues management authority before acknowledging Chrome, retries Runner outages, and emits thread identity only from an exact cross-channel reply or explicit mapping. The prior running observe-only smoke proved the management receiver; the new entry route, outbox retry, and thread mapping are automated-test proven but not yet runtime-smoked. The runtime intentionally has zero provider adapters until paper certification.
+Multi-account Mirror Groups now have a draft source-of-truth design, not an
+implementation. One immutable source event binds to one frozen group revision;
+the parent coordinates independent per-account gateway children, exact
+provider-account/instrument ownership, aggregate risk reservations, and
+group-aware follow-ups. No mirror child can submit without a gateway-verified
+parent dispatch grant. Paper implementation and evidence remain pending.
+
+Discord entry and follow-up management both enter through Trade God's isolated HMAC-authenticated 9201 trigger server. The `discotrader` path validates the complete immutable ticket and registers it through the single gateway intent source; it binds only to an explicitly configured exact Discord-source route, with no default or single-account fallback. The `discotrader-management` path resolves a checksum-bound message only by immutable author plus reply/thread/channel/symbol evidence to exactly one protected gateway trade. Its command identity includes the immutable Discord message and action index, so retries are idempotent without collapsing two separate identical reductions. Startup recovery runs before new delivery. DiscoTrader persists both kinds of signed envelope in a SQLite outbox before network delivery, queues management authority before acknowledging Chrome, retries Runner outages, and emits thread identity only from an exact cross-channel reply or explicit mapping. The prior running observe-only smoke proved the management receiver; the new entry route, outbox retry, and thread mapping are automated-test proven but not yet runtime-smoked. The runtime intentionally has zero provider adapters until paper certification.
 
 Phase 1 has an isolated Python 3.12.9/NautilusTrader 1.230.0 adapter and provider-independent event, quality, batch, candle, series, and agent-snapshot contracts. Python emits the exact TypeScript golden/checksum; typed client/Electron supervision validates it; the replay engine produces current price and candle history under a no-lookahead watermark. `agent-market-snapshot@2` now binds explicit provider sequence, continuity, freshness, and session-window admission into its checksum. One canonical batch produces both the checksum-verified `order-flow-artifact@2` and the addressed snapshot reference consumed by `order-flow-specialist@0.1.0`. The specialist refuses reconnecting, gapped, stale, unavailable, invalid, or out-of-window evidence before invoking the model. The GPT path has been user-smoked in Electron.
 
@@ -53,7 +98,11 @@ approval-gated. See `docs/trading/integrations/DISCOTRADER-CONTROL-CENTER.md`.
 
 ## Immediate Assignment
 
-Confirm Apex/Tradovate API eligibility, obtain a demo credential bound to the exact account, implement/prove partial-close protection resizing, and run the 50-lifecycle paper soak. Do not attach a provider adapter or enable consequential execution before those gates pass.
+Enroll fresh Trade God credentials, wire time-bounded paper arming and the
+created-to-approved coordinator, then confirm Apex/Tradovate API eligibility
+and obtain a demo credential bound to the exact account. Implement/prove token
+refresh, continuous reconciliation, partial-close protection resizing, and the
+50-lifecycle paper soak before attaching an adapter.
 
 ## Known Expected Artifact
 
@@ -67,6 +116,8 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
+- 2026-08-10 safety closure: 356 relevant tests passed across 50 files; full
+  typecheck, Electron main/preload/renderer builds, and diff check passed.
 - Unified gateway closure: 175 tests passed, 0 failed across 31 trading/Electron files with 582 expectations.
 - Repository-wide `bun run typecheck:all` passed.
 - Electron main, preload, and renderer production builds passed.

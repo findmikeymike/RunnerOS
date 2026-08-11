@@ -1,10 +1,13 @@
-import { expect, test } from 'bun:test'
+import { expect, mock, test } from 'bun:test'
+mock.module('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: 'pdf.worker.js' }))
+mock.module('pdfjs-dist', () => ({ GlobalWorkerOptions: { workerSrc: '' }, getDocument: () => ({}) }))
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import TradeGodHomePage, {
+const {
+  default: TradeGodHomePage,
   normalizeWatchTicker,
   readWatchlistPreference,
-} from './TradeGodHomePage.tsx'
+} = await import('./TradeGodHomePage.tsx')
 
 test('renders a futures-first overview with honest connection states', () => {
   const html = renderToStaticMarkup(<TradeGodHomePage workspaceId="desk-es" workspaceName="Index Futures" />)

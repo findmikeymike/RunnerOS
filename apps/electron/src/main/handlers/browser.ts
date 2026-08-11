@@ -40,7 +40,7 @@ export function registerBrowserHandlers(server: RpcServer, deps: HandlerDeps): v
   })
 
   server.handle(RPC_CHANNELS.browserPane.DESTROY, (_ctx, id: string) => {
-    browserPaneManager.destroyInstance(id)
+    browserPaneManager.destroyUserInstance(id)
   })
 
   server.handle(RPC_CHANNELS.browserPane.LIST, () => {

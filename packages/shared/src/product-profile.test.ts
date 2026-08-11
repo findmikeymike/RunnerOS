@@ -25,10 +25,7 @@ describe('Trade God product catalog', () => {
     expect(STARTER_AGENTS.some(agent => agent.slug === TRADE_DESK_AGENT.slug)).toBe(false);
     expect(TRADE_DESK_AGENT.metadata.permissionMode).toBe('ask');
     expect(TRADE_DESK_AGENT.metadata.sources).toEqual(['discotrader']);
-    expect(TRADE_DESK_AGENT.metadata.skills).toEqual([
-      'trade-desk-operator',
-      'incident-recovery',
-    ]);
+    expect(TRADE_DESK_AGENT.metadata.skills).toEqual(['trade-desk-operator']);
   });
 
   test('ships only Trade God bundled skills', () => {
@@ -41,6 +38,7 @@ describe('Trade God product catalog', () => {
   });
 
   test('keeps agent and skill libraries inside the Trade God config root', () => {
+    expect(CONFIG_DIR.endsWith('/.trade-god')).toBe(true);
     expect(GLOBAL_AGENTS_DIR).toBe(join(CONFIG_DIR, 'agents'));
     expect(GLOBAL_AGENT_SKILLS_DIR).toBe(join(CONFIG_DIR, 'skills'));
   });

@@ -19,7 +19,7 @@ import {
 } from '@trade-god/contracts'
 
 import type { ExecutionAdapter } from '../adapter.ts'
-import { computeManagementAcknowledgmentChecksum } from '../canonical.ts'
+import { computeManagementAcknowledgmentChecksum, sha256 } from '../canonical.ts'
 import { ExecutionAdapterError, ExecutionGatewayError } from '../errors.ts'
 
 export interface TradovateCredential {
@@ -59,6 +59,11 @@ export interface TradovatePosition {
 export interface TradovateRestClient {
   connect(connection: TradingConnection): Promise<void>
   snapshot(connection: TradingConnection): Promise<ExecutionAccountSnapshot>
+  resolveContract(connection: TradingConnection, symbol: string): Promise<{
+    id: number
+    name: string
+    expiration_date: string
+  }>
   placeOso(input: {
     connection: TradingConnection
     intent: OrderIntent
@@ -155,6 +160,12 @@ interface TradovateExecutionReport {
 interface TradovateContract {
   id: number
   name: string
+  contractMaturityId: number
+}
+
+interface TradovateContractMaturity {
+  id: number
+  expirationDate: string
 }
 
 export class TradovateFetchClient implements TradovateRestClient {
@@ -247,6 +258,51 @@ export class TradovateFetchClient implements TradovateRestClient {
     })
   }
 
+  async resolveContract(
+    connection: TradingConnection,
+    symbol: string,
+  ): Promise<{ id: number; name: string; expiration_date: string }> {
+    const credential = await this.credential(connection)
+    const contract = await this.requestJson<TradovateContract>(
+      credential,
+      `/contract/find?name=${encodeURIComponent(symbol)}`,
+      { method: 'GET' },
+      false,
+    )
+    if (
+      !Number.isSafeInteger(contract.id)
+      || contract.id <= 0
+      || contract.name !== symbol
+      || !Number.isSafeInteger(contract.contractMaturityId)
+      || contract.contractMaturityId <= 0
+    ) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Tradovate did not resolve the exact canonical futures contract.',
+      )
+    }
+    const maturity = await this.requestJson<TradovateContractMaturity>(
+      credential,
+      `/contractMaturity/item?id=${contract.contractMaturityId}`,
+      { method: 'GET' },
+      false,
+    )
+    if (
+      maturity.id !== contract.contractMaturityId
+      || !Number.isFinite(Date.parse(maturity.expirationDate))
+    ) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Tradovate returned invalid contract maturity evidence.',
+      )
+    }
+    return {
+      id: contract.id,
+      name: contract.name,
+      expiration_date: new Date(maturity.expirationDate).toISOString(),
+    }
+  }
+
   async placeOso(input: {
     connection: TradingConnection
     intent: OrderIntent
@@ -334,12 +390,27 @@ export class TradovateFetchClient implements TradovateRestClient {
     }
 
     const orders = await this.listOrders(input.connection)
+    const entry = orders.find((order) => order.clOrdId === tradovateClientOrderId(input.command))
+    if (
+      !entry
+      || entry.symbol !== input.intent.instrument.symbol
+      || entry.accountId !== credential.account_id
+    ) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Tradovate could not prove the management target belongs to this trade.',
+      )
+    }
+    const ownedOrderIds = new Set([
+      entry.id,
+      ...orders.filter((order) => order.parentId === entry.id).map((order) => order.id),
+    ])
     if (payload.operation === 'cancel') {
       const targets = payload.provider_order_ids.map((value) => parsePositiveProviderId(value))
-      if (!targets.every((id) => orders.some((order) => order.id === id))) {
+      if (!targets.every((id) => ownedOrderIds.has(id))) {
         throw new ExecutionGatewayError(
           'ACCOUNT_MISMATCH',
-          'Tradovate cancel target is not owned by the configured account.',
+          'Tradovate cancel target is not owned by this trade.',
         )
       }
       const providerCommandIds: number[] = []
@@ -374,10 +445,10 @@ export class TradovateFetchClient implements TradovateRestClient {
     }
 
     const orderId = parsePositiveProviderId(payload.provider_order_id)
-    if (!orders.some((order) => order.id === orderId)) {
+    if (!ownedOrderIds.has(orderId)) {
       throw new ExecutionGatewayError(
         'ACCOUNT_MISMATCH',
-        'Tradovate modify target is not owned by the configured account.',
+        'Tradovate modify target is not owned by this trade.',
       )
     }
     const result = await this.requestJson<{
@@ -598,6 +669,29 @@ export class TradovateApiAdapter implements ExecutionAdapter {
     intent: OrderIntent
     command: ExecutionCommand
   }) {
+    const contract = await this.client.resolveContract(
+      input.connection,
+      input.intent.instrument.symbol,
+    )
+    if (
+      contract.name !== input.intent.instrument.symbol
+      || !Number.isSafeInteger(contract.id)
+      || contract.id <= 0
+    ) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Tradovate did not resolve the exact canonical futures contract.',
+      )
+    }
+    if (
+      !Number.isFinite(Date.parse(contract.expiration_date))
+      || Date.parse(contract.expiration_date) <= Date.parse(this.now())
+    ) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        'Tradovate resolved a futures contract that is already expired.',
+      )
+    }
     const body = buildTradovateOsoBody(input.connection, input.intent, input.command)
     let response
     try {
@@ -708,6 +802,9 @@ export class TradovateApiAdapter implements ExecutionAdapter {
     const activeStops = activeProtection.filter(
       (order) => order.orderType === 'Stop' || order.orderType === 'StopLimit',
     )
+    const activeContractOrders = orders.filter((order) => (
+      order.contractId === entry.contractId && isWorking(order.ordStatus)
+    ))
     const protectionVerified = (
       openQuantity > 0
       && activeStops.length === 1
@@ -718,18 +815,38 @@ export class TradovateApiAdapter implements ExecutionAdapter {
       )
     )
     if (input.managementCommand?.payload.operation === 'flatten') {
+      const flat = !position || position.netPos === 0
+      const safeToClose = flat && activeContractOrders.length === 0
       return reconciliation(input, {
-        status: !position || position.netPos === 0 ? 'closed' : 'closing',
+        status: safeToClose ? 'closed' : flat ? 'divergent' : 'closing',
         providerOrderIds,
         filledQuantity,
         openQuantity,
         averageFillPrice: entry.avgPrice,
         protectionVerified: false,
         protectionOrders: [],
-        reason: !position || position.netPos === 0
-          ? 'Tradovate reports the position flat after liquidation.'
+        reason: safeToClose
+          ? 'Tradovate reports the position flat with no working contract order.'
+          : flat
+            ? 'Tradovate reports the position flat but a working contract order could reopen it.'
           : 'Tradovate liquidation is acknowledged but the position is not yet flat.',
       }, this.now())
+    }
+    if (input.managementCommand?.payload.operation === 'modify') {
+      const requested = input.managementCommand.payload
+      const target = orders.find((order) => String(order.id) === requested.provider_order_id)
+      if (!target || !tradovateOrderMatchesModification(target, requested)) {
+        return reconciliation(input, {
+          status: 'divergent',
+          providerOrderIds,
+          filledQuantity,
+          openQuantity,
+          averageFillPrice: entry.avgPrice,
+          protectionVerified: false,
+          protectionOrders,
+          reason: 'Tradovate has not verified the exact requested order modification.',
+        }, this.now())
+      }
     }
     if (
       input.managementCommand?.payload.operation === 'cancel'
@@ -795,6 +912,18 @@ export class TradovateApiAdapter implements ExecutionAdapter {
       }, this.now())
     }
     if (!position || position.netPos === 0) {
+      if (activeContractOrders.length > 0) {
+        return reconciliation(input, {
+          status: 'divergent',
+          providerOrderIds,
+          filledQuantity,
+          openQuantity: 0,
+          averageFillPrice: entry.avgPrice,
+          protectionVerified: false,
+          protectionOrders,
+          reason: 'Tradovate reports the position flat but a working contract order could reopen it.',
+        }, this.now())
+      }
       return reconciliation(input, {
         status: 'closed',
         providerOrderIds,
@@ -998,6 +1127,22 @@ const normalizeTimeInForce = (value: string | undefined): 'day' | 'gtc' => {
   )
 }
 
+const tradovateOrderMatchesModification = (
+  order: TradovateOrder,
+  requested: Extract<ExecutionManagementCommand['payload'], { operation: 'modify' }>,
+): boolean => {
+  if (!isWorking(order.ordStatus)) return false
+  if (Math.trunc(order.orderQty) !== requested.quantity) return false
+  if (normalizedOrderType(order.orderType) !== requested.order_type) return false
+  if (normalizeTimeInForce(order.timeInForce) !== requested.time_in_force) return false
+  if (requested.limit_price !== undefined && order.price !== Number(requested.limit_price)) return false
+  if (
+    requested.stop_price !== undefined
+    && (order.stopPrice ?? order.price) !== Number(requested.stop_price)
+  ) return false
+  return true
+}
+
 const latestBy = <T extends { id: number }>(
   values: T[],
   key: (value: T) => number,
@@ -1083,17 +1228,22 @@ export const buildTradovateAccountSnapshot = (input: {
   canTrade: boolean
   positions?: ExecutionAccountSnapshot['positions']
   workingOrders?: ExecutionAccountSnapshot['working_orders']
-}): ExecutionAccountSnapshot => executionAccountSnapshotSchema.parse({
-  account_snapshot_schema_version: EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
-  account_snapshot_id: `tradovate-snapshot-${Date.parse(input.capturedAt)}`,
-  connection_id: input.connection.connection_id,
-  account_ref: input.connection.account_ref,
-  environment: input.connection.environment,
-  captured_at: input.capturedAt,
-  can_trade: input.canTrade,
-  balance: String(input.balance),
-  realized_pnl: String(input.realizedPnl),
-  open_pnl: String(input.openPnl),
-  positions: input.positions ?? [],
-  working_orders: input.workingOrders ?? [],
-})
+}): ExecutionAccountSnapshot => {
+  const providerState = {
+    connection_id: input.connection.connection_id,
+    account_ref: input.connection.account_ref,
+    environment: input.connection.environment,
+    can_trade: input.canTrade,
+    balance: String(input.balance),
+    realized_pnl: String(input.realizedPnl),
+    open_pnl: String(input.openPnl),
+    positions: input.positions ?? [],
+    working_orders: input.workingOrders ?? [],
+  }
+  return executionAccountSnapshotSchema.parse({
+    account_snapshot_schema_version: EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
+    account_snapshot_id: `tradovate-snapshot-${sha256(providerState).slice(0, 32)}`,
+    ...providerState,
+    captured_at: input.capturedAt,
+  })
+}

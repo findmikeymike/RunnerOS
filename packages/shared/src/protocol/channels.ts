@@ -261,6 +261,7 @@ export const RPC_CHANNELS = {
     CHANGED: 'sources:changed',
     GET_PERMISSIONS: 'sources:getPermissions',
     GET_MCP_TOOLS: 'sources:getMcpTools',
+    GET_DISCOTRADER_SIGNAL_SOURCES: 'sources:getDiscoTraderSignalSources',
     /** Every source defined globally at ~/.agents/sources/. */
     LIST_GLOBAL: 'sources:listGlobal',
     /** Slugs activated in a workspace's `.global-sources.json`. */

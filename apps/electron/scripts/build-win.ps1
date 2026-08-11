@@ -232,7 +232,7 @@ Write-Host "Building Electron app..."
 # Build main process with OAuth credentials
 Write-Host "  Building main process..."
 $MainArgs = @(
-    "apps/electron/src/main/index.ts",
+    "apps/electron/src/main/bootstrap.ts",
     "--bundle",
     "--platform=node",
     "--format=cjs",

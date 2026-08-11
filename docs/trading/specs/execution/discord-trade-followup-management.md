@@ -301,7 +301,7 @@ The Trading workspace now has an enabled `WebhookReceive` matcher for
 DiscoTrader's `DT_RUNNER_HMAC_SECRET`. The donor sends `kind: "management"`
 plus the full immutable management message to:
 
-`http://127.0.0.1:9101/v1/triggers/<trading-workspace-id>/discotrader-management`
+`http://127.0.0.1:9201/v1/triggers/<trading-workspace-id>/discotrader-management`
 
 The end-to-end local observe-only path is now runtime-proven: the donor sender,
 installed matcher, and running Electron receiver accepted live local messages,

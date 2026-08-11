@@ -334,7 +334,7 @@ export function SourcesListPanel({
                         <SourceMenu
                           sourceSlug={source.config.slug}
                           sourceName={source.config.name}
-                          onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
+                          onOpenInNewWindow={() => window.electronAPI.openUrl(`tradegod://sources/source/${source.config.slug}?window=focused`)}
                           onShowInFinder={source.folderPath ? () => window.electronAPI.showInFolder(source.folderPath) : undefined}
                           onDelete={() => onDeleteSource(source.config.slug)}
                           canDelete={isWorkspaceSource}
@@ -434,7 +434,7 @@ export function SourcesListPanel({
             <SourceMenu
               sourceSlug={source.config.slug}
               sourceName={source.config.name}
-              onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
+              onOpenInNewWindow={() => window.electronAPI.openUrl(`tradegod://sources/source/${source.config.slug}?window=focused`)}
               onShowInFinder={source.folderPath ? () => window.electronAPI.showInFolder(source.folderPath) : undefined}
               onDelete={() => onDeleteSource(source.config.slug)}
               canDelete={isWorkspaceSource}

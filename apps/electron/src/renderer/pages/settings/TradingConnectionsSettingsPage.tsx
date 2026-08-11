@@ -17,6 +17,10 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
+  isSelectableSignalSource,
+  type DiscoTraderSignalSourceCatalog,
+} from '@/features/trading/discotrader-signal-sources'
+import {
   TRADING_CONNECTION_SCHEMA_VERSION,
   type ExecutionEnvironment,
   type ExecutionTransportPreference,
@@ -64,6 +68,16 @@ type SignalDraft = {
   connectionId: string
 }
 
+type SignalRoute = Awaited<ReturnType<typeof window.electronAPI.listTradingSignalRoutes>>[number]
+
+interface TradingConnectionsSettingsPageProps {
+  embedded?: boolean
+  onConnectionsChanged?: () => void
+  signalSourceCatalog?: DiscoTraderSignalSourceCatalog | null
+  signalSourceCatalogError?: string | null
+  onRefreshSignalSources?: () => void
+}
+
 const EMPTY_SIGNAL_DRAFT: SignalDraft = {
   displayName: '', serverId: '', channelId: '', traderAuthorId: '', connectionId: '',
 }
@@ -78,15 +92,22 @@ const EMPTY_DRAFT: Draft = {
   apiSecret: '',
 }
 
-export default function TradingConnectionsSettingsPage() {
+export default function TradingConnectionsSettingsPage({
+  embedded = false,
+  onConnectionsChanged,
+  signalSourceCatalog = null,
+  signalSourceCatalogError = null,
+  onRefreshSignalSources,
+}: TradingConnectionsSettingsPageProps = {}) {
   const [connections, setConnections] = React.useState<
     Awaited<ReturnType<typeof window.electronAPI.listTradingConnections>>
   >([])
   const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
   const [editing, setEditing] = React.useState(false)
-  const [routes, setRoutes] = React.useState<Awaited<ReturnType<typeof window.electronAPI.listTradingSignalRoutes>>>([])
+  const [routes, setRoutes] = React.useState<SignalRoute[]>([])
   const [signalDraft, setSignalDraft] = React.useState<SignalDraft>(EMPTY_SIGNAL_DRAFT)
   const [editingSignal, setEditingSignal] = React.useState(false)
+  const [pendingReassignment, setPendingReassignment] = React.useState<SignalRoute | null>(null)
   const [busy, setBusy] = React.useState<string | null>('load')
 
   const load = React.useCallback(async () => {
@@ -168,6 +189,7 @@ export default function TradingConnectionsSettingsPage() {
       setDraft(EMPTY_DRAFT)
       setEditing(false)
       await load()
+      onConnectionsChanged?.()
       if (transport === 'browser') {
         await window.electronAPI.openTradingConnectionLogin(saved.connection.connection_id)
         toast.success('Account saved. Sign in, then return here and confirm the session.')
@@ -186,6 +208,7 @@ export default function TradingConnectionsSettingsPage() {
     try {
       await window.electronAPI.removeTradingConnection(connectionId)
       await load()
+      onConnectionsChanged?.()
       toast.success('Trading connection removed')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not remove trading connection')
@@ -211,7 +234,10 @@ export default function TradingConnectionsSettingsPage() {
     try {
       await window.electronAPI.confirmTradingConnectionLogin(connectionId)
       await load()
-      toast.success('Browser session confirmed and saved')
+      onConnectionsChanged?.()
+      toast.success('Provider page session saved', {
+        description: 'This confirms the isolated browser origin only. Execution remains locked pending account identity and paper certification.',
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not confirm trading login')
     } finally {
@@ -219,7 +245,7 @@ export default function TradingConnectionsSettingsPage() {
     }
   }
 
-  const saveSignalRoute = async () => {
+  const saveSignalRoute = async (expectedPreviousConnectionId?: string) => {
     if (!signalDraft.displayName.trim() || !signalDraft.connectionId
       || !/^\d{1,25}$/.test(signalDraft.serverId)
       || !/^\d{1,25}$/.test(signalDraft.channelId)
@@ -227,11 +253,18 @@ export default function TradingConnectionsSettingsPage() {
       toast.error('Name, target account, and immutable Discord server, channel, and trader IDs are required')
       return
     }
+    const existing = findSignalRouteByIdentity(routes, signalDraft)
+    if (existing && existing.connection_id !== signalDraft.connectionId
+      && expectedPreviousConnectionId !== existing.connection_id) {
+      setPendingReassignment(existing)
+      return
+    }
     setBusy('save-signal')
     try {
       const now = new Date().toISOString()
       await window.electronAPI.saveTradingSignalRoute({
-        route_id: `discord-${signalDraft.serverId}-${signalDraft.channelId}-${signalDraft.traderAuthorId}`,
+        route_id: existing?.route_id
+          ?? `discord-${signalDraft.serverId}-${signalDraft.channelId}-${signalDraft.traderAuthorId}`,
         display_name: signalDraft.displayName.trim(),
         source_type: 'discord',
         server_id: signalDraft.serverId,
@@ -239,13 +272,16 @@ export default function TradingConnectionsSettingsPage() {
         trader_author_id: signalDraft.traderAuthorId,
         connection_id: signalDraft.connectionId,
         enabled: true,
-        created_at: now,
+        created_at: existing?.created_at ?? now,
         updated_at: now,
-      })
+      }, expectedPreviousConnectionId)
       setSignalDraft(EMPTY_SIGNAL_DRAFT)
       setEditingSignal(false)
+      setPendingReassignment(null)
       await load()
-      toast.success('Discord trader routed to one exact account')
+      toast.success(expectedPreviousConnectionId
+        ? 'Discord source reassigned to the selected account'
+        : 'Discord trader routed to one exact account')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not save Discord route')
     } finally { setBusy(null) }
@@ -256,32 +292,38 @@ export default function TradingConnectionsSettingsPage() {
     try {
       await window.electronAPI.removeTradingSignalRoute(routeId)
       await load()
+      toast.success('Discord route removed')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not remove Discord route')
     } finally { setBusy(null) }
   }
 
-  const signedIn = connections.filter((status) => status.browser_login_confirmed).length
-  const ready = connections.filter((status) => status.connection.state === 'ready').length
+  const originConfirmed = connections.filter((status) => status.browser_login_confirmed).length
+  const ready = connections.filter(isExecutionReady).length
+  const connectionIds = new Set(connections.map(({ connection }) => connection.connection_id))
+  const orphanedRoutes = routes.filter((route) => !connectionIds.has(route.connection_id))
 
-  return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <PanelHeader
-        title="Trading Connections"
-        actions={(
+  const body = (
+    <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
+      {embedded && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Accounts & Discord routing</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Connect each prop account, then choose exactly which Discord traders feed it.</p>
+          </div>
           <Button size="sm" onClick={() => setEditing(true)}>
             <Plus className="mr-1.5 size-4" />
-            Add connection
+            Add account
           </Button>
-        )}
-      />
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
+        </div>
+      )}
           <SettingsSection
             title="Execution custody"
             description="Secrets stay in the encrypted desktop vault. Browser sessions use a trading-only partition."
           >
             <div className="grid gap-3 md:grid-cols-4">
               <Guardrail label="Accounts" value={String(connections.length)} />
-              <Guardrail label="Browser sessions" value={`${signedIn} confirmed`} />
+              <Guardrail label="Browser sessions" value={`${originConfirmed} provider pages saved`} />
               <Guardrail label="Execution ready" value={String(ready)} />
               <Guardrail label="Default safety" value="Locked" />
             </div>
@@ -399,11 +441,15 @@ export default function TradingConnectionsSettingsPage() {
                           <Badge>{status.connection.transport_preference === 'browser' ? 'Browser' : 'API'}</Badge>
                           <StatusBadge positive={status.browser_login_confirmed || status.credential_configured}>
                             {status.connection.transport_preference === 'browser'
-                              ? status.browser_login_confirmed ? 'Login confirmed' : 'Sign-in needed'
+                              ? status.browser_login_confirmed ? 'Provider page saved' : 'Sign-in needed'
                               : status.credential_configured ? 'Credential saved' : 'Credential needed'}
                           </StatusBadge>
-                          <StatusBadge positive={status.connection.state === 'ready'}>
-                            {status.connection.state === 'ready' ? 'Execution ready' : 'Execution locked'}
+                          <StatusBadge positive={isExecutionReady(status)}>
+                            {isExecutionReady(status)
+                              ? 'Execution ready'
+                              : status.connection.state === 'ready'
+                                ? 'Ready · disabled'
+                                : 'Execution locked'}
                           </StatusBadge>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
@@ -432,7 +478,7 @@ export default function TradingConnectionsSettingsPage() {
                                 onClick={() => void confirmLogin(status.connection.connection_id)}
                               >
                                 <CheckCircle2 className="mr-1.5 size-3.5" />
-                                I’m signed in
+                                Save provider page
                               </Button>
                             )}
                           </>
@@ -441,7 +487,11 @@ export default function TradingConnectionsSettingsPage() {
                           variant="ghost"
                           size="icon"
                           aria-label={`Remove ${status.connection.display_name}`}
-                          disabled={busy === `remove:${status.connection.connection_id}`}
+                          title={routes.some((route) => route.connection_id === status.connection.connection_id)
+                            ? 'Remove Discord sources first'
+                            : 'Remove account'}
+                          disabled={busy === `remove:${status.connection.connection_id}`
+                            || routes.some((route) => route.connection_id === status.connection.connection_id)}
                           onClick={() => void remove(status.connection.connection_id)}
                         >
                           <Trash2 className="size-4" />
@@ -449,6 +499,42 @@ export default function TradingConnectionsSettingsPage() {
                       </div>
                     </div>
                     <CertificationMatrix evidence={status.certification_evidence[0]} />
+                    <AccountDiscordRoutes
+                      connectionId={status.connection.connection_id}
+                      routes={routes}
+                      draft={signalDraft}
+                      editing={editingSignal && signalDraft.connectionId === status.connection.connection_id}
+                      addDisabled={editingSignal}
+                      pendingReassignment={pendingReassignment}
+                      previousAccountName={pendingReassignment
+                        ? connections.find(({ connection }) => (
+                            connection.connection_id === pendingReassignment.connection_id
+                          ))?.connection.display_name ?? pendingReassignment.connection_id
+                        : null}
+                      signalSourceCatalog={signalSourceCatalog}
+                      signalSourceCatalogError={signalSourceCatalogError}
+                      onRefreshSignalSources={onRefreshSignalSources}
+                      busy={busy}
+                      onAdd={() => {
+                        setSignalDraft({ ...EMPTY_SIGNAL_DRAFT, connectionId: status.connection.connection_id })
+                        setPendingReassignment(null)
+                        setEditingSignal(true)
+                      }}
+                      onDraftChange={(nextDraft) => {
+                        setSignalDraft(nextDraft)
+                        setPendingReassignment(null)
+                      }}
+                      onCancel={() => {
+                        setSignalDraft(EMPTY_SIGNAL_DRAFT)
+                        setEditingSignal(false)
+                        setPendingReassignment(null)
+                      }}
+                      onSave={() => void saveSignalRoute()}
+                      onConfirmReassignment={() => {
+                        if (pendingReassignment) void saveSignalRoute(pendingReassignment.connection_id)
+                      }}
+                      onRemove={(routeId) => void removeSignalRoute(routeId)}
+                    />
                   </SettingsCardContent>
                 </SettingsCard>
               ))}
@@ -460,41 +546,34 @@ export default function TradingConnectionsSettingsPage() {
             </div>
           </SettingsSection>
 
-          <SettingsSection
-            title="Discord signal routes"
-            description="Routes messages DiscoTrader already monitors to one exact prop account. Display names never authorize a trade; immutable Discord IDs do."
-          >
-            <div className="mb-3 flex justify-end">
-              <Button size="sm" variant="outline" onClick={() => setEditingSignal(true)} disabled={!connections.length}>
-                <Plus className="mr-1.5 size-4" /> Add Discord route
-              </Button>
-            </div>
-            {editingSignal && (
-              <SettingsCard>
-                <SettingsCardContent className="grid gap-4 p-5 md:grid-cols-2">
-                  <Field label="Route name"><input className={inputClass} value={signalDraft.displayName} onChange={(e) => setSignalDraft({ ...signalDraft, displayName: e.target.value })} placeholder="Uncle Mike — NQ room" /></Field>
-                  <Field label="Target prop account">
-                    <select className={inputClass} value={signalDraft.connectionId} onChange={(e) => setSignalDraft({ ...signalDraft, connectionId: e.target.value })}>
-                      <option value="">Choose exact account</option>
-                      {connections.map(({ connection }) => <option key={connection.connection_id} value={connection.connection_id}>{connection.display_name} · {connection.account_display.label}</option>)}
-                    </select>
-                  </Field>
-                  <Field label="Discord server ID"><input className={inputClass} value={signalDraft.serverId} onChange={(e) => setSignalDraft({ ...signalDraft, serverId: e.target.value.trim() })} placeholder="Immutable server snowflake" /></Field>
-                  <Field label="Discord channel ID"><input className={inputClass} value={signalDraft.channelId} onChange={(e) => setSignalDraft({ ...signalDraft, channelId: e.target.value.trim() })} placeholder="Immutable channel snowflake" /></Field>
-                  <Field label="Trader user ID" className="md:col-span-2"><input className={inputClass} value={signalDraft.traderAuthorId} onChange={(e) => setSignalDraft({ ...signalDraft, traderAuthorId: e.target.value.trim() })} placeholder="Immutable Discord user snowflake" /></Field>
-                  <div className="flex justify-end gap-2 md:col-span-2"><Button variant="ghost" onClick={() => setEditingSignal(false)}>Cancel</Button><Button onClick={() => void saveSignalRoute()} disabled={busy === 'save-signal'}>Save exact route</Button></div>
-                </SettingsCardContent>
-              </SettingsCard>
-            )}
-            <div className="mt-3 space-y-2">
-              {routes.map((route) => {
-                const target = connections.find(({ connection }) => connection.connection_id === route.connection_id)?.connection
-                return <SettingsCard key={route.route_id}><SettingsCardContent className="flex items-center gap-3 p-4"><RadioTower className="size-4 text-cyan-300" /><div className="min-w-0 flex-1"><p className="text-sm font-medium">{route.display_name}</p><p className="mt-1 text-[11px] text-muted-foreground">Discord {route.server_id}/{route.channel_id} · trader {route.trader_author_id} → {target ? `${target.display_name} (${target.account_display.label})` : 'Missing account — blocked'}</p></div><StatusBadge positive={Boolean(target) && route.enabled}>{target && route.enabled ? 'Routed' : 'Blocked'}</StatusBadge><Button variant="ghost" size="icon" aria-label={`Remove ${route.display_name}`} onClick={() => void removeSignalRoute(route.route_id)}><Trash2 className="size-4" /></Button></SettingsCardContent></SettingsCard>
-              })}
-              {!routes.length && <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted-foreground">No Discord routes yet. Add one per monitored trader/channel/account path.</div>}
-            </div>
-            <p className="mt-3 text-[11px] leading-5 text-muted-foreground">Monitoring enrollment still lives in the DiscoTrader Chrome extension and daemon allowlist. This registry controls the downstream account route and fails closed if the source identity does not match.</p>
-          </SettingsSection>
+          {orphanedRoutes.length > 0 && (
+            <SettingsSection
+              title="Orphaned Discord routes"
+              description="These legacy routes point to accounts that no longer exist. They cannot execute."
+            >
+              <div className="space-y-2 rounded-xl border border-amber-400/20 bg-amber-400/[0.04] p-4">
+                {orphanedRoutes.map((route) => (
+                  <div key={route.route_id} className="flex items-center gap-3 rounded-md border border-white/10 bg-black/10 px-3 py-2.5">
+                    <RadioTower className="size-3.5 text-amber-300" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-medium">{route.display_name}</p>
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">Missing account {route.connection_id}</p>
+                    </div>
+                    <StatusBadge positive={false}>Blocked</StatusBadge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remove orphaned ${route.display_name}`}
+                      disabled={busy === `remove-route:${route.route_id}`}
+                      onClick={() => void removeSignalRoute(route.route_id)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </SettingsSection>
+          )}
 
           <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-4 py-3 text-xs text-emerald-200/80">
             <ShieldCheck className="size-4 shrink-0" />
@@ -502,12 +581,173 @@ export default function TradingConnectionsSettingsPage() {
           </div>
           <div className="flex items-start gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] px-4 py-3 text-xs text-cyan-100/80">
             <RadioTower className="mt-0.5 size-4 shrink-0" />
-            <span>Discord channels and traders are signal sources, not broker accounts. Configure and monitor them in Futures → DiscoTrader; each executable route must resolve to one exact account.</span>
+            <span>Discord channels and traders are signal sources, not broker accounts. Assign each monitored source to one exact account here.</span>
           </div>
-        </div>
-      </ScrollArea>
     </div>
   )
+
+  if (embedded) return body
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-background">
+      <PanelHeader
+        title="Trading Connections"
+        actions={(
+          <Button size="sm" onClick={() => setEditing(true)}>
+            <Plus className="mr-1.5 size-4" />
+            Add account
+          </Button>
+        )}
+      />
+      <ScrollArea className="min-h-0 flex-1">{body}</ScrollArea>
+    </div>
+  )
+}
+
+function AccountDiscordRoutes({
+  connectionId,
+  routes,
+  draft,
+  editing,
+  addDisabled,
+  pendingReassignment,
+  previousAccountName,
+  signalSourceCatalog,
+  signalSourceCatalogError,
+  onRefreshSignalSources,
+  busy,
+  onAdd,
+  onDraftChange,
+  onCancel,
+  onSave,
+  onConfirmReassignment,
+  onRemove,
+}: {
+  connectionId: string
+  routes: SignalRoute[]
+  draft: SignalDraft
+  editing: boolean
+  addDisabled: boolean
+  pendingReassignment: SignalRoute | null
+  previousAccountName: string | null
+  signalSourceCatalog: DiscoTraderSignalSourceCatalog | null
+  signalSourceCatalogError: string | null
+  onRefreshSignalSources?: () => void
+  busy: string | null
+  onAdd: () => void
+  onDraftChange: (draft: SignalDraft) => void
+  onCancel: () => void
+  onSave: () => void
+  onConfirmReassignment: () => void
+  onRemove: (routeId: string) => void
+}) {
+  const accountRoutes = routes.filter((route) => route.connection_id === connectionId)
+  const selectableSources = signalSourceCatalog?.observed.sources.filter(isSelectableSignalSource) ?? []
+  return (
+    <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.025] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium">Discord sources</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">Only these exact channel + trader matches can route into this account.</p>
+        </div>
+        <Button size="sm" variant="outline" onClick={onAdd} disabled={addDisabled}>
+          <Plus className="mr-1.5 size-3.5" /> Add source
+        </Button>
+      </div>
+
+      {editing && (
+        <div className="mt-3 grid gap-3 rounded-lg border border-white/10 bg-black/10 p-3 md:grid-cols-2">
+          <div className="md:col-span-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-medium text-muted-foreground">DiscoTrader source catalog</p>
+              {onRefreshSignalSources && (
+                <Button variant="ghost" size="sm" onClick={onRefreshSignalSources}>Refresh</Button>
+              )}
+            </div>
+            <select
+              className={inputClass}
+              value=""
+              disabled={!selectableSources.length}
+              onChange={(event) => {
+                const source = selectableSources.find((candidate) => candidate.sourceId === event.target.value)
+                if (!source?.serverId || !source.trader.discordUserId) return
+                onDraftChange({
+                  ...draft,
+                  displayName: draft.displayName || `${source.trader.displayName} · ${source.channelId}`,
+                  serverId: source.serverId,
+                  channelId: source.channelId,
+                  traderAuthorId: source.trader.discordUserId,
+                })
+              }}
+            >
+              <option value="">{selectableSources.length ? 'Choose a configured observed trader…' : 'No selectable configured traders found'}</option>
+              {selectableSources.map((source) => (
+                <option key={source.sourceId} value={source.sourceId}>
+                  {source.trader.displayName} · channel {source.channelId}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-[10px] text-muted-foreground">
+              {signalSourceCatalogError
+                ? `Catalog unavailable: ${signalSourceCatalogError}. You can still enter immutable IDs below.`
+                : signalSourceCatalog
+                  ? `${signalSourceCatalog.observed.sources.length} observed · ${selectableSources.length} configured for daemon routing. Observation does not prove a Discord tab is currently open.`
+                  : 'Connect and start DiscoTrader to load its monitored channel catalog. Manual IDs remain available.'}
+            </p>
+          </div>
+          <Field label="Route name"><input className={inputClass} value={draft.displayName} onChange={(event) => onDraftChange({ ...draft, displayName: event.target.value })} placeholder="NQ alerts — Uncle Mike" /></Field>
+          <Field label="Discord server ID"><input className={inputClass} value={draft.serverId} onChange={(event) => onDraftChange({ ...draft, serverId: event.target.value.trim() })} placeholder="Immutable server ID" /></Field>
+          <Field label="Discord channel ID"><input className={inputClass} value={draft.channelId} onChange={(event) => onDraftChange({ ...draft, channelId: event.target.value.trim() })} placeholder="Immutable channel ID" /></Field>
+          <Field label="Trader user ID"><input className={inputClass} value={draft.traderAuthorId} onChange={(event) => onDraftChange({ ...draft, traderAuthorId: event.target.value.trim() })} placeholder="Immutable Discord user ID" /></Field>
+          {pendingReassignment && (
+            <div className="rounded-lg border border-amber-400/25 bg-amber-400/[0.06] p-3 text-xs text-amber-100 md:col-span-2">
+              <p className="font-medium">Confirm account reassignment</p>
+              <p className="mt-1 text-amber-100/70">
+                This source currently routes to {previousAccountName}. Saving will move it here; it will never feed both accounts.
+              </p>
+              <div className="mt-3 flex justify-end gap-2">
+                <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+                <Button onClick={onConfirmReassignment} disabled={busy === 'save-signal'}>Confirm reassignment</Button>
+              </div>
+            </div>
+          )}
+          {!pendingReassignment && (
+            <div className="flex justify-end gap-2 md:col-span-2"><Button variant="ghost" onClick={onCancel}>Cancel</Button><Button onClick={onSave} disabled={busy === 'save-signal'}>Save source</Button></div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-3 space-y-2">
+        {accountRoutes.map((route) => (
+          <div key={route.route_id} className="flex items-center gap-3 rounded-md border border-white/10 bg-black/10 px-3 py-2.5">
+            <RadioTower className="size-3.5 text-cyan-300" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium">{route.display_name}</p>
+              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">Server {route.server_id} · channel {route.channel_id} · trader {route.trader_author_id}</p>
+            </div>
+            <StatusBadge positive={route.enabled}>{route.enabled ? 'Routed' : 'Off'}</StatusBadge>
+            <Button variant="ghost" size="icon" aria-label={`Remove ${route.display_name}`} onClick={() => onRemove(route.route_id)}><Trash2 className="size-3.5" /></Button>
+          </div>
+        ))}
+        {!accountRoutes.length && !editing && <p className="rounded-md border border-dashed border-white/10 px-3 py-4 text-center text-[11px] text-muted-foreground">No Discord source assigned to this account.</p>}
+      </div>
+    </div>
+  )
+}
+
+export function isExecutionReady(
+  status: Awaited<ReturnType<typeof window.electronAPI.listTradingConnections>>[number],
+): boolean {
+  return status.connection.enabled && status.connection.state === 'ready'
+}
+
+export function findSignalRouteByIdentity(
+  routes: SignalRoute[],
+  draft: Pick<SignalDraft, 'serverId' | 'channelId' | 'traderAuthorId'>,
+): SignalRoute | undefined {
+  return routes.find((route) => route.server_id === draft.serverId
+    && route.channel_id === draft.channelId
+    && route.trader_author_id === draft.traderAuthorId)
 }
 
 function CertificationMatrix(props: {

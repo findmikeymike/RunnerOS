@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -22,10 +21,12 @@ export interface DiscoTraderInstrumentRoute {
   exchange: string
   expiry?: string
   tick_size: string
+  point_value_usd: string
 }
 
 export interface DiscoTraderIntentRoute {
   connection_id: string
+  source_id: string
   instrument: DiscoTraderInstrumentRoute
   valid_for_ms: number
 }
@@ -71,6 +72,7 @@ export class FileDiscoTraderIntentSource {
       )
     }
     const artifact = convertDiscoTraderTicket(payload.ticket, route, this.now())
+    await this.bindTicketIdentity(artifact)
     const existing = await this.persist(artifact)
     const durableArtifact = existing ?? artifact
     return {
@@ -107,6 +109,39 @@ export class FileDiscoTraderIntentSource {
         )
       }
       return current
+    }
+  }
+
+  private async bindTicketIdentity(artifact: DiscoTraderIntentSourceArtifact): Promise<void> {
+    await mkdir(this.directory, { recursive: true })
+    const destination = path.join(
+      this.directory,
+      `${hash(artifact.source_ticket_id)}.ticket-binding.json`,
+    )
+    const binding = {
+      source_ticket_id: artifact.source_ticket_id,
+      source_message_id: artifact.source_message_id,
+      intent_id: artifact.intent.intent_id,
+    }
+    try {
+      await writeFile(destination, `${JSON.stringify(binding, null, 2)}\n`, {
+        encoding: 'utf8',
+        flag: 'wx',
+        mode: 0o600,
+      })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      const current = JSON.parse(await readFile(destination, 'utf8')) as Partial<typeof binding>
+      if (
+        current.source_ticket_id !== binding.source_ticket_id
+        || current.source_message_id !== binding.source_message_id
+        || current.intent_id !== binding.intent_id
+      ) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'DiscoTrader ticket identity is already bound to another Discord source event.',
+        )
+      }
     }
   }
 
@@ -162,13 +197,13 @@ export const convertDiscoTraderTicket = (
   receivedAt: string,
 ): DiscoTraderIntentSourceArtifact => {
   const ticket = discoTraderTicketSchema.parse(input)
-  assertDiscoTraderTicketCanEnterGateway(ticket, route)
   if (!Number.isFinite(Date.parse(receivedAt))) {
     throw new ExecutionGatewayError(
       'CAPABILITY_UNAVAILABLE',
       'DiscoTrader source receipt time is invalid.',
     )
   }
+  assertDiscoTraderTicketCanEnterGateway(ticket, route, receivedAt)
   const tickSize = positiveDecimal(route.instrument.tick_size, 'instrument tick size')
   const validForMs = route.valid_for_ms
   if (!Number.isSafeInteger(validForMs) || validForMs <= 0 || validForMs > 5 * 60_000) {
@@ -192,10 +227,14 @@ export const convertDiscoTraderTicket = (
   const target = ticket.targets[0]
   const unsigned: Omit<OrderIntent, 'content_checksum'> = {
     intent_schema_version: ORDER_INTENT_SCHEMA_VERSION,
-    intent_id: `intent-discotrader-${hash(ticket.id).slice(0, 32)}`,
+    intent_id: `intent-discotrader-${hash({
+      source_id: route.source_id,
+      message_id: ticket.provenance.messageId,
+      author_id: ticket.provenance.authorId,
+    }).slice(0, 32)}`,
     source: {
       type: 'discord',
-      source_id: ticket.provenance.messageId,
+      source_id: route.source_id,
       author_id: ticket.provenance.authorId!,
     },
     connection_id: route.connection_id,
@@ -204,6 +243,8 @@ export const convertDiscoTraderTicket = (
       symbol: route.instrument.symbol,
       exchange: route.instrument.exchange,
       ...(route.instrument.expiry ? { expiry: route.instrument.expiry } : {}),
+      tick_size: route.instrument.tick_size,
+      point_value_usd: route.instrument.point_value_usd,
     },
     side: ticket.side === 'long' ? 'buy' : 'sell',
     quantity: ticket.contracts,
@@ -221,9 +262,10 @@ export const convertDiscoTraderTicket = (
             },
           }),
     },
+    max_loss_usd: String(ticket.riskUsd),
     time_in_force: 'day',
-    created_at: ticket.createdAt,
-    valid_until: new Date(Date.parse(ticket.createdAt) + validForMs).toISOString(),
+    created_at: ticket.provenance.postedAt!,
+    valid_until: new Date(Date.parse(ticket.provenance.postedAt!) + validForMs).toISOString(),
   }
   const intent = orderIntentSchema.parse({
     ...unsigned,
@@ -249,6 +291,7 @@ export const convertDiscoTraderTicket = (
 const assertDiscoTraderTicketCanEnterGateway = (
   ticket: DiscoTraderTicket,
   route: DiscoTraderIntentRoute,
+  receivedAt: string,
 ): void => {
   if (ticket.mode === 'armed-live') {
     throw new ExecutionGatewayError(
@@ -280,6 +323,35 @@ const assertDiscoTraderTicketCanEnterGateway = (
       'DiscoTrader ticket lacks an immutable Discord author ID.',
     )
   }
+  if (!ticket.provenance.postedAt) {
+    throw new ExecutionGatewayError(
+      'INTENT_EXPIRED',
+      'Executable DiscoTrader tickets require the immutable Discord posted timestamp.',
+    )
+  }
+  const postedAt = Date.parse(ticket.provenance.postedAt)
+  const observedAt = Date.parse(ticket.provenance.observedAt)
+  const createdAt = Date.parse(ticket.createdAt)
+  const receivedAtMs = Date.parse(receivedAt)
+  if (
+    observedAt < postedAt
+    || createdAt < observedAt
+    || receivedAtMs < createdAt
+    // DiscoTrader records end-to-end ingest latency when it creates the ticket,
+    // not the earlier Discord observation timestamp.
+    || Math.abs((createdAt - postedAt) - ticket.provenance.latencyMs) > 1_000
+  ) {
+    throw new ExecutionGatewayError(
+      'RECORD_INTEGRITY_FAILURE',
+      'DiscoTrader posted, observed, created, received, and latency timestamps disagree.',
+    )
+  }
+  if (receivedAtMs >= postedAt + route.valid_for_ms) {
+    throw new ExecutionGatewayError(
+      'INTENT_EXPIRED',
+      'DiscoTrader source message expired before reaching the execution gateway.',
+    )
+  }
   if (!ticket.llmVeto || ticket.llmVeto.decision !== 'accept') {
     throw new ExecutionGatewayError(
       'RISK_DENIED',
@@ -290,6 +362,12 @@ const assertDiscoTraderTicketCanEnterGateway = (
     throw new ExecutionGatewayError(
       'ACCOUNT_MISMATCH',
       'DiscoTrader traded symbol does not match the configured gateway route.',
+    )
+  }
+  if (ticket.targets.length > 1) {
+    throw new ExecutionGatewayError(
+      'CAPABILITY_UNAVAILABLE',
+      'DiscoTrader tickets with multiple targets are refused until target quantities and multi-leg protection are explicit.',
     )
   }
   if (
@@ -381,4 +459,4 @@ const canonicalPositiveDecimal = (value: number, label: string): string => {
   return decimal
 }
 
-const hash = (value: string): string => createHash('sha256').update(value).digest('hex')
+const hash = (value: unknown): string => sha256(value)

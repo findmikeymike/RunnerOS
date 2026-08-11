@@ -47,6 +47,10 @@ type ApiToChannelMapKeys = Exclude<
   | 'listTradingSignalRoutes' // direct local trading signal-route IPC
   | 'saveTradingSignalRoute' // direct local trading signal-route IPC
   | 'removeTradingSignalRoute' // direct local trading signal-route IPC
+  | 'getDiscoTraderWebhookSecretStatus' // direct local encrypted-vault IPC
+  | 'saveDiscoTraderWebhookSecret' // direct local encrypted-vault IPC
+  | 'getTradeGodExecutionControl' // direct local execution-control IPC
+  | 'setTradeGodGlobalExecutionKill' // direct local execution-control IPC
   | 'onTradeGodAlert' // direct local Trade God alert listener
 > | BrowserPaneKeys
 type ChannelMapKeys = keyof typeof CHANNEL_MAP & string

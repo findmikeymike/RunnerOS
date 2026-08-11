@@ -1,12 +1,19 @@
-import { expect, test } from 'bun:test'
+import { expect, mock, test } from 'bun:test'
+mock.module('pdfjs-dist/build/pdf.worker.min.mjs?url', () => ({ default: 'pdf.worker.js' }))
+mock.module('pdfjs-dist', () => ({ GlobalWorkerOptions: { workerSrc: '' }, getDocument: () => ({}) }))
 import { renderToStaticMarkup } from 'react-dom/server'
 import { TRADE_DESK_AGENT } from '@craft-agent/shared/agent-definitions/trade-god-starter-templates'
 import type { AgentDefinitionDTO, FolderSourceConfig } from '../../../shared/types'
 
-import DiscoTraderControlCenterPage, {
+const {
+  default: DiscoTraderControlCenterPage,
   isAuditedDiscoTraderSource,
   isAuditedTradeDeskWorker,
-} from './DiscoTraderControlCenterPage.tsx'
+} = await import('./DiscoTraderControlCenterPage.tsx')
+const {
+  discoTraderSignalSourceCatalogSchema,
+  isSelectableSignalSource,
+} = await import('./discotrader-signal-sources.ts')
 
 test('renders an honest approval-gated DiscoTrader setup path', () => {
   const html = renderToStaticMarkup(
@@ -14,11 +21,14 @@ test('renders an honest approval-gated DiscoTrader setup path', () => {
   )
 
   expect(html).toContain('DiscoTrader Control Center')
+  expect(html).toContain('Accounts &amp; Discord routing')
+  expect(html).toContain('Add account')
   expect(html).toContain('One-time setup')
   expect(html).toContain('Connect the signed local source')
   expect(html).toContain('Install the Trade Desk worker')
-  expect(html).toContain('Every tool call remains approval-gated')
-  expect(html).toContain('Halt / flatten')
+  expect(html).toContain('Mutation tools are not exposed; gateway halt is persistent')
+  expect(html).toContain('New-entry safety halt')
+  expect(html).toContain('Flatten is not implemented')
   expect(html).not.toContain('Autonomous execution enabled')
 })
 
@@ -34,6 +44,7 @@ test('accepts only the exact loopback DiscoTrader source contract', () => {
       transport: 'http',
       url: 'http://127.0.0.1:8788/mcp',
       authType: 'bearer',
+      allowedTools: ['dt_status', 'dt_signal_sources', 'dt_positions', 'dt_pending_tickets', 'dt_recent_alerts'],
     },
   }
 
@@ -41,6 +52,10 @@ test('accepts only the exact loopback DiscoTrader source contract', () => {
   expect(isAuditedDiscoTraderSource({
     ...source,
     mcp: { ...source.mcp, url: 'https://example.com/mcp' },
+  })).toBe(false)
+  expect(isAuditedDiscoTraderSource({
+    ...source,
+    mcp: { ...source.mcp, allowedTools: [...source.mcp!.allowedTools!, 'dt_place_ticket'] },
   })).toBe(false)
   expect(isAuditedDiscoTraderSource({
     ...source,
@@ -69,5 +84,37 @@ test('refuses a same-slug worker with expanded authority', () => {
       ...worker.metadata,
       trustedWorkerTools: ['dt_flatten_all'],
     },
+  })).toBe(false)
+})
+
+test('offers only complete, daemon-allowed, configured DiscoTrader identities for account routing', () => {
+  const catalog = discoTraderSignalSourceCatalogSchema.parse({
+    schemaVersion: 1,
+    readOnly: true,
+    configured: {
+      allowlistMode: 'restricted', channelAllowlist: ['2'], truncated: false, invalidEntriesOmitted: 0,
+    },
+    observed: {
+      limit: 100,
+      truncated: false,
+      sources: [{
+        sourceId: 'source-1', serverId: '1', channelId: '2', threadId: null, parentChannelId: null,
+        trader: {
+          discordUserId: '3', configuredTraderId: 'trader-1', configuredTraderEnabled: true,
+          displayName: 'Trader One', configurationStatus: 'configured-enabled',
+        },
+        identityStatus: 'complete', daemonAllowlistStatus: 'allowlisted',
+        lastObservedAt: '2026-08-03T12:00:00.000Z', messageCount: 4, provenance: 'observed-daemon-db',
+      }],
+    },
+  })
+  expect(isSelectableSignalSource(catalog.observed.sources[0]!)).toBe(true)
+  expect(isSelectableSignalSource({
+    ...catalog.observed.sources[0]!,
+    daemonAllowlistStatus: 'not-allowlisted',
+  })).toBe(false)
+  expect(isSelectableSignalSource({
+    ...catalog.observed.sources[0]!,
+    trader: { ...catalog.observed.sources[0]!.trader, configurationStatus: 'configured-disabled' },
   })).toBe(false)
 })

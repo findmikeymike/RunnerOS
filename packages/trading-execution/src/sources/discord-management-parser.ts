@@ -38,7 +38,7 @@ export const parseDiscordManagementText = (rawText: string): ParsedDiscordManage
   }
 
   const stoppedOut = /\b(?:stopped out|stop(?:ped)? (?:was )?hit|hit my stop)\b/.exec(normalized)
-  const fullExit = /\b(?:all out|flatten(?: me)?|flat now|i(?:'m| am) (?:out|flat|done)|we(?:'re| are) flat|done here|closing (?:it|this|everything|all|here|now)|close (?:it|this|everything|all|here|now))\b/.exec(normalized)
+  const fullExit = /\b(?:all out|flatten(?: me)?|flat now|i(?:'m| am) (?:out(?!\s+of\b)|flat)|we(?:'re| are) flat|closing (?:it|this|everything|all|here|now)|close (?:it|this|everything|all|here|now))\b/.exec(normalized)
     ?? /^(?:flat|done)$/.exec(normalized)
   const half = /\b(?:taking|take|closing|close|trim(?:ming)?|scal(?:e|ing)) (?:off |out )?(?:my )?half\b/.exec(normalized)
     ?? /\bhalf off\b/.exec(normalized)

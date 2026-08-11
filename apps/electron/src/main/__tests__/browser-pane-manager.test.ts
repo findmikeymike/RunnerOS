@@ -294,6 +294,23 @@ describe('BrowserPaneManager', () => {
     expect(manager.listInstances()).toHaveLength(1)
   })
 
+  it('prevents trading browser IDs from being preclaimed, reused, destroyed, or announced', () => {
+    manager.createInstance('preclaimed-trading-id')
+    expect(() => manager.createTradingInstance(
+      'preclaimed-trading-id',
+      'persist:trade-browser-account-one',
+    )).toThrow('different security context')
+
+    const states: unknown[] = []
+    manager.onStateChange((state) => states.push(state))
+    manager.createTradingInstance('trusted-trading-id', 'persist:trade-browser-account-two')
+    expect(states).toHaveLength(0)
+    expect(() => manager.createInstance('trusted-trading-id')).toThrow('different security context')
+    expect(() => manager.destroyUserInstance('trusted-trading-id')).toThrow(
+      'restricted to the trusted execution runtime',
+    )
+  })
+
   it('allows http(s) popups with shared browser partition', () => {
     manager.createInstance('popup-allow')
     const instance = (manager as any).instances.get('popup-allow')
@@ -332,14 +349,14 @@ describe('BrowserPaneManager', () => {
     const openHandler = instance.pageView.webContents.setWindowOpenHandler.mock.calls[0][0]
 
     const result = openHandler({
-      url: 'craftagents://settings',
+      url: 'tradegod://settings',
       disposition: 'new-popup',
       frameName: '',
     })
 
     expect(result).toEqual({ action: 'deny' })
     await Bun.sleep(0)
-    expect(mockShellOpenExternal).toHaveBeenCalledWith('craftagents://settings')
+    expect(mockShellOpenExternal).toHaveBeenCalledWith('tradegod://settings')
   })
 
   it('destroys child popups when parent instance is destroyed', () => {

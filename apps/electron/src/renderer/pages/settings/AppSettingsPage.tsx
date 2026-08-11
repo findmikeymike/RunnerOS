@@ -36,9 +36,6 @@ export const meta: DetailsPageMeta = {
   slug: 'app',
 }
 
-const RUNNEROS_UPDATES_URL = 'https://github.com/findmikeymike/RunnerOS/releases'
-const quietButtonClass = 'inline-flex h-8 items-center gap-1.5 rounded-[8px] border border-white/[0.065] bg-white/[0.035] px-2.5 text-xs font-medium text-white/52 transition-colors hover:bg-white/[0.055] hover:text-white/76'
-
 // ============================================
 // Proxy form helpers
 // ============================================
@@ -305,19 +302,6 @@ export default function AppSettingsPage() {
                       </span>
                     </div>
                   </SettingsRow>
-                  <SettingsRow
-                    label={t("settings.about.futureUpdates")}
-                    description={t("settings.about.futureUpdatesDesc")}
-                    action={
-                      <button
-                        type="button"
-                        onClick={() => window.electronAPI.openUrl(RUNNEROS_UPDATES_URL)}
-                        className={quietButtonClass}
-                      >
-                        {t("settings.about.openRunnerUpdates")}
-                      </button>
-                    }
-                  />
                 </SettingsCard>
               </SettingsSection>
             </div>

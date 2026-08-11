@@ -33,15 +33,21 @@ import {
   type TradeAlertTunnelHandle,
 } from './trade-alert-tunnel.ts'
 import { buildSyntheticEsChartFixture } from './synthetic-chart-fixture.ts'
+import { DISCOTRADER_WEBHOOK_SECRET_REF } from './discotrader-webhook-secret.ts'
 import {
   TradingConnectionService,
   type TradingBrowserSessionLauncher,
   type TradingCredentialVault,
 } from './trading-connection-service.ts'
-import { TradingSignalRouteStore } from './trading-signal-route-store.ts'
+import {
+  TradingSignalRouteStore,
+  type TradingSignalRoute,
+} from './trading-signal-route-store.ts'
 import {
   ExecutionGateway,
   ExecutionGatewayError,
+  resolveFuturesContractIdentity,
+  resolveFuturesEconomicSpec,
   FileAdapterCertificationStore,
   FileDiscoTraderIntentSource,
   FileDiscordTradeManager,
@@ -95,6 +101,60 @@ interface HostConfigOptions {
   homeDir: string
   env: Record<string, string | undefined>
   platform: NodeJS.Platform
+}
+
+export class TradingRouteMutationCoordinator {
+  private queue: Promise<void> = Promise.resolve()
+
+  constructor(
+    private readonly connections: Pick<FileTradingConnectionStore, 'get'>,
+    private readonly routes: Pick<TradingSignalRouteStore, 'list' | 'save' | 'remove'>,
+    private readonly hasUnresolvedExecution: (connectionId: string) => Promise<boolean> = async () => false,
+  ) {}
+
+  async saveRoute(
+    route: TradingSignalRoute,
+    expectedPreviousConnectionId?: string,
+  ): Promise<TradingSignalRoute> {
+    return this.withLock(async () => {
+      await this.connections.get(route.connection_id)
+      return this.routes.save(route, {
+        ...(expectedPreviousConnectionId
+          ? { expected_previous_connection_id: expectedPreviousConnectionId }
+          : {}),
+      })
+    })
+  }
+
+  async removeRoute(routeId: string): Promise<boolean> {
+    return this.withLock(() => this.routes.remove(routeId))
+  }
+
+  async removeConnection(
+    connectionId: string,
+    remove: () => Promise<boolean>,
+  ): Promise<boolean> {
+    return this.withLock(async () => {
+      const attachedRoutes = (await this.routes.list())
+        .filter((route) => route.connection_id === connectionId)
+      if (attachedRoutes.length > 0) {
+        throw new Error('Remove this account’s Discord sources before removing the trading account.')
+      }
+      if (await this.hasUnresolvedExecution(connectionId)) {
+        throw new Error('Resolve or close this account’s execution records before removing the trading account.')
+      }
+      return remove()
+    })
+  }
+
+  private async withLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.queue
+    let release!: () => void
+    this.queue = previous.catch(() => undefined)
+      .then(() => new Promise<void>((resolve) => { release = resolve }))
+    await previous.catch(() => undefined)
+    try { return await operation() } finally { release() }
+  }
 }
 
 export function resolveTradeGodHostConfig(options: HostConfigOptions): ResolveLaunchOptions {
@@ -171,6 +231,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   alertLedger?: TradeAlertLedger
   ingestDiscoTraderTicketPush?: (input: unknown) => Promise<ExecutionRecord>
   ingestDiscordManagementPush?: (input: unknown) => Promise<DiscordManagementReceipt>
+  emergencyHalt: () => Promise<void>
   setSpecialistModel: (model: SpecialistModel) => void
   dispose: () => Promise<void>
 } {
@@ -255,6 +316,21 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         now: options.now,
       })
     : undefined
+  const removableExecutionStates = new Set([
+    'risk-denied', 'closed', 'rejected', 'canceled', 'expired', 'error',
+  ])
+  const tradingRouteMutations = tradingConnectionStore && tradingSignalRouteStore
+    ? new TradingRouteMutationCoordinator(
+        tradingConnectionStore,
+        tradingSignalRouteStore,
+        async (connectionId) => executionGateway
+          ? (await executionGateway.list()).some((record) => (
+              record.intent.connection_id === connectionId
+              && !removableExecutionStates.has(record.state)
+            ))
+          : false,
+      )
+    : undefined
   const discordManagementSource = executionGateway && options.executionDirectory
     ? new FileDiscoTraderIntentSource(
         path.join(options.executionDirectory, 'discotrader-sources'),
@@ -271,21 +347,13 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         )
         const selected = sourceRoute
           ? connections.find(({ connection_id }) => connection_id === sourceRoute.connection_id)
-          : options.discoTraderConnectionId
-          ? connections.find(({ connection_id }) => (
-              connection_id === options.discoTraderConnectionId
-            ))
-          : connections.filter(({ enabled, state }) => enabled && state === 'ready').length === 1
-            ? connections.find(({ enabled, state }) => enabled && state === 'ready')
-            : undefined
-        if (!selected) {
+          : undefined
+        if (!sourceRoute || !selected) {
           throw new ExecutionGatewayError(
             'CONNECTION_UNAVAILABLE',
             sourceRoute
               ? `Discord route ${sourceRoute.display_name} targets missing connection ${sourceRoute.connection_id}.`
-              : options.discoTraderConnectionId
-              ? `Configured DiscoTrader connection ${options.discoTraderConnectionId} was not found.`
-              : 'DiscoTrader entry requires exactly one enabled ready connection or TRADE_GOD_DISCOTRADER_CONNECTION_ID.',
+              : 'DiscoTrader entry requires an explicit enabled Discord source-to-account route.',
           )
         }
         if (!selected.enabled || selected.state !== 'ready') {
@@ -294,9 +362,20 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             'Configured DiscoTrader connection is not enabled and ready.',
           )
         }
-        const symbol = ticket.tradedSymbol.toUpperCase()
-        const instrument = DISCOTRADER_FUTURES_INSTRUMENT[symbol]
-        if (!instrument) {
+        const contract = resolveFuturesContractIdentity(
+          ticket.tradedSymbol,
+          options.now(),
+        )
+        if (contract.expiry && contract.active === false) {
+          throw new ExecutionGatewayError(
+            'CAPABILITY_UNAVAILABLE',
+            `DiscoTrader contract ${contract.symbol} is expired for the current trading month.`,
+          )
+        }
+        const symbol = contract.symbol
+        const instrument = DISCOTRADER_FUTURES_INSTRUMENT[contract.root]
+        const economics = resolveFuturesEconomicSpec(contract.root)
+        if (!instrument || !economics) {
           throw new ExecutionGatewayError(
             'CAPABILITY_UNAVAILABLE',
             `DiscoTrader symbol ${symbol} has no configured Trade God instrument route.`,
@@ -304,11 +383,14 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         }
         return {
           connection_id: selected.connection_id,
+          source_id: sourceRoute.route_id,
           instrument: {
             canonical_id: `${instrument.venue}:${symbol}`,
             symbol,
             exchange: instrument.exchange,
-            tick_size: instrument.tickSize,
+            ...(contract.expiry ? { expiry: contract.expiry } : {}),
+            tick_size: economics.tick_size,
+            point_value_usd: economics.point_value_usd,
           },
           valid_for_ms: options.discoTraderIntentValidityMs ?? 60_000,
         }
@@ -322,11 +404,20 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         now: options.now,
       })
     : undefined
+  let executionRecoveryError: unknown
+  const executionRecoveryReady = executionGateway
+    ? executionGateway.recoverNonTerminal().catch((error) => {
+        executionRecoveryError = error
+      })
+    : Promise.resolve()
   let discordManagementRecoveryError: unknown
   const discordManagementReady = discordTradeManager
-    ? discordTradeManager.recoverPending().catch((error) => {
-        discordManagementRecoveryError = error
-      })
+    ? executionRecoveryReady.then(async () => {
+        if (executionRecoveryError) throw executionRecoveryError
+        await discordTradeManager.recoverPending()
+      }).catch((error) => {
+          discordManagementRecoveryError = error
+        })
     : Promise.resolve()
   const unsubscribeAlert = alertLedger && options.onAlert
     ? alertLedger.subscribe(options.onAlert)
@@ -410,7 +501,10 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       ? {
           listTradingConnections: () => tradingConnectionService.list(),
           saveTradingConnection: (input) => tradingConnectionService.save(input),
-          removeTradingConnection: (connectionId) => tradingConnectionService.remove(connectionId),
+          removeTradingConnection: (connectionId) => tradingRouteMutations!.removeConnection(
+            connectionId,
+            () => tradingConnectionService.remove(connectionId),
+          ),
           openTradingConnectionLogin: (connectionId) => (
             tradingConnectionService.openBrowserLogin(connectionId)
           ),
@@ -418,8 +512,30 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             tradingConnectionService.confirmBrowserLogin(connectionId)
           ),
           listTradingSignalRoutes: () => tradingSignalRouteStore!.list(),
-          saveTradingSignalRoute: (route) => tradingSignalRouteStore!.save(route),
-          removeTradingSignalRoute: (routeId) => tradingSignalRouteStore!.remove(routeId),
+          saveTradingSignalRoute: (route, expectedPreviousConnectionId) => (
+            tradingRouteMutations!.saveRoute(route, expectedPreviousConnectionId)
+          ),
+          removeTradingSignalRoute: (routeId) => tradingRouteMutations!.removeRoute(routeId),
+        }
+      : {}),
+    ...(options.credentialVault
+      ? {
+          getDiscoTraderWebhookSecretStatus: async () => ({
+            configured: Boolean(await options.credentialVault!.getSecret(DISCOTRADER_WEBHOOK_SECRET_REF)),
+          }),
+          saveDiscoTraderWebhookSecret: async (secret: string) => {
+            await options.credentialVault!.setSecret(DISCOTRADER_WEBHOOK_SECRET_REF, secret)
+            return { configured: true as const }
+          },
+        }
+      : {}),
+    ...(executionGateway
+      ? {
+          getExecutionControl: () => executionGateway.readControl(),
+          setGlobalExecutionKill: async (enabled: boolean) => {
+            await executionGateway.setGlobalKill(enabled)
+            return { global_kill: enabled }
+          },
         }
       : {}),
     stop: () => manager.stop(),
@@ -437,6 +553,8 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(discordTradeManager
       ? {
           ingestDiscoTraderTicketPush: async (input: unknown) => {
+            await executionRecoveryReady
+            if (executionRecoveryError) throw executionRecoveryError
             const payload = discoTraderPushPayloadSchema.parse(input)
             if (payload.kind !== 'ticket' || !payload.ticket || !resolveDiscoTraderRoute) {
               throw new ExecutionGatewayError(
@@ -455,6 +573,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           },
         }
       : {}),
+    emergencyHalt: async () => {
+      if (executionGateway) await executionGateway.activateEmergencyHalt()
+    },
     setSpecialistModel: (model) => { specialistModel = model },
     dispose: async () => {
       unsubscribeAlert?.()
@@ -467,14 +588,14 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
 
 const DISCOTRADER_FUTURES_INSTRUMENT: Readonly<Record<
   string,
-  { venue: string; exchange: string; tickSize: string }
+  { venue: string; exchange: string }
 >> = Object.freeze({
-  ES: { venue: 'CME', exchange: 'XCME', tickSize: '0.25' },
-  MES: { venue: 'CME', exchange: 'XCME', tickSize: '0.25' },
-  NQ: { venue: 'CME', exchange: 'XCME', tickSize: '0.25' },
-  MNQ: { venue: 'CME', exchange: 'XCME', tickSize: '0.25' },
-  YM: { venue: 'CBOT', exchange: 'XCBT', tickSize: '1' },
-  MYM: { venue: 'CBOT', exchange: 'XCBT', tickSize: '1' },
-  RTY: { venue: 'CME', exchange: 'XCME', tickSize: '0.1' },
-  M2K: { venue: 'CME', exchange: 'XCME', tickSize: '0.1' },
+  ES: { venue: 'CME', exchange: 'XCME' },
+  MES: { venue: 'CME', exchange: 'XCME' },
+  NQ: { venue: 'CME', exchange: 'XCME' },
+  MNQ: { venue: 'CME', exchange: 'XCME' },
+  YM: { venue: 'CBOT', exchange: 'XCBT' },
+  MYM: { venue: 'CBOT', exchange: 'XCBT' },
+  RTY: { venue: 'CME', exchange: 'XCME' },
+  M2K: { venue: 'CME', exchange: 'XCME' },
 })

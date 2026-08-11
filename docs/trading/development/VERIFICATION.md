@@ -1,11 +1,45 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-31
+last_verified: 2026-08-10
 source_of_truth: true
 ---
 
 # Verification System
+
+## 2026-08-10 Discord Execution Safety Closure
+
+- Trade God/trading/security suite excluding the two ephemeral-port suites:
+  321 passed, 0 failed, 889 expectations across 47 files.
+- Trigger receiver suite including encrypted-vault HMAC resolution: 30 passed,
+  0 failed.
+- TradingView alert receiver suite: 3 passed, 0 failed.
+- Transport parity suite: 2 passed, 0 failed.
+- Total relevant evidence: 356 passed, 0 failed across 50 files.
+- `bun run typecheck:all`: passed after the safety changes.
+- `git diff --check`: passed.
+- Electron `build:main`, `build:preload`, and `build:renderer`: passed with the
+  new Trade God bootstrap entry.
+- Newly proven in this closure: independent supported-futures economic-loss
+  calculation rejects upstream understatement; expired explicit contracts fail
+  closed using both local month admission and Tradovate's exact maturity date;
+  public/restart reconciliation shares the durable provider-account mutation
+  lock with entries and management.
+- The repo-wide `bun test` run exposed one unrelated ads-operator expectation
+  failure (`public-meta-ad-library-browser` versus its current route). No Trade
+  God test failed in that run. A combined parallel port suite also caused
+  ephemeral-port contention; both affected server suites passed in isolation.
+- Live isolated config repair: both `discotrader` and
+  `discotrader-management` are enabled POST-only safe receivers using the same
+  secret reference.
+- Live vault isolation: the byte-identical Trade God copies of Artist OS
+  `credentials.enc` and `credentials.key` were moved to
+  `~/.trade-god/isolated-vault-quarantine/2026-08-11T04-02-12-935Z/`. Artist OS
+  files remain in place; Trade God now requires fresh credential enrollment.
+- Not proven: installed packaged app, real Discord entry delivery after rebuild,
+  Tradovate credential/token exchange, paper provider order lifecycle,
+  multi-target execution, Mirror Groups, live browser DOM automation, crash
+  soak, or 50-lifecycle provider certification.
 
 ## Evidence Ladder
 
@@ -345,7 +379,7 @@ A lower rung does not prove a higher rung.
 ## Discord Follow-Up End-to-End Handoff — 2026-07-30
 
 - Rival findings fixed: negated/delayed close false positives, unsafe `to be` breakeven matching, missing `flat`/`done`, stop quantity not bound to provider open quantity, and completed actions without provider evidence.
-- Existing port 9101 is reused. HMAC/timestamp/body/rate gates run before the dedicated trusted handler; the `discotrader-management` slug rejects exact signed replay while releasing its reservation after transient failure.
+- Trade God's isolated port 9201 is used. HMAC/timestamp/body/rate gates run before the dedicated trusted handler; the `discotrader-management` slug rejects exact signed replay while releasing its reservation after transient failure.
 - Electron instantiates the durable manager, runs pending-receipt recovery before new delivery, and attaches zero provider adapters.
 - Focused proof: 29 trigger-server tests, 110 contract/execution tests with 296 expectations, and 4 Electron runtime tests passed; contract, execution, server-core, and Electron typechecks passed.
 - Repository-wide `bun run typecheck:all` and Electron main, preload, and renderer production builds passed.
@@ -424,3 +458,25 @@ Never collapse these into “done.”
 - Focused connection, route-store, IPC, preload, and channel-parity gate: 16
   tests pass.
 - Repository typecheck and Electron main, preload, and renderer builds pass.
+
+## Account routing and source catalog hardening — 2026-08-03
+
+- Silent Discord source reassignment is rejected unless the caller proves the
+  exact previous account; the UI requires a second explicit confirmation.
+- Account deletion and route mutation share one serialized guard. Missing
+  target accounts are rejected before route persistence, and legacy orphaned
+  routes remain visible as blocked/removable.
+- Renderer readiness uses `enabled && state=ready`; disabled certified accounts
+  are not described as executable. Embedded account mutations refresh the
+  parent broker summary, and route deletion failures surface to the operator.
+- Trade God calls only the exact read-only `dt_signal_sources` MCP tool over the
+  audited loopback bearer source. The picker accepts only complete,
+  configured-enabled, daemon-allowed identities and retains an honest manual
+  fallback.
+- Focused Trade God proof: 26 tests pass with 121 expectations across runtime,
+  route store, IPC, preload, renderer logic, and channel parity.
+- DiscoTrader donor proof: 287 tests pass across 11 files; typecheck and diff
+  check pass. The catalog has no message text, URLs, secrets, broker data, or
+  write/enrollment authority.
+- Repository-wide typecheck and Electron main, preload, and renderer production
+  builds pass. Live daemon restart/catalog click-through is not yet claimed.

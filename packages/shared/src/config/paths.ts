@@ -6,7 +6,7 @@
  * script sets CRAFT_CONFIG_DIR to ~/.craft-agent-1, allowing multiple instances to run
  * simultaneously with separate configurations.
  *
- * Default (non-numbered folders): ~/.craft-agent/
+ * Trade God default: ~/.trade-god/
  * Instance 1 (-1 suffix): ~/.craft-agent-1/
  * Instance 2 (-2 suffix): ~/.craft-agent-2/
  */
@@ -16,4 +16,4 @@ import { join } from 'path';
 
 // Allow override via environment variable for multi-instance dev
 // Falls back to default ~/.craft-agent/ for production and non-numbered dev folders
-export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');
+export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.trade-god');

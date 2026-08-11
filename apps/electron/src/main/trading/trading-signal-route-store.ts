@@ -18,6 +18,10 @@ export const tradingSignalRouteSchema = z.object({
 
 export type TradingSignalRoute = z.infer<typeof tradingSignalRouteSchema>
 
+export interface SaveTradingSignalRouteOptions {
+  expected_previous_connection_id?: string
+}
+
 export class TradingSignalRouteStore {
   private readonly file: string
   private queue: Promise<void> = Promise.resolve()
@@ -30,18 +34,35 @@ export class TradingSignalRouteStore {
     return (await this.read()).sort((a, b) => a.display_name.localeCompare(b.display_name))
   }
 
-  async save(input: TradingSignalRoute): Promise<TradingSignalRoute> {
+  async save(
+    input: TradingSignalRoute,
+    options: SaveTradingSignalRouteOptions = {},
+  ): Promise<TradingSignalRoute> {
     const route = tradingSignalRouteSchema.parse(input)
     return this.withLock(async () => {
       const current = await this.read()
+      const existingById = current.find((candidate) => candidate.route_id === route.route_id)
+      if (existingById && (
+        existingById.server_id !== route.server_id
+        || existingById.channel_id !== route.channel_id
+        || existingById.trader_author_id !== route.trader_author_id
+      )) {
+        throw new Error('Discord server, channel, and trader identity are immutable; create a new route.')
+      }
       const collision = current.find((candidate) => candidate.route_id !== route.route_id
         && candidate.server_id === route.server_id
         && candidate.channel_id === route.channel_id
-        && candidate.trader_author_id === route.trader_author_id
-        && candidate.enabled && route.enabled)
+        && candidate.trader_author_id === route.trader_author_id)
       if (collision) throw new Error(`That Discord trader is already routed by ${collision.display_name}.`)
-      await this.write([...current.filter((item) => item.route_id !== route.route_id), route])
-      return structuredClone(route)
+      if (existingById && existingById.connection_id !== route.connection_id
+        && options.expected_previous_connection_id !== existingById.connection_id) {
+        throw new Error(
+          `That Discord trader is already routed to ${existingById.connection_id}. Confirm reassignment before changing accounts.`,
+        )
+      }
+      const saved = existingById ? { ...route, created_at: existingById.created_at } : route
+      await this.write([...current.filter((item) => item.route_id !== route.route_id), saved])
+      return structuredClone(saved)
     })
   }
 
@@ -57,7 +78,15 @@ export class TradingSignalRouteStore {
 
   async resolve(channelUrl: string, authorId?: string): Promise<TradingSignalRoute | null> {
     if (!authorId) return null
-    const match = /^https:\/\/discord\.com\/channels\/(\d{1,25})\/(\d{1,25})/.exec(channelUrl)
+    let url: URL
+    try { url = new URL(channelUrl) } catch { return null }
+    if (url.protocol !== 'https:' || ![
+      'discord.com',
+      'www.discord.com',
+      'canary.discord.com',
+      'ptb.discord.com',
+    ].includes(url.hostname)) return null
+    const match = /^\/channels\/(\d{1,25})\/(\d{1,25})(?:\/|$)/.exec(url.pathname)
     if (!match) return null
     const candidates = (await this.read()).filter((route) => route.enabled
       && route.server_id === match[1]

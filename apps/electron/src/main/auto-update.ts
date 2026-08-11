@@ -1,9 +1,8 @@
 /**
- * Auto-update module using electron-updater
+ * Auto-update module using electron-updater.
  *
- * Handles checking for updates, downloading, and installing via the standard
- * electron-updater library. Updates are served from https://github.com/findmikeymike/RunnerOS/releases/latest/download
- * using the generic provider (YAML manifests + binaries on R2/S3).
+ * Trade God updates are fail-closed until the app has its own release feed.
+ * Set TRADE_GOD_AUTO_UPDATE=1 only together with a Trade God-specific feed.
  *
  * Platform behavior:
  * - macOS: Downloads zip, extracts and swaps app bundle atomically
@@ -33,6 +32,7 @@ import type { EventSink } from '@craft-agent/server-core/transport'
 const PLATFORM = platform()
 const IS_MAC = PLATFORM === 'darwin'
 const IS_WINDOWS = PLATFORM === 'win32'
+const AUTO_UPDATE_ENABLED = process.env.TRADE_GOD_AUTO_UPDATE === '1'
 
 // Get the update cache directory path (for file watcher fallback on macOS)
 // electron-updater uses these paths:
@@ -314,6 +314,11 @@ function checkForExistingDownload(): { exists: boolean; version?: string } {
  * @param options.autoDownload - If false, only checks without downloading (for manual "Check Now")
  */
 export async function checkForUpdates(options: CheckOptions = {}): Promise<UpdateInfo> {
+  if (!AUTO_UPDATE_ENABLED) {
+    mainLog.info('[auto-update] Disabled: Trade God has no configured release feed')
+    return getUpdateInfo()
+  }
+
   const { autoDownload = true } = options
 
   // Temporarily override autoDownload for this check if needed
@@ -369,6 +374,10 @@ export async function checkForUpdates(options: CheckOptions = {}): Promise<Updat
  * Then relaunches the app automatically.
  */
 export async function installUpdate(): Promise<void> {
+  if (!AUTO_UPDATE_ENABLED) {
+    throw new Error('Trade God auto-update is disabled until a dedicated release feed is configured')
+  }
+
   if (updateInfo.downloadState !== 'ready') {
     throw new Error('No update ready to install')
   }
@@ -413,6 +422,11 @@ export interface UpdateOnLaunchResult {
  * - Auto-downloads if update available
  */
 export async function checkForUpdatesOnLaunch(): Promise<UpdateOnLaunchResult> {
+  if (!AUTO_UPDATE_ENABLED) {
+    mainLog.info('[auto-update] Launch check skipped: no Trade God release feed configured')
+    return { action: 'skipped', reason: 'disabled' }
+  }
+
   mainLog.info('[auto-update] Checking for updates on launch...')
 
   const info = await checkForUpdates({ autoDownload: true })

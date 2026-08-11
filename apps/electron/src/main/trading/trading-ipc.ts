@@ -41,6 +41,10 @@ export const TRADE_GOD_IPC = {
   LIST_SIGNAL_ROUTES: 'trade-god:signal-routes:list',
   SAVE_SIGNAL_ROUTE: 'trade-god:signal-routes:save',
   REMOVE_SIGNAL_ROUTE: 'trade-god:signal-routes:remove',
+  DISCOTRADER_WEBHOOK_SECRET_STATUS: 'trade-god:discotrader:webhook-secret-status',
+  SAVE_DISCOTRADER_WEBHOOK_SECRET: 'trade-god:discotrader:save-webhook-secret',
+  EXECUTION_CONTROL: 'trade-god:execution:control',
+  SET_GLOBAL_EXECUTION_KILL: 'trade-god:execution:set-global-kill',
 } as const
 
 export interface TradingIpcManager {
@@ -63,8 +67,20 @@ export interface TradingIpcManager {
   }>
   confirmTradingConnectionLogin?(connectionId: string): Promise<TradingConnectionStatus>
   listTradingSignalRoutes?(): Promise<TradingSignalRoute[]>
-  saveTradingSignalRoute?(route: TradingSignalRoute): Promise<TradingSignalRoute>
+  saveTradingSignalRoute?(
+    route: TradingSignalRoute,
+    expectedPreviousConnectionId?: string,
+  ): Promise<TradingSignalRoute>
   removeTradingSignalRoute?(routeId: string): Promise<boolean>
+  getDiscoTraderWebhookSecretStatus?(): Promise<{ configured: boolean }>
+  saveDiscoTraderWebhookSecret?(secret: string): Promise<{ configured: true }>
+  getExecutionControl?(): Promise<{
+    global_kill: boolean
+    connection_kills: string[]
+    source_kills: string[]
+    updated_at: string
+  }>
+  setGlobalExecutionKill?(enabled: boolean): Promise<{ global_kill: boolean }>
   resolveTradingConnection?(connectionId: string): Promise<TradingConnection>
   stop(): Promise<void>
 }
@@ -136,13 +152,43 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (!manager.listTradingSignalRoutes) throw new Error('Trading signal routes are unavailable.')
     return manager.listTradingSignalRoutes()
   })
-  ipcMain.handle(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, (_event, route: unknown) => {
+  ipcMain.handle(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, (
+    _event,
+    route: unknown,
+    expectedPreviousConnectionId: unknown,
+  ) => {
     if (!manager.saveTradingSignalRoute) throw new Error('Trading signal routes are unavailable.')
-    return manager.saveTradingSignalRoute(route as TradingSignalRoute)
+    if (expectedPreviousConnectionId !== undefined && typeof expectedPreviousConnectionId !== 'string') {
+      throw new Error('Expected previous connection id is invalid.')
+    }
+    return manager.saveTradingSignalRoute(
+      route as TradingSignalRoute,
+      expectedPreviousConnectionId,
+    )
   })
   ipcMain.handle(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, (_event, routeId: unknown) => {
     if (!manager.removeTradingSignalRoute) throw new Error('Trading signal routes are unavailable.')
     return manager.removeTradingSignalRoute(String(routeId))
+  })
+  ipcMain.handle(TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS, () => {
+    if (!manager.getDiscoTraderWebhookSecretStatus) throw new Error('DiscoTrader webhook credentials are unavailable.')
+    return manager.getDiscoTraderWebhookSecretStatus()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET, (_event, secret: unknown) => {
+    if (!manager.saveDiscoTraderWebhookSecret) throw new Error('DiscoTrader webhook credentials are unavailable.')
+    if (typeof secret !== 'string' || secret.length < 32 || secret.length > 512) {
+      throw new Error('DiscoTrader shared secret must be between 32 and 512 characters.')
+    }
+    return manager.saveDiscoTraderWebhookSecret(secret)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.EXECUTION_CONTROL, () => {
+    if (!manager.getExecutionControl) throw new Error('Execution controls are unavailable.')
+    return manager.getExecutionControl()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL, (_event, enabled: unknown) => {
+    if (!manager.setGlobalExecutionKill) throw new Error('Execution controls are unavailable.')
+    if (typeof enabled !== 'boolean') throw new Error('Execution halt state is invalid.')
+    return manager.setGlobalExecutionKill(enabled)
   })
 
   let disposed = false
@@ -167,6 +213,10 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE)
+    ipcMain.removeHandler(TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET)
+    ipcMain.removeHandler(TRADE_GOD_IPC.EXECUTION_CONTROL)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL)
     await manager.stop()
   }
 }

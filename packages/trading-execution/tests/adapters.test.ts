@@ -23,6 +23,7 @@ import {
   TradovateFetchClient,
   WealthChartsBrowserAdapter,
   WealthChartsCertifiedDriver,
+  buildTradovateAccountSnapshot,
   buildTradovateOsoBody,
   computeActionDigest,
   computeOrderIntentChecksum,
@@ -175,6 +176,15 @@ class TradovateClient implements TradovateRestClient {
     oso1Id: 101,
     oso2Id: 102,
   }
+  resolvedContract = {
+    id: 9001,
+    name: 'ESU6',
+    expiration_date: '2026-09-18T13:30:00.000Z',
+  }
+
+  async resolveContract() {
+    return this.resolvedContract
+  }
   placeError?: Error
   orders: TradovateOrder[] = []
   positions: TradovatePosition[] = []
@@ -251,6 +261,24 @@ class WealthChartsDriver implements WealthChartsBrowserDriver {
 }
 
 describe('Tradovate API adapter', () => {
+  test('snapshot identity binds provider state rather than capture time', () => {
+    const targetConnection = connection('tradovate')
+    const build = (capturedAt: string, balance: number) => buildTradovateAccountSnapshot({
+      connection: targetConnection,
+      capturedAt,
+      balance,
+      realizedPnl: 0,
+      openPnl: 0,
+      canTrade: true,
+    })
+    const first = build('2026-07-30T15:05:00.000Z', 50_000)
+    const oneMillisecondLater = build('2026-07-30T15:05:00.001Z', 50_000)
+    const changedState = build('2026-07-30T15:05:00.001Z', 49_999)
+
+    expect(oneMillisecondLater.account_snapshot_id).toBe(first.account_snapshot_id)
+    expect(changedState.account_snapshot_id).not.toBe(first.account_snapshot_id)
+  })
+
   test('builds a native OCO strategy with automation and idempotency fields', async () => {
     const targetConnection = connection('tradovate')
     const targetIntent = intent(targetConnection)
@@ -323,6 +351,40 @@ describe('Tradovate API adapter', () => {
     })).rejects.toMatchObject({
       submissionMayHaveOccurred: true,
     })
+  })
+
+  test('refuses submission unless Tradovate resolves the exact contract symbol', async () => {
+    const targetConnection = connection('tradovate')
+    const targetIntent = intent(targetConnection)
+    const targetCommand = command(targetConnection, targetIntent)
+    const client = new TradovateClient()
+    client.resolvedContract = { ...client.resolvedContract, name: 'NQU6' }
+    const adapter = new TradovateApiAdapter(client, () => NOW)
+
+    await expect(adapter.submit({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+    })).rejects.toMatchObject({ code: 'RECONCILIATION_DIVERGENCE' })
+  })
+
+  test('refuses an exact contract whose provider maturity is already expired', async () => {
+    const targetConnection = connection('tradovate')
+    const targetIntent = intent(targetConnection)
+    const targetCommand = command(targetConnection, targetIntent)
+    const client = new TradovateClient()
+    client.resolvedContract = {
+      ...client.resolvedContract,
+      expiration_date: '2026-06-19T13:30:00.000Z',
+    }
+    const adapter = new TradovateApiAdapter(client, () => NOW)
+
+    await expect(adapter.submit({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+    })).rejects.toMatchObject({ code: 'CAPABILITY_UNAVAILABLE' })
+    expect(client.lastBody).toBeNull()
   })
 
   test('reconciles entry, child orders, fill, and active native protection', async () => {
@@ -420,6 +482,154 @@ describe('Tradovate API adapter', () => {
     })
   })
 
+  test('does not confirm a stop modification until the exact price is provider-visible', async () => {
+    const targetConnection = connection('tradovate')
+    const targetIntent = intent(targetConnection)
+    const targetCommand = command(targetConnection, targetIntent)
+    const client = new TradovateClient()
+    const adapter = new TradovateApiAdapter(client, () => NOW)
+    const clOrdId = String(buildTradovateOsoBody(targetConnection, targetIntent, targetCommand).clOrdId)
+    client.orders = [
+      {
+        id: 100,
+        accountId: 123456,
+        contractId: 9001,
+        clOrdId,
+        ordStatus: 'Filled',
+        orderType: 'Limit',
+        action: 'Buy',
+        symbol: 'ESU6',
+        orderQty: 1,
+        filledQty: 1,
+        avgPrice: 5600,
+      },
+      {
+        id: 101,
+        accountId: 123456,
+        contractId: 9001,
+        parentId: 100,
+        ordStatus: 'Working',
+        orderType: 'Stop',
+        action: 'Sell',
+        symbol: 'ESU6',
+        orderQty: 1,
+        stopPrice: 5598,
+        timeInForce: 'Day',
+      },
+      {
+        id: 102,
+        accountId: 123456,
+        contractId: 9001,
+        parentId: 100,
+        ordStatus: 'Working',
+        orderType: 'Limit',
+        action: 'Sell',
+        symbol: 'ESU6',
+        orderQty: 1,
+        price: 5603,
+        timeInForce: 'Day',
+      },
+    ]
+    client.positions = [{
+      id: 1,
+      accountId: 123456,
+      contractId: 9001,
+      netPos: 1,
+      netPrice: 5600,
+      symbol: 'ESU6',
+    }]
+    const stopMove = managementCommand(targetConnection, targetIntent, {
+      operation: 'modify',
+      provider_order_id: '101',
+      quantity: 1,
+      order_type: 'stop',
+      stop_price: '5600',
+      time_in_force: 'day',
+    })
+
+    expect(await adapter.reconcile({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+      managementCommand: stopMove,
+    })).toMatchObject({
+      status: 'divergent',
+      protection_verified: false,
+    })
+
+    client.orders[1] = { ...client.orders[1]!, stopPrice: undefined, price: 5600 }
+    expect(await adapter.reconcile({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+      managementCommand: stopMove,
+    })).toMatchObject({
+      status: 'filled-protected',
+      protection_verified: true,
+      protection_orders: [
+        { stop_price: '5600' },
+        { limit_price: '5603' },
+      ],
+    })
+  })
+
+  test('does not declare a flat trade closed while a working order can reopen it', async () => {
+    const targetConnection = connection('tradovate')
+    const targetIntent = intent(targetConnection)
+    const targetCommand = command(targetConnection, targetIntent)
+    const client = new TradovateClient()
+    const adapter = new TradovateApiAdapter(client, () => NOW)
+    const clOrdId = String(buildTradovateOsoBody(targetConnection, targetIntent, targetCommand).clOrdId)
+    client.orders = [
+      {
+        id: 100,
+        accountId: 123456,
+        contractId: 9001,
+        clOrdId,
+        ordStatus: 'Filled',
+        orderType: 'Limit',
+        action: 'Buy',
+        symbol: 'ESU6',
+        orderQty: 1,
+        filledQty: 1,
+        avgPrice: 5600,
+      },
+      {
+        id: 101,
+        accountId: 123456,
+        contractId: 9001,
+        parentId: 100,
+        ordStatus: 'Working',
+        orderType: 'Stop',
+        action: 'Sell',
+        symbol: 'ESU6',
+        orderQty: 1,
+        stopPrice: 5598,
+        timeInForce: 'Day',
+      },
+    ]
+    client.positions = []
+    const flatten = managementCommand(targetConnection, targetIntent, {
+      operation: 'flatten',
+      reason: 'Trader called flat.',
+    })
+
+    expect(await adapter.reconcile({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+      managementCommand: flatten,
+    })).toMatchObject({ status: 'divergent' })
+
+    client.orders[1] = { ...client.orders[1]!, ordStatus: 'Canceled' }
+    expect(await adapter.reconcile({
+      connection: targetConnection,
+      intent: targetIntent,
+      command: targetCommand,
+      managementCommand: flatten,
+    })).toMatchObject({ status: 'closed', open_quantity: 0 })
+  })
+
   test('uses the demo REST API, verifies exact account identity, and joins provider truth', async () => {
     const targetConnection = connection('tradovate')
     const fixture = new TradovateFetchFixture()
@@ -456,7 +666,7 @@ describe('Tradovate API adapter', () => {
     })
     expect(orders).toMatchObject([{
       id: 100,
-      clOrdId: 'tg-provider-command',
+      clOrdId: `tg-${'b'.repeat(56)}`,
       parentId: undefined,
       ordStatus: 'PartiallyFilled',
       orderType: 'Limit',
@@ -593,6 +803,14 @@ class TradovateFetchFixture {
         active: true,
         readonly: false,
       }],
+      '/contract/find': { id: 9001, name: 'ESU6', contractMaturityId: 8001 },
+      '/contractMaturity/item': {
+        id: 8001,
+        productId: 7001,
+        expirationMonth: 202609,
+        expirationDate: '2026-09-18T13:30:00.000Z',
+        isFront: true,
+      },
       '/cashBalance/getcashbalancesnapshot': {
         totalCashValue: 50_000,
         netLiq: 50_250,
@@ -615,7 +833,7 @@ class TradovateFetchFixture {
       '/command/list': [{
         id: 301,
         orderId: 100,
-        clOrdId: 'tg-provider-command',
+        clOrdId: `tg-${'b'.repeat(56)}`,
       }, {
         id: 302,
         orderId: 100,

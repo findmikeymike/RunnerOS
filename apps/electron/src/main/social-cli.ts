@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { CONFIG_DIR } from '@craft-agent/shared/config'
 
 function socialToolDir(): string {
   const candidates = [
@@ -22,7 +23,11 @@ export function runSocialJson(args: string[]): Promise<unknown> {
     const child = spawn(process.execPath, [path.join(cwd, 'src', 'social.mjs'), ...args], {
       cwd,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        SOCIAL_HOME: process.env.SOCIAL_HOME || path.join(CONFIG_DIR, 'social'),
+      },
     })
     let stdout = ''
     let stderr = ''

@@ -22,6 +22,8 @@ describe('trading signal route store', () => {
     const store = new TradingSignalRouteStore(root, () => NOW)
     await store.save(route())
     expect(await store.resolve('https://discord.com/channels/111/222', '333')).toMatchObject({ connection_id: 'connection-one' })
+    expect(await store.resolve('https://canary.discord.com/channels/111/222/444', '333')).toMatchObject({ connection_id: 'connection-one' })
+    expect(await store.resolve('https://evil.example/channels/111/222', '333')).toBeNull()
     expect(await store.resolve('https://discord.com/channels/111/222', '334')).toBeNull()
   })
 
@@ -31,5 +33,38 @@ describe('trading signal route store', () => {
     await store.save(route())
     await expect(store.save(route({ route_id: 'route-two', connection_id: 'connection-two' })))
       .rejects.toThrow('already routed')
+  })
+
+  test('requires explicit confirmation before moving a Discord identity to another account', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-routes-')); roots.push(root)
+    const store = new TradingSignalRouteStore(root, () => NOW)
+    await store.save(route())
+
+    await expect(store.save(route({ connection_id: 'connection-two' })))
+      .rejects.toThrow('Confirm reassignment')
+    expect((await store.list())[0]?.connection_id).toBe('connection-one')
+
+    await expect(store.save(
+      route({ connection_id: 'connection-two' }),
+      { expected_previous_connection_id: 'wrong-connection' },
+    )).rejects.toThrow('Confirm reassignment')
+
+    const moved = await store.save(
+      route({
+        connection_id: 'connection-two',
+        created_at: '2026-08-01T18:00:00.000Z',
+        updated_at: '2026-08-01T18:00:00.000Z',
+      }),
+      { expected_previous_connection_id: 'connection-one' },
+    )
+    expect(moved.connection_id).toBe('connection-two')
+    expect(moved.created_at).toBe(NOW)
+  })
+
+  test('keeps Discord identity immutable for an existing route id', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-routes-')); roots.push(root)
+    const store = new TradingSignalRouteStore(root, () => NOW)
+    await store.save(route())
+    await expect(store.save(route({ channel_id: '999' }))).rejects.toThrow('identity are immutable')
   })
 })

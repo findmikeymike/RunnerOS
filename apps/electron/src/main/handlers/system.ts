@@ -209,7 +209,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
       const parsed = new URL(url)
 
       // Handle craftagents:// URLs internally via deep link handler (GUI only)
-      if (parsed.protocol === 'craftagents:') {
+      if (parsed.protocol === `${process.env.CRAFT_DEEPLINK_SCHEME || 'tradegod'}:`) {
         if (!windowManager) return
         deps.platform.logger.info('[OPEN_URL] Handling as deep link')
         const { handleDeepLink } = await import('../deep-link')

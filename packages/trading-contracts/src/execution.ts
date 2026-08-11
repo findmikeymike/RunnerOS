@@ -187,6 +187,12 @@ export const orderIntentSchema = z.object({
     symbol: identifierSchema,
     exchange: identifierSchema,
     expiry: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+    tick_size: decimalStringSchema.refine((value) => Number(value) > 0, {
+      message: 'Instrument tick size must be positive',
+    }).optional(),
+    point_value_usd: decimalStringSchema.refine((value) => Number(value) > 0, {
+      message: 'Instrument point value must be positive',
+    }).optional(),
   }).strict(),
   side: orderSideSchema,
   quantity: z.number().int().positive().max(1_000),
@@ -195,6 +201,7 @@ export const orderIntentSchema = z.object({
     stop_loss: protectionLegSchema,
     take_profit: protectionLegSchema.optional(),
   }).strict(),
+  max_loss_usd: decimalStringSchema.optional(),
   time_in_force: timeInForceSchema,
   created_at: utcTimestampSchema,
   valid_until: utcTimestampSchema,

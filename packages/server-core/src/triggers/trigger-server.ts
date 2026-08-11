@@ -93,6 +93,12 @@ export interface TriggerHttpServerOptions {
   logger?: Logger
   /** Optional test hook/custom persistence for inbound webhook delivery history. */
   deliveryRecorder?: WebhookDeliveryRecorder
+  /** Optional encrypted-secret resolver. Environment remains the fallback. */
+  secretResolver?: (input: {
+    workspaceId: string
+    slug: string
+    secretEnv: string
+  }) => Promise<string | undefined>
   /**
    * Optional trusted-main-process consumer. It runs only after the matcher,
    * method, body, authentication, replay, and rate gates pass. Returning
@@ -172,6 +178,7 @@ export async function startTriggerHttpServer(
         trustedProxyIps,
         deliveryRecorder: options.deliveryRecorder ?? appendWebhookDeliveryRecord,
         authenticatedDeliveryHandler: options.authenticatedDeliveryHandler,
+        secretResolver: options.secretResolver,
       },
       rateBuckets,
       authenticatedReplayKeys,
@@ -221,6 +228,7 @@ async function handleRequest(
     trustedProxyIps: string[]
     deliveryRecorder: WebhookDeliveryRecorder
     authenticatedDeliveryHandler?: AuthenticatedTriggerDeliveryHandler
+    secretResolver?: TriggerHttpServerOptions['secretResolver']
   },
   rateBuckets: Map<string, { count: number; windowStart: number }>,
   authenticatedReplayKeys: Map<string, number>,
@@ -333,7 +341,11 @@ async function handleRequest(
   let authenticated = false
   let replayKey: string | undefined
   if (matcher.secretEnv) {
-    const secret = process.env[matcher.secretEnv]
+    const secret = await config.secretResolver?.({
+      workspaceId,
+      slug,
+      secretEnv: matcher.secretEnv,
+    }) ?? process.env[matcher.secretEnv]
     if (!secret) {
       // Misconfigured: secretEnv is set but the env var is empty. Fail closed
       // to avoid silently downgrading to unauthenticated.

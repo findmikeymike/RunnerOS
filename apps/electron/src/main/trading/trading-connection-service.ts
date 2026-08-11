@@ -225,7 +225,7 @@ export class TradingConnectionService {
     const expectedOrigin = loginOrigin(connection.platform.slug)
     const actualOrigin = new URL(inspected.url).origin
     if (actualOrigin !== expectedOrigin) {
-      throw new Error(`Login confirmation refused: browser is on ${actualOrigin}, not ${expectedOrigin}.`)
+      throw new Error(`Provider-page confirmation refused: browser is on ${actualOrigin}, not ${expectedOrigin}.`)
     }
     const saved = await this.store.save(tradingConnectionSchema.parse({
       ...connection,

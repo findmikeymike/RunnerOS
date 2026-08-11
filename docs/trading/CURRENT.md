@@ -1,7 +1,7 @@
 ---
 status: active
 owner: team
-last_verified: 2026-07-31
+last_verified: 2026-08-10
 source_of_truth: true
 ---
 
@@ -9,10 +9,10 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-07-31
-- Stage: signed Discord entry and follow-up paths are wired through the durable gateway boundary; real-provider paper certification is the next gate
-- Current goal: certify one exact paper adapter and its partial-close/protection-resize lifecycle without enabling consequential execution
-- Overall state: Trade God now has durable execution contracts and lifecycle storage, multi-prop account records, isolated per-account browser sessions with operator-confirmed provider origin, exact Discord server/channel/trader routes, a Tradovate demo API adapter foundation, a named WealthCharts browser driver foundation, DiscoTrader ticket convergence, version-bound certification evidence, restart reconciliation, kill switches, checksum-bound cancel/modify/partial-close/flatten commands, and a durable Discord follow-up manager. Electron directly handles both HMAC-authenticated `discotrader` entry tickets and `discotrader-management` follow-ups. Entry routing first resolves an exact immutable Discord route, then falls back to the explicit environment connection or a single enabled ready connection; it never guesses an account. Browser login still does not equal execution certification. The runtime attaches zero execution adapters deliberately. No real adapter is paper-certified or enabled for consequential entry. Tradovate still lacks certified partial-close/protection-resize behavior; WealthCharts management actions remain disabled until its live paper DOM is inspected.
+- Date: 2026-08-10
+- Stage: adversarial safety closure before real-provider paper connectivity
+- Current goal: complete the P0 gates in `audits/discord-signal-system-readiness-2026-08-10.md`, then smoke one exact Tradovate paper lifecycle
+- Overall state: signed Discord entry and management receivers, exact source-to-account routing, durable event/ticket lineage, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute maximum loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. The runtime still attaches zero execution adapters and incoming tickets stop at `created`. Multiple targets fail closed, Mirror Groups remain design-only, browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -64,13 +64,42 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
+- Drafted the source-of-truth Multi-Account Mirror Groups specification. It
+  defines versioned account-or-group routing, immutable parent/child lineage,
+  per-account sizing/risk/authorization/provider truth, netted-position
+  ownership leases, immutable source replay binding, aggregate risk
+  reservations, gateway-enforced parent dispatch grants, strict pre-order
+  admission, visible partial outcomes, group-aware Discord follow-ups, restart
+  recovery, UI states, and a staged paper-only rollout. This is design truth
+  only; no mirrored provider execution is implemented or enabled.
+- Split Trade God into a distinct Electron product: `Trade God`, app ID
+  `com.findmikeymike.tradegod`, `tradegod://` deep links, dev port `5273`, and
+  isolated `~/.trade-god` config, credentials, workspace, window, browser,
+  messaging, logs, and social-session roots. A fail-closed migration copied
+  only the Trading workspace identity, DiscoTrader receivers, and existing
+  Trade God runtime receipts. It no longer copies any credential vault. The
+  previously duplicated live vault/key were moved to a recoverable quarantine,
+  so Trade God must enroll fresh credentials. Artist OS data and the
+  disabled social-replies automation remain untouched in `~/.craft-agent`.
+  New local and remote-connected workspaces also default to the isolated root.
+  Trade God auto-update is fail-closed until it has its own release feed, and
+  the live DiscoTrader management webhook now targets the isolated `9201` port.
 - Added a dedicated DiscoTrader Control Center to the Futures sidebar. It
   reports the real workspace MCP-source, Trade Desk activation, and Trading
   Connection states; saves `DT_MCP_TOKEN` through encrypted source credentials;
-  and installs the audited `trade-desk` definition only after an explicit
-  workspace action. The worker remains `ask` permissioned and its live tools
-  are not exposed as dashboard buttons.
-- Bundled the `trade-desk-operator` and `incident-recovery` skills. Replaced
+  installs the audited `trade-desk` definition only after an explicit workspace
+  action, and now owns account onboarding directly in the page. Each account
+  card shows its exact Discord server/channel/trader routes and can add or remove
+  those sources without visiting Settings. The worker remains `ask` permissioned
+  and its live tools are not exposed as dashboard buttons.
+- Hardened multi-account Discord routing: DiscoTrader now exposes a bounded,
+  bearer-authenticated read-only source catalog; the account page can select
+  only complete configured/allowed identities. Silent account reassignment is
+  rejected unless the operator confirms the prior account, account deletion is
+  serialized against route mutation, legacy orphan routes have a blocked
+  recovery surface, and execution-ready labels require both enabled and ready.
+- Bundled the `trade-desk-operator` and `incident-recovery` skills, while the
+  Trade Desk worker itself receives only the read-only operator skill. Replaced
   inherited music-worker defaults and launchpad copy with the focused trading
   roster. `trade-desk` is deliberately absent from automatic starter/default
   activation.
@@ -147,10 +176,19 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Next Actions
 
-1. Confirm Apex-issued Tradovate API eligibility and supply a demo credential bound to the exact paper account.
-2. Implement and certify Tradovate partial-close/protection-resize behavior.
-3. Run and retain the 50-lifecycle real paper soak plus forced-failure matrix.
-4. After one adapter passes the paper gate, attach it to the desktop gateway and test follow-up management in paper mode before defining any bounded consequential canary.
+1. Enroll fresh Trade God credentials, implement time-bounded paper arming, and
+   wire the created-to-risk-decision-to-approved coordinator without attaching
+   a live adapter.
+2. Add Tradovate token refresh plus bounded polling/reconnect reconciliation,
+   then certify one exact demo/paper connection.
+3. Approve the four Mirror Group defaults in the draft spec, then implement
+   contracts, lossless route migration, group revisions, ownership leases, and
+   dry-run planning with zero provider order/mutation calls.
+4. Confirm Apex-issued Tradovate API eligibility and supply a demo credential
+   bound to the exact paper account.
+5. Implement and certify Tradovate partial-close/protection-resize behavior.
+6. Run and retain the single-account and Mirror Group paper soak plus forced-
+   failure matrices before attaching the adapter to the desktop gateway.
 
 ## Blockers / Decisions Needed
 

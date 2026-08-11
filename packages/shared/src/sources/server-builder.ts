@@ -100,6 +100,7 @@ export class SourceServerBuilder {
         command: mcp.command,
         args: mcp.args,
         env: mcp.env,
+        ...(mcp.allowedTools ? { allowedTools: mcp.allowedTools } : {}),
       };
     }
 
@@ -114,6 +115,7 @@ export class SourceServerBuilder {
     const config: McpServerConfig = {
       type: mcp.transport === 'sse' ? 'sse' : 'http',
       url,
+      ...(mcp.allowedTools ? { allowedTools: mcp.allowedTools } : {}),
     };
 
     // Layer headers with increasing precedence:

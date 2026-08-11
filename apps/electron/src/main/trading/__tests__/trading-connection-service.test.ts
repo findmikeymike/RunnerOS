@@ -322,7 +322,7 @@ describe('trading connection service', () => {
 
     browser.inspected = { url: 'https://evil.example/phish', title: 'WealthCharts' }
     await expect(service.confirmBrowserLogin(saved.connection.connection_id))
-      .rejects.toThrow('Login confirmation refused')
+      .rejects.toThrow('Provider-page confirmation refused')
   })
 
   test('deletes connection metadata and its vault secret together', async () => {

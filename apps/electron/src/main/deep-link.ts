@@ -97,7 +97,7 @@ export function parseDeepLink(url: string): DeepLinkTarget | null {
   try {
     const parsed = new URL(url)
 
-    if (parsed.protocol !== 'craftagents:') {
+    if (parsed.protocol !== 'tradegod:' && parsed.protocol !== 'craftagents:') {
       return null
     }
 

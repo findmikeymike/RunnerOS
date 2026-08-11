@@ -10,6 +10,7 @@ export * from './self-edit.ts';
 export * from './theme.ts';
 export * from './validators.ts';
 export * from './cli-domains.ts';
+export { CONFIG_DIR } from './paths.ts';
 export {
   ConfigWatcher,
   createConfigWatcher,

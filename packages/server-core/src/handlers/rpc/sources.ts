@@ -22,6 +22,26 @@ import type { HandlerDeps } from '../handler-deps'
 import { syncGoogleAdsCredentialCache } from './google-ads-credential-cache'
 import { syncYouTubeResearchCredentialCache } from './youtube-research-credential-cache'
 
+export function assertDiscoTraderCatalogSource(config: LoadedSource['config']): void {
+  if (!config.enabled) throw new Error('DiscoTrader source is disabled')
+  if (config.connectionStatus === 'needs_auth') {
+    throw new Error('DiscoTrader source requires authentication')
+  }
+  if (config.connectionStatus === 'failed') {
+    throw new Error(config.connectionError || 'DiscoTrader connection failed')
+  }
+  if (config.connectionStatus === 'untested') {
+    throw new Error('DiscoTrader source has not been tested yet')
+  }
+  if (config.type !== 'mcp'
+    || config.provider !== 'discotrader'
+    || config.mcp?.transport !== 'http'
+    || config.mcp.url !== 'http://127.0.0.1:8788/mcp'
+    || config.mcp.authType !== 'bearer') {
+    throw new Error('DiscoTrader source does not match the audited local connection')
+  }
+}
+
 export const HANDLED_CHANNELS = [
   RPC_CHANNELS.sources.GET,
   RPC_CHANNELS.sources.CREATE,
@@ -37,6 +57,7 @@ export const HANDLED_CHANNELS = [
   RPC_CHANNELS.workspace.GET_PERMISSIONS,
   RPC_CHANNELS.permissions.GET_DEFAULTS,
   RPC_CHANNELS.sources.GET_MCP_TOOLS,
+  RPC_CHANNELS.sources.GET_DISCOTRADER_SIGNAL_SOURCES,
   RPC_CHANNELS.sources.LIST_GLOBAL,
   RPC_CHANNELS.sources.GET_ENABLED_GLOBAL,
   RPC_CHANNELS.sources.SET_GLOBAL_ENABLED,
@@ -503,6 +524,42 @@ export function registerSourcesHandlers(server: RpcServer, deps: HandlerDeps): v
         return { success: false, error: 'Authentication failed. Please re-authenticate with this source.' }
       }
       return { success: false, error: errorMessage }
+    }
+  })
+
+  // Trade God product surface: invoke one audited read-only DiscoTrader tool.
+  // This is intentionally not a generic renderer-to-MCP execution bridge.
+  server.handle(RPC_CHANNELS.sources.GET_DISCOTRADER_SIGNAL_SOURCES, async (
+    _ctx,
+    workspaceId: string,
+  ) => {
+    const workspace = getWorkspaceByNameOrId(workspaceId)
+    if (!workspace) throw new Error('Workspace not found')
+    const [source] = getSourcesBySlugs(workspace.rootPath, ['discotrader'])
+    if (!source) throw new Error('DiscoTrader source is not connected')
+    assertDiscoTraderCatalogSource(source.config)
+    const auditedUrl = source.config.mcp!.url!
+
+    const { CraftMcpClient } = await import('@craft-agent/shared/mcp')
+    const { getSourceCredentialManager } = await import('@craft-agent/shared/sources')
+    const accessToken = await getSourceCredentialManager().getToken(source)
+    if (!accessToken) throw new Error('DiscoTrader authentication is missing')
+    const client = new CraftMcpClient({
+      transport: 'http',
+      url: auditedUrl,
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    try {
+      const result = await client.callTool('dt_signal_sources', { limit: 100 }) as {
+        content?: Array<{ type?: string; text?: unknown }>
+        isError?: boolean
+      }
+      const text = result.content?.find((block) => block.type === 'text')?.text
+      if (result.isError) throw new Error(typeof text === 'string' ? text : 'DiscoTrader source catalog failed')
+      if (typeof text !== 'string') throw new Error('DiscoTrader returned an invalid source catalog')
+      return JSON.parse(text) as unknown
+    } finally {
+      await client.close()
     }
   })
 

@@ -1,8 +1,3 @@
-// Load user's shell environment first (before other imports that may use env)
-// This ensures tools like Homebrew, nvm, etc. are available to the agent
-import { loadShellEnv } from './shell-env'
-loadShellEnv()
-
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, session, shell } from 'electron'
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
@@ -85,6 +80,7 @@ import { createApplicationMenu } from './menu'
 import { WindowManager } from './window-manager'
 import { loadWindowState, saveWindowState } from './window-state'
 import { getWorkspaces, getWorkspaceByNameOrId, loadStoredConfig, addWorkspace, saveConfig } from '@craft-agent/shared/config'
+import { CONFIG_DIR } from '@craft-agent/shared/config'
 import { getDefaultWorkspacesDir } from '@craft-agent/shared/workspaces'
 import { initializeDocs } from '@craft-agent/shared/docs'
 import { initializeReleaseNotes } from '@craft-agent/shared/release-notes'
@@ -115,6 +111,7 @@ import {
 import { executeScheduledSocialBrowser } from './scheduled-social-browser-executor'
 import { runSocialJson } from './social-cli'
 import { createTradeGodRuntime, resolveTradeGodHostConfig } from './trading/trading-runtime'
+import { DISCOTRADER_WEBHOOK_SECRET_REF } from './trading/discotrader-webhook-secret'
 
 // Initialize electron-log for renderer process support
 log.initialize()
@@ -194,7 +191,7 @@ registerPiModelResolver((piAuthProvider) =>
 
 // Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
 // Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (craftagents1, craftagents2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
+const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'tradegod'
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
@@ -220,13 +217,11 @@ let pendingDeepLink: string | null = null
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Runner [1]")
-app.setName(process.env.CRAFT_APP_NAME || 'Runner')
+app.setName(process.env.CRAFT_APP_NAME || 'Trade God')
 
 // Give parallel development worktrees independent Electron locks and runtime
 // state without separating the shared Runner workspace/provider configuration.
-if (process.env.CRAFT_USER_DATA_DIR) {
-  app.setPath('userData', process.env.CRAFT_USER_DATA_DIR)
-}
+app.setPath('userData', process.env.CRAFT_USER_DATA_DIR || join(CONFIG_DIR, 'electron'))
 
 // Register as default protocol client for craftagents:// URLs
 // This must be done before app.whenReady() on some platforms
@@ -334,16 +329,16 @@ async function createInitialWindows(): Promise<void> {
   const savedState = loadWindowState()
   let workspaces = getWorkspaces()
 
-  // If no workspaces exist, create default "My Workspace" on first run
+  // If no workspaces exist, create Trade God's default trading workspace.
   if (workspaces.length === 0) {
     // Ensure config file exists (addWorkspace requires it)
     if (!loadStoredConfig()) {
       saveConfig({ workspaces: [], activeWorkspaceId: null, activeSessionId: null })
     }
-    const defaultPath = join(getDefaultWorkspacesDir(), 'my-workspace')
-    addWorkspace({ rootPath: defaultPath, name: 'My Workspace' })
+    const defaultPath = join(getDefaultWorkspacesDir(), 'trading')
+    addWorkspace({ rootPath: defaultPath, name: 'Trading' })
     workspaces = getWorkspaces() // Refresh after creation
-    mainLog.info('Created default workspace on first run')
+    mainLog.info('Created default Trade God workspace on first run')
   }
 
   const validWorkspaceIds = workspaces.map(ws => ws.id)
@@ -780,7 +775,7 @@ app.whenReady().then(async () => {
               })
             },
             getMessagingDir: (wsId: string) =>
-              join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+              join(CONFIG_DIR, 'workspaces', wsId, 'messaging'),
             getLegacyMessagingDir: (wsId: string) => {
               const ws = getWorkspaces().find((w) => w.id === wsId)
               return ws ? join(ws.rootPath, 'messaging') : undefined
@@ -897,7 +892,7 @@ app.whenReady().then(async () => {
       // port. Users who want public exposure must explicitly bind to 0.0.0.0.
       // -----------------------------------------------------------------------
       try {
-        const DEFAULT_TRIGGER_PORT = 9101
+        const DEFAULT_TRIGGER_PORT = 9201
         const envPort = process.env.CRAFT_TRIGGER_PORT
         let triggerPort: number
         if (envPort === undefined || envPort === '') {
@@ -914,6 +909,11 @@ app.whenReady().then(async () => {
             host: process.env.CRAFT_TRIGGER_HOST ?? '127.0.0.1',
             resolver: instance.sessionManager,
             replayProtectedSlugs: ['discotrader', 'discotrader-management'],
+            secretResolver: async ({ slug }) => (
+              slug === 'discotrader' || slug === 'discotrader-management'
+                ? await getCredentialManager().getTradingConnectionSecret(DISCOTRADER_WEBHOOK_SECRET_REF) ?? undefined
+                : undefined
+            ),
             authenticatedDeliveryHandler: async (delivery) => {
               if (
                 delivery.slug !== 'discotrader'
@@ -1413,14 +1413,42 @@ app.on('window-all-closed', () => {
 // Track if we're in the process of quitting (to avoid re-entry)
 let isQuitting = false
 
+const settleRuntimeSafetyActions = async (
+  actions: Promise<unknown>[],
+  timeoutMs: number,
+): Promise<boolean> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const result = await Promise.race([
+    Promise.allSettled(actions),
+    new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), timeoutMs)
+    }),
+  ])
+  if (timer) clearTimeout(timer)
+  return result !== null && result.every((entry) => entry.status === 'fulfilled')
+}
+
 // Save window state and clean up resources before quitting
 app.on('before-quit', async (event) => {
   // Avoid re-entry when we call app.exit()
   if (isQuitting) return
   isQuitting = true
+  event.preventDefault()
 
   // Ensure Cmd+Q/app quit bypasses layered window close interception (Cmd+W behavior).
   windowManager?.setAppQuitting(true)
+
+  // Persist a fail-closed restart state before any slower desktop cleanup.
+  const safetySettled = await settleRuntimeSafetyActions([
+    tradeGodRuntime?.emergencyHalt() ?? Promise.resolve(),
+    triggerServerHandle?.stop() ?? Promise.resolve(),
+  ], 2_000)
+  if (!safetySettled) {
+    mainLog.error('Quit refused: emergency halt or trigger shutdown was not durably confirmed.')
+    isQuitting = false
+    return
+  }
+  triggerServerHandle = null
 
   if (windowManager) {
     // Get full window states (includes bounds, type, and query)
@@ -1451,8 +1479,6 @@ app.on('before-quit', async (event) => {
 
   // Flush all pending session writes before quitting
   if (sessionManager) {
-    // Prevent quit until sessions are flushed
-    event.preventDefault()
     try {
       await sessionManager.flushAllSessions()
       mainLog.info('Flushed all pending session writes')
@@ -1461,11 +1487,12 @@ app.on('before-quit', async (event) => {
     }
     // Clean up SessionManager resources (file watchers, timers, etc.)
     sessionManager.cleanup()
+  }
 
-    // Clean up browser pane instances
-    if (browserPaneManager) {
-      browserPaneManager.destroyAll()
-    }
+  // Clean up browser pane instances
+  if (browserPaneManager) {
+    browserPaneManager.destroyAll()
+  }
 
     // Clean up OAuth flow store (stop periodic cleanup timer)
     if (oauthFlowStore) {
@@ -1474,15 +1501,6 @@ app.on('before-quit', async (event) => {
 
     // Stop all model refresh timers
     getModelRefreshService().stopAll()
-
-    // Stop the inbound webhook trigger HTTP server.
-    if (triggerServerHandle) {
-      try {
-        await triggerServerHandle.stop()
-      } catch (err) {
-        mainLog.error('[trigger-server] stop failed:', err)
-      }
-    }
 
     // Stop messaging gateways so the WhatsApp worker subprocess exits cleanly.
     if (messagingHandle) {
@@ -1509,19 +1527,41 @@ app.on('before-quit', async (event) => {
       return
     }
 
-    // Now actually quit
-    app.exit(0)
-  }
+  // Now actually quit
+  app.exit(0)
 })
 
-// Handle uncaught exceptions — forward to Sentry explicitly since registering
-// a custom handler can interfere with @sentry/electron's automatic capture.
+let handlingFatalRuntimeFailure = false
+const handleFatalRuntimeFailure = async (error: unknown): Promise<void> => {
+  if (handlingFatalRuntimeFailure) return
+  handlingFatalRuntimeFailure = true
+  const failure = error instanceof Error ? error : new Error(String(error))
+  mainLog.error('Fatal runtime failure:', failure)
+  Sentry.captureException(failure)
+  const safetySettled = await settleRuntimeSafetyActions([
+    tradeGodRuntime?.emergencyHalt() ?? Promise.resolve(),
+    triggerServerHandle?.stop() ?? Promise.resolve(),
+  ], 2_000)
+  if (!safetySettled) {
+    mainLog.error('Fatal exit refused: execution containment was not confirmed; process remains emergency-halted.')
+    return
+  }
+  app.exit(1)
+}
+
 process.on('uncaughtException', (error) => {
   mainLog.error('Uncaught exception:', error)
   Sentry.captureException(error)
+  void handleFatalRuntimeFailure(error)
 })
 
 process.on('unhandledRejection', (reason, promise) => {
   mainLog.error('Unhandled rejection at:', promise, 'reason:', reason)
   Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)))
+  void handleFatalRuntimeFailure(reason)
+})
+
+app.on('render-process-gone', (_event, _webContents, details) => {
+  if (details.reason === 'clean-exit') return
+  void handleFatalRuntimeFailure(new Error(`Renderer process failed: ${details.reason}`))
 })

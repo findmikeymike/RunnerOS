@@ -146,7 +146,7 @@ export function AddWorkspaceStep_ConnectRemote({
     }
 
     if (!homeDir) return
-    const defaultBasePath = `${homeDir}/.craft-agent/workspaces`
+    const defaultBasePath = `${homeDir}/.trade-god/workspaces`
 
     if (isCreateNew || isFreshServer) {
       // Create new workspace on remote server via direct RPC, then connect locally

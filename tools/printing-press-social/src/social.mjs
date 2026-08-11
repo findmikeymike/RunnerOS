@@ -583,7 +583,7 @@ function sessionDir(profile) {
 
 function socialHome(platform) {
   if (process.env.SOCIAL_HOME) return process.env.SOCIAL_HOME;
-  return path.join(os.homedir(), '.config', 'printing-press-clis', platform);
+  return path.join(os.homedir(), '.trade-god', 'social', platform);
 }
 
 function buildLiveReplayArgs(action, flags) {

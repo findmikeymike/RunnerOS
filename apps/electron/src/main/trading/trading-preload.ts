@@ -45,8 +45,20 @@ export interface TradingPreloadApi {
   }>
   confirmTradingConnectionLogin(connectionId: string): Promise<TradingConnectionStatus>
   listTradingSignalRoutes(): Promise<TradingSignalRoute[]>
-  saveTradingSignalRoute(route: TradingSignalRoute): Promise<TradingSignalRoute>
+  saveTradingSignalRoute(
+    route: TradingSignalRoute,
+    expectedPreviousConnectionId?: string,
+  ): Promise<TradingSignalRoute>
   removeTradingSignalRoute(routeId: string): Promise<boolean>
+  getDiscoTraderWebhookSecretStatus(): Promise<{ configured: boolean }>
+  saveDiscoTraderWebhookSecret(secret: string): Promise<{ configured: true }>
+  getTradeGodExecutionControl(): Promise<{
+    global_kill: boolean
+    connection_kills: string[]
+    source_kills: string[]
+    updated_at: string
+  }>
+  setTradeGodGlobalExecutionKill(enabled: boolean): Promise<{ global_kill: boolean }>
 }
 
 export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): TradingPreloadApi {
@@ -84,8 +96,25 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
       invoke(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN, connectionId) as Promise<TradingConnectionStatus>
     ),
     listTradingSignalRoutes: () => invoke(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES) as Promise<TradingSignalRoute[]>,
-    saveTradingSignalRoute: (route) => invoke(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, route) as Promise<TradingSignalRoute>,
+    saveTradingSignalRoute: (route, expectedPreviousConnectionId) => (
+      invoke(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, route, expectedPreviousConnectionId) as Promise<TradingSignalRoute>
+    ),
     removeTradingSignalRoute: (routeId) => invoke(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, routeId) as Promise<boolean>,
+    getDiscoTraderWebhookSecretStatus: () => (
+      invoke(TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS) as Promise<{ configured: boolean }>
+    ),
+    saveDiscoTraderWebhookSecret: (secret) => (
+      invoke(TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET, secret) as Promise<{ configured: true }>
+    ),
+    getTradeGodExecutionControl: () => invoke(TRADE_GOD_IPC.EXECUTION_CONTROL) as Promise<{
+      global_kill: boolean
+      connection_kills: string[]
+      source_kills: string[]
+      updated_at: string
+    }>,
+    setTradeGodGlobalExecutionKill: (enabled) => (
+      invoke(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL, enabled) as Promise<{ global_kill: boolean }>
+    ),
     onTradeGodAlert: (callback) => subscribe
       ? subscribe(TRADE_GOD_IPC.ALERT_RECEIVED, (payload) => callback(payload as TradeAlert))
       : () => {},

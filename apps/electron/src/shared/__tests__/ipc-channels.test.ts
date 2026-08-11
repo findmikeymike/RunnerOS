@@ -349,6 +349,7 @@ const EXPECTED_CHANNELS: string[] = [
   "sources:delete",
   "sources:get",
   "sources:getCredentialScope",
+  "sources:getDiscoTraderSignalSources",
   "sources:getEnabledGlobal",
   "sources:getMcpTools",
   "sources:getPermissions",

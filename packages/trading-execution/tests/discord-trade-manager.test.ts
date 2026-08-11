@@ -76,12 +76,14 @@ const artifact = (
   ticket(messageId, symbol, channelId, authorId),
   {
     connection_id: 'connection-paper',
+    source_id: `discord-route-${channelId}-${authorId}`,
     instrument: {
       canonical_id: `CME:${symbol}`,
       symbol,
       exchange: 'XCME',
       expiry: '2026-09',
       tick_size: '0.25',
+      point_value_usd: '50',
     },
     valid_for_ms: 60_000,
   },
@@ -337,6 +339,8 @@ describe('Discord management-only parser', () => {
     expect(parseDiscordManagementText('close here after CPI').actions).toHaveLength(0)
     expect(parseDiscordManagementText('flat').actions[0]).toMatchObject({ operation: 'flatten' })
     expect(parseDiscordManagementText('done').actions[0]).toMatchObject({ operation: 'flatten' })
+    expect(parseDiscordManagementText("I'm out of patience here").actions).toHaveLength(0)
+    expect(parseDiscordManagementText('done here analyzing this').actions).toHaveLength(0)
   })
 })
 
@@ -464,6 +468,32 @@ describe('Discord trade manager', () => {
     expect(gateway.log).toEqual(['reconcile', 'partial:2', 'stop:5600'])
   })
 
+  test('defers an exact early follow-up and executes it after the entry becomes protected', async () => {
+    const source = artifact()
+    const protectedEntry = protectedRecord(source)
+    const pendingEntry = structuredClone(protectedEntry)
+    pendingEntry.state = 'created'
+    delete pendingEntry.claim
+    delete pendingEntry.command
+    delete pendingEntry.receipt
+    const gateway = new FakeGateway([pendingEntry])
+    const manager = new FileDiscordTradeManager({
+      directory: await mkdtemp(path.join(tmpdir(), 'discord-trade-manager-deferred-')),
+      gateway,
+      source: new SourceReader([source]),
+      now: () => NOW,
+    })
+    const followUp = message('all out', { reply_to_message_id: source.source_message_id })
+
+    expect(await manager.ingestMessage(followUp)).toMatchObject({ status: 'deferred' })
+    expect(gateway.log).toEqual([])
+
+    Object.assign(pendingEntry, protectedEntry)
+    const recovered = await manager.recoverPending()
+    expect(recovered[0]).toMatchObject({ status: 'completed' })
+    expect(gateway.log).toEqual(['reconcile', 'flatten'])
+  })
+
   test('executes the same explicit reduction from two distinct Discord messages', async () => {
     const { gateway, manager } = await setup([artifact()], [3])
 
@@ -479,6 +509,31 @@ describe('Discord trade manager', () => {
     expect(gateway.log).toEqual(['reconcile', 'partial:1', 'reconcile', 'partial:1'])
     expect(first.actions[0]!.management_command_id)
       .not.toBe(second.actions[0]!.management_command_id)
+  })
+
+  test('serializes concurrent follow-ups against freshly reconciled quantity', async () => {
+    const { gateway, manager } = await setup([artifact()], [4])
+    await Promise.all([
+      manager.ingestMessage(message('taking off half', { message_id: 'concurrent-half-1' })),
+      manager.ingestMessage(message('taking off half', { message_id: 'concurrent-half-2' })),
+    ])
+    expect(gateway.log).toEqual(['reconcile', 'partial:2', 'reconcile', 'partial:1'])
+  })
+
+  test('blocks a delayed older follow-up from superseding a newer accepted stop', async () => {
+    const { gateway, manager } = await setup()
+    expect(await manager.ingestMessage(message('move stop to 5601', {
+      message_id: 'newer-stop',
+      posted_at: '2026-07-30T15:10:00.000Z',
+    }))).toMatchObject({ status: 'completed' })
+    expect(await manager.ingestMessage(message('move stop to 5600', {
+      message_id: 'older-stop',
+      posted_at: '2026-07-30T15:09:59.000Z',
+    }))).toMatchObject({
+      status: 'blocked',
+      error: 'An older Discord follow-up cannot supersede a newer accepted instruction for this trade.',
+    })
+    expect(gateway.log).toEqual(['reconcile', 'stop:5601'])
   })
 
   test('treats stopped out as reconciliation only', async () => {

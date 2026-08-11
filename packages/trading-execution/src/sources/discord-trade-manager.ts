@@ -74,6 +74,7 @@ interface Resolution {
   resolved?: Candidate
   strategy?: DiscordManagementResolutionStrategy
   error?: string
+  retryable?: boolean
 }
 
 export const buildDiscordManagementMessage = (
@@ -95,6 +96,7 @@ export const buildDiscordManagementMessage = (
 export class FileDiscordTradeManager {
   private readonly now: () => string
   private readonly maxMessageAgeMs: number
+  private queue: Promise<void> = Promise.resolve()
 
   constructor(private readonly options: DiscordTradeManagerOptions) {
     this.now = options.now ?? (() => new Date().toISOString())
@@ -113,6 +115,10 @@ export class FileDiscordTradeManager {
   }
 
   async ingestMessage(input: unknown): Promise<DiscordManagementReceipt> {
+    return this.withLock(() => this.ingestMessageUnlocked(input))
+  }
+
+  private async ingestMessageUnlocked(input: unknown): Promise<DiscordManagementReceipt> {
     const message = discordManagementMessageSchema.parse(input)
     this.verifyMessage(message)
     const existing = await this.readReceiptIfPresent(message.message_id)
@@ -123,8 +129,11 @@ export class FileDiscordTradeManager {
           'Discord message ID conflicts with a different immutable payload.',
         )
       }
-      return existing.status === 'prepared' || existing.status === 'executing'
-        ? this.executeReceipt(existing)
+      if (existing.status === 'prepared' || existing.status === 'executing') {
+        return this.executeReceipt(existing)
+      }
+      return existing.status === 'deferred'
+        ? this.retryDeferred(existing)
         : existing
     }
 
@@ -143,11 +152,28 @@ export class FileDiscordTradeManager {
     const resolution = await this.resolve(message, parsed.symbol)
     if (!resolution.resolved || !resolution.strategy) {
       return this.createReceipt(message, {
-        status: 'blocked',
+        status: resolution.retryable ? 'deferred' : 'blocked',
         candidates: resolution.candidates.map(({ record }) => record.intent.intent_id),
         actions: [],
         evidence: ['No gateway mutation was attempted.'],
         error: resolution.error ?? 'Discord management message did not resolve to one active trade.',
+      })
+    }
+
+    const orderingError = await this.messageOrderingError(
+      message,
+      resolution.resolved.record.intent.intent_id,
+    )
+    if (orderingError) {
+      return this.createReceipt(message, {
+        status: 'blocked',
+        candidates: resolution.candidates.map(({ record }) => record.intent.intent_id),
+        resolvedIntentId: resolution.resolved.record.intent.intent_id,
+        strategy: resolution.strategy,
+        symbol: parsed.symbol,
+        actions: [],
+        evidence: ['No gateway mutation was attempted.'],
+        error: orderingError,
       })
     }
 
@@ -204,9 +230,90 @@ export class FileDiscordTradeManager {
     for (const receipt of receipts) {
       if (receipt.status === 'prepared' || receipt.status === 'executing') {
         recovered.push(await this.executeReceipt(receipt))
+      } else if (receipt.status === 'deferred') {
+        recovered.push(await this.retryDeferred(receipt))
       }
     }
     return recovered
+  }
+
+  private async retryDeferred(
+    receipt: DiscordManagementReceipt,
+  ): Promise<DiscordManagementReceipt> {
+    const message = receipt.source_message
+    const parsed = parseDiscordManagementText(message.raw_text)
+    const policyError = this.messagePolicyError(message) ?? parsed.error
+    if (policyError) {
+      return this.updateReceipt(receipt, (current) => {
+        current.status = 'blocked'
+        current.error = policyError
+        current.evidence = ['Deferred message expired or became ineligible. No gateway mutation was attempted.']
+        return current
+      })
+    }
+
+    const resolution = await this.resolve(message, parsed.symbol)
+    if (!resolution.resolved || !resolution.strategy) {
+      if (resolution.retryable) return receipt
+      return this.updateReceipt(receipt, (current) => {
+        current.status = 'blocked'
+        current.candidate_intent_ids = resolution.candidates
+          .map(({ record }) => record.intent.intent_id)
+          .sort()
+        current.error = resolution.error ?? 'Deferred Discord management message did not resolve.'
+        current.evidence = ['Deferred resolution became terminal. No gateway mutation was attempted.']
+        return current
+      })
+    }
+
+    const orderingError = await this.messageOrderingError(
+      message,
+      resolution.resolved.record.intent.intent_id,
+    )
+    if (orderingError) {
+      return this.updateReceipt(receipt, (current) => {
+        current.status = 'blocked'
+        current.error = orderingError
+        current.evidence = ['Deferred message was superseded. No gateway mutation was attempted.']
+        return current
+      })
+    }
+
+    let actions: DiscordManagementActionReceipt[]
+    try {
+      const needsPreflight = parsed.actions.some((action) => action.operation !== 'reconcile')
+      const currentRecord = needsPreflight
+        ? await this.options.gateway.reconcile(resolution.resolved.record.intent.intent_id)
+        : resolution.resolved.record
+      actions = this.prepareLogicalActions(currentRecord, parsed.actions)
+    } catch (error) {
+      return this.updateReceipt(receipt, (current) => {
+        current.status = 'blocked'
+        current.error = error instanceof Error ? error.message : 'Deferred management plan is invalid.'
+        current.evidence = ['Deferred trade resolution succeeded, but deterministic planning failed.']
+        return current
+      })
+    }
+
+    const prepared = await this.updateReceipt(receipt, (current) => {
+      current.status = 'prepared'
+      current.candidate_intent_ids = resolution.candidates
+        .map(({ record }) => record.intent.intent_id)
+        .sort()
+      current.resolved_intent_id = resolution.resolved!.record.intent.intent_id
+      current.resolution_strategy = resolution.strategy
+      if (parsed.symbol) current.symbol_evidence = parsed.symbol
+      else delete current.symbol_evidence
+      current.actions = actions
+      current.evidence = [
+        `Matched immutable Discord author ${message.author_id}.`,
+        `Resolved deferred message by ${resolution.strategy}.`,
+        'Exact ordered action plan persisted before gateway mutation.',
+      ]
+      delete current.error
+      return current
+    })
+    return this.executeReceipt(prepared)
   }
 
   private verifyMessage(message: DiscordManagementMessage): void {
@@ -216,6 +323,32 @@ export class FileDiscordTradeManager {
         'Discord management message checksum does not match its immutable fields.',
       )
     }
+  }
+
+  private async messageOrderingError(
+    message: DiscordManagementMessage,
+    intentId: string,
+  ): Promise<string | undefined> {
+    const currentPostedAt = Date.parse(message.posted_at)
+    const newer = (await this.listReceipts()).find((receipt) => (
+      receipt.source_message.message_id !== message.message_id
+      && receipt.resolved_intent_id === intentId
+      && ['prepared', 'executing', 'completed'].includes(receipt.status)
+      && Date.parse(receipt.source_message.posted_at) > currentPostedAt
+    ))
+    return newer
+      ? 'An older Discord follow-up cannot supersede a newer accepted instruction for this trade.'
+      : undefined
+  }
+
+  private async withLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.queue
+    let release!: () => void
+    this.queue = previous.catch(() => undefined).then(() => new Promise<void>((resolve) => {
+      release = resolve
+    }))
+    await previous.catch(() => undefined)
+    try { return await operation() } finally { release() }
   }
 
   private messagePolicyError(message: DiscordManagementMessage): string | undefined {
@@ -230,7 +363,6 @@ export class FileDiscordTradeManager {
     const records = (await this.options.gateway.list()).filter((record) => (
       record.intent.source.type === 'discord'
       && record.intent.source.author_id === message.author_id
-      && record.command
     ))
     const allCandidates: Candidate[] = []
     for (const record of records) {
@@ -274,6 +406,7 @@ export class FileDiscordTradeManager {
       return {
         candidates: [],
         error: 'Reply target is not an accepted entry or management follow-up.',
+        retryable: true,
       }
     }
 
@@ -296,13 +429,17 @@ export class FileDiscordTradeManager {
         ({ record }) => instrumentMatchesRoot(record.intent.instrument.symbol, symbol),
       )
     }
-    candidates = candidates.filter(({ record }) => isManagementEligible(record))
+    const scopedCandidates = candidates
+    candidates = scopedCandidates.filter(({ record }) => isManagementEligible(record))
     if (candidates.length !== 1) {
       return {
-        candidates,
+        candidates: scopedCandidates,
         error: candidates.length === 0
           ? 'No active trade matches this author and Discord channel context.'
           : 'More than one active trade matches; an exact reply or symbol is required.',
+        retryable: candidates.length === 0 && scopedCandidates.some(({ record }) => (
+          isPendingManagementCandidate(record)
+        )),
       }
     }
     return { candidates, resolved: candidates[0], strategy }
@@ -627,6 +764,9 @@ const authoritativeResolution = (
       error: eligible.length === 0
         ? 'Authoritative reply target is no longer an active protected trade.'
         : 'Authoritative reply target maps to more than one active trade.',
+      retryable: eligible.length === 0 && candidates.some(({ record }) => (
+        isPendingManagementCandidate(record)
+      )),
     }
   }
   return { candidates, resolved: eligible[0], strategy }
@@ -637,6 +777,22 @@ const isManagementEligible = (record: ExecutionRecord): boolean => (
   && Boolean(record.command)
   && Boolean(record.receipt?.protection_verified)
   && Boolean(record.receipt?.open_quantity)
+)
+
+const isPendingManagementCandidate = (record: ExecutionRecord): boolean => (
+  [
+    'created',
+    'awaiting-authorization',
+    'approved',
+    'claimed',
+    'submitting',
+    'acknowledged',
+    'partially-filled',
+    'filled',
+    'protecting',
+    'submit-unknown',
+    'protection-unknown',
+  ].includes(record.state)
 )
 
 const confirmedOpenQuantity = (record: ExecutionRecord): number => {

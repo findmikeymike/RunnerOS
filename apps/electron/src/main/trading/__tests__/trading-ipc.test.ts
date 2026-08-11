@@ -45,8 +45,32 @@ describe('Trade God IPC registration', () => {
         return { browser_login_confirmed: true } as any
       },
       listTradingSignalRoutes: async () => { calls.push('routes:list'); return [] },
-      saveTradingSignalRoute: async (route) => { calls.push('routes:save'); return route },
+      saveTradingSignalRoute: async (route, expectedPreviousConnectionId) => {
+        calls.push(`routes:save:${expectedPreviousConnectionId ?? 'new'}`)
+        return route
+      },
       removeTradingSignalRoute: async (id) => { calls.push(`routes:remove:${id}`); return true },
+      getDiscoTraderWebhookSecretStatus: async () => {
+        calls.push('discotrader-secret:status')
+        return { configured: true }
+      },
+      saveDiscoTraderWebhookSecret: async () => {
+        calls.push('discotrader-secret:save')
+        return { configured: true }
+      },
+      getExecutionControl: async () => {
+        calls.push('execution-control:get')
+        return {
+          global_kill: false,
+          connection_kills: [],
+          source_kills: [],
+          updated_at: '2026-08-10T00:00:00.000Z',
+        }
+      },
+      setGlobalExecutionKill: async (enabled) => {
+        calls.push(`execution-control:set:${enabled}`)
+        return { global_kill: enabled }
+      },
       stop: async () => { calls.push('stop') },
     }
 
@@ -71,6 +95,10 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
       TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
       TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,
+      TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS,
+      TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET,
+      TRADE_GOD_IPC.EXECUTION_CONTROL,
+      TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL,
     ])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.HEALTH)!({})).toEqual({ state: 'ready' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.ANALYZE_FIXTURE)!({}, { timeoutMs: 500 })).toEqual({ artifact_id: 'artifact-ipc' })
@@ -95,8 +123,23 @@ describe('Trade God IPC registration', () => {
     expect(await ipc.handlers.get(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN)!({}, 'connection-1'))
       .toEqual({ browser_login_confirmed: true })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)!({})).toEqual([])
-    expect(await ipc.handlers.get(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)!({}, { route_id: 'route-1' })).toEqual({ route_id: 'route-1' })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)!(
+      {},
+      { route_id: 'route-1' },
+      'connection-old',
+    )).toEqual({ route_id: 'route-1' })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE)!({}, 'route-1')).toBe(true)
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS)!({}))
+      .toEqual({ configured: true })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET)!(
+      {},
+      'a'.repeat(32),
+    )).toEqual({ configured: true })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.EXECUTION_CONTROL)!({})).toMatchObject({
+      global_kill: false,
+    })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL)!({}, true))
+      .toEqual({ global_kill: true })
     expect(calls).toEqual([
       'health',
       'analyze:500',
@@ -114,9 +157,28 @@ describe('Trade God IPC registration', () => {
       'connections:login:connection-1',
       'connections:confirm-login:connection-1',
       'routes:list',
-      'routes:save',
+      'routes:save:connection-old',
       'routes:remove:route-1',
+      'discotrader-secret:status',
+      'discotrader-secret:save',
+      'execution-control:get',
+      'execution-control:set:true',
     ])
+  })
+
+  test('rejects invalid route reassignment confirmation before reaching the manager', () => {
+    const ipc = new FakeIpcMain()
+    const manager: TradingIpcManager = {
+      health: async () => ({}) as any,
+      analyzeFixture: async () => ({}) as any,
+      cancelAnalysis: async () => ({}) as any,
+      getSyntheticChartFixture: async () => null,
+      saveTradingSignalRoute: async (route) => route,
+      stop: async () => {},
+    }
+    registerTradingIpc(ipc, manager)
+    expect(() => ipc.handlers.get(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)!({}, {}, 42))
+      .toThrow('Expected previous connection id is invalid')
   })
 
   test('disposal removes handlers and stops the manager once', async () => {
@@ -153,6 +215,10 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
       TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
       TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,
+      TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS,
+      TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET,
+      TRADE_GOD_IPC.EXECUTION_CONTROL,
+      TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL,
     ])
     expect(stops).toBe(1)
   })

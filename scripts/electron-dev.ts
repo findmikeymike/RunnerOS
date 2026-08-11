@@ -133,6 +133,24 @@ function loadEnvFile(): void {
   }
 }
 
+/**
+ * Trade God is a separate desktop product. Generic Runner env files may still
+ * contain Artist OS defaults, so product-owned runtime identities are applied
+ * after dotenv loading and before any dev servers start.
+ */
+function applyTradeGodRuntimeIdentity(): void {
+  const configDir = process.env.TRADE_GOD_CONFIG_DIR
+    || join(process.env.HOME || "", ".trade-god");
+  process.env.CRAFT_VITE_PORT = process.env.TRADE_GOD_VITE_PORT || "5273";
+  process.env.CRAFT_CONFIG_DIR = configDir;
+  process.env.CRAFT_USER_DATA_DIR = process.env.TRADE_GOD_USER_DATA_DIR
+    || join(configDir, "electron");
+  process.env.CRAFT_APP_NAME = "Trade God";
+  process.env.CRAFT_DEEPLINK_SCHEME = "tradegod";
+  process.env.CRAFT_TRIGGER_PORT = process.env.TRADE_GOD_TRIGGER_PORT || "9201";
+  process.env.SOCIAL_HOME = process.env.TRADE_GOD_SOCIAL_HOME || join(configDir, "social");
+}
+
 // Kill any process using the specified port
 async function killProcessOnPort(port: string): Promise<void> {
   const isWindows = process.platform === "win32";
@@ -289,7 +307,7 @@ function getOAuthDefines(): Record<string, string> {
 
 // Get environment variables for electron process
 function getElectronEnv(): Record<string, string> {
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.CRAFT_VITE_PORT || "5273";
 
   // Codex binary path is resolved at runtime by the binary-resolver module.
   // It checks: CODEX_PATH env var > bundled binary > local dev fork > system PATH.
@@ -298,9 +316,10 @@ function getElectronEnv(): Record<string, string> {
   return {
     ...process.env as Record<string, string>,
     VITE_DEV_SERVER_URL: `http://localhost:${vitePort}`,
-    CRAFT_CONFIG_DIR: process.env.CRAFT_CONFIG_DIR || "",
-    CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "Craft Agents",
-    CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "craftagents",
+    CRAFT_CONFIG_DIR: process.env.CRAFT_CONFIG_DIR || join(process.env.HOME || "", ".trade-god"),
+    CRAFT_USER_DATA_DIR: process.env.CRAFT_USER_DATA_DIR || join(process.env.HOME || "", ".trade-god", "electron"),
+    CRAFT_APP_NAME: process.env.CRAFT_APP_NAME || "Trade God",
+    CRAFT_DEEPLINK_SCHEME: process.env.CRAFT_DEEPLINK_SCHEME || "tradegod",
     CRAFT_INSTANCE_NUMBER: process.env.CRAFT_INSTANCE_NUMBER || "",
   };
 }
@@ -422,6 +441,7 @@ async function main(): Promise<void> {
   // Setup
   detectInstance();
   loadEnvFile();
+  applyTradeGodRuntimeIdentity();
   cleanViteCache();
 
   // Ensure dist directory exists
@@ -439,7 +459,7 @@ async function main(): Promise<void> {
   // Build WhatsApp worker bundle so the adapter can spawn it on demand
   await buildWaWorker();
 
-  const vitePort = process.env.CRAFT_VITE_PORT || "5173";
+  const vitePort = process.env.CRAFT_VITE_PORT || "5273";
   const oauthDefines = getOAuthDefines();
 
   // Kill any existing process on the Vite port
@@ -462,7 +482,7 @@ async function main(): Promise<void> {
   // Build main and preload entries in parallel
   const [mainResult, preloadResult, toolbarPreloadResult] = await Promise.all([
     runEsbuild(
-      "apps/electron/src/main/index.ts",
+      "apps/electron/src/main/bootstrap.ts",
       "apps/electron/dist/main.cjs",
       oauthDefines,
       { alias: MAIN_PROCESS_ALIAS }
@@ -551,7 +571,7 @@ async function main(): Promise<void> {
 
   // 2. Main process watcher (using esbuild watch API)
   const mainContext = await esbuild.context({
-    entryPoints: [join(ROOT_DIR, "apps/electron/src/main/index.ts")],
+    entryPoints: [join(ROOT_DIR, "apps/electron/src/main/bootstrap.ts")],
     bundle: true,
     platform: "node",
     format: "cjs",

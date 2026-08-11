@@ -58,12 +58,14 @@ const ticket = (overrides: Record<string, unknown> = {}) => ({
 
 const route = {
   connection_id: 'connection-apex-paper',
+  source_id: 'discord-route-jordan-v',
   instrument: {
     canonical_id: 'CME:ESU6',
     symbol: 'ESU6',
     exchange: 'XCME',
     expiry: '2026-09',
     tick_size: '0.25',
+    point_value_usd: '50',
   },
   valid_for_ms: 60_000,
 }
@@ -105,7 +107,14 @@ class Registrar {
 
 describe('DiscoTrader intent source', () => {
   test('preserves deterministic size and immutable author while converting to order-intent@1', () => {
-    const artifact = convertDiscoTraderTicket(ticket(), route, NOW)
+    const artifact = convertDiscoTraderTicket(ticket({
+      provenance: {
+        ...ticket().provenance,
+        postedAt: '2026-07-30T15:04:58.000Z',
+        observedAt: '2026-07-30T15:04:58.250Z',
+        latencyMs: 2_000,
+      },
+    }), route, NOW)
 
     expect(artifact).toMatchObject({
       source_ticket_id: 'ticket-1',
@@ -117,7 +126,7 @@ describe('DiscoTrader intent source', () => {
         connection_id: 'connection-apex-paper',
         source: {
           type: 'discord',
-          source_id: 'discord-message-123',
+          source_id: 'discord-route-jordan-v',
           author_id: 'discord-user-456',
         },
         instrument: {
@@ -126,6 +135,7 @@ describe('DiscoTrader intent source', () => {
         },
         side: 'buy',
         quantity: 3,
+        max_loss_usd: '300',
         entry: { type: 'limit', price: '5600' },
         protection: {
           stop_loss: { type: 'price', value: '5598' },
@@ -161,8 +171,31 @@ describe('DiscoTrader intent source', () => {
     expect(() => convertDiscoTraderTicket(ticket({
       action: { ...ticket().action, side: 'short' },
     }), route, NOW)).toThrow('direction conflicts')
+    expect(() => convertDiscoTraderTicket(ticket({
+      provenance: { ...ticket().provenance, postedAt: undefined },
+    }), route, NOW)).toThrow('posted timestamp')
+    expect(() => convertDiscoTraderTicket(ticket({
+      createdAt: '2026-07-30T15:03:02.000Z',
+      provenance: {
+        ...ticket().provenance,
+        postedAt: '2026-07-30T15:03:00.000Z',
+        observedAt: '2026-07-30T15:03:01.000Z',
+        latencyMs: 1_000,
+      },
+    }), route, NOW)).toThrow('expired before reaching')
+    expect(() => convertDiscoTraderTicket(ticket({
+      createdAt: NOW,
+      provenance: {
+        ...ticket().provenance,
+        postedAt: '2026-07-30T15:04:58.000Z',
+        observedAt: '2026-07-30T15:04:58.250Z',
+        latencyMs: 250,
+      },
+    }), route, NOW)).toThrow('timestamps disagree')
     expect(() => convertDiscoTraderTicket(ticket({ targets: [5599] }), route, NOW))
       .toThrow('target is on the wrong side')
+    expect(() => convertDiscoTraderTicket(ticket({ targets: [5603, 5605] }), route, NOW))
+      .toThrow('multiple targets are refused')
   })
 
   test('persists source evidence once and makes webhook replay idempotent', async () => {
@@ -184,6 +217,30 @@ describe('DiscoTrader intent source', () => {
     expect(replay.record.intent.intent_id).toBe(first.record.intent.intent_id)
     expect(registrar.registerCount).toBe(1)
     expect(await source.get(first.record.intent.intent_id)).toEqual(first.artifact)
+  })
+
+  test('binds one Discord source event and one ticket id to one durable intent', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'discotrader-intent-lineage-'))
+    const registrar = new Registrar()
+    const source = new FileDiscoTraderIntentSource(directory, registrar, () => NOW)
+    const push = (sourceTicket: ReturnType<typeof ticket>) => ({
+      kind: 'ticket' as const,
+      severity: 'action_required' as const,
+      summary: 'LONG 3xESU6',
+      ticket: sourceTicket,
+      at: NOW,
+    })
+    await source.ingestPush(push(ticket()), route)
+
+    await expect(source.ingestPush(push(ticket({ id: 'ticket-reissued' })), route))
+      .rejects.toMatchObject({ code: 'RECORD_INTEGRITY_FAILURE' })
+    await expect(source.ingestPush(push(ticket({
+      provenance: {
+        ...ticket().provenance,
+        messageId: 'discord-message-different',
+      },
+    })), route)).rejects.toMatchObject({ code: 'RECORD_INTEGRITY_FAILURE' })
+    expect(registrar.registerCount).toBe(1)
   })
 
   test('recovers registration after source persistence but before gateway registration', async () => {

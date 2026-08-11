@@ -20,7 +20,11 @@ import {
   resolveMarketDataLaunch,
   resolveOrderFlowLaunch,
   resolveTradeGodHostConfig,
+  TradingRouteMutationCoordinator,
 } from '../trading-runtime.ts'
+import { resolveFuturesContractIdentity } from '@trade-god/execution'
+import type { TradingSignalRoute } from '../trading-signal-route-store.ts'
+import { TradingSignalRouteStore } from '../trading-signal-route-store.ts'
 
 class FakeIpcMain {
   readonly handlers = new Map<string, (...args: any[]) => any>()
@@ -173,6 +177,18 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     updated_at: runtimeNow,
   }
   await new FileTradingConnectionStore(connectionDirectory, () => runtimeNow).save(connection)
+  await new TradingSignalRouteStore(connectionDirectory, () => runtimeNow).save({
+    route_id: 'route-runtime-discord-one',
+    display_name: 'Jordan V signals',
+    source_type: 'discord',
+    server_id: '1',
+    channel_id: '2',
+    trader_author_id: '123456789012345678',
+    connection_id: connection.connection_id,
+    enabled: true,
+    created_at: runtimeNow,
+    updated_at: runtimeNow,
+  })
   expect(runtime.ingestDiscoTraderTicketPush).toBeDefined()
   const entryPush = {
     kind: 'ticket',
@@ -204,7 +220,7 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
       provenance: {
         messageId: 'discord-entry-runtime-1',
         author: 'Jordan V',
-        authorId: 'discord-user-1',
+        authorId: '123456789012345678',
         channelUrl: 'https://discord.com/channels/1/2',
         rawText: 'NQ long 21450 stop 21440 target 21470',
         postedAt: runtimeNow,
@@ -225,7 +241,7 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
   expect(entry).toMatchObject({
     state: 'created',
     intent: {
-      source: { type: 'discord', source_id: 'discord-entry-runtime-1' },
+      source: { type: 'discord', source_id: 'route-runtime-discord-one' },
       connection_id: connection.connection_id,
       instrument: { canonical_id: 'CME:MNQ', symbol: 'MNQ', exchange: 'XCME' },
       quantity: 2,
@@ -242,7 +258,7 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
         symbol: 'YM',
       },
       symbol: 'YM',
-      tradedSymbol: 'MYM',
+      tradedSymbol: 'MYMU6',
       contracts: 1,
       stop: undefined,
       provenance: {
@@ -253,15 +269,18 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     },
   })
   expect(cbotEntry.intent.instrument).toEqual({
-    canonical_id: 'CBOT:MYM',
-    symbol: 'MYM',
+    canonical_id: 'CBOT:MYMU6',
+    symbol: 'MYMU6',
     exchange: 'XCBT',
+    expiry: '2026-09',
+    tick_size: '1',
+    point_value_usd: '0.5',
   })
   expect(cbotEntry.intent.protection.stop_loss).toEqual({ type: 'ticks', value: '10' })
 
   const managementMessage = buildDiscordManagementMessage({
     message_id: 'runtime-followup-1',
-    author_id: 'discord-user-1',
+    author_id: '123456789012345678',
     channel_id: 'discord-channel-1',
     raw_text: 'all out',
     posted_at: runtimeNow,
@@ -296,6 +315,20 @@ test('fails clearly when no sidecar entrypoint exists', () => {
     .toThrow('Market Data sidecar runtime was not found')
 })
 
+test('resolves only explicit futures month/year symbols to canonical expiry', () => {
+  expect(resolveFuturesContractIdentity('ESU6', '2026-08-10T00:00:00.000Z')).toEqual({
+    root: 'ES', symbol: 'ESU6', expiry: '2026-09', active: true,
+  })
+  expect(resolveFuturesContractIdentity('M2KZ26', '2026-08-10T00:00:00.000Z')).toEqual({
+    root: 'M2K', symbol: 'M2KZ26', expiry: '2026-12', active: true,
+  })
+  expect(resolveFuturesContractIdentity('ESH6', '2026-08-10T00:00:00.000Z')).toEqual({
+    root: 'ES', symbol: 'ESH6', expiry: '2026-03', active: false,
+  })
+  expect(resolveFuturesContractIdentity('MNQ', '2026-08-10T00:00:00.000Z'))
+    .toEqual({ root: 'MNQ', symbol: 'MNQ' })
+})
+
 test('resolves the packaged sidecar bundle before source candidates', () => {
   const packagedRoot = mkdtempSync(path.join(tmpdir(), 'trade-god-packaged-'))
   const packagedEntrypoint = path.join(packagedRoot, 'dist', 'trade-god', 'order-flow-engine.mjs')
@@ -321,14 +354,94 @@ test('resolves the packaged sidecar bundle before source candidates', () => {
 test('uses only packaged app assets and bundled Bun in packaged mode', () => {
   expect(resolveTradeGodHostConfig({
     isPackaged: true,
-    appPath: '/Applications/Runner.app/Contents/Resources/app',
-    resourcesPath: '/Applications/Runner.app/Contents/Resources',
+    appPath: '/Applications/Trade God.app/Contents/Resources/app',
+    resourcesPath: '/Applications/Trade God.app/Contents/Resources',
     cwd: '/untrusted/launch-directory',
     homeDir: '/Users/tester',
     env: {},
     platform: 'darwin',
   })).toEqual({
-    rootCandidates: ['/Applications/Runner.app/Contents/Resources/app'],
-    runtimeExecutable: '/Applications/Runner.app/Contents/Resources/app/vendor/bun/bun',
+    rootCandidates: ['/Applications/Trade God.app/Contents/Resources/app'],
+    runtimeExecutable: '/Applications/Trade God.app/Contents/Resources/app/vendor/bun/bun',
   })
+})
+
+const coordinatorRoute = (connectionId = 'connection-one'): TradingSignalRoute => ({
+  route_id: 'route-one', display_name: 'Trader one', source_type: 'discord',
+  server_id: '1', channel_id: '2', trader_author_id: '3',
+  connection_id: connectionId, enabled: true,
+  created_at: '2026-08-03T12:00:00.000Z', updated_at: '2026-08-03T12:00:00.000Z',
+})
+
+test('route coordinator rejects missing account targets and blocks deletion with attached routes', async () => {
+  let saveCalled = false
+  let removeConnectionCalled = false
+  const routes = [coordinatorRoute()]
+  const coordinator = new TradingRouteMutationCoordinator({
+    get: async (connectionId) => {
+      if (connectionId === 'missing') throw new Error('not found')
+      return {} as TradingConnection
+    },
+  }, {
+    list: async () => routes,
+    save: async (route) => { saveCalled = true; return route },
+    remove: async () => true,
+  })
+
+  await expect(coordinator.saveRoute(coordinatorRoute('missing'))).rejects.toThrow('not found')
+  expect(saveCalled).toBe(false)
+  await expect(coordinator.removeConnection('connection-one', async () => {
+    removeConnectionCalled = true
+    return true
+  })).rejects.toThrow('Remove this account’s Discord sources')
+  expect(removeConnectionCalled).toBe(false)
+})
+
+test('route save and account deletion are serialized so a new route cannot be orphaned', async () => {
+  const routes: TradingSignalRoute[] = []
+  let releaseSave!: () => void
+  let markSaveStarted!: () => void
+  const saveStarted = new Promise<void>((resolve) => { markSaveStarted = resolve })
+  const saveGate = new Promise<void>((resolve) => { releaseSave = resolve })
+  let removeConnectionCalled = false
+  const coordinator = new TradingRouteMutationCoordinator({
+    get: async () => ({} as TradingConnection),
+  }, {
+    list: async () => routes,
+    save: async (route) => {
+      markSaveStarted()
+      await saveGate
+      routes.push(route)
+      return route
+    },
+    remove: async () => true,
+  })
+
+  const saving = coordinator.saveRoute(coordinatorRoute())
+  await saveStarted
+  const removing = coordinator.removeConnection('connection-one', async () => {
+    removeConnectionCalled = true
+    return true
+  })
+  releaseSave()
+  await saving
+  await expect(removing).rejects.toThrow('Remove this account’s Discord sources')
+  expect(removeConnectionCalled).toBe(false)
+})
+
+test('account deletion is blocked while an execution is active or unresolved', async () => {
+  let removeConnectionCalled = false
+  const coordinator = new TradingRouteMutationCoordinator({
+    get: async () => ({} as TradingConnection),
+  }, {
+    list: async () => [],
+    save: async (route) => route,
+    remove: async () => true,
+  }, async (connectionId) => connectionId === 'connection-one')
+
+  await expect(coordinator.removeConnection('connection-one', async () => {
+    removeConnectionCalled = true
+    return true
+  })).rejects.toThrow('Resolve or close this account’s execution records')
+  expect(removeConnectionCalled).toBe(false)
 })

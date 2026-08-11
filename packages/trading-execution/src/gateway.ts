@@ -43,6 +43,10 @@ import {
   sha256,
 } from './canonical.ts'
 import { ExecutionAdapterError, ExecutionGatewayError } from './errors.ts'
+import {
+  resolveFuturesContractIdentity,
+  resolveFuturesEconomicSpec,
+} from './futures-contract.ts'
 import { FileExecutionStore } from './store.ts'
 
 export interface ExecutionGatewayOptions {
@@ -64,6 +68,7 @@ export interface ExecutionRecoveryResult {
 export class ExecutionGateway {
   private readonly now: () => string
   private readonly maxAccountSnapshotAgeMs: number
+  private emergencyHalted = false
 
   constructor(private readonly options: ExecutionGatewayOptions) {
     this.now = options.now ?? (() => new Date().toISOString())
@@ -129,6 +134,24 @@ export class ExecutionGateway {
         'Breakeven movement requires a verified average fill price.',
       )
     }
+    const currentStop = stop.stop_price
+    if (!currentStop) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Stop movement requires the provider current stop price.',
+      )
+    }
+    const currentValue = Number(currentStop)
+    const nextValue = Number(stopPrice)
+    const widensRisk = record.intent.side === 'buy'
+      ? nextValue < currentValue
+      : nextValue > currentValue
+    if (widensRisk) {
+      throw new ExecutionGatewayError(
+        'RISK_DENIED',
+        'Stop movement cannot widen risk relative to the provider-verified current stop.',
+      )
+    }
     const prepared = executionManagementPayloadSchema.parse({
       operation: 'modify',
       provider_order_id: stop.provider_order_id,
@@ -186,7 +209,75 @@ export class ExecutionGateway {
     })
   }
 
+  async evaluateAndApprove(
+    intentId: string,
+    authorizationInput: ExecutionAuthorization,
+  ): Promise<ExecutionRecord> {
+    const record = await this.options.store.get(intentId)
+    this.assertState(record, ['created'])
+    const authorization = executionAuthorizationSchema.parse(authorizationInput)
+    const connection = tradingConnectionSchema.parse(
+      await this.options.resolveConnection(record.intent.connection_id),
+    )
+    this.assertAuthorization(
+      record.intent,
+      authorization,
+      computeActionDigest(record.intent, connection),
+    )
+    const adapter = this.resolveAdapter(connection, record.intent)
+    await adapter.connect(connection)
+    const snapshot = executionAccountSnapshotSchema.parse(
+      await adapter.snapshotAccount(connection),
+    )
+    this.assertAccountSnapshot(connection, snapshot)
+
+    let result: RiskDecision['result'] = 'allow'
+    let reasons = ['Provider state and checksum-bound trade loss are within the authorized paper envelope.']
+    try {
+      this.assertNoUnownedExposure(snapshot)
+      this.assertMonetaryRisk(record.intent, snapshot, authorization)
+    } catch (error) {
+      if (!(error instanceof ExecutionGatewayError)) throw error
+      result = 'deny'
+      reasons = [error.message]
+    }
+    const evaluatedAt = this.now()
+    const validUntilMs = Math.min(
+      Date.parse(evaluatedAt) + this.maxAccountSnapshotAgeMs,
+      Date.parse(record.intent.valid_until),
+      Date.parse(authorization.expires_at),
+    )
+    const risk = riskDecisionSchema.parse({
+      risk_decision_schema_version: 'risk-decision@1',
+      decision_id: `risk-${randomUUID()}`,
+      intent_id: record.intent.intent_id,
+      account_snapshot_id: snapshot.account_snapshot_id,
+      risk_policy_version: '1.0.0',
+      result,
+      reasons,
+      evaluated_at: evaluatedAt,
+      valid_until: new Date(validUntilMs).toISOString(),
+    })
+    return this.approve(
+      intentId,
+      risk,
+      result === 'allow' ? authorization : undefined,
+    )
+  }
+
   async execute(intentId: string): Promise<ExecutionRecord> {
+    const record = await this.options.store.get(intentId)
+    const connection = tradingConnectionSchema.parse(
+      await this.options.resolveConnection(record.intent.connection_id),
+    )
+    return this.options.store.withProviderMutationLock(
+      this.providerAccountKey(connection),
+      `entry:${intentId}`,
+      () => this.executeWithProviderLock(intentId),
+    )
+  }
+
+  private async executeWithProviderLock(intentId: string): Promise<ExecutionRecord> {
     const approved = await this.options.store.get(intentId)
     this.assertState(approved, ['approved'])
     const connection = tradingConnectionSchema.parse(
@@ -203,20 +294,43 @@ export class ExecutionGateway {
     this.assertAuthorization(approved.intent, authorization, actionDigest)
     await this.assertExecutionAllowed(approved.intent, connection)
     const adapter = this.resolveAdapter(connection, approved.intent)
-    await adapter.connect(connection)
-    const snapshot = executionAccountSnapshotSchema.parse(
-      await adapter.snapshotAccount(connection),
-    )
-    this.assertAccountSnapshot(connection, snapshot)
-
-    const claimed = await this.options.store.claim(intentId, (record) => {
-      this.assertState(record, ['approved'])
-      record.claim = {
-        claim_id: `claim-${randomUUID()}`,
-        claimed_at: this.now(),
-      }
-      return transition(record, 'claimed', 'Execution gateway atomically claimed the intent.', this.now())
+    const ownershipKey = this.ownershipKey(connection, approved.intent)
+    await this.options.store.acquireOwnership({
+      ownership_key: ownershipKey,
+      intent_id: approved.intent.intent_id,
+      connection_id: connection.connection_id,
+      provider_account_key: this.providerAccountKey(connection),
+      instrument_id: approved.intent.instrument.canonical_id,
     })
+
+    let claimed: ExecutionRecord
+    try {
+      await adapter.connect(connection)
+      const snapshot = executionAccountSnapshotSchema.parse(
+        await adapter.snapshotAccount(connection),
+      )
+      this.assertAccountSnapshot(connection, snapshot)
+      this.assertMonetaryRisk(approved.intent, snapshot, authorization)
+      if (risk.account_snapshot_id !== snapshot.account_snapshot_id) {
+        throw new ExecutionGatewayError(
+          'STALE_RISK_DECISION',
+          'Risk decision does not bind the current provider account state.',
+          true,
+        )
+      }
+      this.assertNoUnownedExposure(snapshot)
+      claimed = await this.options.store.claim(intentId, (record) => {
+        this.assertState(record, ['approved'])
+        record.claim = {
+          claim_id: `claim-${randomUUID()}`,
+          claimed_at: this.now(),
+        }
+        return transition(record, 'claimed', 'Execution gateway atomically claimed the intent.', this.now())
+      })
+    } catch (error) {
+      await this.options.store.releaseOwnership(ownershipKey, intentId)
+      throw error
+    }
 
     try {
       await this.assertExecutionAllowed(claimed.intent, connection)
@@ -224,6 +338,7 @@ export class ExecutionGateway {
       await this.options.store.update(intentId, (record) => (
         transition(record, 'canceled', 'Execution was blocked after claim and before submission.', this.now())
       ))
+      await this.options.store.releaseOwnership(ownershipKey, intentId)
       throw error
     }
     if (!claimed.claim) {
@@ -271,6 +386,7 @@ export class ExecutionGateway {
           this.now(),
         )
       ))
+      await this.options.store.releaseOwnership(ownershipKey, intentId)
       throw error
     }
 
@@ -283,7 +399,7 @@ export class ExecutionGateway {
       )
     }
     if (acknowledgment.status === 'rejected') {
-      return this.options.store.update(intentId, (record) => {
+      const rejected = await this.options.store.update(intentId, (record) => {
         transition(
           record,
           'rejected',
@@ -302,15 +418,29 @@ export class ExecutionGateway {
         })
         return record
       })
+      await this.options.store.releaseOwnership(ownershipKey, intentId)
+      return rejected
     }
 
     await this.options.store.update(intentId, (record) => (
       transition(record, 'acknowledged', 'Provider acknowledged the order command.', this.now())
     ))
-    return this.reconcile(intentId)
+    return this.reconcileWithProviderLock(intentId)
   }
 
   async reconcile(intentId: string): Promise<ExecutionRecord> {
+    const record = await this.options.store.get(intentId)
+    const connection = tradingConnectionSchema.parse(
+      await this.options.resolveConnection(record.intent.connection_id),
+    )
+    return this.options.store.withProviderMutationLock(
+      this.providerAccountKey(connection),
+      `reconcile:${intentId}`,
+      () => this.reconcileWithProviderLock(intentId),
+    )
+  }
+
+  private async reconcileWithProviderLock(intentId: string): Promise<ExecutionRecord> {
     const record = await this.options.store.get(intentId)
     if (TERMINAL_STATES.has(record.state)) {
       throw new ExecutionGatewayError(
@@ -405,6 +535,22 @@ export class ExecutionGateway {
     const requestId = requestIdInput ?? `management-semantic-${sha256(
       payload.operation === 'flatten' ? { operation: 'flatten' } : payload,
     ).slice(0, 32)}`
+    const initial = await this.options.store.get(intentId)
+    const initialConnection = tradingConnectionSchema.parse(
+      await this.options.resolveConnection(initial.intent.connection_id),
+    )
+    return this.options.store.withProviderMutationLock(
+      this.providerAccountKey(initialConnection),
+      `management:${intentId}:${requestId}`,
+      () => this.manageWithProviderLock(intentId, payload, requestId),
+    )
+  }
+
+  private async manageWithProviderLock(
+    intentId: string,
+    payload: ExecutionManagementPayload,
+    requestId: string,
+  ): Promise<ExecutionRecord> {
     const record = await this.options.store.get(intentId)
     if (!record.command || !record.claim) {
       throw new ExecutionGatewayError(
@@ -546,13 +692,16 @@ export class ExecutionGateway {
         acknowledgment.message,
       )
     }
-    return this.reconcile(intentId)
+    return this.reconcileWithProviderLock(intentId)
   }
 
   async recoverNonTerminal(): Promise<ExecutionRecoveryResult[]> {
     const records = await this.options.store.list()
     const results: ExecutionRecoveryResult[] = []
     for (const record of records) {
+      if (OWNERSHIP_RELEASE_STATES.has(record.state) || record.state === 'approved') {
+        await this.releaseOwnershipForRecord(record)
+      }
       if (TERMINAL_STATES.has(record.state) || record.state === 'approved') {
         results.push({
           intent_id: record.intent.intent_id,
@@ -571,6 +720,7 @@ export class ExecutionGateway {
             this.now(),
           )
         ))
+        await this.releaseOwnershipForRecord(canceled)
         results.push({
           intent_id: record.intent.intent_id,
           initial_state: record.state,
@@ -622,6 +772,17 @@ export class ExecutionGateway {
     await this.options.store.setGlobalKill(enabled)
   }
 
+  async activateEmergencyHalt(): Promise<void> {
+    // Set the process-local latch before durable I/O. A storage failure may
+    // prevent shutdown, but it cannot leave this process able to submit.
+    this.emergencyHalted = true
+    await this.options.store.setGlobalKill(true)
+  }
+
+  readControl() {
+    return this.options.store.readControl()
+  }
+
   async setConnectionKill(connectionId: string, enabled: boolean): Promise<void> {
     await this.options.store.setConnectionKill(connectionId, enabled)
   }
@@ -634,6 +795,9 @@ export class ExecutionGateway {
     intent: OrderIntent,
     connection: TradingConnection,
   ): Promise<void> {
+    if (this.emergencyHalted) {
+      throw new ExecutionGatewayError('KILL_SWITCH_ENABLED', 'Execution is blocked by the emergency halt latch.')
+    }
     const control = await this.options.store.readControl()
     if (
       control.global_kill
@@ -824,6 +988,15 @@ export class ExecutionGateway {
         'Intent exceeds the authorized symbol, quantity, side, or order-type scope.',
       )
     }
+    if (
+      Number(authorization.scope.max_daily_loss) <= 0
+      || Number(authorization.scope.max_open_risk) <= 0
+    ) {
+      throw new ExecutionGatewayError(
+        'AUTHORIZATION_MISMATCH',
+        'Authorization monetary risk limits must be positive.',
+      )
+    }
   }
 
   private assertAccountSnapshot(
@@ -853,12 +1026,142 @@ export class ExecutionGateway {
     }
   }
 
+  private assertNoUnownedExposure(
+    snapshot: ReturnType<typeof executionAccountSnapshotSchema.parse>,
+  ): void {
+    if (snapshot.positions.length > 0 || snapshot.working_orders.length > 0) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'New entry requires a provider-flat account with no unowned working orders.',
+      )
+    }
+  }
+
+  private assertMonetaryRisk(
+    intent: OrderIntent,
+    snapshot: ReturnType<typeof executionAccountSnapshotSchema.parse>,
+    authorization: ExecutionAuthorization,
+  ): void {
+    const contract = resolveFuturesContractIdentity(
+      intent.instrument.symbol,
+      this.now(),
+    )
+    if (
+      !intent.instrument.expiry
+      || contract.expiry !== intent.instrument.expiry
+      || contract.active !== true
+    ) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        'Futures execution requires a non-expired symbol whose month/year matches its canonical expiry.',
+      )
+    }
+    const economics = resolveFuturesEconomicSpec(contract.root)
+    if (!economics) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        `Futures economic risk is not configured for ${contract.root}.`,
+      )
+    }
+    if (
+      intent.instrument.tick_size !== economics.tick_size
+      || intent.instrument.point_value_usd !== economics.point_value_usd
+    ) {
+      throw new ExecutionGatewayError(
+        'RISK_DENIED',
+        'Intent instrument economics do not match the trusted futures risk specification.',
+      )
+    }
+    if (!intent.max_loss_usd) {
+      throw new ExecutionGatewayError(
+        'RISK_DENIED',
+        'Execution requires a checksum-bound maximum loss in USD.',
+      )
+    }
+    const declaredRisk = Number(intent.max_loss_usd)
+    const tickSize = Number(economics.tick_size)
+    const pointValue = Number(economics.point_value_usd)
+    const entryPrice = intent.entry.type === 'market'
+      ? undefined
+      : intent.entry.type === 'limit'
+        ? Number(intent.entry.price)
+        : intent.entry.type === 'stop'
+          ? Number(intent.entry.stop_price)
+          : Number(intent.entry.limit_price)
+    let stopDistance: number
+    if (intent.protection.stop_loss.type === 'ticks') {
+      stopDistance = Number(intent.protection.stop_loss.value) * tickSize
+    } else {
+      if (entryPrice === undefined) {
+        throw new ExecutionGatewayError(
+          'RISK_DENIED',
+          'An absolute stop requires a checksum-bound entry price to compute economic risk.',
+        )
+      }
+      const stopPrice = Number(intent.protection.stop_loss.value)
+      if (
+        (intent.side === 'buy' && stopPrice >= entryPrice)
+        || (intent.side === 'sell' && stopPrice <= entryPrice)
+      ) {
+        throw new ExecutionGatewayError(
+          'RISK_DENIED',
+          'Stop price must reduce risk on the protective side of the entry.',
+        )
+      }
+      stopDistance = Math.abs(entryPrice - stopPrice)
+    }
+    const computedRisk = stopDistance * pointValue * intent.quantity
+    const effectiveRisk = Math.max(declaredRisk, computedRisk)
+    const maxOpenRisk = Number(authorization.scope.max_open_risk)
+    const maxDailyLoss = Number(authorization.scope.max_daily_loss)
+    const realizedLoss = Math.max(0, -Number(snapshot.realized_pnl))
+    if (
+      !Number.isFinite(declaredRisk)
+      || declaredRisk <= 0
+      || !Number.isFinite(computedRisk)
+      || computedRisk <= 0
+      || declaredRisk + 0.005 < computedRisk
+      || effectiveRisk > maxOpenRisk
+      || realizedLoss + effectiveRisk > maxDailyLoss
+    ) {
+      throw new ExecutionGatewayError(
+        'RISK_DENIED',
+        'Declared trade risk understates computed economic loss or exceeds the authorized risk budget.',
+      )
+    }
+  }
+
+  private providerAccountKey(connection: TradingConnection): string {
+    return [
+      connection.platform.slug,
+      connection.environment,
+      connection.account_ref,
+    ].join(':')
+  }
+
+  private ownershipKey(connection: TradingConnection, _intent: OrderIntent): string {
+    // One provider account admits only one unresolved execution at a time.
+    // Portfolio-level concurrency requires a real account risk reservation ledger.
+    return this.providerAccountKey(connection)
+  }
+
+  private async releaseOwnershipForRecord(record: ExecutionRecord): Promise<void> {
+    const connection = tradingConnectionSchema.parse(
+      await this.options.resolveConnection(record.intent.connection_id),
+    )
+    const ownershipKey = this.ownershipKey(connection, record.intent)
+    const current = await this.options.store.readOwnership(ownershipKey)
+    if (!current || current.intent_id !== record.intent.intent_id) return
+    await this.options.store.releaseOwnership(ownershipKey, record.intent.intent_id)
+  }
+
   private async finishUncertain(
     intentId: string,
     connection: TradingConnection,
     adapter: ExecutionAdapter,
     reason: string,
   ): Promise<ExecutionRecord> {
+    await this.options.store.setConnectionKill(connection.connection_id, true)
     return this.options.store.update(intentId, (record) => {
       transition(record, 'submit-unknown', reason, this.now())
       record.receipt = this.buildReceipt({
@@ -968,10 +1271,12 @@ export class ExecutionGateway {
         )
       }
       try {
-        return await this.manage(intentId, {
+        const emergencyPayload = executionManagementPayloadSchema.parse({
           operation: 'flatten',
           reason: 'Emergency flatten after required protection could not be verified.',
         })
+        const emergencyRequestId = `management-semantic-${sha256({ operation: 'flatten' }).slice(0, 32)}`
+        return await this.manageWithProviderLock(intentId, emergencyPayload, emergencyRequestId)
       } catch (error) {
         return this.finishManagementHalt(
           intentId,
@@ -981,7 +1286,7 @@ export class ExecutionGateway {
         )
       }
     }
-    return this.options.store.update(intentId, (record) => {
+    const updated = await this.options.store.update(intentId, (record) => {
       let receiptResult: ExecutionReceipt['result']
       if (result.status === 'working') {
         ensureState(record, ['acknowledged', 'submit-unknown', 'closing'])
@@ -1031,6 +1336,13 @@ export class ExecutionGateway {
       })
       return record
     })
+    if (updated.state === 'closed' || updated.state === 'canceled') {
+      await this.options.store.releaseOwnership(
+        this.ownershipKey(connection, updated.intent),
+        updated.intent.intent_id,
+      )
+    }
+    return updated
   }
 
   private buildReceipt(input: {
@@ -1154,6 +1466,15 @@ const TERMINAL_STATES = new Set<ExecutionLifecycleState>([
   'risk-denied',
   'closed',
   'reconcile-halted',
+  'rejected',
+  'canceled',
+  'expired',
+  'error',
+])
+
+const OWNERSHIP_RELEASE_STATES = new Set<ExecutionLifecycleState>([
+  'risk-denied',
+  'closed',
   'rejected',
   'canceled',
   'expired',

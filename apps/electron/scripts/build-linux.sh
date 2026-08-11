@@ -93,7 +93,7 @@ done
 # Configuration
 BUN_VERSION="bun-v1.3.9"  # Pinned version for reproducible builds
 
-echo "=== Building Runner AppImage (${ARCH}) using electron-builder ==="
+echo "=== Building Trade God AppImage (${ARCH}) using electron-builder ==="
 if [ "$UPLOAD" = true ]; then
     echo "Will upload to S3 after build"
 fi
@@ -184,8 +184,8 @@ else
     LINUX_ARCH="aarch64"
 fi
 
-# electron-builder outputs: Runner-x86_64.AppImage or Runner-aarch64.AppImage
-BUILT_APPIMAGE_NAME="Runner-${LINUX_ARCH}.AppImage"
+# electron-builder outputs: Trade-God-x86_64.AppImage or Trade-God-aarch64.AppImage
+BUILT_APPIMAGE_NAME="Trade-God-${LINUX_ARCH}.AppImage"
 BUILT_APPIMAGE_PATH="$ELECTRON_DIR/release/$BUILT_APPIMAGE_NAME"
 
 if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
@@ -195,8 +195,8 @@ if [ ! -f "$BUILT_APPIMAGE_PATH" ]; then
     exit 1
 fi
 
-# Rename to our standard naming convention: Runner-x64.AppImage, Runner-arm64.AppImage
-APPIMAGE_NAME="Runner-${ARCH}.AppImage"
+# Rename to our standard naming convention: Trade-God-x64.AppImage, Trade-God-arm64.AppImage
+APPIMAGE_NAME="Trade-God-${ARCH}.AppImage"
 APPIMAGE_PATH="$ELECTRON_DIR/release/$APPIMAGE_NAME"
 mv "$BUILT_APPIMAGE_PATH" "$APPIMAGE_PATH"
 echo "Renamed $BUILT_APPIMAGE_NAME -> $APPIMAGE_NAME"

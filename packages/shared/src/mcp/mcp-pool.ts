@@ -84,6 +84,7 @@ function sdkConfigToClientConfig(config: SdkMcpServerConfig): McpClientConfig | 
  */
 function mcpConfigChanged(oldConfig: SdkMcpServerConfig, newConfig: SdkMcpServerConfig): boolean {
   if (oldConfig.type !== newConfig.type) return true;
+  if (JSON.stringify(oldConfig.allowedTools ?? []) !== JSON.stringify(newConfig.allowedTools ?? [])) return true;
 
   if (
     (oldConfig.type === 'http' || oldConfig.type === 'sse') &&
@@ -152,9 +153,17 @@ export class McpClientPool {
    * Register a client: connect, cache tools, build proxy mappings.
    * Shared logic for both remote MCP and in-process API sources.
    */
-  protected async registerClient(slug: string, client: PoolClient): Promise<void> {
+  protected async registerClient(
+    slug: string,
+    client: PoolClient,
+    allowedTools?: string[],
+  ): Promise<void> {
     // listTools() triggers connect() internally for both CraftMcpClient and ApiSourcePoolClient
-    const tools = await client.listTools();
+    const serverTools = await client.listTools();
+    const allowlist = allowedTools ? new Set(allowedTools) : undefined;
+    const tools = allowlist
+      ? serverTools.filter((tool) => allowlist.has(tool.name))
+      : serverTools;
     this.clients.set(slug, client);
     this.toolCache.set(slug, tools);
 
@@ -177,7 +186,7 @@ export class McpClientPool {
       this.debug(`Unknown MCP server type for ${slug}: ${(config as { type: string }).type}`);
       return;
     }
-    await this.registerClient(slug, new CraftMcpClient(clientConfig));
+    await this.registerClient(slug, new CraftMcpClient(clientConfig), config.allowedTools);
     this.activeConfigs.set(slug, config);
   }
 

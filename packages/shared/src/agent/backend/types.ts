@@ -289,6 +289,7 @@ export type SdkMcpServerConfig =
       type: 'http' | 'sse';
       url: string;
       headers?: Record<string, string>;
+      allowedTools?: string[];
       /** Environment variable name containing bearer token (Codex-specific) */
       bearerTokenEnvVar?: string;
     }
@@ -302,6 +303,7 @@ export type SdkMcpServerConfig =
       envVars?: string[];
       /** Working directory for the server process (Codex-specific) */
       cwd?: string;
+      allowedTools?: string[];
     };
 
 /**

@@ -13,11 +13,11 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { LoadedSource } from '../../sources/types.ts';
 import { sourceNeedsAuthentication } from '../../sources/credential-manager.ts';
 import type { SourceManagerConfig } from './types.ts';
+import { CONFIG_DIR } from '../../config/paths.ts';
 
 /** Slugs exempt from guide.md prerequisite (internal sources) */
 const GUIDE_EXEMPT_SLUGS = new Set(['session', 'runner-docs']);
@@ -532,7 +532,7 @@ function buildSocialBrowserSession(platform: string, profile: string): SocialPro
 
 function socialHome(platform: string): string {
   if (process.env.SOCIAL_HOME) return process.env.SOCIAL_HOME;
-  return join(homedir(), '.config', 'printing-press-clis', platform);
+  return join(CONFIG_DIR, 'social', platform);
 }
 
 function cleanSocialText(value: unknown, maxLength: number): string | null {

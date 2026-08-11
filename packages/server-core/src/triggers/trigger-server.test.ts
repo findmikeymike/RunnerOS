@@ -270,6 +270,46 @@ describe('trigger HTTP server', () => {
     delete process.env[SECRET_ENV]
   })
 
+  test('HMAC verification — accepts a secret resolved from the encrypted app vault', async () => {
+    const SECRET_ENV = 'CRAFT_WH_TEST_VAULT_SECRET'
+    const SECRET = 'vault-owned-shared-secret'
+    delete process.env[SECRET_ENV]
+
+    const matcher: AutomationMatcher = {
+      slug: 'vault-signed',
+      secretEnv: SECRET_ENV,
+      actions: [{ type: 'prompt', prompt: 'noop' }],
+    }
+    const { stub, fireCalls } = makeStubAutomationSystem(matcher)
+    const resolverCalls: unknown[] = []
+    handle = await startWithResolver(makeResolver({ ws1: stub }), {
+      secretResolver: async (input) => {
+        resolverCalls.push(input)
+        return input.secretEnv === SECRET_ENV ? SECRET : undefined
+      },
+    })
+
+    const body = JSON.stringify({ hello: 'vault' })
+    const timestamp = String(Math.floor(Date.now() / 1000))
+    const res = await fetch(`${handle.url}/v1/triggers/ws1/vault-signed`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-craft-timestamp': timestamp,
+        'x-craft-signature': signBody(SECRET, timestamp, body),
+      },
+      body,
+    })
+
+    expect(res.status).toBe(202)
+    expect(fireCalls).toHaveLength(1)
+    expect(resolverCalls).toEqual([{
+      workspaceId: 'ws1',
+      slug: 'vault-signed',
+      secretEnv: SECRET_ENV,
+    }])
+  })
+
   test('HMAC verification — rejects an exact signed replay before dispatch', async () => {
     const SECRET_ENV = 'CRAFT_WH_TEST_REPLAY_SECRET'
     const SECRET = 'replay-secret'

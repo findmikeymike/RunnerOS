@@ -44,7 +44,7 @@ const THEME_COLOR_NULL_SENTINEL = '__NULL__'
 const THEME_OBSERVER_MIN_INTERVAL_MS = 120
 const EARLY_THEME_EXTRACTION_DELAY_MS = 100
 const BROWSER_EMPTY_STATE_PAGE = 'browser-empty-state.html'
-const CRAFT_DEEPLINK_SCHEME_PREFIX = `${process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'}://`
+const CRAFT_DEEPLINK_SCHEME_PREFIX = `${process.env.CRAFT_DEEPLINK_SCHEME || 'tradegod'}://`
 
 const THEME_COLOR_EXTRACTOR_FN = String.raw`
 () => {
@@ -354,6 +354,17 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     const ownerSessionId = ownerType === 'session' ? (options?.ownerSessionId ?? null) : null
 
     if (this.instances.has(instanceId)) {
+      const existing = this.instances.get(instanceId)!
+      const requestedPartition = options?.partition ?? SESSION_PARTITION
+      const requestedTradingRestriction = options?.restrictedToTrading ?? false
+      if (
+        existing.partition !== requestedPartition
+        || existing.restrictedToTrading !== requestedTradingRestriction
+        || existing.ownerType !== ownerType
+        || existing.ownerSessionId !== ownerSessionId
+      ) {
+        throw new Error(`Browser instance ID is already owned by a different security context: ${instanceId}`)
+      }
       mainLog.warn(`[browser-pane] Instance already exists, reusing: ${instanceId}`)
       return instanceId
     }
@@ -556,6 +567,11 @@ export class BrowserPaneManager implements IBrowserPaneManager {
       this.finalizeDestroyedInstance(instance, 'destroy')
       mainLog.info(`[browser-pane] destroy completed id=${id} removed=${!this.instances.has(id)}`)
     }
+  }
+
+  destroyUserInstance(id: string): void {
+    this.requireAliveInstance(id)
+    this.destroyInstance(id)
   }
 
   getInstance(id: string): BrowserInstance | undefined {
@@ -2054,7 +2070,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     runFinalizeCleanup('updateNativeOverlayState', () => this.updateNativeOverlayState(instance))
     runFinalizeCleanup('cdp.detach', () => instance.cdp.detach())
     this.instances.delete(instance.id)
-    this.removedCallback?.(instance.id)
+    if (!instance.restrictedToTrading) this.removedCallback?.(instance.id)
     mainLog.info(`[browser-pane] Destroyed instance: ${instance.id} (${source})`)
   }
 
@@ -3179,6 +3195,7 @@ export class BrowserPaneManager implements IBrowserPaneManager {
     if (!this.instances.has(instance.id)) {
       return
     }
+    if (instance.restrictedToTrading) return
     this.stateChangeCallback?.(this.toInfo(instance))
   }
 }

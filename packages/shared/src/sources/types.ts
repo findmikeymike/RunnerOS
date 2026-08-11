@@ -313,6 +313,9 @@ export interface McpSourceConfig {
    * Precedence: static headers < credential-store headerNames < Authorization bearer.
    */
   headerNames?: string[];
+
+  /** Exact server tool names exposed to agents. Omit to expose the full server catalog. */
+  allowedTools?: string[];
 }
 
 /**

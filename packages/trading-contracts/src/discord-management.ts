@@ -161,7 +161,7 @@ export const discordManagementReceiptSchema = z.object({
   candidate_intent_ids: z.array(identifierSchema).max(100),
   resolved_intent_id: identifierSchema.optional(),
   symbol_evidence: identifierSchema.optional(),
-  status: z.enum(['blocked', 'prepared', 'executing', 'completed', 'failed']),
+  status: z.enum(['blocked', 'deferred', 'prepared', 'executing', 'completed', 'failed']),
   actions: z.array(discordManagementActionReceiptSchema).max(20),
   evidence: z.array(z.string().trim().min(1).max(500)).max(100),
   error: z.string().trim().min(1).max(1_000).optional(),
@@ -186,7 +186,7 @@ export const discordManagementReceiptSchema = z.object({
       message: 'A completed receipt requires every action to be completed',
     })
   }
-  if ((receipt.status === 'blocked' || receipt.status === 'failed') && !receipt.error) {
+  if ((receipt.status === 'blocked' || receipt.status === 'deferred' || receipt.status === 'failed') && !receipt.error) {
     context.addIssue({
       code: 'custom',
       path: ['error'],

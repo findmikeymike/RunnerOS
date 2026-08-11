@@ -125,6 +125,8 @@ const makeIntent = (
       symbol: 'ESU6',
       exchange: 'XCME',
       expiry: '2026-09',
+      tick_size: '0.25',
+      point_value_usd: '50',
     },
     side: 'buy',
     quantity: 1,
@@ -133,6 +135,7 @@ const makeIntent = (
       stop_loss: { type: 'ticks', value: '8' },
       take_profit: { type: 'ticks', value: '12' },
     },
+    max_loss_usd: '100',
     time_in_force: 'day',
     created_at: '2026-07-30T15:04:00.000Z',
     valid_until: '2026-07-30T15:10:00.000Z',
@@ -149,6 +152,8 @@ class FakeAdapter implements ExecutionAdapter {
   manageError?: Error
   manageCount = 0
   snapshotOverrides: Partial<ExecutionAccountSnapshot> = {}
+  reconcileStarted?: () => void
+  reconcileGate?: Promise<void>
 
   readonly descriptor
 
@@ -244,7 +249,7 @@ class FakeAdapter implements ExecutionAdapter {
     } else if (input.managementCommand.payload.operation === 'partial-close') {
       const remaining = Math.max(
         0,
-        this.reconciliation.open_quantity - input.managementCommand.payload.quantity,
+        (this.reconciliation.open_quantity ?? 0) - input.managementCommand.payload.quantity,
       )
       this.reconciliation = {
         ...this.reconciliation,
@@ -273,6 +278,8 @@ class FakeAdapter implements ExecutionAdapter {
   }
 
   async reconcile(input: Parameters<ExecutionAdapter['reconcile']>[0]) {
+    this.reconcileStarted?.()
+    await this.reconcileGate
     return {
       ...this.reconciliation,
       command_id: input.command.command_id,
@@ -288,6 +295,7 @@ const setup = async (
   const root = await mkdtemp(path.join(tmpdir(), 'trade-god-execution-'))
   roots.push(root)
   const store = new FileExecutionStore(root, () => NOW)
+  await store.setGlobalKill(false)
   const gateway = new ExecutionGateway({
     store,
     adapters,
@@ -297,23 +305,10 @@ const setup = async (
   return { root, store, gateway, connection }
 }
 
-const approve = async (
-  gateway: ExecutionGateway,
+const authorizationFor = (
   connection: TradingConnection,
   intent: OrderIntent,
-) => {
-  const risk: RiskDecision = {
-    risk_decision_schema_version: RISK_DECISION_SCHEMA_VERSION,
-    decision_id: `risk-${intent.intent_id}`,
-    intent_id: intent.intent_id,
-    account_snapshot_id: 'snapshot-1',
-    risk_policy_version: '1.0.0',
-    result: 'allow' as const,
-    reasons: ['Intent is within the paper risk envelope.'],
-    evaluated_at: NOW,
-    valid_until: '2026-07-30T15:09:00.000Z',
-  }
-  const authorization: ExecutionAuthorization = {
+): ExecutionAuthorization => ({
     authorization_schema_version: EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
     authorization_id: `authorization-${intent.intent_id}`,
     connection_id: connection.connection_id,
@@ -333,15 +328,41 @@ const approve = async (
     issued_by: 'operator-michael',
     issued_at: NOW,
     expires_at: '2026-07-30T15:09:00.000Z',
+  })
+
+const approve = async (
+  gateway: ExecutionGateway,
+  connection: TradingConnection,
+  intent: OrderIntent,
+) => {
+  const risk: RiskDecision = {
+    risk_decision_schema_version: RISK_DECISION_SCHEMA_VERSION,
+    decision_id: `risk-${intent.intent_id}`,
+    intent_id: intent.intent_id,
+    account_snapshot_id: 'snapshot-1',
+    risk_policy_version: '1.0.0',
+    result: 'allow' as const,
+    reasons: ['Intent is within the paper risk envelope.'],
+    evaluated_at: NOW,
+    valid_until: '2026-07-30T15:09:00.000Z',
   }
+  const authorization = authorizationFor(connection, intent)
   await gateway.registerIntent(intent)
   return gateway.approve(intent.intent_id, risk, authorization)
 }
 
 describe('execution gateway', () => {
+  test('starts with the persistent global execution halt enabled', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-god-execution-'))
+    roots.push(root)
+    const store = new FileExecutionStore(root, () => NOW)
+
+    expect(await store.readControl()).toMatchObject({ global_kill: true })
+  })
+
   test('persists one paper lifecycle through a protected fill and valid receipt', async () => {
     const adapter = new FakeAdapter()
-    const { root, gateway, connection } = await setup(makeConnection(), [adapter])
+    const { root, store, gateway, connection } = await setup(makeConnection(), [adapter])
     const intent = makeIntent(connection)
     await approve(gateway, connection, intent)
 
@@ -359,9 +380,62 @@ describe('execution gateway', () => {
     expect(reloaded.command?.idempotency_key).toBe(result.command?.idempotency_key)
   })
 
+  test('issues a provider-bound deterministic risk decision before approval', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection, { intent_id: 'intent-provider-risk' })
+    await gateway.registerIntent(intent)
+
+    const approved = await gateway.evaluateAndApprove(
+      intent.intent_id,
+      authorizationFor(connection, intent),
+    )
+    expect(approved).toMatchObject({
+      state: 'approved',
+      risk_decision: { result: 'allow', account_snapshot_id: 'snapshot-1' },
+    })
+    expect((await gateway.execute(intent.intent_id)).state).toBe('protected')
+  })
+
+  test('persists a provider-bound denial when deterministic loss exceeds authorization', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection, {
+      intent_id: 'intent-provider-risk-denied',
+      max_loss_usd: '250',
+    })
+    await gateway.registerIntent(intent)
+
+    const denied = await gateway.evaluateAndApprove(
+      intent.intent_id,
+      authorizationFor(connection, intent),
+    )
+    expect(denied).toMatchObject({ state: 'risk-denied', risk_decision: { result: 'deny' } })
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('denies an upstream ticket that understates independently computed futures loss', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection, {
+      intent_id: 'intent-underreported-risk',
+      max_loss_usd: '1',
+    })
+    await gateway.registerIntent(intent)
+
+    const denied = await gateway.evaluateAndApprove(
+      intent.intent_id,
+      authorizationFor(connection, intent),
+    )
+
+    expect(denied).toMatchObject({ state: 'risk-denied', risk_decision: { result: 'deny' } })
+    expect(denied.risk_decision?.reasons[0]).toContain('understates computed economic loss')
+    expect(adapter.submitCount).toBe(0)
+  })
+
   test('persists one flatten command before I/O and suppresses a concurrent duplicate', async () => {
     const adapter = new FakeAdapter()
-    const { root, gateway, connection } = await setup(makeConnection(), [adapter])
+    const { root, store, gateway, connection } = await setup(makeConnection(), [adapter])
     const intent = makeIntent(connection)
     await approve(gateway, connection, intent)
     expect((await gateway.execute(intent.intent_id)).state).toBe('protected')
@@ -404,6 +478,9 @@ describe('execution gateway', () => {
       stop_price: '5600.25',
       time_in_force: 'day',
     })
+    await expect(gateway.prepareStopMove(intent.intent_id, '5597.75')).rejects.toMatchObject({
+      code: 'RISK_DENIED',
+    })
 
     adapter.reconciliation = {
       ...adapter.reconciliation,
@@ -432,7 +509,14 @@ describe('execution gateway', () => {
       })),
     }
     const { gateway, connection } = await setup(makeConnection(), [adapter])
-    const intent = makeIntent(connection, { quantity: 3 })
+    const intent = makeIntent(connection, {
+      quantity: 3,
+      protection: {
+        stop_loss: { type: 'ticks', value: '4' },
+        take_profit: { type: 'ticks', value: '12' },
+      },
+      max_loss_usd: '150',
+    })
     await approve(gateway, connection, intent)
     expect((await gateway.execute(intent.intent_id)).state).toBe('protected')
 
@@ -540,6 +624,46 @@ describe('execution gateway', () => {
     expect(adapter.submitCount).toBe(0)
   })
 
+  test('recovers a management claim marker left by a dead process before journaling', async () => {
+    const { root, store, gateway, connection } = await setup()
+    const intent = makeIntent(connection)
+    await gateway.registerIntent(intent)
+    const actionDigest = 'e'.repeat(64)
+    await writeFile(
+      path.join(root, 'records', `${intent.intent_id}.management.${actionDigest}.claim.json`),
+      `${JSON.stringify({
+        intent_id: intent.intent_id,
+        action_digest: actionDigest,
+        claimed_at: NOW,
+        process_id: 2_147_483_647,
+      })}\n`,
+      'utf8',
+    )
+
+    expect(await store.claimManagement(intent.intent_id, actionDigest, (record) => record))
+      .toMatchObject({ claimed: true })
+  })
+
+  test('recovers an entry claim marker left by a dead process before journaling', async () => {
+    const adapter = new FakeAdapter()
+    const { root, gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    await writeFile(
+      path.join(root, 'records', `${intent.intent_id}.claim.json`),
+      `${JSON.stringify({
+        intent_id: intent.intent_id,
+        claim_id: 'claim-from-dead-process',
+        claimed_at: NOW,
+        process_id: 2_147_483_647,
+      })}\n`,
+      'utf8',
+    )
+
+    expect(await gateway.execute(intent.intent_id)).toMatchObject({ state: 'protected' })
+    expect(adapter.submitCount).toBe(1)
+  })
+
   test('halts an uncertain submit without retry and later adopts broker truth', async () => {
     const adapter = new FakeAdapter()
     adapter.submitError = new ExecutionAdapterError(
@@ -556,11 +680,12 @@ describe('execution gateway', () => {
       protection_verified: false,
       reason: 'Provider reports the original order working.',
     }
-    const { root, gateway, connection } = await setup(makeConnection(), [adapter])
+    const { root, store, gateway, connection } = await setup(makeConnection(), [adapter])
     const intent = makeIntent(connection)
     await approve(gateway, connection, intent)
 
     expect((await gateway.execute(intent.intent_id)).state).toBe('submit-unknown')
+    expect((await store.readControl()).connection_kills).toContain(connection.connection_id)
     expect(adapter.submitCount).toBe(1)
     await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({ code: 'INVALID_STATE' })
     expect(adapter.submitCount).toBe(1)
@@ -588,6 +713,237 @@ describe('execution gateway', () => {
 
     await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({ code: 'ACCOUNT_MISMATCH' })
     expect((await store.get(intent.intent_id)).state).toBe('approved')
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('does not execute a risk decision against a different provider snapshot', async () => {
+    const adapter = new FakeAdapter()
+    adapter.snapshotOverrides = { account_snapshot_id: 'snapshot-newer' }
+    const { gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({
+      code: 'STALE_RISK_DECISION',
+      retryable: true,
+    })
+    expect((await store.get(intent.intent_id)).state).toBe('approved')
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('blocks a new entry when provider truth contains unowned exposure', async () => {
+    const adapter = new FakeAdapter()
+    adapter.snapshotOverrides = {
+      positions: [{
+        instrument_id: 'tradovate-contract-9001',
+        symbol: 'ESU6',
+        side: 'buy',
+        quantity: 1,
+        average_price: '5600',
+      }],
+    }
+    const { gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({
+      code: 'RECONCILIATION_DIVERGENCE',
+    })
+    expect((await store.get(intent.intent_id)).state).toBe('approved')
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('enforces checksum-bound trade risk against open and daily loss budgets', async () => {
+    const adapter = new FakeAdapter()
+    adapter.snapshotOverrides = { realized_pnl: '-450' }
+    const { gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection, {
+      intent_id: 'intent-over-daily-budget',
+      max_loss_usd: '100',
+    })
+    await approve(gateway, connection, intent)
+
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({ code: 'RISK_DENIED' })
+    expect((await store.get(intent.intent_id)).state).toBe('approved')
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('refuses futures execution without exact expiry or declared maximum loss', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const noExpiry = makeIntent(connection, {
+      intent_id: 'intent-no-expiry',
+      instrument: { canonical_id: 'CME:ES', symbol: 'ES', exchange: 'XCME' },
+    })
+    const noRisk = makeIntent(connection, {
+      intent_id: 'intent-no-risk',
+      max_loss_usd: undefined,
+    })
+    const mismatchedExpiry = makeIntent(connection, {
+      intent_id: 'intent-mismatched-expiry',
+      instrument: {
+        canonical_id: 'CME:ESU6', symbol: 'ESU6', exchange: 'XCME', expiry: '2027-09',
+      },
+    })
+    await approve(gateway, connection, noExpiry)
+    await approve(gateway, connection, noRisk)
+    await approve(gateway, connection, mismatchedExpiry)
+
+    await expect(gateway.execute(noExpiry.intent_id)).rejects.toMatchObject({
+      code: 'CAPABILITY_UNAVAILABLE',
+    })
+    await expect(gateway.execute(noRisk.intent_id)).rejects.toMatchObject({ code: 'RISK_DENIED' })
+    await expect(gateway.execute(mismatchedExpiry.intent_id)).rejects.toMatchObject({
+      code: 'CAPABILITY_UNAVAILABLE',
+    })
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('gives one intent durable ownership across duplicate connection records', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-god-execution-'))
+    roots.push(root)
+    const store = new FileExecutionStore(root, () => NOW)
+    await store.setGlobalKill(false)
+    const firstConnection = makeConnection({ connection_id: 'connection-apex-paper-a' })
+    const secondConnection = makeConnection({ connection_id: 'connection-apex-paper-b' })
+    const connections = new Map([
+      [firstConnection.connection_id, firstConnection],
+      [secondConnection.connection_id, secondConnection],
+    ])
+    const adapter = new FakeAdapter()
+    const gateway = new ExecutionGateway({
+      store,
+      adapters: [adapter],
+      resolveConnection: async (connectionId) => connections.get(connectionId)!,
+      now: () => NOW,
+    })
+    const first = makeIntent(firstConnection, { intent_id: 'intent-es-owner-a' })
+    const second = makeIntent(secondConnection, { intent_id: 'intent-es-owner-b' })
+    await approve(gateway, firstConnection, first)
+    await approve(gateway, secondConnection, second)
+
+    expect((await gateway.execute(first.intent_id)).state).toBe('protected')
+    await expect(gateway.execute(second.intent_id)).rejects.toMatchObject({
+      code: 'EXECUTION_BUSY',
+    })
+    expect(adapter.submitCount).toBe(1)
+
+    expect((await gateway.flatten(first.intent_id, 'Release provider ownership.')).state).toBe('closed')
+    expect((await gateway.execute(second.intent_id)).state).toBe('closed')
+    expect(adapter.submitCount).toBe(2)
+  })
+
+  test('serializes admission across different instruments on one provider account', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const es = makeIntent(connection, { intent_id: 'intent-account-owner-es' })
+    const nq = makeIntent(connection, {
+      intent_id: 'intent-account-owner-nq',
+      instrument: {
+        canonical_id: 'CME:NQU6', symbol: 'NQU6', exchange: 'XCME', expiry: '2026-09',
+        tick_size: '0.25', point_value_usd: '20',
+      },
+    })
+    await approve(gateway, connection, es)
+    await approve(gateway, connection, nq)
+
+    expect((await gateway.execute(es.intent_id)).state).toBe('protected')
+    await expect(gateway.execute(nq.intent_id)).rejects.toMatchObject({ code: 'EXECUTION_BUSY' })
+    expect(adapter.submitCount).toBe(1)
+  })
+
+  test('restart recovery ignores an old closed record while a newer intent owns the account', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const first = makeIntent(connection, { intent_id: 'intent-old-closed' })
+    const second = makeIntent(connection, { intent_id: 'intent-new-live' })
+    await approve(gateway, connection, first)
+    await approve(gateway, connection, second)
+    await gateway.execute(first.intent_id)
+    await gateway.flatten(first.intent_id, 'Close first owner.')
+    adapter.reconciliation = {
+      ...adapter.reconciliation,
+      status: 'filled-protected',
+      open_quantity: 1,
+      protection_verified: true,
+      reason: 'New intent is protected.',
+    }
+    expect((await gateway.execute(second.intent_id)).state).toBe('protected')
+
+    const recovery = await gateway.recoverNonTerminal()
+    expect(recovery.find(({ intent_id }) => intent_id === first.intent_id)?.outcome).toBe('skipped')
+    expect(recovery.find(({ intent_id }) => intent_id === second.intent_id)?.outcome).toBe('reconciled')
+  })
+
+  test('serializes restart emergency reconciliation with concurrent account management', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection, { intent_id: 'intent-recovery-lock' })
+    await approve(gateway, connection, intent)
+    expect((await gateway.execute(intent.intent_id)).state).toBe('protected')
+
+    adapter.reconciliation = {
+      ...adapter.reconciliation,
+      status: 'filled',
+      protection_verified: false,
+      protection_orders: [],
+      reason: 'Provider reports an unprotected fill after restart.',
+    }
+    let releaseReconcile!: () => void
+    adapter.reconcileGate = new Promise<void>((resolve) => { releaseReconcile = resolve })
+    let markStarted!: () => void
+    const started = new Promise<void>((resolve) => { markStarted = resolve })
+    adapter.reconcileStarted = markStarted
+
+    const recovery = gateway.recoverNonTerminal()
+    await started
+    const concurrentFlatten = gateway.flatten(intent.intent_id, 'Concurrent operator flatten.')
+    await Promise.resolve()
+    expect(adapter.manageCount).toBe(0)
+    releaseReconcile()
+
+    const [recoveryResult, flattenResult] = await Promise.allSettled([
+      recovery,
+      concurrentFlatten,
+    ])
+    expect(recoveryResult.status).toBe('fulfilled')
+    expect(flattenResult.status).toBe('fulfilled')
+    expect(adapter.manageCount).toBe(1)
+    expect((await gateway.get(intent.intent_id)).state).toBe('closed')
+  })
+
+  test('refuses an expired explicit futures contract even when expiry metadata matches', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const expired = makeIntent(connection, {
+      intent_id: 'intent-expired-contract',
+      instrument: {
+        canonical_id: 'CME:ESM6',
+        symbol: 'ESM6',
+        exchange: 'XCME',
+        expiry: '2026-06',
+        tick_size: '0.25',
+        point_value_usd: '50',
+      },
+    })
+    await approve(gateway, connection, expired)
+
+    await expect(gateway.execute(expired.intent_id)).rejects.toMatchObject({
+      code: 'CAPABILITY_UNAVAILABLE',
+    })
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('emergency halt stays latched in process when durable control storage fails', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const originalSetGlobalKill = store.setGlobalKill.bind(store)
+    store.setGlobalKill = async () => { throw new Error('disk unavailable') }
+    await expect(gateway.activateEmergencyHalt()).rejects.toThrow('disk unavailable')
+    store.setGlobalKill = originalSetGlobalKill
+    const intent = makeIntent(connection, { intent_id: 'intent-after-emergency-halt' })
+    await approve(gateway, connection, intent)
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({ code: 'KILL_SWITCH_ENABLED' })
     expect(adapter.submitCount).toBe(0)
   })
 

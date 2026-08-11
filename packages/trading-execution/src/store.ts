@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises'
+import { createHash, randomUUID } from 'node:crypto'
+import { mkdir, readFile, readdir, rename, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import {
@@ -25,18 +25,30 @@ export interface ExecutionControlState {
   updated_at: string
 }
 
+export interface ExecutionOwnershipLease {
+  lease_schema_version: 'execution-ownership-lease@1'
+  ownership_key: string
+  intent_id: string
+  connection_id: string
+  provider_account_key: string
+  instrument_id: string
+  acquired_at: string
+}
+
 const defaultControl = (now: string): ExecutionControlState => ({
   control_schema_version: 'execution-control@1',
-  global_kill: false,
+  global_kill: true,
   connection_kills: [],
   source_kills: [],
   updated_at: now,
 })
 
 export class FileExecutionStore {
+  private static readonly processQueues = new Map<string, Promise<void>>()
   private readonly recordsDirectory: string
   private readonly controlFile: string
-  private readonly queues = new Map<string, Promise<void>>()
+  private readonly ownershipDirectory: string
+  private readonly providerMutationDirectory: string
 
   constructor(
     private readonly root: string,
@@ -44,6 +56,8 @@ export class FileExecutionStore {
   ) {
     this.recordsDirectory = path.join(root, 'records')
     this.controlFile = path.join(root, 'control.json')
+    this.ownershipDirectory = path.join(root, 'ownership')
+    this.providerMutationDirectory = path.join(root, 'provider-mutations')
   }
 
   async create(intent: OrderIntent, traceId: string): Promise<ExecutionRecord> {
@@ -125,12 +139,32 @@ export class FileExecutionStore {
         })
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-          throw new ExecutionGatewayError(
-            'EXECUTION_BUSY',
-            `Intent ${intentId} already has a durable execution claim.`,
-          )
+          const stale = await readFile(marker, 'utf8').then((value) => JSON.parse(value) as {
+            process_id?: number
+          })
+          if (
+            typeof stale.process_id !== 'number'
+            || stale.process_id === process.pid
+            || processIsAlive(stale.process_id)
+          ) {
+            throw new ExecutionGatewayError(
+              'EXECUTION_BUSY',
+              `Intent ${intentId} already has a durable execution claim.`,
+            )
+          }
+          await unlink(marker)
+          await writeFile(marker, `${JSON.stringify({
+            intent_id: intentId,
+            claim_id: next.claim?.claim_id,
+            claimed_at: next.claim?.claimed_at,
+            process_id: process.pid,
+          }, null, 2)}\n`, {
+            encoding: 'utf8',
+            flag: 'wx',
+            mode: 0o600,
+          })
         }
-        throw error
+        else throw error
       }
       await this.atomicWrite(this.recordFile(intentId), next)
       return next
@@ -168,9 +202,35 @@ export class FileExecutionStore {
         })
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-          return { record: await this.get(intentId), claimed: false }
+          const latest = await this.get(intentId)
+          if (latest.management_actions.some(
+            (action) => action.command.action_digest === actionDigest,
+          )) {
+            return { record: latest, claimed: false }
+          }
+          const stale = await readFile(marker, 'utf8').then((value) => JSON.parse(value) as {
+            process_id?: number
+          })
+          if (
+            typeof stale.process_id !== 'number'
+            || stale.process_id === process.pid
+            || processIsAlive(stale.process_id)
+          ) {
+            return { record: latest, claimed: false }
+          }
+          await unlink(marker)
+          await writeFile(marker, `${JSON.stringify({
+            intent_id: intentId,
+            action_digest: actionDigest,
+            claimed_at: this.now(),
+            process_id: process.pid,
+          }, null, 2)}\n`, {
+            encoding: 'utf8',
+            flag: 'wx',
+            mode: 0o600,
+          })
         }
-        throw error
+        else throw error
       }
       const next = executionRecordSchema.parse(mutate(structuredClone(current)))
       await this.atomicWrite(this.recordFile(intentId), next)
@@ -219,6 +279,124 @@ export class FileExecutionStore {
     }))
   }
 
+  async acquireOwnership(input: Omit<ExecutionOwnershipLease, 'lease_schema_version' | 'acquired_at'>): Promise<ExecutionOwnershipLease> {
+    const lease = this.parseOwnershipLease({
+      lease_schema_version: 'execution-ownership-lease@1',
+      ...input,
+      acquired_at: this.now(),
+    })
+    const file = this.ownershipFile(lease.ownership_key)
+    return this.withLock(`ownership:${lease.ownership_key}`, async () => {
+      await mkdir(this.ownershipDirectory, { recursive: true })
+      try {
+        await writeFile(file, `${JSON.stringify(lease, null, 2)}\n`, {
+          encoding: 'utf8',
+          flag: 'wx',
+          mode: 0o600,
+        })
+        return lease
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+        const current = this.parseOwnershipLease(JSON.parse(await readFile(file, 'utf8')))
+        if (current.intent_id === lease.intent_id) return current
+        throw new ExecutionGatewayError(
+          'EXECUTION_BUSY',
+          `Provider account/instrument is already owned by intent ${current.intent_id}.`,
+        )
+      }
+    })
+  }
+
+  async releaseOwnership(ownershipKey: string, intentId: string): Promise<boolean> {
+    const file = this.ownershipFile(ownershipKey)
+    return this.withLock(`ownership:${ownershipKey}`, async () => {
+      let current: ExecutionOwnershipLease
+      try {
+        current = this.parseOwnershipLease(JSON.parse(await readFile(file, 'utf8')))
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
+        throw error
+      }
+      if (current.intent_id !== intentId) {
+        throw new ExecutionGatewayError(
+          'EXECUTION_BUSY',
+          `Intent ${intentId} cannot release ownership held by ${current.intent_id}.`,
+        )
+      }
+      await unlink(file)
+      return true
+    })
+  }
+
+  async readOwnership(ownershipKey: string): Promise<ExecutionOwnershipLease | null> {
+    try {
+      return this.parseOwnershipLease(JSON.parse(await readFile(this.ownershipFile(ownershipKey), 'utf8')))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+      throw error
+    }
+  }
+
+  async withProviderMutationLock<T>(
+    providerAccountKey: string,
+    operationId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    if (!providerAccountKey.trim() || providerAccountKey.length > 1_000) {
+      throw new Error('Provider account mutation key is invalid.')
+    }
+    if (!operationId.trim() || operationId.length > 1_000) {
+      throw new Error('Provider mutation operation ID is invalid.')
+    }
+    return this.withLock(`provider-mutation:${providerAccountKey}`, async () => {
+      await mkdir(this.providerMutationDirectory, { recursive: true })
+      const marker = this.providerMutationFile(providerAccountKey)
+      const claim = {
+        mutation_lock_schema_version: 'provider-mutation-lock@1',
+        provider_account_key: providerAccountKey,
+        operation_id: operationId,
+        process_id: process.pid,
+        acquired_at: this.now(),
+      }
+      try {
+        await writeFile(marker, `${JSON.stringify(claim, null, 2)}\n`, {
+          encoding: 'utf8', flag: 'wx', mode: 0o600,
+        })
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+        const stale = JSON.parse(await readFile(marker, 'utf8')) as {
+          process_id?: number
+          operation_id?: string
+        }
+        if (typeof stale.process_id !== 'number' || processIsAlive(stale.process_id)) {
+          throw new ExecutionGatewayError(
+            'EXECUTION_BUSY',
+            `Provider account already has an active mutation (${stale.operation_id ?? 'unknown'}).`,
+          )
+        }
+        await unlink(marker)
+        await writeFile(marker, `${JSON.stringify(claim, null, 2)}\n`, {
+          encoding: 'utf8', flag: 'wx', mode: 0o600,
+        })
+      }
+      try {
+        return await operation()
+      } finally {
+        try {
+          const current = JSON.parse(await readFile(marker, 'utf8')) as {
+            process_id?: number
+            operation_id?: string
+          }
+          if (current.process_id === process.pid && current.operation_id === operationId) {
+            await unlink(marker)
+          }
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+        }
+      }
+    })
+  }
+
   private async updateControl(
     mutate: (control: ExecutionControlState) => ExecutionControlState,
   ): Promise<ExecutionControlState> {
@@ -252,6 +430,26 @@ export class FileExecutionStore {
     return control as ExecutionControlState
   }
 
+  private parseOwnershipLease(value: unknown): ExecutionOwnershipLease {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('Execution ownership lease is invalid.')
+    }
+    const lease = value as Partial<ExecutionOwnershipLease>
+    if (
+      lease.lease_schema_version !== 'execution-ownership-lease@1'
+      || !lease.ownership_key?.trim()
+      || !lease.intent_id?.trim()
+      || !lease.connection_id?.trim()
+      || !lease.provider_account_key?.trim()
+      || !lease.instrument_id?.trim()
+      || typeof lease.acquired_at !== 'string'
+      || !Number.isFinite(Date.parse(lease.acquired_at))
+    ) {
+      throw new Error('Execution ownership lease is invalid.')
+    }
+    return lease as ExecutionOwnershipLease
+  }
+
   private async atomicWrite(destination: string, value: unknown): Promise<void> {
     await mkdir(path.dirname(destination), { recursive: true })
     const temporary = `${destination}.${process.pid}.${randomUUID()}.tmp`
@@ -280,6 +478,19 @@ export class FileExecutionStore {
     )
   }
 
+  private ownershipFile(ownershipKey: string): string {
+    if (!ownershipKey.trim() || ownershipKey.length > 1_000) {
+      throw new Error('Execution ownership key is invalid.')
+    }
+    const digest = createHash('sha256').update(ownershipKey, 'utf8').digest('hex')
+    return path.join(this.ownershipDirectory, `${digest}.json`)
+  }
+
+  private providerMutationFile(providerAccountKey: string): string {
+    const digest = createHash('sha256').update(providerAccountKey, 'utf8').digest('hex')
+    return path.join(this.providerMutationDirectory, `${digest}.lock.json`)
+  }
+
   private assertPathSafeIntentId(intentId: string): void {
     if (!/^[A-Za-z0-9][A-Za-z0-9._:@-]{0,159}$/.test(intentId)) {
       throw new Error('Execution intent ID is not path-safe.')
@@ -287,19 +498,32 @@ export class FileExecutionStore {
   }
 
   private async withLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
-    const previous = this.queues.get(key) ?? Promise.resolve()
+    const scopedKey = `${this.root}:${key}`
+    const previous = FileExecutionStore.processQueues.get(scopedKey) ?? Promise.resolve()
     let release!: () => void
     const current = previous.catch(() => undefined).then(() => new Promise<void>((resolve) => {
       release = resolve
     }))
-    this.queues.set(key, current)
+    FileExecutionStore.processQueues.set(scopedKey, current)
     await previous.catch(() => undefined)
     try {
       return await operation()
     } finally {
       release()
-      if (this.queues.get(key) === current) this.queues.delete(key)
+      if (FileExecutionStore.processQueues.get(scopedKey) === current) {
+        FileExecutionStore.processQueues.delete(scopedKey)
+      }
     }
+  }
+}
+
+const processIsAlive = (pid: number): boolean => {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === 'EPERM'
   }
 }
 
