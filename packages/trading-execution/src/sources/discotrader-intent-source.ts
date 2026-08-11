@@ -77,19 +77,39 @@ export class FileDiscoTraderIntentSource {
       )
     }
     const artifact = convertDiscoTraderTicket(payload.ticket, route, receivedAt)
-    await this.bindTicketIdentity(artifact)
-    const existing = await this.persist(artifact)
+    let existing: DiscoTraderIntentSourceArtifact | null = null
+    try {
+      existing = await this.get(artifact.intent.intent_id)
+      if (existing.source_ticket_sha256 !== artifact.source_ticket_sha256) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'DiscoTrader intent source artifact conflicts with an existing ticket.',
+        )
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
     const durableArtifact = existing ?? artifact
+    await this.bindTicketIdentity(durableArtifact)
+    const record = await this.registerOrRecover(durableArtifact, traceId)
+    if (!existing) await this.persist(durableArtifact)
     return {
       artifact: durableArtifact,
-      record: await this.registerOrRecover(durableArtifact, Boolean(existing), traceId),
+      record,
     }
   }
 
   async get(intentId: string): Promise<DiscoTraderIntentSourceArtifact> {
-    return parseSourceArtifact(JSON.parse(
+    const artifact = parseSourceArtifact(JSON.parse(
       await readFile(this.artifactPath(intentId), 'utf8'),
     ))
+    if (artifact.intent.intent_id !== intentId) {
+      throw new ExecutionGatewayError(
+        'RECORD_INTEGRITY_FAILURE',
+        'DiscoTrader source artifact intent identity does not match its durable path.',
+      )
+    }
+    return artifact
   }
 
   private async persist(
@@ -152,20 +172,22 @@ export class FileDiscoTraderIntentSource {
 
   private async registerOrRecover(
     artifact: DiscoTraderIntentSourceArtifact,
-    sourceAlreadyExisted: boolean,
     traceId?: string,
   ): Promise<ExecutionRecord> {
-    if (sourceAlreadyExisted) {
-      try {
-        return await this.registrar.get(artifact.intent.intent_id)
-      } catch (error) {
-        if (
-          !(error instanceof ExecutionGatewayError)
-          || error.code !== 'INTENT_NOT_FOUND'
-        ) {
-          throw error
-        }
+    try {
+      const existing = await this.registrar.get(artifact.intent.intent_id)
+      if (existing.intent.content_checksum !== artifact.intent.content_checksum) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Existing gateway intent conflicts with the signed DiscoTrader source artifact.',
+        )
       }
+      return existing
+    } catch (error) {
+      if (
+        !(error instanceof ExecutionGatewayError)
+        || error.code !== 'INTENT_NOT_FOUND'
+      ) throw error
     }
     return this.registrar.registerIntent(
       artifact.intent,

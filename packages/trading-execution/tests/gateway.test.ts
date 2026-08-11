@@ -1451,4 +1451,103 @@ describe('execution gateway', () => {
       code: 'RECONCILIATION_DIVERGENCE',
     })
   })
+
+  test('cancels only the exact reviewed pending record', async () => {
+    const { gateway, connection } = await setup()
+    const intent = makeIntent(connection)
+    const created = await gateway.registerIntent(intent)
+
+    await expect(gateway.dismissPendingIntent(intent.intent_id, 'f'.repeat(64)))
+      .rejects.toMatchObject({ code: 'RECORD_INTEGRITY_FAILURE' })
+    const canceled = await gateway.dismissPendingIntent(intent.intent_id, sha256(created))
+    expect(canceled.state).toBe('canceled')
+    await expect(gateway.dismissPendingIntent(intent.intent_id, sha256(canceled)))
+      .rejects.toMatchObject({ code: 'INVALID_STATE' })
+  })
+
+  test('captures exact flat account truth and refuses any provider exposure', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const flat = await gateway.captureFlatAccountSnapshot(connection.connection_id)
+    expect(flat).toMatchObject({ positions: [], working_orders: [] })
+
+    adapter.snapshotOverrides = {
+      working_orders: [{
+        provider_order_id: 'manual-order-1',
+        instrument_id: 'contract-esu6',
+        side: 'buy',
+        quantity: 1,
+        order_type: 'limit',
+        status: 'working',
+      }],
+    }
+    await expect(gateway.captureFlatAccountSnapshot(connection.connection_id))
+      .rejects.toMatchObject({ code: 'RECONCILIATION_DIVERGENCE' })
+  })
+
+  test('atomically binds a reviewed release and never overrides the emergency latch', async () => {
+    const { gateway, store, connection } = await setup()
+    await store.setGlobalKill(true)
+    await store.setConnectionKill(connection.connection_id, true)
+    const reviewedControlChecksum = sha256(await store.readControl())
+    await gateway.commitPaperActivationRelease({
+      release_id: 'release-paper-one',
+      state_checksum: 'b'.repeat(64),
+      expected_control_checksum: reviewedControlChecksum,
+      review_expires_at: '2099-01-01T00:00:00.000Z',
+      connection_ids: [connection.connection_id],
+      assert_release_current: async () => {},
+      persist_release_evidence: async () => ({
+        release_event_id: 'event-dismissed-one',
+        release_event_checksum: 'a'.repeat(64),
+      }),
+    })
+    expect(await store.readControl()).toMatchObject({
+      global_kill: false,
+      connection_kills: [],
+      activation_release: {
+        release_id: 'release-paper-one',
+        release_event_id: 'event-dismissed-one',
+      },
+    })
+
+    await gateway.activateEmergencyHalt()
+    await expect(gateway.commitPaperActivationRelease({
+      release_id: 'release-paper-two',
+      state_checksum: 'd'.repeat(64),
+      expected_control_checksum: sha256(await store.readControl()),
+      review_expires_at: '2099-01-01T00:00:00.000Z',
+      connection_ids: [connection.connection_id],
+      assert_release_current: async () => {},
+      persist_release_evidence: async () => ({
+        release_event_id: 'event-dismissed-two',
+        release_event_checksum: 'c'.repeat(64),
+      }),
+    })).rejects.toMatchObject({ code: 'KILL_SWITCH_ENABLED' })
+    expect((await store.readControl()).global_kill).toBe(true)
+  })
+
+  test('never clears a halt added after the operator reviewed execution control', async () => {
+    const { gateway, store, connection } = await setup()
+    await store.setGlobalKill(true)
+    const reviewedControlChecksum = sha256(await store.readControl())
+    await store.setConnectionKill(connection.connection_id, true)
+
+    await expect(gateway.commitPaperActivationRelease({
+      release_id: 'release-control-drift',
+      state_checksum: 'd'.repeat(64),
+      expected_control_checksum: reviewedControlChecksum,
+      review_expires_at: '2099-01-01T00:00:00.000Z',
+      connection_ids: [connection.connection_id],
+      assert_release_current: async () => {},
+      persist_release_evidence: async () => ({
+        release_event_id: 'event-control-drift',
+        release_event_checksum: 'e'.repeat(64),
+      }),
+    })).rejects.toMatchObject({ code: 'RECORD_INTEGRITY_FAILURE' })
+    expect(await store.readControl()).toMatchObject({
+      global_kill: true,
+      connection_kills: [connection.connection_id],
+    })
+  })
 })

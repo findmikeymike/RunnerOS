@@ -101,8 +101,7 @@ export default function DiscoTraderControlCenterPage({
   const [providerAdaptersAttached, setProviderAdaptersAttached] = useState<boolean | null>(null)
   const [reconciliationStaleCount, setReconciliationStaleCount] = useState(0)
   const [connectionKillCount, setConnectionKillCount] = useState(0)
-  const [connectionKills, setConnectionKills] = useState<string[]>([])
-  const [freshConnectionIds, setFreshConnectionIds] = useState<string[]>([])
+  const [activationBusy, setActivationBusy] = useState(false)
   const [sourceBusy, setSourceBusy] = useState(false)
   const [workerBusy, setWorkerBusy] = useState(false)
   const [readyConnections, setReadyConnections] = useState(0)
@@ -199,15 +198,11 @@ export default function DiscoTraderControlCenterPage({
       setProviderAdaptersAttached(provider_adapters_attached)
       setReconciliationStaleCount(reconciliation_health?.stale_connection_ids.length ?? 0)
       setConnectionKillCount(connection_kills.length)
-      setConnectionKills(connection_kills)
-      setFreshConnectionIds(reconciliation_health?.fresh_connection_ids ?? [])
     } catch {
       setGlobalExecutionKill(null)
       setProviderAdaptersAttached(null)
       setReconciliationStaleCount(0)
       setConnectionKillCount(0)
-      setConnectionKills([])
-      setFreshConnectionIds([])
     }
   }, [])
 
@@ -224,44 +219,46 @@ export default function DiscoTraderControlCenterPage({
 
   const handleGlobalExecutionKill = useCallback(async () => {
     if (globalExecutionKill === null) return
+    setActivationBusy(true)
     try {
-      const next = !globalExecutionKill
-      if (
-        !next
-        && !window.confirm('Release the persistent Trade God new-entry halt? This only removes one safety gate; it does not certify or start provider execution.')
-      ) return
-      await window.electronAPI.setTradeGodGlobalExecutionKill(next)
-      setGlobalExecutionKill(next)
-      toast.success(next ? 'Trade God new entries halted' : 'Trade God new-entry halt released')
-    } catch (error) {
-      toast.error('Could not change Trade God execution halt', {
-        description: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }, [globalExecutionKill])
-
-  const handleReleaseConnectionHalts = useCallback(async () => {
-    if (
-      connectionKills.length === 0
-      || reconciliationStaleCount > 0
-      || !connectionKills.every((connectionId) => freshConnectionIds.includes(connectionId))
-    ) return
-    if (!window.confirm(
-      `Release new-entry halts for ${connectionKills.join(', ')}? Only continue after verifying each broker account has fresh, reconciled provider truth.`,
-    )) return
-    try {
-      for (const connectionId of connectionKills) {
-        await window.electronAPI.setTradeGodConnectionExecutionKill(connectionId, false)
+      if (!globalExecutionKill) {
+        await window.electronAPI.setTradeGodGlobalExecutionKill(true)
+        setGlobalExecutionKill(true)
+        toast.success('Trade God new entries halted')
+        return
       }
+      const review = await window.electronAPI.prepareTradeGodPaperActivation()
+      if (!review.ready) {
+        const details = review.blockers.slice(0, 3).map((blocker) => blocker.detail).join(' ')
+        throw new Error(details || 'Paper activation prerequisites are not complete.')
+      }
+      const accountLines = review.connections.map((connection) => [
+        `• ${connection.connection_id}: provider proved flat`,
+        `  ${connection.authorized_symbols.join(', ')} · max ${connection.max_contracts}/order · open risk $${connection.max_open_risk} · daily loss $${connection.max_daily_loss}`,
+        `  ${connection.allowed_sides.join('/')} ${connection.allowed_order_types.join('/')} · mandate expires ${connection.authorization_expires_at}`,
+      ].join('\n')).join('\n')
+      const pendingLines = review.pending_intents.length > 0
+        ? review.pending_intents.map((intent) => (
+            `• CANCEL ${intent.side.toUpperCase()} ${intent.quantity} ${intent.symbol} on ${intent.connection_id} (${intent.state}, source ${intent.source_id}, created ${intent.created_at}, valid until ${intent.valid_until})`
+          )).join('\n')
+        : '• No queued pre-activation tickets'
+      if (!window.confirm(
+        `Release paper new-entry halts for ${review.connections.length} account(s)?\n\n${accountLines}\n\nQueued tickets will NOT execute:\n${pendingLines}\n\nThis review expires in 60 seconds.`,
+      )) return
+      await window.electronAPI.commitTradeGodPaperActivation(review.review_id, review.content_checksum)
       await refreshExecutionControl()
-      toast.success('Recovered account halts released')
+      toast.success('Reviewed paper activation released', {
+        description: `${review.pending_intents.length} queued ticket${review.pending_intents.length === 1 ? '' : 's'} canceled.`,
+      })
     } catch (error) {
       await refreshExecutionControl()
-      toast.error('Could not release every account halt', {
+      toast.error('Paper activation remains halted', {
         description: error instanceof Error ? error.message : String(error),
       })
+    } finally {
+      setActivationBusy(false)
     }
-  }, [connectionKills, freshConnectionIds, reconciliationStaleCount, refreshExecutionControl])
+  }, [globalExecutionKill, refreshExecutionControl])
 
   const handleConnectSource = useCallback(async () => {
     if (!workspaceId) return
@@ -601,8 +598,8 @@ export default function DiscoTraderControlCenterPage({
                 <OperationRow
                   icon={<CircleOff className="h-4 w-4" />}
                   title="New-entry safety halt"
-                  detail={globalExecutionKill ? 'New entries halted. Select to release.' : 'Persistently halt all new gateway entries. Flatten is not implemented.'}
-                  enabled={globalExecutionKill !== null}
+                  detail={globalExecutionKill ? 'Select for an exact paper-account review. Old queued tickets are canceled, never auto-run.' : 'Persistently halt all new gateway entries. Flatten is not implemented.'}
+                  enabled={globalExecutionKill !== null && !activationBusy}
                   onClick={handleGlobalExecutionKill}
                 />
                 <OperationRow
@@ -610,17 +607,11 @@ export default function DiscoTraderControlCenterPage({
                   title="Recovered account halts"
                   detail={connectionKillCount === 0
                     ? 'No account-level execution halts.'
-                    : reconciliationStaleCount > 0
-                      ? 'Provider truth is still stale; release is blocked.'
-                      : !connectionKills.every((connectionId) => freshConnectionIds.includes(connectionId))
-                        ? 'Waiting for fresh provider reconciliation before release.'
-                      : `${connectionKillCount} halted account${connectionKillCount === 1 ? '' : 's'}. Select to review and release.`}
-                  enabled={
-                    connectionKillCount > 0
-                    && reconciliationStaleCount === 0
-                    && connectionKills.every((connectionId) => freshConnectionIds.includes(connectionId))
-                  }
-                  onClick={handleReleaseConnectionHalts}
+                    : globalExecutionKill
+                      ? `${connectionKillCount} account halt${connectionKillCount === 1 ? '' : 's'} will be included in the exact activation review.`
+                      : 'Latch the global halt first, then run the exact activation review.'}
+                  enabled={connectionKillCount > 0 && globalExecutionKill === true && !activationBusy}
+                  onClick={handleGlobalExecutionKill}
                 />
               </div>
             </div>

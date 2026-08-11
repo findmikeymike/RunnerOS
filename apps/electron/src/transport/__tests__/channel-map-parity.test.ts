@@ -45,6 +45,8 @@ type ApiToChannelMapKeys = Exclude<
   | 'openTradingConnectionLogin' // direct local isolated browser-session IPC
   | 'confirmTradingConnectionLogin' // direct local isolated browser-session IPC
   | 'verifyTradingConnection' // direct local read-only provider verification IPC
+  | 'applyTradingConnectionCertification' // direct local trusted certification application IPC
+  | 'setTradingConnectionPaperExecution' // direct local paper execution enable IPC
   | 'listTradingSignalRoutes' // direct local trading signal-route IPC
   | 'saveTradingSignalRoute' // direct local trading signal-route IPC
   | 'removeTradingSignalRoute' // direct local trading signal-route IPC
@@ -55,6 +57,8 @@ type ApiToChannelMapKeys = Exclude<
   | 'getTradeGodExecutionControl' // direct local execution-control IPC
   | 'setTradeGodGlobalExecutionKill' // direct local execution-control IPC
   | 'setTradeGodConnectionExecutionKill' // direct local account-halt IPC
+  | 'prepareTradeGodPaperActivation' // direct local reviewed paper activation IPC
+  | 'commitTradeGodPaperActivation' // direct local reviewed paper activation IPC
   | 'listTradeGodStandingAuthorizations' // direct local paper-mandate IPC
   | 'saveTradeGodStandingAuthorization' // direct local paper-mandate IPC
   | 'revokeTradeGodStandingAuthorization' // direct local paper-mandate IPC

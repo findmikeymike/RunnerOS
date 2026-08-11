@@ -478,6 +478,8 @@ export interface ElectronAPI {
   openTradingConnectionLogin(connectionId: string): Promise<{ browser_instance_id: string; session_ref: string }>
   confirmTradingConnectionLogin(connectionId: string): Promise<import('../main/trading/trading-connection-service').TradingConnectionStatus>
   verifyTradingConnection(connectionId: string): Promise<import('../main/trading/trading-connection-service').TradingConnectionStatus>
+  applyTradingConnectionCertification(connectionId: string, certificationId: string): Promise<import('../main/trading/trading-connection-service').TradingConnectionStatus>
+  setTradingConnectionPaperExecution(connectionId: string, enabled: boolean): Promise<import('../main/trading/trading-connection-service').TradingConnectionStatus>
   listTradingSignalRoutes(): Promise<import('../main/trading/trading-signal-route-store').TradingSignalRoute[]>
   saveTradingSignalRoute(route: import('../main/trading/trading-signal-route-store').TradingSignalRoute, expectedPreviousTargetKey?: string): Promise<import('../main/trading/trading-signal-route-store').TradingSignalRoute>
   removeTradingSignalRoute(routeId: string): Promise<boolean>
@@ -488,6 +490,8 @@ export interface ElectronAPI {
   getTradeGodExecutionControl(): Promise<{ global_kill: boolean; connection_kills: string[]; source_kills: string[]; updated_at: string; provider_adapters_attached: boolean; reconciliation_health?: { running: boolean; cycle_in_progress: boolean; last_cycle_started_at?: string; last_success_at?: string; consecutive_failures: number; stale_connection_ids: string[]; fresh_connection_ids: string[] } }>
   setTradeGodGlobalExecutionKill(enabled: boolean): Promise<{ global_kill: boolean }>
   setTradeGodConnectionExecutionKill(connectionId: string, enabled: boolean): Promise<{ connection_id: string; killed: boolean }>
+  prepareTradeGodPaperActivation(): Promise<import('@trade-god/contracts').PaperActivationReview>
+  commitTradeGodPaperActivation(reviewId: string, reviewChecksum: string): Promise<import('@trade-god/contracts').PaperActivationEvent>
   listTradeGodStandingAuthorizations(): Promise<import('@trade-god/contracts').ExecutionAuthorization[]>
   saveTradeGodStandingAuthorization(authorization: import('@trade-god/contracts').ExecutionAuthorization): Promise<import('@trade-god/contracts').ExecutionAuthorization>
   revokeTradeGodStandingAuthorization(connectionId: string): Promise<boolean>

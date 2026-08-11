@@ -12,6 +12,8 @@ import type {
   MarketCandleSeries,
   ExecutionAuthorization,
   MirrorGroup,
+  PaperActivationEvent,
+  PaperActivationReview,
 } from '@trade-god/contracts'
 import type { SaveMirrorGroupInput } from '@trade-god/execution'
 
@@ -48,6 +50,8 @@ export interface TradingPreloadApi {
   }>
   confirmTradingConnectionLogin(connectionId: string): Promise<TradingConnectionStatus>
   verifyTradingConnection(connectionId: string): Promise<TradingConnectionStatus>
+  applyTradingConnectionCertification(connectionId: string, certificationId: string): Promise<TradingConnectionStatus>
+  setTradingConnectionPaperExecution(connectionId: string, enabled: boolean): Promise<TradingConnectionStatus>
   listTradingSignalRoutes(): Promise<TradingSignalRoute[]>
   saveTradingSignalRoute(
     route: TradingSignalRoute,
@@ -76,6 +80,8 @@ export interface TradingPreloadApi {
   }>
   setTradeGodGlobalExecutionKill(enabled: boolean): Promise<{ global_kill: boolean }>
   setTradeGodConnectionExecutionKill(connectionId: string, enabled: boolean): Promise<{ connection_id: string; killed: boolean }>
+  prepareTradeGodPaperActivation(): Promise<PaperActivationReview>
+  commitTradeGodPaperActivation(reviewId: string, reviewChecksum: string): Promise<PaperActivationEvent>
   listTradeGodStandingAuthorizations(): Promise<ExecutionAuthorization[]>
   saveTradeGodStandingAuthorization(authorization: ExecutionAuthorization): Promise<ExecutionAuthorization>
   revokeTradeGodStandingAuthorization(connectionId: string): Promise<boolean>
@@ -118,6 +124,20 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     verifyTradingConnection: (connectionId) => (
       invoke(TRADE_GOD_IPC.VERIFY_CONNECTION, connectionId) as Promise<TradingConnectionStatus>
     ),
+    applyTradingConnectionCertification: (connectionId, certificationId) => (
+      invoke(
+        TRADE_GOD_IPC.APPLY_CONNECTION_CERTIFICATION,
+        connectionId,
+        certificationId,
+      ) as Promise<TradingConnectionStatus>
+    ),
+    setTradingConnectionPaperExecution: (connectionId, enabled) => (
+      invoke(
+        TRADE_GOD_IPC.SET_CONNECTION_PAPER_EXECUTION,
+        connectionId,
+        enabled,
+      ) as Promise<TradingConnectionStatus>
+    ),
     listTradingSignalRoutes: () => invoke(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES) as Promise<TradingSignalRoute[]>,
     saveTradingSignalRoute: (route, expectedPreviousTargetKey) => (
       invoke(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, route, expectedPreviousTargetKey) as Promise<TradingSignalRoute>
@@ -155,6 +175,16 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
         connection_id: string
         killed: boolean
       }>
+    ),
+    prepareTradeGodPaperActivation: () => (
+      invoke(TRADE_GOD_IPC.PREPARE_PAPER_ACTIVATION) as Promise<PaperActivationReview>
+    ),
+    commitTradeGodPaperActivation: (reviewId, reviewChecksum) => (
+      invoke(
+        TRADE_GOD_IPC.COMMIT_PAPER_ACTIVATION,
+        reviewId,
+        reviewChecksum,
+      ) as Promise<PaperActivationEvent>
     ),
     listTradeGodStandingAuthorizations: () => (
       invoke(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS) as Promise<ExecutionAuthorization[]>

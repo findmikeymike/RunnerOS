@@ -37,19 +37,9 @@ describe('Keys settings registry', () => {
     }
   })
 
-  test('provider publishing agents have visible managed connection cards', () => {
-    const managedSlugs = new Set(
-      SECRET_PRESETS
-        .filter((preset) => preset.storage === 'managed-source')
-        .map((preset) => preset.sourceSlug),
-    )
-
+  test('Trade God does not reintroduce Artist OS publishing agents', () => {
     for (const agentSlug of ['trypost-agent', 'postiz-agent']) {
-      const agent = STARTER_AGENTS.find((candidate) => candidate.slug === agentSlug)
-      expect(agent, `missing built-in agent ${agentSlug}`).toBeDefined()
-      for (const sourceSlug of agent?.metadata.sources ?? []) {
-        expect(managedSlugs.has(sourceSlug), `${agentSlug} has no Keys setup path for ${sourceSlug}`).toBe(true)
-      }
+      expect(STARTER_AGENTS.find((candidate) => candidate.slug === agentSlug)).toBeUndefined()
     }
   })
 })

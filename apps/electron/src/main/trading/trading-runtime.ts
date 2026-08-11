@@ -40,6 +40,7 @@ import {
   type TradingCredentialVault,
 } from './trading-connection-service.ts'
 import { createTradovatePaperRuntime } from './tradovate-paper-runtime.ts'
+import { PaperActivationService } from './paper-activation-service.ts'
 import {
   TradingSignalRouteStore,
   type TradingSignalRoute,
@@ -51,6 +52,7 @@ import {
   resolveFuturesEconomicSpec,
   FileAdapterCertificationStore,
   FileProviderReadVerificationStore,
+  FilePaperActivationStore,
   FileDiscoTraderIntentSource,
   FileDiscordTradeManager,
   FileMirrorDiscordTradeManager,
@@ -481,6 +483,25 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         options.now,
       )
     : undefined
+  const paperActivationJournal = options.executionDirectory
+    ? new FilePaperActivationStore(options.executionDirectory, options.now)
+    : undefined
+  let attachedAdapterSetChecksum = ''
+  const paperActivationService = (
+    executionGateway
+    && tradingConnectionService
+    && standingAuthorizationStore
+    && discordManagementSource
+    && paperActivationJournal
+  ) ? new PaperActivationService({
+      gateway: executionGateway,
+      connections: tradingConnectionService,
+      authorizations: standingAuthorizationStore,
+      sources: discordManagementSource,
+      journal: paperActivationJournal,
+      adapterSetChecksum: () => attachedAdapterSetChecksum,
+      now: options.now,
+    }) : undefined
   const resolveDiscoTraderRoute = discordManagementSource && tradingConnectionStore
     ? async (ticket: DiscoTraderTicket): Promise<
         | { type: 'connection'; route: DiscoTraderIntentRoute; binding?: SourceExecutionBinding }
@@ -648,22 +669,33 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   let executionRecoveryError: unknown
   const executionRecoveryReady = executionGateway && executionStore
     ? executionStore.bindAdapterSet(attachedExecutionAdapters.map((adapter) => adapter.descriptor))
-      .then(() => Promise.all([
-        executionStore.recoverStaleLocks(),
-        mirrorExecutionStore?.recoverStaleLocks() ?? Promise.resolve(0),
-      ]))
+      .then((attachment) => {
+        attachedAdapterSetChecksum = attachment.adapter_set_checksum
+        return Promise.all([
+          executionStore.recoverStaleLocks(),
+          mirrorExecutionStore?.recoverStaleLocks() ?? Promise.resolve(0),
+        ])
+      })
       .then(() => executionGateway.recoverNonTerminal()).catch((error) => {
         executionRecoveryError = error
       })
     : Promise.resolve()
-  const executionSupervisionReady = executionRecoveryReady.then(() => {
+  let paperActivationRecoveryError: unknown
+  const paperActivationReady = paperActivationService
+    ? executionRecoveryReady.then(() => paperActivationService.recoverIncomplete()).catch((error) => {
+        paperActivationRecoveryError = error
+      })
+    : executionRecoveryReady
+  const executionSupervisionReady = paperActivationReady.then(() => {
     if (executionRecoveryError) throw executionRecoveryError
+    if (paperActivationRecoveryError) throw paperActivationRecoveryError
     reconciliationSupervisor?.start()
   })
   let discordManagementRecoveryError: unknown
   const discordManagementReady = discordTradeManager && mirrorDiscordTradeManager && discordManagementFamilyResolver
     ? executionSupervisionReady.then(async () => {
         if (executionRecoveryError) throw executionRecoveryError
+        if (paperActivationRecoveryError) throw paperActivationRecoveryError
         await discordTradeManager.recoverPending()
         await mirrorDiscordTradeManager.recoverPending()
         await discordManagementFamilyResolver.recoverPending()
@@ -752,25 +784,97 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(tradingConnectionService
       ? {
           listTradingConnections: () => tradingConnectionService.list(),
-          saveTradingConnection: (input) => tradingRouteMutations!.saveConnection(
-            input.connection.connection_id,
-            () => tradingConnectionService.save(input),
-          ),
-          removeTradingConnection: (connectionId) => tradingRouteMutations!.removeConnection(
-            connectionId,
-            () => tradingConnectionService.remove(connectionId),
-          ),
+          saveTradingConnection: async (input) => {
+            if (executionGateway) {
+              await executionRecoveryReady
+              await executionGateway.setGlobalKill(true)
+              await executionGateway.setConnectionKill(input.connection.connection_id, true)
+            }
+            return tradingRouteMutations!.saveConnection(
+              input.connection.connection_id,
+              async () => {
+                await paperExecutionCoordinator?.revokeAuthorization(input.connection.connection_id)
+                return tradingConnectionService.save(input)
+              },
+            )
+          },
+          removeTradingConnection: async (connectionId) => {
+            if (executionGateway) {
+              await executionRecoveryReady
+              await executionGateway.setConnectionKill(connectionId, true)
+            }
+            return tradingRouteMutations!.removeConnection(
+              connectionId,
+              async () => {
+                await paperExecutionCoordinator?.revokeAuthorization(connectionId)
+                return tradingConnectionService.remove(connectionId)
+              },
+            )
+          },
           openTradingConnectionLogin: (connectionId) => (
             tradingConnectionService.openBrowserLogin(connectionId)
           ),
-          confirmTradingConnectionLogin: (connectionId) => tradingRouteMutations!.saveConnection(
-            connectionId,
-            () => tradingConnectionService.confirmBrowserLogin(connectionId),
-          ),
+          confirmTradingConnectionLogin: async (connectionId) => {
+            if (executionGateway) {
+              await executionRecoveryReady
+              await executionGateway.setGlobalKill(true)
+              await executionGateway.setConnectionKill(connectionId, true)
+            }
+            return tradingRouteMutations!.saveConnection(
+              connectionId,
+              async () => {
+                await paperExecutionCoordinator?.revokeAuthorization(connectionId)
+                return tradingConnectionService.confirmBrowserLogin(connectionId)
+              },
+            )
+          },
           verifyTradingConnection: (connectionId) => tradingRouteMutations!.saveConnection(
             connectionId,
             () => tradingConnectionService.verifyProviderRead(connectionId),
           ),
+          ...(executionGateway && tradingRouteMutations ? {
+            applyTradingConnectionCertification: async (connectionId: string, certificationId: string) => {
+            await executionSupervisionReady
+            if (paperActivationRecoveryError) throw paperActivationRecoveryError
+            const control = await executionGateway.readControl()
+            if (!control.global_kill) {
+              throw new ExecutionGatewayError(
+                'KILL_SWITCH_ENABLED',
+                'Apply certification only while the persistent global new-entry halt is active.',
+              )
+            }
+            await executionGateway.setConnectionKill(connectionId, true)
+            return tradingRouteMutations.saveConnection(
+              connectionId,
+              async () => {
+                await paperExecutionCoordinator?.revokeAuthorization(connectionId)
+                return tradingConnectionService.applyCertificationForConnection(
+                  connectionId,
+                  certificationId,
+                )
+              },
+            )
+            },
+            setTradingConnectionPaperExecution: async (connectionId: string, enabled: boolean) => {
+            await executionSupervisionReady
+            if (paperActivationRecoveryError) throw paperActivationRecoveryError
+            const control = await executionGateway.readControl()
+            if (enabled && !control.global_kill) {
+              throw new ExecutionGatewayError(
+                'KILL_SWITCH_ENABLED',
+                'Enable paper execution only while the persistent global new-entry halt is active.',
+              )
+            }
+            await executionGateway.setConnectionKill(connectionId, true)
+            return tradingRouteMutations.saveConnection(
+              connectionId,
+              async () => {
+                await paperExecutionCoordinator?.revokeAuthorization(connectionId)
+                return tradingConnectionService.setPaperExecutionEnabled(connectionId, enabled)
+              },
+            )
+            },
+          } : {}),
           listTradingSignalRoutes: () => tradingSignalRouteStore!.list(),
           saveTradingSignalRoute: (route, expectedPreviousTargetKey) => (
             tradingRouteMutations!.saveRoute(route, expectedPreviousTargetKey)
@@ -808,26 +912,46 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             }
           },
           setGlobalExecutionKill: async (enabled: boolean) => {
-            await executionSupervisionReady
-            await executionGateway.setGlobalKill(enabled)
-            if (!enabled) await paperExecutionCoordinator?.coordinatePending()
-            return { global_kill: enabled }
-          },
-          setConnectionExecutionKill: async (connectionId: string, enabled: boolean) => {
-            await executionSupervisionReady
-            await tradingConnectionStore!.get(connectionId)
-            if (
-              !enabled
-              && !reconciliationSupervisor?.canReleaseConnectionHalt(connectionId)
-            ) {
+            await executionRecoveryReady
+            if (!enabled) {
               throw new ExecutionGatewayError(
-                'CONNECTION_UNAVAILABLE',
-                'Account halt release requires fresh reconciled provider truth from the active adapter.',
+                'KILL_SWITCH_ENABLED',
+                'Releasing the global halt requires an exact paper activation review.',
               )
             }
-            await executionGateway.setConnectionKill(connectionId, enabled)
-            return { connection_id: connectionId, killed: enabled }
+            await executionGateway.setGlobalKill(true)
+            return { global_kill: true }
           },
+          setConnectionExecutionKill: async (connectionId: string, enabled: boolean) => {
+            await executionRecoveryReady
+            await tradingConnectionStore!.get(connectionId)
+            if (!enabled) {
+              throw new ExecutionGatewayError(
+                'KILL_SWITCH_ENABLED',
+                'Releasing an account halt requires an exact paper activation review.',
+              )
+            }
+            await executionGateway.setConnectionKill(connectionId, true)
+            return { connection_id: connectionId, killed: true }
+          },
+          ...(paperActivationService && tradingRouteMutations
+            ? {
+                preparePaperActivation: async () => {
+                  await executionSupervisionReady
+                  if (paperActivationRecoveryError) throw paperActivationRecoveryError
+                  return tradingRouteMutations.captureRoutingSnapshot(() => (
+                    paperActivationService.prepareReview()
+                  ))
+                },
+                commitPaperActivation: async (reviewId: string, reviewChecksum: string) => {
+                  await executionSupervisionReady
+                  if (paperActivationRecoveryError) throw paperActivationRecoveryError
+                  return tradingRouteMutations.captureRoutingSnapshot(() => (
+                    paperActivationService.commitReview(reviewId, reviewChecksum)
+                  ))
+                },
+              }
+            : {}),
         }
       : {}),
     ...(standingAuthorizationStore && tradingConnectionStore
@@ -835,26 +959,39 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           listStandingAuthorizations: () => standingAuthorizationStore.list(),
           saveStandingAuthorization: async (authorization: ExecutionAuthorization) => {
             await executionSupervisionReady
-            const connection = await tradingConnectionStore.get(authorization.connection_id)
-            if (
-              connection.environment !== 'paper'
-              || connection.environment_class !== 'rehearsal'
-              || !connection.enabled
-              || connection.state !== 'ready'
-              || !connection.certifications.includes('paper-lifecycle-certified')
-            ) {
+            if (paperActivationRecoveryError) throw paperActivationRecoveryError
+            const control = await executionGateway!.readControl()
+            if (!control.global_kill) {
               throw new ExecutionGatewayError(
-                'CERTIFICATION_REQUIRED',
-                'Standing mandates require an enabled, ready, paper-lifecycle-certified paper account.',
+                'KILL_SWITCH_ENABLED',
+                'Saving or replacing a paper mandate requires the persistent global new-entry halt.',
               )
             }
-            const saved = await paperExecutionCoordinator!.saveAuthorization(authorization)
-            await paperExecutionCoordinator?.coordinatePending()
-            return saved
+            await executionGateway!.setConnectionKill(authorization.connection_id, true)
+            return tradingRouteMutations!.captureRoutingSnapshot(async () => {
+              const connection = await tradingConnectionStore.get(authorization.connection_id)
+              if (
+                connection.environment !== 'paper'
+                || connection.environment_class !== 'rehearsal'
+                || !connection.enabled
+                || connection.state !== 'ready'
+                || !connection.certifications.includes('paper-lifecycle-certified')
+              ) {
+                throw new ExecutionGatewayError(
+                  'CERTIFICATION_REQUIRED',
+                  'Standing mandates require an enabled, ready, paper-lifecycle-certified paper account.',
+                )
+              }
+              return paperExecutionCoordinator!.saveAuthorization(authorization)
+            })
           },
-          revokeStandingAuthorization: (connectionId: string) => (
-            paperExecutionCoordinator!.revokeAuthorization(connectionId)
-          ),
+          revokeStandingAuthorization: async (connectionId: string) => {
+            await executionSupervisionReady
+            if (paperActivationRecoveryError) throw paperActivationRecoveryError
+            return tradingRouteMutations!.captureRoutingSnapshot(() => (
+              paperExecutionCoordinator!.revokeAuthorization(connectionId)
+            ))
+          },
         }
       : {}),
     stop: () => manager.stop(),
@@ -873,6 +1010,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       ? {
           ingestDiscoTraderTicketPush: async (input: unknown) => {
             await executionSupervisionReady
+            if (paperActivationRecoveryError) throw paperActivationRecoveryError
             if (executionRecoveryError) throw executionRecoveryError
             const payload = discoTraderPushPayloadSchema.parse(input)
             if (payload.kind !== 'ticket' || !payload.ticket || !resolveDiscoTraderRoute) {
@@ -938,10 +1076,30 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
                   intent_id: projected.intent.intent_id,
                 },
               })
-              return { type: 'connection' as const, resolved, binding, projected }
+              const result = await discordManagementSource!.ingestPush(
+                input,
+                resolved.route,
+                undefined,
+                binding.received_at,
+              )
+              if (
+                projected.intent.intent_id !== result.record.intent.intent_id
+                || projected.intent.content_checksum !== result.record.intent.content_checksum
+                || binding.target.type !== 'connection'
+                || result.record.intent.intent_id !== binding.target.intent_id
+                || result.record.intent.connection_id !== binding.target.connection_id
+                || sha256(result.record.intent.instrument) !== sha256(binding.instrument)
+              ) {
+                throw new ExecutionGatewayError(
+                  'RECORD_INTEGRITY_FAILURE',
+                  'Gateway intent does not match its frozen source binding.',
+                )
+              }
+              await sourceExecutionBindingStore!.markMaterialized(binding.binding_id, sourceIdentity)
+              return { type: 'connection' as const, result }
             })
-            const { resolved, binding } = captured
-            if (resolved.type === 'mirror-group') {
+            if (captured.type === 'mirror-group') {
+              const { resolved, binding } = captured
               const preview = await mirrorPreviewCoordinator!.preview({
                 ticket: payload.ticket,
                 route_id: resolved.routeId,
@@ -961,25 +1119,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
               await sourceExecutionBindingStore!.markMaterialized(binding.binding_id, sourceIdentity)
               return preview
             }
-            const result = await discordManagementSource!.ingestPush(
-              input,
-              resolved.route,
-              undefined,
-              binding.received_at,
-            )
-            if (
-              binding.target.type !== 'connection'
-              || result.record.intent.intent_id !== binding.target.intent_id
-            ) {
-              throw new ExecutionGatewayError(
-                'RECORD_INTEGRITY_FAILURE',
-                'Gateway intent does not match its frozen source binding.',
-              )
-            }
-            await sourceExecutionBindingStore!.markMaterialized(binding.binding_id, sourceIdentity)
             return paperExecutionCoordinator
-              ? paperExecutionCoordinator.coordinate(result.record.intent.intent_id)
-              : result.record
+              ? paperExecutionCoordinator.coordinate(captured.result.record.intent.intent_id)
+              : captured.result.record
           },
           ingestDiscordManagementPush: async (input: unknown) => {
             await discordManagementReady

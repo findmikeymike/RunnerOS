@@ -334,6 +334,48 @@ export default function TradingConnectionsSettingsPage({
     }
   }
 
+  const applyCertification = async (connectionId: string, certificationId: string) => {
+    if (!window.confirm(
+      'Apply this retained 50-lifecycle paper certification to the exact saved account and installed adapter? Execution will remain disabled and halted.',
+    )) return
+    setBusy(`certify:${connectionId}`)
+    try {
+      await window.electronAPI.applyTradingConnectionCertification(connectionId, certificationId)
+      await load()
+      onConnectionsChanged?.()
+      toast.success('Exact paper certification applied', {
+        description: 'Execution remains disabled and all release halts remain active.',
+      })
+    } catch (error) {
+      await load()
+      toast.error(error instanceof Error ? error.message : 'Could not apply certification')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const setPaperExecution = async (connectionId: string, enabled: boolean) => {
+    if (enabled && !window.confirm(
+      'Enable this certified PAPER account for automated execution? The account and global new-entry halts remain active until the final reviewed release.',
+    )) return
+    setBusy(`paper-execution:${connectionId}`)
+    try {
+      await window.electronAPI.setTradingConnectionPaperExecution(connectionId, enabled)
+      await load()
+      onConnectionsChanged?.()
+      toast.success(enabled ? 'Paper execution enabled behind halts' : 'Paper execution disabled', {
+        description: enabled
+          ? 'Create a bounded mandate, then use the reviewed activation control to release new entries.'
+          : 'The account halt is active.',
+      })
+    } catch (error) {
+      await load()
+      toast.error(error instanceof Error ? error.message : 'Could not change paper execution state')
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const saveSignalRoute = async (expectedPreviousTargetKey?: string) => {
     if (!signalDraft.displayName.trim() || !signalDraft.connectionId
       || !/^\d{1,25}$/.test(signalDraft.serverId)
@@ -831,6 +873,48 @@ export default function TradingConnectionsSettingsPage({
                         )}
                       </div>
                       <div className="flex gap-2">
+                        {!status.connection.certifications.includes('paper-lifecycle-certified')
+                          && status.certification_evidence.some((evidence) => (
+                            evidence.eligible_certifications.includes('paper-lifecycle-certified')
+                          )) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!status.provider_read_fresh || busy === `certify:${status.connection.connection_id}`}
+                            onClick={() => {
+                              const evidence = status.certification_evidence.find((candidate) => (
+                                candidate.eligible_certifications.includes('paper-lifecycle-certified')
+                              ))
+                              if (evidence) void applyCertification(
+                                status.connection.connection_id,
+                                evidence.certification_id,
+                              )
+                            }}
+                          >
+                            {busy === `certify:${status.connection.connection_id}`
+                              && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+                            Apply certification
+                          </Button>
+                        )}
+                        {status.connection.state === 'ready'
+                          && status.connection.certifications.includes('paper-lifecycle-certified') && (
+                          <Button
+                            variant={status.connection.enabled ? 'outline' : 'default'}
+                            size="sm"
+                            disabled={
+                              busy === `paper-execution:${status.connection.connection_id}`
+                              || (!status.connection.enabled && !status.provider_read_fresh)
+                            }
+                            onClick={() => void setPaperExecution(
+                              status.connection.connection_id,
+                              !status.connection.enabled,
+                            )}
+                          >
+                            {busy === `paper-execution:${status.connection.connection_id}`
+                              && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
+                            {status.connection.enabled ? 'Disable paper' : 'Enable paper'}
+                          </Button>
+                        )}
                         {status.connection.transport_preference === 'api' && (
                           <Button
                             variant="outline"

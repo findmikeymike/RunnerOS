@@ -27,6 +27,13 @@ export interface ExecutionControlState {
   global_kill: boolean
   connection_kills: string[]
   source_kills: string[]
+  activation_release?: {
+    release_id: string
+    release_event_id: string
+    release_event_checksum: string
+    state_checksum: string
+    committed_at: string
+  }
   updated_at: string
 }
 
@@ -291,6 +298,44 @@ export class FileExecutionStore {
 
   async setGlobalKill(enabled: boolean): Promise<ExecutionControlState> {
     return this.updateControl((control) => ({ ...control, global_kill: enabled }))
+  }
+
+  async commitPaperActivationRelease(input: {
+    release_id: string
+    release_event_id: string
+    release_event_checksum: string
+    state_checksum: string
+    expected_control_checksum: string
+    connection_ids: string[]
+  }): Promise<ExecutionControlState> {
+    return this.updateControl((control) => {
+      if (sha256(control) !== input.expected_control_checksum) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Execution control state changed after the activation review.',
+        )
+      }
+      if (!control.global_kill) {
+        throw new ExecutionGatewayError(
+          'INVALID_STATE',
+          'Paper activation release requires the persistent global halt to be active.',
+        )
+      }
+      return {
+        ...control,
+        global_kill: false,
+        connection_kills: control.connection_kills.filter((connectionId) => (
+          !input.connection_ids.includes(connectionId)
+        )),
+        activation_release: {
+          release_id: input.release_id,
+          release_event_id: input.release_event_id,
+          release_event_checksum: input.release_event_checksum,
+          state_checksum: input.state_checksum,
+          committed_at: this.now(),
+        },
+      }
+    })
   }
 
   async setConnectionKill(connectionId: string, enabled: boolean): Promise<ExecutionControlState> {
@@ -619,6 +664,15 @@ export class FileExecutionStore {
       || !control.connection_kills.every((entry) => typeof entry === 'string')
       || !Array.isArray(control.source_kills)
       || !control.source_kills.every((entry) => typeof entry === 'string')
+      || (control.activation_release !== undefined && (
+        !control.activation_release
+        || typeof control.activation_release.release_id !== 'string'
+        || typeof control.activation_release.release_event_id !== 'string'
+        || typeof control.activation_release.release_event_checksum !== 'string'
+        || typeof control.activation_release.state_checksum !== 'string'
+        || typeof control.activation_release.committed_at !== 'string'
+        || !Number.isFinite(Date.parse(control.activation_release.committed_at))
+      ))
       || typeof control.updated_at !== 'string'
       || !Number.isFinite(Date.parse(control.updated_at))
     ) {

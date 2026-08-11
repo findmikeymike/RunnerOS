@@ -401,8 +401,35 @@ describe('trading connection service', () => {
         capabilities: installedCapabilities,
       }),
     }
-    const { service, certificationStore } = await setup(registry)
+    let verificationNumber = 0
+    const verifier: TradingProviderReadVerifier = {
+      async verify(target) {
+        verificationNumber += 1
+        const unsigned = {
+          verification_schema_version: 'provider-read-verification@1' as const,
+          verification_id: `provider-read-certification-apply-${verificationNumber}`,
+          connection_id: target.connection_id,
+          account_ref: target.account_ref,
+          provider_slug: target.platform.slug,
+          environment: target.environment,
+          adapter_id: 'tradovate-api',
+          adapter_version: '0.1.0',
+          provider_contract_version: 'tradovate-demo-rest-2026-07',
+          capabilities_checksum: sha256(certifiedCapabilities),
+          account_snapshot_id: 'snapshot-certification-apply',
+          account_snapshot_checksum: 'b'.repeat(64),
+          captured_at: NOW,
+          can_trade: true as const,
+          position_count: 0,
+          working_order_count: 0,
+          verified_at: NOW,
+        }
+        return { ...unsigned, content_checksum: sha256(unsigned) }
+      },
+    }
+    const { service, certificationStore } = await setup(registry, verifier)
     const saved = await service.save({ connection: connection('api'), api_secret: apiSecret() })
+    await service.verifyProviderRead(saved.connection.connection_id)
     const runner: AdapterCertificationRunner = {
       connection_id: saved.connection.connection_id,
       account_ref: saved.connection.account_ref,
@@ -431,8 +458,9 @@ describe('trading connection service', () => {
 
     installedCapabilities = { ...certifiedCapabilities, partial_close: false }
     await expect(service.applyCertification(evidence.certification_id))
-      .rejects.toThrow('installed adapter contract')
+      .rejects.toThrow('fresh flat read-only provider proof')
     installedCapabilities = certifiedCapabilities
+    await service.verifyProviderRead(saved.connection.connection_id)
 
     const certified = await service.applyCertification(evidence.certification_id)
     expect(certified.connection).toMatchObject({
@@ -450,6 +478,18 @@ describe('trading connection service', () => {
         capabilities_checksum: sha256(certifiedCapabilities),
       }],
     })
+    const enabled = await service.setPaperExecutionEnabled(
+      saved.connection.connection_id,
+      true,
+    )
+    expect(enabled.connection.enabled).toBe(true)
+    const resaved = await service.save({ connection: enabled.connection })
+    expect(resaved.connection.enabled).toBe(false)
+    const disabled = await service.setPaperExecutionEnabled(
+      saved.connection.connection_id,
+      false,
+    )
+    expect(disabled.connection.enabled).toBe(false)
 
     const staleSetup = await setup({
       resolve: () => ({
@@ -475,7 +515,7 @@ describe('trading connection service', () => {
     }, () => NOW)
     await staleSetup.certificationStore.save(staleEvidence)
     await expect(staleSetup.service.applyCertification(staleEvidence.certification_id))
-      .rejects.toThrow('installed adapter contract')
+      .rejects.toThrow('fresh flat read-only provider proof')
   })
 
   test('refuses an API connection without an existing or newly supplied secret', async () => {

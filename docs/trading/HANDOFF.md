@@ -17,6 +17,12 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
 - The account UI can run a trusted read-only provider verification. Its
   append-only proof confirms exact account/environment/tradability and safe
   position/order counts, but grants no certification or execution authority.
+- Trusted UI actions can apply retained certification evidence and explicitly
+  enable a paper account, but both keep persistent halts active. The final
+  release is a checksum-bound review that re-proves all accounts flat under
+  provider locks, rechecks mandate/expiry, and cancels every old queued ticket.
+  Any account, credential, certification, enablement, or mandate replacement
+  re-latches the reviewed boundary.
 - Live isolated workspace now contains both signed DiscoTrader receivers.
 - Trade Desk is read-only and cannot call donor execution/management tools.
 - Exact Discord routing is mandatory; no default/single-account fallback exists.
@@ -32,7 +38,12 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
 - The previously copied Artist OS vault was moved into a recoverable Trade
   God-only quarantine. Fresh Trade God login/secrets are required.
 - Time-bounded paper arming and execution coordination are implemented locally;
-  one paper-only Tradovate adapter is attached but inert. Coalesced token
+  one paper-only Tradovate adapter is attached but inert on a clean install.
+  No production certification runner has produced the required 50 clean
+  lifecycles, and the official Tradovate API does not document a reduce-only
+  partial-close primitive. That remains an external demo-evidence blocker; do
+  not weaken the lifecycle gate or label an opposite market order safe.
+  Coalesced token
   renewal, provider backoff, low-rate stale-truth supervision, and trusted
   read-only account verification are implemented. Next build gate: event-driven
   user-sync truth and exact-account lifecycle certification.

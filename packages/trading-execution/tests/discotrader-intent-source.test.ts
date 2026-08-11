@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { existsSync } from 'node:fs'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -315,6 +316,24 @@ describe('DiscoTrader intent source', () => {
 
     expect(recovered.record.intent.intent_id).toBe(artifact.intent.intent_id)
     expect(registrar.registerCount).toBe(1)
+  })
+
+  test('durably registers the halted gateway record before writing source sidecars', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'discotrader-admission-order-'))
+    const registrar = new Registrar()
+    const originalRegister = registrar.registerIntent.bind(registrar)
+    let sourceExistedAtRegistration = true
+    registrar.registerIntent = async (intent) => {
+      sourceExistedAtRegistration = existsSync(path.join(directory, `${intent.intent_id}.source.json`))
+      return originalRegister(intent)
+    }
+    const source = new FileDiscoTraderIntentSource(directory, registrar, () => NOW)
+
+    await source.ingestPush({
+      kind: 'ticket', severity: 'action_required', summary: 'LONG 3xESU6', ticket: ticket(), at: NOW,
+    }, route)
+
+    expect(sourceExistedAtRegistration).toBe(false)
   })
 
   test('reads checksum-valid version 1 source artifacts only without exit legs', async () => {

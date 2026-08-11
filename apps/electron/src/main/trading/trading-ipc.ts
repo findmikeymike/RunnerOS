@@ -13,6 +13,8 @@ import type {
   TradingConnection,
   ExecutionAuthorization,
   MirrorGroup,
+  PaperActivationEvent,
+  PaperActivationReview,
 } from '@trade-god/contracts'
 import type { SaveMirrorGroupInput } from '@trade-god/execution'
 
@@ -42,6 +44,8 @@ export const TRADE_GOD_IPC = {
   OPEN_CONNECTION_LOGIN: 'trade-god:connections:open-login',
   CONFIRM_CONNECTION_LOGIN: 'trade-god:connections:confirm-login',
   VERIFY_CONNECTION: 'trade-god:connections:verify',
+  APPLY_CONNECTION_CERTIFICATION: 'trade-god:connections:apply-certification',
+  SET_CONNECTION_PAPER_EXECUTION: 'trade-god:connections:set-paper-execution',
   LIST_SIGNAL_ROUTES: 'trade-god:signal-routes:list',
   SAVE_SIGNAL_ROUTE: 'trade-god:signal-routes:save',
   REMOVE_SIGNAL_ROUTE: 'trade-god:signal-routes:remove',
@@ -52,6 +56,8 @@ export const TRADE_GOD_IPC = {
   EXECUTION_CONTROL: 'trade-god:execution:control',
   SET_GLOBAL_EXECUTION_KILL: 'trade-god:execution:set-global-kill',
   SET_CONNECTION_EXECUTION_KILL: 'trade-god:execution:set-connection-kill',
+  PREPARE_PAPER_ACTIVATION: 'trade-god:execution:paper-activation:prepare',
+  COMMIT_PAPER_ACTIVATION: 'trade-god:execution:paper-activation:commit',
   LIST_STANDING_AUTHORIZATIONS: 'trade-god:execution:authorizations:list',
   SAVE_STANDING_AUTHORIZATION: 'trade-god:execution:authorizations:save',
   REVOKE_STANDING_AUTHORIZATION: 'trade-god:execution:authorizations:revoke',
@@ -77,6 +83,8 @@ export interface TradingIpcManager {
   }>
   confirmTradingConnectionLogin?(connectionId: string): Promise<TradingConnectionStatus>
   verifyTradingConnection?(connectionId: string): Promise<TradingConnectionStatus>
+  applyTradingConnectionCertification?(connectionId: string, certificationId: string): Promise<TradingConnectionStatus>
+  setTradingConnectionPaperExecution?(connectionId: string, enabled: boolean): Promise<TradingConnectionStatus>
   listTradingSignalRoutes?(): Promise<TradingSignalRoute[]>
   saveTradingSignalRoute?(
     route: TradingSignalRoute,
@@ -105,6 +113,8 @@ export interface TradingIpcManager {
   }>
   setGlobalExecutionKill?(enabled: boolean): Promise<{ global_kill: boolean }>
   setConnectionExecutionKill?(connectionId: string, enabled: boolean): Promise<{ connection_id: string; killed: boolean }>
+  preparePaperActivation?(): Promise<PaperActivationReview>
+  commitPaperActivation?(reviewId: string, reviewChecksum: string): Promise<PaperActivationEvent>
   listStandingAuthorizations?(): Promise<ExecutionAuthorization[]>
   saveStandingAuthorization?(authorization: ExecutionAuthorization): Promise<ExecutionAuthorization>
   revokeStandingAuthorization?(connectionId: string): Promise<boolean>
@@ -182,6 +192,35 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     }
     return manager.verifyTradingConnection(connectionId)
   })
+  ipcMain.handle(TRADE_GOD_IPC.APPLY_CONNECTION_CERTIFICATION, (
+    _event,
+    connectionId: unknown,
+    certificationId: unknown,
+  ) => {
+    if (!manager.applyTradingConnectionCertification) {
+      throw new Error('Trusted certification application is unavailable.')
+    }
+    if (typeof connectionId !== 'string' || !connectionId.trim()) {
+      throw new Error('Trading connection id is invalid.')
+    }
+    if (typeof certificationId !== 'string' || !certificationId.trim()) {
+      throw new Error('Certification id is invalid.')
+    }
+    return manager.applyTradingConnectionCertification(connectionId, certificationId)
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SET_CONNECTION_PAPER_EXECUTION, (
+    _event,
+    connectionId: unknown,
+    enabled: unknown,
+  ) => {
+    if (!manager.setTradingConnectionPaperExecution) {
+      throw new Error('Trusted paper execution control is unavailable.')
+    }
+    if (typeof connectionId !== 'string' || !connectionId.trim() || typeof enabled !== 'boolean') {
+      throw new Error('Paper execution control payload is invalid.')
+    }
+    return manager.setTradingConnectionPaperExecution(connectionId, enabled)
+  })
   ipcMain.handle(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES, () => {
     if (!manager.listTradingSignalRoutes) throw new Error('Trading signal routes are unavailable.')
     return manager.listTradingSignalRoutes()
@@ -241,6 +280,22 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     if (typeof enabled !== 'boolean') throw new Error('Execution halt state is invalid.')
     return manager.setConnectionExecutionKill(connectionId, enabled)
   })
+  ipcMain.handle(TRADE_GOD_IPC.PREPARE_PAPER_ACTIVATION, () => {
+    if (!manager.preparePaperActivation) throw new Error('Paper activation review is unavailable.')
+    return manager.preparePaperActivation()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.COMMIT_PAPER_ACTIVATION, (
+    _event,
+    reviewId: unknown,
+    reviewChecksum: unknown,
+  ) => {
+    if (!manager.commitPaperActivation) throw new Error('Paper activation review is unavailable.')
+    if (typeof reviewId !== 'string' || !reviewId.trim()) throw new Error('Paper activation review id is invalid.')
+    if (typeof reviewChecksum !== 'string' || !/^[a-f0-9]{64}$/.test(reviewChecksum)) {
+      throw new Error('Paper activation review checksum is invalid.')
+    }
+    return manager.commitPaperActivation(reviewId, reviewChecksum)
+  })
   ipcMain.handle(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS, () => {
     if (!manager.listStandingAuthorizations) throw new Error('Standing paper mandates are unavailable.')
     return manager.listStandingAuthorizations()
@@ -274,6 +329,8 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN)
     ipcMain.removeHandler(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN)
     ipcMain.removeHandler(TRADE_GOD_IPC.VERIFY_CONNECTION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.APPLY_CONNECTION_CERTIFICATION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SET_CONNECTION_PAPER_EXECUTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE)
@@ -284,6 +341,8 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.EXECUTION_CONTROL)
     ipcMain.removeHandler(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL)
     ipcMain.removeHandler(TRADE_GOD_IPC.SET_CONNECTION_EXECUTION_KILL)
+    ipcMain.removeHandler(TRADE_GOD_IPC.PREPARE_PAPER_ACTIVATION)
+    ipcMain.removeHandler(TRADE_GOD_IPC.COMMIT_PAPER_ACTIVATION)
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION)
     ipcMain.removeHandler(TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION)

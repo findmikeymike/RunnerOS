@@ -48,6 +48,14 @@ describe('Trade God IPC registration', () => {
         calls.push(`connections:verify:${id}`)
         return { provider_read_verified: true } as any
       },
+      applyTradingConnectionCertification: async (id, certificationId) => {
+        calls.push(`connections:certify:${id}:${certificationId}`)
+        return { connection: { connection_id: id, state: 'ready' } } as any
+      },
+      setTradingConnectionPaperExecution: async (id, enabled) => {
+        calls.push(`connections:paper:${id}:${enabled}`)
+        return { connection: { connection_id: id, enabled } } as any
+      },
       listTradingSignalRoutes: async () => { calls.push('routes:list'); return [] },
       saveTradingSignalRoute: async (route, expectedPreviousConnectionId) => {
         calls.push(`routes:save:${expectedPreviousConnectionId ?? 'new'}`)
@@ -85,6 +93,14 @@ describe('Trade God IPC registration', () => {
         calls.push(`execution-control:set-connection:${connectionId}:${enabled}`)
         return { connection_id: connectionId, killed: enabled }
       },
+      preparePaperActivation: async () => {
+        calls.push('paper-activation:prepare')
+        return { review_id: 'review-1' } as any
+      },
+      commitPaperActivation: async (reviewId, reviewChecksum) => {
+        calls.push(`paper-activation:commit:${reviewId}:${reviewChecksum}`)
+        return { status: 'released' } as any
+      },
       stop: async () => { calls.push('stop') },
     }
 
@@ -107,6 +123,8 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN,
       TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN,
       TRADE_GOD_IPC.VERIFY_CONNECTION,
+      TRADE_GOD_IPC.APPLY_CONNECTION_CERTIFICATION,
+      TRADE_GOD_IPC.SET_CONNECTION_PAPER_EXECUTION,
       TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
       TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
       TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,
@@ -117,6 +135,8 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.EXECUTION_CONTROL,
       TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL,
       TRADE_GOD_IPC.SET_CONNECTION_EXECUTION_KILL,
+      TRADE_GOD_IPC.PREPARE_PAPER_ACTIVATION,
+      TRADE_GOD_IPC.COMMIT_PAPER_ACTIVATION,
       TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS,
       TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION,
       TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION,
@@ -145,6 +165,16 @@ describe('Trade God IPC registration', () => {
       .toEqual({ browser_login_confirmed: true })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.VERIFY_CONNECTION)!({}, 'connection-1'))
       .toEqual({ provider_read_verified: true })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.APPLY_CONNECTION_CERTIFICATION)!(
+      {},
+      'connection-1',
+      'certification-1',
+    )).toMatchObject({ connection: { state: 'ready' } })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.SET_CONNECTION_PAPER_EXECUTION)!(
+      {},
+      'connection-1',
+      true,
+    )).toMatchObject({ connection: { enabled: true } })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)!({})).toEqual([])
     expect(await ipc.handlers.get(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)!(
       {},
@@ -167,6 +197,10 @@ describe('Trade God IPC registration', () => {
     })
     expect(await ipc.handlers.get(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL)!({}, true))
       .toEqual({ global_kill: true })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.PREPARE_PAPER_ACTIVATION)!({}))
+      .toEqual({ review_id: 'review-1' })
+    expect(await ipc.handlers.get(TRADE_GOD_IPC.COMMIT_PAPER_ACTIVATION)!({}, 'review-1', 'a'.repeat(64)))
+      .toEqual({ status: 'released' })
     expect(calls).toEqual([
       'health',
       'analyze:500',
@@ -184,6 +218,8 @@ describe('Trade God IPC registration', () => {
       'connections:login:connection-1',
       'connections:confirm-login:connection-1',
       'connections:verify:connection-1',
+      'connections:certify:connection-1:certification-1',
+      'connections:paper:connection-1:true',
       'routes:list',
       'routes:save:connection-old',
       'routes:remove:route-1',
@@ -193,6 +229,8 @@ describe('Trade God IPC registration', () => {
       'discotrader-secret:save',
       'execution-control:get',
       'execution-control:set:true',
+      'paper-activation:prepare',
+      `paper-activation:commit:review-1:${'a'.repeat(64)}`,
     ])
   })
 
@@ -243,6 +281,8 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN,
       TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN,
       TRADE_GOD_IPC.VERIFY_CONNECTION,
+      TRADE_GOD_IPC.APPLY_CONNECTION_CERTIFICATION,
+      TRADE_GOD_IPC.SET_CONNECTION_PAPER_EXECUTION,
       TRADE_GOD_IPC.LIST_SIGNAL_ROUTES,
       TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE,
       TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE,
@@ -253,6 +293,8 @@ describe('Trade God IPC registration', () => {
       TRADE_GOD_IPC.EXECUTION_CONTROL,
       TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL,
       TRADE_GOD_IPC.SET_CONNECTION_EXECUTION_KILL,
+      TRADE_GOD_IPC.PREPARE_PAPER_ACTIVATION,
+      TRADE_GOD_IPC.COMMIT_PAPER_ACTIVATION,
       TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS,
       TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION,
       TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION,

@@ -11,6 +11,7 @@ import {
 } from '@trade-god/contracts'
 import {
   buildDiscordManagementMessage,
+  FileExecutionStore,
   FileMirrorGroupStore,
   FileTradingConnectionStore,
 } from '@trade-god/execution'
@@ -90,6 +91,8 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
   expect(runtime.alertLedger).toBeDefined()
   expect(await ipc.handlers.get(TRADE_GOD_IPC.EXECUTION_CONTROL)!({}))
     .toMatchObject({ provider_adapters_attached: false, global_kill: true })
+  expect(await ipc.handlers.get(TRADE_GOD_IPC.PREPARE_PAPER_ACTIVATION)!({}))
+    .toMatchObject({ ready: false, blockers: [{ code: 'no-enabled-paper-account' }] })
   expect(await runtime.marketDataManager!.health()).toMatchObject({ state: 'ready' })
   const chartPreview = await ipc.handlers.get(TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE)!({}, {
     symbol: 'ES', timeframe: '5m', sessionMode: 'RTH',
@@ -234,8 +237,25 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
   })
   expect(await ipc.handlers.get(TRADE_GOD_IPC.LIST_STANDING_AUTHORIZATIONS)!({}))
     .toMatchObject([{ authorization_id: 'mandate-runtime-paper' }])
-  expect(await ipc.handlers.get(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL)!({}, false))
-    .toEqual({ global_kill: false })
+  const externalExecutionStore = new FileExecutionStore(executionDirectory, () => runtimeNow)
+  await externalExecutionStore.setGlobalKill(false)
+  await expect(ipc.handlers.get(TRADE_GOD_IPC.SAVE_STANDING_AUTHORIZATION)!({}, {
+    authorization_schema_version: EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
+    authorization_id: 'mandate-runtime-replacement',
+    connection_id: connection.connection_id,
+    mode: 'standing-mandate',
+    scope: {
+      symbols: ['ESZ27'], max_contracts: 2, allowed_sides: ['buy', 'sell'],
+      allowed_order_types: ['market', 'limit'], session_start: runtimeNow,
+      session_end: mandateEnd, max_daily_loss: '500', max_open_risk: '100',
+    },
+    issued_by: 'operator-test', issued_at: runtimeNow, expires_at: mandateEnd,
+  })).rejects.toThrow('persistent global new-entry halt')
+  await externalExecutionStore.setGlobalKill(true)
+  await expect(ipc.handlers.get(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL)!({}, false))
+    .rejects.toThrow('exact paper activation review')
+  await expect(ipc.handlers.get(TRADE_GOD_IPC.SET_CONNECTION_EXECUTION_KILL)!({}, connection.connection_id, false))
+    .rejects.toThrow('exact paper activation review')
   expect(runtime.ingestDiscoTraderTicketPush).toBeDefined()
   const entryPush = {
     kind: 'ticket',
@@ -375,6 +395,7 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     created_at: runtimeNow,
     updated_at: runtimeNow,
   }, { expected_previous_target_key: `connection:${connection.connection_id}` })
+  expect(await runtime.ingestDiscoTraderTicketPush!(entryPush)).toEqual(entry)
   const mirrorPreview = await runtime.ingestDiscoTraderTicketPush!({
     ...entryPush,
     ticket: {

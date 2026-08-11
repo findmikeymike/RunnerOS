@@ -21,6 +21,7 @@ import {
   riskDecisionSchema,
   tradingConnectionSchema,
   type ExecutionAuthorization,
+  type ExecutionAccountSnapshot,
   type ExecutionLifecycleState,
   type ExecutionManagementAcknowledgment,
   type ExecutionManagementCommand,
@@ -104,6 +105,37 @@ export class ExecutionGateway {
 
   list(): Promise<ExecutionRecord[]> {
     return this.options.store.list()
+  }
+
+  async dismissPendingIntent(
+    intentId: string,
+    expectedRecordChecksum: string,
+  ): Promise<ExecutionRecord> {
+    return this.options.store.update(intentId, (record) => {
+      if (sha256(record) !== expectedRecordChecksum) {
+        throw new ExecutionGatewayError(
+          'RECORD_INTEGRITY_FAILURE',
+          'Pending intent changed after operator review.',
+        )
+      }
+      ensureState(record, ['created', 'approved'])
+      return transition(
+        record,
+        'canceled',
+        'Operator dismissed the pre-activation pending intent.',
+        this.now(),
+      )
+    })
+  }
+
+  async captureFlatAccountSnapshot(connectionId: string): Promise<ExecutionAccountSnapshot> {
+    const connection = tradingConnectionSchema.parse(await this.options.resolveConnection(connectionId))
+    const adapter = this.resolveCertifiedAdapter(connection)
+    return this.options.store.withProviderMutationLock(
+      this.providerAccountKey(connection),
+      `paper-activation-snapshot:${connectionId}`,
+      () => this.captureFlatAccountSnapshotWithProviderLock(connection, adapter),
+    )
   }
 
   async verifyNoExposure(intentId: string): Promise<ExecutionNoExposureProof> {
@@ -1028,6 +1060,91 @@ export class ExecutionGateway {
     await this.options.store.setGlobalKill(enabled)
   }
 
+  async commitPaperActivationRelease(input: {
+    release_id: string
+    state_checksum: string
+    expected_control_checksum: string
+    review_expires_at: string
+    connection_ids: string[]
+    assert_release_current: () => Promise<void>
+    persist_release_evidence: (snapshots: ExecutionAccountSnapshot[]) => Promise<{
+      release_event_id: string
+      release_event_checksum: string
+    }>
+  }): Promise<ExecutionAccountSnapshot[]> {
+    if (this.emergencyHalted) {
+      throw new ExecutionGatewayError(
+        'KILL_SWITCH_ENABLED',
+        'The process-local emergency execution halt is active.',
+      )
+    }
+    if (
+      input.connection_ids.length === 0
+      || new Set(input.connection_ids).size !== input.connection_ids.length
+    ) {
+      throw new ExecutionGatewayError(
+        'INVALID_STATE',
+        'Paper activation requires at least one unique reviewed connection.',
+      )
+    }
+    const targets = await Promise.all(input.connection_ids.map(async (connectionId) => {
+      const connection = tradingConnectionSchema.parse(await this.options.resolveConnection(connectionId))
+      return {
+        connection,
+        adapter: this.resolveCertifiedAdapter(connection),
+        providerAccountKey: this.providerAccountKey(connection),
+      }
+    }))
+    targets.sort((left, right) => left.providerAccountKey.localeCompare(right.providerAccountKey))
+    if (new Set(targets.map((target) => target.providerAccountKey)).size !== targets.length) {
+      throw new ExecutionGatewayError(
+        'ACCOUNT_MISMATCH',
+        'Paper activation cannot review duplicate provider-account identities.',
+      )
+    }
+    const withLocks = async (index: number): Promise<ExecutionAccountSnapshot[]> => {
+      const target = targets[index]
+      if (!target) {
+        const snapshots: ExecutionAccountSnapshot[] = []
+        for (const current of targets) {
+          snapshots.push(await this.captureFlatAccountSnapshotWithProviderLock(
+            current.connection,
+            current.adapter,
+          ))
+        }
+        const releaseEvidence = await input.persist_release_evidence(snapshots)
+        await input.assert_release_current()
+        if (Date.parse(this.now()) >= Date.parse(input.review_expires_at)) {
+          throw new ExecutionGatewayError(
+            'INTENT_EXPIRED',
+            'Paper activation review expired before the atomic control release.',
+          )
+        }
+        if (this.emergencyHalted) {
+          throw new ExecutionGatewayError(
+            'KILL_SWITCH_ENABLED',
+            'The emergency halt activated during paper release review.',
+          )
+        }
+        await this.options.store.commitPaperActivationRelease({
+          release_id: input.release_id,
+          release_event_id: releaseEvidence.release_event_id,
+          release_event_checksum: releaseEvidence.release_event_checksum,
+          state_checksum: input.state_checksum,
+          expected_control_checksum: input.expected_control_checksum,
+          connection_ids: input.connection_ids,
+        })
+        return snapshots
+      }
+      return this.options.store.withProviderMutationLock(
+        target.providerAccountKey,
+        `paper-activation-release:${input.release_id}:${target.connection.connection_id}`,
+        () => withLocks(index + 1),
+      )
+    }
+    return withLocks(0)
+  }
+
   async activateEmergencyHalt(): Promise<void> {
     // Set the process-local latch before durable I/O. A storage failure may
     // prevent shutdown, but it cannot leave this process able to submit.
@@ -1092,6 +1209,33 @@ export class ExecutionGateway {
   }
 
   private resolveAdapter(connection: TradingConnection, intent: OrderIntent): ExecutionAdapter {
+    const adapter = this.resolveCertifiedAdapter(connection)
+    const capability = capabilityForEntry(intent.entry.type)
+    if (!adapter.descriptor.capabilities[capability]) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        `Adapter cannot submit ${intent.entry.type} orders.`,
+      )
+    }
+    if (!adapter.descriptor.capabilities.native_bracket) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        'This execution slice requires a certified native protective bracket.',
+      )
+    }
+    if (
+      intent.protection.exit_legs
+      && adapter.descriptor.capabilities.native_multi_bracket !== true
+    ) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        'Multi-leg execution requires an explicitly certified native multi-bracket adapter.',
+      )
+    }
+    return adapter
+  }
+
+  private resolveCertifiedAdapter(connection: TradingConnection): ExecutionAdapter {
     const candidates = this.options.adapters
       .filter((adapter) => adapter.supports(connection))
       .filter((adapter) => (
@@ -1117,29 +1261,18 @@ export class ExecutionGateway {
     if (!adapter) {
       throw new ExecutionGatewayError('CONNECTION_UNAVAILABLE', 'No certified adapter supports this connection.')
     }
-    const capability = capabilityForEntry(intent.entry.type)
-    if (!adapter.descriptor.capabilities[capability]) {
-      throw new ExecutionGatewayError(
-        'CAPABILITY_UNAVAILABLE',
-        `Adapter cannot submit ${intent.entry.type} orders.`,
-      )
-    }
-    if (!adapter.descriptor.capabilities.native_bracket) {
-      throw new ExecutionGatewayError(
-        'CAPABILITY_UNAVAILABLE',
-        'This execution slice requires a certified native protective bracket.',
-      )
-    }
-    if (
-      intent.protection.exit_legs
-      && adapter.descriptor.capabilities.native_multi_bracket !== true
-    ) {
-      throw new ExecutionGatewayError(
-        'CAPABILITY_UNAVAILABLE',
-        'Multi-leg execution requires an explicitly certified native multi-bracket adapter.',
-      )
-    }
     return adapter
+  }
+
+  private async captureFlatAccountSnapshotWithProviderLock(
+    connection: TradingConnection,
+    adapter: ExecutionAdapter,
+  ): Promise<ExecutionAccountSnapshot> {
+    await adapter.connect(connection)
+    const snapshot = executionAccountSnapshotSchema.parse(await adapter.snapshotAccount(connection))
+    this.assertAccountSnapshot(connection, snapshot)
+    this.assertNoUnownedExposure(snapshot)
+    return snapshot
   }
 
   private adapterForRecord(record: ExecutionRecord): ExecutionAdapter {
@@ -1746,7 +1879,7 @@ const transition = (
 }
 
 const ALLOWED_TRANSITIONS: Record<ExecutionLifecycleState, ExecutionLifecycleState[]> = {
-  created: ['risk-denied', 'awaiting-authorization', 'expired', 'error'],
+  created: ['risk-denied', 'awaiting-authorization', 'canceled', 'expired', 'error'],
   'risk-denied': [],
   'awaiting-authorization': ['approved', 'expired', 'error'],
   approved: ['claimed', 'canceled', 'expired', 'error'],

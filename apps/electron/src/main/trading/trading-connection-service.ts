@@ -126,7 +126,9 @@ export class TradingConnectionService {
       consequential_enabled_until: existing?.consequential_enabled_until,
       browser_login_confirmed_at: existing?.browser_login_confirmed_at,
       browser_login_origin: existing?.browser_login_origin,
-      enabled: existing?.enabled ?? false,
+      // Saving credentials or account metadata is a fresh enrollment boundary.
+      // Prior execution authority must be explicitly re-enabled afterward.
+      enabled: false,
       ...(
         transportPreference !== 'browser'
           ? { credential_ref: expectedCredentialRef }
@@ -232,12 +234,37 @@ export class TradingConnectionService {
     return this.withMutationLock(() => this.applyCertificationUnlocked(certificationId))
   }
 
+  async applyCertificationForConnection(
+    connectionId: string,
+    certificationId: string,
+  ): Promise<TradingConnectionStatus> {
+    return this.withMutationLock(async () => {
+      if (!this.certificationStore) {
+        throw new Error('Adapter certification evidence store is not configured.')
+      }
+      const evidence = await this.certificationStore.get(certificationId)
+      if (evidence.connection_id !== connectionId) {
+        throw new Error('Certification evidence does not belong to the selected connection.')
+      }
+      return this.applyCertificationUnlocked(certificationId)
+    })
+  }
+
   private async applyCertificationUnlocked(certificationId: string): Promise<TradingConnectionStatus> {
     if (!this.certificationStore) {
       throw new Error('Adapter certification evidence store is not configured.')
     }
     const evidence = await this.certificationStore.get(certificationId)
     const connection = await this.store.get(evidence.connection_id)
+    const currentStatus = await this.status(connection)
+    if (
+      !currentStatus.provider_read_fresh
+      || !currentStatus.provider_read_verification
+      || currentStatus.provider_read_verification.position_count !== 0
+      || currentStatus.provider_read_verification.working_order_count !== 0
+    ) {
+      throw new Error('Certification application requires a fresh flat read-only provider proof.')
+    }
     if (
       connection.account_ref !== evidence.account_ref
       || connection.platform.slug !== evidence.provider_slug
@@ -281,6 +308,78 @@ export class TradingConnectionService {
       }],
       enabled: false,
       consequential_enabled_until: undefined,
+      updated_at: this.now(),
+    }))
+    return this.status(saved)
+  }
+
+  async setPaperExecutionEnabled(
+    connectionId: string,
+    enabled: boolean,
+  ): Promise<TradingConnectionStatus> {
+    return this.withMutationLock(() => this.setPaperExecutionEnabledUnlocked(connectionId, enabled))
+  }
+
+  private async setPaperExecutionEnabledUnlocked(
+    connectionId: string,
+    enabled: boolean,
+  ): Promise<TradingConnectionStatus> {
+    const connection = await this.store.get(connectionId)
+    if (!enabled) {
+      const saved = await this.store.save(tradingConnectionSchema.parse({
+        ...connection,
+        enabled: false,
+        updated_at: this.now(),
+      }))
+      return this.status(saved)
+    }
+    const status = await this.status(connection)
+    if (
+      connection.environment !== 'paper'
+      || connection.environment_class !== 'rehearsal'
+      || connection.state !== 'ready'
+      || !connection.certifications.includes('paper-lifecycle-certified')
+    ) {
+      throw new Error('Paper execution enablement requires a ready paper-lifecycle-certified rehearsal account.')
+    }
+    if (!status.credential_configured && !status.browser_login_confirmed) {
+      throw new Error('Paper execution enablement requires a current provider credential or confirmed provider session.')
+    }
+    if (
+      !status.provider_read_fresh
+      || !status.provider_read_verification
+      || status.provider_read_verification.position_count !== 0
+      || status.provider_read_verification.working_order_count !== 0
+    ) {
+      throw new Error('Paper execution enablement requires a fresh flat read-only provider proof.')
+    }
+    const binding = connection.adapter_certifications?.find((candidate) => (
+      candidate.levels.includes('paper-lifecycle-certified')
+    ))
+    if (!binding || !this.certificationStore) {
+      throw new Error('Paper execution enablement requires exact retained lifecycle certification evidence.')
+    }
+    const evidence = await this.certificationStore.get(binding.certification_id)
+    const installed = this.certificationRegistry?.resolve(connection)
+    if (
+      evidence.connection_id !== connection.connection_id
+      || evidence.account_ref !== connection.account_ref
+      || !evidence.eligible_certifications.includes('paper-lifecycle-certified')
+      || !installed
+      || binding.adapter_id !== installed.adapter_id
+      || binding.adapter_version !== installed.adapter_version
+      || binding.provider_contract_version !== installed.provider_contract_version
+      || binding.capabilities_checksum !== sha256(installed.capabilities)
+      || evidence.adapter_id !== installed.adapter_id
+      || evidence.adapter_version !== installed.adapter_version
+      || evidence.provider_contract_version !== installed.provider_contract_version
+      || sha256(evidence.certified_capabilities) !== sha256(installed.capabilities)
+    ) {
+      throw new Error('Paper execution enablement requires certification for the exact installed adapter contract.')
+    }
+    const saved = await this.store.save(tradingConnectionSchema.parse({
+      ...connection,
+      enabled: true,
       updated_at: this.now(),
     }))
     return this.status(saved)
