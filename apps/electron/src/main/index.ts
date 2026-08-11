@@ -579,12 +579,20 @@ app.whenReady().then(async () => {
           alertDirectory: join(app.getPath('userData'), 'trade-god', 'alerts'),
           connectionDirectory: join(app.getPath('userData'), 'trade-god', 'connections'),
           executionDirectory: join(app.getPath('userData'), 'trade-god', 'execution'),
+          enableTradovatePaperAdapter: true,
           ...(process.env.TRADE_GOD_DISCOTRADER_CONNECTION_ID
             ? { discoTraderConnectionId: process.env.TRADE_GOD_DISCOTRADER_CONNECTION_ID }
             : {}),
           credentialVault: {
             getSecret: (name) => getCredentialManager().getTradingConnectionSecret(name),
             setSecret: (name, value) => getCredentialManager().setTradingConnectionSecret(name, value),
+            compareAndSetSecret: (name, expectedValueSha256, value) => (
+              getCredentialManager().compareAndSetTradingConnectionSecret(
+                name,
+                expectedValueSha256,
+                value,
+              )
+            ),
             deleteSecret: (name) => getCredentialManager().deleteTradingConnectionSecret(name),
           },
           tradingBrowserSessionLauncher: {

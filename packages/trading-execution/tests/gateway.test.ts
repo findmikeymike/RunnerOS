@@ -360,6 +360,41 @@ const approve = async (
 }
 
 describe('execution gateway', () => {
+  test('re-latches global halt whenever the installed adapter contract changes', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-god-adapter-binding-'))
+    roots.push(root)
+    const store = new FileExecutionStore(root, () => NOW)
+    const tradovate = {
+      adapter_id: 'tradovate-api', adapter_version: '1.0.0',
+      provider_contract_version: 'tradovate-demo-rest-2026-07', transport: 'api',
+    }
+
+    expect((await store.bindAdapterSet([])).changed).toBe(true)
+    await store.setGlobalKill(false)
+    expect((await store.bindAdapterSet([])).changed).toBe(false)
+    expect((await store.readControl()).global_kill).toBe(false)
+    expect((await store.bindAdapterSet([tradovate])).changed).toBe(true)
+    expect((await store.readControl()).global_kill).toBe(true)
+  })
+
+  test('keeps changed adapters quarantined across every restart while work is nonterminal', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-god-adapter-quarantine-'))
+    roots.push(root)
+    const first = new FileExecutionStore(root, () => NOW)
+    await first.bindAdapterSet([])
+    const target = makeConnection()
+    await first.create(makeIntent(target), 'trace-adapter-quarantine')
+    const tradovate = [{
+      adapter_id: 'tradovate-api', adapter_version: '1.0.0',
+      provider_contract_version: 'tradovate-demo-rest-2026-07', transport: 'api',
+    }]
+
+    await expect(first.bindAdapterSet(tradovate)).rejects.toThrow('operator recovery review')
+    const restarted = new FileExecutionStore(root, () => NOW)
+    await expect(restarted.bindAdapterSet(tradovate)).rejects.toThrow('operator recovery review')
+    expect((await restarted.readControl()).global_kill).toBe(true)
+  })
+
   test('starts with the persistent global execution halt enabled', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'trade-god-execution-'))
     roots.push(root)

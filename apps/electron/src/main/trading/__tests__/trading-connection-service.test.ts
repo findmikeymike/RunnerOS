@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -34,8 +35,19 @@ afterEach(async () => {
 
 class Vault implements TradingCredentialVault {
   readonly values = new Map<string, string>()
+  replaceBeforeNextCas: string | null = null
   async getSecret(name: string) { return this.values.get(name) ?? null }
   async setSecret(name: string, value: string) { this.values.set(name, value) }
+  async compareAndSetSecret(name: string, expectedValueSha256: string, value: string) {
+    if (this.replaceBeforeNextCas) {
+      this.values.set(name, this.replaceBeforeNextCas)
+      this.replaceBeforeNextCas = null
+    }
+    const current = this.values.get(name)
+    if (!current || createHash('sha256').update(current).digest('hex') !== expectedValueSha256) return false
+    this.values.set(name, value)
+    return true
+  }
   async deleteSecret(name: string) { return this.values.delete(name) }
 }
 
@@ -82,7 +94,7 @@ const connection = (
   environment: 'paper',
   environment_class: 'rehearsal',
   transport_preference: transport,
-  account_ref: `account-apex-${transport}`,
+  account_ref: transport === 'browser' ? 'account-apex-browser' : '123',
   account_display: { label: `APEX-${transport}` },
   ...(transport !== 'browser' ? { credential_ref: 'renderer-must-not-control-ref' } : {}),
   ...(transport !== 'api' ? { browser_session_ref: 'renderer-must-not-control-session' } : {}),
@@ -95,6 +107,17 @@ const connection = (
   enabled: false,
   created_at: NOW,
   updated_at: NOW,
+})
+
+const apiSecret = (
+  accessToken = 'top-secret-access-token',
+  accountId = 123,
+  accountSpec = 'APEX-api',
+) => JSON.stringify({
+  access_token: accessToken,
+  account_id: accountId,
+  account_spec: accountSpec,
+  expires_at: '2026-07-30T16:00:00.000Z',
 })
 
 const setup = async (registry?: TradingAdapterCertificationRegistry) => {
@@ -118,13 +141,24 @@ const setup = async (registry?: TradingAdapterCertificationRegistry) => {
 describe('trading connection service', () => {
   test('stores API secret in the vault and returns only its opaque reference', async () => {
     const { service, vault } = await setup()
-    const saved = await service.save({ connection: connection('api'), api_secret: 'top-secret' })
+    const saved = await service.save({ connection: connection('api'), api_secret: apiSecret() })
 
     expect(saved.connection.credential_ref).toBe(credentialRef(saved.connection.connection_id))
     expect(saved.credential_configured).toBe(true)
     expect(JSON.stringify(saved)).not.toContain('top-secret')
-    expect(vault.values.get(secretName(saved.connection.connection_id))).toBe('top-secret')
+    expect(vault.values.get(secretName(saved.connection.connection_id))).toBe(apiSecret())
     expect(saved.certification_evidence).toEqual([])
+  })
+
+  test('rejects malformed or wrong-account Tradovate credentials before vault storage', async () => {
+    const { service, vault } = await setup()
+    await expect(service.save({ connection: connection('api'), api_secret: 'opaque-token' }))
+      .rejects.toThrow('structured credential data')
+    await expect(service.save({
+      connection: connection('api'),
+      api_secret: apiSecret('wrong-account-access-token', 999, 'WRONG'),
+    })).rejects.toThrow('must match the connection')
+    expect(vault.values.size).toBe(0)
   })
 
   test('does not trust renderer-supplied execution state or certification claims', async () => {
@@ -146,7 +180,7 @@ describe('trading connection service', () => {
       browser_login_confirmed_at: NOW,
       browser_login_origin: 'https://www.wealthcharts.com',
     }
-    const saved = await service.save({ connection: hostile, api_secret: 'top-secret' })
+    const saved = await service.save({ connection: hostile, api_secret: apiSecret() })
 
     expect(saved.connection).toMatchObject({
       state: 'auth-required',
@@ -196,7 +230,7 @@ describe('trading connection service', () => {
       }),
     }
     const { service, certificationStore } = await setup(registry)
-    const saved = await service.save({ connection: connection('api'), api_secret: 'top-secret' })
+    const saved = await service.save({ connection: connection('api'), api_secret: apiSecret() })
     const runner: AdapterCertificationRunner = {
       connection_id: saved.connection.connection_id,
       account_ref: saved.connection.account_ref,
@@ -262,9 +296,10 @@ describe('trading connection service', () => {
       connection: {
         ...connection('api'),
         connection_id: 'connection-apex-api-stale',
-        account_ref: 'account-apex-api-stale',
+        account_ref: '456',
+        account_display: { label: 'APEX-STALE' },
       },
-      api_secret: 'top-secret',
+      api_secret: apiSecret('stale-secret-access-token', 456, 'APEX-STALE'),
     })
     const staleEvidence = await runAdapterCertification({
       ...runner,
@@ -279,24 +314,39 @@ describe('trading connection service', () => {
   test('refuses an API connection without an existing or newly supplied secret', async () => {
     const { service } = await setup()
     await expect(service.save({ connection: connection('api') }))
-      .rejects.toThrow('requires credentials')
+      .rejects.toThrow('access token bundle is required')
   })
 
   test('does not rotate a secret when metadata validation rejects an identity change', async () => {
     const { service, vault } = await setup()
     const original = connection('api')
-    await service.save({ connection: original, api_secret: 'original-secret' })
+    await service.save({ connection: original, api_secret: apiSecret('original-secret-access-token') })
 
     await expect(service.save({
       connection: {
         ...original,
-        account_ref: 'different-account',
+        account_ref: '999',
         account_display: { label: 'APEX-DIFFERENT' },
       },
-      api_secret: 'replacement-secret',
+      api_secret: apiSecret('replacement-secret-token', 999, 'APEX-DIFFERENT'),
     })).rejects.toThrow('identity are immutable')
 
-    expect(vault.values.get(secretName(original.connection_id))).toBe('original-secret')
+    expect(vault.values.get(secretName(original.connection_id)))
+      .toBe(apiSecret('original-secret-access-token'))
+  })
+
+  test('never overwrites a token renewed concurrently with account save', async () => {
+    const { service, vault } = await setup()
+    const target = connection('api')
+    await service.save({ connection: target, api_secret: apiSecret('original-secret-access-token') })
+    const renewed = apiSecret('renewed-secret-access-token')
+    vault.replaceBeforeNextCas = renewed
+
+    await expect(service.save({
+      connection: { ...target, display_name: 'Renamed safely' },
+      api_secret: apiSecret('replacement-secret-token'),
+    })).rejects.toThrow('credential changed during account save')
+    expect(vault.values.get(secretName(target.connection_id))).toBe(renewed)
   })
 
   test('opens WealthCharts in a dedicated persistent trading partition', async () => {
@@ -327,7 +377,7 @@ describe('trading connection service', () => {
 
   test('deletes connection metadata and its vault secret together', async () => {
     const { service, vault } = await setup()
-    const saved = await service.save({ connection: connection('api'), api_secret: 'top-secret' })
+    const saved = await service.save({ connection: connection('api'), api_secret: apiSecret() })
     expect(await service.remove(saved.connection.connection_id)).toBe(true)
     expect(vault.values.has(secretName(saved.connection.connection_id))).toBe(false)
     expect(await service.list()).toEqual([])

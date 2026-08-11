@@ -52,6 +52,7 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
   ])
 
   const ipc = new FakeIpcMain()
+  const vault = new Map<string, string>()
   const runtime = createTradeGodRuntime({
     ipcMain: ipc,
     rootCandidates: [repoRoot],
@@ -61,6 +62,23 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     alertDirectory,
     connectionDirectory,
     executionDirectory,
+    credentialVault: {
+      getSecret: async (name) => vault.get(name) ?? null,
+      setSecret: async (name, value) => { vault.set(name, value) },
+      compareAndSetSecret: async (name, _expected, value) => {
+        if (!vault.has(name)) return false
+        vault.set(name, value)
+        return true
+      },
+      deleteSecret: async (name) => vault.delete(name),
+    },
+    tradingBrowserSessionLauncher: {
+      open: async ({ connectionId, sessionRef }) => ({
+        browser_instance_id: `browser-${connectionId}`, session_ref: sessionRef,
+      }),
+      inspect: async () => ({ url: 'https://www.wealthcharts.com/', title: 'WealthCharts' }),
+      clear: async () => undefined,
+    },
     alertPort: -1,
   })
 
@@ -70,6 +88,8 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
   expect(runtime.canonicalPipeline).toBeDefined()
   expect(runtime.specialistContextPipeline).toBeDefined()
   expect(runtime.alertLedger).toBeDefined()
+  expect(await ipc.handlers.get(TRADE_GOD_IPC.EXECUTION_CONTROL)!({}))
+    .toMatchObject({ provider_adapters_attached: false, global_kill: true })
   expect(await runtime.marketDataManager!.health()).toMatchObject({ state: 'ready' })
   const chartPreview = await ipc.handlers.get(TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE)!({}, {
     symbol: 'ES', timeframe: '5m', sessionMode: 'RTH',
@@ -569,6 +589,76 @@ test('route save and account deletion are serialized so a new route cannot be or
   await saving
   await expect(removing).rejects.toThrow('Remove this account’s Discord sources')
   expect(removeConnectionCalled).toBe(false)
+})
+
+test('account save and deletion are serialized so a deleted account cannot be resurrected', async () => {
+  let releaseSave!: () => void
+  let markSaveStarted!: () => void
+  const saveStarted = new Promise<void>((resolve) => { markSaveStarted = resolve })
+  const saveGate = new Promise<void>((resolve) => { releaseSave = resolve })
+  const operations: string[] = []
+  const coordinator = new TradingRouteMutationCoordinator({
+    get: async () => ({} as TradingConnection),
+  }, {
+    list: async () => [],
+    save: async (route) => route,
+    remove: async () => true,
+  })
+
+  const saving = coordinator.saveConnection('connection-one', async () => {
+    operations.push('save-start')
+    markSaveStarted()
+    await saveGate
+    operations.push('save-finish')
+    return true
+  })
+  await saveStarted
+  const removing = coordinator.removeConnection('connection-one', async () => {
+    operations.push('remove')
+    return true
+  })
+  expect(operations).toEqual(['save-start'])
+  releaseSave()
+  await saving
+  expect(await removing).toBe(true)
+  expect(operations).toEqual(['save-start', 'save-finish', 'remove'])
+
+  await expect(coordinator.saveConnection('connection-one', async () => {
+    operations.push('resurrect')
+    return true
+  })).rejects.toThrow('removed in the current app session')
+  expect(operations).not.toContain('resurrect')
+})
+
+test('browser confirmation uses the same deletion-safe connection mutation boundary', async () => {
+  let releaseConfirmation!: () => void
+  let markConfirmationStarted!: () => void
+  const confirmationStarted = new Promise<void>((resolve) => { markConfirmationStarted = resolve })
+  const confirmationGate = new Promise<void>((resolve) => { releaseConfirmation = resolve })
+  const operations: string[] = []
+  const coordinator = new TradingRouteMutationCoordinator({
+    get: async () => ({} as TradingConnection),
+  }, {
+    list: async () => [], save: async (route) => route, remove: async () => true,
+  })
+  const confirming = coordinator.saveConnection('connection-one', async () => {
+    operations.push('confirm-start')
+    markConfirmationStarted()
+    await confirmationGate
+    operations.push('confirm-save')
+    return true
+  })
+  await confirmationStarted
+  const removing = coordinator.removeConnection('connection-one', async () => {
+    operations.push('remove')
+    return true
+  })
+  releaseConfirmation()
+  await confirming
+  await removing
+  expect(operations).toEqual(['confirm-start', 'confirm-save', 'remove'])
+  await expect(coordinator.saveConnection('connection-one', async () => true))
+    .rejects.toThrow('removed in the current app session')
 })
 
 test('account deletion is blocked while an execution is active or unresolved', async () => {

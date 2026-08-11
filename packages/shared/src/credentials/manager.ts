@@ -11,6 +11,7 @@ import type { LlmAuthType, LlmProviderType } from '../config/llm-connections.ts'
 import { SecureStorageBackend } from './backends/secure-storage.ts';
 import { EnvironmentBackend } from './backends/env.ts';
 import { debug } from '../utils/debug.ts';
+import { createHash } from 'node:crypto';
 
 export interface UserSecretSummary {
   name: string;
@@ -41,6 +42,7 @@ export class CredentialManager {
   private writeBackend: CredentialBackend | null = null;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  private tradingSecretQueue: Promise<void> = Promise.resolve();
 
   /**
    * Explicitly initialize the credential manager.
@@ -227,14 +229,47 @@ export class CredentialManager {
   }
 
   async setTradingConnectionSecret(name: string, value: string): Promise<void> {
-    await this.set(
-      { type: 'trading_connection_secret', name },
-      { value, source: 'native', updatedAt: Date.now() },
-    );
+    await this.withTradingSecretLock(async () => {
+      await this.set(
+        { type: 'trading_connection_secret', name },
+        { value, source: 'native', updatedAt: Date.now() },
+      );
+    });
+  }
+
+  async compareAndSetTradingConnectionSecret(
+    name: string,
+    expectedValueSha256: string,
+    value: string,
+  ): Promise<boolean> {
+    return this.withTradingSecretLock(async () => {
+      const current = await this.get({ type: 'trading_connection_secret', name });
+      if (
+        !current
+        || createHash('sha256').update(current.value).digest('hex') !== expectedValueSha256
+      ) return false;
+      await this.set(
+        { type: 'trading_connection_secret', name },
+        { ...current, value, source: 'native', updatedAt: Date.now() },
+      );
+      return true;
+    });
   }
 
   async deleteTradingConnectionSecret(name: string): Promise<boolean> {
-    return this.delete({ type: 'trading_connection_secret', name });
+    return this.withTradingSecretLock(() => (
+      this.delete({ type: 'trading_connection_secret', name })
+    ));
+  }
+
+  private async withTradingSecretLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.tradingSecretQueue;
+    let release!: () => void;
+    this.tradingSecretQueue = previous.catch(() => undefined).then(() => (
+      new Promise<void>((resolve) => { release = resolve; })
+    ));
+    await previous.catch(() => undefined);
+    try { return await operation(); } finally { release(); }
   }
 
   async listUserSecrets(): Promise<UserSecretSummary[]> {

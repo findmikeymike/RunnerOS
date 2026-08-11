@@ -27,6 +27,8 @@ import {
   buildTradovateOsoBody,
   computeActionDigest,
   computeOrderIntentChecksum,
+  parseTradovateCredential,
+  serializeTradovateCredential,
   type TradovateCredential,
   type TradovateFetch,
   type TradovateOrder,
@@ -261,6 +263,21 @@ class WealthChartsDriver implements WealthChartsBrowserDriver {
 }
 
 describe('Tradovate API adapter', () => {
+  test('accepts only a complete canonical encrypted-vault credential bundle', () => {
+    const credential = parseTradovateCredential(JSON.stringify({
+      access_token: 'paper-access-token-12345',
+      account_id: 123,
+      account_spec: 'APEX-123',
+      expires_at: '2026-07-30T16:00:00.000Z',
+    }))
+    expect(JSON.parse(serializeTradovateCredential(credential))).toEqual(credential)
+    expect(() => parseTradovateCredential('paper-access-token-12345'))
+      .toThrow('structured credential data')
+    expect(() => parseTradovateCredential(JSON.stringify({
+      access_token: 'paper-access-token-12345', account_id: 123, account_spec: 'APEX-123',
+    }))).toThrow('incomplete')
+  })
+
   test('snapshot identity binds provider state rather than capture time', () => {
     const targetConnection = connection('tradovate')
     const build = (capturedAt: string, balance: number) => buildTradovateAccountSnapshot({

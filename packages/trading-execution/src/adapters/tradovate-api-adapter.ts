@@ -30,6 +30,43 @@ export interface TradovateCredential {
   expires_at?: string
 }
 
+export const parseTradovateCredential = (input: string): TradovateCredential => {
+  let value: unknown
+  try { value = JSON.parse(input) } catch {
+    throw new ExecutionGatewayError(
+      'CONNECTION_UNAVAILABLE',
+      'Stored Tradovate credential is not valid structured credential data.',
+    )
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new ExecutionGatewayError('CONNECTION_UNAVAILABLE', 'Stored Tradovate credential is invalid.')
+  }
+  const credential = value as Record<string, unknown>
+  if (
+    typeof credential.access_token !== 'string'
+    || credential.access_token.trim().length < 16
+    || typeof credential.account_id !== 'number'
+    || !Number.isSafeInteger(credential.account_id)
+    || credential.account_id <= 0
+    || typeof credential.account_spec !== 'string'
+    || !credential.account_spec.trim()
+    || typeof credential.expires_at !== 'string'
+    || !Number.isFinite(Date.parse(credential.expires_at))
+  ) {
+    throw new ExecutionGatewayError('CONNECTION_UNAVAILABLE', 'Stored Tradovate credential is incomplete.')
+  }
+  return {
+    access_token: credential.access_token.trim(),
+    account_id: credential.account_id,
+    account_spec: credential.account_spec.trim(),
+    expires_at: new Date(credential.expires_at).toISOString(),
+  }
+}
+
+export const serializeTradovateCredential = (credential: TradovateCredential): string => (
+  JSON.stringify(parseTradovateCredential(JSON.stringify(credential)))
+)
+
 export interface TradovateOrder {
   id: number
   accountId: number

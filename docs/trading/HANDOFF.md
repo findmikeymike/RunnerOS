@@ -121,12 +121,13 @@ approval-gated. See `docs/trading/integrations/DISCOTRADER-CONTROL-CENTER.md`.
 ## Immediate Assignment
 
 Enroll fresh Trade God credentials, confirm Apex/Tradovate API eligibility, and
-obtain a demo credential bound to one exact account. Paper mandates, the
-created-to-approved coordinator, renewable token owner, provider backoff, and
-low-rate reconciliation supervisor are implemented, but remain inert because
-the runtime attaches zero adapters. Bind renewal to the encrypted vault, add
-event-driven provider truth, then prove partial-close protection resizing and
-the 50-lifecycle paper soak before attaching the certified adapter.
+obtain a demo credential bound to one exact account. Trade God now explicitly
+attaches one paper-only Tradovate adapter with structured encrypted-vault
+credentials, CAS token rotation, exact descriptor binding, and adapter-change
+halt quarantine. It remains inert behind lifecycle certification, explicit
+account enablement, a current mandate, and persistent halt controls. Add trusted
+read-only provider verification and event-driven truth, then prove partial-close
+protection resizing and the 50-lifecycle paper soak before enabling the account.
 
 ## Known Expected Artifact
 

@@ -54,6 +54,7 @@ export class FileExecutionStore {
   private readonly ownershipDirectory: string
   private readonly providerMutationDirectory: string
   private readonly mirrorReleaseDirectory: string
+  private readonly adapterAttachmentFile: string
 
   constructor(
     private readonly root: string,
@@ -65,6 +66,61 @@ export class FileExecutionStore {
     this.ownershipDirectory = path.join(root, 'ownership')
     this.providerMutationDirectory = path.join(root, 'provider-mutations')
     this.mirrorReleaseDirectory = path.join(root, 'mirror-ownership-releases')
+    this.adapterAttachmentFile = path.join(root, 'adapter-attachment.json')
+  }
+
+  /** Binds persisted activation to the exact installed adapter set. Any change re-latches halt. */
+  async bindAdapterSet(adapters: Array<{
+    adapter_id: string
+    adapter_version: string
+    provider_contract_version: string
+    transport: string
+  }>): Promise<{ changed: boolean; adapter_set_checksum: string }> {
+    const installed = adapters.map((adapter) => ({
+      adapter_id: adapter.adapter_id,
+      adapter_version: adapter.adapter_version,
+      provider_contract_version: adapter.provider_contract_version,
+      transport: adapter.transport,
+    })).sort((left, right) => (
+      `${left.adapter_id}:${left.adapter_version}:${left.provider_contract_version}:${left.transport}`
+        .localeCompare(`${right.adapter_id}:${right.adapter_version}:${right.provider_contract_version}:${right.transport}`)
+    ))
+    const adapterSetChecksum = sha256(installed)
+    return this.withLock('adapter-attachment', async () => {
+      let existing: { adapter_set_checksum?: string } | null = null
+      try {
+        existing = JSON.parse(await readFile(this.adapterAttachmentFile, 'utf8')) as {
+          adapter_set_checksum?: string
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+      if (existing?.adapter_set_checksum === adapterSetChecksum) {
+        return { changed: false, adapter_set_checksum: adapterSetChecksum }
+      }
+      await this.setGlobalKill(true)
+      const terminal = new Set(['risk-denied', 'closed', 'rejected', 'canceled', 'expired', 'error'])
+      const nonterminal = (await this.list()).filter((record) => !terminal.has(record.state))
+      if (nonterminal.length > 0) {
+        throw new ExecutionGatewayError(
+          'CONNECTION_UNAVAILABLE',
+          `Adapter attachment changed with ${nonterminal.length} nonterminal execution record(s); operator recovery review is required.`,
+        )
+      }
+      const timestamp = this.now()
+      const unsigned = {
+        adapter_attachment_schema_version: 'adapter-attachment@1',
+        installed,
+        adapter_set_checksum: adapterSetChecksum,
+        halt_relatched_at: timestamp,
+        updated_at: timestamp,
+      }
+      await this.atomicWrite(this.adapterAttachmentFile, {
+        ...unsigned,
+        content_checksum: sha256(unsigned),
+      })
+      return { changed: true, adapter_set_checksum: adapterSetChecksum }
+    })
   }
 
   async create(intent: OrderIntent, traceId: string): Promise<ExecutionRecord> {

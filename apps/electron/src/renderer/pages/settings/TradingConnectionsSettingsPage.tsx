@@ -61,6 +61,7 @@ type Draft = {
   accountRef: string
   accountLabel: string
   apiSecret: string
+  tokenExpiresAt: string
 }
 
 type SignalDraft = {
@@ -115,6 +116,7 @@ const EMPTY_DRAFT: Draft = {
   accountRef: '',
   accountLabel: '',
   apiSecret: '',
+  tokenExpiresAt: '',
 }
 
 const EMPTY_MANDATE_DRAFT: MandateDraft = {
@@ -185,7 +187,25 @@ export default function TradingConnectionsSettingsPage({
       return
     }
     if (draft.platform === 'tradovate' && !draft.apiSecret.trim()) {
-      toast.error('Tradovate credentials are required')
+      toast.error('Tradovate access token is required')
+      return
+    }
+    if (draft.platform === 'tradovate' && draft.environment !== 'paper') {
+      toast.error('Tradovate API execution is paper-only in this build')
+      return
+    }
+    if (
+      draft.platform === 'tradovate'
+      && (!/^\d+$/.test(accountRef) || Number(accountRef) <= 0)
+    ) {
+      toast.error('Tradovate account reference must be the numeric account ID')
+      return
+    }
+    if (
+      draft.platform === 'tradovate'
+      && (!draft.tokenExpiresAt || !Number.isFinite(Date.parse(draft.tokenExpiresAt)))
+    ) {
+      toast.error('Tradovate token expiration is required')
       return
     }
     setBusy('save')
@@ -229,7 +249,14 @@ export default function TradingConnectionsSettingsPage({
       }
       const saved = await window.electronAPI.saveTradingConnection({
         connection,
-        ...(transport === 'api' ? { api_secret: draft.apiSecret.trim() } : {}),
+        ...(transport === 'api' ? {
+          api_secret: JSON.stringify({
+            access_token: draft.apiSecret.trim(),
+            account_id: Number(accountRef),
+            account_spec: accountLabel,
+            expires_at: new Date(draft.tokenExpiresAt).toISOString(),
+          }),
+        } : {}),
       })
       setDraft(EMPTY_DRAFT)
       setEditing(false)
@@ -510,7 +537,9 @@ export default function TradingConnectionsSettingsPage({
                       onChange={(event) => setDraft({
                         ...draft,
                         platform: event.target.value as Draft['platform'],
+                        environment: event.target.value === 'tradovate' ? 'paper' : draft.environment,
                         apiSecret: '',
+                        tokenExpiresAt: '',
                       })}
                     >
                       <option value="tradovate">Tradovate API</option>
@@ -521,15 +550,16 @@ export default function TradingConnectionsSettingsPage({
                     <select
                       className={inputClass}
                       value={draft.environment}
+                      disabled={draft.platform === 'tradovate'}
                       onChange={(event) => setDraft({
                         ...draft,
                         environment: event.target.value as ExecutionEnvironment,
                       })}
                     >
                       <option value="paper">Paper</option>
-                      <option value="evaluation">Evaluation</option>
-                      <option value="performance">Performance</option>
-                      <option value="live">Live</option>
+                      {draft.platform !== 'tradovate' && <option value="evaluation">Evaluation</option>}
+                      {draft.platform !== 'tradovate' && <option value="performance">Performance</option>}
+                      {draft.platform !== 'tradovate' && <option value="live">Live</option>}
                     </select>
                   </Field>
                   <Field label="Account reference">
@@ -549,7 +579,7 @@ export default function TradingConnectionsSettingsPage({
                     />
                   </Field>
                   {draft.platform === 'tradovate' && (
-                    <Field label="API credential" className="md:col-span-2">
+                    <Field label="Tradovate access token" className="md:col-span-2">
                       <input
                         className={inputClass}
                         type="password"
@@ -557,6 +587,19 @@ export default function TradingConnectionsSettingsPage({
                         onChange={(event) => setDraft({ ...draft, apiSecret: event.target.value })}
                         placeholder="Stored encrypted; never returned to the renderer"
                       />
+                    </Field>
+                  )}
+                  {draft.platform === 'tradovate' && (
+                    <Field label="Token expires at" className="md:col-span-2">
+                      <input
+                        className={inputClass}
+                        type="datetime-local"
+                        value={draft.tokenExpiresAt}
+                        onChange={(event) => setDraft({ ...draft, tokenExpiresAt: event.target.value })}
+                      />
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Tradovate tokens normally expire after 90 minutes; Trade God renews and re-encrypts them before expiry.
+                      </p>
                     </Field>
                   )}
                   <div className="flex justify-end gap-2 md:col-span-2">

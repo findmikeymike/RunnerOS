@@ -8,11 +8,14 @@ import {
 import {
   FileAdapterCertificationStore,
   FileTradingConnectionStore,
+  parseTradovateCredential,
+  serializeTradovateCredential,
 } from '@trade-god/execution'
 
 export interface TradingCredentialVault {
   getSecret(name: string): Promise<string | null>
   setSecret(name: string, value: string): Promise<void>
+  compareAndSetSecret(name: string, expectedValueSha256: string, value: string): Promise<boolean>
   deleteSecret(name: string): Promise<boolean>
 }
 
@@ -116,16 +119,47 @@ export class TradingConnectionService {
           : { browser_session_ref: undefined }
       ),
     })
+    const vaultName = secretName(connection.connection_id)
+    const existingSecretRaw = connection.transport_preference !== 'browser'
+      ? await this.vault.getSecret(vaultName)
+      : null
+    let canonicalSecretToStore: string | undefined
+    if (connection.platform.slug === 'tradovate') {
+      if (connection.environment !== 'paper' || connection.transport_preference !== 'api') {
+        throw new Error('Tradovate adapter enrollment is restricted to API paper accounts.')
+      }
+      const raw = suppliedSecret ?? existingSecretRaw
+      if (!raw) throw new Error('Tradovate access token bundle is required.')
+      const credential = parseTradovateCredential(raw)
+      if (
+        String(credential.account_id) !== connection.account_ref
+        || credential.account_spec !== connection.account_display.label
+      ) {
+        throw new Error('Tradovate credential account ID and account label must match the connection.')
+      }
+      if (suppliedSecret) canonicalSecretToStore = serializeTradovateCredential(credential)
+    }
     if (
       connection.transport_preference !== 'browser'
       && !suppliedSecret
-      && !(await this.vault.getSecret(secretName(connection.connection_id)))
+      && !existingSecretRaw
     ) {
         throw new Error('API transport requires credentials before the connection can be saved.')
     }
     const saved = await this.store.save(connection)
-    if (suppliedSecret) {
-      await this.vault.setSecret(secretName(connection.connection_id), suppliedSecret)
+    if (canonicalSecretToStore) {
+      if (existingSecretRaw) {
+        const replaced = await this.vault.compareAndSetSecret(
+          vaultName,
+          createHash('sha256').update(existingSecretRaw).digest('hex'),
+          canonicalSecretToStore,
+        )
+        if (!replaced) {
+          throw new Error('Tradovate credential changed during account save; reload and try again.')
+        }
+      } else await this.vault.setSecret(vaultName, canonicalSecretToStore)
+    } else if (suppliedSecret) {
+      await this.vault.setSecret(vaultName, suppliedSecret)
     }
     return this.status(saved)
   }
@@ -244,9 +278,22 @@ export class TradingConnectionService {
   }
 
   private async status(connection: TradingConnection): Promise<TradingConnectionStatus> {
-    const credentialConfigured = connection.credential_ref
-      ? Boolean(await this.resolveCredential(connection))
-      : false
+    let credentialConfigured = false
+    if (connection.credential_ref) {
+      const raw = await this.resolveCredential(connection)
+      if (raw) {
+        if (connection.platform.slug === 'tradovate') {
+          try {
+            const credential = parseTradovateCredential(raw)
+            credentialConfigured = (
+              String(credential.account_id) === connection.account_ref
+              && credential.account_spec === connection.account_display.label
+              && Date.parse(credential.expires_at!) > Date.parse(this.now())
+            )
+          } catch { credentialConfigured = false }
+        } else credentialConfigured = true
+      }
+    }
     return {
       connection,
       credential_configured: credentialConfigured,

@@ -12,7 +12,7 @@ source_of_truth: true
 - Date: 2026-08-11
 - Stage: adversarial safety closure before real-provider paper connectivity
 - Current goal: complete the P0 gates in `audits/discord-signal-system-readiness-2026-08-10.md`, then smoke one exact Tradovate paper lifecycle
-- Overall state: signed Discord entry and management receivers, exact account-or-Mirror-Group routing, durable source replay binding, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute planned stop-distance loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. Per-account automatic paper authority is an explicit, durable, expiring mandate with exact contracts and hard risk/quantity limits. A provider session layer coalesces Tradovate renewal, persists rotation before reuse, and backs off penalty/captcha responses; a low-rate supervisor continuously reconciles active records and connection-halts stale truth. Mirror Group Stage 0/1 provides immutable revisions, lossless route migration, exact per-member sizing previews, and configuration UI. Stage 2 now provides fake-provider-only child artifacts, account admission, aggregate planning-risk reservations, atomic ownership sets, exact dispatch grants, bounded fan-out, and crash/partial-outcome recovery. The dormant group-follow-up foundation now adds joint family resolution, frozen child action matrices, truthful partial rollup, recovery, and provider-flat-proof release. Those grants remain rejected by a normal gateway; the desktop still attaches zero execution adapters and stops group tickets at preview receipts. Browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
+- Overall state: signed Discord entry and management receivers, exact account-or-Mirror-Group routing, durable source replay binding, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute planned stop-distance loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. Per-account automatic paper authority is an explicit, durable, expiring mandate with exact contracts and hard risk/quantity limits. One explicit paper-only Tradovate adapter is now composed in the Trade God desktop from a structured encrypted-vault credential, a CAS-rotated token session, and an exact installed-descriptor registry. Any adapter change re-latches the durable halt and remains quarantined across restarts while nonterminal records exist. The adapter is attached but inert: no connection can execute until real lifecycle certification, explicit enablement, a current mandate, and halt release all pass. Mirror Group Stage 0/1 provides immutable revisions, lossless route migration, exact per-member sizing previews, and configuration UI. Stage 2 provides fake-provider-only child artifacts, account admission, aggregate planning-risk reservations, atomic ownership sets, exact dispatch grants, bounded fan-out, and crash/partial-outcome recovery. The dormant group-follow-up foundation adds joint family resolution, frozen child action matrices, truthful partial rollup, recovery, and provider-flat-proof release. Group tickets still stop at preview receipts. Browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -230,18 +230,18 @@ The workbench can request engine health, run the known fixture, and display tota
 
 1. Enroll fresh Trade God credentials and confirm Apex/Tradovate API eligibility
    for one exact demo account.
-2. Bind the new token/session layer to the encrypted Trade God credential vault,
-   add event-driven Tradovate user-sync truth, then certify one exact demo/paper
-   connection.
-3. Provider-certify the contract economics/calendar path, run the forced-
-   failure matrix, and attach only that exact paper adapter.
+2. Use the paper-only connection form to store the exact numeric account ID,
+   account label, access token, and expiration in the encrypted Trade God vault;
+   then add a trusted read-only provider verification flow.
+3. Add event-driven Tradovate user-sync truth, implement the real certification
+   runner, and provider-certify the contract economics/calendar path.
 4. Finish the remaining Mirror management certification boundary: add an
    adapter-certified post-partial stop-resize plan, then run crash/restart and
    provider-paper evidence matrices. Parent-aware routing, durable child plans,
    recovery, and proof-gated release are implemented but remain dormant.
 5. Implement and certify Tradovate partial-close/protection-resize behavior.
 6. Run and retain the single-account and Mirror Group paper soak plus forced-
-   failure matrices before attaching the adapter to the desktop gateway.
+   failure matrices before enabling any account or releasing execution halts.
 
 ## Blockers / Decisions Needed
 

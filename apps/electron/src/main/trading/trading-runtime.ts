@@ -39,6 +39,7 @@ import {
   type TradingBrowserSessionLauncher,
   type TradingCredentialVault,
 } from './trading-connection-service.ts'
+import { createTradovatePaperRuntime } from './tradovate-paper-runtime.ts'
 import {
   TradingSignalRouteStore,
   type TradingSignalRoute,
@@ -97,6 +98,7 @@ interface RuntimeOptions extends ResolveLaunchOptions {
   connectionDirectory?: string
   executionDirectory?: string
   executionAdapters?: ExecutionAdapter[]
+  enableTradovatePaperAdapter?: boolean
   discoTraderConnectionId?: string
   discoTraderIntentValidityMs?: number
   credentialVault?: TradingCredentialVault
@@ -127,6 +129,7 @@ interface HostConfigOptions {
 
 export class TradingRouteMutationCoordinator {
   private queue: Promise<void> = Promise.resolve()
+  private readonly removedConnectionIds = new Set<string>()
 
   constructor(
     private readonly connections: Pick<FileTradingConnectionStore, 'get'>,
@@ -137,6 +140,15 @@ export class TradingRouteMutationCoordinator {
 
   async captureRoutingSnapshot<T>(operation: () => Promise<T>): Promise<T> {
     return this.withLock(operation)
+  }
+
+  async saveConnection<T>(connectionId: string, save: () => Promise<T>): Promise<T> {
+    return this.withLock(async () => {
+      if (this.removedConnectionIds.has(connectionId)) {
+        throw new Error('This trading account was removed in the current app session; create a new connection identity.')
+      }
+      return save()
+    })
   }
 
   async saveMirrorGroup(input: SaveMirrorGroupInput): Promise<MirrorGroup> {
@@ -194,7 +206,9 @@ export class TradingRouteMutationCoordinator {
       if (attachedGroups.length > 0) {
         throw new Error('Remove this account from active Mirror Group revisions before removing it.')
       }
-      return remove()
+      const removed = await remove()
+      if (removed) this.removedConnectionIds.add(connectionId)
+      return removed
     })
   }
 
@@ -366,6 +380,32 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const executionStore = options.executionDirectory
     ? new FileExecutionStore(options.executionDirectory, options.now, executionProcessInstanceId)
     : undefined
+  let tradovatePaperRuntime: ReturnType<typeof createTradovatePaperRuntime> | undefined
+  let attachedExecutionAdapters = options.executionAdapters ?? []
+  if (
+    options.executionAdapters === undefined
+    && options.enableTradovatePaperAdapter === true
+    && tradingConnectionStore
+    && options.credentialVault
+  ) {
+    tradovatePaperRuntime = createTradovatePaperRuntime({
+      connectionStore: tradingConnectionStore,
+      vault: options.credentialVault,
+      now: options.now,
+    })
+    attachedExecutionAdapters = [tradovatePaperRuntime.adapter]
+  }
+  const certificationRegistry = tradovatePaperRuntime?.certificationRegistry ?? {
+    resolve: (connection) => {
+      const adapter = attachedExecutionAdapters.find((candidate) => candidate.supports(connection))
+      if (!adapter) return null
+      return {
+        adapter_id: adapter.descriptor.adapter_id,
+        adapter_version: adapter.descriptor.adapter_version,
+        provider_contract_version: adapter.descriptor.provider_contract_version,
+      }
+    },
+  }
   const tradingConnectionService = (
     tradingConnectionStore
     && options.credentialVault
@@ -376,7 +416,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         options.credentialVault,
         options.tradingBrowserSessionLauncher,
         new FileAdapterCertificationStore(options.connectionDirectory!, options.now),
-        undefined,
+        certificationRegistry,
         options.now,
       )
     : undefined
@@ -386,7 +426,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         resolveConnection: (connectionId) => tradingConnectionStore.get(connectionId),
         // Observe-only receiver foundation. Provider adapters are attached only
         // after their exact paper connection has passed certification.
-        adapters: options.executionAdapters ?? [],
+        adapters: attachedExecutionAdapters,
         ...(mirrorExecutionStore
           ? { resolveMirrorDispatchGrant: (grantId: string) => mirrorExecutionStore.getGrant(grantId) }
           : {}),
@@ -403,10 +443,10 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ? new PaperExecutionCoordinator(
         executionGateway,
         standingAuthorizationStore,
-        () => Boolean(options.executionAdapters?.length),
+        () => attachedExecutionAdapters.length > 0,
       )
     : undefined
-  const reconciliationSupervisor = executionGateway && options.executionAdapters?.length
+  const reconciliationSupervisor = executionGateway && attachedExecutionAdapters.length > 0
     ? new ExecutionReconciliationSupervisor({ gateway: executionGateway, now: options.now })
     : undefined
   const removableExecutionStates = new Set([
@@ -598,10 +638,12 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     }) : undefined
   let executionRecoveryError: unknown
   const executionRecoveryReady = executionGateway && executionStore
-    ? Promise.all([
+    ? executionStore.bindAdapterSet(attachedExecutionAdapters.map((adapter) => adapter.descriptor))
+      .then(() => Promise.all([
         executionStore.recoverStaleLocks(),
         mirrorExecutionStore?.recoverStaleLocks() ?? Promise.resolve(0),
-      ]).then(() => executionGateway.recoverNonTerminal()).catch((error) => {
+      ]))
+      .then(() => executionGateway.recoverNonTerminal()).catch((error) => {
         executionRecoveryError = error
       })
     : Promise.resolve()
@@ -701,7 +743,10 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(tradingConnectionService
       ? {
           listTradingConnections: () => tradingConnectionService.list(),
-          saveTradingConnection: (input) => tradingConnectionService.save(input),
+          saveTradingConnection: (input) => tradingRouteMutations!.saveConnection(
+            input.connection.connection_id,
+            () => tradingConnectionService.save(input),
+          ),
           removeTradingConnection: (connectionId) => tradingRouteMutations!.removeConnection(
             connectionId,
             () => tradingConnectionService.remove(connectionId),
@@ -709,8 +754,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           openTradingConnectionLogin: (connectionId) => (
             tradingConnectionService.openBrowserLogin(connectionId)
           ),
-          confirmTradingConnectionLogin: (connectionId) => (
-            tradingConnectionService.confirmBrowserLogin(connectionId)
+          confirmTradingConnectionLogin: (connectionId) => tradingRouteMutations!.saveConnection(
+            connectionId,
+            () => tradingConnectionService.confirmBrowserLogin(connectionId),
           ),
           listTradingSignalRoutes: () => tradingSignalRouteStore!.list(),
           saveTradingSignalRoute: (route, expectedPreviousTargetKey) => (
@@ -738,19 +784,24 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       : {}),
     ...(executionGateway
       ? {
-          getExecutionControl: async () => ({
-            ...await executionGateway.readControl(),
-            provider_adapters_attached: Boolean(options.executionAdapters?.length),
-            ...(reconciliationSupervisor
-              ? { reconciliation_health: reconciliationSupervisor.health() }
-              : {}),
-          }),
+          getExecutionControl: async () => {
+            await executionSupervisionReady
+            return {
+              ...await executionGateway.readControl(),
+              provider_adapters_attached: attachedExecutionAdapters.length > 0,
+              ...(reconciliationSupervisor
+                ? { reconciliation_health: reconciliationSupervisor.health() }
+                : {}),
+            }
+          },
           setGlobalExecutionKill: async (enabled: boolean) => {
+            await executionSupervisionReady
             await executionGateway.setGlobalKill(enabled)
             if (!enabled) await paperExecutionCoordinator?.coordinatePending()
             return { global_kill: enabled }
           },
           setConnectionExecutionKill: async (connectionId: string, enabled: boolean) => {
+            await executionSupervisionReady
             await tradingConnectionStore!.get(connectionId)
             if (
               !enabled
@@ -770,6 +821,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       ? {
           listStandingAuthorizations: () => standingAuthorizationStore.list(),
           saveStandingAuthorization: async (authorization: ExecutionAuthorization) => {
+            await executionSupervisionReady
             const connection = await tradingConnectionStore.get(authorization.connection_id)
             if (
               connection.environment !== 'paper'
@@ -939,6 +991,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       unsubscribeAlert?.()
       await discordManagementReady
       await reconciliationSupervisor?.stop()
+      tradovatePaperRuntime?.stop()
       const [alertServer, alertTunnel] = await Promise.all([alertServerPromise, alertTunnelPromise])
       await Promise.all([disposeTradingIpc(), marketDataManager?.stop(), alertTunnel?.stop(), alertServer?.stop()])
     },
