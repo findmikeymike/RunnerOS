@@ -4,6 +4,7 @@ import {
   EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
   EXTERNAL_AUTHORIZATION_BASIS_SCHEMA_VERSION,
   ORDER_INTENT_SCHEMA_VERSION,
+  LEGACY_ORDER_INTENT_SCHEMA_VERSION,
   TRADING_CONNECTION_SCHEMA_VERSION,
   executionAuthorizationSchema,
   externalAuthorizationBasisSchema,
@@ -177,6 +178,36 @@ describe('execution contracts', () => {
     expect(orderIntentSchema.safeParse({
       ...intent,
       valid_until: intent.created_at,
+    }).success).toBe(false)
+  })
+
+  test('requires immutable exit legs to exactly cover quantity', () => {
+    const multiLeg = {
+      ...intent,
+      quantity: 3,
+      protection: {
+        stop_loss: { type: 'ticks', value: '8' },
+        exit_legs: [
+          { leg_id: 'target-one', quantity: 2, take_profit: { type: 'ticks', value: '12' } },
+          { leg_id: 'runner', quantity: 1 },
+        ],
+      },
+    }
+    expect(orderIntentSchema.safeParse(multiLeg).success).toBe(true)
+    expect(orderIntentSchema.safeParse({
+      ...multiLeg,
+      intent_schema_version: LEGACY_ORDER_INTENT_SCHEMA_VERSION,
+    }).success).toBe(false)
+    expect(orderIntentSchema.safeParse({
+      ...multiLeg,
+      protection: { ...multiLeg.protection, take_profit: { type: 'ticks', value: '12' } },
+    }).success).toBe(false)
+    expect(orderIntentSchema.safeParse({
+      ...multiLeg,
+      protection: {
+        ...multiLeg.protection,
+        exit_legs: multiLeg.protection.exit_legs.map((leg) => ({ ...leg, quantity: 1 })),
+      },
     }).success).toBe(false)
   })
 })

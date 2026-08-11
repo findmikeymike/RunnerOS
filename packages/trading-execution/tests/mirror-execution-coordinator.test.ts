@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import {
   EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
   EXECUTION_RECORD_SCHEMA_VERSION,
+  LEGACY_MIRROR_CHILD_SOURCE_SCHEMA_VERSION,
+  MIRROR_CHILD_SOURCE_SCHEMA_VERSION,
   RISK_DECISION_SCHEMA_VERSION,
   TRADING_CONNECTION_SCHEMA_VERSION,
+  mirrorChildSourceSchema,
   type DiscoTraderTicket,
   type ExecutionAuthorization,
   type ExecutionRecord,
@@ -159,8 +162,15 @@ class FakeMirrorGateway implements MirrorExecutionGateway {
   }
 }
 
-const setup = async (options: { maxRisk?: string; maxParents?: number } = {}) => {
+const setup = async (options: {
+  maxRisk?: string
+  maxParents?: number
+  memberContracts?: number
+  sourceTicket?: DiscoTraderTicket
+} = {}) => {
   const root = await mkdtemp(path.join(tmpdir(), 'mirror-stage-two-')); roots.push(root)
+  const sourceTicket = options.sourceTicket ?? ticket()
+  const memberContracts = options.memberContracts ?? 1
   const connections = new Map([
     ['connection-a', connection('connection-a')],
     ['connection-b', connection('connection-b')],
@@ -173,14 +183,18 @@ const setup = async (options: { maxRisk?: string; maxParents?: number } = {}) =>
     max_active_parent_trades: options.maxParents ?? 1,
     members: [...connections.keys()].map((connection_id) => ({
       connection_id, enabled: true,
-      quantity_rule: { mode: 'fixed-contracts' as const, contracts: 1, max_contracts: 1 },
+      quantity_rule: {
+        mode: 'fixed-contracts' as const,
+        contracts: memberContracts,
+        max_contracts: memberContracts,
+      },
     })),
   })
   const sourceStore = new FileSourceExecutionBindingStore(root, () => NOW)
   const binding = await sourceStore.bind({
     source_type: 'discord', server_id: '1', channel_id: '2', author_id: '333',
-    message_id: ticket().provenance.messageId, ticket_id: ticket().id,
-    ticket_checksum: sha256(ticket()), route_id: 'route-stage-two', received_at: NOW,
+    message_id: sourceTicket.provenance.messageId, ticket_id: sourceTicket.id,
+    ticket_checksum: sha256(sourceTicket), route_id: 'route-stage-two', received_at: NOW,
     instrument: {
       canonical_id: 'CME:ESU6', symbol: 'ESU6', exchange: 'XCME', expiry: '2026-09',
       tick_size: '0.25', point_value_usd: '50',
@@ -188,7 +202,7 @@ const setup = async (options: { maxRisk?: string; maxParents?: number } = {}) =>
     target: {
       type: 'mirror-group', mirror_group_id: group.mirror_group_id,
       mirror_group_revision: group.revision, group_snapshot_checksum: group.content_checksum,
-      mirror_execution_id: mirrorExecutionIdFor(ticket(), group),
+      mirror_execution_id: mirrorExecutionIdFor(sourceTicket, group),
     },
   })
   const gateway = new FakeMirrorGateway()
@@ -196,7 +210,8 @@ const setup = async (options: { maxRisk?: string; maxParents?: number } = {}) =>
     authorization_schema_version: EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
     authorization_id: `mandate-${connectionId}`, connection_id: connectionId,
     mode: 'standing-mandate', scope: {
-      symbols: ['ESU6'], max_contracts: 1, allowed_sides: ['buy'], allowed_order_types: ['limit'],
+      symbols: ['ESU6'], max_contracts: memberContracts,
+      allowed_sides: ['buy'], allowed_order_types: ['limit'],
       session_start: '2026-08-11T15:00:00.000Z', session_end: '2026-08-11T16:00:00.000Z',
       max_daily_loss: '1000', max_open_risk: '500',
     }, issued_by: 'operator', issued_at: NOW, expires_at: '2026-08-11T16:00:00.000Z',
@@ -211,7 +226,7 @@ const setup = async (options: { maxRisk?: string; maxParents?: number } = {}) =>
       policy_version: 'mirror-risk@1', fees_policy_version: 'fees@1', fee_per_contract_usd: '5',
     },
   })
-  return { root, group, binding, gateway, store, coordinator, authorizations }
+  return { root, group, binding, gateway, store, coordinator, authorizations, sourceTicket }
 }
 
 describe('Mirror Stage 2 coordinator', () => {
@@ -248,6 +263,94 @@ describe('Mirror Stage 2 coordinator', () => {
     })
     expect(parent.state).toBe('admitted')
     expect(parent.reservation_id).toBeDefined()
+    expect(fixture.gateway.executeCount).toBe(0)
+  })
+
+  test('scales immutable exit legs only when every child quantity stays exact and whole', async () => {
+    const sourceTicket: DiscoTraderTicket = {
+      ...ticket('multi-leg-exact'),
+      ticketSchemaVersion: 'discotrader-ticket@2',
+      contracts: 4,
+      targets: [5603, 5605],
+      action: { ...ticket().action, targets: [5603, 5605] },
+      targetLegs: [
+        { legId: 'tp-one', quantity: 2, target: 5603 },
+        { legId: 'tp-two', quantity: 2, target: 5605 },
+      ],
+    }
+    const fixture = await setup({ sourceTicket, memberContracts: 2 })
+    const parent = await fixture.coordinator.coordinate({
+      ticket: sourceTicket,
+      binding: fixture.binding,
+      group: fixture.group,
+      instrument: fixture.binding.instrument,
+      dispatch: false,
+    })
+    expect(parent.state).toBe('admitted')
+    expect([...fixture.gateway.records.values()].every((record) => (
+      JSON.stringify(record.intent.protection.exit_legs) === JSON.stringify([
+        { leg_id: 'tp-one', quantity: 1, take_profit: { type: 'price', value: '5603' } },
+        { leg_id: 'tp-two', quantity: 1, take_profit: { type: 'price', value: '5605' } },
+      ])
+    ))).toBe(true)
+    const sourceDirectory = path.join(fixture.root, 'mirror-groups', 'executions', 'child-sources')
+    const sourceFiles = await readdir(sourceDirectory)
+    const persisted = JSON.parse(await readFile(
+      path.join(sourceDirectory, sourceFiles[0]!),
+      'utf8',
+    ))
+    expect(persisted).toMatchObject({
+      mirror_child_source_schema_version: MIRROR_CHILD_SOURCE_SCHEMA_VERSION,
+      derivation_version: '2.0.0',
+    })
+    const { exit_legs: _exitLegs, ...legacy } = persisted
+    expect(mirrorChildSourceSchema.safeParse({
+      ...legacy,
+      mirror_child_source_schema_version: LEGACY_MIRROR_CHILD_SOURCE_SCHEMA_VERSION,
+      derivation_version: '1.0.0',
+      target_prices: [legacy.target_prices[0]],
+    }).success).toBe(true)
+    expect(mirrorChildSourceSchema.safeParse({
+      ...persisted,
+      mirror_child_source_schema_version: LEGACY_MIRROR_CHILD_SOURCE_SCHEMA_VERSION,
+      derivation_version: '1.0.0',
+    }).success).toBe(false)
+    expect(mirrorChildSourceSchema.safeParse({
+      ...persisted,
+      exit_legs: persisted.exit_legs.map((leg: { quantity: number }, index: number) => (
+        index === 0 ? { ...leg, quantity: leg.quantity + 1 } : leg
+      )),
+    }).success).toBe(false)
+    expect(mirrorChildSourceSchema.safeParse({
+      ...persisted,
+      exit_legs: persisted.exit_legs.map((leg: { take_profit?: { value: string } }, index: number) => (
+        index === 0
+          ? { ...leg, take_profit: { ...leg.take_profit, value: '5604' } }
+          : leg
+      )),
+    }).success).toBe(false)
+  })
+
+  test('blocks Mirror target legs before dispatch when proportional scaling is fractional', async () => {
+    const sourceTicket: DiscoTraderTicket = {
+      ...ticket('multi-leg-fractional'),
+      ticketSchemaVersion: 'discotrader-ticket@2',
+      contracts: 3,
+      targets: [5603, 5605],
+      action: { ...ticket().action, targets: [5603, 5605] },
+      targetLegs: [
+        { legId: 'tp-one', quantity: 2, target: 5603 },
+        { legId: 'tp-two', quantity: 1, target: 5605 },
+      ],
+    }
+    const fixture = await setup({ sourceTicket, memberContracts: 2 })
+    await expect(fixture.coordinator.coordinate({
+      ticket: sourceTicket,
+      binding: fixture.binding,
+      group: fixture.group,
+      instrument: fixture.binding.instrument,
+      dispatch: true,
+    })).rejects.toMatchObject({ code: 'CAPABILITY_UNAVAILABLE' })
     expect(fixture.gateway.executeCount).toBe(0)
   })
 

@@ -51,8 +51,13 @@ not yet a nonstop trade copier.
 - Required the immutable Discord posted timestamp and rejected signals that
   arrive after their route validity window. Donor latency now binds the
   posted-to-ticket-created interval used by DiscoTrader itself.
-- Reject multiple targets at ingestion instead of silently discarding all but
-  the first. Multi-target execution remains unimplemented.
+- Added immutable exit-leg contracts for multiple targets. Each leg requires a
+  stable ID and explicit whole-contract quantity; quantities must cover the
+  entry exactly. Legacy target-price arrays without those quantities still
+  fail closed instead of guessing a split.
+- Versioned new tickets, source artifacts, and intents at
+  `discotrader-ticket@2`, `discotrader-intent-source@2`, and `order-intent@2`;
+  checksum-verified v1 records remain readable only without exit legs.
 - Repaired dead-process entry and management claim markers.
 - Quarantined a connection after an uncertain provider submit.
 - Made Tradovate modification reconciliation require the exact requested
@@ -120,7 +125,7 @@ not yet a nonstop trade copier.
 | Position ownership | durable provider-account lease and flat-account preflight now exist | Add lease visibility and real-provider restart/adverse proof |
 | Provider queue | durable per-account mutation lock serializes commands through reconciliation | Real-provider crash, stale-lock, cross-process, and adverse ordering proof |
 | Multi-account | Mirror Groups are specification only | Parent plan, independent children, all-member admission, visible partial outcomes |
-| Multiple targets | `order-intent@1` has one target; source now rejects many | Versioned allocation/child-leg contract and protection-resize lifecycle |
+| Multiple targets | explicit checksum-bound exit legs and exact Mirror proportional mapping are implemented; a native Tradovate multi-bracket payload is deterministic but transport/reconciliation are not certified | Donor must emit exact `targetLegs`; then demo-certify native strategy graph, target fills, restart, and remaining protection |
 | Continuous truth | Tradovate REST performs one immediate reconciliation | User-data stream or bounded polling, reconnect/backoff, token refresh, stale-feed halt |
 | Real evidence | simulated tests only | Real Tradovate paper entry, fill, bracket, move, partial, flatten, restart, and unknown-submit drills |
 

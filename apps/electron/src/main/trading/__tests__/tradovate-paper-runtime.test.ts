@@ -100,6 +100,7 @@ describe('Tradovate paper runtime', () => {
       adapter_id: 'tradovate-api',
       adapter_version: '1.0.0',
       provider_contract_version: 'tradovate-demo-rest-2026-07',
+      capabilities: runtime.adapter.descriptor.capabilities,
     })
     await runtime.adapter.connect(target)
     expect(vault.casCount).toBe(1)

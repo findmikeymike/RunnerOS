@@ -29,6 +29,7 @@ export const COMMON_CERTIFICATION_SCENARIOS = [
   'partial-fill-reconciled',
   'no-fill-reconciled',
   'bracket-or-protection-failure-contained',
+  'multi-bracket-failure-contained',
   'cancel-failure-contained',
   'modify-failure-contained',
   'partial-close-failure-contained',
@@ -47,8 +48,12 @@ export const BROWSER_CERTIFICATION_SCENARIOS = [
 
 export const requiredCertificationScenarios = (
   transport: ExecutionTransport,
+  capabilities?: ExecutionCapabilities,
 ): CertificationScenarioId[] => [
   ...COMMON_CERTIFICATION_SCENARIOS,
+  ...(capabilities?.native_multi_bracket === true
+    ? ['multi-bracket-protected-lifecycle' as const]
+    : []),
   ...(transport === 'browser' ? BROWSER_CERTIFICATION_SCENARIOS : []),
 ]
 
@@ -109,7 +114,10 @@ export const deriveCertificationOutcome = (
   >,
 ): Pick<AdapterCertificationEvidence, 'eligible_certifications' | 'blockers'> => {
   const results = new Map(evidence.scenarios.map((scenario) => [scenario.scenario_id, scenario]))
-  const required = requiredCertificationScenarios(evidence.transport)
+  const required = requiredCertificationScenarios(
+    evidence.transport,
+    evidence.certified_capabilities,
+  )
   const blockers = required.flatMap((scenarioId) => {
     const result = results.get(scenarioId)
     if (!result) return [`${scenarioId}: missing`]
@@ -165,7 +173,10 @@ export const runAdapterCertification = async (
 ): Promise<AdapterCertificationEvidence> => {
   const startedAt = now()
   const scenarios: CertificationScenarioResult[] = []
-  for (const scenarioId of requiredCertificationScenarios(runner.transport)) {
+  for (const scenarioId of requiredCertificationScenarios(
+    runner.transport,
+    runner.certified_capabilities,
+  )) {
     const observation = await runner.runScenario(scenarioId)
     scenarios.push({
       scenario_id: scenarioId,

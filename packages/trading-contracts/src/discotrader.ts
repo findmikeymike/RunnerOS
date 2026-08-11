@@ -3,10 +3,18 @@ import { z } from 'zod'
 import { identifierSchema, utcTimestampSchema } from './common.ts'
 import { discordManagementMessageSchema } from './discord-management.ts'
 
-export const DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION = 'discotrader-intent-source@1'
+export const LEGACY_DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION = 'discotrader-intent-source@1'
+export const DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION = 'discotrader-intent-source@2'
+export const DISCOTRADER_TICKET_SCHEMA_VERSION = 'discotrader-ticket@2'
 
 const finiteNumberSchema = z.number().finite()
 const positiveNumberSchema = finiteNumberSchema.positive()
+
+export const discoTraderTargetLegSchema = z.object({
+  legId: identifierSchema,
+  quantity: z.number().int().positive().max(1_000),
+  target: positiveNumberSchema.optional(),
+}).strict()
 
 export const discoTraderParsedActionSchema = z.object({
   intent: z.enum([
@@ -41,6 +49,7 @@ export const discoTraderParsedActionSchema = z.object({
 }).strict()
 
 export const discoTraderTicketSchema = z.object({
+  ticketSchemaVersion: z.literal(DISCOTRADER_TICKET_SCHEMA_VERSION).optional(),
   id: identifierSchema,
   createdAt: utcTimestampSchema,
   mode: z.enum(['observe-only', 'alert-only', 'stage-only', 'armed-live']),
@@ -53,6 +62,7 @@ export const discoTraderTicketSchema = z.object({
   stop: positiveNumberSchema.optional(),
   stopDistancePoints: positiveNumberSchema,
   targets: z.array(positiveNumberSchema).max(20),
+  targetLegs: z.array(discoTraderTargetLegSchema).min(1).max(20).optional(),
   targetRR: positiveNumberSchema.optional(),
   riskUsd: positiveNumberSchema,
   provenance: z.object({
@@ -72,7 +82,37 @@ export const discoTraderTicketSchema = z.object({
     model: z.string().trim().min(1).max(160),
     ms: finiteNumberSchema.nonnegative(),
   }).strict().optional(),
-}).strict()
+}).strict().superRefine((ticket, context) => {
+  if (!ticket.targetLegs) return
+  if (ticket.ticketSchemaVersion !== DISCOTRADER_TICKET_SCHEMA_VERSION) {
+    context.addIssue({
+      code: 'custom',
+      path: ['ticketSchemaVersion'],
+      message: 'Target legs require the version 2 DiscoTrader ticket contract',
+    })
+  }
+  if (new Set(ticket.targetLegs.map((leg) => leg.legId)).size !== ticket.targetLegs.length) {
+    context.addIssue({ code: 'custom', path: ['targetLegs'], message: 'Target leg IDs must be unique' })
+  }
+  if (ticket.targetLegs.reduce((total, leg) => total + leg.quantity, 0) !== ticket.contracts) {
+    context.addIssue({
+      code: 'custom',
+      path: ['targetLegs'],
+      message: 'Target-leg quantities must exactly cover the ticket contracts',
+    })
+  }
+  const legTargets = ticket.targetLegs.flatMap((leg) => leg.target === undefined ? [] : [leg.target])
+  if (
+    legTargets.length !== ticket.targets.length
+    || legTargets.some((target, index) => target !== ticket.targets[index])
+  ) {
+    context.addIssue({
+      code: 'custom',
+      path: ['targetLegs'],
+      message: 'Target legs must preserve the ordered ticket target evidence',
+    })
+  }
+})
 
 export const discoTraderPushPayloadSchema = z.object({
   kind: z.enum([

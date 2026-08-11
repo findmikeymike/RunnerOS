@@ -730,6 +730,7 @@ export class TradovateApiAdapter implements ExecutionAdapter {
       submit_stop_limit: true,
       native_bracket: true,
       native_oco: true,
+      native_multi_bracket: false,
       modify_order: true,
       cancel_order: true,
       partial_close: false,
@@ -1048,6 +1049,12 @@ export const buildTradovateOsoBody = (
   intent: OrderIntent,
   command: ExecutionCommand,
 ): Record<string, unknown> => {
+  if (intent.protection.exit_legs) {
+    throw new ExecutionGatewayError(
+      'CAPABILITY_UNAVAILABLE',
+      'Tradovate multi-leg entry requires the native multi-bracket strategy transport and paper certification.',
+    )
+  }
   const stop = intent.protection.stop_loss
   const target = intent.protection.take_profit
   if (stop.type !== 'price' || (target && target.type !== 'price')) {
@@ -1085,6 +1092,132 @@ export const buildTradovateOsoBody = (
         }
       : {}),
   }
+}
+
+/** Builds the exact native multi-bracket payload; transport stays disabled until paper-certified. */
+export const buildTradovateMultiBracketBody = (
+  connection: TradingConnection,
+  intent: OrderIntent,
+  command: ExecutionCommand,
+): Record<string, unknown> => {
+  const legs = intent.protection.exit_legs
+  const tickSize = intent.instrument.tick_size
+  if (!legs || legs.length < 2 || !tickSize) {
+    throw new ExecutionGatewayError(
+      'CAPABILITY_UNAVAILABLE',
+      'Tradovate multi-bracket entry requires explicit exit legs and instrument tick size.',
+    )
+  }
+  if (intent.entry.type !== 'limit' || intent.protection.stop_loss.type !== 'price') {
+    throw new ExecutionGatewayError(
+      'CAPABILITY_UNAVAILABLE',
+      'Tradovate multi-bracket entry currently requires an absolute limit entry and stop.',
+    )
+  }
+  if (legs.some((leg) => !leg.take_profit || leg.take_profit.type !== 'price')) {
+    throw new ExecutionGatewayError(
+      'CAPABILITY_UNAVAILABLE',
+      'Tradovate multi-bracket entry requires one absolute take profit for every exit leg.',
+    )
+  }
+  const entry = decimalNumber(intent.entry.price, 'entry limit price')
+  const entryPrice = intent.entry.price
+  const stop = decimalNumber(intent.protection.stop_loss.value, 'stop-loss price')
+  decimalNumber(tickSize, 'instrument tick size')
+  if (
+    (intent.side === 'buy' && stop >= entry)
+    || (intent.side === 'sell' && stop <= entry)
+  ) {
+    throw new ExecutionGatewayError('RISK_DENIED', 'Tradovate multi-bracket stop is not protective.')
+  }
+  const stopTicks = exactPositiveTicksBetween(
+    entryPrice,
+    intent.protection.stop_loss.value,
+    tickSize,
+    'stop loss',
+  )
+  const brackets = legs.map((leg) => {
+    const target = decimalNumber(leg.take_profit!.value, `take-profit ${leg.leg_id}`)
+    if (
+      (intent.side === 'buy' && target <= entry)
+      || (intent.side === 'sell' && target >= entry)
+    ) {
+      throw new ExecutionGatewayError('RISK_DENIED', `Tradovate target ${leg.leg_id} is not profitable.`)
+    }
+    const targetTicks = exactPositiveTicksBetween(
+      entryPrice,
+      leg.take_profit!.value,
+      tickSize,
+      `take-profit ${leg.leg_id}`,
+    )
+    return {
+      qty: leg.quantity,
+      profitTarget: intent.side === 'buy' ? targetTicks : -targetTicks,
+      stopLoss: intent.side === 'buy' ? -stopTicks : stopTicks,
+      trailingStop: false,
+    }
+  })
+  return {
+    accountSpec: connection.account_display.label,
+    accountId: parsePositiveAccountId(connection.account_ref),
+    symbol: intent.instrument.symbol,
+    action: intent.side === 'buy' ? 'Buy' : 'Sell',
+    orderStrategyTypeId: 2,
+    params: JSON.stringify({
+      entryVersion: {
+        orderQty: intent.quantity,
+        orderType: 'Limit',
+        price: entry,
+        timeInForce: intent.time_in_force === 'gtc' ? 'GTC' : 'Day',
+      },
+      brackets,
+    }),
+    uuid: deterministicTradovateStrategyUuid(command.idempotency_key),
+    customTag50: `tg-${command.idempotency_key.slice(0, 47)}`,
+  }
+}
+
+const exactPositiveTicksBetween = (
+  left: string,
+  right: string,
+  tickSize: string,
+  label: string,
+): number => {
+  const a = decimalFraction(left)
+  const b = decimalFraction(right)
+  const tick = decimalFraction(tickSize)
+  const distanceNumerator = a.numerator * b.scale - b.numerator * a.scale
+  const absoluteDistance = distanceNumerator < 0n ? -distanceNumerator : distanceNumerator
+  const distanceScale = a.scale * b.scale
+  const numerator = absoluteDistance * tick.scale
+  const denominator = distanceScale * tick.numerator
+  if (denominator <= 0n || numerator <= 0n || numerator % denominator !== 0n) {
+    throw new ExecutionGatewayError('RISK_DENIED', `${label} is not an exact positive tick distance.`)
+  }
+  const ticks = numerator / denominator
+  if (ticks > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new ExecutionGatewayError('CAPABILITY_UNAVAILABLE', `${label} tick distance is too large.`)
+  }
+  return Number(ticks)
+}
+
+const decimalFraction = (value: string): { numerator: bigint; scale: bigint } => {
+  if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {
+    throw new ExecutionGatewayError('CAPABILITY_UNAVAILABLE', 'Tradovate decimal is not canonical.')
+  }
+  const [whole, decimals = ''] = value.split('.')
+  return {
+    numerator: BigInt(`${whole}${decimals}`),
+    scale: 10n ** BigInt(decimals.length),
+  }
+}
+
+const deterministicTradovateStrategyUuid = (idempotencyKey: string): string => {
+  if (!/^[a-f0-9]{64}$/.test(idempotencyKey)) {
+    throw new ExecutionGatewayError('RECORD_INTEGRITY_FAILURE', 'Tradovate idempotency key is invalid.')
+  }
+  const hex = `${idempotencyKey.slice(0, 12)}4${idempotencyKey.slice(13, 16)}8${idempotencyKey.slice(17, 32)}`
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
 }
 
 const tradovateOrderType = (intent: OrderIntent): string => {

@@ -83,7 +83,7 @@ describe('adapter certification', () => {
   test('requires every forced failure scenario and 50 clean paper lifecycles', async () => {
     const evidence = await runAdapterCertification(new Runner(), () => NOW)
 
-    expect(evidence.scenarios).toHaveLength(22)
+    expect(evidence.scenarios).toHaveLength(23)
     expect(evidence.soak.completed_lifecycles).toBe(50)
     expect(evidence.eligible_certifications).toEqual([
       'read-certified',
@@ -91,6 +91,20 @@ describe('adapter certification', () => {
       'paper-lifecycle-certified',
     ])
     expect(evidence.blockers).toEqual([])
+  })
+
+  test('requires a protected success scenario before certifying native multi-bracket capability', async () => {
+    const runner = new Runner()
+    Object.defineProperty(runner, 'certified_capabilities', {
+      value: { ...capabilities, native_multi_bracket: true },
+    })
+    const evidence = await runAdapterCertification(runner, () => NOW)
+
+    expect(evidence.scenarios).toHaveLength(24)
+    expect(evidence.scenarios.some((scenario) => (
+      scenario.scenario_id === 'multi-bracket-protected-lifecycle'
+    ))).toBe(true)
+    expect(evidence.eligible_certifications).toContain('paper-lifecycle-certified')
   })
 
   test('blocks lifecycle certification on unsupported operations', async () => {

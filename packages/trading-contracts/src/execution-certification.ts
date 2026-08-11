@@ -31,6 +31,8 @@ export const certificationScenarioIdSchema = z.enum([
   'partial-fill-reconciled',
   'no-fill-reconciled',
   'bracket-or-protection-failure-contained',
+  'multi-bracket-failure-contained',
+  'multi-bracket-protected-lifecycle',
   'cancel-failure-contained',
   'modify-failure-contained',
   'partial-close-failure-contained',

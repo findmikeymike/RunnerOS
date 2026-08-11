@@ -10,6 +10,7 @@ import {
   FileTradingConnectionStore,
   parseTradovateCredential,
   serializeTradovateCredential,
+  sha256,
 } from '@trade-god/execution'
 
 export interface TradingCredentialVault {
@@ -47,6 +48,7 @@ export interface TradingAdapterCertificationBinding {
   adapter_id: string
   adapter_version: string
   provider_contract_version: string
+  capabilities: TradingConnection['capabilities']
 }
 
 export interface TradingAdapterCertificationRegistry {
@@ -193,6 +195,7 @@ export class TradingConnectionService {
       || installed.adapter_id !== evidence.adapter_id
       || installed.adapter_version !== evidence.adapter_version
       || installed.provider_contract_version !== evidence.provider_contract_version
+      || sha256(installed.capabilities) !== sha256(evidence.certified_capabilities)
     ) {
       throw new Error('Certification evidence does not match the installed adapter contract.')
     }
@@ -207,6 +210,7 @@ export class TradingConnectionService {
         adapter_version: evidence.adapter_version,
         provider_contract_version: evidence.provider_contract_version,
         transport: evidence.transport,
+        capabilities_checksum: sha256(evidence.certified_capabilities),
         levels: evidence.eligible_certifications,
       }],
       enabled: false,

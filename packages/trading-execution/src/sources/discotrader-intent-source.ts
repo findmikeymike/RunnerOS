@@ -3,6 +3,8 @@ import path from 'node:path'
 
 import {
   DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION,
+  LEGACY_DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION,
+  LEGACY_ORDER_INTENT_SCHEMA_VERSION,
   ORDER_INTENT_SCHEMA_VERSION,
   discoTraderPushPayloadSchema,
   discoTraderTicketSchema,
@@ -32,7 +34,9 @@ export interface DiscoTraderIntentRoute {
 }
 
 export interface DiscoTraderIntentSourceArtifact {
-  source_schema_version: typeof DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION
+  source_schema_version:
+    | typeof LEGACY_DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION
+    | typeof DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION
   source_ticket_sha256: string
   source_ticket_id: string
   source_message_id: string
@@ -226,6 +230,7 @@ export const convertDiscoTraderTicket = (
         value: canonicalPositiveDecimal(ticket.stop, 'stop price'),
       }
   const target = ticket.targets[0]
+  const exitLegs = canonicalTicketExitLegs(ticket)
   const unsigned: Omit<OrderIntent, 'content_checksum'> = {
     intent_schema_version: ORDER_INTENT_SCHEMA_VERSION,
     intent_id: `intent-discotrader-${hash({
@@ -254,9 +259,11 @@ export const convertDiscoTraderTicket = (
       : { type: 'limit', price: canonicalPositiveDecimal(ticket.entry, 'entry price') },
     protection: {
       stop_loss: stopLoss,
-      ...(target === undefined
-        ? {}
-        : {
+      ...(exitLegs
+        ? { exit_legs: exitLegs }
+        : target === undefined
+          ? {}
+          : {
             take_profit: {
               type: 'price' as const,
               value: canonicalPositiveDecimal(target, 'target price'),
@@ -318,6 +325,19 @@ const assertDiscoTraderTicketCanEnterGateway = (
       'DiscoTrader ticket direction conflicts with its parsed action.',
     )
   }
+  if (
+    (ticket.action.entry !== undefined && ticket.action.entry !== ticket.entry)
+    || (ticket.action.stop !== undefined && ticket.action.stop !== ticket.stop)
+    || (
+      ticket.action.targets !== undefined
+      && JSON.stringify(ticket.action.targets) !== JSON.stringify(ticket.targets)
+    )
+  ) {
+    throw new ExecutionGatewayError(
+      'RECORD_INTEGRITY_FAILURE',
+      'DiscoTrader ticket economics conflict with its parsed action evidence.',
+    )
+  }
   if (!ticket.provenance.authorId) {
     throw new ExecutionGatewayError(
       'AUTHORIZATION_MISMATCH',
@@ -365,10 +385,10 @@ const assertDiscoTraderTicketCanEnterGateway = (
       'DiscoTrader traded symbol does not match the configured gateway route.',
     )
   }
-  if (ticket.targets.length > 1) {
+  if (ticket.targets.length > 1 && !ticket.targetLegs) {
     throw new ExecutionGatewayError(
       'CAPABILITY_UNAVAILABLE',
-      'DiscoTrader tickets with multiple targets are refused until target quantities and multi-leg protection are explicit.',
+      'DiscoTrader tickets with multiple targets require explicit immutable target-leg quantities.',
     )
   }
   if (
@@ -381,18 +401,14 @@ const assertDiscoTraderTicketCanEnterGateway = (
   ) {
     throw new ExecutionGatewayError('RISK_DENIED', 'DiscoTrader stop is on the wrong side of entry.')
   }
-  const firstTarget = ticket.targets[0]
-  if (
-    ticket.entry !== undefined
-    && firstTarget !== undefined
-    && (
-      (ticket.side === 'long' && firstTarget <= ticket.entry)
-      || (ticket.side === 'short' && firstTarget >= ticket.entry)
-    )
-  ) {
+  if (ticket.entry !== undefined && ticket.targets.some((target) => (
+    (ticket.side === 'long' && target <= ticket.entry!)
+    || (ticket.side === 'short' && target >= ticket.entry!)
+  ))) {
     throw new ExecutionGatewayError('RISK_DENIED', 'DiscoTrader target is on the wrong side of entry.')
   }
 }
+
 
 const parseSourceArtifact = (value: unknown): DiscoTraderIntentSourceArtifact => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -401,8 +417,21 @@ const parseSourceArtifact = (value: unknown): DiscoTraderIntentSourceArtifact =>
   const artifact = value as DiscoTraderIntentSourceArtifact
   const intent = orderIntentSchema.parse(artifact.intent)
   const ticket = discoTraderTicketSchema.parse(artifact.source_ticket)
+  const expectedExitLegs = canonicalTicketExitLegs(ticket)
+  const expectedLegacyTarget = !expectedExitLegs && ticket.targets[0] !== undefined
+    ? { type: 'price' as const, value: canonicalPositiveDecimal(ticket.targets[0], 'target price') }
+    : undefined
+  const sourceVersionIsValid = (
+    artifact.source_schema_version === DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION
+    && intent.intent_schema_version === ORDER_INTENT_SCHEMA_VERSION
+  ) || (
+    artifact.source_schema_version === LEGACY_DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION
+    && intent.intent_schema_version === LEGACY_ORDER_INTENT_SCHEMA_VERSION
+    && !ticket.targetLegs
+    && !intent.protection.exit_legs
+  )
   if (
-    artifact.source_schema_version !== DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION
+    !sourceVersionIsValid
     || typeof artifact.source_ticket_sha256 !== 'string'
     || !/^[a-f0-9]{64}$/.test(artifact.source_ticket_sha256)
     || typeof artifact.source_ticket_id !== 'string'
@@ -416,6 +445,8 @@ const parseSourceArtifact = (value: unknown): DiscoTraderIntentSourceArtifact =>
     || artifact.deterministic_contracts !== ticket.contracts
     || artifact.deterministic_risk_usd !== canonicalPositiveDecimal(ticket.riskUsd, 'risk USD')
     || intent.quantity !== ticket.contracts
+    || JSON.stringify(intent.protection.exit_legs) !== JSON.stringify(expectedExitLegs)
+    || JSON.stringify(intent.protection.take_profit) !== JSON.stringify(expectedLegacyTarget)
     || !Array.isArray(artifact.gate_trail)
     || JSON.stringify(artifact.gate_trail) !== JSON.stringify(ticket.gateTrail)
     || JSON.stringify(artifact.veto) !== JSON.stringify(ticket.llmVeto)
@@ -426,6 +457,23 @@ const parseSourceArtifact = (value: unknown): DiscoTraderIntentSourceArtifact =>
   }
   return { ...artifact, source_ticket: ticket, intent }
 }
+
+const canonicalTicketExitLegs = (
+  ticket: DiscoTraderTicket,
+): OrderIntent['protection']['exit_legs'] => ticket.targetLegs
+  ? [...ticket.targetLegs]
+      .sort((left, right) => left.legId.localeCompare(right.legId))
+      .map((leg) => ({
+        leg_id: leg.legId,
+        quantity: leg.quantity,
+        ...(leg.target === undefined ? {} : {
+          take_profit: {
+            type: 'price' as const,
+            value: canonicalPositiveDecimal(leg.target, `target leg ${leg.legId} price`),
+          },
+        }),
+      }))
+  : undefined
 
 const positiveDecimal = (value: string, label: string): number => {
   if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value)) {

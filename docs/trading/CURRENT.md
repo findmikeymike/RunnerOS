@@ -20,7 +20,7 @@ source_of_truth: true
 
 ## Unified Broker Entry Gateway
 
-`signed Discord ticket or approved intent -> immutable order-intent@1 -> durable gateway claim -> exact connection/certification gate -> one adapter submit -> reconciliation -> protected terminal receipt`
+`signed Discord ticket or approved intent -> immutable order-intent@2 -> durable gateway claim -> exact connection/certification gate -> one adapter submit -> reconciliation -> protected terminal receipt`
 
 - Entry retry is forbidden after an ambiguous submit.
 - Credentials remain in the trusted vault; renderer and agents receive opaque references only.
@@ -233,13 +233,15 @@ The workbench can request engine health, run the known fixture, and display tota
 2. Use the paper-only connection form to store the exact numeric account ID,
    account label, access token, and expiration in the encrypted Trade God vault;
    then add a trusted read-only provider verification flow.
-3. Add event-driven Tradovate user-sync truth, implement the real certification
-   runner, and provider-certify the contract economics/calendar path.
+3. Update DiscoTrader to emit exact immutable target-leg quantities, then add
+   event-driven Tradovate user-sync truth and the real certification runner.
 4. Finish the remaining Mirror management certification boundary: add an
    adapter-certified post-partial stop-resize plan, then run crash/restart and
    provider-paper evidence matrices. Parent-aware routing, durable child plans,
    recovery, and proof-gated release are implemented but remain dormant.
-5. Implement and certify Tradovate partial-close/protection-resize behavior.
+5. Demo-certify native Tradovate multi-bracket entry/reconciliation. Implement
+   discretionary partial-close only if a non-reversing provider primitive can
+   preserve and resize protection; otherwise keep it disabled.
 6. Run and retain the single-account and Mirror Group paper soak plus forced-
    failure matrices before enabling any account or releasing execution halts.
 

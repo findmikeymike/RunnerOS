@@ -403,6 +403,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         adapter_id: adapter.descriptor.adapter_id,
         adapter_version: adapter.descriptor.adapter_version,
         provider_contract_version: adapter.descriptor.provider_contract_version,
+        capabilities: adapter.descriptor.capabilities,
       }
     },
   }

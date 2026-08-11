@@ -7,6 +7,7 @@ import {
   utcTimestampSchema,
 } from './common.ts'
 import {
+  exitLegSchema,
   executionEnvironmentSchema,
   orderSideSchema,
   orderTypeSchema,
@@ -16,7 +17,8 @@ import {
 export const MIRROR_GROUP_SCHEMA_VERSION = 'mirror-group@1'
 export const MIRROR_EXECUTION_PREVIEW_SCHEMA_VERSION = 'mirror-execution-preview@1'
 export const SOURCE_EXECUTION_BINDING_SCHEMA_VERSION = 'source-execution-binding@2'
-export const MIRROR_CHILD_SOURCE_SCHEMA_VERSION = 'mirror-child-source@1'
+export const LEGACY_MIRROR_CHILD_SOURCE_SCHEMA_VERSION = 'mirror-child-source@1'
+export const MIRROR_CHILD_SOURCE_SCHEMA_VERSION = 'mirror-child-source@2'
 export const MIRROR_CHILD_RISK_PROJECTION_SCHEMA_VERSION = 'mirror-child-risk-projection@1'
 export const MIRROR_DISPATCH_GRANT_SCHEMA_VERSION = 'mirror-dispatch-grant@1'
 export const MIRROR_RISK_RESERVATION_SCHEMA_VERSION = 'mirror-risk-reservation@1'
@@ -176,7 +178,10 @@ export const mirrorExecutionPreviewSchema = z.object({
 }).strict()
 
 export const mirrorChildSourceSchema = z.object({
-  mirror_child_source_schema_version: z.literal(MIRROR_CHILD_SOURCE_SCHEMA_VERSION),
+  mirror_child_source_schema_version: z.union([
+    z.literal(LEGACY_MIRROR_CHILD_SOURCE_SCHEMA_VERSION),
+    z.literal(MIRROR_CHILD_SOURCE_SCHEMA_VERSION),
+  ]),
   mirror_child_source_id: identifierSchema,
   mirror_execution_id: identifierSchema,
   mirror_group_id: identifierSchema,
@@ -195,6 +200,7 @@ export const mirrorChildSourceSchema = z.object({
   entry_price: decimalStringSchema.optional(),
   stop_loss: protectionLegSchema,
   target_prices: z.array(decimalStringSchema).max(20),
+  exit_legs: z.array(exitLegSchema).min(1).max(20).optional(),
   source_quantity: z.number().int().positive().max(1_000),
   planned_quantity: z.number().int().positive().max(1_000),
   quantity_rule_snapshot: mirrorQuantityRuleSchema,
@@ -202,10 +208,58 @@ export const mirrorChildSourceSchema = z.object({
     (value) => Number(value) > 0,
     'Derived risk must be positive',
   ),
-  derivation_version: z.literal('1.0.0'),
+  derivation_version: z.union([z.literal('1.0.0'), z.literal('2.0.0')]),
   created_at: utcTimestampSchema,
   content_checksum: sha256Schema,
-}).strict()
+}).strict().superRefine((source, context) => {
+  const legacy = source.mirror_child_source_schema_version
+    === LEGACY_MIRROR_CHILD_SOURCE_SCHEMA_VERSION
+  if (legacy && (source.derivation_version !== '1.0.0' || source.exit_legs)) {
+    context.addIssue({
+      code: 'custom',
+      path: ['mirror_child_source_schema_version'],
+      message: 'Legacy Mirror child sources cannot contain version 2 exit-leg derivation',
+    })
+  }
+  if (!legacy && source.derivation_version !== '2.0.0') {
+    context.addIssue({
+      code: 'custom',
+      path: ['derivation_version'],
+      message: 'Version 2 Mirror child sources require derivation version 2.0.0',
+    })
+  }
+  if (source.target_prices.length > 1 && !source.exit_legs) {
+    context.addIssue({
+      code: 'custom',
+      path: ['exit_legs'],
+      message: 'Multiple Mirror targets require exact immutable exit-leg allocations',
+    })
+  }
+  if (source.exit_legs) {
+    const exitQuantity = source.exit_legs.reduce((total, leg) => total + leg.quantity, 0)
+    if (exitQuantity !== source.planned_quantity) {
+      context.addIssue({
+        code: 'custom',
+        path: ['exit_legs'],
+        message: 'Mirror exit-leg quantities must exactly cover planned quantity',
+      })
+    }
+    const legTargets = source.exit_legs.flatMap((leg) => (
+      leg.take_profit?.type === 'price' ? [leg.take_profit.value] : []
+    )).sort()
+    const evidenceTargets = [...source.target_prices].sort()
+    if (
+      legTargets.length !== evidenceTargets.length
+      || legTargets.some((target, index) => target !== evidenceTargets[index])
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['exit_legs'],
+        message: 'Mirror exit-leg prices must exactly match frozen target evidence',
+      })
+    }
+  }
+})
 
 export const mirrorChildRiskProjectionSchema = z.object({
   mirror_child_risk_projection_schema_version: z.literal(

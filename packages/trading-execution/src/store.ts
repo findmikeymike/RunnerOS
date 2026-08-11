@@ -7,6 +7,7 @@ import {
   executionRecordSchema,
   mirrorOwnershipReleaseJournalSchema,
   type ExecutionRecord,
+  type ExecutionCapabilities,
   type ExecutionNoExposureProof,
   type MirrorOwnershipReleaseJournal,
   type OrderIntent,
@@ -75,12 +76,14 @@ export class FileExecutionStore {
     adapter_version: string
     provider_contract_version: string
     transport: string
+    capabilities?: ExecutionCapabilities
   }>): Promise<{ changed: boolean; adapter_set_checksum: string }> {
     const installed = adapters.map((adapter) => ({
       adapter_id: adapter.adapter_id,
       adapter_version: adapter.adapter_version,
       provider_contract_version: adapter.provider_contract_version,
       transport: adapter.transport,
+      capabilities: adapter.capabilities ?? null,
     })).sort((left, right) => (
       `${left.adapter_id}:${left.adapter_version}:${left.provider_contract_version}:${left.transport}`
         .localeCompare(`${right.adapter_id}:${right.adapter_version}:${right.provider_contract_version}:${right.transport}`)

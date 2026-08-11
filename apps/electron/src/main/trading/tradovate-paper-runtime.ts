@@ -97,6 +97,7 @@ export const createTradovatePaperRuntime = (options: {
         adapter_id: adapter.descriptor.adapter_id,
         adapter_version: adapter.descriptor.adapter_version,
         provider_contract_version: adapter.descriptor.provider_contract_version,
+        capabilities: adapter.descriptor.capabilities,
       } : null,
     },
     stop: () => sessionManager.stop(),

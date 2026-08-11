@@ -9,7 +9,8 @@ import {
 } from './common.ts'
 
 export const TRADING_CONNECTION_SCHEMA_VERSION = 'trading-connection@1'
-export const ORDER_INTENT_SCHEMA_VERSION = 'order-intent@1'
+export const LEGACY_ORDER_INTENT_SCHEMA_VERSION = 'order-intent@1'
+export const ORDER_INTENT_SCHEMA_VERSION = 'order-intent@2'
 export const RISK_DECISION_SCHEMA_VERSION = 'risk-decision@1'
 export const EXECUTION_AUTHORIZATION_SCHEMA_VERSION = 'execution-authorization@1'
 export const EXTERNAL_AUTHORIZATION_BASIS_SCHEMA_VERSION = 'external-authorization-basis@1'
@@ -64,6 +65,7 @@ export const executionCapabilitiesSchema = z.object({
   submit_stop_limit: z.boolean(),
   native_bracket: z.boolean(),
   native_oco: z.boolean(),
+  native_multi_bracket: z.boolean().optional(),
   modify_order: z.boolean(),
   cancel_order: z.boolean(),
   partial_close: z.boolean(),
@@ -107,6 +109,7 @@ export const tradingConnectionSchema = z.object({
     adapter_version: semverSchema,
     provider_contract_version: z.string().trim().min(1).max(120),
     transport: executionTransportSchema,
+    capabilities_checksum: sha256Schema.optional(),
     levels: z.array(executionCertificationSchema).min(1).max(5),
   }).strict()).max(20).optional(),
   consequential_enabled_until: utcTimestampSchema.optional(),
@@ -173,8 +176,17 @@ export const protectionLegSchema = z.object({
   }),
 }).strict()
 
+export const exitLegSchema = z.object({
+  leg_id: identifierSchema,
+  quantity: z.number().int().positive().max(1_000),
+  take_profit: protectionLegSchema.optional(),
+}).strict()
+
 export const orderIntentSchema = z.object({
-  intent_schema_version: z.literal(ORDER_INTENT_SCHEMA_VERSION),
+  intent_schema_version: z.union([
+    z.literal(LEGACY_ORDER_INTENT_SCHEMA_VERSION),
+    z.literal(ORDER_INTENT_SCHEMA_VERSION),
+  ]),
   intent_id: identifierSchema,
   source: z.object({
     type: z.enum(['discord', 'alert', 'agent', 'manual']),
@@ -208,6 +220,7 @@ export const orderIntentSchema = z.object({
   protection: z.object({
     stop_loss: protectionLegSchema,
     take_profit: protectionLegSchema.optional(),
+    exit_legs: z.array(exitLegSchema).min(1).max(20).optional(),
   }).strict(),
   max_loss_usd: decimalStringSchema.optional(),
   time_in_force: timeInForceSchema,
@@ -228,6 +241,38 @@ export const orderIntentSchema = z.object({
       path: ['source', 'author_id'],
       message: 'Discord intents require an immutable author ID',
     })
+  }
+  if (intent.protection.take_profit && intent.protection.exit_legs) {
+    context.addIssue({
+      code: 'custom',
+      path: ['protection'],
+      message: 'Use either one take profit or explicit take-profit legs, never both',
+    })
+  }
+  const exitLegs = intent.protection.exit_legs
+  if (intent.intent_schema_version === LEGACY_ORDER_INTENT_SCHEMA_VERSION && exitLegs) {
+    context.addIssue({
+      code: 'custom',
+      path: ['intent_schema_version'],
+      message: 'Legacy order intents cannot contain version 2 exit legs',
+    })
+  }
+  if (exitLegs) {
+    const exitQuantity = exitLegs.reduce((total, leg) => total + leg.quantity, 0)
+    if (exitQuantity !== intent.quantity) {
+      context.addIssue({
+        code: 'custom',
+        path: ['protection', 'exit_legs'],
+        message: 'Exit-leg quantities must exactly cover the entry quantity',
+      })
+    }
+    if (new Set(exitLegs.map((leg) => leg.leg_id)).size !== exitLegs.length) {
+      context.addIssue({
+        code: 'custom',
+        path: ['protection', 'exit_legs'],
+        message: 'Exit legs must have unique immutable IDs',
+      })
+    }
   }
 })
 

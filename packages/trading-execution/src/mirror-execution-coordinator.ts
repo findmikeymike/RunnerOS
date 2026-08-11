@@ -416,6 +416,11 @@ export const buildMirrorChildPlan = (input: {
     connection_id: input.connection.connection_id,
   }).slice(0, 40)}`
   const sourceId = `mirror-child-source-${sha256(childIntentId).slice(0, 32)}`
+  const exitLegs = scaleExitLegs(
+    base.intent.protection.exit_legs,
+    input.ticket.contracts,
+    plannedQuantity,
+  )
   const sourceUnsigned: Omit<MirrorChildSource, 'content_checksum'> = {
     mirror_child_source_schema_version: MIRROR_CHILD_SOURCE_SCHEMA_VERSION,
     mirror_child_source_id: sourceId,
@@ -436,11 +441,12 @@ export const buildMirrorChildPlan = (input: {
     entry_price: base.intent.entry.price,
     stop_loss: base.intent.protection.stop_loss,
     target_prices: input.ticket.targets.map(String),
+    ...(exitLegs ? { exit_legs: exitLegs } : {}),
     source_quantity: input.ticket.contracts,
     planned_quantity: plannedQuantity,
     quantity_rule_snapshot: input.member.quantity_rule,
     derived_initial_risk_upper_bound_usd: risk.initialRiskUsd,
-    derivation_version: '1.0.0',
+    derivation_version: '2.0.0',
     created_at: input.binding.received_at,
   }
   const source = mirrorChildSourceSchema.parse({
@@ -462,6 +468,10 @@ export const buildMirrorChildPlan = (input: {
       mirror_child_source_checksum: source.content_checksum,
     },
     quantity: plannedQuantity,
+    protection: {
+      ...base.intent.protection,
+      ...(exitLegs ? { exit_legs: exitLegs } : {}),
+    },
     max_loss_usd: risk.initialRiskUsd,
   }
   const intent = orderIntentSchema.parse({
@@ -487,6 +497,31 @@ export const buildMirrorChildPlan = (input: {
     risk_policy_version: input.riskPolicy.policy_version,
     fees_policy_version: input.riskPolicy.fees_policy_version,
   }
+}
+
+const scaleExitLegs = (
+  legs: OrderIntent['protection']['exit_legs'],
+  sourceQuantity: number,
+  plannedQuantity: number,
+): OrderIntent['protection']['exit_legs'] => {
+  if (!legs) return undefined
+  const scaled = legs.map((leg) => {
+    const numerator = leg.quantity * plannedQuantity
+    if (numerator % sourceQuantity !== 0 || numerator / sourceQuantity < 1) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        'Mirror quantity cannot preserve every immutable exit leg as a positive whole-contract allocation.',
+      )
+    }
+    return { ...leg, quantity: numerator / sourceQuantity }
+  })
+  if (scaled.reduce((total, leg) => total + leg.quantity, 0) !== plannedQuantity) {
+    throw new ExecutionGatewayError(
+      'RECORD_INTEGRITY_FAILURE',
+      'Scaled Mirror exit legs do not cover the planned child quantity.',
+    )
+  }
+  return scaled
 }
 
 const buildRiskProjection = (

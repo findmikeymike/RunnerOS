@@ -1108,6 +1108,7 @@ export class ExecutionGateway {
           && certification.provider_contract_version
             === adapter.descriptor.provider_contract_version
           && certification.transport === adapter.descriptor.transport
+          && certification.capabilities_checksum === sha256(adapter.descriptor.capabilities)
           && certification.levels.includes(requiredLevel)
         )) === true
       })
@@ -1127,6 +1128,15 @@ export class ExecutionGateway {
       throw new ExecutionGatewayError(
         'CAPABILITY_UNAVAILABLE',
         'This execution slice requires a certified native protective bracket.',
+      )
+    }
+    if (
+      intent.protection.exit_legs
+      && adapter.descriptor.capabilities.native_multi_bracket !== true
+    ) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        'Multi-leg execution requires an explicitly certified native multi-bracket adapter.',
       )
     }
     return adapter

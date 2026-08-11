@@ -13,6 +13,7 @@ import {
   FileAdapterCertificationStore,
   FileTradingConnectionStore,
   runAdapterCertification,
+  sha256,
   type AdapterCertificationRunner,
 } from '@trade-god/execution'
 
@@ -222,11 +223,26 @@ describe('trading connection service', () => {
   })
 
   test('applies only exact installed-adapter evidence and still leaves paper disabled', async () => {
+    const certifiedCapabilities = {
+      ...capabilities,
+      read_accounts: true,
+      read_orders: true,
+      read_positions: true,
+      submit_market: true,
+      native_bracket: true,
+      native_oco: true,
+      modify_order: true,
+      cancel_order: true,
+      partial_close: true,
+      flatten: true,
+    }
+    let installedCapabilities = certifiedCapabilities
     const registry: TradingAdapterCertificationRegistry = {
       resolve: () => ({
         adapter_id: 'tradovate-api',
         adapter_version: '0.1.0',
         provider_contract_version: 'tradovate-demo-rest-2026-07',
+        capabilities: installedCapabilities,
       }),
     }
     const { service, certificationStore } = await setup(registry)
@@ -240,19 +256,7 @@ describe('trading connection service', () => {
       transport: 'api',
       environment: 'paper',
       provider_contract_version: 'tradovate-demo-rest-2026-07',
-      certified_capabilities: {
-        ...capabilities,
-        read_accounts: true,
-        read_orders: true,
-        read_positions: true,
-        submit_market: true,
-        native_bracket: true,
-        native_oco: true,
-        modify_order: true,
-        cancel_order: true,
-        partial_close: true,
-        flatten: true,
-      },
+      certified_capabilities: certifiedCapabilities,
       async runScenario(scenarioId: CertificationScenarioId) {
         return { status: 'pass', evidence_ref: `evidence-${scenarioId}` }
       },
@@ -269,6 +273,11 @@ describe('trading connection service', () => {
     const evidence = await runAdapterCertification(runner, () => NOW)
     await certificationStore.save(evidence)
 
+    installedCapabilities = { ...certifiedCapabilities, partial_close: false }
+    await expect(service.applyCertification(evidence.certification_id))
+      .rejects.toThrow('installed adapter contract')
+    installedCapabilities = certifiedCapabilities
+
     const certified = await service.applyCertification(evidence.certification_id)
     expect(certified.connection).toMatchObject({
       state: 'ready',
@@ -282,6 +291,7 @@ describe('trading connection service', () => {
         certification_id: evidence.certification_id,
         adapter_id: 'tradovate-api',
         adapter_version: '0.1.0',
+        capabilities_checksum: sha256(certifiedCapabilities),
       }],
     })
 
@@ -290,6 +300,7 @@ describe('trading connection service', () => {
         adapter_id: 'tradovate-api',
         adapter_version: '0.2.0',
         provider_contract_version: 'tradovate-demo-rest-2026-07',
+        capabilities: certifiedCapabilities,
       }),
     })
     const staleSaved = await staleSetup.service.save({

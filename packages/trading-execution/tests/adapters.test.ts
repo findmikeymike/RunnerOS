@@ -24,6 +24,7 @@ import {
   WealthChartsBrowserAdapter,
   WealthChartsCertifiedDriver,
   buildTradovateAccountSnapshot,
+  buildTradovateMultiBracketBody,
   buildTradovateOsoBody,
   computeActionDigest,
   computeOrderIntentChecksum,
@@ -313,6 +314,74 @@ describe('Tradovate API adapter', () => {
       bracket2: { action: 'Sell', orderType: 'Limit', price: 5603 },
     })
     expect(String(body.clOrdId)).toHaveLength(59)
+  })
+
+  test('builds an exact native multi-bracket plan without inferring quantities', () => {
+    const targetConnection = connection('tradovate')
+    const base = intent(targetConnection)
+    const { content_checksum: _checksum, ...baseUnsigned } = base
+    const unsigned: Omit<OrderIntent, 'content_checksum'> = {
+      ...baseUnsigned,
+      quantity: 3,
+      protection: {
+        stop_loss: { type: 'price', value: '5598' },
+        exit_legs: [
+          { leg_id: 'tp-one', quantity: 2, take_profit: { type: 'price', value: '5603' } },
+          { leg_id: 'tp-two', quantity: 1, take_profit: { type: 'price', value: '5605' } },
+        ],
+      },
+      instrument: { ...base.instrument, tick_size: '0.25' },
+    }
+    const targetIntent = {
+      ...unsigned,
+      content_checksum: computeOrderIntentChecksum(unsigned),
+    }
+    const targetCommand = command(targetConnection, targetIntent)
+    const body = buildTradovateMultiBracketBody(targetConnection, targetIntent, targetCommand)
+    expect(body).toMatchObject({
+      accountId: 123456,
+      action: 'Buy',
+      orderStrategyTypeId: 2,
+    })
+    expect(body).not.toHaveProperty('isAutomated')
+    expect(JSON.parse(String(body.params))).toEqual({
+      entryVersion: { orderQty: 3, orderType: 'Limit', price: 5600, timeInForce: 'Day' },
+      brackets: [
+        { qty: 2, profitTarget: 12, stopLoss: -8, trailingStop: false },
+        { qty: 1, profitTarget: 20, stopLoss: -8, trailingStop: false },
+      ],
+    })
+    expect(() => buildTradovateOsoBody(targetConnection, targetIntent, targetCommand))
+      .toThrow('native multi-bracket strategy transport')
+
+    const sellUnsigned: Omit<OrderIntent, 'content_checksum'> = {
+      ...unsigned,
+      side: 'sell',
+      time_in_force: 'gtc',
+      protection: {
+        stop_loss: { type: 'price', value: '5602' },
+        exit_legs: [
+          { leg_id: 'tp-one', quantity: 2, take_profit: { type: 'price', value: '5597' } },
+          { leg_id: 'tp-two', quantity: 1, take_profit: { type: 'price', value: '5595' } },
+        ],
+      },
+    }
+    const sellIntent = {
+      ...sellUnsigned,
+      content_checksum: computeOrderIntentChecksum(sellUnsigned),
+    }
+    const sellBody = buildTradovateMultiBracketBody(
+      targetConnection,
+      sellIntent,
+      command(targetConnection, sellIntent),
+    )
+    expect(JSON.parse(String(sellBody.params))).toMatchObject({
+      entryVersion: { timeInForce: 'GTC' },
+      brackets: [
+        { profitTarget: -12, stopLoss: 8 },
+        { profitTarget: -20, stopLoss: 8 },
+      ],
+    })
   })
 
   test('rejects uncertified tick-offset translation before provider I/O', async () => {

@@ -55,6 +55,7 @@ const capabilities = {
   submit_stop_limit: true,
   native_bracket: true,
   native_oco: true,
+  native_multi_bracket: true,
   modify_order: true,
   cancel_order: true,
   partial_close: true,
@@ -81,7 +82,7 @@ const makeConnection = (
   authorization_basis_ref: 'authorization-basis-apex',
   approval_policy_ref: 'approval-policy-paper',
   state: 'ready',
-  capabilities,
+  capabilities: { ...capabilities },
   certifications: [
     'read-certified',
     'paper-entry-certified',
@@ -94,6 +95,7 @@ const makeConnection = (
       adapter_version: '1.0.0',
       provider_contract_version: 'fake-provider@1',
       transport: 'api',
+      capabilities_checksum: sha256(capabilities),
       levels: ['paper-lifecycle-certified'],
     },
     {
@@ -102,6 +104,7 @@ const makeConnection = (
       adapter_version: '1.0.0',
       provider_contract_version: 'fake-provider@1',
       transport: 'browser',
+      capabilities_checksum: sha256(capabilities),
       levels: ['paper-lifecycle-certified'],
     },
   ],
@@ -170,7 +173,7 @@ class FakeAdapter implements ExecutionAdapter {
       adapter_version: '1.0.0',
       provider_contract_version: 'fake-provider@1',
       transport,
-      capabilities,
+      capabilities: { ...capabilities },
     }
     this.reconciliation = {
       reconciliation_schema_version: EXECUTION_RECONCILIATION_SCHEMA_VERSION,
@@ -374,6 +377,12 @@ describe('execution gateway', () => {
     expect((await store.bindAdapterSet([])).changed).toBe(false)
     expect((await store.readControl()).global_kill).toBe(false)
     expect((await store.bindAdapterSet([tradovate])).changed).toBe(true)
+    expect((await store.readControl()).global_kill).toBe(true)
+    await store.setGlobalKill(false)
+    expect((await store.bindAdapterSet([{
+      ...tradovate,
+      capabilities: { ...capabilities, native_multi_bracket: false },
+    }])).changed).toBe(true)
     expect((await store.readControl()).global_kill).toBe(true)
   })
 
@@ -840,6 +849,52 @@ describe('execution gateway', () => {
     expect(browser.submitCount).toBe(0)
   })
 
+  test('blocks multi-leg intents unless the exact adapter advertises native multi-bracket', async () => {
+    const adapter = new FakeAdapter()
+    adapter.descriptor.capabilities.native_multi_bracket = false
+    const certifiedWithoutMultiBracket = makeConnection({
+      adapter_certifications: [{
+        certification_id: 'cert-fake-api-no-multi',
+        adapter_id: 'fake-api',
+        adapter_version: '1.0.0',
+        provider_contract_version: 'fake-provider@1',
+        transport: 'api',
+        capabilities_checksum: sha256(adapter.descriptor.capabilities),
+        levels: ['paper-lifecycle-certified'],
+      }],
+    })
+    const { gateway, connection } = await setup(certifiedWithoutMultiBracket, [adapter])
+    const intent = makeIntent(connection, {
+      quantity: 2,
+      protection: {
+        stop_loss: { type: 'ticks', value: '4' },
+        exit_legs: [
+          { leg_id: 'tp-one', quantity: 1, take_profit: { type: 'ticks', value: '8' } },
+          { leg_id: 'tp-two', quantity: 1, take_profit: { type: 'ticks', value: '12' } },
+        ],
+      },
+      max_loss_usd: '100',
+    })
+    await approve(gateway, connection, intent)
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({
+      code: 'CAPABILITY_UNAVAILABLE',
+    })
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('does not inherit certification after an adapter capability change', async () => {
+    const adapter = new FakeAdapter()
+    adapter.descriptor.capabilities.native_multi_bracket = false
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({
+      code: 'CONNECTION_UNAVAILABLE',
+    })
+    expect(adapter.submitCount).toBe(0)
+  })
+
   test('does not inherit certification from another adapter version', async () => {
     const adapter = new FakeAdapter()
     const connection = makeConnection({
@@ -849,6 +904,7 @@ describe('execution gateway', () => {
         adapter_version: '0.9.0',
         provider_contract_version: 'fake-provider@1',
         transport: 'api',
+        capabilities_checksum: sha256(capabilities),
         levels: ['paper-lifecycle-certified'],
       }],
     })

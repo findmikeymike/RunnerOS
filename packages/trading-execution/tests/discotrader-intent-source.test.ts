@@ -3,11 +3,18 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
-import type { ExecutionRecord, OrderIntent } from '@trade-god/contracts'
+import {
+  DISCOTRADER_TICKET_SCHEMA_VERSION,
+  LEGACY_DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION,
+  LEGACY_ORDER_INTENT_SCHEMA_VERSION,
+  type ExecutionRecord,
+  type OrderIntent,
+} from '@trade-god/contracts'
 
 import {
   ExecutionGatewayError,
   FileDiscoTraderIntentSource,
+  computeOrderIntentChecksum,
   convertDiscoTraderTicket,
 } from '../src/index.ts'
 
@@ -106,7 +113,7 @@ class Registrar {
 }
 
 describe('DiscoTrader intent source', () => {
-  test('preserves deterministic size and immutable author while converting to order-intent@1', () => {
+  test('preserves deterministic size and immutable author while converting to order-intent@2', () => {
     const artifact = convertDiscoTraderTicket(ticket({
       provenance: {
         ...ticket().provenance,
@@ -149,7 +156,12 @@ describe('DiscoTrader intent source', () => {
   })
 
   test('converts a points stop to exact ticks without accepting a size override', () => {
-    const source = ticket({ entry: undefined, stop: undefined, stopDistancePoints: 2.5 })
+    const source = ticket({
+      entry: undefined,
+      stop: undefined,
+      stopDistancePoints: 2.5,
+      action: { ...ticket().action, entry: undefined, stop: undefined },
+    })
     const artifact = convertDiscoTraderTicket(source, route, NOW)
 
     expect(artifact.intent.quantity).toBe(3)
@@ -192,10 +204,48 @@ describe('DiscoTrader intent source', () => {
         latencyMs: 250,
       },
     }), route, NOW)).toThrow('timestamps disagree')
-    expect(() => convertDiscoTraderTicket(ticket({ targets: [5599] }), route, NOW))
+    expect(() => convertDiscoTraderTicket(ticket({
+      createdAt: '2026-07-30T15:05:01.000Z',
+      provenance: {
+        ...ticket().provenance,
+        postedAt: '2026-07-30T15:05:00.000Z',
+        observedAt: '2026-07-30T15:05:00.250Z',
+        latencyMs: 1_000,
+      },
+    }), route, NOW)).toThrow('timestamps disagree')
+    expect(() => convertDiscoTraderTicket(ticket({
+      targets: [5599], action: { ...ticket().action, targets: [5599] },
+    }), route, NOW))
       .toThrow('target is on the wrong side')
-    expect(() => convertDiscoTraderTicket(ticket({ targets: [5603, 5605] }), route, NOW))
-      .toThrow('multiple targets are refused')
+    expect(() => convertDiscoTraderTicket(ticket({
+      targets: [5603, 5605], action: { ...ticket().action, targets: [5603, 5605] },
+    }), route, NOW))
+      .toThrow('explicit immutable target-leg quantities')
+  })
+
+  test('freezes explicit multi-target quantities without inferring a split', () => {
+    const artifact = convertDiscoTraderTicket(ticket({
+      targets: [5603, 5605],
+      ticketSchemaVersion: DISCOTRADER_TICKET_SCHEMA_VERSION,
+      action: { ...ticket().action, targets: [5603, 5605] },
+      targetLegs: [
+        { legId: 'tp-one', quantity: 2, target: 5603 },
+        { legId: 'tp-two', quantity: 1, target: 5605 },
+      ],
+    }), route, NOW)
+    expect(artifact.intent.protection.exit_legs).toEqual([
+      { leg_id: 'tp-one', quantity: 2, take_profit: { type: 'price', value: '5603' } },
+      { leg_id: 'tp-two', quantity: 1, take_profit: { type: 'price', value: '5605' } },
+    ])
+    expect(() => convertDiscoTraderTicket(ticket({
+      targets: [5603, 5605],
+      ticketSchemaVersion: DISCOTRADER_TICKET_SCHEMA_VERSION,
+      action: { ...ticket().action, targets: [5603, 5605] },
+      targetLegs: [
+        { legId: 'tp-one', quantity: 1, target: 5603 },
+        { legId: 'tp-two', quantity: 1, target: 5605 },
+      ],
+    }), route, NOW)).toThrow('Target-leg quantities must exactly cover')
   })
 
   test('persists source evidence once and makes webhook replay idempotent', async () => {
@@ -267,6 +317,32 @@ describe('DiscoTrader intent source', () => {
     expect(registrar.registerCount).toBe(1)
   })
 
+  test('reads checksum-valid version 1 source artifacts only without exit legs', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'discotrader-v1-read-'))
+    const source = new FileDiscoTraderIntentSource(directory, new Registrar(), () => NOW)
+    const current = convertDiscoTraderTicket(ticket(), route, NOW)
+    const { content_checksum: _checksum, ...currentUnsigned } = current.intent
+    const legacyUnsigned = {
+      ...currentUnsigned,
+      intent_schema_version: LEGACY_ORDER_INTENT_SCHEMA_VERSION,
+    }
+    const legacy = {
+      ...current,
+      source_schema_version: LEGACY_DISCOTRADER_INTENT_SOURCE_SCHEMA_VERSION,
+      intent: {
+        ...legacyUnsigned,
+        content_checksum: computeOrderIntentChecksum(legacyUnsigned),
+      },
+    }
+    await writeFile(
+      path.join(directory, `${legacy.intent.intent_id}.source.json`),
+      `${JSON.stringify(legacy, null, 2)}\n`,
+      'utf8',
+    )
+    expect((await source.get(legacy.intent.intent_id)).intent.intent_schema_version)
+      .toBe(LEGACY_ORDER_INTENT_SCHEMA_VERSION)
+  })
+
   test('detects tampered source evidence', async () => {
     const directory = await mkdtemp(path.join(tmpdir(), 'discotrader-intent-tamper-'))
     const registrar = new Registrar()
@@ -291,9 +367,54 @@ describe('DiscoTrader intent source', () => {
       .rejects.toMatchObject({ code: 'RECORD_INTEGRITY_FAILURE' })
   })
 
+  test('rejects a rechecksummed intent whose exit legs drift from the signed ticket', async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), 'discotrader-leg-tamper-'))
+    const source = new FileDiscoTraderIntentSource(directory, new Registrar(), () => NOW)
+    const sourceTicket = ticket({
+      ticketSchemaVersion: DISCOTRADER_TICKET_SCHEMA_VERSION,
+      targets: [5603, 5605],
+      action: { ...ticket().action, targets: [5603, 5605] },
+      targetLegs: [
+        { legId: 'tp-one', quantity: 2, target: 5603 },
+        { legId: 'tp-two', quantity: 1, target: 5605 },
+      ],
+    })
+    const artifact = convertDiscoTraderTicket(sourceTicket, route, NOW)
+    const { content_checksum: _checksum, ...unsigned } = artifact.intent
+    const driftedUnsigned = {
+      ...unsigned,
+      protection: {
+        ...unsigned.protection,
+        exit_legs: unsigned.protection.exit_legs!.map((leg, index) => ({
+          ...leg,
+          quantity: index === 0 ? 1 : 2,
+        })),
+      },
+    }
+    const drifted = {
+      ...artifact,
+      intent: {
+        ...driftedUnsigned,
+        content_checksum: computeOrderIntentChecksum(driftedUnsigned),
+      },
+    }
+    await writeFile(
+      path.join(directory, `${artifact.intent.intent_id}.source.json`),
+      `${JSON.stringify(drifted, null, 2)}\n`,
+      'utf8',
+    )
+    await expect(source.get(artifact.intent.intent_id))
+      .rejects.toMatchObject({ code: 'RECORD_INTEGRITY_FAILURE' })
+  })
+
   test('fails closed on an off-grid points stop', () => {
     expect(() => convertDiscoTraderTicket(
-      ticket({ entry: undefined, stop: undefined, stopDistancePoints: 2.1 }),
+      ticket({
+        entry: undefined,
+        stop: undefined,
+        stopDistancePoints: 2.1,
+        action: { ...ticket().action, entry: undefined, stop: undefined },
+      }),
       route,
       NOW,
     )).toThrow('exact positive instrument tick count')

@@ -77,6 +77,7 @@ export class WealthChartsBrowserAdapter implements ExecutionAdapter {
       submit_stop_limit: false,
       native_bracket: true,
       native_oco: true,
+      native_multi_bracket: false,
       modify_order: false,
       cancel_order: false,
       partial_close: false,
@@ -136,6 +137,12 @@ export class WealthChartsBrowserAdapter implements ExecutionAdapter {
     intent: OrderIntent
     command: ExecutionCommand
   }) {
+    if (input.intent.protection.exit_legs) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        'WealthCharts multi-leg entry is not certified.',
+      )
+    }
     const draft = await this.driver.prepareBracketDraft(input)
     if (
       draft.action_digest !== input.command.action_digest

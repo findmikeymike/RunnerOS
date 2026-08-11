@@ -12,12 +12,14 @@ source_of_truth: false
 Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
 
 - Verdict: not ready for automated provider execution.
-- Runtime truth: `adapters: []`; signed tickets create durable intents only.
+- Runtime truth: Trade God explicitly attaches one Tradovate paper adapter, but
+  certification, account enablement, mandate, and halt gates keep it inert.
 - Live isolated workspace now contains both signed DiscoTrader receivers.
 - Trade Desk is read-only and cannot call donor execution/management tools.
 - Exact Discord routing is mandatory; no default/single-account fallback exists.
-- Multiple targets are rejected rather than truncated. Mirror Groups now have
-  paper-only configuration and dry-run preview, but no execution authority.
+- Multiple targets require immutable `targetLegs` with exact quantities rather
+  than truncation or an inferred split. Mirror children preserve the source
+  ratio only when every leg remains a positive whole-contract quantity.
 - Packaged Trade God identity is forced before main-process import, independent
   of Artist OS shell variables.
 - Provider-account admission and provider mutations are durably serialized
@@ -128,6 +130,9 @@ halt quarantine. It remains inert behind lifecycle certification, explicit
 account enablement, a current mandate, and persistent halt controls. Add trusted
 read-only provider verification and event-driven truth, then prove partial-close
 protection resizing and the 50-lifecycle paper soak before enabling the account.
+Before a multi-target smoke, update DiscoTrader to emit
+`targetLegs: [{ legId, quantity, target }]`; the legacy `targets` array remains
+evidence but cannot authorize a guessed allocation.
 
 ## Known Expected Artifact
 
