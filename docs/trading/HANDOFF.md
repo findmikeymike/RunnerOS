@@ -43,10 +43,15 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
   lifecycles, and the official Tradovate API does not document a reduce-only
   partial-close primitive. That remains an external demo-evidence blocker; do
   not weaken the lifecycle gate or label an opposite market order safe.
-  Coalesced token
-  renewal, provider backoff, low-rate stale-truth supervision, and trusted
-  read-only account verification are implemented. Next build gate: event-driven
-  user-sync truth and exact-account lifecycle certification.
+  Coalesced token renewal, provider backoff, trusted read-only account
+  verification, and an exact-account Tradovate user-sync hint feed are
+  implemented. Events only invalidate freshness and wake authoritative REST;
+  gaps halt entry, and REST refuses freshness when any position/order is not
+  Trade God-owned. Halt generations prevent a concurrent activation from
+  clearing a newer feed gap before its durable write completes. The full local
+  closure is 383 tests across 52 files with 1,345 expectations, repository
+  typecheck, and all three Electron production builds. Next build gate:
+  exact-account lifecycle certification.
 
 ## Mission
 
@@ -142,8 +147,9 @@ attaches one paper-only Tradovate adapter with structured encrypted-vault
 credentials, CAS token rotation, exact descriptor binding, and adapter-change
 halt quarantine. It remains inert behind lifecycle certification, explicit
 account enablement, a current mandate, and persistent halt controls. Run the new
-read-only `Verify account` action, add event-driven truth, then prove partial-close
-protection resizing and the 50-lifecycle paper soak before enabling the account.
+read-only `Verify account` action, confirm the exact account event feed is
+subscribed, then prove partial-close protection resizing and the 50-lifecycle
+paper soak before enabling the account.
 Before a multi-target smoke, update DiscoTrader to emit
 `targetLegs: [{ legId, quantity, target }]`; the legacy `targets` array remains
 evidence but cannot authorize a guessed allocation.

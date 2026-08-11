@@ -100,6 +100,8 @@ export default function DiscoTraderControlCenterPage({
   const [globalExecutionKill, setGlobalExecutionKill] = useState<boolean | null>(null)
   const [providerAdaptersAttached, setProviderAdaptersAttached] = useState<boolean | null>(null)
   const [reconciliationStaleCount, setReconciliationStaleCount] = useState(0)
+  const [userSyncSubscribedCount, setUserSyncSubscribedCount] = useState(0)
+  const [userSyncGapCount, setUserSyncGapCount] = useState(0)
   const [connectionKillCount, setConnectionKillCount] = useState(0)
   const [activationBusy, setActivationBusy] = useState(false)
   const [sourceBusy, setSourceBusy] = useState(false)
@@ -193,15 +195,22 @@ export default function DiscoTraderControlCenterPage({
         connection_kills,
         provider_adapters_attached,
         reconciliation_health,
+        user_sync_health,
       } = await window.electronAPI.getTradeGodExecutionControl()
       setGlobalExecutionKill(global_kill)
       setProviderAdaptersAttached(provider_adapters_attached)
       setReconciliationStaleCount(reconciliation_health?.stale_connection_ids.length ?? 0)
+      setUserSyncSubscribedCount(user_sync_health?.filter(({ state }) => state === 'subscribed').length ?? 0)
+      setUserSyncGapCount(user_sync_health?.filter(({ state }) => (
+        state === 'gap' || state === 'reconnecting'
+      )).length ?? 0)
       setConnectionKillCount(connection_kills.length)
     } catch {
       setGlobalExecutionKill(null)
       setProviderAdaptersAttached(null)
       setReconciliationStaleCount(0)
+      setUserSyncSubscribedCount(0)
+      setUserSyncGapCount(0)
       setConnectionKillCount(0)
     }
   }, [])
@@ -414,7 +423,9 @@ export default function DiscoTraderControlCenterPage({
             value={brokerLabel}
             detail={readyConnections > 0
               ? providerAdaptersAttached
-                ? 'Certified account configured; mandate + halt gates apply'
+                ? userSyncSubscribedCount > 0
+                  ? `${userSyncSubscribedCount} provider event feed${userSyncSubscribedCount === 1 ? '' : 's'} waking exact REST truth`
+                  : 'Certified account configured; mandate + halt gates apply'
                 : 'Account configured; no runtime adapter attached'
               : 'Add or connect an account below'}
             tone={readyConnections > 0 ? 'warning' : 'muted'}
@@ -430,13 +441,15 @@ export default function DiscoTraderControlCenterPage({
                 ? 'Account mandates control entry'
                 : 'Execution unavailable'}
             detail={providerAdaptersAttached
-              ? reconciliationStaleCount > 0
+              ? userSyncGapCount > 0
+                ? `${userSyncGapCount} provider event feed${userSyncGapCount === 1 ? '' : 's'} disconnected; account halt retained`
+                : reconciliationStaleCount > 0
                 ? `${reconciliationStaleCount} account truth feed stale; new entries halted`
                 : connectionKillCount > 0
                   ? 'Provider divergence or uncertainty halted affected accounts'
                 : 'Read-only worker; certified adapter + mandate + risk gates required'
               : 'No provider adapter attached; gateway halt is persistent'}
-            tone={reconciliationStaleCount > 0 || connectionKillCount > 0 ? 'danger' : 'muted'}
+            tone={userSyncGapCount > 0 || reconciliationStaleCount > 0 || connectionKillCount > 0 ? 'danger' : 'muted'}
           />
         </section>
 

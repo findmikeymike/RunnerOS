@@ -15,7 +15,7 @@ import type {
   PaperActivationEvent,
   PaperActivationReview,
 } from '@trade-god/contracts'
-import type { SaveMirrorGroupInput } from '@trade-god/execution'
+import type { SaveMirrorGroupInput, TradovateUserSyncHealth } from '@trade-god/execution'
 
 import { TRADE_GOD_IPC } from './trading-ipc.ts'
 import type { InterpretFixtureInput } from './order-flow-specialist-pipeline.ts'
@@ -77,6 +77,7 @@ export interface TradingPreloadApi {
       stale_connection_ids: string[]
       fresh_connection_ids: string[]
     }
+    user_sync_health?: TradovateUserSyncHealth[]
   }>
   setTradeGodGlobalExecutionKill(enabled: boolean): Promise<{ global_kill: boolean }>
   setTradeGodConnectionExecutionKill(connectionId: string, enabled: boolean): Promise<{ connection_id: string; killed: boolean }>
@@ -166,6 +167,7 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
         stale_connection_ids: string[]
         fresh_connection_ids: string[]
       }
+      user_sync_health?: TradovateUserSyncHealth[]
     }>,
     setTradeGodGlobalExecutionKill: (enabled) => (
       invoke(TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL, enabled) as Promise<{ global_kill: boolean }>

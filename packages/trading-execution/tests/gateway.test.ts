@@ -1485,10 +1485,88 @@ describe('execution gateway', () => {
       .rejects.toMatchObject({ code: 'RECONCILIATION_DIVERGENCE' })
   })
 
+  test('marks account truth fresh only when every provider position and order is Trade God-owned', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    await gateway.execute(intent.intent_id)
+    adapter.snapshotOverrides = {
+      positions: [{
+        instrument_id: 'contract-esu6', symbol: 'ESU6', side: 'buy',
+        quantity: 1, average_price: '5600.25',
+      }],
+      working_orders: [{
+        provider_order_id: 'provider-stop-1',
+        instrument_id: 'contract-esu6',
+        side: 'sell',
+        quantity: 1,
+        order_type: 'stop',
+        status: 'working',
+      }],
+    }
+
+    await expect(gateway.verifyConnectionAccountCoverage(connection.connection_id)).resolves.toBeDefined()
+
+    adapter.snapshotOverrides = {
+      ...adapter.snapshotOverrides,
+      positions: [
+        ...adapter.snapshotOverrides.positions!,
+        {
+          instrument_id: 'contract-nqu6', symbol: 'NQU6', side: 'buy',
+          quantity: 1, average_price: '20100',
+        },
+      ],
+      working_orders: [
+        ...adapter.snapshotOverrides.working_orders!,
+        {
+          provider_order_id: 'manual-nq-stop',
+          instrument_id: 'contract-nqu6',
+          side: 'sell',
+          quantity: 1,
+          order_type: 'stop',
+          status: 'working',
+        },
+      ],
+    }
+    await expect(gateway.verifyConnectionAccountCoverage(connection.connection_id))
+      .rejects.toMatchObject({ code: 'RECONCILIATION_DIVERGENCE' })
+  })
+
+  test('latches an account halt in process before its durable control write completes', async () => {
+    const adapter = new FakeAdapter()
+    const { gateway, store, connection } = await setup(makeConnection(), [adapter])
+    const intent = makeIntent(connection)
+    await approve(gateway, connection, intent)
+    let release!: () => void
+    const blocked = new Promise<void>((resolve) => { release = resolve })
+    const originalSetConnectionKill = store.setConnectionKill.bind(store)
+    store.setConnectionKill = async () => blocked
+
+    const halt = gateway.setConnectionKill(connection.connection_id, true)
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({
+      code: 'KILL_SWITCH_ENABLED',
+    })
+    expect(adapter.submitCount).toBe(0)
+
+    release()
+    await halt
+    store.setConnectionKill = originalSetConnectionKill
+  })
+
+  test('refuses every direct attempt to release an account halt outside activation review', async () => {
+    const { gateway, store, connection } = await setup()
+    await gateway.setConnectionKill(connection.connection_id, true)
+
+    await expect(gateway.setConnectionKill(connection.connection_id, false))
+      .rejects.toMatchObject({ code: 'KILL_SWITCH_ENABLED' })
+    expect((await store.readControl()).connection_kills).toContain(connection.connection_id)
+  })
+
   test('atomically binds a reviewed release and never overrides the emergency latch', async () => {
     const { gateway, store, connection } = await setup()
     await store.setGlobalKill(true)
-    await store.setConnectionKill(connection.connection_id, true)
+    await gateway.setConnectionKill(connection.connection_id, true)
     const reviewedControlChecksum = sha256(await store.readControl())
     await gateway.commitPaperActivationRelease({
       release_id: 'release-paper-one',
@@ -1496,6 +1574,9 @@ describe('execution gateway', () => {
       expected_control_checksum: reviewedControlChecksum,
       review_expires_at: '2099-01-01T00:00:00.000Z',
       connection_ids: [connection.connection_id],
+      expected_connection_halt_epochs: {
+        [connection.connection_id]: gateway.connectionHaltEpoch(connection.connection_id),
+      },
       assert_release_current: async () => {},
       persist_release_evidence: async () => ({
         release_event_id: 'event-dismissed-one',
@@ -1510,6 +1591,9 @@ describe('execution gateway', () => {
         release_event_id: 'event-dismissed-one',
       },
     })
+    const postReleaseIntent = makeIntent(connection)
+    await approve(gateway, connection, postReleaseIntent)
+    expect((await gateway.execute(postReleaseIntent.intent_id)).state).toBe('protected')
 
     await gateway.activateEmergencyHalt()
     await expect(gateway.commitPaperActivationRelease({
@@ -1518,6 +1602,9 @@ describe('execution gateway', () => {
       expected_control_checksum: sha256(await store.readControl()),
       review_expires_at: '2099-01-01T00:00:00.000Z',
       connection_ids: [connection.connection_id],
+      expected_connection_halt_epochs: {
+        [connection.connection_id]: gateway.connectionHaltEpoch(connection.connection_id),
+      },
       assert_release_current: async () => {},
       persist_release_evidence: async () => ({
         release_event_id: 'event-dismissed-two',
@@ -1539,6 +1626,9 @@ describe('execution gateway', () => {
       expected_control_checksum: reviewedControlChecksum,
       review_expires_at: '2099-01-01T00:00:00.000Z',
       connection_ids: [connection.connection_id],
+      expected_connection_halt_epochs: {
+        [connection.connection_id]: gateway.connectionHaltEpoch(connection.connection_id),
+      },
       assert_release_current: async () => {},
       persist_release_evidence: async () => ({
         release_event_id: 'event-control-drift',
@@ -1549,5 +1639,43 @@ describe('execution gateway', () => {
       global_kill: true,
       connection_kills: [connection.connection_id],
     })
+  })
+
+  test('retains a newer account halt while its durable write races activation release', async () => {
+    const { gateway, store, connection } = await setup()
+    await store.setGlobalKill(true)
+    await gateway.setConnectionKill(connection.connection_id, true)
+    const expectedEpoch = gateway.connectionHaltEpoch(connection.connection_id)
+    const reviewedControlChecksum = sha256(await store.readControl())
+    const originalSetConnectionKill = store.setConnectionKill.bind(store)
+    let releaseWrite!: () => void
+    const blockedWrite = new Promise<void>((resolve) => { releaseWrite = resolve })
+    let racingHalt: Promise<void> | undefined
+    store.setConnectionKill = async () => blockedWrite
+
+    await expect(gateway.commitPaperActivationRelease({
+      release_id: 'release-racing-account-halt',
+      state_checksum: 'f'.repeat(64),
+      expected_control_checksum: reviewedControlChecksum,
+      review_expires_at: '2099-01-01T00:00:00.000Z',
+      connection_ids: [connection.connection_id],
+      expected_connection_halt_epochs: {
+        [connection.connection_id]: expectedEpoch,
+      },
+      assert_release_current: async () => {},
+      persist_release_evidence: async () => {
+        racingHalt = gateway.setConnectionKill(connection.connection_id, true)
+        return {
+          release_event_id: 'event-racing-account-halt',
+          release_event_checksum: '1'.repeat(64),
+        }
+      },
+    })).rejects.toMatchObject({ code: 'KILL_SWITCH_ENABLED' })
+
+    expect(gateway.connectionHaltEpoch(connection.connection_id)).toBe(expectedEpoch + 1)
+    expect((await store.readControl()).global_kill).toBe(true)
+    releaseWrite()
+    await racingHalt
+    store.setConnectionKill = originalSetConnectionKill
   })
 })

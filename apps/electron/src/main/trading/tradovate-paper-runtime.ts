@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import WebSocket from 'ws'
 
 import {
   PROVIDER_READ_VERIFICATION_SCHEMA_VERSION,
@@ -12,12 +13,17 @@ import {
   TradovateApiAdapter,
   TradovateFetchClient,
   TradovateSessionManager,
+  TradovateUserSyncClient,
   parseTradovateCredential,
   serializeTradovateCredential,
   sha256,
   tokenFingerprint,
   type FileTradingConnectionStore,
   type TradovateFetch,
+  type TradovateUserSyncGap,
+  type TradovateUserSyncHealth,
+  type TradovateUserSyncHint,
+  type TradovateUserSyncSocket,
 } from '@trade-god/execution'
 
 import {
@@ -31,6 +37,14 @@ export interface TradovatePaperRuntime {
   adapter: TradovateApiAdapter
   certificationRegistry: TradingAdapterCertificationRegistry
   verifyReadOnly(connection: TradingConnection): Promise<ProviderReadVerification>
+  refreshUserSync(
+    connections: TradingConnection[],
+    callbacks: {
+      onHint(hint: TradovateUserSyncHint): void | Promise<void>
+      onGap(gap: TradovateUserSyncGap): void | Promise<void>
+    },
+  ): Promise<void>
+  userSyncHealth(): TradovateUserSyncHealth[]
   stop(): void
 }
 
@@ -40,6 +54,7 @@ export const createTradovatePaperRuntime = (options: {
   vault: TradingCredentialVault
   now: () => string
   fetch?: TradovateFetch
+  socketFactory?: (url: string) => TradovateUserSyncSocket
 }): TradovatePaperRuntime => {
   const connectionForCredentialRef = async (reference: string) => {
     const matches = (await options.connectionStore.list()).filter((connection) => (
@@ -98,7 +113,11 @@ export const createTradovatePaperRuntime = (options: {
       ...(options.fetch ? { fetch: options.fetch } : {}),
     }),
     options.now,
+    { userSyncAvailable: true },
   )
+  const feeds = new Map<string, { updatedAt: string; client: TradovateUserSyncClient }>()
+  let feedQueue: Promise<void> = Promise.resolve()
+  let stopped = false
   return {
     adapter,
     certificationRegistry: {
@@ -153,6 +172,48 @@ export const createTradovatePaperRuntime = (options: {
         content_checksum: sha256(unsigned),
       })
     },
-    stop: () => sessionManager.stop(),
+    refreshUserSync: async (connections, callbacks) => {
+      const operation = feedQueue.then(async () => {
+        if (stopped) return
+        const eligible = new Map(connections.filter((connection) => (
+          connection.platform.slug === 'tradovate'
+          && connection.environment === 'paper'
+          && connection.transport_preference === 'api'
+          && Boolean(connection.credential_ref)
+        )).map((connection) => [connection.connection_id, connection]))
+        for (const [connectionId, feed] of feeds) {
+          const current = eligible.get(connectionId)
+          if (current && current.updated_at === feed.updatedAt) continue
+          feed.client.stop()
+          feeds.delete(connectionId)
+        }
+        for (const connection of eligible.values()) {
+          if (feeds.has(connection.connection_id)) continue
+          const client = new TradovateUserSyncClient({
+            connection,
+            sessionManager,
+            socketFactory: options.socketFactory ?? ((url) => (
+              new WebSocket(url) as unknown as TradovateUserSyncSocket
+            )),
+            onHint: callbacks.onHint,
+            onGap: callbacks.onGap,
+            now: options.now,
+          })
+          feeds.set(connection.connection_id, { updatedAt: connection.updated_at, client })
+          await client.start()
+        }
+      })
+      feedQueue = operation.catch(() => undefined)
+      return operation
+    },
+    userSyncHealth: () => [...feeds.values()]
+      .map((feed) => feed.client.health())
+      .sort((left, right) => left.connection_id.localeCompare(right.connection_id)),
+    stop: () => {
+      stopped = true
+      for (const feed of feeds.values()) feed.client.stop()
+      feeds.clear()
+      sessionManager.stop()
+    },
   }
 }

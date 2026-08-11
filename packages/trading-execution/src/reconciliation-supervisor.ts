@@ -1,6 +1,7 @@
 import type { ExecutionLifecycleState, ExecutionRecord } from '@trade-god/contracts'
 
 import type { ExecutionGateway } from './gateway.ts'
+import { ExecutionGatewayError } from './errors.ts'
 
 export interface ReconciliationSupervisorHealth {
   running: boolean
@@ -15,7 +16,7 @@ export interface ReconciliationSupervisorHealth {
 export interface ExecutionReconciliationSupervisorOptions {
   gateway: Pick<
     ExecutionGateway,
-    'list' | 'reconcile' | 'setConnectionKill' | 'activateEmergencyHalt'
+    'list' | 'reconcile' | 'verifyConnectionAccountCoverage' | 'setConnectionKill' | 'activateEmergencyHalt'
   >
   now?: () => string
   intervalMs?: number
@@ -51,6 +52,8 @@ export class ExecutionReconciliationSupervisor {
   private readonly staleConnections = new Set<string>()
   private readonly failureSince = new Map<string, number>()
   private readonly lastConnectionSuccess = new Map<string, number>()
+  private readonly invalidationEpochs = new Map<string, number>()
+  private wakePending = false
 
   constructor(private readonly options: ExecutionReconciliationSupervisorOptions) {
     this.now = options.now ?? (() => new Date().toISOString())
@@ -75,8 +78,18 @@ export class ExecutionReconciliationSupervisor {
     await this.cycle
   }
 
+  invalidate(connectionId: string): void {
+    this.lastConnectionSuccess.delete(connectionId)
+    this.invalidationEpochs.set(connectionId, (this.invalidationEpochs.get(connectionId) ?? 0) + 1)
+    this.wake()
+  }
+
   wake(): void {
-    if (!this.running || this.cycle) return
+    if (!this.running) return
+    if (this.cycle) {
+      this.wakePending = true
+      return
+    }
     if (this.timer) this.clearTimer(this.timer)
     this.schedule(0)
   }
@@ -127,7 +140,10 @@ export class ExecutionReconciliationSupervisor {
     this.timer = this.setTimer(() => {
       this.timer = undefined
       void this.runOnce().finally(() => {
-        if (this.running) this.schedule(this.intervalMs)
+        if (!this.running) return
+        const delay = this.wakePending ? 0 : this.intervalMs
+        this.wakePending = false
+        this.schedule(delay)
       })
     }, delayMs)
   }
@@ -137,8 +153,12 @@ export class ExecutionReconciliationSupervisor {
     this.lastCycleStartedAt = startedAt
     const records = (await this.options.gateway.list()).filter(isReconcilable)
     const byConnection = groupByConnection(records)
+    const cycleEpochs = new Map(this.invalidationEpochs)
+    for (const connectionId of cycleEpochs.keys()) {
+      if (!byConnection.has(connectionId)) byConnection.set(connectionId, [])
+    }
     for (const connectionId of this.failureSince.keys()) {
-      if (!byConnection.has(connectionId)) {
+      if (!byConnection.has(connectionId) && !this.invalidationEpochs.has(connectionId)) {
         this.failureSince.delete(connectionId)
         this.staleConnections.delete(connectionId)
       }
@@ -146,27 +166,34 @@ export class ExecutionReconciliationSupervisor {
     let failures = 0
     for (const [connectionId, connectionRecords] of byConnection) {
       let connectionFailed = false
-      for (const record of connectionRecords) {
-        try {
+      let immediateHalt = false
+      try {
+        for (const record of connectionRecords) {
           await this.options.gateway.reconcile(record.intent.intent_id)
-        } catch {
-          connectionFailed = true
-          failures += 1
-          break
         }
+        await this.options.gateway.verifyConnectionAccountCoverage(connectionId)
+      } catch (error) {
+        connectionFailed = true
+        immediateHalt = isImmediateTruthFailure(error)
+        failures += 1
       }
       if (connectionFailed) {
         this.lastConnectionSuccess.delete(connectionId)
         const firstFailure = this.failureSince.get(connectionId) ?? Date.parse(startedAt)
         this.failureSince.set(connectionId, firstFailure)
-        if (Date.parse(startedAt) - firstFailure >= this.staleAfterMs) {
+        if (immediateHalt || Date.parse(startedAt) - firstFailure >= this.staleAfterMs) {
           this.staleConnections.add(connectionId)
           await this.options.gateway.setConnectionKill(connectionId, true)
         }
       } else {
         this.failureSince.delete(connectionId)
         this.staleConnections.delete(connectionId)
-        this.lastConnectionSuccess.set(connectionId, Date.parse(startedAt))
+        const capturedEpoch = cycleEpochs.get(connectionId)
+        const currentEpoch = this.invalidationEpochs.get(connectionId)
+        if (capturedEpoch === undefined || currentEpoch === capturedEpoch) {
+          if (capturedEpoch !== undefined) this.invalidationEpochs.delete(connectionId)
+          this.lastConnectionSuccess.set(connectionId, Date.parse(startedAt))
+        }
       }
     }
     if (failures === 0) {
@@ -177,6 +204,17 @@ export class ExecutionReconciliationSupervisor {
     }
   }
 }
+
+const isImmediateTruthFailure = (error: unknown): boolean => (
+  error instanceof ExecutionGatewayError
+  && new Set([
+    'ACCOUNT_MISMATCH',
+    'ENVIRONMENT_MISMATCH',
+    'RECONCILIATION_DIVERGENCE',
+    'RECORD_INTEGRITY_FAILURE',
+    'INTENT_CHECKSUM_MISMATCH',
+  ]).has(error.code)
+)
 
 const isReconcilable = (record: ExecutionRecord): boolean => (
   Boolean(record.command) && RECONCILABLE_STATES.has(record.state)

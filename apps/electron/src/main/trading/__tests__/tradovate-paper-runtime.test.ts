@@ -12,6 +12,7 @@ import {
   FileTradingConnectionStore,
   parseTradovateCredential,
   serializeTradovateCredential,
+  type TradovateUserSyncSocket,
 } from '@trade-god/execution'
 
 import { credentialRef, secretName, type TradingCredentialVault } from '../trading-connection-service.ts'
@@ -37,6 +38,23 @@ class Vault implements TradingCredentialVault {
   async deleteSecret(name: string) { return this.values.delete(name) }
 }
 
+class Socket implements TradovateUserSyncSocket {
+  readonly sent: string[] = []
+  closed = false
+  private readonly listeners = new Map<string, Array<(...values: unknown[]) => void>>()
+  on(event: 'open' | 'message' | 'close' | 'error', listener: (...values: never[]) => void) {
+    const current = this.listeners.get(event) ?? []
+    current.push(listener as (...values: unknown[]) => void)
+    this.listeners.set(event, current)
+    return this
+  }
+  send(data: string) { this.sent.push(data) }
+  close() { this.closed = true }
+  emit(event: string, value?: unknown) {
+    for (const listener of this.listeners.get(event) ?? []) listener(value)
+  }
+}
+
 const connection = (): TradingConnection => ({
   connection_schema_version: TRADING_CONNECTION_SCHEMA_VERSION,
   connection_id: 'connection-tradovate-paper-runtime',
@@ -57,7 +75,7 @@ const connection = (): TradingConnection => ({
     read_accounts: false, read_orders: false, read_positions: false, read_executions: false,
     submit_market: false, submit_limit: false, submit_stop: false, submit_stop_limit: false,
     native_bracket: false, native_oco: false, modify_order: false, cancel_order: false,
-    partial_close: false, flatten: false, streaming_events: false,
+    partial_close: false, flatten: false, streaming_events: true,
   },
   certifications: [],
   enabled: false,
@@ -73,6 +91,7 @@ describe('Tradovate paper runtime', () => {
     const target = connection()
     await store.save(target)
     const vault = new Vault()
+    const sockets: Socket[] = []
     await vault.setSecret(secretName(target.connection_id), serializeTradovateCredential({
       access_token: 'near-expiry-access-token',
       account_id: 123,
@@ -83,6 +102,11 @@ describe('Tradovate paper runtime', () => {
       connectionStore: store,
       vault,
       now: () => NOW,
+      socketFactory: () => {
+        const socket = new Socket()
+        sockets.push(socket)
+        return socket
+      },
       fetch: async (input) => {
         const url = String(input)
         if (url.endsWith('/auth/renewaccesstoken')) return Response.json({
@@ -107,8 +131,8 @@ describe('Tradovate paper runtime', () => {
 
     expect(runtime.certificationRegistry.resolve(target)).toEqual({
       adapter_id: 'tradovate-api',
-      adapter_version: '1.0.0',
-      provider_contract_version: 'tradovate-demo-rest-2026-07',
+      adapter_version: '1.1.0',
+      provider_contract_version: 'tradovate-demo-rest-user-sync-2026-08',
       capabilities: runtime.adapter.descriptor.capabilities,
     })
     await runtime.adapter.connect(target)
@@ -125,7 +149,21 @@ describe('Tradovate paper runtime', () => {
       working_order_count: 0,
     })
     expect(JSON.stringify(verification)).not.toContain('renewed-paper-access-token')
+    const hints: string[] = []
+    await runtime.refreshUserSync([target], {
+      onHint: (hint) => { hints.push(hint.entity_type) },
+      onGap: () => undefined,
+    })
+    await Bun.sleep(0)
+    expect(sockets).toHaveLength(1)
+    sockets[0]!.emit('open')
+    sockets[0]!.emit('message', 'a[{"i":0,"s":200}]')
+    sockets[0]!.emit('message', 'a[{"i":1,"s":200}]')
+    await Promise.resolve()
+    expect(sockets[0]!.sent[0]).toContain('renewed-paper-access-token')
+    expect(hints).toEqual(['subscription'])
     runtime.stop()
+    expect(sockets[0]!.closed).toBe(true)
     await expect(runtime.adapter.connect(target)).rejects.toMatchObject({ code: 'CONNECTION_UNAVAILABLE' })
   })
 })

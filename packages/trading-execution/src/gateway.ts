@@ -78,6 +78,7 @@ export class ExecutionGateway {
   private readonly now: () => string
   private readonly maxAccountSnapshotAgeMs: number
   private emergencyHalted = false
+  private readonly emergencyConnectionHaltEpochs = new Map<string, number>()
 
   constructor(private readonly options: ExecutionGatewayOptions) {
     this.now = options.now ?? (() => new Date().toISOString())
@@ -135,6 +136,27 @@ export class ExecutionGateway {
       this.providerAccountKey(connection),
       `paper-activation-snapshot:${connectionId}`,
       () => this.captureFlatAccountSnapshotWithProviderLock(connection, adapter),
+    )
+  }
+
+  async verifyConnectionAccountCoverage(connectionId: string): Promise<ExecutionAccountSnapshot> {
+    const connection = tradingConnectionSchema.parse(await this.options.resolveConnection(connectionId))
+    const adapter = this.resolveCertifiedAdapter(connection)
+    return this.options.store.withProviderMutationLock(
+      this.providerAccountKey(connection),
+      `verify-account-coverage:${connectionId}`,
+      async () => {
+        await adapter.connect(connection)
+        const snapshot = executionAccountSnapshotSchema.parse(await adapter.snapshotAccount(connection))
+        this.assertAccountSnapshot(connection, snapshot)
+        const records = (await this.options.store.list()).filter((record) => (
+          record.intent.connection_id === connectionId
+          && Boolean(record.command)
+          && !TERMINAL_EXECUTION_STATES.has(record.state)
+        ))
+        this.assertAccountCoverage(snapshot, records)
+        return snapshot
+      },
     )
   }
 
@@ -1066,6 +1088,7 @@ export class ExecutionGateway {
     expected_control_checksum: string
     review_expires_at: string
     connection_ids: string[]
+    expected_connection_halt_epochs: Record<string, number>
     assert_release_current: () => Promise<void>
     persist_release_evidence: (snapshots: ExecutionAccountSnapshot[]) => Promise<{
       release_event_id: string
@@ -1126,6 +1149,17 @@ export class ExecutionGateway {
             'The emergency halt activated during paper release review.',
           )
         }
+        for (const connectionId of input.connection_ids) {
+          if (
+            (this.emergencyConnectionHaltEpochs.get(connectionId) ?? 0)
+            !== input.expected_connection_halt_epochs[connectionId]
+          ) {
+            throw new ExecutionGatewayError(
+              'KILL_SWITCH_ENABLED',
+              `The account halt changed during paper activation for ${connectionId}.`,
+            )
+          }
+        }
         await this.options.store.commitPaperActivationRelease({
           release_id: input.release_id,
           release_event_id: releaseEvidence.release_event_id,
@@ -1134,6 +1168,14 @@ export class ExecutionGateway {
           expected_control_checksum: input.expected_control_checksum,
           connection_ids: input.connection_ids,
         })
+        for (const connectionId of input.connection_ids) {
+          if (
+            (this.emergencyConnectionHaltEpochs.get(connectionId) ?? 0)
+            === input.expected_connection_halt_epochs[connectionId]
+          ) {
+            this.emergencyConnectionHaltEpochs.delete(connectionId)
+          }
+        }
         return snapshots
       }
       return this.options.store.withProviderMutationLock(
@@ -1156,8 +1198,22 @@ export class ExecutionGateway {
     return this.options.store.readControl()
   }
 
+  connectionHaltEpoch(connectionId: string): number {
+    return this.emergencyConnectionHaltEpochs.get(connectionId) ?? 0
+  }
+
   async setConnectionKill(connectionId: string, enabled: boolean): Promise<void> {
-    await this.options.store.setConnectionKill(connectionId, enabled)
+    if (!enabled) {
+      throw new ExecutionGatewayError(
+        'KILL_SWITCH_ENABLED',
+        'Releasing an account halt requires an exact paper activation review.',
+      )
+    }
+    this.emergencyConnectionHaltEpochs.set(
+      connectionId,
+      this.connectionHaltEpoch(connectionId) + 1,
+    )
+    await this.options.store.setConnectionKill(connectionId, true)
   }
 
   async setSourceKill(sourceId: string, enabled: boolean): Promise<void> {
@@ -1168,7 +1224,7 @@ export class ExecutionGateway {
     intent: OrderIntent,
     connection: TradingConnection,
   ): Promise<void> {
-    if (this.emergencyHalted) {
+    if (this.emergencyHalted || this.emergencyConnectionHaltEpochs.has(connection.connection_id)) {
       throw new ExecutionGatewayError('KILL_SWITCH_ENABLED', 'Execution is blocked by the emergency halt latch.')
     }
     const control = await this.options.store.readControl()
@@ -1480,6 +1536,55 @@ export class ExecutionGateway {
       throw new ExecutionGatewayError(
         'RECONCILIATION_DIVERGENCE',
         'New entry requires a provider-flat account with no unowned working orders.',
+      )
+    }
+  }
+
+  private assertAccountCoverage(
+    snapshot: ReturnType<typeof executionAccountSnapshotSchema.parse>,
+    records: ExecutionRecord[],
+  ): void {
+    const ownedOrderIds = new Set<string>()
+    const requiredWorkingOrderIds = new Set<string>()
+    const expectedPositions = new Map<string, number>()
+    for (const record of records) {
+      if (!ACCOUNT_COVERAGE_STATES.has(record.state) || !record.receipt) {
+        throw new ExecutionGatewayError(
+          'RECONCILIATION_DIVERGENCE',
+          'Account truth cannot be fresh while an execution record is unresolved.',
+        )
+      }
+      for (const providerOrderId of record.receipt.provider_order_ids) {
+        ownedOrderIds.add(providerOrderId)
+      }
+      for (const order of record.receipt.protection_orders ?? []) {
+        if (isActiveProtectionOrder(order)) requiredWorkingOrderIds.add(order.provider_order_id)
+      }
+      const openQuantity = record.receipt.open_quantity ?? 0
+      if (openQuantity > 0) {
+        const key = `${record.intent.instrument.symbol}:${record.intent.side}`
+        expectedPositions.set(key, (expectedPositions.get(key) ?? 0) + openQuantity)
+      }
+    }
+    const actualPositions = new Map<string, number>()
+    for (const position of snapshot.positions) {
+      const key = `${position.symbol}:${position.side}`
+      actualPositions.set(key, (actualPositions.get(key) ?? 0) + position.quantity)
+    }
+    if (sha256([...actualPositions].sort()) !== sha256([...expectedPositions].sort())) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Provider positions do not exactly match Trade God-owned open quantities.',
+      )
+    }
+    const actualWorkingOrderIds = new Set(snapshot.working_orders.map((order) => order.provider_order_id))
+    if (
+      snapshot.working_orders.some((order) => !ownedOrderIds.has(order.provider_order_id))
+      || [...requiredWorkingOrderIds].some((providerOrderId) => !actualWorkingOrderIds.has(providerOrderId))
+    ) {
+      throw new ExecutionGatewayError(
+        'RECONCILIATION_DIVERGENCE',
+        'Provider working orders do not exactly belong to the reconciled Trade God records.',
       )
     }
   }
@@ -1851,6 +1956,14 @@ const isActiveProtectionOrder = (order: ExecutionProtectionOrder): boolean => (
   || order.status === 'working'
   || order.status === 'partially-filled'
 )
+
+const TERMINAL_EXECUTION_STATES = new Set<ExecutionLifecycleState>([
+  'risk-denied', 'closed', 'rejected', 'canceled', 'expired', 'error',
+])
+
+const ACCOUNT_COVERAGE_STATES = new Set<ExecutionLifecycleState>([
+  'acknowledged', 'partially-filled', 'protected',
+])
 
 const transition = (
   record: ExecutionRecord,

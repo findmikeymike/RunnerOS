@@ -101,6 +101,7 @@ const setup = async (options: {
   failCommit?: boolean
   now?: () => string
   beforeReleaseAssertion?: () => void
+  eventFeedState?: 'subscribed' | 'reconnecting' | 'gap'
 } = {}) => {
   const root = await mkdtemp(path.join(tmpdir(), 'paper-activation-service-'))
   roots.push(root)
@@ -118,6 +119,7 @@ const setup = async (options: {
   const gateway = {
     list: async () => structuredClone(records),
     readControl: async () => structuredClone(control),
+    connectionHaltEpoch: () => 0,
     captureFlatAccountSnapshot: async () => ({
       account_snapshot_schema_version: 'execution-account-snapshot@1',
       account_snapshot_id: 'release-snapshot-one',
@@ -184,6 +186,12 @@ const setup = async (options: {
     },
     journal,
     adapterSetChecksum: () => '6'.repeat(64),
+    eventFeedHealth: () => ({
+      connection_id: connection.connection_id,
+      state: options.eventFeedState ?? 'subscribed',
+      reconnect_attempt: 0,
+      last_hint_at: NOW,
+    }),
     now: options.now ?? (() => NOW),
   })
   return { service, journal, records, control, commits, haltWrites: () => haltWrites }
@@ -229,6 +237,15 @@ describe('paper activation service', () => {
     expect(review.blockers.map((blocker) => blocker.code)).toContain('no-enabled-paper-account')
     await expect(service.commitReview(review.review_id, review.content_checksum))
       .rejects.toThrow('blocked or expired')
+  })
+
+  test('keeps paper activation halted until the exact-account provider feed is subscribed', async () => {
+    const { service } = await setup({ eventFeedState: 'reconnecting' })
+
+    const review = await service.prepareReview()
+
+    expect(review.ready).toBe(false)
+    expect(review.blockers.map((blocker) => blocker.code)).toContain('provider-event-feed-required')
   })
 
   test('blocks any pending intent that lacks exact Discord source evidence', async () => {

@@ -71,15 +71,34 @@ import {
   ExecutionReconciliationSupervisor,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
+  type TradovateUserSyncGap,
   type DiscordManagementDispatchResult,
   type SaveMirrorGroupInput,
 } from '@trade-god/execution'
+
 import type {
   ExecutionAuthorization,
   MirrorExecutionPreview,
   MirrorGroup,
   SourceExecutionBinding,
 } from '@trade-god/contracts'
+
+export const haltAfterTradovateUserSyncGap = async (
+  gateway: Pick<ExecutionGateway, 'setConnectionKill' | 'activateEmergencyHalt'>,
+  supervisor: Pick<ExecutionReconciliationSupervisor, 'invalidate'>,
+  gap: TradovateUserSyncGap,
+): Promise<void> => {
+  supervisor.invalidate(gap.connection_id)
+  try {
+    await gateway.setConnectionKill(gap.connection_id, true)
+  } catch {
+    try {
+      await gateway.activateEmergencyHalt()
+    } catch {
+      // The gateway latches the process emergency halt before durable I/O.
+    }
+  }
+}
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
@@ -460,6 +479,37 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const reconciliationSupervisor = executionGateway && attachedExecutionAdapters.length > 0
     ? new ExecutionReconciliationSupervisor({ gateway: executionGateway, now: options.now })
     : undefined
+  let userSyncRefreshTimer: ReturnType<typeof setTimeout> | undefined
+  let userSyncStopped = false
+  const refreshTradovateUserSync = async (): Promise<void> => {
+    if (
+      userSyncStopped
+      || !tradovatePaperRuntime
+      || !tradingConnectionStore
+      || !reconciliationSupervisor
+      || !executionGateway
+    ) return
+    await tradovatePaperRuntime.refreshUserSync(
+      await tradingConnectionStore.list(),
+      {
+        onHint: (hint) => {
+          reconciliationSupervisor.invalidate(hint.connection_id)
+        },
+        onGap: async (gap) => {
+          await haltAfterTradovateUserSyncGap(executionGateway, reconciliationSupervisor, gap)
+        },
+      },
+    )
+  }
+  const scheduleTradovateUserSyncRefresh = (): void => {
+    if (userSyncStopped || !tradovatePaperRuntime) return
+    userSyncRefreshTimer = setTimeout(() => {
+      userSyncRefreshTimer = undefined
+      void refreshTradovateUserSync()
+        .catch(() => executionGateway?.activateEmergencyHalt())
+        .finally(scheduleTradovateUserSyncRefresh)
+    }, 30_000)
+  }
   const removableExecutionStates = new Set([
     'risk-denied', 'closed', 'rejected', 'canceled', 'expired', 'error',
   ])
@@ -500,6 +550,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       sources: discordManagementSource,
       journal: paperActivationJournal,
       adapterSetChecksum: () => attachedAdapterSetChecksum,
+      eventFeedHealth: (connectionId) => tradovatePaperRuntime
+        ?.userSyncHealth()
+        .find((health) => health.connection_id === connectionId),
       now: options.now,
     }) : undefined
   const resolveDiscoTraderRoute = discordManagementSource && tradingConnectionStore
@@ -686,10 +739,12 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         paperActivationRecoveryError = error
       })
     : executionRecoveryReady
-  const executionSupervisionReady = paperActivationReady.then(() => {
+  const executionSupervisionReady = paperActivationReady.then(async () => {
     if (executionRecoveryError) throw executionRecoveryError
     if (paperActivationRecoveryError) throw paperActivationRecoveryError
     reconciliationSupervisor?.start()
+    await refreshTradovateUserSync()
+    scheduleTradovateUserSyncRefresh()
   })
   let discordManagementRecoveryError: unknown
   const discordManagementReady = discordTradeManager && mirrorDiscordTradeManager && discordManagementFamilyResolver
@@ -790,26 +845,30 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
               await executionGateway.setGlobalKill(true)
               await executionGateway.setConnectionKill(input.connection.connection_id, true)
             }
-            return tradingRouteMutations!.saveConnection(
+            const saved = await tradingRouteMutations!.saveConnection(
               input.connection.connection_id,
               async () => {
                 await paperExecutionCoordinator?.revokeAuthorization(input.connection.connection_id)
                 return tradingConnectionService.save(input)
               },
             )
+            await refreshTradovateUserSync()
+            return saved
           },
           removeTradingConnection: async (connectionId) => {
             if (executionGateway) {
               await executionRecoveryReady
               await executionGateway.setConnectionKill(connectionId, true)
             }
-            return tradingRouteMutations!.removeConnection(
+            const removed = await tradingRouteMutations!.removeConnection(
               connectionId,
               async () => {
                 await paperExecutionCoordinator?.revokeAuthorization(connectionId)
                 return tradingConnectionService.remove(connectionId)
               },
             )
+            await refreshTradovateUserSync()
+            return removed
           },
           openTradingConnectionLogin: (connectionId) => (
             tradingConnectionService.openBrowserLogin(connectionId)
@@ -908,6 +967,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
               provider_adapters_attached: attachedExecutionAdapters.length > 0,
               ...(reconciliationSupervisor
                 ? { reconciliation_health: reconciliationSupervisor.health() }
+                : {}),
+              ...(tradovatePaperRuntime
+                ? { user_sync_health: tradovatePaperRuntime.userSyncHealth() }
                 : {}),
             }
           },
@@ -1145,6 +1207,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     dispose: async () => {
       unsubscribeAlert?.()
       await discordManagementReady
+      userSyncStopped = true
+      if (userSyncRefreshTimer) clearTimeout(userSyncRefreshTimer)
+      userSyncRefreshTimer = undefined
       await reconciliationSupervisor?.stop()
       tradovatePaperRuntime?.stop()
       const [alertServer, alertTunnel] = await Promise.all([alertServerPromise, alertTunnelPromise])

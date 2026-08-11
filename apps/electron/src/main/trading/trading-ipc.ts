@@ -16,7 +16,7 @@ import type {
   PaperActivationEvent,
   PaperActivationReview,
 } from '@trade-god/contracts'
-import type { SaveMirrorGroupInput } from '@trade-god/execution'
+import type { SaveMirrorGroupInput, TradovateUserSyncHealth } from '@trade-god/execution'
 
 import type { InterpretFixtureInput } from './order-flow-specialist-pipeline.ts'
 import type { SyntheticChartFixtureInput } from './synthetic-chart-fixture.ts'
@@ -110,6 +110,7 @@ export interface TradingIpcManager {
       stale_connection_ids: string[]
       fresh_connection_ids: string[]
     }
+    user_sync_health?: TradovateUserSyncHealth[]
   }>
   setGlobalExecutionKill?(enabled: boolean): Promise<{ global_kill: boolean }>
   setConnectionExecutionKill?(connectionId: string, enabled: boolean): Promise<{ connection_id: string; killed: boolean }>

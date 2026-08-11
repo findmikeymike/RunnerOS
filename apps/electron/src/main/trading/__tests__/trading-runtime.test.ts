@@ -20,6 +20,7 @@ import { loadEsDemoFixture } from '@trade-god/testkit'
 import { TRADE_GOD_IPC } from '../trading-ipc.ts'
 import {
   createTradeGodRuntime,
+  haltAfterTradovateUserSyncGap,
   resolveMarketDataLaunch,
   resolveOrderFlowLaunch,
   resolveTradeGodHostConfig,
@@ -36,6 +37,27 @@ class FakeIpcMain {
 }
 
 const repoRoot = path.resolve(import.meta.dir, '../../../../../..')
+
+test('falls back to the process emergency halt when a user-sync gap cannot persist its account halt', async () => {
+  const invalidated: string[] = []
+  let emergencyHalts = 0
+  await haltAfterTradovateUserSyncGap(
+    {
+      setConnectionKill: async () => { throw new Error('control file unavailable') },
+      activateEmergencyHalt: async () => { emergencyHalts += 1 },
+    } as any,
+    { invalidate: (connectionId: string) => { invalidated.push(connectionId) } } as any,
+    {
+      connection_id: 'connection-tradovate-paper-12345',
+      account_ref: '12345',
+      reason: 'malformed user-sync frame',
+      observed_at: '2026-08-11T15:00:00.000Z',
+    },
+  )
+
+  expect(invalidated).toEqual(['connection-tradovate-paper-12345'])
+  expect(emergencyHalts).toBe(1)
+})
 
 test('resolves and runs the development sidecar from an explicit RunnerOS root', async () => {
   let runtimeNow = new Date().toISOString()

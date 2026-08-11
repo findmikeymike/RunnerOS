@@ -12,7 +12,7 @@ source_of_truth: true
 - Date: 2026-08-11
 - Stage: adversarial safety closure before real-provider paper connectivity
 - Current goal: complete the P0 gates in `audits/discord-signal-system-readiness-2026-08-10.md`, then smoke one exact Tradovate paper lifecycle
-- Overall state: signed Discord entry and management receivers, exact account-or-Mirror-Group routing, durable source replay binding, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute planned stop-distance loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. Per-account automatic paper authority is an explicit, durable, expiring mandate with exact contracts and hard risk/quantity limits. One explicit paper-only Tradovate adapter is composed in the desktop from a structured encrypted-vault credential, CAS-rotated token session, and exact installed-descriptor registry. The UI can retain a checksum-bound read-only provider proof, apply only trusted lifecycle evidence, explicitly enable paper execution behind halts, create a bounded mandate, and run one final reviewed release. That release re-proves every account flat under all provider locks, cancels old queued Discord entries, rechecks the exact mandate and review expiry, persists an append-only journal, and atomically clears only the reviewed halts. Credential/account/certification/enablement changes disarm execution, revoke the mandate, and re-latch halts. The adapter remains inert on a clean install because no real Tradovate lifecycle certification exists; the official API does not document a reduce-only partial-close primitive, and the project refuses to claim that capability without demo evidence. Mirror Group Stage 0/1 provides immutable revisions, lossless route migration, exact per-member sizing previews, and configuration UI. Stage 2 provides fake-provider-only child artifacts, account admission, aggregate planning-risk reservations, atomic ownership sets, exact dispatch grants, bounded fan-out, and crash/partial-outcome recovery. The dormant group-follow-up foundation adds joint family resolution, frozen child action matrices, truthful partial rollup, recovery, and provider-flat-proof release. Group tickets still stop at preview receipts. Browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
+- Overall state: signed Discord entry and management receivers, exact account-or-Mirror-Group routing, durable source replay binding, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute planned stop-distance loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. Per-account automatic paper authority is an explicit, durable, expiring mandate with exact contracts and hard risk/quantity limits. One explicit paper-only Tradovate adapter is composed in the desktop from a structured encrypted-vault credential, CAS-rotated token session, exact installed-descriptor registry, and exact-account user-sync feed. Provider events are hints only: they invalidate freshness and wake full REST reconciliation; malformed, disconnected, or wrong-account evidence latches the account halt. REST freshness proves every account position and working order belongs to reconciled Trade God lineage. The UI can retain a checksum-bound read-only provider proof, apply only trusted lifecycle evidence, explicitly enable paper execution behind halts, create a bounded mandate, and run one final reviewed release. Release also requires the exact account feed to be subscribed. That release re-proves every account flat under all provider locks, cancels old queued Discord entries, rechecks the exact mandate and review expiry, persists an append-only journal, and atomically clears only the reviewed halts. Credential/account/certification/enablement changes disarm execution, revoke the mandate, and re-latch halts. The adapter remains inert on a clean install because no real Tradovate lifecycle certification exists; the official API does not document a reduce-only partial-close primitive, and the project refuses to claim that capability without demo evidence. Mirror Group Stage 0/1 provides immutable revisions, lossless route migration, exact per-member sizing previews, and configuration UI. Stage 2 provides fake-provider-only child artifacts, account admission, aggregate planning-risk reservations, atomic ownership sets, exact dispatch grants, bounded fan-out, and crash/partial-outcome recovery. The dormant group-follow-up foundation adds joint family resolution, frozen child action matrices, truthful partial rollup, recovery, and provider-flat-proof release. Group tickets still stop at preview receipts. Browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -63,6 +63,18 @@ source_of_truth: true
 The workbench can request engine health, run the known fixture, and display total volume, buy/sell volume, delta, POC, quality, trace ID, checksums, producer identity, and failures.
 
 ## Recently Completed
+
+- Added the exact-account Tradovate user-sync safety feed. It implements the
+  documented open/data/heartbeat/close frames, one authenticated sync request
+  per socket, bounded account evidence, reconnect, and clean disposal. Events
+  never mutate orders; accepted hints invalidate a generation and wake
+  authoritative REST. Same-account hints arriving mid-rebuild cannot be lost.
+  Fresh status now requires every provider position and working order to map to
+  reconciled Trade God receipts. Activation requires the exact feed subscribed;
+  any gap persists the account halt and falls back to the process emergency
+  latch if control storage fails. Per-account halt generations prevent an
+  activation release from erasing a newer gap while its durable write is still
+  pending.
 
 - Added the reviewed paper-activation transaction. Raw IPC can only add halts;
   release requires exact enabled/certified paper accounts, fresh retained provider
@@ -252,8 +264,8 @@ The workbench can request engine health, run the known fixture, and display tota
 2. Use the paper-only connection form to store the exact numeric account ID,
    account label, access token, and expiration in the encrypted Trade God vault;
    then click `Verify account` and retain the exact read-only proof.
-3. Update DiscoTrader to emit exact immutable target-leg quantities, then add
-   event-driven Tradovate user-sync truth and the real certification runner.
+3. Update DiscoTrader to emit exact immutable target-leg quantities, then use
+   the user-sync plus REST evidence in the real certification runner.
 4. Finish the remaining Mirror management certification boundary: add an
    adapter-certified post-partial stop-resize plan, then run crash/restart and
    provider-paper evidence matrices. Parent-aware routing, durable child plans,
@@ -277,6 +289,12 @@ The Phase 0 fixture, transport, contracts, worktree, and initial Nautilus compat
 
 ## Verification State
 
+- Exact-account user-sync closure: 383 trading, trigger, Electron, and renderer
+  tests passed across 52 files with 1,345 expectations; repository typecheck,
+  Electron main/preload/renderer production builds, and diff check passed.
+  Adversarial review found no remaining High/Medium blocker in this local slice.
+  This proves the hint-to-REST safety boundary, not a real Tradovate session or
+  lifecycle certification.
 - Provider read-verification slice: 49 focused contract, evidence-store,
   Tradovate runtime, connection lifecycle, IPC/preload, renderer, channel-parity,
   and runtime tests pass. Full repository typecheck and production builds pass.

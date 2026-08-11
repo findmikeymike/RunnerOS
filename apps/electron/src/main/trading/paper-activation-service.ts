@@ -19,6 +19,7 @@ import {
   type ExecutionGateway,
   type FileDiscoTraderIntentSource,
   type FileStandingAuthorizationStore,
+  type TradovateUserSyncHealth,
 } from '@trade-god/execution'
 
 import type { TradingConnectionService } from './trading-connection-service.ts'
@@ -27,6 +28,7 @@ interface ActivationGateway extends Pick<
   ExecutionGateway,
   | 'list'
   | 'readControl'
+  | 'connectionHaltEpoch'
   | 'captureFlatAccountSnapshot'
   | 'dismissPendingIntent'
   | 'commitPaperActivationRelease'
@@ -40,6 +42,7 @@ interface ActivationState {
   connections: PaperActivationConnectionEvidence[]
   pending_intents: PaperActivationPendingIntent[]
   blockers: PaperActivationBlocker[]
+  connection_halt_epochs: Record<string, number>
 }
 
 export class PaperActivationService {
@@ -50,16 +53,18 @@ export class PaperActivationService {
     sources: Pick<FileDiscoTraderIntentSource, 'get'>
     journal: FilePaperActivationStore
     adapterSetChecksum: () => string
+    eventFeedHealth: (connectionId: string) => TradovateUserSyncHealth | undefined
     now: () => string
   }) {}
 
   async prepareReview(): Promise<PaperActivationReview> {
     const state = await this.captureState()
+    const { connection_halt_epochs: _connectionHaltEpochs, ...persistedState } = state
     const createdAt = this.options.now()
     const unsigned = {
       review_schema_version: PAPER_ACTIVATION_REVIEW_SCHEMA_VERSION,
       review_id: `paper-activation-review-${randomUUID()}`,
-      ...state,
+      ...persistedState,
       ready: state.blockers.length === 0,
       created_at: createdAt,
       expires_at: new Date(Date.parse(createdAt) + 60_000).toISOString(),
@@ -132,6 +137,7 @@ export class PaperActivationService {
         expected_control_checksum: review.control_checksum,
         review_expires_at: review.expires_at,
         connection_ids: review.connections.map((connection) => connection.connection_id),
+        expected_connection_halt_epochs: current.connection_halt_epochs,
         assert_release_current: async () => {
           if (Date.parse(this.options.now()) >= Date.parse(review.expires_at)) {
             throw new ExecutionGatewayError(
@@ -140,6 +146,12 @@ export class PaperActivationService {
             )
           }
           for (const evidence of review.connections) {
+            if (this.options.eventFeedHealth(evidence.connection_id)?.state !== 'subscribed') {
+              throw new ExecutionGatewayError(
+                'CONNECTION_UNAVAILABLE',
+                `Provider event feed for ${evidence.connection_id} is not subscribed.`,
+              )
+            }
             const authorization = await this.options.authorizations.getActive(evidence.connection_id)
             if (
               !authorization
@@ -226,6 +238,7 @@ export class PaperActivationService {
           ))
         : undefined
       const authorization = await this.options.authorizations.getActive(connection.connection_id)
+      const eventFeedHealth = this.options.eventFeedHealth(connection.connection_id)
       if (
         connection.environment !== 'paper'
         || connection.environment_class !== 'rehearsal'
@@ -253,11 +266,17 @@ export class PaperActivationService {
         connection_id: connection.connection_id,
         detail: 'Enabled account needs an active exact standing mandate.',
       })
+      if (eventFeedHealth?.state !== 'subscribed') blockers.push({
+        code: 'provider-event-feed-required',
+        connection_id: connection.connection_id,
+        detail: 'Enabled account needs an authenticated exact-account provider event feed before activation.',
+      })
       if (
         certification
         && status.provider_read_verification
         && status.provider_read_fresh
         && authorization
+        && eventFeedHealth?.state === 'subscribed'
       ) {
         try {
           const snapshot = await this.options.gateway.captureFlatAccountSnapshot(connection.connection_id)
@@ -358,6 +377,12 @@ export class PaperActivationService {
       connections: connections.sort((a, b) => a.connection_id.localeCompare(b.connection_id)),
       pending_intents: pendingIntents.sort((a, b) => a.intent_id.localeCompare(b.intent_id)),
       blockers: blockers.sort((a, b) => `${a.code}:${a.connection_id ?? ''}`.localeCompare(`${b.code}:${b.connection_id ?? ''}`)),
+      connection_halt_epochs: Object.fromEntries(
+        connections.map((evidence) => [
+          evidence.connection_id,
+          this.options.gateway.connectionHaltEpoch(evidence.connection_id),
+        ]),
+      ),
     }
   }
 
@@ -386,6 +411,7 @@ export class PaperActivationService {
       })),
       pending_intents: state.pending_intents,
       blockers: state.blockers,
+      connection_halt_epochs: state.connection_halt_epochs,
     })
   }
 

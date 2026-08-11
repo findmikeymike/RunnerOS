@@ -18,7 +18,7 @@ import {
   type TradingConnection,
 } from '@trade-god/contracts'
 
-import type { ExecutionAdapter } from '../adapter.ts'
+import type { ExecutionAdapter, ExecutionAdapterDescriptor } from '../adapter.ts'
 import { computeManagementAcknowledgmentChecksum, sha256 } from '../canonical.ts'
 import { ExecutionAdapterError, ExecutionGatewayError } from '../errors.ts'
 import type { TradovateSessionManager } from './tradovate-session-manager.ts'
@@ -714,35 +714,41 @@ const tradovatePenalty = (body: unknown): {
 }
 
 export class TradovateApiAdapter implements ExecutionAdapter {
-  readonly descriptor = {
-    adapter_id: 'tradovate-api',
-    adapter_version: '1.0.0',
-    provider_contract_version: 'tradovate-demo-rest-2026-07',
-    transport: 'api' as const,
-    capabilities: {
-      read_accounts: true,
-      read_orders: true,
-      read_positions: true,
-      read_executions: true,
-      submit_market: true,
-      submit_limit: true,
-      submit_stop: true,
-      submit_stop_limit: true,
-      native_bracket: true,
-      native_oco: true,
-      native_multi_bracket: false,
-      modify_order: true,
-      cancel_order: true,
-      partial_close: false,
-      flatten: true,
-      streaming_events: false,
-    },
-  }
+  readonly descriptor: ExecutionAdapterDescriptor
 
   constructor(
     private readonly client: TradovateRestClient,
     private readonly now: () => string = () => new Date().toISOString(),
-  ) {}
+    options: { userSyncAvailable?: boolean } = {},
+  ) {
+    const userSyncAvailable = options.userSyncAvailable === true
+    this.descriptor = {
+      adapter_id: 'tradovate-api',
+      adapter_version: userSyncAvailable ? '1.1.0' : '1.0.0',
+      provider_contract_version: userSyncAvailable
+        ? 'tradovate-demo-rest-user-sync-2026-08'
+        : 'tradovate-demo-rest-2026-07',
+      transport: 'api',
+      capabilities: {
+        read_accounts: true,
+        read_orders: true,
+        read_positions: true,
+        read_executions: true,
+        submit_market: true,
+        submit_limit: true,
+        submit_stop: true,
+        submit_stop_limit: true,
+        native_bracket: true,
+        native_oco: true,
+        native_multi_bracket: false,
+        modify_order: true,
+        cancel_order: true,
+        partial_close: false,
+        flatten: true,
+        streaming_events: userSyncAvailable,
+      },
+    }
+  }
 
   supports(connection: TradingConnection): boolean {
     return (
