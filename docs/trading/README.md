@@ -34,11 +34,12 @@ This is the routing table for humans and agents. Read only what the current job 
 
 ## Active Design Specifications
 
-- `specs/execution/multi-account-mirror-groups.md` — draft parent/child
+- `specs/execution/multi-account-mirror-groups.md` — source-of-truth parent/child
   orchestration contract for copying one authenticated Discord entry into
   multiple exact accounts while preserving independent risk, provider truth,
-  stop identity, follow-up management, and recovery. No mirror execution is
-  implemented or enabled yet.
+  stop identity, follow-up management, and recovery. Stage 2 is a dormant
+  fake-provider harness; runtime/real-provider mirror execution remains
+  disabled.
 - `specs/execution/unified-broker-entry-gateway.md` — implemented execution
   foundation for certified API/browser entry, protection, and reconciliation.
   Real connections remain disabled until external paper certification; it

@@ -86,10 +86,15 @@ materialization. Both durable indexes carry full recovery evidence, so a crash
 or replay cannot follow later route, group, clock, or economics changes. Group
 tickets persist deterministic child previews only;
 `order_mutation_allowed` is always false and the displayed price-distance risk
-is explicitly an estimate, not certified risk. Child risk projections,
-aggregate reservations, dispatch grants, parent execution/recovery, group-aware
-follow-ups, and legacy source-binding backfill remain pending. No mirror child
-can submit.
+is explicitly an estimate, not certified risk. Stage 2 adds a dormant
+fake-provider harness: child account admission, aggregate planning-risk
+reservations, atomic all-child ownership, fresh provider/mandate revalidation,
+reservation-bound grants, bounded fan-out, and truthful crash/partial recovery.
+Its grants are explicitly `fake-provider-test-only`; a normal gateway rejects
+them and the desktop runtime does not instantiate the coordinator. Real-provider
+Mirror authority, group-aware follow-ups, verified closure/release, startup
+lock audit, and legacy source-binding backfill remain pending. No runtime mirror
+child can submit.
 
 Discord entry and follow-up management both enter through Trade God's isolated HMAC-authenticated 9201 trigger server. The `discotrader` path validates the complete immutable ticket and registers it through the single gateway intent source; it binds only to an explicitly configured exact Discord-source route, with no default or single-account fallback. The `discotrader-management` path resolves a checksum-bound message only by immutable author plus reply/thread/channel/symbol evidence to exactly one protected gateway trade. Its command identity includes the immutable Discord message and action index, so retries are idempotent without collapsing two separate identical reductions. Startup recovery runs before new delivery. DiscoTrader persists both kinds of signed envelope in a SQLite outbox before network delivery, queues management authority before acknowledging Chrome, retries Runner outages, and emits thread identity only from an exact cross-channel reply or explicit mapping. The prior running observe-only smoke proved the management receiver; the new entry route, outbox retry, and thread mapping are automated-test proven but not yet runtime-smoked. The runtime intentionally has zero provider adapters until paper certification.
 
@@ -129,6 +134,11 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
+- Mirror Groups Stage 2: 246 focused trading/trigger/Electron tests passed
+  across 31 files with 796 expectations. Repository typecheck, Electron
+  main/preload/renderer production builds, and diff check passed. Rival review
+  found no remaining High/Medium blocker in the dormant fake-provider scope.
+  This does not prove runtime activation or real-provider fan-out.
 - Mirror Groups Stage 0/1: 287 focused tests passed across 41 contract,
   execution, trigger, Electron trading, route, IPC/preload, renderer-helper,
   and channel parity files with 992 expectations. Repository typecheck and Electron

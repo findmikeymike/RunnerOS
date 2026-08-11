@@ -280,52 +280,74 @@ export class FileExecutionStore {
   }
 
   async acquireOwnership(input: Omit<ExecutionOwnershipLease, 'lease_schema_version' | 'acquired_at'>): Promise<ExecutionOwnershipLease> {
-    const lease = this.parseOwnershipLease({
+    return (await this.acquireOwnershipSet([input]))[0]!
+  }
+
+  async acquireOwnershipSet(
+    inputs: Array<Omit<ExecutionOwnershipLease, 'lease_schema_version' | 'acquired_at'>>,
+  ): Promise<ExecutionOwnershipLease[]> {
+    if (inputs.length === 0) return []
+    const leases = inputs.map((input) => this.parseOwnershipLease({
       lease_schema_version: 'execution-ownership-lease@1',
       ...input,
       acquired_at: this.now(),
-    })
-    const file = this.ownershipFile(lease.ownership_key)
-    return this.withLock(`ownership:${lease.ownership_key}`, async () => {
-      await mkdir(this.ownershipDirectory, { recursive: true })
-      try {
-        await writeFile(file, `${JSON.stringify(lease, null, 2)}\n`, {
-          encoding: 'utf8',
-          flag: 'wx',
-          mode: 0o600,
-        })
-        return lease
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-        const current = this.parseOwnershipLease(JSON.parse(await readFile(file, 'utf8')))
-        if (current.intent_id === lease.intent_id) return current
-        throw new ExecutionGatewayError(
-          'EXECUTION_BUSY',
-          `Provider account/instrument is already owned by intent ${current.intent_id}.`,
-        )
+    }))
+    if (new Set(leases.map((lease) => lease.ownership_key)).size !== leases.length) {
+      throw new ExecutionGatewayError('RECORD_INTEGRITY_FAILURE', 'Ownership set contains duplicate keys.')
+    }
+    return this.withLock('ownership-set', () => this.withOwnershipSetFileLock(leases, async () => {
+      const existing = new Map<string, ExecutionOwnershipLease>()
+      for (const lease of leases) {
+        const current = await this.readOwnership(lease.ownership_key)
+        if (current && current.intent_id !== lease.intent_id) {
+          throw new ExecutionGatewayError(
+            'EXECUTION_BUSY',
+            `Provider account/instrument is already owned by intent ${current.intent_id}.`,
+          )
+        }
+        if (current) existing.set(lease.ownership_key, current)
       }
-    })
+      const created: ExecutionOwnershipLease[] = []
+      try {
+        for (const lease of leases) {
+          if (existing.has(lease.ownership_key)) continue
+          await writeFile(this.ownershipFile(lease.ownership_key), `${JSON.stringify(lease, null, 2)}\n`, {
+            encoding: 'utf8', flag: 'wx', mode: 0o600,
+          })
+          created.push(lease)
+        }
+      } catch (error) {
+        await Promise.all(created.map((lease) => unlink(this.ownershipFile(lease.ownership_key)).catch(() => undefined)))
+        throw error
+      }
+      return leases.map((lease) => existing.get(lease.ownership_key) ?? lease)
+    }))
   }
 
   async releaseOwnership(ownershipKey: string, intentId: string): Promise<boolean> {
-    const file = this.ownershipFile(ownershipKey)
-    return this.withLock(`ownership:${ownershipKey}`, async () => {
-      let current: ExecutionOwnershipLease
-      try {
-        current = this.parseOwnershipLease(JSON.parse(await readFile(file, 'utf8')))
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
-        throw error
+    return (await this.releaseOwnershipSet([{ ownership_key: ownershipKey, intent_id: intentId }])) > 0
+  }
+
+  async releaseOwnershipSet(
+    inputs: Array<{ ownership_key: string; intent_id: string }>,
+  ): Promise<number> {
+    if (inputs.length === 0) return 0
+    return this.withLock('ownership-set', () => this.withOwnershipSetFileLock([], async () => {
+      const existing: Array<{ input: typeof inputs[number]; lease: ExecutionOwnershipLease }> = []
+      for (const input of inputs) {
+        const current = await this.readOwnership(input.ownership_key)
+        if (!current) continue
+        if (current.intent_id !== input.intent_id) {
+          throw new ExecutionGatewayError(
+            'EXECUTION_BUSY',
+            `Intent ${input.intent_id} cannot release ownership held by ${current.intent_id}.`,
+          )
+        }
+        existing.push({ input, lease: current })
       }
-      if (current.intent_id !== intentId) {
-        throw new ExecutionGatewayError(
-          'EXECUTION_BUSY',
-          `Intent ${intentId} cannot release ownership held by ${current.intent_id}.`,
-        )
-      }
-      await unlink(file)
-      return true
-    })
+      for (const { input } of existing) await unlink(this.ownershipFile(input.ownership_key))
+      return existing.length
+    }))
   }
 
   async readOwnership(ownershipKey: string): Promise<ExecutionOwnershipLease | null> {
@@ -489,6 +511,40 @@ export class FileExecutionStore {
   private providerMutationFile(providerAccountKey: string): string {
     const digest = createHash('sha256').update(providerAccountKey, 'utf8').digest('hex')
     return path.join(this.providerMutationDirectory, `${digest}.lock.json`)
+  }
+
+  private async withOwnershipSetFileLock<T>(
+    leases: ExecutionOwnershipLease[],
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    await mkdir(this.ownershipDirectory, { recursive: true })
+    const marker = path.join(this.ownershipDirectory, '_ownership-set.lock.json')
+    const claim = {
+      ownership_set_lock_schema_version: 'ownership-set-lock@1',
+      process_id: process.pid,
+      operation_id: `ownership-set-${randomUUID()}`,
+      leases,
+      acquired_at: this.now(),
+    }
+    try {
+      await writeFile(marker, `${JSON.stringify(claim, null, 2)}\n`, {
+        encoding: 'utf8', flag: 'wx', mode: 0o600,
+      })
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      throw new ExecutionGatewayError(
+        'EXECUTION_BUSY',
+        'Provider ownership admission is locked; stale locks require explicit startup recovery.',
+      )
+    }
+    try { return await operation() } finally {
+      try {
+        const current = JSON.parse(await readFile(marker, 'utf8')) as { operation_id?: string }
+        if (current.operation_id === claim.operation_id) await unlink(marker)
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+    }
   }
 
   private assertPathSafeIntentId(intentId: string): void {

@@ -7,6 +7,7 @@ import {
   EXECUTION_ACCOUNT_SNAPSHOT_SCHEMA_VERSION,
   EXECUTION_AUTHORIZATION_SCHEMA_VERSION,
   EXECUTION_MANAGEMENT_ACK_SCHEMA_VERSION,
+  MIRROR_DISPATCH_GRANT_SCHEMA_VERSION,
   EXECUTION_RECONCILIATION_SCHEMA_VERSION,
   EXECUTION_SUBMIT_ACK_SCHEMA_VERSION,
   ORDER_INTENT_SCHEMA_VERSION,
@@ -18,6 +19,7 @@ import {
   type ExecutionManagementAcknowledgment,
   type ExecutionSubmitAcknowledgment,
   type OrderIntent,
+  type MirrorDispatchGrant,
   type RiskDecision,
   type TradingConnection,
 } from '@trade-god/contracts'
@@ -30,6 +32,7 @@ import {
   computeExecutionReceiptChecksum,
   computeManagementAcknowledgmentChecksum,
   computeOrderIntentChecksum,
+  sha256,
   type ExecutionAdapter,
 } from '../src/index.ts'
 
@@ -291,6 +294,8 @@ class FakeAdapter implements ExecutionAdapter {
 const setup = async (
   connection = makeConnection(),
   adapters: ExecutionAdapter[] = [new FakeAdapter()],
+  resolveMirrorDispatchGrant?: (grantId: string) => Promise<MirrorDispatchGrant>,
+  allowFakeMirrorDispatch = Boolean(resolveMirrorDispatchGrant),
 ) => {
   const root = await mkdtemp(path.join(tmpdir(), 'trade-god-execution-'))
   roots.push(root)
@@ -300,6 +305,8 @@ const setup = async (
     store,
     adapters,
     resolveConnection: async () => connection,
+    ...(resolveMirrorDispatchGrant ? { resolveMirrorDispatchGrant } : {}),
+    allowFakeMirrorDispatch,
     now: () => NOW,
   })
   return { root, store, gateway, connection }
@@ -358,6 +365,148 @@ describe('execution gateway', () => {
     const store = new FileExecutionStore(root, () => NOW)
 
     expect(await store.readControl()).toMatchObject({ global_kill: true })
+  })
+
+  test('requires a fresh gateway-resolved parent grant for every Mirror child submit', async () => {
+    const adapter = new FakeAdapter()
+    let grant: MirrorDispatchGrant | undefined
+    const { gateway, connection } = await setup(
+      makeConnection(),
+      [adapter],
+      async (grantId) => {
+        if (!grant || grant.grant_id !== grantId) throw new Error('missing grant')
+        return grant
+      },
+    )
+    const intent = makeIntent(connection, {
+      intent_id: 'intent-mirror-grant-one',
+      mirror_lineage: {
+        mirror_execution_id: 'mirror-parent-one',
+        mirror_group_id: 'mirror-group-one',
+        mirror_group_revision: 1,
+        member_id: 'mirror-member-one',
+        mirror_child_source_id: 'mirror-child-source-one',
+        mirror_child_source_checksum: 'a'.repeat(64),
+      },
+    })
+    await approve(gateway, connection, intent)
+    await expect(gateway.execute(intent.intent_id)).rejects.toMatchObject({
+      code: 'AUTHORIZATION_MISMATCH',
+    })
+    expect(adapter.submitCount).toBe(0)
+    const grantFor = (overrides: Partial<Omit<MirrorDispatchGrant, 'content_checksum'>> = {}) => {
+      const unsigned: Omit<MirrorDispatchGrant, 'content_checksum'> = {
+      mirror_dispatch_grant_schema_version: MIRROR_DISPATCH_GRANT_SCHEMA_VERSION,
+      grant_id: 'mirror-grant-one', mirror_execution_id: 'mirror-parent-one',
+      intent_id: intent.intent_id, connection_id: connection.connection_id,
+      admitted_parent_checksum: 'b'.repeat(64), complete_child_set_checksum: 'c'.repeat(64),
+      reservation_id: 'mirror-reservation-one', reservation_checksum: 'e'.repeat(64),
+      projection_set_checksum: 'f'.repeat(64), dispatch_authority: 'fake-provider-test-only',
+      issued_at: NOW, expires_at: '2026-07-30T15:06:00.000Z',
+        ...overrides,
+      }
+      return { ...unsigned, content_checksum: sha256(unsigned) }
+    }
+    grant = grantFor({ connection_id: 'wrong-connection' })
+    await expect(gateway.execute(intent.intent_id, grant.grant_id)).rejects.toMatchObject({
+      code: 'AUTHORIZATION_MISMATCH',
+    })
+    expect(adapter.submitCount).toBe(0)
+    grant = grantFor({
+      issued_at: '2026-07-30T15:04:00.000Z',
+      expires_at: '2026-07-30T15:05:00.000Z',
+    })
+    await expect(gateway.execute(intent.intent_id, grant.grant_id)).rejects.toMatchObject({
+      code: 'INTENT_EXPIRED',
+    })
+    expect(adapter.submitCount).toBe(0)
+    grant = { ...grantFor(), content_checksum: 'd'.repeat(64) }
+    await expect(gateway.execute(intent.intent_id, grant.grant_id)).rejects.toMatchObject({
+      code: 'RECORD_INTEGRITY_FAILURE',
+    })
+    expect(adapter.submitCount).toBe(0)
+    grant = grantFor()
+    expect((await gateway.execute(intent.intent_id, grant.grant_id)).state).toBe('protected')
+    expect(adapter.submitCount).toBe(1)
+  })
+
+  test('refuses fake-only Mirror grants unless the gateway explicitly enables test dispatch', async () => {
+    const adapter = new FakeAdapter()
+    let grant!: MirrorDispatchGrant
+    const { gateway, connection } = await setup(
+      makeConnection(),
+      [adapter],
+      async () => grant,
+      false,
+    )
+    const intent = makeIntent(connection, {
+      intent_id: 'intent-mirror-fake-only',
+      mirror_lineage: {
+        mirror_execution_id: 'mirror-parent-fake-only', mirror_group_id: 'mirror-group-one',
+        mirror_group_revision: 1, member_id: 'mirror-member-one',
+        mirror_child_source_id: 'mirror-child-source-one',
+        mirror_child_source_checksum: 'a'.repeat(64),
+      },
+    })
+    await approve(gateway, connection, intent)
+    const unsigned: Omit<MirrorDispatchGrant, 'content_checksum'> = {
+      mirror_dispatch_grant_schema_version: MIRROR_DISPATCH_GRANT_SCHEMA_VERSION,
+      grant_id: 'mirror-grant-fake-only', mirror_execution_id: 'mirror-parent-fake-only',
+      intent_id: intent.intent_id, connection_id: connection.connection_id,
+      admitted_parent_checksum: 'b'.repeat(64), complete_child_set_checksum: 'c'.repeat(64),
+      reservation_id: 'mirror-reservation-one', reservation_checksum: 'e'.repeat(64),
+      projection_set_checksum: 'f'.repeat(64), dispatch_authority: 'fake-provider-test-only',
+      issued_at: NOW, expires_at: '2026-07-30T15:06:00.000Z',
+    }
+    grant = { ...unsigned, content_checksum: sha256(unsigned) }
+
+    await expect(gateway.execute(intent.intent_id, grant.grant_id)).rejects.toMatchObject({
+      code: 'CAPABILITY_UNAVAILABLE',
+    })
+    expect(adapter.submitCount).toBe(0)
+  })
+
+  test('holds every Mirror ownership lease before the fresh all-child provider barrier', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'trade-god-mirror-barrier-'))
+    roots.push(root)
+    const store = new FileExecutionStore(root, () => NOW)
+    await store.setGlobalKill(false)
+    const left = makeConnection({
+      connection_id: 'connection-mirror-left', account_ref: 'account-mirror-left',
+    })
+    const right = makeConnection({
+      connection_id: 'connection-mirror-right', account_ref: 'account-mirror-right',
+    })
+    const connections = new Map([[left.connection_id, left], [right.connection_id, right]])
+    const adapter = new FakeAdapter()
+    const gateway = new ExecutionGateway({
+      store, adapters: [adapter], now: () => NOW,
+      resolveConnection: async (id) => connections.get(id)!,
+    })
+    const intents = [left, right].map((connection, index) => makeIntent(connection, {
+      intent_id: `intent-mirror-barrier-${index}`,
+      mirror_lineage: {
+        mirror_execution_id: 'mirror-parent-barrier', mirror_group_id: 'mirror-group-barrier',
+        mirror_group_revision: 1, member_id: `mirror-member-${index}`,
+        mirror_child_source_id: `mirror-child-source-${index}`,
+        mirror_child_source_checksum: `${index + 1}`.repeat(64),
+      },
+    }))
+    for (const intent of intents) await approve(gateway, connections.get(intent.connection_id)!, intent)
+
+    await gateway.reserveMirrorOwnership(intents.map((intent) => intent.intent_id))
+    await gateway.revalidateMirrorAdmission(intents.map((intent) => intent.intent_id))
+    expect(adapter.connectCount).toBe(2)
+    adapter.snapshotOverrides = {
+      positions: [{
+        instrument_id: 'CME:NQU6', symbol: 'NQU6', side: 'buy',
+        quantity: 1, average_price: '20000',
+      }],
+    }
+    await expect(gateway.revalidateMirrorAdmission(
+      intents.map((intent) => intent.intent_id),
+    )).rejects.toMatchObject({ code: 'RECONCILIATION_DIVERGENCE' })
+    expect(adapter.submitCount).toBe(0)
   })
 
   test('persists one paper lifecycle through a protected fill and valid receipt', async () => {

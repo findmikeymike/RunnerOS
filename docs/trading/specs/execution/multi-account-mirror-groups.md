@@ -1,7 +1,7 @@
 ---
-status: draft
+status: active
 owner: team
-last_verified: 2026-08-03
+last_verified: 2026-08-11
 source_of_truth: true
 spec_id: TG-EXEC-003
 target_phase: 5-6
@@ -11,6 +11,21 @@ depends_on:
 ---
 
 # Multi-Account Mirror Groups
+
+## Implementation Status
+
+- Stage 0/1 is implemented: immutable paper-group revisions, account-or-group
+  routing, frozen source binding, deterministic zero-I/O previews, and UI.
+- Stage 2 is implemented as a dormant fake-provider harness: complete child
+  persistence/admission, aggregate planning-risk reservation, atomic all-child
+  ownership, fresh provider/mandate revalidation, reservation-bound grants,
+  bounded dispatch, and restart/partial-outcome recovery.
+- Stage 2 grants are explicitly `fake-provider-test-only` and are rejected by a
+  normal gateway. The desktop runtime does not instantiate this coordinator and
+  still attaches zero execution adapters.
+- Group-aware follow-up management, verified closure/release, startup lock
+  recovery, real-provider grant authority, and paper certification remain
+  pending.
 
 ## Decision Summary
 
@@ -99,7 +114,7 @@ the independent provider truth of each account.
 Verified in this checkout:
 
 - `TradingSignalRouteStore` maps one immutable Discord
-  server/channel/trader identity to one exact `connection_id`.
+  server/channel/trader identity to one exact account-or-group target.
 - Silent route reassignment is rejected without explicit prior-account proof.
 - `FileDiscoTraderIntentSource` creates one deterministic
   `order-intent@1` from one ticket and one resolved connection.
@@ -111,43 +126,33 @@ Verified in this checkout:
   trade.
 - Each protected execution receipt identifies the child's exact provider orders,
   open quantity, verified stop, and average fill.
+- `FileMirrorGroupStore`, `FileSourceExecutionBindingStore`, and the desktop UI
+  implement immutable revisions, frozen routing, and deterministic preview.
+- `MirrorExecutionCoordinator` and `FileMirrorExecutionStore` implement dormant
+  fake-provider child admission, aggregate reservations, atomic ownership,
+  reservation-bound grants, bounded dispatch, and restart/partial recovery.
 - The Electron runtime deliberately attaches zero live execution adapters until
   an exact paper adapter is certified.
 
 Not implemented:
 
-- Mirror Group contracts, persistence, configuration UI, or group routing.
-- Parent execution/fan-out coordination.
+- Real-provider Mirror dispatch authority or runtime activation.
 - Group-level management receipts and queues.
-- Group kill state or parent/child dashboard rollups.
+- Group kill state, verified terminal release, startup stale-lock audit, or
+  parent/child dashboard rollups.
 - Real-provider paper evidence for multi-account entry or management.
 
-### Required changes to current contracts
+### Remaining contract/runtime changes
 
-- Signal routes currently contain only `connection_id`; they need the versioned
-  account-or-group target union.
-- DiscoTrader child intent identity currently derives from the ticket alone;
-  mirrored children would collide unless group revision/member identity enters
-  the hash.
-- `order-intent@1` binds one connection but has no parent lineage fields; parent
-  linkage must live in a verified source artifact/new contract without weakening
-  the existing child intent.
-- `risk-decision@1` binds an account snapshot but does not expose a normalized
-  aggregate-risk upper bound. Mirroring needs a versioned companion projection
-  or additive contract before group limits can be enforced.
-- The current DiscoTrader source artifact requires child quantity and risk to
-  equal the original ticket. Fixed member sizing therefore requires a new
-  mirror-child source artifact; the original ticket must never be rewritten.
 - `discord-management-receipt@1` resolves one intent and cannot represent an
   action-by-child matrix; it remains readable while the new parent receipt is
   added.
-- Gateway locking is per intent. Netted futures safety also requires durable
-  provider-account/instrument ownership and provider-account command
-  serialization.
 - Runtime recovery must recover gateway children, rebuild parents, recover
   management, and validate leases before accepting new webhooks.
-- Durable claim markers need an orphan-repair audit because a marker can survive
-  failure of the following record write.
+- A real-provider dispatch grant must bind certified stop-exit risk/slippage
+  policy; the current planning estimate and grants are fake-provider-only.
+- Multiple targets require explicit integer allocation and multi-leg protection;
+  current input fails closed rather than truncating.
 - Runtime still attaches zero provider adapters, so this feature is not
   paper-executable today.
 
@@ -1384,9 +1389,11 @@ Tradovate paper groups pass.
 
 ### Stage 2 — Fake-provider paper orchestration
 
-- Enable parent/child coordinator behind
-  `TRADE_GOD_MIRROR_GROUPS=paper-preview`.
-- Prove failure injection and restart boundaries.
+- Implemented as a dormant library with explicit fake-provider-only grants;
+  the desktop runtime remains preview-only.
+- Failure injection covers child denial, aggregate capacity, ownership conflict,
+  mandate replacement, partial dispatch, grant invalidation, and restart without
+  duplicate submit.
 
 ### Stage 3 — Tradovate paper entry
 
@@ -1446,7 +1453,7 @@ Reversal:
 ## Open Questions
 
 These defaults are recommended for the first paper release and need operator
-acceptance before implementation leaves Stage 1:
+acceptance before implementation enters real-provider Stage 3:
 
 1. **Initial member cap:** recommend five accounts despite a schema maximum of
    twenty.

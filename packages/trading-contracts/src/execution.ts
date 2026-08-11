@@ -181,6 +181,14 @@ export const orderIntentSchema = z.object({
     source_id: identifierSchema,
     author_id: identifierSchema.optional(),
   }).strict(),
+  mirror_lineage: z.object({
+    mirror_execution_id: identifierSchema,
+    mirror_group_id: identifierSchema,
+    mirror_group_revision: z.number().int().positive(),
+    member_id: identifierSchema,
+    mirror_child_source_id: identifierSchema,
+    mirror_child_source_checksum: sha256Schema,
+  }).strict().optional(),
   connection_id: identifierSchema,
   instrument: z.object({
     canonical_id: identifierSchema,

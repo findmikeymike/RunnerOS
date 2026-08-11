@@ -57,6 +57,7 @@ import {
   FileMirrorGroupStore,
   FileMirrorPreviewCoordinator,
   FileSourceExecutionBindingStore,
+  FileMirrorExecutionStore,
   convertDiscoTraderTicket,
   mirrorExecutionIdFor,
   sha256,
@@ -355,6 +356,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const sourceExecutionBindingStore = options.executionDirectory
     ? new FileSourceExecutionBindingStore(options.executionDirectory, options.now)
     : undefined
+  const mirrorExecutionStore = options.executionDirectory
+    ? new FileMirrorExecutionStore(options.executionDirectory, options.now)
+    : undefined
   const tradingConnectionService = (
     tradingConnectionStore
     && options.credentialVault
@@ -376,6 +380,9 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
         // Observe-only receiver foundation. Provider adapters are attached only
         // after their exact paper connection has passed certification.
         adapters: options.executionAdapters ?? [],
+        ...(mirrorExecutionStore
+          ? { resolveMirrorDispatchGrant: (grantId: string) => mirrorExecutionStore.getGrant(grantId) }
+          : {}),
         now: options.now,
       })
     : undefined

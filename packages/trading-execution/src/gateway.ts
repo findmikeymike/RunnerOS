@@ -14,6 +14,7 @@ import {
   executionReceiptSchema,
   executionReconciliationSchema,
   executionSubmitAcknowledgmentSchema,
+  mirrorDispatchGrantSchema,
   orderIntentSchema,
   riskDecisionSchema,
   tradingConnectionSchema,
@@ -27,6 +28,7 @@ import {
   type ExecutionRecord,
   type ExecutionReconciliation,
   type OrderIntent,
+  type MirrorDispatchGrant,
   type RiskDecision,
   type TradingConnection,
 } from '@trade-god/contracts'
@@ -53,6 +55,8 @@ export interface ExecutionGatewayOptions {
   store: FileExecutionStore
   resolveConnection(connectionId: string): Promise<TradingConnection>
   adapters: ExecutionAdapter[]
+  resolveMirrorDispatchGrant?: (grantId: string) => Promise<MirrorDispatchGrant>
+  allowFakeMirrorDispatch?: boolean
   now?: () => string
   maxAccountSnapshotAgeMs?: number
 }
@@ -265,7 +269,7 @@ export class ExecutionGateway {
     )
   }
 
-  async execute(intentId: string): Promise<ExecutionRecord> {
+  async execute(intentId: string, mirrorDispatchGrantId?: string): Promise<ExecutionRecord> {
     const record = await this.options.store.get(intentId)
     const connection = tradingConnectionSchema.parse(
       await this.options.resolveConnection(record.intent.connection_id),
@@ -273,11 +277,107 @@ export class ExecutionGateway {
     return this.options.store.withProviderMutationLock(
       this.providerAccountKey(connection),
       `entry:${intentId}`,
-      () => this.executeWithProviderLock(intentId),
+      () => this.executeWithProviderLock(intentId, mirrorDispatchGrantId),
     )
   }
 
-  private async executeWithProviderLock(intentId: string): Promise<ExecutionRecord> {
+  async reserveMirrorOwnership(intentIds: string[]): Promise<void> {
+    if (intentIds.length < 2 || new Set(intentIds).size !== intentIds.length) {
+      throw new ExecutionGatewayError(
+        'RECORD_INTEGRITY_FAILURE',
+        'Mirror ownership reservation requires at least two unique child intents.',
+      )
+    }
+    const leases = []
+    let mirrorExecutionId: string | undefined
+    for (const intentId of [...intentIds].sort()) {
+      const record = await this.options.store.get(intentId)
+      this.assertState(record, ['approved'])
+      if (!record.intent.mirror_lineage) {
+        throw new ExecutionGatewayError('AUTHORIZATION_MISMATCH', 'Mirror ownership requires child lineage.')
+      }
+      mirrorExecutionId ??= record.intent.mirror_lineage.mirror_execution_id
+      if (record.intent.mirror_lineage.mirror_execution_id !== mirrorExecutionId) {
+        throw new ExecutionGatewayError('AUTHORIZATION_MISMATCH', 'Mirror children do not share one parent.')
+      }
+      const connection = tradingConnectionSchema.parse(
+        await this.options.resolveConnection(record.intent.connection_id),
+      )
+      leases.push({
+        ownership_key: this.ownershipKey(connection, record.intent),
+        intent_id: record.intent.intent_id,
+        connection_id: connection.connection_id,
+        provider_account_key: this.providerAccountKey(connection),
+        instrument_id: record.intent.instrument.canonical_id,
+      })
+    }
+    await this.options.store.acquireOwnershipSet(leases)
+  }
+
+  async releaseMirrorOwnership(intentIds: string[]): Promise<void> {
+    const leases = []
+    for (const intentId of [...new Set(intentIds)].sort()) {
+      const record = await this.options.store.get(intentId)
+      if (!record.intent.mirror_lineage) continue
+      const connection = tradingConnectionSchema.parse(
+        await this.options.resolveConnection(record.intent.connection_id),
+      )
+      leases.push({
+        ownership_key: this.ownershipKey(connection, record.intent),
+        intent_id: record.intent.intent_id,
+      })
+    }
+    await this.options.store.releaseOwnershipSet(leases)
+  }
+
+  async revalidateMirrorAdmission(intentIds: string[]): Promise<void> {
+    for (const intentId of [...intentIds].sort()) {
+      const record = await this.options.store.get(intentId)
+      this.assertState(record, ['approved'])
+      if (!record.intent.mirror_lineage || !record.authorization || !record.risk_decision) {
+        throw new ExecutionGatewayError('AUTHORIZATION_MISMATCH', 'Mirror child admission is incomplete.')
+      }
+      const connection = tradingConnectionSchema.parse(
+        await this.options.resolveConnection(record.intent.connection_id),
+      )
+      const ownershipKey = this.ownershipKey(connection, record.intent)
+      const ownership = await this.options.store.readOwnership(ownershipKey)
+      if (ownership?.intent_id !== record.intent.intent_id) {
+        throw new ExecutionGatewayError('EXECUTION_BUSY', 'Mirror child does not hold exact ownership.')
+      }
+      await this.options.store.withProviderMutationLock(
+        this.providerAccountKey(connection),
+        `mirror-revalidate:${record.intent.intent_id}`,
+        async () => {
+          this.assertIntentCurrent(record.intent)
+          this.assertRisk(record.intent, record.risk_decision!)
+          this.assertAuthorization(
+            record.intent,
+            record.authorization!,
+            computeActionDigest(record.intent, connection),
+          )
+          await this.assertExecutionAllowed(record.intent, connection)
+          const adapter = this.resolveAdapter(connection, record.intent)
+          await adapter.connect(connection)
+          const snapshot = executionAccountSnapshotSchema.parse(await adapter.snapshotAccount(connection))
+          this.assertAccountSnapshot(connection, snapshot)
+          this.assertMonetaryRisk(record.intent, snapshot, record.authorization!)
+          if (snapshot.account_snapshot_id !== record.risk_decision!.account_snapshot_id) {
+            throw new ExecutionGatewayError(
+              'STALE_RISK_DECISION',
+              'Mirror child provider truth changed after account risk approval.',
+            )
+          }
+          this.assertNoUnownedExposure(snapshot)
+        },
+      )
+    }
+  }
+
+  private async executeWithProviderLock(
+    intentId: string,
+    mirrorDispatchGrantId?: string,
+  ): Promise<ExecutionRecord> {
     const approved = await this.options.store.get(intentId)
     this.assertState(approved, ['approved'])
     const connection = tradingConnectionSchema.parse(
@@ -292,6 +392,7 @@ export class ExecutionGateway {
     this.assertRisk(approved.intent, risk)
     const actionDigest = computeActionDigest(approved.intent, connection)
     this.assertAuthorization(approved.intent, authorization, actionDigest)
+    await this.assertMirrorDispatchGrant(approved.intent, mirrorDispatchGrantId)
     await this.assertExecutionAllowed(approved.intent, connection)
     const adapter = this.resolveAdapter(connection, approved.intent)
     const ownershipKey = this.ownershipKey(connection, approved.intent)
@@ -426,6 +527,57 @@ export class ExecutionGateway {
       transition(record, 'acknowledged', 'Provider acknowledged the order command.', this.now())
     ))
     return this.reconcileWithProviderLock(intentId)
+  }
+
+  private async assertMirrorDispatchGrant(
+    intent: OrderIntent,
+    grantId?: string,
+  ): Promise<void> {
+    if (!intent.mirror_lineage) {
+      if (grantId) {
+        throw new ExecutionGatewayError(
+          'AUTHORIZATION_MISMATCH',
+          'A Mirror dispatch grant cannot authorize a non-Mirror intent.',
+        )
+      }
+      return
+    }
+    if (!grantId || !this.options.resolveMirrorDispatchGrant) {
+      throw new ExecutionGatewayError(
+        'AUTHORIZATION_MISMATCH',
+        'Mirror child execution requires a gateway-resolved dispatch grant.',
+      )
+    }
+    const grant = mirrorDispatchGrantSchema.parse(
+      await this.options.resolveMirrorDispatchGrant(grantId),
+    )
+    if (grant.dispatch_authority === 'fake-provider-test-only' && !this.options.allowFakeMirrorDispatch) {
+      throw new ExecutionGatewayError(
+        'CAPABILITY_UNAVAILABLE',
+        'Stage 2 Mirror grants cannot authorize a real provider adapter.',
+      )
+    }
+    const { content_checksum: _checksum, ...unsigned } = grant
+    if (sha256(unsigned) !== grant.content_checksum) {
+      throw new ExecutionGatewayError(
+        'RECORD_INTEGRITY_FAILURE',
+        'Mirror dispatch grant failed integrity validation.',
+      )
+    }
+    if (
+      grant.grant_id !== grantId
+      || grant.mirror_execution_id !== intent.mirror_lineage.mirror_execution_id
+      || grant.intent_id !== intent.intent_id
+      || grant.connection_id !== intent.connection_id
+    ) {
+      throw new ExecutionGatewayError(
+        'AUTHORIZATION_MISMATCH',
+        'Mirror dispatch grant does not bind this exact child intent.',
+      )
+    }
+    if (Date.parse(grant.expires_at) <= Date.parse(this.now())) {
+      throw new ExecutionGatewayError('INTENT_EXPIRED', 'Mirror dispatch grant has expired.')
+    }
   }
 
   async reconcile(intentId: string): Promise<ExecutionRecord> {
