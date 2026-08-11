@@ -16,8 +16,8 @@ Start with `audits/discord-signal-system-readiness-2026-08-10.md`.
 - Live isolated workspace now contains both signed DiscoTrader receivers.
 - Trade Desk is read-only and cannot call donor execution/management tools.
 - Exact Discord routing is mandatory; no default/single-account fallback exists.
-- Multiple targets are rejected rather than truncated; Mirror Groups are still
-  specification only.
+- Multiple targets are rejected rather than truncated. Mirror Groups now have
+  paper-only configuration and dry-run preview, but no execution authority.
 - Packaged Trade God identity is forced before main-process import, independent
   of Artist OS shell variables.
 - Provider-account admission and provider mutations are durably serialized
@@ -76,12 +76,20 @@ This is not yet a live trading system. It has no live quote stream or certified 
 
 The Unified Broker Entry Gateway foundation is implemented locally. Provider-neutral contracts, durable single-claim state, reconciliation, kill switches, checksum-bound management commands, exact adapter certification, and protected-fill recovery are covered by automated tests. Tradovate demo/API and WealthCharts browser foundations implement the same normalized adapter boundary, but neither is paper-certified. DiscordTrader tickets now become immutable gateway intents rather than retaining a second execution authority.
 
-Multi-account Mirror Groups now have a draft source-of-truth design, not an
-implementation. One immutable source event binds to one frozen group revision;
-the parent coordinates independent per-account gateway children, exact
-provider-account/instrument ownership, aggregate risk reservations, and
-group-aware follow-ups. No mirror child can submit without a gateway-verified
-parent dispatch grant. Paper implementation and evidence remain pending.
+Multi-account Mirror Groups now have Stage 0/1 implementation. The UI creates
+paper-only, append-only group revisions with two to five exact accounts,
+per-member source/fixed sizing caps, and an estimated price-distance exposure limit.
+Routes migrate losslessly to an account-or-group target union and reassignment
+requires confirmation. One immutable Discord source event binds to one frozen
+target/revision, instrument/economic snapshot, and trusted receive time before
+materialization. Both durable indexes carry full recovery evidence, so a crash
+or replay cannot follow later route, group, clock, or economics changes. Group
+tickets persist deterministic child previews only;
+`order_mutation_allowed` is always false and the displayed price-distance risk
+is explicitly an estimate, not certified risk. Child risk projections,
+aggregate reservations, dispatch grants, parent execution/recovery, group-aware
+follow-ups, and legacy source-binding backfill remain pending. No mirror child
+can submit.
 
 Discord entry and follow-up management both enter through Trade God's isolated HMAC-authenticated 9201 trigger server. The `discotrader` path validates the complete immutable ticket and registers it through the single gateway intent source; it binds only to an explicitly configured exact Discord-source route, with no default or single-account fallback. The `discotrader-management` path resolves a checksum-bound message only by immutable author plus reply/thread/channel/symbol evidence to exactly one protected gateway trade. Its command identity includes the immutable Discord message and action index, so retries are idempotent without collapsing two separate identical reductions. Startup recovery runs before new delivery. DiscoTrader persists both kinds of signed envelope in a SQLite outbox before network delivery, queues management authority before acknowledging Chrome, retries Runner outages, and emits thread identity only from an exact cross-channel reply or explicit mapping. The prior running observe-only smoke proved the management receiver; the new entry route, outbox retry, and thread mapping are automated-test proven but not yet runtime-smoked. The runtime intentionally has zero provider adapters until paper certification.
 
@@ -121,6 +129,12 @@ The UI also exposes quality, trace ID, fixture checksum, content hash, and produ
 
 ## Verification Truth
 
+- Mirror Groups Stage 0/1: 287 focused tests passed across 41 contract,
+  execution, trigger, Electron trading, route, IPC/preload, renderer-helper,
+  and channel parity files with 992 expectations. Repository typecheck and Electron
+  main/preload/renderer production builds passed. This proves configuration,
+  route migration, immutable source binding, deterministic preview, and zero
+  execution authority—not provider fan-out or group management.
 - Provider lifecycle closure: 318 focused/system tests passed across 50 files;
   repository typecheck, all three Electron production builds, and diff check
   passed. Rival repros for blind enumeration and post-stop token distribution

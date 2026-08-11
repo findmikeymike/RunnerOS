@@ -63,6 +63,7 @@ export class FileDiscoTraderIntentSource {
     input: unknown,
     route: DiscoTraderIntentRoute,
     traceId?: string,
+    receivedAt: string = this.now(),
   ): Promise<{ artifact: DiscoTraderIntentSourceArtifact; record: ExecutionRecord }> {
     const payload = discoTraderPushPayloadSchema.parse(input)
     if (payload.kind !== 'ticket' || !payload.ticket) {
@@ -71,7 +72,7 @@ export class FileDiscoTraderIntentSource {
         'Only a DiscoTrader ticket push can create an order intent.',
       )
     }
-    const artifact = convertDiscoTraderTicket(payload.ticket, route, this.now())
+    const artifact = convertDiscoTraderTicket(payload.ticket, route, receivedAt)
     await this.bindTicketIdentity(artifact)
     const existing = await this.persist(artifact)
     const durableArtifact = existing ?? artifact

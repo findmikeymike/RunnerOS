@@ -47,10 +47,13 @@ type ApiToChannelMapKeys = Exclude<
   | 'listTradingSignalRoutes' // direct local trading signal-route IPC
   | 'saveTradingSignalRoute' // direct local trading signal-route IPC
   | 'removeTradingSignalRoute' // direct local trading signal-route IPC
+  | 'listMirrorGroups' // direct local Mirror Group configuration IPC
+  | 'saveMirrorGroup' // direct local Mirror Group revision IPC
   | 'getDiscoTraderWebhookSecretStatus' // direct local encrypted-vault IPC
   | 'saveDiscoTraderWebhookSecret' // direct local encrypted-vault IPC
   | 'getTradeGodExecutionControl' // direct local execution-control IPC
   | 'setTradeGodGlobalExecutionKill' // direct local execution-control IPC
+  | 'setTradeGodConnectionExecutionKill' // direct local account-halt IPC
   | 'listTradeGodStandingAuthorizations' // direct local paper-mandate IPC
   | 'saveTradeGodStandingAuthorization' // direct local paper-mandate IPC
   | 'revokeTradeGodStandingAuthorization' // direct local paper-mandate IPC

@@ -310,14 +310,14 @@ and coordinates child intents through the existing gateway.
 
 ## Contracts
 
-### Source-event binding `source-execution-binding@1`
+### Source-event binding `source-execution-binding@2`
 
 One binding protects both existing single-account execution and Mirror Groups
 from route/revision drift on retries.
 
 ```ts
-interface SourceExecutionBindingV1 {
-  source_execution_binding_schema_version: 'source-execution-binding@1'
+interface SourceExecutionBindingV2 {
+  source_execution_binding_schema_version: 'source-execution-binding@2'
   binding_id: string
   source_type: 'discord'
   server_id: string
@@ -326,6 +326,16 @@ interface SourceExecutionBindingV1 {
   message_id: string
   ticket_id: string
   ticket_checksum: string
+  route_id: string
+  instrument: {
+    canonical_id: string
+    symbol: string
+    exchange: string
+    expiry?: string
+    tick_size: string
+    point_value_usd: string
+  }
+  received_at: string
   target:
     | { type: 'connection'; connection_id: string; intent_id: string }
     | {
@@ -351,8 +361,11 @@ serialized operation shared with route/group target mutation. A crash after
 binding but before materialization resumes from the binding and cannot select a
 different account.
 
-Lookup indexes both immutable message ID and ticket ID. Either identity may
-find the binding, but both must agree when present; disagreement halts.
+Lookup indexes both immutable message ID and ticket ID. The ticket index stores
+the complete checksum-valid binding, including frozen instrument economics and
+trusted receipt time, so a crash before the source index write is recoverable.
+Either identity may find the binding, but both must agree when present;
+disagreement halts.
 
 Before accepting webhooks after the contract ships, Trade God performs a
 one-time legacy backfill:

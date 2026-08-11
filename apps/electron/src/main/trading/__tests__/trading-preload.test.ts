@@ -39,6 +39,9 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     'connection-old',
   ) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.removeTradingSignalRoute('route-1') as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.listMirrorGroups() as any).toEqual({ artifact_id: 'artifact-preload' })
+  expect(await api.saveMirrorGroup({ mirror_group_id: 'group-one' } as any) as any)
+    .toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.getTradeGodExecutionControl() as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.setTradeGodGlobalExecutionKill(true) as any).toEqual({ artifact_id: 'artifact-preload' })
   expect(await api.setTradeGodConnectionExecutionKill('connection-1', false) as any)
@@ -70,6 +73,8 @@ test('preload adapter invokes only the local Trade God channels', async () => {
     { channel: TRADE_GOD_IPC.LIST_SIGNAL_ROUTES, args: [] },
     { channel: TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, args: [{ route_id: 'route-1' }, 'connection-old'] },
     { channel: TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, args: ['route-1'] },
+    { channel: TRADE_GOD_IPC.LIST_MIRROR_GROUPS, args: [] },
+    { channel: TRADE_GOD_IPC.SAVE_MIRROR_GROUP, args: [{ mirror_group_id: 'group-one' }] },
     { channel: TRADE_GOD_IPC.EXECUTION_CONTROL, args: [] },
     { channel: TRADE_GOD_IPC.SET_GLOBAL_EXECUTION_KILL, args: [true] },
     { channel: TRADE_GOD_IPC.SET_CONNECTION_EXECUTION_KILL, args: ['connection-1', false] },

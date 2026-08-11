@@ -944,14 +944,19 @@ app.whenReady().then(async () => {
                   }
                 }
                 try {
-                  const record = await tradeGodRuntime.ingestDiscoTraderTicketPush(delivery.body)
+                  const result = await tradeGodRuntime.ingestDiscoTraderTicketPush(delivery.body)
                   return {
                     handled: true,
                     status: 202,
                     body: {
                       ok: true,
-                      intent_id: record.intent.intent_id,
-                      state: record.state,
+                      ...('intent' in result
+                        ? { intent_id: result.intent.intent_id, state: result.state }
+                        : {
+                            mirror_execution_id: result.mirror_execution_id,
+                            state: result.state,
+                            order_mutation_allowed: false,
+                          }),
                     },
                   }
                 } catch (error) {

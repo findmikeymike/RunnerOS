@@ -11,7 +11,9 @@ import type {
   IbkrGatewayHealth,
   MarketCandleSeries,
   ExecutionAuthorization,
+  MirrorGroup,
 } from '@trade-god/contracts'
+import type { SaveMirrorGroupInput } from '@trade-god/execution'
 
 import { TRADE_GOD_IPC } from './trading-ipc.ts'
 import type { InterpretFixtureInput } from './order-flow-specialist-pipeline.ts'
@@ -48,9 +50,11 @@ export interface TradingPreloadApi {
   listTradingSignalRoutes(): Promise<TradingSignalRoute[]>
   saveTradingSignalRoute(
     route: TradingSignalRoute,
-    expectedPreviousConnectionId?: string,
+    expectedPreviousTargetKey?: string,
   ): Promise<TradingSignalRoute>
   removeTradingSignalRoute(routeId: string): Promise<boolean>
+  listMirrorGroups(): Promise<MirrorGroup[]>
+  saveMirrorGroup(input: SaveMirrorGroupInput): Promise<MirrorGroup>
   getDiscoTraderWebhookSecretStatus(): Promise<{ configured: boolean }>
   saveDiscoTraderWebhookSecret(secret: string): Promise<{ configured: true }>
   getTradeGodExecutionControl(): Promise<{
@@ -111,10 +115,12 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
       invoke(TRADE_GOD_IPC.CONFIRM_CONNECTION_LOGIN, connectionId) as Promise<TradingConnectionStatus>
     ),
     listTradingSignalRoutes: () => invoke(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES) as Promise<TradingSignalRoute[]>,
-    saveTradingSignalRoute: (route, expectedPreviousConnectionId) => (
-      invoke(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, route, expectedPreviousConnectionId) as Promise<TradingSignalRoute>
+    saveTradingSignalRoute: (route, expectedPreviousTargetKey) => (
+      invoke(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, route, expectedPreviousTargetKey) as Promise<TradingSignalRoute>
     ),
     removeTradingSignalRoute: (routeId) => invoke(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, routeId) as Promise<boolean>,
+    listMirrorGroups: () => invoke(TRADE_GOD_IPC.LIST_MIRROR_GROUPS) as Promise<MirrorGroup[]>,
+    saveMirrorGroup: (input) => invoke(TRADE_GOD_IPC.SAVE_MIRROR_GROUP, input) as Promise<MirrorGroup>,
     getDiscoTraderWebhookSecretStatus: () => (
       invoke(TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS) as Promise<{ configured: boolean }>
     ),

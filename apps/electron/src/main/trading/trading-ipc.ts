@@ -12,7 +12,9 @@ import type {
   MarketCandleSeries,
   TradingConnection,
   ExecutionAuthorization,
+  MirrorGroup,
 } from '@trade-god/contracts'
+import type { SaveMirrorGroupInput } from '@trade-god/execution'
 
 import type { InterpretFixtureInput } from './order-flow-specialist-pipeline.ts'
 import type { SyntheticChartFixtureInput } from './synthetic-chart-fixture.ts'
@@ -42,6 +44,8 @@ export const TRADE_GOD_IPC = {
   LIST_SIGNAL_ROUTES: 'trade-god:signal-routes:list',
   SAVE_SIGNAL_ROUTE: 'trade-god:signal-routes:save',
   REMOVE_SIGNAL_ROUTE: 'trade-god:signal-routes:remove',
+  LIST_MIRROR_GROUPS: 'trade-god:mirror-groups:list',
+  SAVE_MIRROR_GROUP: 'trade-god:mirror-groups:save',
   DISCOTRADER_WEBHOOK_SECRET_STATUS: 'trade-god:discotrader:webhook-secret-status',
   SAVE_DISCOTRADER_WEBHOOK_SECRET: 'trade-god:discotrader:save-webhook-secret',
   EXECUTION_CONTROL: 'trade-god:execution:control',
@@ -74,9 +78,11 @@ export interface TradingIpcManager {
   listTradingSignalRoutes?(): Promise<TradingSignalRoute[]>
   saveTradingSignalRoute?(
     route: TradingSignalRoute,
-    expectedPreviousConnectionId?: string,
+    expectedPreviousTargetKey?: string,
   ): Promise<TradingSignalRoute>
   removeTradingSignalRoute?(routeId: string): Promise<boolean>
+  listMirrorGroups?(): Promise<MirrorGroup[]>
+  saveMirrorGroup?(input: SaveMirrorGroupInput): Promise<MirrorGroup>
   getDiscoTraderWebhookSecretStatus?(): Promise<{ configured: boolean }>
   saveDiscoTraderWebhookSecret?(secret: string): Promise<{ configured: true }>
   getExecutionControl?(): Promise<{
@@ -174,20 +180,31 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
   ipcMain.handle(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE, (
     _event,
     route: unknown,
-    expectedPreviousConnectionId: unknown,
+    expectedPreviousTargetKey: unknown,
   ) => {
     if (!manager.saveTradingSignalRoute) throw new Error('Trading signal routes are unavailable.')
-    if (expectedPreviousConnectionId !== undefined && typeof expectedPreviousConnectionId !== 'string') {
-      throw new Error('Expected previous connection id is invalid.')
+    if (expectedPreviousTargetKey !== undefined && typeof expectedPreviousTargetKey !== 'string') {
+      throw new Error('Expected previous target key is invalid.')
     }
     return manager.saveTradingSignalRoute(
       route as TradingSignalRoute,
-      expectedPreviousConnectionId,
+      expectedPreviousTargetKey,
     )
   })
   ipcMain.handle(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE, (_event, routeId: unknown) => {
     if (!manager.removeTradingSignalRoute) throw new Error('Trading signal routes are unavailable.')
     return manager.removeTradingSignalRoute(String(routeId))
+  })
+  ipcMain.handle(TRADE_GOD_IPC.LIST_MIRROR_GROUPS, () => {
+    if (!manager.listMirrorGroups) throw new Error('Mirror Groups are unavailable.')
+    return manager.listMirrorGroups()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.SAVE_MIRROR_GROUP, (_event, input: unknown) => {
+    if (!manager.saveMirrorGroup) throw new Error('Mirror Groups are unavailable.')
+    if (!input || typeof input !== 'object' || Array.isArray(input)) {
+      throw new Error('Mirror Group payload is invalid.')
+    }
+    return manager.saveMirrorGroup(input as SaveMirrorGroupInput)
   })
   ipcMain.handle(TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS, () => {
     if (!manager.getDiscoTraderWebhookSecretStatus) throw new Error('DiscoTrader webhook credentials are unavailable.')
@@ -250,6 +267,8 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_SIGNAL_ROUTES)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_SIGNAL_ROUTE)
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_SIGNAL_ROUTE)
+    ipcMain.removeHandler(TRADE_GOD_IPC.LIST_MIRROR_GROUPS)
+    ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_MIRROR_GROUP)
     ipcMain.removeHandler(TRADE_GOD_IPC.DISCOTRADER_WEBHOOK_SECRET_STATUS)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_DISCOTRADER_WEBHOOK_SECRET)
     ipcMain.removeHandler(TRADE_GOD_IPC.EXECUTION_CONTROL)

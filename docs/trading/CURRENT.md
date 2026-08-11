@@ -12,7 +12,7 @@ source_of_truth: true
 - Date: 2026-08-11
 - Stage: adversarial safety closure before real-provider paper connectivity
 - Current goal: complete the P0 gates in `audits/discord-signal-system-readiness-2026-08-10.md`, then smoke one exact Tradovate paper lifecycle
-- Overall state: signed Discord entry and management receivers, exact source-to-account routing, durable event/ticket lineage, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute maximum loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. Per-account automatic paper authority is an explicit, durable, expiring mandate with exact contracts and hard risk/quantity limits. A provider session layer now coalesces Tradovate renewal, persists rotation before reuse, and backs off penalty/captcha responses; a low-rate supervisor continuously reconciles active records and connection-halts stale truth. The desktop runtime still attaches zero execution adapters, so these lifecycle controls remain inert and incoming tickets remain `created`. Multiple targets fail closed, Mirror Groups remain design-only, browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
+- Overall state: signed Discord entry and management receivers, exact account-or-Mirror-Group routing, durable source replay binding, startup recovery, isolated trading sessions, encrypted webhook credentials, persistent halt controls, and a read-only Trade Desk are implemented and verified locally. Unmapped or stale sources fail closed; early exact follow-ups defer; stale management cannot regress newer stops; uncertain submits quarantine the connection; all provider-account mutations including restart reconciliation are serialized; gateway-owned futures economics independently recompute maximum loss; expired/root contracts cannot execute; and exact Tradovate contract/modify/close truth is required. Per-account automatic paper authority is an explicit, durable, expiring mandate with exact contracts and hard risk/quantity limits. A provider session layer now coalesces Tradovate renewal, persists rotation before reuse, and backs off penalty/captcha responses; a low-rate supervisor continuously reconciles active records and connection-halts stale truth. Mirror Group Stage 0/1 now provides immutable revisions, lossless route migration, exact per-member sizing previews, and configuration UI; every preview explicitly has zero order authority and its stop-distance estimate is not mislabeled as certified risk. The desktop runtime still attaches zero execution adapters, so single-account tickets remain `created` and group tickets stop at preview receipts. Multiple targets fail closed, group dispatch/risk reservations/follow-up management are not implemented, browser execution remains interface-only, and no real provider is certified. Trade God is not yet an autonomous trade copier.
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/progress/trade-god-foundation`
 - Branch: `codex/trade-god-foundation`
 - Frozen base: `origin/main` at `e7e96be32a5be394aefaf5712bdd711b96ad9d15`
@@ -64,14 +64,27 @@ The workbench can request engine health, run the known fixture, and display tota
 
 ## Recently Completed
 
-- Drafted the source-of-truth Multi-Account Mirror Groups specification. It
+- Implemented Mirror Groups Stage 0/1 from the source-of-truth specification:
+  append-only checksum-bound group revisions, a five-account paper cap,
+  duplicate-account/environment/readiness checks, lossless route v1-to-v2
+  migration, exact account-or-group reassignment confirmation, and a desktop
+  group editor with per-account source/fixed sizing caps. Authenticated group
+  tickets create immutable, replay-safe dry-run receipts with deterministic
+  child IDs and zero gateway/provider calls. The binding freezes its route,
+  group revision, instrument economics, and trusted receive time; either
+  durable index can repair the other after a crash. Group follow-ups cannot
+  fall through to the single-account manager. Enforceable child risk
+  projections, reservations, dispatch grants, parent execution, group
+  follow-ups, legacy binding backfill, and paper evidence remain pending.
+- Maintained the source-of-truth Multi-Account Mirror Groups specification. It
   defines versioned account-or-group routing, immutable parent/child lineage,
   per-account sizing/risk/authorization/provider truth, netted-position
   ownership leases, immutable source replay binding, aggregate risk
   reservations, gateway-enforced parent dispatch grants, strict pre-order
   admission, visible partial outcomes, group-aware Discord follow-ups, restart
   recovery, UI states, and a staged paper-only rollout. This is design truth
-  only; no mirrored provider execution is implemented or enabled.
+  governs the new configuration/preview implementation; no mirrored provider
+  execution is implemented or enabled.
 - Split Trade God into a distinct Electron product: `Trade God`, app ID
   `com.findmikeymike.tradegod`, `tradegod://` deep links, dev port `5273`, and
   isolated `~/.trade-god` config, credentials, workspace, window, browser,
@@ -195,9 +208,9 @@ The workbench can request engine health, run the known fixture, and display tota
    connection.
 3. Provider-certify the contract economics/calendar path, run the forced-
    failure matrix, and attach only that exact paper adapter.
-4. Approve the four Mirror Group defaults in the draft spec, then implement
-   contracts, lossless route migration, group revisions, ownership leases, and
-   dry-run planning with zero provider order/mutation calls.
+4. Continue Mirror Groups Stage 2: backfill/audit legacy source bindings, add
+   certified child risk projections, aggregate reservations, gateway-verified
+   dispatch grants, parent recovery, and fake-provider failure injection.
 5. Implement and certify Tradovate partial-close/protection-resize behavior.
 6. Run and retain the single-account and Mirror Group paper soak plus forced-
    failure matrices before attaching the adapter to the desktop gateway.

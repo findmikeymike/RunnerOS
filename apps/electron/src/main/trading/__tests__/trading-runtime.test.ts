@@ -11,6 +11,7 @@ import {
 } from '@trade-god/contracts'
 import {
   buildDiscordManagementMessage,
+  FileMirrorGroupStore,
   FileTradingConnectionStore,
 } from '@trade-god/execution'
 import { loadEsDemoFixture } from '@trade-god/testkit'
@@ -36,7 +37,7 @@ class FakeIpcMain {
 const repoRoot = path.resolve(import.meta.dir, '../../../../../..')
 
 test('resolves and runs the development sidecar from an explicit RunnerOS root', async () => {
-  const runtimeNow = new Date().toISOString()
+  let runtimeNow = new Date().toISOString()
   const contextDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-agent-context-'))
   const alertDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-alerts-'))
   const connectionDirectory = mkdtempSync(path.join(tmpdir(), 'trade-god-connections-'))
@@ -179,13 +180,14 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
   }
   await new FileTradingConnectionStore(connectionDirectory, () => runtimeNow).save(connection)
   await new TradingSignalRouteStore(connectionDirectory, () => runtimeNow).save({
+    route_schema_version: 'trading-signal-route@2',
     route_id: 'route-runtime-discord-one',
     display_name: 'Jordan V signals',
     source_type: 'discord',
     server_id: '1',
     channel_id: '2',
     trader_author_id: '123456789012345678',
-    connection_id: connection.connection_id,
+    target: { type: 'connection', connection_id: connection.connection_id },
     enabled: true,
     created_at: runtimeNow,
     updated_at: runtimeNow,
@@ -272,6 +274,10 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
       quantity: 2,
     },
   })
+  const entryReceivedAt = runtimeNow
+  runtimeNow = '2027-01-15T15:05:00.000Z'
+  expect(await runtime.ingestDiscoTraderTicketPush!(entryPush)).toEqual(entry)
+  runtimeNow = entryReceivedAt
   expect(await ipc.handlers.get(TRADE_GOD_IPC.REVOKE_STANDING_AUTHORIZATION)!({}, connection.connection_id))
     .toBe(true)
   const cbotEntry = await runtime.ingestDiscoTraderTicketPush!({
@@ -295,6 +301,7 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
       },
     },
   })
+  if (!('intent' in cbotEntry)) throw new Error('Expected a single-account execution record.')
   expect(cbotEntry.intent.instrument).toEqual({
     canonical_id: 'CBOT:MYMU6',
     symbol: 'MYMU6',
@@ -304,6 +311,113 @@ test('resolves and runs the development sidecar from an explicit RunnerOS root',
     point_value_usd: '0.5',
   })
   expect(cbotEntry.intent.protection.stop_loss).toEqual({ type: 'ticks', value: '10' })
+
+  const mirrorConnection = {
+    ...connection,
+    connection_id: 'connection-discotrader-paper-two',
+    display_name: 'DiscoTrader Paper Two',
+    account_ref: 'account-paper-two',
+    account_display: { label: 'Paper account two' },
+    credential_ref: 'credential-paper-two',
+  }
+  const connectionStore = new FileTradingConnectionStore(connectionDirectory, () => runtimeNow)
+  await connectionStore.save(mirrorConnection)
+  const group = await new FileMirrorGroupStore(
+    executionDirectory,
+    (connectionId) => connectionStore.get(connectionId),
+    () => runtimeNow,
+  ).save({
+    mirror_group_id: 'mirror-runtime-paper',
+    display_name: 'Runtime paper mirrors',
+    environment: 'paper',
+    state: 'active',
+    dispatch_max_concurrency: 2,
+    max_aggregate_initial_risk: '100',
+    max_active_parent_trades: 1,
+    members: [connection, mirrorConnection].map((member) => ({
+      connection_id: member.connection_id,
+      enabled: true,
+      quantity_rule: { mode: 'fixed-contracts' as const, contracts: 1, max_contracts: 1 },
+    })),
+  })
+  await new TradingSignalRouteStore(connectionDirectory, () => runtimeNow).save({
+    route_schema_version: 'trading-signal-route@2',
+    route_id: 'route-runtime-discord-one',
+    display_name: 'Jordan V signals',
+    source_type: 'discord',
+    server_id: '1',
+    channel_id: '2',
+    trader_author_id: '123456789012345678',
+    target: { type: 'mirror-group', mirror_group_id: group.mirror_group_id },
+    enabled: true,
+    created_at: runtimeNow,
+    updated_at: runtimeNow,
+  }, { expected_previous_target_key: `connection:${connection.connection_id}` })
+  const mirrorPreview = await runtime.ingestDiscoTraderTicketPush!({
+    ...entryPush,
+    ticket: {
+      ...entryPush.ticket,
+      id: 'ticket-runtime-mirror-1',
+      riskUsd: 80,
+      provenance: {
+        ...entryPush.ticket.provenance,
+        messageId: 'discord-entry-runtime-mirror-1',
+      },
+    },
+  })
+  expect(mirrorPreview).toMatchObject({
+    mirror_execution_preview_schema_version: 'mirror-execution-preview@1',
+    state: 'ready',
+    order_mutation_allowed: false,
+    children: [
+      { connection_id: connection.connection_id, planned_quantity: 1 },
+      { connection_id: mirrorConnection.connection_id, planned_quantity: 1 },
+    ],
+  })
+  expect('intent' in mirrorPreview).toBe(false)
+  await new TradingSignalRouteStore(connectionDirectory, () => runtimeNow).save({
+    route_schema_version: 'trading-signal-route@2',
+    route_id: 'route-runtime-discord-one',
+    display_name: 'Jordan V signals',
+    source_type: 'discord',
+    server_id: '1', channel_id: '2', trader_author_id: '123456789012345678',
+    target: { type: 'connection', connection_id: connection.connection_id },
+    enabled: true, created_at: runtimeNow, updated_at: runtimeNow,
+  }, { expected_previous_target_key: `mirror-group:${group.mirror_group_id}` })
+  const originalRuntimeNow = runtimeNow
+  runtimeNow = '2027-01-15T15:05:00.000Z'
+  expect(await runtime.ingestDiscoTraderTicketPush!({
+    ...entryPush,
+    ticket: {
+      ...entryPush.ticket,
+      id: 'ticket-runtime-mirror-1',
+      riskUsd: 80,
+      provenance: {
+        ...entryPush.ticket.provenance,
+        messageId: 'discord-entry-runtime-mirror-1',
+      },
+    },
+  })).toEqual(mirrorPreview)
+  runtimeNow = originalRuntimeNow
+
+  const mirrorContextManagement = buildDiscordManagementMessage({
+    message_id: 'runtime-followup-mirror-context',
+    author_id: '123456789012345678',
+    channel_id: '2',
+    guild_id: '1',
+    reply_to_message_id: 'discord-entry-runtime-mirror-1',
+    raw_text: 'all out',
+    posted_at: runtimeNow,
+    observed_at: runtimeNow,
+    is_edit: false,
+  })
+  await expect(runtime.ingestDiscordManagementPush!({
+    kind: 'management', severity: 'action_required', summary: 'Mirror follow-up',
+    management: mirrorContextManagement, at: runtimeNow,
+  })).rejects.toMatchObject({
+    code: 'CAPABILITY_UNAVAILABLE',
+    message: 'Mirror Group follow-up management is disabled during the preview-only rollout.',
+  })
 
   const managementMessage = buildDiscordManagementMessage({
     message_id: 'runtime-followup-1',
@@ -394,9 +508,10 @@ test('uses only packaged app assets and bundled Bun in packaged mode', () => {
 })
 
 const coordinatorRoute = (connectionId = 'connection-one'): TradingSignalRoute => ({
+  route_schema_version: 'trading-signal-route@2',
   route_id: 'route-one', display_name: 'Trader one', source_type: 'discord',
   server_id: '1', channel_id: '2', trader_author_id: '3',
-  connection_id: connectionId, enabled: true,
+  target: { type: 'connection', connection_id: connectionId }, enabled: true,
   created_at: '2026-08-03T12:00:00.000Z', updated_at: '2026-08-03T12:00:00.000Z',
 })
 
@@ -471,4 +586,110 @@ test('account deletion is blocked while an execution is active or unresolved', a
     return true
   })).rejects.toThrow('Resolve or close this account’s execution records')
   expect(removeConnectionCalled).toBe(false)
+})
+
+test('route coordinator validates Mirror Group targets and protects current group members', async () => {
+  let connectionLookup = 0
+  let groupLookup = 0
+  let removeConnectionCalled = false
+  const groupRoute: TradingSignalRoute = {
+    ...coordinatorRoute(),
+    target: { type: 'mirror-group', mirror_group_id: 'mirror-group-one' },
+  }
+  const coordinator = new TradingRouteMutationCoordinator({
+    get: async () => { connectionLookup += 1; return {} as TradingConnection },
+  }, {
+    list: async () => [],
+    save: async (route) => route,
+    remove: async () => true,
+  }, async () => false, {
+    get: async (groupId) => {
+      groupLookup += 1
+      if (groupId !== 'mirror-group-one') throw new Error('missing group')
+      return { state: 'active' } as any
+    },
+    list: async () => [{
+      state: 'active',
+      members: [{ connection_id: 'connection-one' }],
+    }] as any,
+    save: async (input) => ({ ...input, revision: 1 }) as any,
+  })
+
+  expect(await coordinator.saveRoute(groupRoute)).toEqual(groupRoute)
+  expect(groupLookup).toBe(1)
+  expect(connectionLookup).toBe(0)
+  await expect(coordinator.removeConnection('connection-one', async () => {
+    removeConnectionCalled = true
+    return true
+  })).rejects.toThrow('active Mirror Group revisions')
+  expect(removeConnectionCalled).toBe(false)
+})
+
+test('route coordinator rejects enabled inactive and all archived Mirror Group routes', async () => {
+  let groupState: 'draft' | 'archived' = 'draft'
+  let saveCalled = false
+  const coordinator = new TradingRouteMutationCoordinator({
+    get: async () => ({} as TradingConnection),
+  }, {
+    list: async () => [],
+    save: async (route) => { saveCalled = true; return route },
+    remove: async () => true,
+  }, async () => false, {
+    get: async () => ({ state: groupState }) as any,
+    list: async () => [],
+    save: async (input) => ({ ...input, revision: 1 }) as any,
+  })
+  const groupRoute: TradingSignalRoute = {
+    ...coordinatorRoute(),
+    target: { type: 'mirror-group', mirror_group_id: 'mirror-group-one' },
+  }
+  await expect(coordinator.saveRoute(groupRoute)).rejects.toThrow('only after its Mirror Group is active')
+  groupState = 'archived'
+  await expect(coordinator.saveRoute({ ...groupRoute, enabled: false })).rejects.toThrow('Archived Mirror Groups')
+  expect(saveCalled).toBe(false)
+})
+
+test('routing capture serializes Mirror Group edits and account deletion', async () => {
+  let releaseCapture!: () => void
+  let markCaptureStarted!: () => void
+  const captureStarted = new Promise<void>((resolve) => { markCaptureStarted = resolve })
+  const captureGate = new Promise<void>((resolve) => { releaseCapture = resolve })
+  let groupSaved = false
+  const groups: any[] = []
+  const coordinator = new TradingRouteMutationCoordinator({
+    get: async () => ({} as TradingConnection),
+  }, {
+    list: async () => [], save: async (route) => route, remove: async () => true,
+  }, async () => false, {
+    get: async () => ({ state: 'active' }) as any,
+    list: async () => groups,
+    save: async (input) => {
+      groupSaved = true
+      const group = {
+        ...input, revision: 1, state: 'active',
+        members: [{ connection_id: 'connection-one' }, { connection_id: 'connection-two' }],
+      }
+      groups.push(group)
+      return group as any
+    },
+  })
+
+  const capture = coordinator.captureRoutingSnapshot(async () => {
+    markCaptureStarted()
+    await captureGate
+    return 'captured'
+  })
+  await captureStarted
+  const save = coordinator.saveMirrorGroup({} as any)
+  let removed = false
+  const remove = coordinator.removeConnection('connection-one', async () => {
+    removed = true
+    return true
+  })
+  expect(groupSaved).toBe(false)
+  releaseCapture()
+  expect(await capture).toBe('captured')
+  await save
+  await expect(remove).rejects.toThrow('active Mirror Group revisions')
+  expect(removed).toBe(false)
 })

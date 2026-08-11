@@ -54,12 +54,24 @@ import {
   FileExecutionStore,
   FileTradingConnectionStore,
   FileStandingAuthorizationStore,
+  FileMirrorGroupStore,
+  FileMirrorPreviewCoordinator,
+  FileSourceExecutionBindingStore,
+  convertDiscoTraderTicket,
+  mirrorExecutionIdFor,
+  sha256,
   PaperExecutionCoordinator,
   ExecutionReconciliationSupervisor,
   type DiscoTraderIntentRoute,
   type ExecutionAdapter,
+  type SaveMirrorGroupInput,
 } from '@trade-god/execution'
-import type { ExecutionAuthorization } from '@trade-god/contracts'
+import type {
+  ExecutionAuthorization,
+  MirrorExecutionPreview,
+  MirrorGroup,
+  SourceExecutionBinding,
+} from '@trade-god/contracts'
 
 interface ResolveLaunchOptions {
   rootCandidates: string[]
@@ -116,17 +128,37 @@ export class TradingRouteMutationCoordinator {
     private readonly connections: Pick<FileTradingConnectionStore, 'get'>,
     private readonly routes: Pick<TradingSignalRouteStore, 'list' | 'save' | 'remove'>,
     private readonly hasUnresolvedExecution: (connectionId: string) => Promise<boolean> = async () => false,
+    private readonly groups?: Pick<FileMirrorGroupStore, 'get' | 'list' | 'save'>,
   ) {}
+
+  async captureRoutingSnapshot<T>(operation: () => Promise<T>): Promise<T> {
+    return this.withLock(operation)
+  }
+
+  async saveMirrorGroup(input: SaveMirrorGroupInput): Promise<MirrorGroup> {
+    if (!this.groups) throw new Error('Mirror Groups are unavailable.')
+    return this.withLock(() => this.groups!.save(input))
+  }
 
   async saveRoute(
     route: TradingSignalRoute,
-    expectedPreviousConnectionId?: string,
+    expectedPreviousTargetKey?: string,
   ): Promise<TradingSignalRoute> {
     return this.withLock(async () => {
-      await this.connections.get(route.connection_id)
+      if (route.target.type === 'connection') await this.connections.get(route.target.connection_id)
+      else {
+        if (!this.groups) throw new Error('Mirror Groups are unavailable.')
+        const group = await this.groups.get(route.target.mirror_group_id)
+        if (group.state === 'archived') {
+          throw new Error('Archived Mirror Groups cannot receive Discord sources.')
+        }
+        if (route.enabled && group.state !== 'active') {
+          throw new Error('Enable this Discord source only after its Mirror Group is active.')
+        }
+      }
       return this.routes.save(route, {
-        ...(expectedPreviousConnectionId
-          ? { expected_previous_connection_id: expectedPreviousConnectionId }
+        ...(expectedPreviousTargetKey
+          ? { expected_previous_target_key: expectedPreviousTargetKey }
           : {}),
       })
     })
@@ -142,12 +174,21 @@ export class TradingRouteMutationCoordinator {
   ): Promise<boolean> {
     return this.withLock(async () => {
       const attachedRoutes = (await this.routes.list())
-        .filter((route) => route.connection_id === connectionId)
+        .filter((route) => route.target.type === 'connection' && route.target.connection_id === connectionId)
       if (attachedRoutes.length > 0) {
         throw new Error('Remove this account’s Discord sources before removing the trading account.')
       }
       if (await this.hasUnresolvedExecution(connectionId)) {
         throw new Error('Resolve or close this account’s execution records before removing the trading account.')
+      }
+      const attachedGroups = this.groups
+        ? (await this.groups.list()).filter((group) => (
+            group.state !== 'archived'
+            && group.members.some((member) => member.connection_id === connectionId)
+          ))
+        : []
+      if (attachedGroups.length > 0) {
+        throw new Error('Remove this account from active Mirror Group revisions before removing it.')
       }
       return remove()
     })
@@ -235,7 +276,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   orderFlowSpecialist?: OrderFlowSpecialist
   orderFlowSpecialistPipeline?: OrderFlowSpecialistPipeline
   alertLedger?: TradeAlertLedger
-  ingestDiscoTraderTicketPush?: (input: unknown) => Promise<ExecutionRecord>
+  ingestDiscoTraderTicketPush?: (input: unknown) => Promise<ExecutionRecord | MirrorExecutionPreview>
   ingestDiscordManagementPush?: (input: unknown) => Promise<DiscordManagementReceipt>
   emergencyHalt: () => Promise<void>
   setSpecialistModel: (model: SpecialistModel) => void
@@ -298,6 +339,22 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
   const tradingSignalRouteStore = options.connectionDirectory
     ? new TradingSignalRouteStore(options.connectionDirectory, options.now)
     : undefined
+  const mirrorGroupStore = options.executionDirectory && tradingConnectionStore
+    ? new FileMirrorGroupStore(
+        options.executionDirectory,
+        (connectionId) => tradingConnectionStore.get(connectionId),
+        options.now,
+      )
+    : undefined
+  const mirrorPreviewCoordinator = options.executionDirectory && tradingConnectionStore
+    ? new FileMirrorPreviewCoordinator(
+        options.executionDirectory,
+        (connectionId) => tradingConnectionStore.get(connectionId),
+      )
+    : undefined
+  const sourceExecutionBindingStore = options.executionDirectory
+    ? new FileSourceExecutionBindingStore(options.executionDirectory, options.now)
+    : undefined
   const tradingConnectionService = (
     tradingConnectionStore
     && options.credentialVault
@@ -351,6 +408,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
               && !removableExecutionStates.has(record.state)
             ))
           : false,
+        mirrorGroupStore,
       )
     : undefined
   const discordManagementSource = executionGateway && options.executionDirectory
@@ -361,21 +419,124 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
       )
     : undefined
   const resolveDiscoTraderRoute = discordManagementSource && tradingConnectionStore
-    ? async (ticket: DiscoTraderTicket): Promise<DiscoTraderIntentRoute> => {
-        const connections = await tradingConnectionStore.list()
+    ? async (ticket: DiscoTraderTicket): Promise<
+        | { type: 'connection'; route: DiscoTraderIntentRoute; binding?: SourceExecutionBinding }
+        | {
+            type: 'mirror-group'
+            routeId: string
+            group: MirrorGroup
+            instrument: DiscoTraderIntentRoute['instrument']
+            binding?: SourceExecutionBinding
+          }
+      > => {
+        const sourceIdentity = resolveDiscordSourceIdentity(ticket)
+        const binding = await sourceExecutionBindingStore?.getBySource(sourceIdentity)
+          ?? await sourceExecutionBindingStore?.getByTicket(ticket.id)
+        if (binding && binding.ticket_checksum !== sha256(ticket)) {
+          throw new ExecutionGatewayError(
+            'RECORD_INTEGRITY_FAILURE',
+            'Discord source event was replayed with different ticket evidence.',
+          )
+        }
+        let resolvedInstrument = binding?.instrument
+        if (!resolvedInstrument) {
+          const contract = resolveFuturesContractIdentity(ticket.tradedSymbol, options.now())
+          if (contract.expiry && contract.active === false) {
+            throw new ExecutionGatewayError(
+              'CAPABILITY_UNAVAILABLE',
+              `DiscoTrader contract ${contract.symbol} is expired for the current trading month.`,
+            )
+          }
+          const instrument = DISCOTRADER_FUTURES_INSTRUMENT[contract.root]
+          const economics = resolveFuturesEconomicSpec(contract.root)
+          if (!instrument || !economics) {
+            throw new ExecutionGatewayError(
+              'CAPABILITY_UNAVAILABLE',
+              `DiscoTrader symbol ${contract.symbol} has no configured Trade God instrument route.`,
+            )
+          }
+          resolvedInstrument = {
+            canonical_id: `${instrument.venue}:${contract.symbol}`,
+            symbol: contract.symbol,
+            exchange: instrument.exchange,
+            ...(contract.expiry ? { expiry: contract.expiry } : {}),
+            tick_size: economics.tick_size,
+            point_value_usd: economics.point_value_usd,
+          }
+        }
+        if (binding?.target.type === 'mirror-group') {
+          if (!mirrorGroupStore || !mirrorPreviewCoordinator) {
+            throw new ExecutionGatewayError('CAPABILITY_UNAVAILABLE', 'Mirror Group preview is unavailable.')
+          }
+          const group = await mirrorGroupStore.getRevision(
+            binding.target.mirror_group_id,
+            binding.target.mirror_group_revision,
+          )
+          if (group.content_checksum !== binding.target.group_snapshot_checksum) {
+            throw new ExecutionGatewayError(
+              'RECORD_INTEGRITY_FAILURE',
+              'Frozen Mirror Group revision no longer matches its source binding.',
+            )
+          }
+          return {
+            type: 'mirror-group',
+            routeId: binding.route_id,
+            group,
+            instrument: resolvedInstrument,
+            binding,
+          }
+        }
+        if (binding?.target.type === 'connection') {
+          const selected = await tradingConnectionStore.get(binding.target.connection_id).catch(() => undefined)
+          if (!selected) {
+            throw new ExecutionGatewayError(
+              'CONNECTION_UNAVAILABLE',
+              `Frozen Discord source binding targets missing connection ${binding.target.connection_id}.`,
+            )
+          }
+          if (!selected.enabled || selected.state !== 'ready') {
+            throw new ExecutionGatewayError(
+              'CONNECTION_UNAVAILABLE',
+              'Frozen DiscoTrader connection is not enabled and ready.',
+            )
+          }
+          return {
+            type: 'connection',
+            route: {
+              connection_id: selected.connection_id,
+              source_id: binding.route_id,
+              instrument: resolvedInstrument,
+              valid_for_ms: options.discoTraderIntentValidityMs ?? 60_000,
+            },
+            binding,
+          }
+        }
         const sourceRoute = await tradingSignalRouteStore?.resolve(
           ticket.provenance.channelUrl,
           ticket.provenance.authorId,
         )
-        const selected = sourceRoute
-          ? connections.find(({ connection_id }) => connection_id === sourceRoute.connection_id)
-          : undefined
-        if (!sourceRoute || !selected) {
+        if (!sourceRoute) {
           throw new ExecutionGatewayError(
             'CONNECTION_UNAVAILABLE',
-            sourceRoute
-              ? `Discord route ${sourceRoute.display_name} targets missing connection ${sourceRoute.connection_id}.`
-              : 'DiscoTrader entry requires an explicit enabled Discord source-to-account route.',
+            'DiscoTrader entry requires an explicit enabled Discord source route.',
+          )
+        }
+        if (sourceRoute.target.type === 'mirror-group') {
+          if (!mirrorGroupStore || !mirrorPreviewCoordinator) {
+            throw new ExecutionGatewayError('CAPABILITY_UNAVAILABLE', 'Mirror Group preview is unavailable.')
+          }
+          return {
+            type: 'mirror-group',
+            routeId: sourceRoute.route_id,
+            group: await mirrorGroupStore.get(sourceRoute.target.mirror_group_id),
+            instrument: resolvedInstrument,
+          }
+        }
+        const selected = await tradingConnectionStore.get(sourceRoute.target.connection_id).catch(() => undefined)
+        if (!selected) {
+          throw new ExecutionGatewayError(
+            'CONNECTION_UNAVAILABLE',
+            `Discord route ${sourceRoute.display_name} targets missing connection ${sourceRoute.target.connection_id}.`,
           )
         }
         if (!selected.enabled || selected.state !== 'ready') {
@@ -384,37 +545,14 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             'Configured DiscoTrader connection is not enabled and ready.',
           )
         }
-        const contract = resolveFuturesContractIdentity(
-          ticket.tradedSymbol,
-          options.now(),
-        )
-        if (contract.expiry && contract.active === false) {
-          throw new ExecutionGatewayError(
-            'CAPABILITY_UNAVAILABLE',
-            `DiscoTrader contract ${contract.symbol} is expired for the current trading month.`,
-          )
-        }
-        const symbol = contract.symbol
-        const instrument = DISCOTRADER_FUTURES_INSTRUMENT[contract.root]
-        const economics = resolveFuturesEconomicSpec(contract.root)
-        if (!instrument || !economics) {
-          throw new ExecutionGatewayError(
-            'CAPABILITY_UNAVAILABLE',
-            `DiscoTrader symbol ${symbol} has no configured Trade God instrument route.`,
-          )
-        }
         return {
-          connection_id: selected.connection_id,
-          source_id: sourceRoute.route_id,
-          instrument: {
-            canonical_id: `${instrument.venue}:${symbol}`,
-            symbol,
-            exchange: instrument.exchange,
-            ...(contract.expiry ? { expiry: contract.expiry } : {}),
-            tick_size: economics.tick_size,
-            point_value_usd: economics.point_value_usd,
+          type: 'connection',
+          route: {
+            connection_id: selected.connection_id,
+            source_id: sourceRoute.route_id,
+            instrument: resolvedInstrument,
+            valid_for_ms: options.discoTraderIntentValidityMs ?? 60_000,
           },
-          valid_for_ms: options.discoTraderIntentValidityMs ?? 60_000,
         }
       }
     : undefined
@@ -538,10 +676,16 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
             tradingConnectionService.confirmBrowserLogin(connectionId)
           ),
           listTradingSignalRoutes: () => tradingSignalRouteStore!.list(),
-          saveTradingSignalRoute: (route, expectedPreviousConnectionId) => (
-            tradingRouteMutations!.saveRoute(route, expectedPreviousConnectionId)
+          saveTradingSignalRoute: (route, expectedPreviousTargetKey) => (
+            tradingRouteMutations!.saveRoute(route, expectedPreviousTargetKey)
           ),
           removeTradingSignalRoute: (routeId) => tradingRouteMutations!.removeRoute(routeId),
+          ...(mirrorGroupStore
+            ? {
+                listMirrorGroups: () => mirrorGroupStore.list(),
+                saveMirrorGroup: (input: SaveMirrorGroupInput) => tradingRouteMutations!.saveMirrorGroup(input),
+              }
+            : {}),
         }
       : {}),
     ...(options.credentialVault
@@ -635,8 +779,102 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
                 'Only a configured DiscoTrader ticket push can create a gateway intent.',
               )
             }
-            const route = await resolveDiscoTraderRoute(payload.ticket)
-            const result = await discordManagementSource!.ingestPush(input, route)
+            const sourceIdentity = resolveDiscordSourceIdentity(payload.ticket)
+            const captured = await tradingRouteMutations!.captureRoutingSnapshot(async () => {
+              const resolved = await resolveDiscoTraderRoute(payload.ticket!)
+              if (resolved.type === 'mirror-group') {
+                if (!resolved.binding && resolved.group.state !== 'active') {
+                  throw new ExecutionGatewayError(
+                    'CONNECTION_UNAVAILABLE',
+                    'Mirror Group must be active before a Discord ticket can bind to it.',
+                  )
+                }
+                const receivedAt = resolved.binding?.received_at ?? options.now()
+                if (!resolved.binding) {
+                  convertDiscoTraderTicket(payload.ticket!, {
+                    connection_id: 'mirror-preview-validation',
+                    source_id: resolved.routeId,
+                    instrument: resolved.instrument,
+                    valid_for_ms: 5 * 60_000,
+                  }, receivedAt)
+                }
+                const binding = resolved.binding ?? await sourceExecutionBindingStore!.bind({
+                  source_type: 'discord',
+                  ...sourceIdentity,
+                  ticket_id: payload.ticket!.id,
+                  ticket_checksum: sha256(payload.ticket),
+                  route_id: resolved.routeId,
+                  instrument: resolved.instrument,
+                  received_at: receivedAt,
+                  target: {
+                    type: 'mirror-group',
+                    mirror_group_id: resolved.group.mirror_group_id,
+                    mirror_group_revision: resolved.group.revision,
+                    group_snapshot_checksum: resolved.group.content_checksum,
+                    mirror_execution_id: mirrorExecutionIdFor(payload.ticket!, resolved.group),
+                  },
+                })
+                return { type: 'mirror-group' as const, resolved, binding }
+              }
+              const receivedAt = resolved.binding?.received_at ?? options.now()
+              const projected = convertDiscoTraderTicket(
+                payload.ticket!,
+                resolved.route,
+                receivedAt,
+              )
+              const binding = resolved.binding ?? await sourceExecutionBindingStore!.bind({
+                source_type: 'discord',
+                ...sourceIdentity,
+                ticket_id: payload.ticket!.id,
+                ticket_checksum: sha256(payload.ticket),
+                route_id: resolved.route.source_id,
+                instrument: resolved.route.instrument,
+                received_at: receivedAt,
+                target: {
+                  type: 'connection',
+                  connection_id: resolved.route.connection_id,
+                  intent_id: projected.intent.intent_id,
+                },
+              })
+              return { type: 'connection' as const, resolved, binding, projected }
+            })
+            const { resolved, binding } = captured
+            if (resolved.type === 'mirror-group') {
+              const preview = await mirrorPreviewCoordinator!.preview({
+                ticket: payload.ticket,
+                route_id: resolved.routeId,
+                group: resolved.group,
+                instrument: resolved.instrument,
+                received_at: binding.received_at,
+              })
+              if (
+                binding.target.type !== 'mirror-group'
+                || preview.mirror_execution_id !== binding.target.mirror_execution_id
+              ) {
+                throw new ExecutionGatewayError(
+                  'RECORD_INTEGRITY_FAILURE',
+                  'Mirror preview does not match its frozen source binding.',
+                )
+              }
+              await sourceExecutionBindingStore!.markMaterialized(binding.binding_id, sourceIdentity)
+              return preview
+            }
+            const result = await discordManagementSource!.ingestPush(
+              input,
+              resolved.route,
+              undefined,
+              binding.received_at,
+            )
+            if (
+              binding.target.type !== 'connection'
+              || result.record.intent.intent_id !== binding.target.intent_id
+            ) {
+              throw new ExecutionGatewayError(
+                'RECORD_INTEGRITY_FAILURE',
+                'Gateway intent does not match its frozen source binding.',
+              )
+            }
+            await sourceExecutionBindingStore!.markMaterialized(binding.binding_id, sourceIdentity)
             return paperExecutionCoordinator
               ? paperExecutionCoordinator.coordinate(result.record.intent.intent_id)
               : result.record
@@ -644,7 +882,35 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
           ingestDiscordManagementPush: async (input: unknown) => {
             await discordManagementReady
             if (discordManagementRecoveryError) throw discordManagementRecoveryError
-            return discordTradeManager.ingestPush(input)
+            const payload = discoTraderPushPayloadSchema.parse(input)
+            if (payload.kind !== 'management' || !payload.management) {
+              return discordTradeManager.ingestPush(payload)
+            }
+            const message = payload.management
+            const channelIds = [...new Set([
+              message.channel_id,
+              ...(message.parent_channel_id ? [message.parent_channel_id] : []),
+            ])]
+            const currentRoute = await tradingSignalRouteStore?.resolveIdentity({
+              ...(message.guild_id ? { server_id: message.guild_id } : {}),
+              channel_id: message.parent_channel_id ?? message.channel_id,
+              author_id: message.author_id,
+            })
+            const hasFrozenMirrorContext = message.reply_to_message_id
+              ? await sourceExecutionBindingStore?.hasMirrorBindingForContext({
+                  ...(message.guild_id ? { server_id: message.guild_id } : {}),
+                  channel_ids: channelIds,
+                  author_id: message.author_id,
+                  reply_to_message_id: message.reply_to_message_id,
+                })
+              : false
+            if (currentRoute?.target.type === 'mirror-group' || hasFrozenMirrorContext) {
+              throw new ExecutionGatewayError(
+                'CAPABILITY_UNAVAILABLE',
+                'Mirror Group follow-up management is disabled during the preview-only rollout.',
+              )
+            }
+            return discordTradeManager.ingestPush(payload)
           },
         }
       : {}),
@@ -675,3 +941,34 @@ const DISCOTRADER_FUTURES_INSTRUMENT: Readonly<Record<
   RTY: { venue: 'CME', exchange: 'XCME' },
   M2K: { venue: 'CME', exchange: 'XCME' },
 })
+
+const resolveDiscordSourceIdentity = (ticket: DiscoTraderTicket): {
+  server_id: string
+  channel_id: string
+  author_id: string
+  message_id: string
+} => {
+  if (!ticket.provenance.authorId) {
+    throw new ExecutionGatewayError('AUTHORIZATION_MISMATCH', 'Discord source lacks an immutable author ID.')
+  }
+  let url: URL
+  try { url = new URL(ticket.provenance.channelUrl) } catch {
+    throw new ExecutionGatewayError('RECORD_INTEGRITY_FAILURE', 'Discord source URL is invalid.')
+  }
+  if (
+    url.protocol !== 'https:'
+    || !['discord.com', 'www.discord.com', 'canary.discord.com', 'ptb.discord.com'].includes(url.hostname)
+  ) {
+    throw new ExecutionGatewayError('RECORD_INTEGRITY_FAILURE', 'Discord source URL is not an approved Discord origin.')
+  }
+  const match = /^\/channels\/(\d{1,25})\/(\d{1,25})(?:\/|$)/.exec(url.pathname)
+  if (!match) {
+    throw new ExecutionGatewayError('RECORD_INTEGRITY_FAILURE', 'Discord source URL lacks immutable server and channel IDs.')
+  }
+  return {
+    server_id: match[1]!,
+    channel_id: match[2]!,
+    author_id: ticket.provenance.authorId,
+    message_id: ticket.provenance.messageId,
+  }
+}

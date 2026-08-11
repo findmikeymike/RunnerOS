@@ -26,6 +26,7 @@ import {
   type ExecutionAuthorization,
   type ExecutionEnvironment,
   type ExecutionTransportPreference,
+  type MirrorGroup,
   type TradingConnection,
 } from '@trade-god/contracts'
 
@@ -80,6 +81,20 @@ type MandateDraft = {
   durationMinutes: string
 }
 
+type MirrorGroupDraftMember = {
+  connectionId: string
+  selected: boolean
+  mode: 'source-quantity' | 'fixed-contracts'
+  contracts: string
+  maxContracts: string
+}
+
+type MirrorGroupDraft = {
+  displayName: string
+  maxAggregateRisk: string
+  members: MirrorGroupDraftMember[]
+}
+
 interface TradingConnectionsSettingsPageProps {
   embedded?: boolean
   onConnectionsChanged?: () => void
@@ -110,6 +125,10 @@ const EMPTY_MANDATE_DRAFT: MandateDraft = {
   durationMinutes: '60',
 }
 
+const EMPTY_MIRROR_GROUP_DRAFT: MirrorGroupDraft = {
+  displayName: '', maxAggregateRisk: '', members: [],
+}
+
 export default function TradingConnectionsSettingsPage({
   embedded = false,
   onConnectionsChanged,
@@ -124,6 +143,9 @@ export default function TradingConnectionsSettingsPage({
   const [draft, setDraft] = React.useState<Draft>(EMPTY_DRAFT)
   const [editing, setEditing] = React.useState(false)
   const [routes, setRoutes] = React.useState<SignalRoute[]>([])
+  const [mirrorGroups, setMirrorGroups] = React.useState<MirrorGroup[]>([])
+  const [mirrorGroupDraft, setMirrorGroupDraft] = React.useState<MirrorGroupDraft>(EMPTY_MIRROR_GROUP_DRAFT)
+  const [editingMirrorGroup, setEditingMirrorGroup] = React.useState(false)
   const [signalDraft, setSignalDraft] = React.useState<SignalDraft>(EMPTY_SIGNAL_DRAFT)
   const [editingSignal, setEditingSignal] = React.useState(false)
   const [pendingReassignment, setPendingReassignment] = React.useState<SignalRoute | null>(null)
@@ -132,14 +154,16 @@ export default function TradingConnectionsSettingsPage({
   const load = React.useCallback(async () => {
     setBusy('load')
     try {
-      const [nextConnections, nextRoutes, nextAuthorizations] = await Promise.all([
+      const [nextConnections, nextRoutes, nextAuthorizations, nextMirrorGroups] = await Promise.all([
         window.electronAPI.listTradingConnections(),
         window.electronAPI.listTradingSignalRoutes(),
         window.electronAPI.listTradeGodStandingAuthorizations(),
+        window.electronAPI.listMirrorGroups(),
       ])
       setConnections(nextConnections)
       setRoutes(nextRoutes)
       setStandingAuthorizations(nextAuthorizations)
+      setMirrorGroups(nextMirrorGroups)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not load trading connections')
     } finally {
@@ -266,7 +290,7 @@ export default function TradingConnectionsSettingsPage({
     }
   }
 
-  const saveSignalRoute = async (expectedPreviousConnectionId?: string) => {
+  const saveSignalRoute = async (expectedPreviousTargetKey?: string) => {
     if (!signalDraft.displayName.trim() || !signalDraft.connectionId
       || !/^\d{1,25}$/.test(signalDraft.serverId)
       || !/^\d{1,25}$/.test(signalDraft.channelId)
@@ -275,8 +299,8 @@ export default function TradingConnectionsSettingsPage({
       return
     }
     const existing = findSignalRouteByIdentity(routes, signalDraft)
-    if (existing && existing.connection_id !== signalDraft.connectionId
-      && expectedPreviousConnectionId !== existing.connection_id) {
+    if (existing && signalRouteTargetKey(existing) !== signalDraftTargetKey(signalDraft.connectionId)
+      && expectedPreviousTargetKey !== signalRouteTargetKey(existing)) {
       setPendingReassignment(existing)
       return
     }
@@ -284,6 +308,7 @@ export default function TradingConnectionsSettingsPage({
     try {
       const now = new Date().toISOString()
       await window.electronAPI.saveTradingSignalRoute({
+        route_schema_version: 'trading-signal-route@2',
         route_id: existing?.route_id
           ?? `discord-${signalDraft.serverId}-${signalDraft.channelId}-${signalDraft.traderAuthorId}`,
         display_name: signalDraft.displayName.trim(),
@@ -291,20 +316,118 @@ export default function TradingConnectionsSettingsPage({
         server_id: signalDraft.serverId,
         channel_id: signalDraft.channelId,
         trader_author_id: signalDraft.traderAuthorId,
-        connection_id: signalDraft.connectionId,
+        target: signalDraftTarget(signalDraft.connectionId),
         enabled: true,
         created_at: existing?.created_at ?? now,
         updated_at: now,
-      }, expectedPreviousConnectionId)
+      }, expectedPreviousTargetKey)
       setSignalDraft(EMPTY_SIGNAL_DRAFT)
       setEditingSignal(false)
       setPendingReassignment(null)
       await load()
-      toast.success(expectedPreviousConnectionId
+      toast.success(expectedPreviousTargetKey
         ? 'Discord source reassigned to the selected account'
         : 'Discord trader routed to one exact account')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Could not save Discord route')
+    } finally { setBusy(null) }
+  }
+
+  const beginMirrorGroup = () => {
+    setMirrorGroupDraft({
+      ...EMPTY_MIRROR_GROUP_DRAFT,
+      members: connections.map(({ connection }) => ({
+        connectionId: connection.connection_id,
+        selected: false,
+        mode: 'source-quantity',
+        contracts: '1',
+        maxContracts: '1',
+      })),
+    })
+    setEditingMirrorGroup(true)
+  }
+
+  const saveMirrorGroup = async () => {
+    const selected = mirrorGroupDraft.members.filter((member) => member.selected)
+    const maxRisk = Number(mirrorGroupDraft.maxAggregateRisk)
+    if (!mirrorGroupDraft.displayName.trim() || selected.length < 2 || !Number.isFinite(maxRisk) || maxRisk <= 0) {
+      toast.error('Mirror Group name, at least two accounts, and a positive price-distance exposure limit are required')
+      return
+    }
+    const parsedMembers = selected.map((member) => ({
+      ...member,
+      contractsNumber: Number(member.contracts),
+      maxContractsNumber: Number(member.maxContracts),
+    }))
+    if (parsedMembers.some((member) => (
+      !Number.isSafeInteger(member.maxContractsNumber) || member.maxContractsNumber <= 0
+      || (member.mode === 'fixed-contracts' && (
+        !Number.isSafeInteger(member.contractsNumber)
+        || member.contractsNumber <= 0
+        || member.contractsNumber > member.maxContractsNumber
+      ))
+    ))) {
+      toast.error('Every selected account needs a valid whole-contract rule and maximum')
+      return
+    }
+    setBusy('save-mirror-group')
+    try {
+      const mirrorGroupId = `mirror-group-${slugify(mirrorGroupDraft.displayName)}`
+      const allMembersReady = parsedMembers.every((member) => {
+        const status = connections.find(({ connection }) => connection.connection_id === member.connectionId)
+        return status ? isPaperMandateEligible(status) : false
+      })
+      await window.electronAPI.saveMirrorGroup({
+        mirror_group_id: mirrorGroupId,
+        display_name: mirrorGroupDraft.displayName.trim(),
+        environment: 'paper',
+        state: allMembersReady ? 'active' : 'draft',
+        dispatch_max_concurrency: Math.min(4, selected.length),
+        max_aggregate_initial_risk: String(maxRisk),
+        max_active_parent_trades: 1,
+        members: parsedMembers.map((member) => ({
+          connection_id: member.connectionId,
+          enabled: true,
+          quantity_rule: member.mode === 'source-quantity'
+            ? { mode: 'source-quantity', max_contracts: member.maxContractsNumber }
+            : {
+                mode: 'fixed-contracts',
+                contracts: member.contractsNumber,
+                max_contracts: member.maxContractsNumber,
+              },
+        })),
+      })
+      setEditingMirrorGroup(false)
+      setMirrorGroupDraft(EMPTY_MIRROR_GROUP_DRAFT)
+      await load()
+      toast.success(allMembersReady
+        ? 'Paper Mirror Group created for previews. It has zero order authority.'
+        : 'Draft Mirror Group saved. Certify every account before activating previews.')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not save Mirror Group')
+    } finally { setBusy(null) }
+  }
+
+  const setMirrorGroupState = async (group: MirrorGroup, state: MirrorGroup['state']) => {
+    setBusy(`mirror-state:${group.mirror_group_id}`)
+    try {
+      await window.electronAPI.saveMirrorGroup({
+        mirror_group_id: group.mirror_group_id,
+        display_name: group.display_name,
+        environment: group.environment,
+        state,
+        dispatch_max_concurrency: group.dispatch_policy.max_concurrency,
+        max_aggregate_initial_risk: group.portfolio_limits.max_aggregate_initial_risk,
+        max_active_parent_trades: group.portfolio_limits.max_active_parent_trades,
+        members: group.members.map(({ connection_id, enabled, quantity_rule }) => ({
+          connection_id, enabled, quantity_rule,
+        })),
+        expected_revision: group.revision,
+      })
+      await load()
+      toast.success(state === 'active' ? 'Mirror Group resumed for previews' : 'Mirror Group paused')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not change Mirror Group state')
     } finally { setBusy(null) }
   }
 
@@ -322,7 +445,14 @@ export default function TradingConnectionsSettingsPage({
   const originConfirmed = connections.filter((status) => status.browser_login_confirmed).length
   const ready = connections.filter(isExecutionReady).length
   const connectionIds = new Set(connections.map(({ connection }) => connection.connection_id))
-  const orphanedRoutes = routes.filter((route) => !connectionIds.has(route.connection_id))
+  const mirrorGroupIds = new Set(mirrorGroups.map((group) => group.mirror_group_id))
+  const groupedConnectionIds = new Set(mirrorGroups
+    .filter((group) => group.state !== 'archived')
+    .flatMap((group) => group.members.map((member) => member.connection_id)))
+  const orphanedRoutes = routes.filter((route) => (
+    (route.target.type === 'connection' && !connectionIds.has(route.target.connection_id))
+    || (route.target.type === 'mirror-group' && !mirrorGroupIds.has(route.target.mirror_group_id))
+  ))
 
   const body = (
     <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
@@ -442,6 +572,152 @@ export default function TradingConnectionsSettingsPage({
           )}
 
           <SettingsSection
+            title="Mirror Groups"
+            description="Route one Discord trader to several paper accounts. This rollout creates exact dry-run plans only—no orders."
+          >
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={beginMirrorGroup} disabled={editingMirrorGroup}>
+                  <Plus className="mr-1.5 size-3.5" /> New Mirror Group
+                </Button>
+              </div>
+              {editingMirrorGroup && (
+                <SettingsCard>
+                  <SettingsCardContent className="space-y-4 p-5">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <Field label="Group name">
+                        <input className={inputClass} value={mirrorGroupDraft.displayName} onChange={(event) => (
+                          setMirrorGroupDraft({ ...mirrorGroupDraft, displayName: event.target.value })
+                        )} placeholder="Apex paper mirrors" />
+                      </Field>
+                      <Field label="Estimated price-distance exposure limit (USD)">
+                        <input className={inputClass} inputMode="decimal" value={mirrorGroupDraft.maxAggregateRisk} onChange={(event) => (
+                          setMirrorGroupDraft({ ...mirrorGroupDraft, maxAggregateRisk: event.target.value })
+                        )} placeholder="500" />
+                        </Field>
+                        <p className="text-[11px] leading-4 text-muted-foreground">
+                          Preview estimate only. Fees, slippage, live risk reservations, and active-parent admission are not yet enforced.
+                        </p>
+                    </div>
+                    <div className="space-y-2">
+                      {mirrorGroupDraft.members.map((member, index) => {
+                        const status = connections.find(({ connection }) => connection.connection_id === member.connectionId)
+                        if (!status) return null
+                        return (
+                          <div key={member.connectionId} className="grid gap-2 rounded-lg border border-white/10 bg-black/10 p-3 md:grid-cols-[1.5fr_1fr_0.7fr_0.7fr]">
+                            <label className="flex items-center gap-2 text-xs">
+                              <input type="checkbox" checked={member.selected} onChange={(event) => {
+                                const members = [...mirrorGroupDraft.members]
+                                members[index] = { ...member, selected: event.target.checked }
+                                setMirrorGroupDraft({ ...mirrorGroupDraft, members })
+                              }} />
+                              <span>{status.connection.display_name}</span>
+                              <StatusBadge positive={isPaperMandateEligible(status)}>
+                                {isPaperMandateEligible(status) ? 'Ready' : 'Blocked'}
+                              </StatusBadge>
+                            </label>
+                            <select className={inputClass} disabled={!member.selected} value={member.mode} onChange={(event) => {
+                              const members = [...mirrorGroupDraft.members]
+                              members[index] = { ...member, mode: event.target.value as MirrorGroupDraftMember['mode'] }
+                              setMirrorGroupDraft({ ...mirrorGroupDraft, members })
+                            }}>
+                              <option value="source-quantity">Copy source quantity</option>
+                              <option value="fixed-contracts">Fixed quantity</option>
+                            </select>
+                            <input className={inputClass} aria-label={`${status.connection.display_name} fixed contracts`} disabled={!member.selected || member.mode !== 'fixed-contracts'} value={member.contracts} onChange={(event) => {
+                              const members = [...mirrorGroupDraft.members]
+                              members[index] = { ...member, contracts: event.target.value }
+                              setMirrorGroupDraft({ ...mirrorGroupDraft, members })
+                            }} placeholder="Fixed" />
+                            <input className={inputClass} aria-label={`${status.connection.display_name} maximum contracts`} disabled={!member.selected} value={member.maxContracts} onChange={(event) => {
+                              const members = [...mirrorGroupDraft.members]
+                              members[index] = { ...member, maxContracts: event.target.value }
+                              setMirrorGroupDraft({ ...mirrorGroupDraft, members })
+                            }} placeholder="Max" />
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <div className="rounded-lg border border-amber-400/20 bg-amber-400/[0.05] p-3 text-[11px] text-amber-100/80">
+                      Saving activates preview routing only. Every member must be enabled, ready, and paper-lifecycle-certified. Provider execution stays disabled.
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" onClick={() => { setEditingMirrorGroup(false); setMirrorGroupDraft(EMPTY_MIRROR_GROUP_DRAFT) }}>Cancel</Button>
+                      <Button onClick={() => void saveMirrorGroup()} disabled={busy === 'save-mirror-group'}>Create preview group</Button>
+                    </div>
+                  </SettingsCardContent>
+                </SettingsCard>
+              )}
+              {mirrorGroups.map((group) => {
+                const targetId = `mirror-group:${group.mirror_group_id}`
+                const groupRoutes = routes.filter((route) => (
+                  route.target.type === 'mirror-group' && route.target.mirror_group_id === group.mirror_group_id
+                ))
+                return (
+                  <SettingsCard key={group.mirror_group_id}>
+                    <SettingsCardContent className="space-y-4 p-5">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-medium">{group.display_name}</p>
+                            <Badge>revision {group.revision}</Badge>
+                            <StatusBadge positive={group.state === 'active'}>{group.state}</StatusBadge>
+                            <StatusBadge positive={false}>Preview only</StatusBadge>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {group.members.filter((member) => member.enabled).length} accounts · ${group.portfolio_limits.max_aggregate_initial_risk} estimated price-distance limit · {groupRoutes.length} Discord source{groupRoutes.length === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                        <Button size="sm" variant="outline" disabled={busy === `mirror-state:${group.mirror_group_id}`} onClick={() => void setMirrorGroupState(group, group.state === 'active' ? 'paused' : 'active')}>
+                          {group.state === 'active' ? 'Pause previews' : 'Resume previews'}
+                        </Button>
+                      </div>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {group.members.map((member) => {
+                          const status = connections.find(({ connection }) => connection.connection_id === member.connection_id)
+                          return (
+                            <div key={member.member_id} className="rounded-md border border-white/10 bg-black/10 px-3 py-2 text-xs">
+                              <p className="font-medium">{status?.connection.display_name ?? member.connection_id}</p>
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                {member.quantity_rule.mode === 'source-quantity'
+                                  ? `Copy source · max ${member.quantity_rule.max_contracts}`
+                                  : `Fixed ${member.quantity_rule.contracts} · max ${member.quantity_rule.max_contracts}`}
+                              </p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <AccountDiscordRoutes
+                        connectionId={targetId}
+                        targetLabel="Mirror Group"
+                        routes={routes}
+                        draft={signalDraft}
+                        editing={editingSignal && signalDraft.connectionId === targetId}
+                        addDisabled={editingSignal || group.state !== 'active'}
+                        pendingReassignment={pendingReassignment}
+                        previousAccountName={pendingReassignment ? describeSignalRouteTarget(pendingReassignment) : null}
+                        signalSourceCatalog={signalSourceCatalog}
+                        signalSourceCatalogError={signalSourceCatalogError}
+                        onRefreshSignalSources={onRefreshSignalSources}
+                        busy={busy}
+                        onAdd={() => { setSignalDraft({ ...EMPTY_SIGNAL_DRAFT, connectionId: targetId }); setPendingReassignment(null); setEditingSignal(true) }}
+                        onDraftChange={(nextDraft) => { setSignalDraft(nextDraft); setPendingReassignment(null) }}
+                        onCancel={() => { setSignalDraft(EMPTY_SIGNAL_DRAFT); setEditingSignal(false); setPendingReassignment(null) }}
+                        onSave={() => void saveSignalRoute()}
+                        onConfirmReassignment={() => { if (pendingReassignment) void saveSignalRoute(signalRouteTargetKey(pendingReassignment)) }}
+                        onRemove={(routeId) => void removeSignalRoute(routeId)}
+                      />
+                    </SettingsCardContent>
+                  </SettingsCard>
+                )
+              })}
+              {!mirrorGroups.length && !editingMirrorGroup && (
+                <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted-foreground">No Mirror Groups yet.</div>
+              )}
+            </div>
+          </SettingsSection>
+
+          <SettingsSection
             title="Accounts"
             description="A connection cannot execute until account identity and paper lifecycle certification are proven."
           >
@@ -508,11 +784,14 @@ export default function TradingConnectionsSettingsPage({
                           variant="ghost"
                           size="icon"
                           aria-label={`Remove ${status.connection.display_name}`}
-                          title={routes.some((route) => route.connection_id === status.connection.connection_id)
+                          title={routes.some((route) => routeTargetsConnection(route, status.connection.connection_id))
                             ? 'Remove Discord sources first'
+                            : groupedConnectionIds.has(status.connection.connection_id)
+                              ? 'Remove this account from its Mirror Group first'
                             : 'Remove account'}
                           disabled={busy === `remove:${status.connection.connection_id}`
-                            || routes.some((route) => route.connection_id === status.connection.connection_id)}
+                            || groupedConnectionIds.has(status.connection.connection_id)
+                            || routes.some((route) => routeTargetsConnection(route, status.connection.connection_id))}
                           onClick={() => void remove(status.connection.connection_id)}
                         >
                           <Trash2 className="size-4" />
@@ -531,6 +810,7 @@ export default function TradingConnectionsSettingsPage({
                     />
                     <AccountDiscordRoutes
                       connectionId={status.connection.connection_id}
+                      targetLabel="account"
                       routes={routes}
                       draft={signalDraft}
                       editing={editingSignal && signalDraft.connectionId === status.connection.connection_id}
@@ -538,8 +818,9 @@ export default function TradingConnectionsSettingsPage({
                       pendingReassignment={pendingReassignment}
                       previousAccountName={pendingReassignment
                         ? connections.find(({ connection }) => (
-                            connection.connection_id === pendingReassignment.connection_id
-                          ))?.connection.display_name ?? pendingReassignment.connection_id
+                            pendingReassignment.target.type === 'connection'
+                            && connection.connection_id === pendingReassignment.target.connection_id
+                          ))?.connection.display_name ?? describeSignalRouteTarget(pendingReassignment)
                         : null}
                       signalSourceCatalog={signalSourceCatalog}
                       signalSourceCatalogError={signalSourceCatalogError}
@@ -561,7 +842,7 @@ export default function TradingConnectionsSettingsPage({
                       }}
                       onSave={() => void saveSignalRoute()}
                       onConfirmReassignment={() => {
-                        if (pendingReassignment) void saveSignalRoute(pendingReassignment.connection_id)
+                        if (pendingReassignment) void saveSignalRoute(signalRouteTargetKey(pendingReassignment))
                       }}
                       onRemove={(routeId) => void removeSignalRoute(routeId)}
                     />
@@ -587,7 +868,11 @@ export default function TradingConnectionsSettingsPage({
                     <RadioTower className="size-3.5 text-amber-300" />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-medium">{route.display_name}</p>
-                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">Missing account {route.connection_id}</p>
+                      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                        Missing {route.target.type === 'connection'
+                          ? `account ${route.target.connection_id}`
+                          : `Mirror Group ${route.target.mirror_group_id}`}
+                      </p>
                     </div>
                     <StatusBadge positive={false}>Blocked</StatusBadge>
                     <Button
@@ -843,6 +1128,7 @@ function PaperMandateControl({
 
 function AccountDiscordRoutes({
   connectionId,
+  targetLabel,
   routes,
   draft,
   editing,
@@ -861,6 +1147,7 @@ function AccountDiscordRoutes({
   onRemove,
 }: {
   connectionId: string
+  targetLabel: string
   routes: SignalRoute[]
   draft: SignalDraft
   editing: boolean
@@ -878,14 +1165,14 @@ function AccountDiscordRoutes({
   onConfirmReassignment: () => void
   onRemove: (routeId: string) => void
 }) {
-  const accountRoutes = routes.filter((route) => route.connection_id === connectionId)
+  const accountRoutes = routes.filter((route) => signalRouteTargetKey(route) === signalDraftTargetKey(connectionId))
   const selectableSources = signalSourceCatalog?.observed.sources.filter(isSelectableSignalSource) ?? []
   return (
     <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.025] p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-medium">Discord sources</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">Only these exact channel + trader matches can route into this account.</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">Only these exact channel + trader matches can route into this {targetLabel}.</p>
         </div>
         <Button size="sm" variant="outline" onClick={onAdd} disabled={addDisabled}>
           <Plus className="mr-1.5 size-3.5" /> Add source
@@ -940,7 +1227,7 @@ function AccountDiscordRoutes({
             <div className="rounded-lg border border-amber-400/25 bg-amber-400/[0.06] p-3 text-xs text-amber-100 md:col-span-2">
               <p className="font-medium">Confirm account reassignment</p>
               <p className="mt-1 text-amber-100/70">
-                This source currently routes to {previousAccountName}. Saving will move it here; it will never feed both accounts.
+                This source currently routes to {previousAccountName}. Saving will move it here; it will never feed both targets.
               </p>
               <div className="mt-3 flex justify-end gap-2">
                 <Button variant="ghost" onClick={onCancel}>Cancel</Button>
@@ -966,7 +1253,7 @@ function AccountDiscordRoutes({
             <Button variant="ghost" size="icon" aria-label={`Remove ${route.display_name}`} onClick={() => onRemove(route.route_id)}><Trash2 className="size-3.5" /></Button>
           </div>
         ))}
-        {!accountRoutes.length && !editing && <p className="rounded-md border border-dashed border-white/10 px-3 py-4 text-center text-[11px] text-muted-foreground">No Discord source assigned to this account.</p>}
+        {!accountRoutes.length && !editing && <p className="rounded-md border border-dashed border-white/10 px-3 py-4 text-center text-[11px] text-muted-foreground">No Discord source assigned to this {targetLabel}.</p>}
       </div>
     </div>
   )
@@ -1016,6 +1303,36 @@ export function findSignalRouteByIdentity(
   return routes.find((route) => route.server_id === draft.serverId
     && route.channel_id === draft.channelId
     && route.trader_author_id === draft.traderAuthorId)
+}
+
+export function signalRouteTargetKey(route: SignalRoute): string {
+  return route.target.type === 'connection'
+    ? `connection:${route.target.connection_id}`
+    : `mirror-group:${route.target.mirror_group_id}`
+}
+
+export function routeTargetsConnection(route: SignalRoute, connectionId: string): boolean {
+  return route.target.type === 'connection' && route.target.connection_id === connectionId
+}
+
+function signalDraftTarget(value: string): SignalRoute['target'] {
+  const mirrorPrefix = 'mirror-group:'
+  return value.startsWith(mirrorPrefix)
+    ? { type: 'mirror-group', mirror_group_id: value.slice(mirrorPrefix.length) }
+    : { type: 'connection', connection_id: value }
+}
+
+function signalDraftTargetKey(value: string): string {
+  const target = signalDraftTarget(value)
+  return target.type === 'connection'
+    ? `connection:${target.connection_id}`
+    : `mirror-group:${target.mirror_group_id}`
+}
+
+function describeSignalRouteTarget(route: SignalRoute): string {
+  return route.target.type === 'connection'
+    ? route.target.connection_id
+    : `Mirror Group ${route.target.mirror_group_id}`
 }
 
 function CertificationMatrix(props: {

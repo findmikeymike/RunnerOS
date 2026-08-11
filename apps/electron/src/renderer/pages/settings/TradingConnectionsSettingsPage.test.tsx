@@ -8,6 +8,7 @@ const {
   formatPaperMandateConfirmation,
   isExecutionReady,
   isPaperMandateEligible,
+  signalRouteTargetKey,
 } = await import('./TradingConnectionsSettingsPage.tsx')
 
 test('execution readiness requires both certification state and explicit enablement', () => {
@@ -61,4 +62,13 @@ test('Discord source identity lookup is exact and independent of target account'
   expect(findSignalRouteByIdentity([route], {
     serverId: '1', channelId: '2', traderAuthorId: '4',
   })).toBeUndefined()
+})
+
+test('route target keys distinguish one account from one Mirror Group', () => {
+  expect(signalRouteTargetKey({
+    target: { type: 'connection', connection_id: 'account-one' },
+  } as any)).toBe('connection:account-one')
+  expect(signalRouteTargetKey({
+    target: { type: 'mirror-group', mirror_group_id: 'group-one' },
+  } as any)).toBe('mirror-group:group-one')
 })
