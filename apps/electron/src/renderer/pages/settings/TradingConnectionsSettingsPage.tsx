@@ -8,15 +8,23 @@ import {
   ShieldCheck,
   RadioTower,
   Trash2,
+  WalletCards,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-import { PanelHeader } from '@/components/app-shell/PanelHeader'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { SettingsCard, SettingsCardContent, SettingsSection } from '@/components/settings'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import {
+  discoTraderSignalSourceCatalogSchema,
   isSelectableSignalSource,
   type DiscoTraderSignalSourceCatalog,
 } from '@/features/trading/discotrader-signal-sources'
@@ -98,6 +106,7 @@ type MirrorGroupDraft = {
 
 interface TradingConnectionsSettingsPageProps {
   embedded?: boolean
+  workspaceId?: string
   onConnectionsChanged?: () => void
   signalSourceCatalog?: DiscoTraderSignalSourceCatalog | null
   signalSourceCatalogError?: string | null
@@ -133,10 +142,11 @@ const EMPTY_MIRROR_GROUP_DRAFT: MirrorGroupDraft = {
 
 export default function TradingConnectionsSettingsPage({
   embedded = false,
+  workspaceId,
   onConnectionsChanged,
-  signalSourceCatalog = null,
-  signalSourceCatalogError = null,
-  onRefreshSignalSources,
+  signalSourceCatalog: suppliedSignalSourceCatalog = null,
+  signalSourceCatalogError: suppliedSignalSourceCatalogError = null,
+  onRefreshSignalSources: suppliedRefreshSignalSources,
 }: TradingConnectionsSettingsPageProps = {}) {
   const [connections, setConnections] = React.useState<
     Awaited<ReturnType<typeof window.electronAPI.listTradingConnections>>
@@ -152,6 +162,24 @@ export default function TradingConnectionsSettingsPage({
   const [editingSignal, setEditingSignal] = React.useState(false)
   const [pendingReassignment, setPendingReassignment] = React.useState<SignalRoute | null>(null)
   const [busy, setBusy] = React.useState<string | null>('load')
+  const [loadedSignalSourceCatalog, setLoadedSignalSourceCatalog] = React.useState<DiscoTraderSignalSourceCatalog | null>(null)
+  const [loadedSignalSourceCatalogError, setLoadedSignalSourceCatalogError] = React.useState<string | null>(null)
+
+  const refreshSignalSources = React.useCallback(async () => {
+    if (!workspaceId) return
+    try {
+      const result = await window.electronAPI.getDiscoTraderSignalSources(workspaceId)
+      setLoadedSignalSourceCatalog(discoTraderSignalSourceCatalogSchema.parse(result))
+      setLoadedSignalSourceCatalogError(null)
+    } catch (error) {
+      setLoadedSignalSourceCatalog(null)
+      setLoadedSignalSourceCatalogError(error instanceof Error ? error.message : String(error))
+    }
+  }, [workspaceId])
+
+  const signalSourceCatalog = suppliedSignalSourceCatalog ?? loadedSignalSourceCatalog
+  const signalSourceCatalogError = suppliedSignalSourceCatalogError ?? loadedSignalSourceCatalogError
+  const onRefreshSignalSources = suppliedRefreshSignalSources ?? (() => void refreshSignalSources())
 
   const load = React.useCallback(async () => {
     setBusy('load')
@@ -177,17 +205,21 @@ export default function TradingConnectionsSettingsPage({
     void load()
   }, [load])
 
+  React.useEffect(() => {
+    if (!suppliedSignalSourceCatalog) void refreshSignalSources()
+  }, [refreshSignalSources, suppliedSignalSourceCatalog])
+
   const save = async () => {
     const accountRef = draft.accountRef.trim()
     const displayName = draft.displayName.trim()
     const accountLabel = draft.accountLabel.trim()
     const firmName = draft.firmName.trim()
     if (!displayName || !firmName || !accountRef || !accountLabel) {
-      toast.error('Connection name, prop firm, account reference, and account label are required')
+      toast.error('Add an account nickname, prop firm, account ID, and account name')
       return
     }
     if (draft.platform === 'tradovate' && !draft.apiSecret.trim()) {
-      toast.error('Tradovate access token is required')
+      toast.error('Add your Tradovate sign-in key')
       return
     }
     if (draft.platform === 'tradovate' && draft.environment !== 'paper') {
@@ -198,14 +230,14 @@ export default function TradingConnectionsSettingsPage({
       draft.platform === 'tradovate'
       && (!/^\d+$/.test(accountRef) || Number(accountRef) <= 0)
     ) {
-      toast.error('Tradovate account reference must be the numeric account ID')
+      toast.error('Tradovate account ID must be a number')
       return
     }
     if (
       draft.platform === 'tradovate'
       && (!draft.tokenExpiresAt || !Number.isFinite(Date.parse(draft.tokenExpiresAt)))
     ) {
-      toast.error('Tradovate token expiration is required')
+      toast.error('Choose when the Tradovate sign-in key expires')
       return
     }
     setBusy('save')
@@ -541,39 +573,40 @@ export default function TradingConnectionsSettingsPage({
   ))
 
   const body = (
-    <div className={`mx-auto w-full space-y-6 p-6 ${embedded ? 'max-w-none' : 'max-w-5xl'}`}>
-      {embedded && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className={`mx-auto w-full space-y-6 px-6 py-8 ${embedded ? 'max-w-none' : 'max-w-[1120px]'}`}>
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold">Accounts & Discord routing</h2>
-            <p className="mt-1 text-xs text-muted-foreground">Connect each prop account, then choose exactly which Discord traders feed it.</p>
+            <p className="text-xs font-medium text-[#8b93a1]">Trading setup</p>
+            <h1 className={`mt-1 font-semibold tracking-[-0.03em] ${embedded ? 'text-xl' : 'text-[30px]'}`}>Accounts</h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-[#858d99]">Connect each paper account, then choose which Discord trader it follows.</p>
           </div>
-          <Button size="sm" onClick={() => setEditing(true)}>
+          <Button size="sm" className="mt-1" onClick={() => setEditing(true)}>
             <Plus className="mr-1.5 size-4" />
             Add account
           </Button>
         </div>
-      )}
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-white/[0.06] py-3 text-[11px] text-muted-foreground">
             <span><strong className="font-medium text-foreground">{connections.length}</strong> accounts</span>
-            <span><strong className="font-medium text-foreground">{ready}</strong> execution ready</span>
+            <span><strong className="font-medium text-foreground">{ready}</strong> ready to trade</span>
             {originConfirmed > 0 && <span><strong className="font-medium text-foreground">{originConfirmed}</strong> browser sessions</span>}
             <span className="ml-auto inline-flex items-center gap-1.5 text-amber-200"><ShieldCheck className="size-3.5" /> Locked by default</span>
           </div>
 
-          {editing && (
-            <SettingsSection
-              title="Add connection"
-              description="Adding credentials never enables order entry. Certification is a separate gate."
-            >
-              <SettingsCard>
-                <SettingsCardContent className="grid gap-4 p-5 md:grid-cols-2">
-                  <Field label="Display name">
+          <Dialog open={editing} onOpenChange={setEditing}>
+            <DialogContent className="max-h-[88vh] max-w-2xl overflow-y-auto border border-white/[0.09] bg-[#0d1014] p-0 text-white shadow-2xl">
+              <DialogHeader className="border-b border-white/[0.07] px-6 pb-5 pt-6 pr-14">
+                <DialogTitle className="text-xl tracking-[-0.02em]">Connect a trading account</DialogTitle>
+                <DialogDescription className="max-w-lg leading-5 text-[#7d8692]">
+                  Add one paper account at a time. Saving it does not turn on trading.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 px-6 pb-6 md:grid-cols-2">
+                  <Field label="Account nickname">
                     <input
                       className={inputClass}
                       value={draft.displayName}
                       onChange={(event) => setDraft({ ...draft, displayName: event.target.value })}
-                      placeholder="Apex Tradovate Paper"
+                      placeholder="My Apex paper account"
                     />
                   </Field>
                   <Field label="Prop firm">
@@ -584,7 +617,7 @@ export default function TradingConnectionsSettingsPage({
                       placeholder="Apex, Topstep, MyFundedFutures…"
                     />
                   </Field>
-                  <Field label="Platform">
+                  <Field label="How you connect">
                     <select
                       className={inputClass}
                       value={draft.platform}
@@ -596,11 +629,11 @@ export default function TradingConnectionsSettingsPage({
                         tokenExpiresAt: '',
                       })}
                     >
-                      <option value="tradovate">Tradovate API</option>
-                      <option value="wealthcharts">WealthCharts browser</option>
+                      <option value="tradovate">Tradovate — direct connection</option>
+                      <option value="wealthcharts">WealthCharts — browser sign-in</option>
                     </select>
                   </Field>
-                  <Field label="Environment">
+                  <Field label="Account type">
                     <select
                       className={inputClass}
                       value={draft.environment}
@@ -610,21 +643,21 @@ export default function TradingConnectionsSettingsPage({
                         environment: event.target.value as ExecutionEnvironment,
                       })}
                     >
-                      <option value="paper">Paper</option>
+                      <option value="paper">Paper trading</option>
                       {draft.platform !== 'tradovate' && <option value="evaluation">Evaluation</option>}
                       {draft.platform !== 'tradovate' && <option value="performance">Performance</option>}
                       {draft.platform !== 'tradovate' && <option value="live">Live</option>}
                     </select>
                   </Field>
-                  <Field label="Account reference">
+                  <Field label="Account ID">
                     <input
                       className={inputClass}
                       value={draft.accountRef}
                       onChange={(event) => setDraft({ ...draft, accountRef: event.target.value })}
-                      placeholder="Stable internal account ID"
+                      placeholder="Your numeric account ID"
                     />
                   </Field>
-                  <Field label="Account label">
+                  <Field label="Account name">
                     <input
                       className={inputClass}
                       value={draft.accountLabel}
@@ -633,18 +666,19 @@ export default function TradingConnectionsSettingsPage({
                     />
                   </Field>
                   {draft.platform === 'tradovate' && (
-                    <Field label="Tradovate access token" className="md:col-span-2">
+                    <Field label="Tradovate sign-in key" className="md:col-span-2">
                       <input
                         className={inputClass}
                         type="password"
                         value={draft.apiSecret}
                         onChange={(event) => setDraft({ ...draft, apiSecret: event.target.value })}
-                        placeholder="Stored encrypted; never returned to the renderer"
+                        placeholder="Paste your temporary Tradovate sign-in key"
                       />
+                      <p className="mt-1 text-[11px] text-muted-foreground">Stored securely on this Mac and never shown again.</p>
                     </Field>
                   )}
                   {draft.platform === 'tradovate' && (
-                    <Field label="Token expires at" className="md:col-span-2">
+                    <Field label="Sign-in key expires" className="md:col-span-2">
                       <input
                         className={inputClass}
                         type="datetime-local"
@@ -652,37 +686,41 @@ export default function TradingConnectionsSettingsPage({
                         onChange={(event) => setDraft({ ...draft, tokenExpiresAt: event.target.value })}
                       />
                       <p className="mt-1 text-[11px] text-muted-foreground">
-                        Tradovate tokens normally expire after 90 minutes; Trade God renews and re-encrypts them before expiry.
+                        Tradovate keys normally last about 90 minutes. Trade God renews the connection securely.
                       </p>
                     </Field>
+                  )}
+                  {draft.platform === 'wealthcharts' && (
+                    <div className="md:col-span-2 rounded-lg border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-xs leading-5 text-muted-foreground">
+                      After saving, choose <strong className="font-medium text-foreground">Open sign-in window</strong> on the account card and sign in normally.
+                    </div>
                   )}
                   <div className="flex justify-end gap-2 md:col-span-2">
                     <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
                     <Button onClick={() => void save()} disabled={busy === 'save'}>
                       {busy === 'save' && <Loader2 className="mr-1.5 size-4 animate-spin" />}
-                      Save disabled
+                      Save account securely
                     </Button>
                   </div>
-                </SettingsCardContent>
-              </SettingsCard>
-            </SettingsSection>
-          )}
+              </div>
+            </DialogContent>
+          </Dialog>
 
           {(connections.length > 1 || mirrorGroups.length > 0 || editingMirrorGroup) && <details className="group rounded-xl border border-white/[0.07] bg-white/[0.015]" open={editingMirrorGroup}>
             <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
-              <div><p className="text-sm font-medium">Mirror Groups</p><p className="mt-1 text-xs text-muted-foreground">Advanced multi-account routing · preview only</p></div>
+              <div><p className="text-sm font-medium">Copy one trader to multiple accounts</p><p className="mt-1 text-xs text-muted-foreground">Advanced setup · paper preview only</p></div>
               <span className="text-xs text-muted-foreground group-open:hidden">Show</span>
               <span className="hidden text-xs text-muted-foreground group-open:inline">Hide</span>
             </summary>
             <div className="border-t border-white/[0.06] p-5">
           <SettingsSection
-            title="Mirror Groups"
-            description="Route one Discord trader to several paper accounts. This rollout creates exact dry-run plans only—no orders."
+            title="Multi-account groups"
+            description="Send one Discord trader's signals to several paper accounts. This currently creates previews only—no orders."
           >
             <div className="space-y-3">
               <div className="flex justify-end">
                 <Button size="sm" variant="outline" onClick={beginMirrorGroup} disabled={editingMirrorGroup}>
-                  <Plus className="mr-1.5 size-3.5" /> New Mirror Group
+                  <Plus className="mr-1.5 size-3.5" /> New account group
                 </Button>
               </div>
               {editingMirrorGroup && (
@@ -816,17 +854,14 @@ export default function TradingConnectionsSettingsPage({
                 )
               })}
               {!mirrorGroups.length && !editingMirrorGroup && (
-                <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted-foreground">No Mirror Groups yet.</div>
+                <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted-foreground">No multi-account groups yet.</div>
               )}
             </div>
           </SettingsSection>
             </div>
           </details>}
 
-          <SettingsSection
-            title="Accounts"
-            description="A connection cannot execute until account identity and paper lifecycle certification are proven."
-          >
+          <section aria-label="Trading accounts">
             <div className="space-y-3">
               {connections.map((status) => (
                 <SettingsCard key={status.connection.connection_id}>
@@ -844,37 +879,29 @@ export default function TradingConnectionsSettingsPage({
                           <Badge>{status.connection.transport_preference === 'browser' ? 'Browser' : 'API'}</Badge>
                           <StatusBadge positive={status.browser_login_confirmed || status.credential_configured}>
                             {status.connection.transport_preference === 'browser'
-                              ? status.browser_login_confirmed ? 'Provider page saved' : 'Sign-in needed'
-                              : status.credential_configured ? 'Credential saved' : 'Credential needed'}
+                              ? status.browser_login_confirmed ? 'Signed in' : 'Sign in'
+                              : status.credential_configured ? 'Connected' : 'Connection needed'}
                           </StatusBadge>
                           {status.connection.transport_preference === 'api' && (
                             <StatusBadge positive={status.provider_read_fresh}>
                               {status.provider_read_fresh
-                                ? 'Provider verified'
+                                ? 'Account checked'
                                 : status.provider_read_verified
-                                  ? 'Verification stale'
-                                  : 'Verify needed'}
+                                  ? 'Check expired'
+                                  : 'Check needed'}
                             </StatusBadge>
                           )}
                           <StatusBadge positive={isExecutionReady(status)}>
                             {isExecutionReady(status)
-                              ? 'Paper certified'
+                              ? 'Ready'
                               : status.connection.state === 'ready'
-                                ? 'Ready · disabled'
-                                : 'Execution locked'}
+                                ? 'Off'
+                                : 'Setup incomplete'}
                           </StatusBadge>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {status.connection.firm.name} · {status.connection.platform.name} · {status.connection.account_display.label}
                         </p>
-                        <p className="mt-1 text-[11px] text-muted-foreground">
-                          Dedicated identity: {status.connection.account_ref} · {status.connection.certifications.length} certifications
-                        </p>
-                        {status.provider_read_verification && (
-                          <p className="mt-1 text-[10px] text-muted-foreground">
-                            Last read-only proof {new Date(status.provider_read_verification.verified_at).toLocaleString()} · {status.provider_read_verification.position_count} positions · {status.provider_read_verification.working_order_count} working orders
-                          </p>
-                        )}
                       </div>
                       <div className="flex gap-2">
                         {!status.connection.certifications.includes('paper-lifecycle-certified')
@@ -897,7 +924,7 @@ export default function TradingConnectionsSettingsPage({
                           >
                             {busy === `certify:${status.connection.connection_id}`
                               && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
-                            Apply certification
+                            Finish account check
                           </Button>
                         )}
                         {status.connection.state === 'ready'
@@ -916,7 +943,7 @@ export default function TradingConnectionsSettingsPage({
                           >
                             {busy === `paper-execution:${status.connection.connection_id}`
                               && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
-                            {status.connection.enabled ? 'Disable paper' : 'Enable paper'}
+                            {status.connection.enabled ? 'Stop paper trades' : 'Allow paper trades'}
                           </Button>
                         )}
                         {status.connection.transport_preference === 'api' && (
@@ -929,7 +956,7 @@ export default function TradingConnectionsSettingsPage({
                             {busy === `verify:${status.connection.connection_id}`
                               ? <Loader2 className="mr-1.5 size-3.5 animate-spin" />
                               : <ShieldCheck className="mr-1.5 size-3.5" />}
-                            Verify account
+                            Check account
                           </Button>
                         )}
                         {status.connection.transport_preference !== 'api' && (
@@ -950,7 +977,7 @@ export default function TradingConnectionsSettingsPage({
                                 onClick={() => void confirmLogin(status.connection.connection_id)}
                               >
                                 <CheckCircle2 className="mr-1.5 size-3.5" />
-                                Save provider page
+                                Confirm sign-in
                               </Button>
                             )}
                           </>
@@ -973,7 +1000,24 @@ export default function TradingConnectionsSettingsPage({
                         </Button>
                       </div>
                     </div>
-                    <CertificationMatrix evidence={status.certification_evidence[0]} />
+                    <details className="group rounded-lg border border-white/[0.07] bg-black/10">
+                      <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs text-muted-foreground">
+                        Advanced account checks
+                        <span className="group-open:hidden">Show</span>
+                        <span className="hidden group-open:inline">Hide</span>
+                      </summary>
+                      <div className="space-y-3 border-t border-white/[0.06] p-4">
+                        <p className="text-[11px] leading-5 text-muted-foreground">
+                          Account ID {status.connection.account_ref} · {status.connection.certifications.length} completed checks
+                        </p>
+                        {status.provider_read_verification && (
+                          <p className="text-[11px] leading-5 text-muted-foreground">
+                            Last checked {new Date(status.provider_read_verification.verified_at).toLocaleString()} · {status.provider_read_verification.position_count} positions · {status.provider_read_verification.working_order_count} working orders
+                          </p>
+                        )}
+                        <CertificationMatrix evidence={status.certification_evidence[0]} />
+                      </div>
+                    </details>
                     <PaperMandateControl
                       status={status}
                       authorization={standingAuthorizations.find((authorization) => (
@@ -1025,12 +1069,19 @@ export default function TradingConnectionsSettingsPage({
                 </SettingsCard>
               ))}
               {!connections.length && busy !== 'load' && (
-                <div className="rounded-lg border border-dashed border-white/10 px-5 py-6 text-center text-xs text-muted-foreground">
-                  No accounts connected yet.
+                <div className="flex flex-col items-center rounded-2xl border border-dashed border-white/[0.1] bg-white/[0.015] px-6 py-14 text-center">
+                  <div className="flex size-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] text-[#8b94a0]">
+                    <WalletCards className="size-5" />
+                  </div>
+                  <h2 className="mt-4 text-base font-medium">No accounts yet</h2>
+                  <p className="mt-2 max-w-sm text-xs leading-5 text-muted-foreground">Add a paper account, check the connection, then choose which Discord trader it follows.</p>
+                  <Button size="sm" className="mt-5" onClick={() => setEditing(true)}>
+                    <Plus className="mr-1.5 size-4" /> Add your first account
+                  </Button>
                 </div>
               )}
             </div>
-          </SettingsSection>
+          </section>
 
           {orphanedRoutes.length > 0 && (
             <SettingsSection
@@ -1067,7 +1118,7 @@ export default function TradingConnectionsSettingsPage({
 
           <div className="flex items-start gap-3 border-t border-white/[0.06] pt-4 text-[11px] leading-5 text-muted-foreground">
             <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-amber-200" />
-            <span>Accounts stay locked until provider verification, paper certification, and an explicit mandate are complete. Discord traders are signal sources—not broker accounts.</span>
+            <span>New accounts stay off until you finish their safety checks and choose clear trading limits.</span>
           </div>
     </div>
   )
@@ -1075,16 +1126,7 @@ export default function TradingConnectionsSettingsPage({
   if (embedded) return body
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-background">
-      <PanelHeader
-        title="Trading Connections"
-        actions={(
-          <Button size="sm" onClick={() => setEditing(true)}>
-            <Plus className="mr-1.5 size-4" />
-            Add account
-          </Button>
-        )}
-      />
+    <div className="flex h-full min-h-0 flex-col bg-[#090b0e] text-[#eef0f3]">
       <ScrollArea className="min-h-0 flex-1">{body}</ScrollArea>
     </div>
   )
@@ -1180,11 +1222,9 @@ function PaperMandateControl({
       await window.electronAPI.saveTradeGodStandingAuthorization(mandate)
       setDraft(EMPTY_MANDATE_DRAFT)
       await onChanged()
-      toast.success('Paper mandate saved', {
-        description: 'Provider execution is still unavailable until this exact adapter is attached.',
-      })
+      toast.success('Paper trading limits saved')
     } catch (error) {
-      toast.error('Could not activate paper mandate', {
+      toast.error('Could not save paper trading limits', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
@@ -1193,14 +1233,14 @@ function PaperMandateControl({
   }
 
   const revoke = async () => {
-    if (!window.confirm(`Revoke new-entry authority for ${connection.display_name}?`)) return
+    if (!window.confirm(`Remove the active paper trading limits for ${connection.display_name}? New trades will stop.`)) return
     onBusyChange(busyKey)
     try {
       await window.electronAPI.revokeTradeGodStandingAuthorization(connection.connection_id)
       await onChanged()
-      toast.success('Paper mandate revoked')
+      toast.success('Paper trading limits removed')
     } catch (error) {
-      toast.error('Could not revoke paper mandate', {
+      toast.error('Could not remove paper trading limits', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
@@ -1213,15 +1253,15 @@ function PaperMandateControl({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs font-medium">Automatic paper authority</p>
-            <StatusBadge positive={active}>{active ? 'Mandate active' : 'Mandate inactive'}</StatusBadge>
+            <p className="text-xs font-medium">Paper trading limits</p>
+            <StatusBadge positive={active}>{active ? 'Limits active' : 'Limits not set'}</StatusBadge>
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
             {active && authorization
-              ? `New-entry authority expires ${new Date(authorization.expires_at).toLocaleString()}.`
+              ? `These limits stay active until ${new Date(authorization.expires_at).toLocaleString()}.`
               : eligible
-                ? 'Set narrow limits for this account. Nothing starts until you confirm.'
-                : 'Requires an enabled, ready, paper-lifecycle-certified paper account.'}
+                ? 'Choose exactly what this account may trade and how much risk it may take.'
+                : 'Finish the account checks above before setting limits.'}
           </p>
         </div>
         {authorization && (
@@ -1231,14 +1271,14 @@ function PaperMandateControl({
             disabled={busy === busyKey}
             onClick={() => void revoke()}
           >
-            Revoke mandate
+            Remove limits
           </Button>
         )}
       </div>
 
       {!active && eligible && (
         <div className="mt-3 grid gap-3 md:grid-cols-5">
-          <Field label="Exact contracts" className="md:col-span-2">
+          <Field label="Contracts allowed" className="md:col-span-2">
             <input
               className={inputClass}
               value={draft.symbols}
@@ -1246,7 +1286,7 @@ function PaperMandateControl({
               placeholder="ESU6, NQU6"
             />
           </Field>
-          <Field label="Max contracts/order">
+          <Field label="Max contracts per trade">
             <input
               className={inputClass}
               inputMode="numeric"
@@ -1255,7 +1295,7 @@ function PaperMandateControl({
               placeholder="1"
             />
           </Field>
-          <Field label="Max open risk ($)">
+          <Field label="Max risk at one time ($)">
             <input
               className={inputClass}
               inputMode="decimal"
@@ -1264,7 +1304,7 @@ function PaperMandateControl({
               placeholder="100"
             />
           </Field>
-          <Field label="Max daily loss ($)">
+          <Field label="Stop trading after losing ($)">
             <input
               className={inputClass}
               inputMode="decimal"
@@ -1273,7 +1313,7 @@ function PaperMandateControl({
               placeholder="500"
             />
           </Field>
-          <Field label="Session minutes">
+          <Field label="Keep active for (minutes)">
             <input
               className={inputClass}
               inputMode="numeric"
@@ -1284,14 +1324,14 @@ function PaperMandateControl({
           <div className="flex items-end md:col-span-4">
             <Button disabled={busy === busyKey} onClick={() => void activate()}>
               {busy === busyKey && <Loader2 className="mr-1.5 size-3.5 animate-spin" />}
-              Activate paper mandate
+              Save trading limits
             </Button>
           </div>
         </div>
       )}
 
       <p className="mt-3 text-[10px] leading-4 text-amber-100/60">
-        A mandate is only one key. A matching signed route, certified attached adapter, gateway risk approval, and released global halt are all still required.
+        Paper trading stays off until Discord, the account checks, and the final review are complete.
       </p>
     </div>
   )
@@ -1342,19 +1382,19 @@ function AccountDiscordRoutes({
     <div className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.025] p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-medium">Discord sources</p>
-          <p className="mt-1 text-[11px] text-muted-foreground">Only these exact channel + trader matches can route into this {targetLabel}.</p>
+          <p className="text-xs font-medium">Discord trader</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">Choose which trader this {targetLabel} should follow.</p>
         </div>
         <Button size="sm" variant="outline" onClick={onAdd} disabled={addDisabled}>
-          <Plus className="mr-1.5 size-3.5" /> Add source
+          <Plus className="mr-1.5 size-3.5" /> Assign trader
         </Button>
       </div>
 
       {editing && (
-        <div className="mt-3 grid gap-3 rounded-lg border border-white/10 bg-black/10 p-3 md:grid-cols-2">
-          <div className="md:col-span-2">
+        <div className="mt-3 space-y-3 rounded-lg border border-white/10 bg-black/10 p-3">
+          <div>
             <div className="flex items-center justify-between gap-3">
-              <p className="text-[11px] font-medium text-muted-foreground">DiscoTrader source catalog</p>
+              <p className="text-[11px] font-medium text-muted-foreground">Choose a trader</p>
               {onRefreshSignalSources && (
                 <Button variant="ghost" size="sm" onClick={onRefreshSignalSources}>Refresh</Button>
               )}
@@ -1375,30 +1415,38 @@ function AccountDiscordRoutes({
                 })
               }}
             >
-              <option value="">{selectableSources.length ? 'Choose a configured observed trader…' : 'No selectable configured traders found'}</option>
+              <option value="">{selectableSources.length ? 'Choose a Discord trader…' : 'No traders available yet'}</option>
               {selectableSources.map((source) => (
                 <option key={source.sourceId} value={source.sourceId}>
-                  {source.trader.displayName} · channel {source.channelId}
+                  {source.trader.displayName}
                 </option>
               ))}
             </select>
             <p className="mt-1.5 text-[10px] text-muted-foreground">
               {signalSourceCatalogError
-                ? `Catalog unavailable: ${signalSourceCatalogError}. You can still enter immutable IDs below.`
+                ? 'Could not load your Discord traders. Check the Discord connection or enter the IDs manually below.'
                 : signalSourceCatalog
-                  ? `${signalSourceCatalog.observed.sources.length} observed · ${selectableSources.length} configured for daemon routing. Observation does not prove a Discord tab is currently open.`
-                  : 'Connect and start DiscoTrader to load its monitored channel catalog. Manual IDs remain available.'}
+                  ? `${selectableSources.length} trader${selectableSources.length === 1 ? '' : 's'} available.`
+                  : 'Connect Discord first, then refresh this list.'}
             </p>
           </div>
-          <Field label="Route name"><input className={inputClass} value={draft.displayName} onChange={(event) => onDraftChange({ ...draft, displayName: event.target.value })} placeholder="NQ alerts — Uncle Mike" /></Field>
-          <Field label="Discord server ID"><input className={inputClass} value={draft.serverId} onChange={(event) => onDraftChange({ ...draft, serverId: event.target.value.trim() })} placeholder="Immutable server ID" /></Field>
-          <Field label="Discord channel ID"><input className={inputClass} value={draft.channelId} onChange={(event) => onDraftChange({ ...draft, channelId: event.target.value.trim() })} placeholder="Immutable channel ID" /></Field>
-          <Field label="Trader user ID"><input className={inputClass} value={draft.traderAuthorId} onChange={(event) => onDraftChange({ ...draft, traderAuthorId: event.target.value.trim() })} placeholder="Immutable Discord user ID" /></Field>
+          <details className="group rounded-lg border border-white/[0.07]">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-[11px] text-muted-foreground">
+              Enter Discord IDs manually
+              <span className="group-open:hidden">Show</span><span className="hidden group-open:inline">Hide</span>
+            </summary>
+            <div className="grid gap-3 border-t border-white/[0.06] p-3 md:grid-cols-2">
+              <Field label="Assignment name"><input className={inputClass} value={draft.displayName} onChange={(event) => onDraftChange({ ...draft, displayName: event.target.value })} placeholder="NQ alerts — Uncle Mike" /></Field>
+              <Field label="Discord server ID"><input className={inputClass} value={draft.serverId} onChange={(event) => onDraftChange({ ...draft, serverId: event.target.value.trim() })} placeholder="Server ID" /></Field>
+              <Field label="Discord channel ID"><input className={inputClass} value={draft.channelId} onChange={(event) => onDraftChange({ ...draft, channelId: event.target.value.trim() })} placeholder="Channel ID" /></Field>
+              <Field label="Discord trader ID"><input className={inputClass} value={draft.traderAuthorId} onChange={(event) => onDraftChange({ ...draft, traderAuthorId: event.target.value.trim() })} placeholder="Trader user ID" /></Field>
+            </div>
+          </details>
           {pendingReassignment && (
-            <div className="rounded-lg border border-amber-400/25 bg-amber-400/[0.06] p-3 text-xs text-amber-100 md:col-span-2">
-              <p className="font-medium">Confirm account reassignment</p>
+            <div className="rounded-lg border border-amber-400/25 bg-amber-400/[0.06] p-3 text-xs text-amber-100">
+              <p className="font-medium">Move this trader?</p>
               <p className="mt-1 text-amber-100/70">
-                This source currently routes to {previousAccountName}. Saving will move it here; it will never feed both targets.
+                This trader currently sends signals to {previousAccountName}. Confirming will move it here.
               </p>
               <div className="mt-3 flex justify-end gap-2">
                 <Button variant="ghost" onClick={onCancel}>Cancel</Button>
@@ -1407,7 +1455,7 @@ function AccountDiscordRoutes({
             </div>
           )}
           {!pendingReassignment && (
-            <div className="flex justify-end gap-2 md:col-span-2"><Button variant="ghost" onClick={onCancel}>Cancel</Button><Button onClick={onSave} disabled={busy === 'save-signal'}>Save source</Button></div>
+            <div className="flex justify-end gap-2"><Button variant="ghost" onClick={onCancel}>Cancel</Button><Button onClick={onSave} disabled={busy === 'save-signal'}>Assign trader</Button></div>
           )}
         </div>
       )}
@@ -1418,13 +1466,13 @@ function AccountDiscordRoutes({
             <RadioTower className="size-3.5 text-cyan-300" />
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium">{route.display_name}</p>
-              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">Server {route.server_id} · channel {route.channel_id} · trader {route.trader_author_id}</p>
+              <p className="mt-0.5 truncate text-[10px] text-muted-foreground">Assigned to this {targetLabel}</p>
             </div>
             <StatusBadge positive={route.enabled}>{route.enabled ? 'Routed' : 'Off'}</StatusBadge>
             <Button variant="ghost" size="icon" aria-label={`Remove ${route.display_name}`} onClick={() => onRemove(route.route_id)}><Trash2 className="size-3.5" /></Button>
           </div>
         ))}
-        {!accountRoutes.length && !editing && <p className="rounded-md border border-dashed border-white/10 px-3 py-4 text-center text-[11px] text-muted-foreground">No Discord source assigned to this {targetLabel}.</p>}
+        {!accountRoutes.length && !editing && <p className="rounded-md border border-dashed border-white/10 px-3 py-4 text-center text-[11px] text-muted-foreground">No Discord trader assigned yet.</p>}
       </div>
     </div>
   )
@@ -1456,14 +1504,14 @@ export function formatPaperMandateConfirmation(input: {
   expiresAt: Date
 }): string {
   return [
-    `Activate this PAPER mandate for ${input.accountName}?`,
+    `Save these PAPER trading limits for ${input.accountName}?`,
     `Contracts: ${input.symbols.join(', ')}`,
     `Max contracts/order: ${input.maxContracts}`,
     `Max open risk: $${input.maxOpenRisk}`,
     `Max daily loss: $${input.maxDailyLoss}`,
     `Expires: ${input.expiresAt.toLocaleString()}`,
     '',
-    'New entries remain blocked unless the exact provider adapter is certified, attached, and the global halt is released.',
+    'Paper trading stays off until the account checks and final activation review are complete.',
   ].join('\n')
 }
 

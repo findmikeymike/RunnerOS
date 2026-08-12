@@ -15,21 +15,24 @@ const {
   isSelectableSignalSource,
 } = await import('./discotrader-signal-sources.ts')
 
-test('renders an honest approval-gated DiscoTrader setup path', () => {
+test('renders a plain-language approval-gated DiscoTrader setup path', () => {
   const html = renderToStaticMarkup(
     <DiscoTraderControlCenterPage workspaceId="trading" />,
   )
 
   expect(html).toContain('DiscoTrader')
-  expect(html).toContain('Trading locked · setup incomplete')
-  expect(html).toContain('Accounts &amp; Discord routing')
+  expect(html).toContain('Paper trading is off')
+  expect(html).toContain('Connect Discord')
+  expect(html).toContain('Add your accounts')
+  expect(html).toContain('Turn on paper trading')
+  expect(html).toContain('A signal arrives')
+  expect(html).toContain('View active and past trades')
   expect(html).toContain('Add account')
-  expect(html).toContain('Discord setup')
-  expect(html).toContain('Connect the signed local source')
-  expect(html).toContain('Install the Trade Desk worker')
-  expect(html).toContain('Setup progress')
-  expect(html).toContain('New-entry safety halt')
-  expect(html).toContain('Flatten is not implemented')
+  expect(html).toContain('Advanced troubleshooting')
+  expect(html).not.toContain('DT_MCP_TOKEN')
+  expect(html).not.toContain('DT_SHARED_SECRET')
+  expect(html).not.toContain('Install the Trade Desk worker')
+  expect(html).not.toContain('execution custody')
   expect(html).not.toContain('Autonomous execution enabled')
 })
 

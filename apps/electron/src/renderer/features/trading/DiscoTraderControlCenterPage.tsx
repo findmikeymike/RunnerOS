@@ -3,29 +3,30 @@ import {
   AlertTriangle,
   ArrowRight,
   Bot,
+  Check,
   CheckCircle2,
-  CircleOff,
-  DatabaseZap,
-  ExternalLink,
+  ChevronRight,
   KeyRound,
   Loader2,
   LockKeyhole,
   MessageSquare,
   PlugZap,
   RefreshCw,
-  Server,
   ShieldCheck,
+  WalletCards,
 } from 'lucide-react'
 import { TRADE_DESK_AGENT } from '@craft-agent/shared/agent-definitions/trade-god-starter-templates'
 import { toast } from 'sonner'
 
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useAgents } from '@/hooks/useAgents'
 import { navigate, routes } from '@/lib/navigate'
-import TradingConnectionsSettingsPage from '@/pages/settings/TradingConnectionsSettingsPage'
-import {
-  discoTraderSignalSourceCatalogSchema,
-  type DiscoTraderSignalSourceCatalog,
-} from './discotrader-signal-sources'
 import type { AgentDefinitionDTO, FolderSourceConfig } from '../../../shared/types'
 
 type SourceState = 'checking' | 'unconfigured' | 'ready' | 'offline' | 'conflict'
@@ -80,6 +81,11 @@ export function isAuditedTradeDeskWorker(worker: AgentDefinitionDTO | undefined)
     && !actual.visualAgent
 }
 
+const openTradeGodView = (view: 'accounts' | 'trades') => {
+  window.sessionStorage.setItem('trade-god:active-view', view)
+  window.dispatchEvent(new CustomEvent('trade-god:view', { detail: view }))
+}
+
 export default function DiscoTraderControlCenterPage({
   workspaceId,
 }: DiscoTraderControlCenterPageProps) {
@@ -97,6 +103,7 @@ export default function DiscoTraderControlCenterPage({
   const [token, setToken] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
   const [webhookSecretConfigured, setWebhookSecretConfigured] = useState(false)
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false)
   const [globalExecutionKill, setGlobalExecutionKill] = useState<boolean | null>(null)
   const [providerAdaptersAttached, setProviderAdaptersAttached] = useState<boolean | null>(null)
   const [reconciliationStaleCount, setReconciliationStaleCount] = useState(0)
@@ -109,8 +116,6 @@ export default function DiscoTraderControlCenterPage({
   const [readyConnections, setReadyConnections] = useState(0)
   const [verifiedConnections, setVerifiedConnections] = useState(0)
   const [connectionCount, setConnectionCount] = useState(0)
-  const [signalSourceCatalog, setSignalSourceCatalog] = useState<DiscoTraderSignalSourceCatalog | null>(null)
-  const [signalSourceCatalogError, setSignalSourceCatalogError] = useState<string | null>(null)
 
   const worker = useMemo(
     () => allAgents.find((agent) => agent.slug === WORKER_SLUG),
@@ -120,22 +125,10 @@ export default function DiscoTraderControlCenterPage({
   const workerConflict = Boolean(worker && !workerMatchesTemplate)
   const workerActive = activeSlugs.includes(WORKER_SLUG)
 
-  const refreshSignalSources = useCallback(async () => {
-    if (!workspaceId) return
-    try {
-      const result = await window.electronAPI.getDiscoTraderSignalSources(workspaceId)
-      setSignalSourceCatalog(discoTraderSignalSourceCatalogSchema.parse(result))
-      setSignalSourceCatalogError(null)
-    } catch (error) {
-      setSignalSourceCatalog(null)
-      setSignalSourceCatalogError(error instanceof Error ? error.message : String(error))
-    }
-  }, [workspaceId])
-
   const probeSource = useCallback(async (): Promise<SourceState> => {
     if (!workspaceId) {
       setSourceState('unconfigured')
-      setSourceError('Open a Trading workspace before connecting DiscoTrader.')
+      setSourceError('Open the Trading workspace before connecting Discord.')
       return 'unconfigured'
     }
 
@@ -151,7 +144,7 @@ export default function DiscoTraderControlCenterPage({
       }
       if (!isAuditedDiscoTraderSource(source.config)) {
         setSourceState('conflict')
-        setSourceError('The existing discotrader source does not match the audited loopback bearer configuration.')
+        setSourceError('An older Discord connection needs attention before it can be used.')
         setToolCount(0)
         return 'conflict'
       }
@@ -159,14 +152,13 @@ export default function DiscoTraderControlCenterPage({
       const result = await window.electronAPI.getMcpTools(workspaceId, SOURCE_SLUG)
       if (!result.success) {
         setSourceState('offline')
-        setSourceError(result.error || 'DiscoTrader did not return its tool catalog.')
+        setSourceError('DiscoTrader is saved, but it is not currently running.')
         setToolCount(0)
         return 'offline'
       }
 
       setSourceState('ready')
       setToolCount(result.tools?.length ?? 0)
-      void refreshSignalSources()
       return 'ready'
     } catch (error) {
       setSourceState('offline')
@@ -174,7 +166,7 @@ export default function DiscoTraderControlCenterPage({
       setToolCount(0)
       return 'offline'
     }
-  }, [refreshSignalSources, workspaceId])
+  }, [workspaceId])
 
   const refreshConnections = useCallback(async () => {
     try {
@@ -236,41 +228,62 @@ export default function DiscoTraderControlCenterPage({
       if (!globalExecutionKill) {
         await window.electronAPI.setTradeGodGlobalExecutionKill(true)
         setGlobalExecutionKill(true)
-        toast.success('Trade God new entries halted')
+        toast.success('New paper trades are paused')
         return
       }
       const review = await window.electronAPI.prepareTradeGodPaperActivation()
       if (!review.ready) {
         const details = review.blockers.slice(0, 3).map((blocker) => blocker.detail).join(' ')
-        throw new Error(details || 'Paper activation prerequisites are not complete.')
+        throw new Error(details || 'Finish the required account checks first.')
       }
       const accountLines = review.connections.map((connection) => [
-        `• ${connection.connection_id}: provider proved flat`,
-        `  ${connection.authorized_symbols.join(', ')} · max ${connection.max_contracts}/order · open risk $${connection.max_open_risk} · daily loss $${connection.max_daily_loss}`,
-        `  ${connection.allowed_sides.join('/')} ${connection.allowed_order_types.join('/')} · mandate expires ${connection.authorization_expires_at}`,
+        `• ${connection.connection_id}`,
+        `  ${connection.authorized_symbols.join(', ')} · up to ${connection.max_contracts} contract(s) per order`,
+        `  max open risk $${connection.max_open_risk} · max daily loss $${connection.max_daily_loss}`,
       ].join('\n')).join('\n')
       const pendingLines = review.pending_intents.length > 0
         ? review.pending_intents.map((intent) => (
-            `• CANCEL ${intent.side.toUpperCase()} ${intent.quantity} ${intent.symbol} on ${intent.connection_id} (${intent.state}, source ${intent.source_id}, created ${intent.created_at}, valid until ${intent.valid_until})`
+            `• Cancel ${intent.side.toUpperCase()} ${intent.quantity} ${intent.symbol} on ${intent.connection_id}`
           )).join('\n')
-        : '• No queued pre-activation tickets'
+        : '• Nothing is waiting to run'
       if (!window.confirm(
-        `Release paper new-entry halts for ${review.connections.length} account(s)?\n\n${accountLines}\n\nQueued tickets will NOT execute:\n${pendingLines}\n\nThis review expires in 60 seconds.`,
+        `Turn on paper trading for ${review.connections.length} account(s)?\n\n${accountLines}\n\nWaiting signals will not run:\n${pendingLines}\n\nThis review expires in 60 seconds.`,
       )) return
       await window.electronAPI.commitTradeGodPaperActivation(review.review_id, review.content_checksum)
       await refreshExecutionControl()
-      toast.success('Reviewed paper activation released', {
-        description: `${review.pending_intents.length} queued ticket${review.pending_intents.length === 1 ? '' : 's'} canceled.`,
+      toast.success('Paper trading is on', {
+        description: `${review.pending_intents.length} old signal${review.pending_intents.length === 1 ? '' : 's'} cleared.`,
       })
     } catch (error) {
       await refreshExecutionControl()
-      toast.error('Paper activation remains halted', {
+      toast.error('Paper trading is still off', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
       setActivationBusy(false)
     }
   }, [globalExecutionKill, refreshExecutionControl])
+
+  const ensureTradeDeskWorker = useCallback(async () => {
+    if (!workspaceId) throw new Error('Open the Trading workspace first.')
+    setWorkerBusy(true)
+    try {
+      if (workerConflict) {
+        throw new Error('A previous Trade Desk setup needs attention. Open Advanced troubleshooting.')
+      }
+      if (!worker) {
+        await upsert({
+          slug: TRADE_DESK_AGENT.slug,
+          metadata: TRADE_DESK_AGENT.metadata,
+          systemPrompt: TRADE_DESK_AGENT.systemPrompt,
+        })
+      } else if (!workerActive) {
+        await setActive(WORKER_SLUG, true)
+      }
+    } finally {
+      setWorkerBusy(false)
+    }
+  }, [setActive, upsert, worker, workerActive, workerConflict, workspaceId])
 
   const handleConnectSource = useCallback(async () => {
     if (!workspaceId) return
@@ -280,18 +293,15 @@ export default function DiscoTraderControlCenterPage({
       const existing = sources.find((entry) => entry.config.slug === SOURCE_SLUG)
 
       if (!webhookSecretConfigured && !webhookSecret.trim()) {
-        throw new Error('Paste DT_SHARED_SECRET from DiscoTrader v2/.env first.')
+        throw new Error('Enter the webhook key from DiscoTrader.')
       }
 
       if (existing && !isAuditedDiscoTraderSource(existing.config)) {
-        navigate(routes.view.sourcesMcp(SOURCE_SLUG))
-        throw new Error('The existing discotrader source differs from the audited local configuration. Review or delete it first.')
+        throw new Error('An older Discord connection needs attention. Open Advanced troubleshooting.')
       }
 
       if (!existing) {
-        if (!token.trim()) {
-          throw new Error('Paste DT_MCP_TOKEN from DiscoTrader v2/.env first.')
-        }
+        if (!token.trim()) throw new Error('Enter the connection key from DiscoTrader.')
         const created = await window.electronAPI.createSource(workspaceId, {
           name: 'DiscoTrader',
           provider: 'discotrader',
@@ -308,7 +318,7 @@ export default function DiscoTraderControlCenterPage({
         })
         if (created.slug !== SOURCE_SLUG) {
           await window.electronAPI.deleteSource(workspaceId, created.slug)
-          throw new Error('A conflicting DiscoTrader source already exists. Open Sources and resolve it first.')
+          throw new Error('A previous Discord connection needs attention. Open Advanced troubleshooting.')
         }
       }
 
@@ -323,50 +333,18 @@ export default function DiscoTraderControlCenterPage({
       }
 
       const state = await probeSource()
-      if (state === 'ready') {
-        toast.success('DiscoTrader MCP connected', {
-          description: 'Webhook secret is saved but sender delivery is not yet verified.',
-        })
-      }
-      else toast.error('DiscoTrader source saved but the daemon is not reachable')
+      if (state !== 'ready') throw new Error('DiscoTrader is saved, but it is not currently running.')
+      await ensureTradeDeskWorker()
+      setConnectDialogOpen(false)
+      toast.success('Discord is connected')
     } catch (error) {
-      toast.error('Could not connect DiscoTrader', {
+      toast.error('Discord could not connect', {
         description: error instanceof Error ? error.message : String(error),
       })
     } finally {
       setSourceBusy(false)
     }
-  }, [probeSource, token, webhookSecret, webhookSecretConfigured, workspaceId])
-
-  const handleInstallWorker = useCallback(async () => {
-    if (!workspaceId) return
-    setWorkerBusy(true)
-    try {
-      if (workerConflict) {
-        navigate(routes.view.agents(WORKER_SLUG))
-        throw new Error('An existing trade-desk definition differs from the audited bundle. Review or delete it before installation.')
-      }
-      if (!worker) {
-        await upsert({
-          slug: TRADE_DESK_AGENT.slug,
-          metadata: TRADE_DESK_AGENT.metadata,
-          systemPrompt: TRADE_DESK_AGENT.systemPrompt,
-        })
-        toast.success('Trade Desk installed and activated in this workspace')
-      } else if (!workerActive) {
-        await setActive(WORKER_SLUG, true)
-        toast.success('Trade Desk activated in this workspace')
-      } else {
-        toast.success('Trade Desk is already active')
-      }
-    } catch (error) {
-      toast.error('Could not install Trade Desk', {
-        description: error instanceof Error ? error.message : String(error),
-      })
-    } finally {
-      setWorkerBusy(false)
-    }
-  }, [setActive, upsert, worker, workerActive, workerConflict, workspaceId])
+  }, [ensureTradeDeskWorker, probeSource, token, webhookSecret, webhookSecretConfigured, workspaceId])
 
   const setupComplete = sourceState === 'ready'
     && webhookSecretConfigured
@@ -375,341 +353,285 @@ export default function DiscoTraderControlCenterPage({
   const accountConnected = connectionCount > 0
   const accountVerified = verifiedConnections > 0
   const activated = readyConnections > 0 && globalExecutionKill === false && connectionKillCount === 0
-  const setupSteps = [
-    { label: 'Discord', complete: setupComplete },
-    { label: 'Account', complete: accountConnected },
-    { label: 'Verified', complete: accountVerified },
-    { label: 'Activated', complete: activated },
-  ]
-  const nextAction = !setupComplete
-    ? { label: 'Finish Discord setup', target: 'discotrader-setup' }
-    : !accountConnected
-      ? { label: 'Add your first account', target: 'discotrader-accounts' }
-      : !accountVerified
-        ? { label: 'Verify account readiness', target: 'discotrader-accounts' }
-        : readyConnections === 0
-          ? { label: 'Complete paper certification', target: 'discotrader-accounts' }
-          : { label: globalExecutionKill ? 'Review paper activation' : 'Halt new entries', target: 'activation' }
-
-  const runNextAction = () => {
-    if (nextAction.target === 'activation') {
-      void handleGlobalExecutionKill()
-      return
-    }
-    const element = document.getElementById(nextAction.target)
-    element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    if (element instanceof HTMLDetailsElement) element.open = true
-  }
+  const activationAvailable = setupComplete && accountVerified && readyConnections > 0
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto bg-[#090b0e] text-[#eef0f3]">
-      <div className="mx-auto flex w-full max-w-[1420px] flex-col gap-6 px-6 py-7 xl:px-9">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.07] pb-6">
+      <div className="mx-auto flex w-full max-w-[1120px] flex-col gap-6 px-6 py-8 xl:px-10">
+        <header className="flex flex-wrap items-start justify-between gap-5">
           <div>
-            <p className="text-xs font-medium text-[#8b93a1]">Futures automation</p>
-            <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.03em]">DiscoTrader</h1>
-            <p className="mt-2 max-w-2xl text-sm text-[#858d99]">Connect Discord traders to exact paper accounts, then activate behind verified safety gates.</p>
+            <p className="text-xs font-medium text-[#8b93a1]">Discord copy trading</p>
+            <h1 className="mt-1 text-[30px] font-semibold tracking-[-0.035em]">DiscoTrader</h1>
+            <p className="mt-2 max-w-xl text-sm leading-6 text-[#858d99]">
+              Copy trades from the Discord traders you choose into your selected paper accounts.
+            </p>
           </div>
           <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] ${
             activated
               ? 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300'
-              : 'border-amber-300/20 bg-amber-300/[0.06] text-amber-200'
+              : 'border-white/[0.09] bg-white/[0.025] text-[#9aa2ad]'
           }`}>
-            {activated ? <ShieldCheck className="size-3.5" /> : <LockKeyhole className="size-3.5" />}
-            {activated ? 'Paper automation active' : 'Trading locked · setup incomplete'}
+            {activated ? <CheckCircle2 className="size-3.5" /> : <LockKeyhole className="size-3.5" />}
+            {activated ? 'Paper trading is on' : 'Paper trading is off'}
           </div>
         </header>
 
-        <section className="rounded-xl border border-white/[0.08] bg-[#0d1014] px-5 py-5" aria-label="Setup progress">
-          <div className="grid grid-cols-4 gap-3">
-            {setupSteps.map((step, index) => (
-              <div key={step.label} className="flex items-center gap-3">
-                <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${step.complete ? 'bg-emerald-400/12 text-emerald-300' : 'bg-white/[0.05] text-[#6e7683]'}`}>
-                  {step.complete ? <CheckCircle2 className="size-3.5" /> : index + 1}
-                </span>
-                <div className="min-w-0"><p className={`text-xs font-medium ${step.complete ? 'text-[#dbe0e6]' : 'text-[#7b8491]'}`}>{step.label}</p><p className="mt-0.5 text-[10px] text-[#5f6773]">{step.complete ? 'Complete' : 'Required'}</p></div>
-              </div>
-            ))}
+        <section className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0d1014] shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
+          <div className="border-b border-white/[0.06] px-6 py-5">
+            <h2 className="text-base font-semibold tracking-[-0.01em]">Get started</h2>
+            <p className="mt-1 text-xs text-[#747d89]">Three steps. You stay in control of every account and limit.</p>
           </div>
-          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-4">
-            <div><p className="text-xs font-medium text-[#d5d9df]">Next step</p><p className="mt-1 text-[11px] text-[#717a87]">{nextAction.label}</p></div>
-            <button type="button" onClick={runNextAction} disabled={activationBusy} className="inline-flex h-9 items-center gap-2 rounded-lg bg-white px-4 text-xs font-semibold text-black transition hover:bg-[#e7e9ec] disabled:opacity-50">
-              {activationBusy ? <Loader2 className="size-3.5 animate-spin" /> : null}{nextAction.label}<ArrowRight className="size-3.5" />
-            </button>
-          </div>
-        </section>
-
-        <section id="discotrader-accounts" className="scroll-mt-6 overflow-hidden rounded-xl border border-white/[0.08] bg-[#0d1014]">
-          <TradingConnectionsSettingsPage
-            embedded
-            onConnectionsChanged={() => void refreshConnections()}
-            signalSourceCatalog={signalSourceCatalog}
-            signalSourceCatalogError={signalSourceCatalogError}
-            onRefreshSignalSources={() => void refreshSignalSources()}
-          />
-        </section>
-
-        <details id="discotrader-setup" open={!setupComplete} className="group scroll-mt-6 rounded-xl border border-white/[0.08] bg-[#0d1014]">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
-            <div><p className="text-sm font-medium">Discord setup</p><p className="mt-1 text-xs text-[#737c88]">Daemon, encrypted secrets, and the read-only worker.</p></div>
-            <ArrowRight className="size-4 text-[#68717e] transition-transform group-open:rotate-90" />
-          </summary>
-          <div className="border-t border-white/[0.06] px-5 py-5">
-
-            <SetupStep
+          <div className="divide-y divide-white/[0.06]">
+            <SetupAction
               number="1"
-              title="Run DiscoTrader"
-              state={sourceState === 'ready' ? 'complete' : 'pending'}
-              description="Start the v2 daemon. The desktop app connects only to its loopback MCP endpoint."
-            >
-              <code className="block overflow-x-auto rounded-md border border-[#2a3038] bg-[#090c0f] px-3 py-2 font-mono text-[11px] text-[#aeb7c2]">
-                cd ~/CAS4/DiscoTrader/v2 &amp;&amp; npm start
-              </code>
-            </SetupStep>
-
-            <SetupStep
+              icon={<MessageSquare className="size-4" />}
+              title="Connect Discord"
+              description="Link the DiscoTrader feed that watches your chosen Discord channels."
+              complete={setupComplete}
+              status={setupComplete ? 'Connected' : sourceState === 'checking' ? 'Checking…' : 'Not connected'}
+              actionLabel={setupComplete ? 'Manage' : 'Connect Discord'}
+              onAction={() => setConnectDialogOpen(true)}
+            />
+            <SetupAction
               number="2"
-              title="Connect the signed local source"
-              state={sourceState === 'ready' ? 'complete' : sourceState === 'offline' || sourceState === 'conflict' ? 'error' : 'pending'}
-              description="Use DT_MCP_TOKEN and DT_SHARED_SECRET from DiscoTrader v2/.env. Both are encrypted and never shown after save."
-            >
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <label className="relative min-w-0 flex-1">
-                  <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#687382]" />
-                  <input
-                    aria-label="DiscoTrader MCP token"
-                    type="password"
-                    value={token}
-                    onChange={(event) => setToken(event.target.value)}
-                    placeholder={sourceState === 'unconfigured' ? 'Paste DT_MCP_TOKEN' : 'Optional: replace saved token'}
-                    className="h-10 w-full rounded-md border border-[#2a3038] bg-[#090c0f] pl-9 pr-3 text-xs text-white outline-none placeholder:text-[#545d69] focus:border-amber-300/40"
-                  />
-                </label>
+              icon={<WalletCards className="size-4" />}
+              title="Add your accounts"
+              description="Connect each paper account, then choose which Discord trader it follows."
+              complete={accountConnected}
+              status={accountConnected ? `${connectionCount} account${connectionCount === 1 ? '' : 's'}` : 'No accounts yet'}
+              actionLabel={accountConnected ? 'Manage accounts' : 'Add account'}
+              onAction={() => openTradeGodView('accounts')}
+            />
+            <SetupAction
+              number="3"
+              icon={<ShieldCheck className="size-4" />}
+              title="Turn on paper trading"
+              description="Review your accounts and limits once, then allow new paper trades."
+              complete={activated}
+              status={activated ? 'On' : activationAvailable ? 'Ready to review' : 'Finish setup first'}
+              actionLabel={activated ? 'Pause new trades' : 'Review & turn on'}
+              onAction={() => void handleGlobalExecutionKill()}
+              disabled={!activated && !activationAvailable || activationBusy}
+              busy={activationBusy}
+            />
+          </div>
+        </section>
+
+        <section className="grid gap-3 md:grid-cols-3" aria-label="How DiscoTrader works">
+          <HowItWorksCard number="1" title="A signal arrives" description="DiscoTrader reads a post from a trader you approved." />
+          <HowItWorksCard number="2" title="Your rules are checked" description="The app confirms the right account, trade, size, and safety limits." />
+          <HowItWorksCard number="3" title="The paper trade is managed" description="Entries and follow-ups stay attached to the correct account and trade." />
+        </section>
+
+        <button
+          type="button"
+          onClick={() => openTradeGodView('trades')}
+          className="group flex w-full items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.018] px-5 py-4 text-left transition hover:border-white/[0.12] hover:bg-white/[0.03]"
+        >
+          <div>
+            <p className="text-sm font-medium">View active and past trades</p>
+            <p className="mt-1 text-xs text-[#707986]">See every accepted signal, open position, update, and final result.</p>
+          </div>
+          <ChevronRight className="size-4 text-[#606975] transition group-hover:translate-x-0.5 group-hover:text-white" />
+        </button>
+
+        <details className="group rounded-xl border border-white/[0.07] bg-white/[0.012]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
+            <div>
+              <p className="text-sm font-medium text-[#b9c0c9]">Advanced troubleshooting</p>
+              <p className="mt-1 text-xs text-[#68717d]">Connection diagnostics and manual safety controls.</p>
+            </div>
+            <ChevronRight className="size-4 text-[#606975] transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="grid gap-5 border-t border-white/[0.06] px-5 py-5 lg:grid-cols-2">
+            <div className="space-y-3">
+              <AdvancedRow label="Discord service" value={sourceState === 'ready' ? 'Online' : sourceState} />
+              <AdvancedRow label="Trade helper" value={workerActive && workerMatchesTemplate ? 'Ready' : 'Needs attention'} />
+              <AdvancedRow label="Account data" value={userSyncSubscribedCount ? 'Live updates connected' : providerAdaptersAttached ? 'Connected' : 'Not connected'} />
+              <AdvancedRow label="Safety checks" value={userSyncGapCount || reconciliationStaleCount || connectionKillCount ? 'Needs attention' : globalExecutionKill ? 'New trades paused' : 'Ready'} />
+            </div>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => { void probeSource(); void refreshConnections(); void refreshExecutionControl() }}
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.09] text-xs font-medium text-[#c3c9d1] hover:bg-white/[0.04]"
+              >
+                <RefreshCw className="size-3.5" /> Refresh status
+              </button>
+              {worker && (
                 <button
                   type="button"
-                  onClick={handleConnectSource}
-                  disabled={sourceBusy || !workspaceId || (
-                    sourceState === 'unconfigured'
-                    && (!token.trim() || (!webhookSecretConfigured && !webhookSecret.trim()))
-                  )}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-amber-300 px-4 text-xs font-semibold text-black transition-colors hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => navigate(routes.view.agents(WORKER_SLUG))}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-white/[0.09] text-xs font-medium text-[#c3c9d1] hover:bg-white/[0.04]"
                 >
-                  {sourceBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <PlugZap className="h-3.5 w-3.5" />}
-                  {sourceState === 'unconfigured' ? 'Connect source' : sourceState === 'conflict' ? 'Review conflicting source' : token.trim() || webhookSecret.trim() ? 'Save secrets + test' : 'Test connection'}
+                  <Bot className="size-3.5" /> Open Trade Desk helper
                 </button>
+              )}
+              {sourceState === 'conflict' && (
+                <button
+                  type="button"
+                  onClick={() => navigate(routes.view.sourcesMcp(SOURCE_SLUG))}
+                  className="flex h-10 w-full items-center justify-center gap-2 rounded-lg border border-amber-300/20 text-xs font-medium text-amber-200 hover:bg-amber-300/[0.04]"
+                >
+                  <AlertTriangle className="size-3.5" /> Review old connection
+                </button>
+              )}
+            </div>
+            {(sourceError || agentsError) && (
+              <div className="lg:col-span-2 rounded-lg border border-red-400/15 bg-red-400/[0.04] px-4 py-3 text-[11px] leading-5 text-red-200">
+                {sourceError || agentsError}
               </div>
-              <label className="relative mt-2 block">
-                <KeyRound className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#687382]" />
+            )}
+          </div>
+        </details>
+      </div>
+
+      <Dialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen}>
+        <DialogContent className="max-h-[88vh] max-w-xl overflow-y-auto border border-white/[0.09] bg-[#0d1014] p-0 text-white shadow-2xl">
+          <DialogHeader className="border-b border-white/[0.07] px-6 pb-5 pt-6 pr-14">
+            <div className="mb-3 flex size-10 items-center justify-center rounded-xl border border-amber-300/15 bg-amber-300/[0.07] text-amber-200">
+              <MessageSquare className="size-5" />
+            </div>
+            <DialogTitle className="text-xl tracking-[-0.02em]">Connect Discord</DialogTitle>
+            <DialogDescription className="max-w-md leading-5 text-[#7d8692]">
+              Copy the two private keys from DiscoTrader, paste them below, and we will handle the rest.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5 px-6 pb-6">
+            <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-4 py-3 text-xs leading-5 text-[#929aa5]">
+              Paste the two private keys from your DiscoTrader setup. If you do not know where they are, open Manual setup below.
+            </div>
+            <label className="block">
+              <span className="text-xs font-medium text-[#d8dce2]">Connection key</span>
+              <div className="relative mt-2">
+                <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#687382]" />
                 <input
-                  aria-label="DiscoTrader shared webhook secret"
+                  aria-label="Connection key"
+                  type="password"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
+                  placeholder={sourceState === 'unconfigured' ? 'Paste connection key' : 'Saved · paste only to replace'}
+                  className="h-11 w-full rounded-lg border border-white/[0.09] bg-[#090c0f] pl-10 pr-3 text-sm text-white outline-none placeholder:text-[#4f5864] focus:border-amber-300/40"
+                />
+              </div>
+            </label>
+            <label className="block">
+              <span className="text-xs font-medium text-[#d8dce2]">Webhook key</span>
+              <div className="relative mt-2">
+                <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#687382]" />
+                <input
+                  aria-label="Webhook key"
                   type="password"
                   value={webhookSecret}
                   onChange={(event) => setWebhookSecret(event.target.value)}
-                  placeholder={webhookSecretConfigured ? 'DT_SHARED_SECRET saved · paste to replace' : 'Paste DT_SHARED_SECRET'}
-                  className="h-10 w-full rounded-md border border-[#2a3038] bg-[#090c0f] pl-9 pr-3 text-xs text-white outline-none placeholder:text-[#545d69] focus:border-amber-300/40"
+                  placeholder={webhookSecretConfigured ? 'Saved · paste only to replace' : 'Paste webhook key'}
+                  className="h-11 w-full rounded-lg border border-white/[0.09] bg-[#090c0f] pl-10 pr-3 text-sm text-white outline-none placeholder:text-[#4f5864] focus:border-amber-300/40"
                 />
-              </label>
-              {sourceError && (
-                <div className="mt-2 flex items-start gap-2 text-[11px] leading-5 text-[#ff9b9b]">
-                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span>{sourceError}</span>
-                </div>
+              </div>
+            </label>
+            <button
+              type="button"
+              onClick={() => void handleConnectSource()}
+              disabled={sourceBusy || workerBusy || agentsLoading || !workspaceId || (
+                sourceState === 'unconfigured'
+                && (!token.trim() || (!webhookSecretConfigured && !webhookSecret.trim()))
               )}
-            </SetupStep>
-
-            <SetupStep
-              number="3"
-              title="Install the Trade Desk worker"
-              state={workerActive ? 'complete' : 'pending'}
-              description="Creates the audited worker definition globally, then activates it only in this Trading workspace."
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-white text-sm font-semibold text-black transition hover:bg-[#e8eaed] disabled:cursor-not-allowed disabled:opacity-40"
             >
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={handleInstallWorker}
-                  disabled={workerBusy || agentsLoading || !workspaceId}
-                  className="inline-flex h-10 items-center gap-2 rounded-md bg-white px-4 text-xs font-semibold text-black transition-colors hover:bg-[#e6e8eb] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  {workerBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Bot className="h-3.5 w-3.5" />}
-                  {workerConflict ? 'Review conflicting worker' : workerActive ? 'Worker active' : worker ? 'Activate worker' : 'Install worker'}
-                </button>
-                {worker && (
-                  <button
-                    type="button"
-                    onClick={() => navigate(routes.view.agents(WORKER_SLUG))}
-                    className="inline-flex h-10 items-center gap-2 rounded-md border border-[#303741] px-4 text-xs font-medium text-[#c4cbd4] hover:bg-white/[0.04]"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" /> Open worker
-                  </button>
-                )}
+              {sourceBusy || workerBusy ? <Loader2 className="size-4 animate-spin" /> : setupComplete ? <Check className="size-4" /> : <PlugZap className="size-4" />}
+              {setupComplete && !token.trim() && !webhookSecret.trim() ? 'Check connection' : 'Connect Discord'}
+            </button>
+            {sourceError && (
+              <div className="flex items-start gap-2 rounded-lg border border-red-400/15 bg-red-400/[0.04] px-4 py-3 text-xs leading-5 text-red-200">
+                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {sourceError}
               </div>
-              {agentsError && <p className="mt-2 text-[11px] text-[#ff9b9b]">{agentsError}</p>}
-            </SetupStep>
+            )}
+            <details className="group rounded-lg border border-white/[0.07] bg-black/10">
+              <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-xs text-[#8c95a1]">
+                Manual setup & diagnostics
+                <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" />
+              </summary>
+              <div className="space-y-3 border-t border-white/[0.06] px-4 py-4 text-[11px] leading-5 text-[#737d89]">
+                <p>If DiscoTrader is not running, start its local service:</p>
+                <code className="block overflow-x-auto rounded-md border border-white/[0.07] bg-[#080a0d] px-3 py-2 font-mono text-[#aeb7c2]">
+                  cd ~/CAS4/DiscoTrader/v2 &amp;&amp; npm start
+                </code>
+                <p>Advanced names: connection key = <code>DT_MCP_TOKEN</code>; webhook key = <code>DT_SHARED_SECRET</code>. Both are stored encrypted.</p>
+                <p>Local address: <code>{DISCOTRADER_MCP_URL}</code> · {toolCount} read-only tools found.</p>
+              </div>
+            </details>
           </div>
-        </details>
-
-        <details className="group rounded-xl border border-white/[0.08] bg-[#0d1014]">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
-            <div><p className="text-sm font-medium">System details</p><p className="mt-1 text-xs text-[#737c88]">Diagnostics, data flow, and manual safety controls.</p></div>
-            <ArrowRight className="size-4 text-[#68717e] transition-transform group-open:rotate-90" />
-          </summary>
-          <div className="grid gap-6 border-t border-white/[0.06] px-5 py-5 lg:grid-cols-2">
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-xs font-semibold text-white">How it runs</div>
-                  <p className="mt-1 text-[11px] text-[#707a87]">Deterministic system first; worker only at the decision edge.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    void probeSource()
-                    void refreshConnections()
-                  }}
-                  className="rounded-md border border-[#2a3038] p-2 text-[#7d8794] hover:bg-white/[0.04] hover:text-white"
-                  aria-label="Refresh DiscoTrader status"
-                >
-                  <RefreshCw className="h-3.5 w-3.5" />
-                </button>
-              </div>
-              <div className="mt-5 grid gap-2">
-                <FlowRow label="Discord signal" detail="DiscoTrader parses + risk-gates" />
-                <FlowRow label="Sized ticket" detail="Immutable ticket ID" />
-                <FlowRow label="Trade Desk" detail="Read-only status and exceptions" />
-                <FlowRow label="Trade God gateway" detail="Connection + certification gates" />
-                <FlowRow label="Provider" detail="Paper first; live requires explicit arming" last />
-              </div>
-            </div>
-            <div>
-              <div className="text-xs font-semibold text-white">Operating surfaces</div>
-              <div className="mt-4 grid gap-2">
-                <OperationRow
-                  icon={<MessageSquare className="h-4 w-4" />}
-                  title="Talk to Trade Desk"
-                  detail="Opens the worker. Run starts with dt_status."
-                  enabled={workerActive && workerMatchesTemplate}
-                  onClick={() => workerActive && workerMatchesTemplate && navigate(routes.view.agents(WORKER_SLUG))}
-                />
-                <OperationRow
-                  icon={<ShieldCheck className="h-4 w-4" />}
-                  title="Pending tickets + positions"
-                  detail="Read through the signed DiscoTrader source."
-                  enabled={sourceState === 'ready'}
-                  onClick={() => navigate(routes.view.sourcesMcp(SOURCE_SLUG))}
-                />
-                <OperationRow
-                  icon={<CircleOff className="h-4 w-4" />}
-                  title="New-entry safety halt"
-                  detail={globalExecutionKill ? 'Select for an exact paper-account review. Old queued tickets are canceled, never auto-run.' : 'Persistently halt all new gateway entries. Flatten is not implemented.'}
-                  enabled={globalExecutionKill !== null && !activationBusy}
-                  onClick={handleGlobalExecutionKill}
-                />
-                <OperationRow
-                  icon={<LockKeyhole className="h-4 w-4" />}
-                  title="Recovered account halts"
-                  detail={connectionKillCount === 0
-                    ? 'No account-level execution halts.'
-                    : globalExecutionKill
-                      ? `${connectionKillCount} account halt${connectionKillCount === 1 ? '' : 's'} will be included in the exact activation review.`
-                      : 'Latch the global halt first, then run the exact activation review.'}
-                  enabled={connectionKillCount > 0 && globalExecutionKill === true && !activationBusy}
-                  onClick={handleGlobalExecutionKill}
-                />
-              </div>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-px border-t border-white/[0.06] bg-white/[0.06] text-[11px] sm:grid-cols-4">
-            <Diagnostic label="Daemon" value={sourceState === 'ready' ? `${toolCount} tools online` : sourceState} />
-            <Diagnostic label="Worker" value={workerActive ? 'Active' : 'Not active'} />
-            <Diagnostic label="Provider feed" value={userSyncSubscribedCount ? `${userSyncSubscribedCount} subscribed` : providerAdaptersAttached ? 'Attached' : 'Unavailable'} />
-            <Diagnostic label="Safety" value={userSyncGapCount || reconciliationStaleCount || connectionKillCount ? 'Attention required' : globalExecutionKill ? 'Halted' : 'Ready'} />
-          </div>
-        </details>
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
-function Diagnostic({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="bg-[#0b0e12] px-4 py-3">
-      <p className="text-[10px] text-[#68717e]">{label}</p>
-      <p className="mt-1 text-xs text-[#b8bec7]">{value}</p>
-    </div>
-  )
-}
-
-function SetupStep({
+function SetupAction({
   number,
-  title,
-  description,
-  state,
-  children,
-}: {
-  number: string
-  title: string
-  description: string
-  state: 'complete' | 'pending' | 'error'
-  children: React.ReactNode
-}) {
-  return (
-    <div className="grid grid-cols-[28px_minmax(0,1fr)] gap-3 border-t border-[#232930] py-5 first:border-t-0 first:pt-0 last:pb-0">
-      <div className={`flex h-7 w-7 items-center justify-center rounded-full border text-[11px] font-semibold ${
-        state === 'complete'
-          ? 'border-[#0ecb81]/30 bg-[#0ecb81]/10 text-[#7de2b0]'
-          : state === 'error'
-            ? 'border-red-400/30 bg-red-400/10 text-[#ff9b9b]'
-            : 'border-[#343b45] bg-[#171c22] text-[#8a94a1]'
-      }`}>
-        {state === 'complete' ? <CheckCircle2 className="h-3.5 w-3.5" /> : number}
-      </div>
-      <div className="min-w-0">
-        <div className="text-xs font-semibold text-white">{title}</div>
-        <p className="mb-3 mt-1 text-[11px] leading-5 text-[#747e8b]">{description}</p>
-        {children}
-      </div>
-    </div>
-  )
-}
-
-function FlowRow({ label, detail, last = false }: { label: string; detail: string; last?: boolean }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="flex min-w-0 flex-1 items-center justify-between gap-3 rounded-md border border-[#262d35] bg-[#0b0f13] px-3 py-2.5">
-        <span className="text-[11px] font-medium text-[#d5dae0]">{label}</span>
-        <span className="truncate text-[10px] text-[#66707d]">{detail}</span>
-      </div>
-      {!last && <ArrowRight className="hidden h-3.5 w-3.5 shrink-0 text-[#4f5864] xl:block" />}
-    </div>
-  )
-}
-
-function OperationRow({
   icon,
   title,
-  detail,
-  enabled,
-  onClick,
+  description,
+  complete,
+  status,
+  actionLabel,
+  onAction,
+  disabled = false,
+  busy = false,
 }: {
+  number: string
   icon: React.ReactNode
   title: string
-  detail: string
-  enabled: boolean
-  onClick: () => void
+  description: string
+  complete: boolean
+  status: string
+  actionLabel: string
+  onAction: () => void
+  disabled?: boolean
+  busy?: boolean
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!enabled}
-      className="flex items-center gap-3 rounded-md border border-[#262d35] bg-[#0b0f13] p-3 text-left transition-colors hover:border-[#3a434e] hover:bg-[#11171d] disabled:cursor-not-allowed disabled:opacity-40"
-    >
-      <span className="text-amber-200">{icon}</span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[11px] font-medium text-[#d5dae0]">{title}</span>
-        <span className="mt-0.5 block text-[10px] leading-4 text-[#66707d]">{detail}</span>
-      </span>
-      <ArrowRight className="h-3.5 w-3.5 text-[#4f5864]" />
-    </button>
+    <div className="grid gap-4 px-6 py-5 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div className="flex min-w-0 items-start gap-4">
+        <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl border ${complete ? 'border-emerald-400/15 bg-emerald-400/[0.06] text-emerald-300' : 'border-white/[0.08] bg-white/[0.025] text-[#8c95a1]'}`}>
+          {complete ? <CheckCircle2 className="size-4" /> : icon}
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-[#e4e7eb]"><span className="mr-2 text-[#5f6875]">{number}.</span>{title}</p>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] ${complete ? 'bg-emerald-400/[0.07] text-emerald-300' : 'bg-white/[0.04] text-[#7a8490]'}`}>{status}</span>
+          </div>
+          <p className="mt-1.5 text-xs leading-5 text-[#747d89]">{description}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onAction}
+        disabled={disabled}
+        className="inline-flex h-9 min-w-[132px] items-center justify-center gap-2 rounded-lg border border-white/[0.1] bg-white/[0.035] px-4 text-xs font-medium text-[#d5dae0] transition hover:bg-white/[0.07] disabled:cursor-not-allowed disabled:opacity-35"
+      >
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+        {actionLabel}<ArrowRight className="size-3.5" />
+      </button>
+    </div>
+  )
+}
+
+function HowItWorksCard({ number, title, description }: { number: string; title: string; description: string }) {
+  return (
+    <div className="rounded-xl border border-white/[0.07] bg-white/[0.015] p-5">
+      <div className="flex size-6 items-center justify-center rounded-full bg-white/[0.05] text-[10px] font-semibold text-[#9aa2ad]">{number}</div>
+      <p className="mt-4 text-sm font-medium text-[#d9dde2]">{title}</p>
+      <p className="mt-1.5 text-xs leading-5 text-[#6f7884]">{description}</p>
+    </div>
+  )
+}
+
+function AdvancedRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-white/[0.06] bg-black/10 px-4 py-3">
+      <span className="text-xs text-[#7b8490]">{label}</span>
+      <span className="text-xs font-medium text-[#c6ccd4]">{value}</span>
+    </div>
   )
 }

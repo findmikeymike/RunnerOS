@@ -309,7 +309,7 @@ const TradeGodHomePage: React.FC<TradeGodHomePageProps> = ({ workspaceId, worksp
   if (activeView === 'discotrader') return <DiscoTraderControlCenterPage workspaceId={workspaceId} />
   if (activeView === 'trades') return <TradeGodTradesPage />
   if (activeView === 'signals') return <TradeGodSignalsPage />
-  if (activeView === 'accounts') return <TradingConnectionsSettingsPage />
+  if (activeView === 'accounts') return <TradingConnectionsSettingsPage workspaceId={workspaceId} />
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto bg-[#090c0f] text-[#eaecef]">

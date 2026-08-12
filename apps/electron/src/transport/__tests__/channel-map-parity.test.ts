@@ -59,6 +59,7 @@ type ApiToChannelMapKeys = Exclude<
   | 'setTradeGodConnectionExecutionKill' // direct local account-halt IPC
   | 'prepareTradeGodPaperActivation' // direct local reviewed paper activation IPC
   | 'commitTradeGodPaperActivation' // direct local reviewed paper activation IPC
+  | 'listTradeGodExecutions' // direct local execution-ledger IPC
   | 'listTradeGodStandingAuthorizations' // direct local paper-mandate IPC
   | 'saveTradeGodStandingAuthorization' // direct local paper-mandate IPC
   | 'revokeTradeGodStandingAuthorization' // direct local paper-mandate IPC
