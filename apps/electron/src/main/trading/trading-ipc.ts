@@ -12,6 +12,7 @@ import type {
   MarketCandleSeries,
   TradingConnection,
   ExecutionAuthorization,
+  ExecutionRecord,
   MirrorGroup,
   PaperActivationEvent,
   PaperActivationReview,
@@ -39,6 +40,7 @@ export const TRADE_GOD_IPC = {
   IBKR_GATEWAY_HEALTH: 'trade-god:ibkr-gateway-health',
   SYNTHETIC_CHART_FIXTURE: 'trade-god:synthetic-chart-fixture',
   LIST_CONNECTIONS: 'trade-god:connections:list',
+  LIST_EXECUTIONS: 'trade-god:executions:list',
   SAVE_CONNECTION: 'trade-god:connections:save',
   REMOVE_CONNECTION: 'trade-god:connections:remove',
   OPEN_CONNECTION_LOGIN: 'trade-god:connections:open-login',
@@ -75,6 +77,7 @@ export interface TradingIpcManager {
   getIbkrGatewayHealth?(environment: IbkrGatewayEnvironment): Promise<IbkrGatewayHealth>
   getSyntheticChartFixture(input: SyntheticChartFixtureInput): Promise<MarketCandleSeries | null>
   listTradingConnections?(): Promise<TradingConnectionStatus[]>
+  listExecutionRecords?(): Promise<ExecutionRecord[]>
   saveTradingConnection?(input: SaveTradingConnectionInput): Promise<TradingConnectionStatus>
   removeTradingConnection?(connectionId: string): Promise<boolean>
   openTradingConnectionLogin?(connectionId: string): Promise<{
@@ -166,6 +169,10 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
   ipcMain.handle(TRADE_GOD_IPC.LIST_CONNECTIONS, () => {
     if (!manager.listTradingConnections) throw new Error('Trading Connections are unavailable.')
     return manager.listTradingConnections()
+  })
+  ipcMain.handle(TRADE_GOD_IPC.LIST_EXECUTIONS, () => {
+    if (!manager.listExecutionRecords) throw new Error('Trade records are unavailable.')
+    return manager.listExecutionRecords()
   })
   ipcMain.handle(TRADE_GOD_IPC.SAVE_CONNECTION, (_event, input: unknown) => {
     if (!manager.saveTradingConnection) throw new Error('Trading Connections are unavailable.')
@@ -325,6 +332,7 @@ export function registerTradingIpc(ipcMain: IpcMainLike, manager: TradingIpcMana
     ipcMain.removeHandler(TRADE_GOD_IPC.IBKR_GATEWAY_HEALTH)
     ipcMain.removeHandler(TRADE_GOD_IPC.SYNTHETIC_CHART_FIXTURE)
     ipcMain.removeHandler(TRADE_GOD_IPC.LIST_CONNECTIONS)
+    ipcMain.removeHandler(TRADE_GOD_IPC.LIST_EXECUTIONS)
     ipcMain.removeHandler(TRADE_GOD_IPC.SAVE_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.REMOVE_CONNECTION)
     ipcMain.removeHandler(TRADE_GOD_IPC.OPEN_CONNECTION_LOGIN)

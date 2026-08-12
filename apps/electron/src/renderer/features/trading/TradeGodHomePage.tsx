@@ -27,12 +27,15 @@ import type {
 
 import TradeGodWorkbenchPage from './TradeGodWorkbenchPage'
 import DiscoTraderControlCenterPage from './DiscoTraderControlCenterPage'
+import TradeGodTradesPage from './TradeGodTradesPage'
+import TradeGodSignalsPage from './TradeGodSignalsPage'
+import TradingConnectionsSettingsPage from '@/pages/settings/TradingConnectionsSettingsPage'
 import { marketCandleSeriesToChartBars } from './chart-series-adapter'
 import type { SyntheticChartTimeframe } from '../../../main/trading/synthetic-chart-fixture'
 
 const FuturesChartPanel = React.lazy(() => import('./FuturesChartPanel'))
 
-export type TradeGodView = 'overview' | 'discotrader' | 'order-flow'
+export type TradeGodView = 'overview' | 'trades' | 'signals' | 'discotrader' | 'accounts' | 'order-flow'
 
 export const TRADE_GOD_VIEW_EVENT = 'trade-god:view'
 export const TRADE_GOD_VIEW_STORAGE_KEY = 'trade-god:active-view'
@@ -71,7 +74,9 @@ export const normalizeWatchTicker = (value: string): string =>
 const readStoredView = (): TradeGodView => {
   if (typeof window === 'undefined') return 'overview'
   const stored = window.sessionStorage.getItem(TRADE_GOD_VIEW_STORAGE_KEY)
-  return stored === 'discotrader' || stored === 'order-flow' ? stored : 'overview'
+  return stored === 'trades' || stored === 'signals' || stored === 'discotrader' || stored === 'accounts' || stored === 'order-flow'
+    ? stored
+    : 'overview'
 }
 
 export const readWatchlistPreference = (content: string, workspaceId?: string): string[] | undefined => {
@@ -115,7 +120,7 @@ const TradeGodHomePage: React.FC<TradeGodHomePageProps> = ({ workspaceId, worksp
   useEffect(() => {
     const handleViewChange = (event: Event) => {
       const view = (event as CustomEvent<TradeGodView>).detail
-      if (view === 'overview' || view === 'discotrader' || view === 'order-flow') setActiveView(view)
+      if (view === 'overview' || view === 'trades' || view === 'signals' || view === 'discotrader' || view === 'accounts' || view === 'order-flow') setActiveView(view)
     }
     window.addEventListener(TRADE_GOD_VIEW_EVENT, handleViewChange)
     return () => window.removeEventListener(TRADE_GOD_VIEW_EVENT, handleViewChange)
@@ -302,6 +307,9 @@ const TradeGodHomePage: React.FC<TradeGodHomePageProps> = ({ workspaceId, worksp
 
   if (activeView === 'order-flow') return <TradeGodWorkbenchPage />
   if (activeView === 'discotrader') return <DiscoTraderControlCenterPage workspaceId={workspaceId} />
+  if (activeView === 'trades') return <TradeGodTradesPage />
+  if (activeView === 'signals') return <TradeGodSignalsPage />
+  if (activeView === 'accounts') return <TradingConnectionsSettingsPage />
 
   return (
     <div className="runneros-glass-route h-full overflow-y-auto bg-[#090c0f] text-[#eaecef]">

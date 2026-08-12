@@ -839,6 +839,7 @@ export function createTradeGodRuntime(options: RuntimeOptions): {
     ...(tradingConnectionService
       ? {
           listTradingConnections: () => tradingConnectionService.list(),
+          listExecutionRecords: () => executionGateway?.list() ?? Promise.resolve([]),
           saveTradingConnection: async (input) => {
             if (executionGateway) {
               await executionRecoveryReady

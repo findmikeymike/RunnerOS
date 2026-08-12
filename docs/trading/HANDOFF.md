@@ -1,11 +1,23 @@
 ---
 status: active
 owner: team
-last_verified: 2026-08-11
+last_verified: 2026-08-12
 source_of_truth: false
 ---
 
 # Trade God Handoff
+
+## 2026-08-12 Trading UI Handoff
+
+- Trade God routes no longer show the unrelated `All Sessions` navigator.
+- The sidebar now prioritizes Overview, Trades, Signals, DiscoTrader, and
+  Accounts; advanced operational surfaces live under Tools.
+- Trades is backed by the read-only durable execution ledger IPC, not mock UI.
+- DiscoTrader uses one progressive setup rail and one next action. Accounts and
+  exact Discord routing are primary; Mirror Groups and diagnostics are folded.
+- The running development app was visually checked at the real restored window
+  size. Overview and DiscoTrader hierarchy, density, empty states, and safety
+  labels were verified after the responsive pass.
 
 ## 2026-08-10 Safety Audit Handoff
 

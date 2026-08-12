@@ -37,6 +37,9 @@ import {
   LayoutDashboard,
   CandlestickChart,
   RadioTower,
+  ChartNoAxesCombined,
+  WalletCards,
+  Wrench,
 } from "lucide-react"
 // SessionStatusIcons no longer used - icons come from dynamic sessionStatuses
 import { SourceAvatar } from "@/components/ui/source-avatar"
@@ -2123,7 +2126,6 @@ function AppShellContent({
     || isAutomationsNavigation(navState)
     || isWorkflowsNavigation(navState)
     || isWorkflowRunNavigation(navState)
-    || isTradeGodNavigation(navState)
   const brainActive = isArtistHQWorkspace
     && (
       vaultActive
@@ -2133,7 +2135,9 @@ function AppShellContent({
   const [tradeGodView, setTradeGodView] = useState<TradeGodView>(() => {
     if (typeof window === 'undefined') return 'overview'
     const stored = window.sessionStorage.getItem(TRADE_GOD_VIEW_STORAGE_KEY)
-    return stored === 'discotrader' || stored === 'order-flow' ? stored : 'overview'
+    return stored === 'trades' || stored === 'signals' || stored === 'discotrader' || stored === 'accounts' || stored === 'order-flow'
+      ? stored
+      : 'overview'
   })
 
   const openTradeGodView = useCallback((view: TradeGodView) => {
@@ -2150,15 +2154,18 @@ function AppShellContent({
 
     if (!isArtistHQWorkspace) {
       result.push({ id: 'nav:trade-god-overview', type: 'nav', action: () => openTradeGodView('overview') })
+      result.push({ id: 'nav:trade-god-trades', type: 'nav', action: () => openTradeGodView('trades') })
+      result.push({ id: 'nav:trade-god-signals', type: 'nav', action: () => openTradeGodView('signals') })
       result.push({ id: 'nav:trade-god-discotrader', type: 'nav', action: () => openTradeGodView('discotrader') })
-      result.push({ id: 'nav:trade-god-order-flow', type: 'nav', action: () => openTradeGodView('order-flow') })
-      result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
+      result.push({ id: 'nav:trade-god-accounts', type: 'nav', action: () => openTradeGodView('accounts') })
       result.push({ id: 'nav:work', type: 'nav', action: () => toggleMainNavGroup('work') })
       if (workExpanded) {
+        result.push({ id: 'nav:trade-god-order-flow', type: 'nav', action: () => openTradeGodView('order-flow') })
         result.push({ id: 'nav:agents', type: 'nav', action: handleAgentsClick })
         result.push({ id: 'nav:workflows', type: 'nav', action: () => navigate(routes.view.workflows()) })
         result.push({ id: 'nav:automations', type: 'nav', action: () => navigate(routes.view.automations()) })
       }
+      result.push({ id: 'nav:chat', type: 'nav', action: handleWorkChatClick })
       return result
     }
 
@@ -2358,23 +2365,23 @@ function AppShellContent({
     if (isSettingsNavigation(navState)) return t("sidebar.settings")
 
     // Sessions navigator - use sessionFilter
-    if (!sessionFilter) return t("sidebar.allSessions")
+    if (!sessionFilter) return isArtistHQWorkspace ? t("sidebar.allSessions") : 'Agent Sessions'
 
     switch (sessionFilter.kind) {
       case 'flagged':
         return t("sidebar.flagged")
       case 'state': {
         const state = effectiveSessionStatuses.find(s => s.id === sessionFilter.stateId)
-        return state ? t(`status.${state.id}`, state.label) : t("sidebar.allSessions")
+        return state ? t(`status.${state.id}`, state.label) : (isArtistHQWorkspace ? t("sidebar.allSessions") : 'Agent Sessions')
       }
       case 'label':
         return sessionFilter.labelId === '__all__' ? t("sidebar.labels") : getLabelDisplayName(labelConfigs, sessionFilter.labelId)
       case 'view':
         return sessionFilter.viewId === '__all__' ? t("sidebar.views") : viewConfigs.find(v => v.id === sessionFilter.viewId)?.name || t("sidebar.views")
       default:
-        return t("sidebar.allSessions")
+        return isArtistHQWorkspace ? t("sidebar.allSessions") : 'Agent Sessions'
     }
-  }, [navState, t, sessionFilter, labelConfigs, viewConfigs, effectiveSessionStatuses])
+  }, [navState, t, sessionFilter, labelConfigs, viewConfigs, effectiveSessionStatuses, isArtistHQWorkspace])
 
   // Build recursive sidebar items from the shared display-sorted label tree.
   // Each node renders with condensed height (compact: true) since many labels expected.
@@ -2435,6 +2442,7 @@ function AppShellContent({
   const shouldShowNavigator = useMemo(() => {
     if (effectiveSidebarAndNavigatorHidden) return false
     if (isCampaignNavigation(navState)) return false
+    if (isTradeGodNavigation(navState)) return false
     if (isAutoCompact) return true
     if (isSessionsNavigation(navState)) return false
     if (isAgentsNavigation(navState)) return false
@@ -2456,35 +2464,56 @@ function AppShellContent({
       return [
         {
           id: "nav:trade-god-overview",
-          title: "Futures Overview",
+          title: "Overview",
           icon: LayoutDashboard,
           variant: isTradeGodNavigation(navState) && tradeGodView === 'overview' ? "default" : "ghost",
           onClick: () => openTradeGodView('overview'),
         },
         {
+          id: "nav:trade-god-trades",
+          title: "Trades",
+          icon: ChartNoAxesCombined,
+          variant: isTradeGodNavigation(navState) && tradeGodView === 'trades' ? "default" : "ghost",
+          onClick: () => openTradeGodView('trades'),
+        },
+        {
+          id: "nav:trade-god-signals",
+          title: "Signals",
+          icon: RadioTower,
+          variant: isTradeGodNavigation(navState) && tradeGodView === 'signals' ? "default" : "ghost",
+          onClick: () => openTradeGodView('signals'),
+        },
+        {
           id: "nav:trade-god-discotrader",
           title: "DiscoTrader",
-          icon: RadioTower,
+          icon: Bot,
           variant: isTradeGodNavigation(navState) && tradeGodView === 'discotrader' ? "default" : "ghost",
           onClick: () => openTradeGodView('discotrader'),
         },
         {
-          id: "nav:trade-god-order-flow",
-          title: "Order Flow",
-          icon: CandlestickChart,
-          variant: isTradeGodNavigation(navState) && tradeGodView === 'order-flow' ? "default" : "ghost",
-          onClick: () => openTradeGodView('order-flow'),
+          id: "nav:trade-god-accounts",
+          title: "Accounts",
+          icon: WalletCards,
+          variant: isTradeGodNavigation(navState) && tradeGodView === 'accounts' ? "default" : "ghost",
+          onClick: () => openTradeGodView('accounts'),
         },
         {
           id: "nav:work",
-          title: "Operations",
-          icon: Briefcase,
-          variant: workActive ? "default" : "ghost",
+          title: "Tools",
+          icon: Wrench,
+          variant: workActive || (isTradeGodNavigation(navState) && tradeGodView === 'order-flow') ? "default" : "ghost",
           onClick: () => toggleMainNavGroup('work'),
           onToggle: () => toggleMainNavGroup('work'),
           expandable: true,
           expanded: workExpanded,
           items: workExpanded ? [
+            {
+              id: "nav:trade-god-order-flow",
+              title: "Order Flow",
+              icon: CandlestickChart,
+              variant: isTradeGodNavigation(navState) && tradeGodView === 'order-flow' ? "default" : "ghost",
+              onClick: () => openTradeGodView('order-flow'),
+            },
             {
               id: "nav:agents",
               title: "Workers",
@@ -2515,7 +2544,7 @@ function AppShellContent({
         },
         {
           id: "nav:chat",
-          title: "Chat",
+          title: "Agent Chat",
           label: String(workspaceSessionMetas.length),
           icon: MessageSquare,
           variant: workChatActive ? "default" : "ghost",

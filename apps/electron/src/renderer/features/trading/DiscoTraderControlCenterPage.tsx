@@ -107,6 +107,7 @@ export default function DiscoTraderControlCenterPage({
   const [sourceBusy, setSourceBusy] = useState(false)
   const [workerBusy, setWorkerBusy] = useState(false)
   const [readyConnections, setReadyConnections] = useState(0)
+  const [verifiedConnections, setVerifiedConnections] = useState(0)
   const [connectionCount, setConnectionCount] = useState(0)
   const [signalSourceCatalog, setSignalSourceCatalog] = useState<DiscoTraderSignalSourceCatalog | null>(null)
   const [signalSourceCatalogError, setSignalSourceCatalogError] = useState<string | null>(null)
@@ -182,9 +183,11 @@ export default function DiscoTraderControlCenterPage({
       setReadyConnections(connections.filter(({ connection }) => (
         connection.enabled && connection.state === 'ready'
       )).length)
+      setVerifiedConnections(connections.filter(({ provider_read_fresh }) => provider_read_fresh).length)
     } catch {
       setConnectionCount(0)
       setReadyConnections(0)
+      setVerifiedConnections(0)
     }
   }, [])
 
@@ -369,91 +372,74 @@ export default function DiscoTraderControlCenterPage({
     && webhookSecretConfigured
     && workerActive
     && workerMatchesTemplate
-  const brokerLabel = readyConnections > 0
-    ? `${readyConnections} ready`
-    : connectionCount > 0
-      ? `${connectionCount} configured`
-      : 'Not configured'
+  const accountConnected = connectionCount > 0
+  const accountVerified = verifiedConnections > 0
+  const activated = readyConnections > 0 && globalExecutionKill === false && connectionKillCount === 0
+  const setupSteps = [
+    { label: 'Discord', complete: setupComplete },
+    { label: 'Account', complete: accountConnected },
+    { label: 'Verified', complete: accountVerified },
+    { label: 'Activated', complete: activated },
+  ]
+  const nextAction = !setupComplete
+    ? { label: 'Finish Discord setup', target: 'discotrader-setup' }
+    : !accountConnected
+      ? { label: 'Add your first account', target: 'discotrader-accounts' }
+      : !accountVerified
+        ? { label: 'Verify account readiness', target: 'discotrader-accounts' }
+        : readyConnections === 0
+          ? { label: 'Complete paper certification', target: 'discotrader-accounts' }
+          : { label: globalExecutionKill ? 'Review paper activation' : 'Halt new entries', target: 'activation' }
+
+  const runNextAction = () => {
+    if (nextAction.target === 'activation') {
+      void handleGlobalExecutionKill()
+      return
+    }
+    const element = document.getElementById(nextAction.target)
+    element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (element instanceof HTMLDetailsElement) element.open = true
+  }
 
   return (
-    <div className="runneros-glass-route h-full overflow-y-auto bg-[#080b0e] text-[#eaecef]">
-      <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-5 px-5 py-5 xl:px-8 xl:py-7">
-        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-[#252b33] pb-5">
+    <div className="runneros-glass-route h-full overflow-y-auto bg-[#090b0e] text-[#eef0f3]">
+      <div className="mx-auto flex w-full max-w-[1420px] flex-col gap-6 px-6 py-7 xl:px-9">
+        <header className="flex flex-wrap items-start justify-between gap-4 border-b border-white/[0.07] pb-6">
           <div>
-            <div className="mb-2 flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.24em] text-amber-300">
-              <DatabaseZap className="h-4 w-4" /> Futures automation
-            </div>
-            <h1 className="text-2xl font-semibold tracking-tight">DiscoTrader Control Center</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#929aa5]">
-              Connect the local daemon, install its read-only Trade Desk monitor, and see which gateway gates remain blocked.
-            </p>
+            <p className="text-xs font-medium text-[#8b93a1]">Futures automation</p>
+            <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.03em]">DiscoTrader</h1>
+            <p className="mt-2 max-w-2xl text-sm text-[#858d99]">Connect Discord traders to exact paper accounts, then activate behind verified safety gates.</p>
           </div>
-          <div className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
-            setupComplete
-              ? 'border-[#0ecb81]/25 bg-[#0ecb81]/[0.07] text-[#8fe8bd]'
-              : 'border-amber-300/20 bg-amber-300/[0.06] text-amber-100'
+          <div className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] ${
+            activated
+              ? 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300'
+              : 'border-amber-300/20 bg-amber-300/[0.06] text-amber-200'
           }`}>
-            {setupComplete ? <ShieldCheck className="h-3.5 w-3.5" /> : <LockKeyhole className="h-3.5 w-3.5" />}
-            {setupComplete
-              ? `Local monitor ready · webhook sender unverified · ${providerAdaptersAttached ? 'paper adapter attached; account gates apply' : 'execution disabled'}`
-              : 'Setup required · execution disabled'}
+            {activated ? <ShieldCheck className="size-3.5" /> : <LockKeyhole className="size-3.5" />}
+            {activated ? 'Paper automation active' : 'Trading locked · setup incomplete'}
           </div>
         </header>
 
-        <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label="DiscoTrader status">
-          <StatusCard
-            icon={<Server className="h-4 w-4" />}
-            label="Daemon bridge"
-            value={sourceState === 'ready' ? 'MCP online' : sourceState === 'checking' ? 'Checking' : sourceState === 'offline' ? 'Offline' : sourceState === 'conflict' ? 'Config conflict' : 'Not connected'}
-            detail={sourceState === 'ready'
-              ? `${toolCount} MCP tools · webhook ${webhookSecretConfigured ? 'saved, sender unverified' : 'secret missing'}`
-              : '127.0.0.1:8788'}
-            tone={sourceState === 'ready' ? 'positive' : sourceState === 'offline' || sourceState === 'conflict' ? 'danger' : 'warning'}
-          />
-          <StatusCard
-            icon={<Bot className="h-4 w-4" />}
-            label="Trade Desk worker"
-            value={workerConflict ? 'Definition conflict' : workerActive ? 'Active' : worker ? 'Installed' : agentsLoading ? 'Checking' : 'Not installed'}
-            detail={workerConflict ? 'Review before activation' : workerActive ? 'Scoped to this workspace' : 'Explicit activation required'}
-            tone={workerConflict ? 'danger' : workerActive ? 'positive' : 'warning'}
-          />
-          <StatusCard
-            icon={<PlugZap className="h-4 w-4" />}
-            label="Broker route"
-            value={brokerLabel}
-            detail={readyConnections > 0
-              ? providerAdaptersAttached
-                ? userSyncSubscribedCount > 0
-                  ? `${userSyncSubscribedCount} provider event feed${userSyncSubscribedCount === 1 ? '' : 's'} waking exact REST truth`
-                  : 'Certified account configured; mandate + halt gates apply'
-                : 'Account configured; no runtime adapter attached'
-              : 'Add or connect an account below'}
-            tone={readyConnections > 0 ? 'warning' : 'muted'}
-          />
-          <StatusCard
-            icon={<LockKeyhole className="h-4 w-4" />}
-            label="Live actions"
-            value={globalExecutionKill
-              ? 'Gateway halted'
-              : connectionKillCount > 0
-                ? `${connectionKillCount} account halt${connectionKillCount === 1 ? '' : 's'}`
-              : providerAdaptersAttached
-                ? 'Account mandates control entry'
-                : 'Execution unavailable'}
-            detail={providerAdaptersAttached
-              ? userSyncGapCount > 0
-                ? `${userSyncGapCount} provider event feed${userSyncGapCount === 1 ? '' : 's'} disconnected; account halt retained`
-                : reconciliationStaleCount > 0
-                ? `${reconciliationStaleCount} account truth feed stale; new entries halted`
-                : connectionKillCount > 0
-                  ? 'Provider divergence or uncertainty halted affected accounts'
-                : 'Read-only worker; certified adapter + mandate + risk gates required'
-              : 'No provider adapter attached; gateway halt is persistent'}
-            tone={userSyncGapCount > 0 || reconciliationStaleCount > 0 || connectionKillCount > 0 ? 'danger' : 'muted'}
-          />
+        <section className="rounded-xl border border-white/[0.08] bg-[#0d1014] px-5 py-5" aria-label="Setup progress">
+          <div className="grid grid-cols-4 gap-3">
+            {setupSteps.map((step, index) => (
+              <div key={step.label} className="flex items-center gap-3">
+                <span className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${step.complete ? 'bg-emerald-400/12 text-emerald-300' : 'bg-white/[0.05] text-[#6e7683]'}`}>
+                  {step.complete ? <CheckCircle2 className="size-3.5" /> : index + 1}
+                </span>
+                <div className="min-w-0"><p className={`text-xs font-medium ${step.complete ? 'text-[#dbe0e6]' : 'text-[#7b8491]'}`}>{step.label}</p><p className="mt-0.5 text-[10px] text-[#5f6773]">{step.complete ? 'Complete' : 'Required'}</p></div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.06] pt-4">
+            <div><p className="text-xs font-medium text-[#d5d9df]">Next step</p><p className="mt-1 text-[11px] text-[#717a87]">{nextAction.label}</p></div>
+            <button type="button" onClick={runNextAction} disabled={activationBusy} className="inline-flex h-9 items-center gap-2 rounded-lg bg-white px-4 text-xs font-semibold text-black transition hover:bg-[#e7e9ec] disabled:opacity-50">
+              {activationBusy ? <Loader2 className="size-3.5 animate-spin" /> : null}{nextAction.label}<ArrowRight className="size-3.5" />
+            </button>
+          </div>
         </section>
 
-        <section className="rounded-xl border border-[#252b33] bg-[#0d1115]">
+        <section id="discotrader-accounts" className="scroll-mt-6 overflow-hidden rounded-xl border border-white/[0.08] bg-[#0d1014]">
           <TradingConnectionsSettingsPage
             embedded
             onConnectionsChanged={() => void refreshConnections()}
@@ -463,14 +449,12 @@ export default function DiscoTraderControlCenterPage({
           />
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
-          <div className="rounded-xl border border-[#252b33] bg-[#11161b] p-5">
-            <div className="mb-5">
-              <div className="text-xs font-semibold text-white">One-time setup</div>
-              <p className="mt-1 text-xs leading-5 text-[#7e8793]">
-                The app stores the daemon token in encrypted credentials. It never writes the token into the worker.
-              </p>
-            </div>
+        <details id="discotrader-setup" open={!setupComplete} className="group scroll-mt-6 rounded-xl border border-white/[0.08] bg-[#0d1014]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
+            <div><p className="text-sm font-medium">Discord setup</p><p className="mt-1 text-xs text-[#737c88]">Daemon, encrypted secrets, and the read-only worker.</p></div>
+            <ArrowRight className="size-4 text-[#68717e] transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="border-t border-white/[0.06] px-5 py-5">
 
             <SetupStep
               number="1"
@@ -562,9 +546,15 @@ export default function DiscoTraderControlCenterPage({
               {agentsError && <p className="mt-2 text-[11px] text-[#ff9b9b]">{agentsError}</p>}
             </SetupStep>
           </div>
+        </details>
 
-          <div className="grid gap-4">
-            <div className="rounded-xl border border-[#252b33] bg-[#11161b] p-5">
+        <details className="group rounded-xl border border-white/[0.08] bg-[#0d1014]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
+            <div><p className="text-sm font-medium">System details</p><p className="mt-1 text-xs text-[#737c88]">Diagnostics, data flow, and manual safety controls.</p></div>
+            <ArrowRight className="size-4 text-[#68717e] transition-transform group-open:rotate-90" />
+          </summary>
+          <div className="grid gap-6 border-t border-white/[0.06] px-5 py-5 lg:grid-cols-2">
+            <div>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-xs font-semibold text-white">How it runs</div>
@@ -590,8 +580,7 @@ export default function DiscoTraderControlCenterPage({
                 <FlowRow label="Provider" detail="Paper first; live requires explicit arming" last />
               </div>
             </div>
-
-            <div className="rounded-xl border border-[#252b33] bg-[#11161b] p-5">
+            <div>
               <div className="text-xs font-semibold text-white">Operating surfaces</div>
               <div className="mt-4 grid gap-2">
                 <OperationRow
@@ -629,38 +618,23 @@ export default function DiscoTraderControlCenterPage({
               </div>
             </div>
           </div>
-        </section>
+          <div className="grid grid-cols-2 gap-px border-t border-white/[0.06] bg-white/[0.06] text-[11px] sm:grid-cols-4">
+            <Diagnostic label="Daemon" value={sourceState === 'ready' ? `${toolCount} tools online` : sourceState} />
+            <Diagnostic label="Worker" value={workerActive ? 'Active' : 'Not active'} />
+            <Diagnostic label="Provider feed" value={userSyncSubscribedCount ? `${userSyncSubscribedCount} subscribed` : providerAdaptersAttached ? 'Attached' : 'Unavailable'} />
+            <Diagnostic label="Safety" value={userSyncGapCount || reconciliationStaleCount || connectionKillCount ? 'Attention required' : globalExecutionKill ? 'Halted' : 'Ready'} />
+          </div>
+        </details>
       </div>
     </div>
   )
 }
 
-function StatusCard({
-  icon,
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  detail: string
-  tone: 'positive' | 'warning' | 'danger' | 'muted'
-}) {
-  const toneClass = {
-    positive: 'text-[#7de2b0]',
-    warning: 'text-amber-200',
-    danger: 'text-[#ff9b9b]',
-    muted: 'text-[#b7bec8]',
-  }[tone]
+function Diagnostic({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-[#252b33] bg-[#11161b] p-4">
-      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.16em] text-[#66707d]">
-        {icon} {label}
-      </div>
-      <div className={`mt-3 text-sm font-semibold ${toneClass}`}>{value}</div>
-      <div className="mt-1 text-[10px] leading-4 text-[#66707d]">{detail}</div>
+    <div className="bg-[#0b0e12] px-4 py-3">
+      <p className="text-[10px] text-[#68717e]">{label}</p>
+      <p className="mt-1 text-xs text-[#b8bec7]">{value}</p>
     </div>
   )
 }

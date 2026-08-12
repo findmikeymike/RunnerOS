@@ -20,13 +20,14 @@ test('renders an honest approval-gated DiscoTrader setup path', () => {
     <DiscoTraderControlCenterPage workspaceId="trading" />,
   )
 
-  expect(html).toContain('DiscoTrader Control Center')
+  expect(html).toContain('DiscoTrader')
+  expect(html).toContain('Trading locked · setup incomplete')
   expect(html).toContain('Accounts &amp; Discord routing')
   expect(html).toContain('Add account')
-  expect(html).toContain('One-time setup')
+  expect(html).toContain('Discord setup')
   expect(html).toContain('Connect the signed local source')
   expect(html).toContain('Install the Trade Desk worker')
-  expect(html).toContain('No provider adapter attached; gateway halt is persistent')
+  expect(html).toContain('Setup progress')
   expect(html).toContain('New-entry safety halt')
   expect(html).toContain('Flatten is not implemented')
   expect(html).not.toContain('Autonomous execution enabled')

@@ -541,7 +541,7 @@ export default function TradingConnectionsSettingsPage({
   ))
 
   const body = (
-    <div className="mx-auto w-full max-w-4xl space-y-6 p-6">
+    <div className={`mx-auto w-full space-y-6 p-6 ${embedded ? 'max-w-none' : 'max-w-5xl'}`}>
       {embedded && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -554,17 +554,12 @@ export default function TradingConnectionsSettingsPage({
           </Button>
         </div>
       )}
-          <SettingsSection
-            title="Execution custody"
-            description="Secrets stay in the encrypted desktop vault. Browser sessions use a trading-only partition."
-          >
-            <div className="grid gap-3 md:grid-cols-4">
-              <Guardrail label="Accounts" value={String(connections.length)} />
-              <Guardrail label="Browser sessions" value={`${originConfirmed} provider pages saved`} />
-              <Guardrail label="Execution ready" value={String(ready)} />
-              <Guardrail label="Default safety" value="Locked" />
-            </div>
-          </SettingsSection>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-white/[0.06] py-3 text-[11px] text-muted-foreground">
+            <span><strong className="font-medium text-foreground">{connections.length}</strong> accounts</span>
+            <span><strong className="font-medium text-foreground">{ready}</strong> execution ready</span>
+            {originConfirmed > 0 && <span><strong className="font-medium text-foreground">{originConfirmed}</strong> browser sessions</span>}
+            <span className="ml-auto inline-flex items-center gap-1.5 text-amber-200"><ShieldCheck className="size-3.5" /> Locked by default</span>
+          </div>
 
           {editing && (
             <SettingsSection
@@ -673,6 +668,13 @@ export default function TradingConnectionsSettingsPage({
             </SettingsSection>
           )}
 
+          {(connections.length > 1 || mirrorGroups.length > 0 || editingMirrorGroup) && <details className="group rounded-xl border border-white/[0.07] bg-white/[0.015]" open={editingMirrorGroup}>
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4">
+              <div><p className="text-sm font-medium">Mirror Groups</p><p className="mt-1 text-xs text-muted-foreground">Advanced multi-account routing · preview only</p></div>
+              <span className="text-xs text-muted-foreground group-open:hidden">Show</span>
+              <span className="hidden text-xs text-muted-foreground group-open:inline">Hide</span>
+            </summary>
+            <div className="border-t border-white/[0.06] p-5">
           <SettingsSection
             title="Mirror Groups"
             description="Route one Discord trader to several paper accounts. This rollout creates exact dry-run plans only—no orders."
@@ -818,6 +820,8 @@ export default function TradingConnectionsSettingsPage({
               )}
             </div>
           </SettingsSection>
+            </div>
+          </details>}
 
           <SettingsSection
             title="Accounts"
@@ -1021,8 +1025,8 @@ export default function TradingConnectionsSettingsPage({
                 </SettingsCard>
               ))}
               {!connections.length && busy !== 'load' && (
-                <div className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-muted-foreground">
-                  No trading connections yet.
+                <div className="rounded-lg border border-dashed border-white/10 px-5 py-6 text-center text-xs text-muted-foreground">
+                  No accounts connected yet.
                 </div>
               )}
             </div>
@@ -1061,13 +1065,9 @@ export default function TradingConnectionsSettingsPage({
             </SettingsSection>
           )}
 
-          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.05] px-4 py-3 text-xs text-emerald-200/80">
-            <ShieldCheck className="size-4 shrink-0" />
-            Credentials alone cannot activate evaluation, performance, or live execution.
-          </div>
-          <div className="flex items-start gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] px-4 py-3 text-xs text-cyan-100/80">
-            <RadioTower className="mt-0.5 size-4 shrink-0" />
-            <span>Discord channels and traders are signal sources, not broker accounts. Assign each monitored source to one exact account here.</span>
+          <div className="flex items-start gap-3 border-t border-white/[0.06] pt-4 text-[11px] leading-5 text-muted-foreground">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-amber-200" />
+            <span>Accounts stay locked until provider verification, paper certification, and an explicit mandate are complete. Discord traders are signal sources—not broker accounts.</span>
           </div>
     </div>
   )

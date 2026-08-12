@@ -11,6 +11,7 @@ import type {
   IbkrGatewayHealth,
   MarketCandleSeries,
   ExecutionAuthorization,
+  ExecutionRecord,
   MirrorGroup,
   PaperActivationEvent,
   PaperActivationReview,
@@ -42,6 +43,7 @@ export interface TradingPreloadApi {
   getIbkrGatewayHealth(environment?: IbkrGatewayEnvironment): Promise<IbkrGatewayHealth>
   getSyntheticTradeGodChartFixture(input: SyntheticChartFixtureInput): Promise<MarketCandleSeries | null>
   listTradingConnections(): Promise<TradingConnectionStatus[]>
+  listTradeGodExecutions(): Promise<ExecutionRecord[]>
   saveTradingConnection(input: SaveTradingConnectionInput): Promise<TradingConnectionStatus>
   removeTradingConnection(connectionId: string): Promise<boolean>
   openTradingConnectionLogin(connectionId: string): Promise<{
@@ -106,6 +108,9 @@ export function createTradingPreloadApi(invoke: Invoke, subscribe?: Subscribe): 
     ),
     listTradingConnections: () => (
       invoke(TRADE_GOD_IPC.LIST_CONNECTIONS) as Promise<TradingConnectionStatus[]>
+    ),
+    listTradeGodExecutions: () => (
+      invoke(TRADE_GOD_IPC.LIST_EXECUTIONS) as Promise<ExecutionRecord[]>
     ),
     saveTradingConnection: (input) => (
       invoke(TRADE_GOD_IPC.SAVE_CONNECTION, input) as Promise<TradingConnectionStatus>
