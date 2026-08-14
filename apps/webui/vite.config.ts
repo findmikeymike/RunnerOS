@@ -75,6 +75,7 @@ export default defineConfig({
   define: {
     // Flag to detect web UI context in shared code
     'import.meta.env.IS_WEBUI': 'true',
+    __CRAFT_PRODUCT_VARIANT__: JSON.stringify(process.env.VITE_CRAFT_PRODUCT_VARIANT || 'runner'),
   },
   optimizeDeps: {
     include: ['react', 'react-dom', 'jotai'],

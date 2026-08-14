@@ -9,7 +9,6 @@
  */
 
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync } from 'fs';
-import { homedir } from 'os';
 import { join, basename } from 'path';
 import { randomUUID } from 'crypto';
 import type {
@@ -24,6 +23,7 @@ import { readJsonFileSync } from '../utils/files.ts';
 import { getBuiltinSources, isBuiltinSource, getDocsSource, getComputerUseSource, getFieldTheorySource, getPrintingPressSocialSource, getHypermotionSource, getLottieSource, getVideoStudioSource, getRawVideoEditorSource, getSquadSource, getGenesisLyricSource, getLyricsTranscriberSource, getGoogleAdsSource, getAdsOperatorSource, getGoogleCalendarSource, getGmailSource, getGoogleDriveSource, getMetaAdsSource, getNotebookLmSource, getYouTubeResearchSource, getYouTubeIntelligenceSource, getOpenSlideSource, getZeroSource, getMediaGenerationSource, getShopifySource, getPrintifySource } from './builtin-sources.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { getWorkspaceSourcesPath } from '../workspaces/storage.ts';
+import { resolveRuntimeIdentity } from '../config/runtime-identity.ts';
 import {
   validateIconValue,
   findIconFile,
@@ -660,7 +660,7 @@ export function loadAllSources(
 export const GLOBAL_WORKSPACE_ID = '__global__';
 
 /** Global agent sources directory: ~/.agents/sources/ */
-export const GLOBAL_AGENT_SOURCES_DIR = join(homedir(), '.agents', 'sources');
+export const GLOBAL_AGENT_SOURCES_DIR = resolveRuntimeIdentity().sourcesDir;
 
 /** Filename of the per-workspace activation manifest. */
 export const WORKSPACE_GLOBAL_SOURCES_MANIFEST = '.global-sources.json';

@@ -1,0 +1,38 @@
+extends: ./electron-builder.yml
+
+appId: com.findmikeymike.artistos
+productName: Artist OS
+copyright: Copyright © 2026 Artist OS
+artifactName: Artist-OS-${version}-${arch}.${ext}
+
+directories:
+  output: release-artist-os
+  buildResources: resources
+
+extraMetadata:
+  main: dist/main.cjs
+  productName: Artist OS
+  description: Agentic operating system for independent artists and music teams
+
+publish:
+  provider: generic
+  url: https://github.com/findmikeymike/ArtistOS/releases/latest/download
+
+mac:
+  icon: resources/artist-os-icon.icns
+  artifactName: Artist-OS-${version}-${arch}.${ext}
+  extendInfo: null
+
+win:
+  icon: resources/artist-os-icon.ico
+  artifactName: Artist-OS-${version}-${arch}.${ext}
+
+linux:
+  icon: resources/artist-os-icon.png
+  artifactName: Artist-OS-${version}-${arch}.${ext}
+  maintainer: Artist OS <support@artistos.local>
+
+dmg:
+  artifactName: Artist-OS-${version}-${arch}.dmg
+  icon: resources/artist-os-icon.icns
+  title: Artist OS

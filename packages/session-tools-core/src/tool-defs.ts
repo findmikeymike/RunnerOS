@@ -16,6 +16,10 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 import type { SessionToolContext } from './context.ts';
 import type { ToolResult } from './types.ts';
 
+const PRODUCT_GLOBAL_SOURCES_HOME = process.env.CRAFT_PRODUCT_VARIANT === 'artist-os'
+  ? '~/.artist-os/libraries/agents/sources'
+  : '~/.agents/sources';
+
 // Handlers
 import { handleSubmitPlan } from './handlers/submit-plan.ts';
 import { handleConfigValidate } from './handlers/config-validate.ts';
@@ -1097,7 +1101,7 @@ For agent creation, prefer activeOnly=true (workspace + activated globals + proj
 
   list_sources: `When the user (or another agent) is choosing which sources/tools (MCP servers, API connectors, local connectors) to bundle into an agent, asking "what sources should this agent have", "which tools does it need", or curating a focused source bundle. Also use during agent-creator's source-bundle step.
 
-Returns each source's slug, display name, description, tags, type (mcp/api/local), tier, enabled flag, authStatus, and optional iconUrl. Tier is one of: workspace (defined in <workspace>/sources/<slug>/), global (defined in ~/.agents/sources/<slug>/ and activated in this workspace), global-dormant (defined globally but not activated here), or project (project-tier source).
+Returns each source's slug, display name, description, tags, type (mcp/api/local), tier, enabled flag, authStatus, and optional iconUrl. Tier is one of: workspace (defined in <workspace>/sources/<slug>/), global (defined in ${PRODUCT_GLOBAL_SOURCES_HOME}/<slug>/ and activated in this workspace), global-dormant (defined globally but not activated here), or project (project-tier source).
 
 For agents reasoning about what is currently spawnable, call with activeOnly=true to exclude global-dormant entries. Use search/tags/type to narrow further. Sources whose config declares auth:'none' short-circuit to enabled=true regardless of credential state; for auth-requiring sources, enabled reflects whether credentials and config gates pass.
 

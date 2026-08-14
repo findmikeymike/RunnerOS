@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { OAuthFlowStore } from '@craft-agent/shared/auth'
 import { ensureConfigDir, loadStoredConfig, saveConfig } from '@craft-agent/shared/config'
 import { CONFIG_DIR } from '@craft-agent/shared/config/paths'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { setBundledAssetsRoot } from '@craft-agent/shared/utils'
 import { WsRpcServer, type WsRpcTlsOptions } from '../transport/server'
 import type { EventSink, RpcServer } from '../transport/types'
@@ -282,7 +283,8 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
   const sessionManager = options.createSessionManager()
 
   const rpcHost = options.rpcHost ?? process.env.CRAFT_RPC_HOST ?? '127.0.0.1'
-  const rpcPortRaw = options.rpcPort ?? parseInt(process.env.CRAFT_RPC_PORT ?? '9100', 10)
+  const rpcPortRaw = options.rpcPort
+    ?? parseInt(process.env.CRAFT_RPC_PORT ?? String(RUNTIME_IDENTITY.defaultRpcPort), 10)
   if (!Number.isFinite(rpcPortRaw) || rpcPortRaw < 0 || rpcPortRaw > 65535) {
     throw new Error(`Invalid RPC port: ${rpcPortRaw}`)
   }
@@ -294,7 +296,8 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
     requireAuth: true,
     validateToken: async (t) => t === serverToken,
     validateSessionCookie: options.validateSessionCookie,
-    serverId: options.serverId ?? 'headless',
+    serverId: options.serverId ?? `${RUNTIME_IDENTITY.rpcNamespace}-headless`,
+    productVariant: RUNTIME_IDENTITY.variant,
     serverVersion: options.serverVersion,
     tls: options.tls,
     httpHandler: options.httpHandler,
@@ -317,7 +320,7 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
   const startedAt = Date.now()
   const serverHandlerContext: ServerHandlerContext = {
     getConnectedClientCount: () => wsServer.getConnectedClientCount(),
-    serverId: options.serverId ?? 'headless',
+    serverId: options.serverId ?? `${RUNTIME_IDENTITY.rpcNamespace}-headless`,
     startedAt,
   }
 
@@ -329,7 +332,7 @@ export async function bootstrapServer<TSessionManager, THandlerDeps>(
 
   modelRefreshService.startAll()
 
-  platform.logger.info(`Runner server listening on ${wsServer.protocol}://${rpcHost}:${wsServer.port}`)
+  platform.logger.info(`${RUNTIME_IDENTITY.productName} server listening on ${wsServer.protocol}://${rpcHost}:${wsServer.port}`)
 
   let stopped = false
   const stop = async (): Promise<void> => {

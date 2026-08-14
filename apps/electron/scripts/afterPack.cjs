@@ -25,8 +25,14 @@ module.exports = async function afterPack(context) {
     return;
   }
 
+  const productFilename = context.packager.appInfo.productFilename;
+  if (productFilename !== 'Runner') {
+    console.log(`Skipping Runner Liquid Glass assets for ${productFilename}`);
+    return;
+  }
+
   const appPath = context.appOutDir;
-  const resourcesDir = path.join(appPath, 'Runner.app', 'Contents', 'Resources');
+  const resourcesDir = path.join(appPath, `${productFilename}.app`, 'Contents', 'Resources');
   const precompiledAssets = path.join(context.packager.projectDir, 'resources', 'Assets.car');
 
   console.log(`afterPack: projectDir=${context.packager.projectDir}`);

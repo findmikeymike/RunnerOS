@@ -31,9 +31,10 @@ import {
   type Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { isDeveloperFeedbackEnabled } from '@craft-agent/shared/feature-flags';
 import { OutputService } from '@craft-agent/server-core/outputs';
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity';
 // Import from session-tools-core
 import {
   type SessionToolContext,
@@ -227,11 +228,7 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
 
     // Preferences: write directly to preferences.json
     updatePreferences: (updates: Record<string, unknown>) => {
-      // Resolve preferences path from config dir (parent of workspaces dir)
-      // workspaceRootPath = ~/.craft-agent/workspaces/{id}
-      // preferencesPath = ~/.craft-agent/preferences.json
-      const configDir = join(workspaceRootPath, '..', '..');
-      const prefsPath = join(configDir, 'preferences.json');
+      const prefsPath = join(RUNTIME_IDENTITY.dataRoot, 'preferences.json');
       try {
         let current: Record<string, unknown> = {};
         if (existsSync(prefsPath)) {
@@ -253,8 +250,7 @@ function createCodexContext(config: SessionConfig): SessionToolContext {
 
     // Developer feedback: write one JSON file per entry to {configDir}/feedback/
     submitFeedback: (feedback) => {
-      const configDir = process.env.CRAFT_CONFIG_DIR || join(workspaceRootPath, '..', '..');
-      const feedbackDir = join(configDir, 'feedback');
+      const feedbackDir = join(RUNTIME_IDENTITY.dataRoot, 'feedback');
       mkdirSync(feedbackDir, { recursive: true });
       const filePath = join(feedbackDir, `${feedback.id}.json`);
       writeFileSync(filePath, JSON.stringify(feedback, null, 2), 'utf-8');
@@ -510,6 +506,18 @@ function setupSignalHandlers(): void {
 async function main() {
   setupSignalHandlers();
 
+  const declaredConfigRoot = process.env.CRAFT_CONFIG_DIR;
+  const declaredProductVariant = process.env.CRAFT_PRODUCT_VARIANT;
+  if (!declaredConfigRoot || !declaredProductVariant) {
+    throw new Error('Session MCP server requires CRAFT_CONFIG_DIR and CRAFT_PRODUCT_VARIANT from its parent product');
+  }
+  if (
+    declaredProductVariant !== RUNTIME_IDENTITY.variant
+    || resolve(declaredConfigRoot) !== resolve(RUNTIME_IDENTITY.dataRoot)
+  ) {
+    throw new Error('Session MCP server product identity does not match its runtime paths');
+  }
+
   // Parse command line arguments
   const args = process.argv.slice(2);
   let sessionId: string | undefined;
@@ -560,7 +568,7 @@ async function main() {
   // Create MCP server
   const server = new Server(
     {
-      name: 'craft-agent-session',
+      name: `${RUNTIME_IDENTITY.rpcNamespace}-session`,
       version: '0.3.1',
     },
     {

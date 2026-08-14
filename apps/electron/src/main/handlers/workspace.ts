@@ -1,6 +1,7 @@
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import type { RpcServer } from '@craft-agent/server-core/transport'
 import type { HandlerDeps } from './handler-deps'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 
 export const GUI_HANDLED_CHANNELS = [
   RPC_CHANNELS.remote.TEST_CONNECTION,
@@ -22,6 +23,7 @@ export async function connectToRemote(url: string, token: string, workspaceId?: 
   const { WsRpcClient } = await import('../../transport/client')
   const client = new WsRpcClient(url, {
     token,
+    productVariant: RUNTIME_IDENTITY.variant,
     workspaceId,
     autoReconnect: false,
     tlsRejectUnauthorized: false,

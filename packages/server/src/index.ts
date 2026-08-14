@@ -37,6 +37,7 @@ import { validateSession, createWebuiHandler, nodeHttpAdapter } from '@craft-age
 import type { WebuiHandler } from '@craft-agent/server-core/webui'
 import { getCredentialManager } from '@craft-agent/shared/credentials'
 import { getWorkspaces } from '@craft-agent/shared/config'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { createMessagingBootstrap, type MessagingBootstrapHandle } from '@craft-agent/messaging-gateway'
 import { startTriggerHttpServer, type TriggerHttpServerHandle } from '@craft-agent/server-core/triggers'
 
@@ -53,6 +54,12 @@ import { setSearchPlatform, setImageProcessor } from '@craft-agent/server-core/s
 import type { HandlerDeps } from '@craft-agent/server-core/handlers'
 
 process.env.CRAFT_IS_PACKAGED ??= 'false'
+process.env['CRAFT_PRODUCT_VARIANT'] = RUNTIME_IDENTITY.variant
+process.env['CRAFT_CONFIG_DIR'] = RUNTIME_IDENTITY.dataRoot
+process.env['CRAFT_GLOBAL_SKILLS_DIR'] = RUNTIME_IDENTITY.skillsDir
+if (RUNTIME_IDENTITY.variant === 'artist-os') {
+  process.env['SOCIAL_HOME'] = RUNTIME_IDENTITY.socialDataRoot
+}
 
 // Prevent unhandled rejections from crashing the server.
 // SDK subprocess abort can reject promises that propagate up unhandled;
@@ -135,7 +142,7 @@ let webuiNodeHandler: ReturnType<typeof nodeHttpAdapter> | undefined
 let healthCheckFn: (() => { status: string }) | null = null
 
 if (webuiEnabled && serverToken) {
-  const rpcPort = parseInt(process.env.CRAFT_RPC_PORT ?? '9100', 10)
+  const rpcPort = parseInt(process.env.CRAFT_RPC_PORT ?? String(RUNTIME_IDENTITY.defaultRpcPort), 10)
   const rpcProtocol = tls ? 'wss' as const : 'ws' as const
 
   webuiHandler = createWebuiHandler({
@@ -237,7 +244,7 @@ const instance = await (async () => {
             })
           },
           getMessagingDir: (wsId: string) =>
-            join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+            join(RUNTIME_IDENTITY.workspacesRoot, wsId, 'messaging'),
           // Headless has no legacy messaging dir — workspaces start clean.
           whatsapp: {
             workerEntry: waWorkerEntry,

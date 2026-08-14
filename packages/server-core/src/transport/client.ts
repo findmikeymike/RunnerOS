@@ -92,6 +92,8 @@ export interface WsRpcClientOptions {
   autoReconnect?: boolean
   /** Handshake/connect timeout in ms. Default: 10_000 */
   connectTimeout?: number
+  /** Product identity sent on handshake. Required by isolated product servers. */
+  productVariant?: 'runner' | 'artist-os'
   /** Capabilities to advertise on handshake. Handlers must be registered via handleCapability(). */
   clientCapabilities?: string[]
   /** Runtime mode — local embedded or remote thin-client connection. */
@@ -143,6 +145,7 @@ export class WsRpcClient implements RpcClient {
   private readonly maxReconnectDelay: number
   private readonly autoReconnect: boolean
   private readonly connectTimeout: number
+  private readonly productVariant: 'runner' | 'artist-os' | undefined
   private readonly mode: TransportMode
   private readonly tlsRejectUnauthorized: boolean
 
@@ -156,6 +159,7 @@ export class WsRpcClient implements RpcClient {
     this.maxReconnectDelay = opts?.maxReconnectDelay ?? 30_000
     this.autoReconnect = opts?.autoReconnect ?? true
     this.connectTimeout = opts?.connectTimeout ?? 10_000
+    this.productVariant = opts?.productVariant
     this.mode = opts?.mode ?? this.inferMode(url)
     this.tlsRejectUnauthorized = opts?.tlsRejectUnauthorized ?? true
 
@@ -403,6 +407,7 @@ export class WsRpcClient implements RpcClient {
         id: crypto.randomUUID(),
         type: 'handshake',
         protocolVersion: PROTOCOL_VERSION,
+        productVariant: this.productVariant,
         workspaceId: this.workspaceId,
         webContentsId: this.webContentsId,
         token: this.token,
@@ -511,6 +516,18 @@ export class WsRpcClient implements RpcClient {
 
     switch (envelope.type) {
       case 'handshake_ack': {
+        if (
+          this.productVariant
+          && envelope.productVariant !== this.productVariant
+        ) {
+          this.connectError = this.createConnectionError(
+            'protocol',
+            `Product mismatch. Client is ${this.productVariant}; server is ${envelope.productVariant}`,
+            'PRODUCT_MISMATCH',
+          )
+          this.ws?.close(4007, 'Product mismatch')
+          return
+        }
         const wasReconnectAttempt = this.currentHandshakeWasReconnect
         const serverRecognizedReconnect = envelope.reconnected === true
 

@@ -9,6 +9,7 @@ import { homedir } from 'node:os';
 import { delimiter } from 'node:path';
 import { join, resolve } from 'node:path';
 import type { LoadedSource, FolderSourceConfig } from './types.ts';
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 
 const COMPUTER_USE_SLUG = 'computer-use';
 const FIELD_THEORY_SLUG = 'field-theory';
@@ -334,7 +335,7 @@ function getPrintifyPath(): string {
 }
 
 function getGoogleAdsCachedAuthState(): { configured: boolean; expired: boolean } {
-  const cachePath = join(homedir(), '.config', 'runneros', 'google-ads', 'credentials.json');
+  const cachePath = join(RUNTIME_IDENTITY.integrationCacheRoot, 'google-ads', 'credentials.json');
   if (!existsSync(cachePath)) return { configured: false, expired: false };
 
   try {
@@ -351,7 +352,7 @@ function getGoogleAdsCachedAuthState(): { configured: boolean; expired: boolean 
 }
 
 function getYouTubeResearchCachedAuthState(): { configured: boolean } {
-  const cachePath = join(homedir(), '.config', 'runneros', 'youtube-research', 'credentials.json');
+  const cachePath = join(RUNTIME_IDENTITY.integrationCacheRoot, 'youtube-research', 'credentials.json');
   if (!existsSync(cachePath)) return { configured: false };
 
   try {

@@ -58,12 +58,18 @@ function getBuildDefines(): string[] {
     "MICROSOFT_OAUTH_CLIENT_ID",
     "SENTRY_ELECTRON_INGEST_URL",
     "CRAFT_DEV_RUNTIME",
+    "CRAFT_PRODUCT_VARIANT",
   ];
 
-  return definedVars.map((varName) => {
+  const defines = definedVars.map((varName) => {
     const value = process.env[varName] || "";
     return `--define:process.env.${varName}="${value}"`;
   });
+
+  defines.push(
+    `--define:__CRAFT_PRODUCT_VARIANT__="${process.env.CRAFT_PRODUCT_VARIANT || 'runner'}"`,
+  );
+  return defines;
 }
 
 // Wait for file to stabilize (no size changes)
@@ -359,7 +365,7 @@ async function main(): Promise<void> {
   const proc = spawn({
     cmd: [
       "bun", "run", "esbuild",
-      "apps/electron/src/main/index.ts",
+      "apps/electron/src/main/bootstrap.ts",
       "--bundle",
       "--platform=node",
       "--format=cjs",

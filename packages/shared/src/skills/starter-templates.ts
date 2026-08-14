@@ -10,6 +10,15 @@
  * automation / workflow" into a structured draft or save.
  */
 
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
+
+const PORTABLE_AGENTS_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
+  ? '~/.artist-os/libraries/agents'
+  : '~/.agents';
+const PORTABLE_WORKFLOWS_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
+  ? '~/.artist-os/libraries/workflows'
+  : '~/.workflows';
+
 export interface StarterSkillFile {
   /** Path relative to the skill directory, e.g. `'SKILL.md'` or `'references/foo.md'`. */
   path: string;
@@ -39,7 +48,7 @@ Use this skill when the user wants to **create a new agent**.
 
 ## What you're producing
 
-A complete AGENT.md saved at \`~/.agents/agents/<slug>/\`. Mandatory fields:
+A complete AGENT.md saved at \`${PORTABLE_AGENTS_ROOT}/agents/<slug>/\`. Mandatory fields:
 \`name\`, \`description\`, \`systemPrompt\`. Strongly preferred fields:
 \`avatar\`, \`inputs\`, \`outputs\`, \`tags\`, \`permissionMode\`, \`thinkingLevel\`.
 Optional: \`skills\`, \`sources\`, \`optionalSources\`, \`trustedWorkerTools\`,
@@ -270,7 +279,7 @@ UI.
 
 ## What you're producing
 
-A complete \`WORKFLOW.md\` file for \`~/.workflows/<slug>/WORKFLOW.md\`.
+A complete \`WORKFLOW.md\` file for \`${PORTABLE_WORKFLOWS_ROOT}/<slug>/WORKFLOW.md\`.
 Use \`create_workflow\` to save it only after showing the complete source draft
 and receiving explicit user confirmation. Use \`list_agents\` to verify agent
 slugs and \`list_workflows\` / \`get_workflow\` to avoid duplicating an existing

@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { routes, navigate } from '@/lib/navigate'
+import { productDeepLink } from '@/lib/product-identity'
 import { useNavigation } from '@/contexts/NavigationContext'
 import { toast } from 'sonner'
 import {
@@ -637,7 +638,7 @@ export default function SourceInfoPage({ sourceSlug, workspaceId, onDelete }: So
 
   // Handle opening in new window
   const handleOpenInNewWindow = useCallback(() => {
-    window.electronAPI.openUrl(`craftagents://sources/source/${sourceSlug}?window=focused`)
+    window.electronAPI.openUrl(productDeepLink(`sources/source/${sourceSlug}?window=focused`))
   }, [sourceSlug])
 
   const handleCredentialDialogComplete = useCallback(() => {

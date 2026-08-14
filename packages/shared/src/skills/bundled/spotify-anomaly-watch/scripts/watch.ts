@@ -3,6 +3,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type OptionalNumber = number | null | undefined;
 type Playlist = { name: string; type?: string; listeners?: OptionalNumber };
@@ -33,7 +34,8 @@ const DEFAULT_ALERTS_DIR = "data/spotify/alerts";
 const DEFAULT_CEO_INBOX = "data/booth/agent-inbox/artist-ceo.md";
 
 function usage() {
-  return `Usage: "\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-anomaly-watch/scripts/watch.ts" [options]
+  const scriptPath = fileURLToPath(import.meta.url);
+  return `Usage: "\${CRAFT_BUN:-bun}" "${scriptPath}" [options]
 
   --snapshots-dir <path>       Default: ${DEFAULT_SNAPSHOTS_DIR}
   --alerts-dir <path>          Default: ${DEFAULT_ALERTS_DIR}

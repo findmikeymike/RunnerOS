@@ -10,6 +10,11 @@ import { getBrowserToolEnabled } from '../config/storage.ts';
 import { readPluginName } from '../utils/workspace.ts';
 import { globSync } from 'glob';
 import os from 'os';
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
+
+const PORTABLE_GLOBAL_SKILLS_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
+  ? '~/.artist-os/libraries/agents/skills'
+  : '~/.agents/skills';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
 const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
@@ -619,7 +624,7 @@ Skills are reusable instruction sets that teach you specialized behaviors. Each 
 2. Follow the instructions in the file to complete the user's request
 
 Skills are stored at three levels (checked in order):
-- Global: \`~/.agents/skills/{slug}/SKILL.md\`
+- Global: \`${PORTABLE_GLOBAL_SKILLS_ROOT}/{slug}/SKILL.md\`
 - Workspace: \`${workspacePath}/skills/{slug}/SKILL.md\`
 - Project: \`{projectRoot}/.agents/skills/{slug}/SKILL.md\`
 

@@ -11,9 +11,8 @@
  * Instance 2 (-2 suffix): ~/.craft-agent-2/
  */
 
-import { homedir } from 'os';
-import { join } from 'path';
+import { RUNTIME_IDENTITY } from './runtime-identity.ts';
 
 // Allow override via environment variable for multi-instance dev
 // Falls back to default ~/.craft-agent/ for production and non-numbered dev folders
-export const CONFIG_DIR = process.env.CRAFT_CONFIG_DIR || join(homedir(), '.craft-agent');
+export const CONFIG_DIR = RUNTIME_IDENTITY.dataRoot;

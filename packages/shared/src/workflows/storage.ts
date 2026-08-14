@@ -23,7 +23,6 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { getActivatedWorkflowsManifestPath } from '../workspaces/storage.ts';
 import { parseWorkflowFile, serializeWorkflow } from './parser.ts';
@@ -35,6 +34,7 @@ import {
   type WorkflowMetadata,
 } from './types.ts';
 import { debug } from '../utils/debug.ts';
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 
 export { parseWorkflowFile, serializeWorkflow } from './parser.ts';
 
@@ -43,7 +43,7 @@ export { parseWorkflowFile, serializeWorkflow } from './parser.ts';
 // ============================================================================
 
 /** Global workflow library directory: ~/.workflows/ */
-export const GLOBAL_WORKFLOWS_DIR = join(homedir(), '.workflows');
+export const GLOBAL_WORKFLOWS_DIR = RUNTIME_IDENTITY.workflowsDir;
 
 const DELETED_WORKFLOWS_FILE = '.deleted-workflows.json';
 

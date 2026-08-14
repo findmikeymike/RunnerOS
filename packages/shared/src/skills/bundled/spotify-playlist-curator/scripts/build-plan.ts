@@ -10,6 +10,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type ComparableTrack = {
   id: string;
@@ -369,7 +370,8 @@ function buildMarkdown(plan: Plan): string {
   lines.push("Review the order above. If approved, run:");
   lines.push("");
   lines.push("```sh");
-  lines.push(`"\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/apply-plan.ts" --plan <plan.json> --apply --confirm`);
+  const applyScript = path.join(path.dirname(fileURLToPath(import.meta.url)), "apply-plan.ts");
+  lines.push(`"\${CRAFT_BUN:-bun}" "${applyScript}" --plan <plan.json> --apply --confirm`);
   lines.push("```");
   lines.push("");
 

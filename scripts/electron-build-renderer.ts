@@ -8,6 +8,7 @@ import { join } from "path";
 
 const ROOT_DIR = join(import.meta.dir, "..");
 const ELECTRON_DIR = join(ROOT_DIR, "apps/electron");
+process.env.VITE_CRAFT_PRODUCT_VARIANT = process.env.CRAFT_PRODUCT_VARIANT || 'runner';
 
 // Clean renderer dist first
 const rendererDir = join(ELECTRON_DIR, "dist/renderer");

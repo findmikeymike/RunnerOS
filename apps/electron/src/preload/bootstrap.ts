@@ -54,6 +54,7 @@ interface TransportClient extends RpcClient {
 
 const webContentsId: number = ipcRenderer.sendSync('__get-web-contents-id')
 const isClientOnly = !!process.env.CRAFT_SERVER_URL
+const productVariant = process.env.CRAFT_PRODUCT_VARIANT === 'artist-os' ? 'artist-os' : 'runner'
 
 let client: TransportClient
 
@@ -81,6 +82,7 @@ if (isClientOnly) {
 
   const wsClient = new WsRpcClient(wsUrl, {
     token: wsToken,
+    productVariant,
     workspaceId,
     webContentsId,
     autoReconnect: true,
@@ -102,6 +104,7 @@ if (isClientOnly) {
 
   const localClient = new WsRpcClient(`ws://127.0.0.1:${wsPort}`, {
     token: wsToken,
+    productVariant,
     workspaceId,
     webContentsId,
     autoReconnect: true,
@@ -118,6 +121,7 @@ if (isClientOnly) {
     // Workspace is remote — create a direct connection to the remote server
     initialWorkspaceClient = new WsRpcClient(remoteConfig.url, {
       token: remoteConfig.token,
+      productVariant,
       workspaceId: remoteConfig.remoteWorkspaceId,
       webContentsId,
       autoReconnect: true,
@@ -143,6 +147,7 @@ if (isClientOnly) {
   routedClient.setClientFactory((remoteServer: RemoteServerConfig) => {
     return new WsRpcClient(remoteServer.url, {
       token: remoteServer.token,
+      productVariant,
       workspaceId: remoteServer.remoteWorkspaceId,
       webContentsId,
       autoReconnect: true,
@@ -389,6 +394,14 @@ client.onConnectionStateChanged((state) => {
       const error = callback.query.error_description || callback.query.error
       await client.invoke('chatgpt:cancelOAuth', { state })
       return { success: false, error }
+    }
+
+    if (callback.query.state !== state) {
+      await client.invoke('chatgpt:cancelOAuth', { state })
+      return {
+        success: false,
+        error: `OAuth response did not belong to ${productVariant === 'artist-os' ? 'Artist OS' : 'Runner'}`,
+      }
     }
 
     const code = callback.query.code

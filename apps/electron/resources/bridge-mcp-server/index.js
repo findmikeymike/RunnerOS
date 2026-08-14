@@ -17919,7 +17919,9 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 function getCredentialCachePath(workspaceId, sourceSlug) {
-  return join(homedir(), ".craft-agent", "workspaces", workspaceId, "sources", sourceSlug, ".credential-cache.json");
+  const configDir = process.env.CRAFT_CONFIG_DIR;
+  if (!configDir) throw new Error("CRAFT_CONFIG_DIR is required for credential cache isolation");
+  return join(configDir, "workspaces", workspaceId, "sources", sourceSlug, ".credential-cache.json");
 }
 function readCredential(workspaceId, sourceSlug) {
   const cachePath = getCredentialCachePath(workspaceId, sourceSlug);

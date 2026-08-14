@@ -16,6 +16,7 @@
 
 import * as React from 'react'
 import { Bot } from 'lucide-react'
+import { PRODUCT_AGENTS_HOME } from '@/lib/product-identity'
 import { EntityPanel } from '@/components/ui/entity-panel'
 import { EntityListEmptyScreen } from '@/components/ui/entity-list-empty'
 import { agentSelection } from '@/hooks/useEntitySelection'
@@ -65,7 +66,7 @@ export function AgentsListPanel({
         <EntityListEmptyScreen
           icon={<Bot />}
           title="No workers yet"
-          description="Workers are saved operators you can summon: prompt, skills, and tools bundled together. The starter set lives in ~/.agents/agents/."
+          description={`Workers are saved operators you can summon: prompt, skills, and tools bundled together. The starter set lives in ${PRODUCT_AGENTS_HOME}/agents/.`}
           docKey="skills"
         />
       }

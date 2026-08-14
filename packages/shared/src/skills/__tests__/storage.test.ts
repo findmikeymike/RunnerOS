@@ -14,16 +14,26 @@
 import { describe, it, expect, beforeEach, afterEach, afterAll, mock } from 'bun:test';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from 'fs';
 import * as os from 'os';
-import { join } from 'path';
+import { join, resolve, sep } from 'path';
 import { statSync, unlinkSync } from 'fs';
 
 const sandboxHome = mkdtempSync(join(os.tmpdir(), 'skills-storage-home-'));
+const sandboxHomeResolved = resolve(sandboxHome);
+const sandboxArtistRoot = join(sandboxHome, '.artist-os');
 mock.module('os', () => ({
   ...os,
   homedir: () => sandboxHome,
 }));
 
+const originalProductVariant = process.env.CRAFT_PRODUCT_VARIANT;
+const originalConfigDir = process.env.CRAFT_CONFIG_DIR;
+process.env.CRAFT_PRODUCT_VARIANT = 'artist-os';
+process.env.CRAFT_CONFIG_DIR = sandboxArtistRoot;
 const storageModule: typeof import('../storage.ts') = await import(`../storage.ts?skills-storage-test=${process.pid}-${Date.now()}`);
+if (originalProductVariant === undefined) delete process.env.CRAFT_PRODUCT_VARIANT;
+else process.env.CRAFT_PRODUCT_VARIANT = originalProductVariant;
+if (originalConfigDir === undefined) delete process.env.CRAFT_CONFIG_DIR;
+else process.env.CRAFT_CONFIG_DIR = originalConfigDir;
 
 const {
   loadAllSkills,
@@ -53,6 +63,14 @@ let projectRoot: string;
 
 const REAL_GLOBAL_SKILLS_DIR = GLOBAL_AGENT_SKILLS_DIR;
 const TEST_PREFIX = '_test_storage_';
+
+const resolvedGlobalSkillsDir = resolve(GLOBAL_AGENT_SKILLS_DIR);
+if (
+  !resolvedGlobalSkillsDir.startsWith(`${sandboxHomeResolved}${sep}`)
+  || !resolvedGlobalSkillsDir.endsWith(join('libraries', 'agents', 'skills'))
+) {
+  throw new Error(`Refusing to run skills storage tests outside the sandbox: ${resolvedGlobalSkillsDir}`);
+}
 
 // ============================================================
 // Helpers

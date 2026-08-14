@@ -16,6 +16,7 @@ function createServer(opts?: {
   maxClients?: number
   requireAuth?: boolean
   validateToken?: (token: string) => Promise<boolean>
+  productVariant?: 'runner' | 'artist-os'
 }) {
   return new WsRpcServer({
     host: '127.0.0.1',
@@ -24,10 +25,15 @@ function createServer(opts?: {
     validateToken: opts?.validateToken ?? (async (t) => t === TEST_TOKEN),
     maxClients: opts?.maxClients,
     serverId: 'test',
+    productVariant: opts?.productVariant,
   })
 }
 
-function handshake(url: string, token: string): Promise<{ ws: WebSocket; clientId: string }> {
+function handshake(
+  url: string,
+  token: string,
+  productVariant?: 'runner' | 'artist-os',
+): Promise<{ ws: WebSocket; clientId: string }> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url)
     const timeout = setTimeout(() => {
@@ -40,6 +46,7 @@ function handshake(url: string, token: string): Promise<{ ws: WebSocket; clientI
         id: crypto.randomUUID(),
         type: 'handshake',
         protocolVersion: PROTOCOL_VERSION,
+        productVariant,
         token,
       }))
     })
@@ -125,6 +132,67 @@ describe('WsRpcServer lifecycle', () => {
     })
 
     expect(closeCode).toBe(4005)
+  })
+
+  it('accepts a matching product identity', async () => {
+    server = createServer({ productVariant: 'artist-os' })
+    await server.listen()
+
+    const { ws } = await handshake(
+      `ws://127.0.0.1:${server.port}`,
+      TEST_TOKEN,
+      'artist-os',
+    )
+    openSockets.push(ws)
+
+    expect(server.getConnectedClientCount()).toBe(1)
+  })
+
+  it('rejects a cross-product handshake before auth registration', async () => {
+    server = createServer({ productVariant: 'artist-os' })
+    await server.listen()
+
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}`)
+    openSockets.push(ws)
+
+    const closeCode = await new Promise<number>((resolve) => {
+      ws.on('open', () => {
+        ws.send(JSON.stringify({
+          id: crypto.randomUUID(),
+          type: 'handshake',
+          protocolVersion: PROTOCOL_VERSION,
+          productVariant: 'runner',
+          token: TEST_TOKEN,
+        }))
+      })
+      ws.on('close', (code) => resolve(code))
+    })
+
+    expect(closeCode).toBe(4007)
+    expect(server.getConnectedClientCount()).toBe(0)
+  })
+
+  it('rejects a client that omits product identity from a strict server', async () => {
+    server = createServer({ productVariant: 'artist-os' })
+    await server.listen()
+
+    const ws = new WebSocket(`ws://127.0.0.1:${server.port}`)
+    openSockets.push(ws)
+
+    const closeCode = await new Promise<number>((resolve) => {
+      ws.on('open', () => {
+        ws.send(JSON.stringify({
+          id: crypto.randomUUID(),
+          type: 'handshake',
+          protocolVersion: PROTOCOL_VERSION,
+          token: TEST_TOKEN,
+        }))
+      })
+      ws.on('close', (code) => resolve(code))
+    })
+
+    expect(closeCode).toBe(4007)
+    expect(server.getConnectedClientCount()).toBe(0)
   })
 
   // -- Capacity tests --

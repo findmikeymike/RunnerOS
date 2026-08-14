@@ -16,8 +16,8 @@ import {
   statSync,
 } from 'fs';
 import { join } from 'path';
-import { homedir } from 'os';
 import { randomUUID } from 'crypto';
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import { expandPath, toPortablePath } from '../utils/paths.ts';
 import { atomicWriteFileSync, readJsonFileSync } from '../utils/files.ts';
 import { getDefaultStatusConfig, saveStatusConfig, ensureDefaultIconFiles } from '../statuses/storage.ts';
@@ -32,8 +32,8 @@ import type {
   WorkspaceSummary,
 } from './types.ts';
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
-const DEFAULT_WORKSPACES_DIR = join(CONFIG_DIR, 'workspaces');
+const CONFIG_DIR = RUNTIME_IDENTITY.dataRoot;
+const DEFAULT_WORKSPACES_DIR = RUNTIME_IDENTITY.workspacesRoot;
 
 // ============================================================
 // Path Utilities

@@ -3,6 +3,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type OptionalNumber = number | null | undefined;
 type Track = { id?: string; name: string; streams?: OptionalNumber };
@@ -33,8 +34,9 @@ const DEFAULT_SNAPSHOTS_DIR = "data/spotify/snapshots";
 const DEFAULT_OUT_DIR = "data/spotify/briefs";
 
 function usage() {
+  const scriptPath = fileURLToPath(import.meta.url);
   return `Usage:
-  "\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-analytics-snapshot/scripts/delta-brief.ts" [options]
+  "\${CRAFT_BUN:-bun}" "${scriptPath}" [options]
 
 Options:
   --snapshots-dir <path>   Default: ${DEFAULT_SNAPSHOTS_DIR}

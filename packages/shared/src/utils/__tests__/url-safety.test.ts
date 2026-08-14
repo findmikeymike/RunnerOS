@@ -106,6 +106,7 @@ describe('isSafeExternalUrl', () => {
 
   it('returns false for internal deep links', () => {
     expect(isSafeExternalUrl('craftagents://settings')).toBe(false)
+    expect(isSafeExternalUrl('artistos://settings')).toBe(false)
   })
 
   it('returns false for dangerous schemes', () => {

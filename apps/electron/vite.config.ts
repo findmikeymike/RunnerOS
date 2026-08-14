@@ -9,6 +9,9 @@ import { resolve } from 'path'
 // import { sentryVitePlugin } from '@sentry/vite-plugin'
 
 export default defineConfig({
+  define: {
+    __CRAFT_PRODUCT_VARIANT__: JSON.stringify(process.env.VITE_CRAFT_PRODUCT_VARIANT || 'runner'),
+  },
   plugins: [
     react({
       babel: {

@@ -31,6 +31,8 @@ export interface MessageEnvelope {
   error?: WireError
   /** Sent on handshake / handshake_ack. */
   protocolVersion?: string
+  /** Product boundary advertised during handshake (Runner and Artist OS must never mix). */
+  productVariant?: 'runner' | 'artist-os'
   /** Sent on handshake by the client. */
   workspaceId?: string
   /** Sent on handshake for remote auth. */
@@ -76,6 +78,7 @@ export type ErrorCode =
   | 'HANDLER_ERROR'
   | 'CHANNEL_NOT_FOUND'
   | 'AUTH_FAILED'
+  | 'PRODUCT_MISMATCH'
   | 'PROTOCOL_VERSION_UNSUPPORTED'
   | 'SESSION_NOT_IDLE'
   | 'SESSION_ID_CONFLICT'

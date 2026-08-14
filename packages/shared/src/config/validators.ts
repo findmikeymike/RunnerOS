@@ -830,7 +830,7 @@ export function validateSkillContent(markdownContent: string, slug: string): Val
         path: 'frontmatter',
         message: `Invalid YAML frontmatter: ${e instanceof Error ? e.message : 'Unknown error'}`,
         severity: 'error',
-        suggestion: 'See ~/.craft-agent/docs/skills.md for SKILL.md format reference',
+        suggestion: `See ${join(CONFIG_DIR, 'docs', 'skills.md')} for SKILL.md format reference`,
       }],
       warnings: [],
     };
@@ -1902,7 +1902,7 @@ export function validateToolIcons(): ValidationResult {
               path: `tools[id=${tool.id}].icon`,
               message: `Icon file '${tool.icon}' not found in tool-icons directory`,
               severity: 'warning',
-              suggestion: `Place '${tool.icon}' in ~/.craft-agent/tool-icons/`,
+              suggestion: `Place '${tool.icon}' in ${join(CONFIG_DIR, 'tool-icons')}/`,
             });
           }
         }

@@ -15,11 +15,11 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import matter from 'gray-matter';
 import { AGENT_SLUG_REGEX } from '../agent-definitions/types.ts';
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import {
   DELETED_MEMORIES_FILE,
   MEMORY_EVENTS_FILE,
@@ -48,7 +48,7 @@ import {
 // Paths
 // ============================================================================
 
-export const GLOBAL_AGENTS_ROOT = join(homedir(), '.agents');
+export const GLOBAL_AGENTS_ROOT = RUNTIME_IDENTITY.agentsRoot;
 
 function getGlobalAgentsRoot(options?: MemoryStorageOptions): string {
   return options?.globalAgentsDir ?? GLOBAL_AGENTS_ROOT;

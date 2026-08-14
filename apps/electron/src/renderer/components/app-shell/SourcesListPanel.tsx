@@ -21,6 +21,7 @@ import { SourceMenu } from './SourceMenu'
 import { SendResourceToWorkspaceDialog } from './SendResourceToWorkspaceDialog'
 import { useAppShellContext } from '@/context/AppShellContext'
 import { EditPopover, getEditConfig, type EditContextKey } from '@/components/ui/EditPopover'
+import { productDeepLink } from '@/lib/product-identity'
 import type { LoadedSource, SourceConnectionStatus, SourceFilter, SourceTier } from '../../../shared/types'
 
 const SOURCE_TYPE_CONFIG: Record<string, { labelKey: string; colorClass: string }> = {
@@ -334,7 +335,7 @@ export function SourcesListPanel({
                         <SourceMenu
                           sourceSlug={source.config.slug}
                           sourceName={source.config.name}
-                          onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
+                          onOpenInNewWindow={() => window.electronAPI.openUrl(productDeepLink(`sources/source/${source.config.slug}?window=focused`))}
                           onShowInFinder={source.folderPath ? () => window.electronAPI.showInFolder(source.folderPath) : undefined}
                           onDelete={() => onDeleteSource(source.config.slug)}
                           canDelete={isWorkspaceSource}
@@ -434,7 +435,7 @@ export function SourcesListPanel({
             <SourceMenu
               sourceSlug={source.config.slug}
               sourceName={source.config.name}
-              onOpenInNewWindow={() => window.electronAPI.openUrl(`craftagents://sources/source/${source.config.slug}?window=focused`)}
+              onOpenInNewWindow={() => window.electronAPI.openUrl(productDeepLink(`sources/source/${source.config.slug}?window=focused`))}
               onShowInFinder={source.folderPath ? () => window.electronAPI.showInFolder(source.folderPath) : undefined}
               onDelete={() => onDeleteSource(source.config.slug)}
               canDelete={isWorkspaceSource}

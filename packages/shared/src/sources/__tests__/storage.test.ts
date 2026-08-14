@@ -16,6 +16,7 @@ import type { FolderSourceConfig, LoadedSource } from '../types.ts';
 const sandboxHome = mkdtempSync(join(tmpdir(), 'global-sources-home-'));
 const sandboxHomeResolved = resolve(sandboxHome);
 const realHomeSourcesDir = resolve(join(os.homedir(), '.agents', 'sources'));
+const sandboxArtistRoot = join(sandboxHome, '.artist-os');
 const fakeCopilotComputerUseMcp = join(sandboxHome, 'computer-use-mcp');
 writeFileSync(fakeCopilotComputerUseMcp, '');
 process.env.CRAFT_COPILOT_COMPUTER_USE_MCP = fakeCopilotComputerUseMcp;
@@ -24,7 +25,15 @@ mock.module('os', () => ({
   homedir: () => sandboxHome,
 }));
 
+const originalProductVariant = process.env.CRAFT_PRODUCT_VARIANT;
+const originalConfigDir = process.env.CRAFT_CONFIG_DIR;
+process.env.CRAFT_PRODUCT_VARIANT = 'artist-os';
+process.env.CRAFT_CONFIG_DIR = sandboxArtistRoot;
 const storage = await import(`../storage.ts?global-sources-storage-test=${process.pid}-${Date.now()}`);
+if (originalProductVariant === undefined) delete process.env.CRAFT_PRODUCT_VARIANT;
+else process.env.CRAFT_PRODUCT_VARIANT = originalProductVariant;
+if (originalConfigDir === undefined) delete process.env.CRAFT_CONFIG_DIR;
+else process.env.CRAFT_CONFIG_DIR = originalConfigDir;
 const {
   GLOBAL_AGENT_SOURCES_DIR,
   GLOBAL_WORKSPACE_ID,
@@ -64,7 +73,7 @@ function assertSandboxedGlobalSourcesDir(path = GLOBAL_AGENT_SOURCES_DIR): void 
   if (
     !isInsideSandboxHome
     || resolvedPath === realHomeSourcesDir
-    || !resolvedPath.endsWith(join('.agents', 'sources'))
+    || !resolvedPath.endsWith(join('libraries', 'agents', 'sources'))
   ) {
     throw new Error(`Refusing to touch non-sandboxed global sources dir: ${resolvedPath}`);
   }
@@ -129,7 +138,7 @@ beforeAll(() => {
 describe('global tier paths', () => {
   test('GLOBAL_AGENT_SOURCES_DIR resolves under the sandboxed home', () => {
     expect(GLOBAL_AGENT_SOURCES_DIR.startsWith(sandboxHome)).toBe(true);
-    expect(GLOBAL_AGENT_SOURCES_DIR.endsWith(join('.agents', 'sources'))).toBe(true);
+    expect(GLOBAL_AGENT_SOURCES_DIR.endsWith(join('libraries', 'agents', 'sources'))).toBe(true);
   });
 
   test('destructive global test paths cannot target the real home sources dir', () => {
@@ -1000,7 +1009,7 @@ describe('getSourcesBySlugs', () => {
   });
 
   test('marks saved youtube-research key as untested until runtime validation', () => {
-    const cacheDir = join(sandboxHome, '.config', 'runneros', 'youtube-research');
+    const cacheDir = join(sandboxArtistRoot, 'cache', 'integrations', 'youtube-research');
     mkdirSync(cacheDir, { recursive: true });
     writeFileSync(join(cacheDir, 'credentials.json'), JSON.stringify({ apiKey: 'fake-key' }));
 

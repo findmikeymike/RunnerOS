@@ -4,9 +4,20 @@ import { loadShellEnv } from './shell-env'
 loadShellEnv()
 
 import { app, BrowserWindow, dialog, ipcMain, nativeImage, nativeTheme, shell } from 'electron'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { createHash, randomUUID } from 'crypto'
 import { hostname, homedir } from 'os'
 import * as Sentry from '@sentry/electron/main'
+
+// Artist OS must establish its process and browser boundary before any
+// Electron session, Sentry transport, window, or subprocess is initialized.
+// Runner intentionally keeps Electron's existing userData behavior.
+if (RUNTIME_IDENTITY.variant === 'artist-os') {
+  process.env['CRAFT_CONFIG_DIR'] = RUNTIME_IDENTITY.dataRoot
+  process.env['CRAFT_DEEPLINK_SCHEME'] = RUNTIME_IDENTITY.deeplinkScheme
+  process.env['CRAFT_APP_NAME'] = RUNTIME_IDENTITY.productName
+  app.setPath('userData', RUNTIME_IDENTITY.browserDataRoot)
+}
 
 // Initialize Sentry error tracking as early as possible after app import.
 // Only enabled in production (packaged) builds to avoid noise during development.
@@ -193,7 +204,9 @@ registerPiModelResolver((piAuthProvider) =>
 
 // Custom URL scheme for deeplinks (e.g., craftagents://auth-complete)
 // Supports multi-instance dev: CRAFT_DEEPLINK_SCHEME env var (craftagents1, craftagents2, etc.)
-const DEEPLINK_SCHEME = process.env.CRAFT_DEEPLINK_SCHEME || 'craftagents'
+const DEEPLINK_SCHEME = RUNTIME_IDENTITY.variant === 'artist-os'
+  ? RUNTIME_IDENTITY.deeplinkScheme
+  : (process.env.CRAFT_DEEPLINK_SCHEME || RUNTIME_IDENTITY.deeplinkScheme)
 
 let windowManager: WindowManager | null = null
 let sessionManager: SessionManager | null = null
@@ -218,7 +231,11 @@ let pendingDeepLink: string | null = null
 
 // Set app name early (before app.whenReady) to ensure correct macOS menu bar title
 // Supports multi-instance dev: CRAFT_APP_NAME env var (e.g., "Runner [1]")
-app.setName(process.env.CRAFT_APP_NAME || 'Runner')
+app.setName(
+  RUNTIME_IDENTITY.variant === 'artist-os'
+    ? RUNTIME_IDENTITY.productName
+    : (process.env.CRAFT_APP_NAME || RUNTIME_IDENTITY.productName),
+)
 
 // Register as default protocol client for craftagents:// URLs
 // This must be done before app.whenReady() on some platforms
@@ -423,9 +440,10 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) {
     // In packaged app, resources are at dist/resources/ (same level as __dirname)
     // In dev, resources are at ../resources/ (sibling of dist/)
+    const dockIconName = RUNTIME_IDENTITY.variant === 'artist-os' ? 'artist-os-icon.png' : 'icon.png'
     const dockIconPath = [
-      join(__dirname, 'resources/icon.png'),
-      join(__dirname, '../resources/icon.png'),
+      join(__dirname, 'resources', dockIconName),
+      join(__dirname, '../resources', dockIconName),
     ].find(p => existsSync(p))
 
     if (dockIconPath) {
@@ -700,7 +718,7 @@ app.whenReady().then(async () => {
               })
             },
             getMessagingDir: (wsId: string) =>
-              join(homedir(), '.craft-agent', 'workspaces', wsId, 'messaging'),
+              join(RUNTIME_IDENTITY.workspacesRoot, wsId, 'messaging'),
             getLegacyMessagingDir: (wsId: string) => {
               const ws = getWorkspaces().find((w) => w.id === wsId)
               return ws ? join(ws.rootPath, 'messaging') : undefined
@@ -808,7 +826,7 @@ app.whenReady().then(async () => {
       // port. Users who want public exposure must explicitly bind to 0.0.0.0.
       // -----------------------------------------------------------------------
       try {
-        const DEFAULT_TRIGGER_PORT = 9101
+        const DEFAULT_TRIGGER_PORT = RUNTIME_IDENTITY.defaultTriggerPort
         const envPort = process.env.CRAFT_TRIGGER_PORT
         let triggerPort: number
         if (envPort === undefined || envPort === '') {

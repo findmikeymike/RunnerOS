@@ -58,7 +58,7 @@ Expected JSON files:
 ## Build A Plan
 
 ```sh
-"${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/build-plan.ts" \
+"${CRAFT_BUN:-bun}" "${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/spotify-playlist-curator/scripts/build-plan.ts" \
   --comparable-tracks data/spotify/comparable-tracks.json \
   --our-tracks data/spotify/our-tracks.json \
   --theme "Drive Home Slow" \
@@ -83,7 +83,7 @@ The planner:
 After user approval:
 
 ```sh
-"${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/apply-plan.ts" \
+"${CRAFT_BUN:-bun}" "${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/spotify-playlist-curator/scripts/apply-plan.ts" \
   --plan data/spotify/playlist-plans/drive-home-slow.json \
   --apply \
   --confirm

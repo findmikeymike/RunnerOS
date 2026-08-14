@@ -15,9 +15,20 @@ Both apps must be installable, runnable, updated, sold, and uninstalled independ
 
 Runner's existing runtime and `~/.craft-agent` data remain untouched. Artist OS is added as a new, fail-closed product identity with no automatic fallback to Runner data.
 
-## Confirmed Current Coupling
+## Implementation Status
 
-Artist OS is presently a workspace/mode inside Runner, not an isolated application. Current coupling includes:
+The code boundary is implemented on `codex/artist-os-runtime-isolation`:
+
+- Runner defaults remain unchanged; Artist OS mutable state resolves beneath `~/.artist-os`.
+- Desktop, server, WebUI, subprocess, protocol, port, packaging, update, and RPC identities are separate.
+- Artist OS clean startup and migration do not discover or transfer Runner credentials.
+- The automated containment gate, identity tests, cross-product RPC rejection, both renderer variants, both WebUI variants, and a live two-server isolated-home smoke pass.
+
+Release certification is not complete. A packaged macOS build currently stops in the existing Electron Builder dependency collector because `minimatch` is not found for `@eslint/eslintrc`. Clean-machine macOS/Windows/Linux, browser-account, update, and uninstall smokes remain mandatory before public release.
+
+## Baseline Coupling Addressed
+
+Before this work, Artist OS was a workspace/mode inside Runner rather than an isolated application. The coupling included:
 
 - Runner app ID, product name, protocol, and single-instance process identity.
 - The shared `~/.craft-agent` state root, including hardcoded consumers that bypass `CRAFT_CONFIG_DIR`.

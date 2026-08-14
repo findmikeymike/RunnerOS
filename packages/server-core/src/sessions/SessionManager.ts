@@ -21,6 +21,7 @@ import {
   type PostInitResult,
 } from '@craft-agent/shared/agent/backend'
 import { getLlmConnection, getLlmConnections, getDefaultLlmConnection, getDefaultThinkingLevel, resetManagedAnthropicAuthEnvVars } from '@craft-agent/shared/config'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { PrivilegedExecutionBroker } from '@craft-agent/server-core/services'
 import { isValidWorkingDirectory } from '../utils/path-validation'
 import { InitGate } from '@craft-agent/server-core/domain'
@@ -4035,7 +4036,7 @@ Memory rule: save durable station-campaign preferences and collaboration pattern
                 replaceBuiltInAgentPromptText(
                   'college-radio-agent',
                   '`$HOME/.agents/skills/college-radio-matcher/match.py`',
-                  '`~/.agents/skills/college-radio-matcher/match.py`',
+                  `\`${RUNTIME_IDENTITY.variant === 'artist-os' ? '~/.artist-os/libraries/agents' : '~/.agents'}/skills/college-radio-matcher/match.py\``,
                 ).updated,
               ].some(Boolean)
             : false

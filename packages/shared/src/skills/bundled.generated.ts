@@ -20203,7 +20203,7 @@ Use known Artist HQ and campaign context first. Collect only what is missing:
 ## First-pass matching
 
 \`\`\`bash
-python3 ~/.agents/skills/college-radio-matcher/match.py \\
+python3 "\${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/college-radio-matcher/match.py" \\
   --home-state CA \\
   --home-city "Los Angeles" \\
   --market-states OR,WA \\
@@ -38081,6 +38081,7 @@ describe("Spotify delta brief", () => {
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type OptionalNumber = number | null | undefined;
 type Track = { id?: string; name: string; streams?: OptionalNumber };
@@ -38111,8 +38112,9 @@ const DEFAULT_SNAPSHOTS_DIR = "data/spotify/snapshots";
 const DEFAULT_OUT_DIR = "data/spotify/briefs";
 
 function usage() {
+  const scriptPath = fileURLToPath(import.meta.url);
   return \`Usage:
-  "\\\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-analytics-snapshot/scripts/delta-brief.ts" [options]
+  "\\\${CRAFT_BUN:-bun}" "\${scriptPath}" [options]
 
 Options:
   --snapshots-dir <path>   Default: \${DEFAULT_SNAPSHOTS_DIR}
@@ -38479,6 +38481,7 @@ describe("Spotify anomaly watch", () => {
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type OptionalNumber = number | null | undefined;
 type Playlist = { name: string; type?: string; listeners?: OptionalNumber };
@@ -38509,7 +38512,8 @@ const DEFAULT_ALERTS_DIR = "data/spotify/alerts";
 const DEFAULT_CEO_INBOX = "data/booth/agent-inbox/artist-ceo.md";
 
 function usage() {
-  return \`Usage: "\\\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-anomaly-watch/scripts/watch.ts" [options]
+  const scriptPath = fileURLToPath(import.meta.url);
+  return \`Usage: "\\\${CRAFT_BUN:-bun}" "\${scriptPath}" [options]
 
   --snapshots-dir <path>       Default: \${DEFAULT_SNAPSHOTS_DIR}
   --alerts-dir <path>          Default: \${DEFAULT_ALERTS_DIR}
@@ -38732,7 +38736,7 @@ Use this skill on a daily heartbeat. It does **not** scrape Spotify — it reads
 ## Workflow
 
 \`\`\`sh
-"\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-anomaly-watch/scripts/watch.ts" \\
+"\${CRAFT_BUN:-bun}" "\${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/spotify-anomaly-watch/scripts/watch.ts" \\
   --snapshots-dir data/spotify/snapshots \\
   --alerts-dir data/spotify/alerts \\
   --ceo-inbox data/spotify/artist-ceo-alerts.md
@@ -39185,6 +39189,7 @@ describe('spotify playlist deterministic planner', () => {
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 type ComparableTrack = {
   id: string;
@@ -39544,7 +39549,8 @@ function buildMarkdown(plan: Plan): string {
   lines.push("Review the order above. If approved, run:");
   lines.push("");
   lines.push("\`\`\`sh");
-  lines.push(\`"\\\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/apply-plan.ts" --plan <plan.json> --apply --confirm\`);
+  const applyScript = path.join(path.dirname(fileURLToPath(import.meta.url)), "apply-plan.ts");
+  lines.push(\`"\\\${CRAFT_BUN:-bun}" "\${applyScript}" --plan <plan.json> --apply --confirm\`);
   lines.push("\`\`\`");
   lines.push("");
 
@@ -39653,7 +39659,7 @@ Expected JSON files:
 ## Build A Plan
 
 \`\`\`sh
-"\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/build-plan.ts" \\
+"\${CRAFT_BUN:-bun}" "\${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/spotify-playlist-curator/scripts/build-plan.ts" \\
   --comparable-tracks data/spotify/comparable-tracks.json \\
   --our-tracks data/spotify/our-tracks.json \\
   --theme "Drive Home Slow" \\
@@ -39678,7 +39684,7 @@ The planner:
 After user approval:
 
 \`\`\`sh
-"\${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-playlist-curator/scripts/apply-plan.ts" \\
+"\${CRAFT_BUN:-bun}" "\${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/spotify-playlist-curator/scripts/apply-plan.ts" \\
   --plan data/spotify/playlist-plans/drive-home-slow.json \\
   --apply \\
   --confirm

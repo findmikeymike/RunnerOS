@@ -96,6 +96,8 @@ export interface WsRpcServerOptions {
   tls?: WsRpcTlsOptions
   /** App version string, included in handshake_ack for client compatibility checks. */
   serverVersion?: string
+  /** When set, reject clients from a different product before auth or RPC registration. */
+  productVariant?: 'runner' | 'artist-os'
   /** Maximum concurrent clients. 0 = unlimited. Default: 50 */
   maxClients?: number
   /** Called when a client completes handshake. */
@@ -140,6 +142,7 @@ export class WsRpcServer implements RpcServer {
   private readonly serverId: string
   private readonly tlsOptions: WsRpcTlsOptions | null
   private readonly serverVersion: string
+  private readonly productVariant: 'runner' | 'artist-os' | null
   private readonly maxClients: number
   private readonly onClientConnected: WsRpcServerOptions['onClientConnected']
   private readonly onClientDisconnected: WsRpcServerOptions['onClientDisconnected']
@@ -153,6 +156,7 @@ export class WsRpcServer implements RpcServer {
     this.validateSessionCookie = opts?.validateSessionCookie ?? null
     this.serverId = opts?.serverId ?? 'local'
     this.serverVersion = opts?.serverVersion ?? ''
+    this.productVariant = opts?.productVariant ?? null
     this.tlsOptions = opts?.tls ?? null
     this.maxClients = opts?.maxClients ?? 50
     this.onClientConnected = opts?.onClientConnected
@@ -274,10 +278,12 @@ export class WsRpcServer implements RpcServer {
           this.startHeartbeat()
           resolve()
         })
-      } else if (this.httpHandler) {
-        // Plain WS + HTTP handler: create an HTTP server for both.
+      } else if (this.httpHandler || this.requestedPort === 0) {
+        // Plain WS + HTTP handler: create an HTTP server for both. Route
+        // ephemeral-port requests through Node's HTTP server as well because
+        // Bun's ws compatibility layer does not reliably accept port 0.
         this._protocol = 'ws'
-        this.httpServer = createHttpServer(this.httpHandler)
+        this.httpServer = createHttpServer(this.httpHandler ?? undefined)
         this.wss = new WebSocketServer({ server: this.httpServer })
 
         this.httpServer.on('error', (err) => reject(err))
@@ -410,6 +416,17 @@ export class WsRpcServer implements RpcServer {
           return
         }
 
+        if (this.productVariant && envelope.productVariant !== this.productVariant) {
+          this.sendError(
+            ws,
+            envelope.id,
+            'PRODUCT_MISMATCH',
+            `Product mismatch. Server is ${this.productVariant}; client is ${envelope.productVariant ?? 'unspecified'}`,
+          )
+          ws.close(4007, 'Product mismatch')
+          return
+        }
+
         // Auth check — bearer token OR session cookie (web UI)
         if (this.requireAuth) {
           let authenticated = false
@@ -476,6 +493,7 @@ export class WsRpcServer implements RpcServer {
                   id: envelope.id,
                   type: 'handshake_ack',
                   protocolVersion: PROTOCOL_VERSION,
+                  productVariant: this.productVariant ?? envelope.productVariant,
                   serverVersion: this.serverVersion || undefined,
                   clientId: prevClient.id,
                   registeredChannels: [...this.handlers.keys()],
@@ -499,6 +517,7 @@ export class WsRpcServer implements RpcServer {
                   id: envelope.id,
                   type: 'handshake_ack',
                   protocolVersion: PROTOCOL_VERSION,
+                  productVariant: this.productVariant ?? envelope.productVariant,
                   serverVersion: this.serverVersion || undefined,
                   clientId: prevClient.id,
                   registeredChannels: [...this.handlers.keys()],
@@ -559,6 +578,7 @@ export class WsRpcServer implements RpcServer {
           id: envelope.id,
           type: 'handshake_ack',
           protocolVersion: PROTOCOL_VERSION,
+          productVariant: this.productVariant ?? envelope.productVariant,
           serverVersion: this.serverVersion || undefined,
           clientId,
           registeredChannels: [...this.handlers.keys()],

@@ -26,7 +26,6 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import matter from 'gray-matter';
 import type { PermissionMode } from '../agent/mode-types.ts';
@@ -41,13 +40,14 @@ import {
   type LoadedAgent,
 } from './types.ts';
 import { getActivatedAgentsManifestPath } from '../workspaces/storage.ts';
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 
 // ============================================================================
 // Paths
 // ============================================================================
 
 /** Global agent library directory: ~/.agents/agents/ */
-export const GLOBAL_AGENTS_DIR = join(homedir(), '.agents', 'agents');
+export const GLOBAL_AGENTS_DIR = RUNTIME_IDENTITY.agentsDir;
 
 /** AGENT.md filename inside each agent directory. */
 export const AGENT_FILE = 'AGENT.md';

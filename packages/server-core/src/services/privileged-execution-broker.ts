@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 import { appendFile, mkdir } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
-import { homedir } from 'node:os'
 import type { Logger } from '../runtime/platform'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 
 export interface PrivilegedExecutionRequest {
   requestId: string
@@ -22,7 +22,7 @@ interface PendingPrivilegedRequest extends PrivilegedExecutionRequest {
 }
 
 const DEFAULT_APPROVAL_TTL_SECONDS = 120
-const AUDIT_LOG_PATH = join(homedir(), '.craft-agent', 'logs', 'privileged-actions.jsonl')
+const AUDIT_LOG_PATH = join(RUNTIME_IDENTITY.logsRoot, 'privileged-actions.jsonl')
 const COMMAND_AUDIT_PREVIEW_MAX_CHARS = 160
 
 function buildCommandAuditPreview(command: string): string {

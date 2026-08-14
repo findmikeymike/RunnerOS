@@ -4,6 +4,7 @@ import { homedir } from 'os'
 import { execSync } from 'child_process'
 import { RPC_CHANNELS } from '@craft-agent/shared/protocol'
 import { getWorkspaceByNameOrId, getGitBashPath, setGitBashPath, clearGitBashPath } from '@craft-agent/shared/config'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { isSafeExternalUrl } from '@craft-agent/shared/utils/url-safety'
 import { isUsableGitBashPath, validateGitBashPath } from '@craft-agent/server-core/services'
 import { validateFilePath, getWorkspaceAllowedDirs } from '@craft-agent/server-core/handlers'
@@ -68,7 +69,7 @@ function collectDeepLinkParams(parsed: URL, pathId?: string): Record<string, str
 }
 
 function parseInternalRunnerDeepLink(parsed: URL): ParsedInternalDeepLink | null {
-  if (parsed.protocol !== 'craftagents:') return null
+  if (parsed.protocol !== `${RUNTIME_IDENTITY.deeplinkScheme}:`) return null
 
   const host = parsed.hostname
   const pathParts = parsed.pathname.split('/').filter(Boolean)
@@ -283,7 +284,7 @@ export function registerSystemCoreHandlers(server: RpcServer, deps: HandlerDeps)
     try {
       const parsed = new URL(url)
 
-      if (parsed.protocol === 'craftagents:') {
+      if (parsed.protocol === `${RUNTIME_IDENTITY.deeplinkScheme}:`) {
         const deepLink = parseInternalRunnerDeepLink(parsed)
 
         if (deepLink?.handledNoop) {

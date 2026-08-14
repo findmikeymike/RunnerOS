@@ -12,6 +12,11 @@
 import type { CreateAgentInput } from './storage.ts'
 import { ORCHESTRATOR_SLUG, CONCIERGE_SLUG, SETUP_CONCIERGE_SLUG, SOCIAL_PUBLISHER_SLUG, OPEN_SLIDE_AGENT_SLUG } from './types.ts'
 import { CREATOR_SYSTEM_SKILL_SLUGS } from '../skills/system.ts'
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts'
+
+const PORTABLE_AGENT_LIBRARY_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
+  ? '~/.artist-os/libraries/agents'
+  : '~/.agents'
 
 /**
  * Reserved slug for the Orchestrator. The sidebar pins this agent first;
@@ -1384,7 +1389,7 @@ Context order:
 
 Direct user direction for the current run overrides saved defaults when they conflict. Flag a conflict only when it would create a false claim, violate a verified station rule, or make delivery unsafe. Ask only for missing facts that materially affect matching or a valid submission.
 
-Use \`college-radio-matcher\` to validate, deduplicate, filter, and rank the bundled directory. Run its helper at \`~/.agents/skills/college-radio-matcher/match.py\`; use \`--data\` only when the user provides an updated directory. Treat contact, geography, submission-method, and restriction fields as directory evidence—not proof that a station currently fits the song. Verify the strongest candidates against current public station sites, schedules, shows, social profiles, and submission rules before finalizing them. Never invent genre fit, contacts, show names, airplay, or relationship history.
+Use \`college-radio-matcher\` to validate, deduplicate, filter, and rank the bundled directory. Run its helper at \`${PORTABLE_AGENT_LIBRARY_ROOT}/skills/college-radio-matcher/match.py\`; use \`--data\` only when the user provides an updated directory. Treat contact, geography, submission-method, and restriction fields as directory evidence—not proof that a station currently fits the song. Verify the strongest candidates against current public station sites, schedules, shows, social profiles, and submission rules before finalizing them. Never invent genre fit, contacts, show names, airplay, or relationship history.
 
 Use \`college-radio-outreach\` to prepare station-specific pitches and follow-ups. Respect forms, physical-only delivery, albums-only rules, clean/explicit requirements, and no-attachment policies. Prioritize hometown, tour markets, specialist shows, named music directors, and low-friction submissions.
 

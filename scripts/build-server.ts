@@ -65,6 +65,7 @@ import {
 type ServerPlatform = 'darwin' | 'linux';
 
 interface ServerBuildConfig {
+  productVariant: 'runner' | 'artist-os';
   platform: ServerPlatform;
   arch: Arch;
   rootDir: string;
@@ -92,6 +93,7 @@ Options:
   --arch=<arch>          Target architecture: x64, arm64
                          (default: ${process.arch === 'arm64' ? 'arm64' : 'x64'})
   --output=<path>        Output directory (default: dist/server)
+  --product=<variant>    Product identity: runner or artist-os (default: runner)
   --compress             Create .tar.gz after assembly
   --skip-download        Reuse existing Bun/uv binaries
   --help                 Show this help message
@@ -585,7 +587,11 @@ function createRootConfig(config: ServerBuildConfig): void {
 // ---------------------------------------------------------------------------
 
 function createEntryScripts(config: ServerBuildConfig): void {
-  const { outputDir } = config;
+  const { outputDir, productVariant } = config;
+  const isArtistOs = productVariant === 'artist-os';
+  const serviceName = isArtistOs ? 'artist-os-server' : 'craft-server';
+  const serviceDescription = isArtistOs ? 'Artist OS Server' : 'Craft Agent Server';
+  const defaultPort = isArtistOs ? 9200 : 9100;
   const binDir = join(outputDir, 'bin');
   mkdirSync(binDir, { recursive: true });
 
@@ -602,6 +608,7 @@ export CRAFT_BUNDLED_ASSETS_ROOT="$ROOT"
 export CRAFT_IS_PACKAGED=true
 export CRAFT_APP_ROOT="$ROOT"
 export CRAFT_RESOURCES_PATH="$ROOT/resources"
+export CRAFT_PRODUCT_VARIANT="${productVariant}"
 
 # CLI tools (doc tools use uv + Python scripts)
 export CRAFT_UV="$ROOT/resources/bin/uv"
@@ -629,7 +636,7 @@ set -euo pipefail
 
 DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "=== Craft Agent Server Setup ==="
+echo "=== ${serviceDescription} Setup ==="
 echo ""
 
 # Make binaries executable
@@ -671,11 +678,11 @@ if [ "\${1:-}" = "--systemd" ]; then
   fi
 
   SERVICE_USER="\${CRAFT_USER:-\$(logname 2>/dev/null || echo craft)}"
-  SERVICE_FILE="/etc/systemd/system/craft-server.service"
+  SERVICE_FILE="/etc/systemd/system/${serviceName}.service"
 
   cat > "$SERVICE_FILE" <<UNIT
 [Unit]
-Description=Craft Agent Server
+Description=${serviceDescription}
 After=network.target
 
 [Service]
@@ -684,7 +691,8 @@ User=$SERVICE_USER
 WorkingDirectory=$DIR
 EnvironmentFile=$DIR/.env
 Environment=CRAFT_RPC_HOST=127.0.0.1
-Environment=CRAFT_RPC_PORT=9100
+Environment=CRAFT_PRODUCT_VARIANT=${productVariant}
+Environment=CRAFT_RPC_PORT=${defaultPort}
 ExecStart=$DIR/bin/craft-server
 Restart=on-failure
 RestartSec=5
@@ -694,13 +702,13 @@ WantedBy=multi-user.target
 UNIT
 
   systemctl daemon-reload
-  systemctl enable craft-server
+  systemctl enable ${serviceName}
 
   echo ""
   echo "Systemd service installed."
-  echo "  Start:   sudo systemctl start craft-server"
-  echo "  Status:  sudo systemctl status craft-server"
-  echo "  Logs:    journalctl -u craft-server -f"
+  echo "  Start:   sudo systemctl start ${serviceName}"
+  echo "  Status:  sudo systemctl status ${serviceName}"
+  echo "  Logs:    journalctl -u ${serviceName} -f"
   echo ""
   exit 0
 fi
@@ -730,7 +738,12 @@ echo ""
 // ---------------------------------------------------------------------------
 
 function createDockerFiles(config: ServerBuildConfig): void {
-  const { outputDir, version } = config;
+  const { outputDir, productVariant } = config;
+  const isArtistOs = productVariant === 'artist-os';
+  const defaultPort = isArtistOs ? 9200 : 9100;
+  const serviceName = isArtistOs ? 'artist-os-server' : 'craft-server';
+  const volumeName = isArtistOs ? 'artist-os-data' : 'craft-data';
+  const dataRoot = isArtistOs ? '/root/.artist-os' : '/root/.craft-agent';
 
   const dockerfile = `FROM oven/bun:1.3-slim
 
@@ -749,11 +762,12 @@ ENV CRAFT_APP_ROOT=/app
 ENV CRAFT_RESOURCES_PATH=/app/resources
 ENV CRAFT_UV=/app/resources/bin/uv
 ENV CRAFT_SCRIPTS=/app/resources/scripts
+ENV CRAFT_PRODUCT_VARIANT=${productVariant}
 ENV CRAFT_RPC_HOST=0.0.0.0
-ENV CRAFT_RPC_PORT=9100
+ENV CRAFT_RPC_PORT=${defaultPort}
 ENV PATH="/app/resources/bin:/app/vendor/bun:\${PATH}"
 
-EXPOSE 9100
+EXPOSE ${defaultPort}
 
 ENTRYPOINT ["/app/bin/craft-server"]
 `;
@@ -761,24 +775,25 @@ ENTRYPOINT ["/app/bin/craft-server"]
 
   const dockerCompose = `version: "3.8"
 services:
-  craft-server:
+  ${serviceName}:
     build: .
     ports:
-      - "9100:9100"
+      - "${defaultPort}:${defaultPort}"
     environment:
       - CRAFT_SERVER_TOKEN=\${CRAFT_SERVER_TOKEN:?Set CRAFT_SERVER_TOKEN}
-      - CRAFT_RPC_PORT=9100
+      - CRAFT_PRODUCT_VARIANT=${productVariant}
+      - CRAFT_RPC_PORT=${defaultPort}
       # TLS — uncomment to enable wss://
       # - CRAFT_RPC_TLS_CERT=/certs/cert.pem
       # - CRAFT_RPC_TLS_KEY=/certs/key.pem
     volumes:
-      - craft-data:/root/.craft-agent
+      - ${volumeName}:${dataRoot}
       # TLS — mount cert directory
       # - ./certs:/certs:ro
     restart: unless-stopped
 
 volumes:
-  craft-data:
+  ${volumeName}:
 `;
   writeFileSync(join(outputDir, 'docker-compose.yml'), dockerCompose);
 }
@@ -794,6 +809,7 @@ async function main(): Promise<void> {
       platform: { type: 'string', default: process.platform },
       arch: { type: 'string', default: process.arch === 'arm64' ? 'arm64' : 'x64' },
       output: { type: 'string', default: 'dist/server' },
+      product: { type: 'string', default: 'runner' },
       compress: { type: 'boolean', default: false },
       'skip-download': { type: 'boolean', default: false },
       help: { type: 'boolean', default: false },
@@ -818,6 +834,12 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const productVariant = values.product as 'runner' | 'artist-os';
+  if (productVariant !== 'runner' && productVariant !== 'artist-os') {
+    console.error(`Unsupported product: ${productVariant}. Use runner or artist-os.`);
+    process.exit(1);
+  }
+
   const scriptDir = dirname(fileURLToPath(import.meta.url));
   const rootDir = dirname(scriptDir);
   const electronDir = join(rootDir, 'apps', 'electron');
@@ -834,6 +856,7 @@ async function main(): Promise<void> {
   const outputDir = join(rootDir, values.output!);
 
   const config: ServerBuildConfig = {
+    productVariant,
     platform,
     arch,
     rootDir,
@@ -844,7 +867,8 @@ async function main(): Promise<void> {
     version,
   };
 
-  console.log(`=== Building Craft Agent Server ${version} for ${platform}-${arch} ===`);
+  const serverName = productVariant === 'artist-os' ? 'Artist OS Server' : 'Craft Agent Server';
+  console.log(`=== Building ${serverName} ${version} for ${platform}-${arch} ===`);
   console.log(`  Output: ${outputDir}`);
 
   // Step 1: Clean

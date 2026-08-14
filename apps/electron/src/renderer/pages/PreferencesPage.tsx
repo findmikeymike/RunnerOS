@@ -22,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@craft-agent/ui'
 import { Save, RotateCcw, Check, ExternalLink } from 'lucide-react'
 import { getFileManagerName } from '@/lib/platform'
+import { productDataPath } from '@/lib/product-identity'
 
 interface PreferencesFormState {
   name: string
@@ -185,7 +186,7 @@ export default function PreferencesPage() {
   const headerActions = (
     <div className="flex items-center gap-1.5">
       <button
-        onClick={() => window.electronAPI.showInFolder('~/.craft-agent/preferences.json')}
+        onClick={() => window.electronAPI.showInFolder(productDataPath('preferences.json'))}
         className="flex items-center gap-1 text-xs h-7 px-2 rounded-md bg-foreground/5 hover:bg-foreground/10 text-muted-foreground"
         title={`Show in ${getFileManagerName()}`}
       >

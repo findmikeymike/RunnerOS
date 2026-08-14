@@ -9,13 +9,30 @@
  */
 
 import { join } from 'path';
-import { homedir } from 'os';
 import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'fs';
 import { getBundledAssetsDir } from '../utils/paths.ts';
 import { debug } from '../utils/debug.ts';
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 
-const CONFIG_DIR = join(homedir(), '.craft-agent');
+const CONFIG_DIR = RUNTIME_IDENTITY.dataRoot;
 const DOCS_DIR = join(CONFIG_DIR, 'docs');
+
+export function localizeBundledDocContent(
+  content: string,
+  variant: 'runner' | 'artist-os' = RUNTIME_IDENTITY.variant,
+): string {
+  if (variant === 'runner') return content;
+  return content
+    .replaceAll('$HOME/.craft-agent', '$HOME/.artist-os')
+    .replaceAll('~/.craft-agent', '~/.artist-os')
+    .replaceAll('$HOME/.agents', '$HOME/.artist-os/libraries/agents')
+    .replaceAll('~/.agents', '~/.artist-os/libraries/agents')
+    .replaceAll('$HOME/.workflows', '$HOME/.artist-os/libraries/workflows')
+    .replaceAll('~/.workflows', '~/.artist-os/libraries/workflows')
+    .replaceAll('craftagents://', 'artistos://')
+    .replaceAll('~/.config/runneros', '~/.artist-os/cache/integrations')
+    .replaceAll('~/.config/printing-press-clis', '~/.artist-os/integrations/social');
+}
 
 // Track if docs have been initialized this session (prevents re-init on hot reload)
 let docsInitialized = false;
@@ -51,7 +68,7 @@ function loadBundledDocs(): Record<string, string> {
   for (const filename of files) {
     const filePath = join(assetsDir, filename);
     try {
-      docs[filename] = readFileSync(filePath, 'utf-8');
+      docs[filename] = localizeBundledDocContent(readFileSync(filePath, 'utf-8'));
     } catch (error) {
       console.error(`[docs] Failed to load ${filename}:`, error);
     }
@@ -94,7 +111,7 @@ export function getDocPath(filename: string): string {
 // IMPORTANT: This is intentionally a human-readable, non-instance-aware path.
 // Do NOT use APP_ROOT for real filesystem reads/writes.
 // For runtime filesystem paths, use CONFIG_DIR from config/paths.ts.
-export const APP_ROOT = '~/.craft-agent';
+export const APP_ROOT = RUNTIME_IDENTITY.variant === 'artist-os' ? '~/.artist-os' : '~/.craft-agent';
 
 /**
  * Documentation file references for use in error messages and tool descriptions.

@@ -2,6 +2,7 @@ import { BrowserWindow, shell, nativeTheme, Menu, app } from 'electron'
 import { windowLog } from './logger'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import { release } from 'os'
 import { RPC_CHANNELS, type WindowCloseRequestSource } from '../shared/types'
 import type { SavedWindow } from './window-state'
@@ -129,9 +130,10 @@ export class WindowManager {
     // In packaged app, resources are at dist/resources/ (same level as __dirname)
     // In dev, resources are at ../resources/ (sibling of dist/)
     const getIconPath = () => {
-      const iconName = process.platform === 'darwin' ? 'icon.icns'
-        : process.platform === 'win32' ? 'icon.ico'
-        : 'icon.png'
+      const prefix = RUNTIME_IDENTITY.variant === 'artist-os' ? 'artist-os-icon' : 'icon'
+      const iconName = process.platform === 'darwin' ? `${prefix}.icns`
+        : process.platform === 'win32' ? `${prefix}.ico`
+        : `${prefix}.png`
       return [
         join(__dirname, 'resources', iconName),
         join(__dirname, '../resources', iconName),

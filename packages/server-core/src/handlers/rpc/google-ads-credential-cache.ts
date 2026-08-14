@@ -1,12 +1,12 @@
 import { mkdir, rm, writeFile, chmod } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getSourceCredentialManager, readGoogleAdsCredentialValue, type LoadedSource } from '@craft-agent/shared/sources'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 
 const GOOGLE_ADS_SOURCE_SLUG = 'google-ads'
 
 export function getGoogleAdsCredentialCachePath(): string {
-  return join(homedir(), '.config', 'runneros', 'google-ads', 'credentials.json')
+  return join(RUNTIME_IDENTITY.integrationCacheRoot, 'google-ads', 'credentials.json')
 }
 
 export async function syncGoogleAdsCredentialCache(source: LoadedSource): Promise<void> {
@@ -28,7 +28,7 @@ export async function syncGoogleAdsCredentialCache(source: LoadedSource): Promis
     updatedAt: Date.now(),
   }
 
-  await mkdir(join(homedir(), '.config', 'runneros', 'google-ads'), { recursive: true })
+  await mkdir(join(RUNTIME_IDENTITY.integrationCacheRoot, 'google-ads'), { recursive: true })
   await writeFile(cachePath, JSON.stringify(payload, null, 2), 'utf8')
   await chmod(cachePath, 0o600).catch(() => undefined)
 }

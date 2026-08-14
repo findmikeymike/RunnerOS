@@ -14,7 +14,7 @@ Use this skill on a daily heartbeat. It does **not** scrape Spotify — it reads
 ## Workflow
 
 ```sh
-"${CRAFT_BUN:-bun}" "$HOME/.agents/skills/spotify-anomaly-watch/scripts/watch.ts" \
+"${CRAFT_BUN:-bun}" "${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/spotify-anomaly-watch/scripts/watch.ts" \
   --snapshots-dir data/spotify/snapshots \
   --alerts-dir data/spotify/alerts \
   --ceo-inbox data/spotify/artist-ceo-alerts.md

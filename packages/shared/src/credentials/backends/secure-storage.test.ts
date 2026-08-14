@@ -6,13 +6,21 @@ import { join } from 'path';
 import { randomBytes } from 'crypto';
 
 const sandboxHome = mkdtempSync(join(tmpdir(), 'secure-storage-home-'));
+const originalProductVariant = process.env.CRAFT_PRODUCT_VARIANT;
+const originalConfigDir = process.env.CRAFT_CONFIG_DIR;
 
 mock.module('os', () => ({
   ...os,
   homedir: () => sandboxHome,
 }));
 
+process.env.CRAFT_PRODUCT_VARIANT = 'runner';
+process.env.CRAFT_CONFIG_DIR = join(sandboxHome, '.craft-agent');
 const { SecureStorageBackend } = await import(`./secure-storage.ts?secure-storage-test=${process.pid}-${Date.now()}`);
+if (originalProductVariant === undefined) delete process.env.CRAFT_PRODUCT_VARIANT;
+else process.env.CRAFT_PRODUCT_VARIANT = originalProductVariant;
+if (originalConfigDir === undefined) delete process.env.CRAFT_CONFIG_DIR;
+else process.env.CRAFT_CONFIG_DIR = originalConfigDir;
 
 afterAll(() => {
   rmSync(sandboxHome, { recursive: true, force: true });

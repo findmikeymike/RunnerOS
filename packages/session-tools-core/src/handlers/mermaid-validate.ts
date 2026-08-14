@@ -13,6 +13,10 @@ export interface MermaidValidateArgs {
   code: string;
 }
 
+const PRODUCT_CONFIG_HOME = process.env.CRAFT_PRODUCT_VARIANT === 'artist-os'
+  ? '~/.artist-os'
+  : '~/.craft-agent';
+
 /**
  * Handle the mermaid_validate tool call.
  *
@@ -48,7 +52,7 @@ export async function handleMermaidValidate(
         text: JSON.stringify({
           valid: false,
           error: errorMessage,
-          suggestion: 'Check the syntax against ~/.craft-agent/docs/mermaid.md',
+          suggestion: `Check the syntax against ${PRODUCT_CONFIG_HOME}/docs/mermaid.md`,
         }, null, 2),
       }],
       isError: true,

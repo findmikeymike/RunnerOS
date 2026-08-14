@@ -19,7 +19,13 @@ const SAFE_EXTERNAL_SCHEMES: ReadonlySet<string> = new Set([
   'sms:',
 ])
 
-const INTERNAL_DEEPLINK_SCHEME = 'craftagents:'
+// Treat every first-party product scheme as internal here. Product-specific
+// routing performs the stricter current-product check; this shared browser-safe
+// classifier only prevents either scheme from escaping to an OS handler.
+const INTERNAL_DEEPLINK_SCHEMES: ReadonlySet<string> = new Set([
+  'craftagents:',
+  'artistos:',
+])
 
 export function classifyExternalUrl(rawUrl: string): UrlClassification {
   if (typeof rawUrl !== 'string' || rawUrl.trim() === '') {
@@ -35,7 +41,7 @@ export function classifyExternalUrl(rawUrl: string): UrlClassification {
 
   const protocol = parsed.protocol.toLowerCase()
 
-  if (protocol === INTERNAL_DEEPLINK_SCHEME) {
+  if (INTERNAL_DEEPLINK_SCHEMES.has(protocol)) {
     return { kind: 'internal-deeplink' }
   }
 

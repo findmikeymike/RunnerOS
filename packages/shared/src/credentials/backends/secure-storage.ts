@@ -38,11 +38,13 @@ import { join, dirname } from 'path';
 import type { CredentialBackend } from './types.ts';
 import type { CredentialId, StoredCredential } from '../types.ts';
 import { credentialIdToAccount, accountToCredentialId } from '../types.ts';
+import { resolveRuntimeIdentity } from '../../config/runtime-identity.ts';
 
 // File location
-const CREDENTIALS_DIR = join(homedir(), '.craft-agent');
-const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.enc');
-const CREDENTIALS_KEY_FILE = join(CREDENTIALS_DIR, 'credentials.key');
+const runtimeIdentity = resolveRuntimeIdentity();
+const CREDENTIALS_DIR = runtimeIdentity.dataRoot;
+const CREDENTIALS_FILE = runtimeIdentity.credentialsFile;
+const CREDENTIALS_KEY_FILE = runtimeIdentity.credentialsKeyFile;
 
 // File format constants
 const MAGIC_BYTES = Buffer.from('CRAFT01\0');

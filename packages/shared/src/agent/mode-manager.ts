@@ -18,6 +18,7 @@ import { debug } from '../utils/debug.ts';
 import { dirname, isAbsolute, relative, resolve, win32 } from 'path';
 import { getSessionSafeAllowedToolNames } from '@craft-agent/session-tools-core';
 import { isBrowserToolNameOrAlias } from './browser-tool-names.ts';
+import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 import type { PermissionsContext, MergedPermissionsConfig } from './permissions-config.ts';
 import {
   validateBashCommand,
@@ -1755,6 +1756,8 @@ export function looksLikePotentialWrite(command: string): boolean {
 export function getPathHint(targetPath: string, plansFolderPath: string, dataFolderPath?: string): string | null {
   const normalizedTarget = targetPath.replace(/\\/g, '/').toLowerCase();
   const normalizedPlans = plansFolderPath.replace(/\\/g, '/').toLowerCase();
+  const normalizedData = dataFolderPath?.replace(/\\/g, '/').toLowerCase();
+  const normalizedProductRoot = RUNTIME_IDENTITY.dataRoot.replace(/\\/g, '/').toLowerCase();
 
   // Case: Writing to session folder but missing /plans/ or /data/
   if (normalizedTarget.includes('/sessions/') && !normalizedTarget.includes('/plans/') && !normalizedTarget.includes('/data/')) {
@@ -1771,12 +1774,17 @@ export function getPathHint(targetPath: string, plansFolderPath: string, dataFol
   }
 
   // Case: Writing to workspace root instead of session
-  if (normalizedTarget.includes('/.craft-agent/workspaces/') && !normalizedTarget.includes('/sessions/')) {
+  if (normalizedTarget.startsWith(`${normalizedProductRoot}/workspaces/`) && !normalizedTarget.includes('/sessions/')) {
     return 'Hint: Write to the session plans or data folder, not the workspace root.';
   }
 
-  // Case: Writing outside .craft-agent entirely
-  if (!normalizedTarget.includes('/.craft-agent/')) {
+  // Case: Writing outside the active product root entirely
+  const insideExplicitSessionArea = normalizedTarget === normalizedPlans
+    || normalizedTarget.startsWith(`${normalizedPlans}/`)
+    || (normalizedData !== undefined && (
+      normalizedTarget === normalizedData || normalizedTarget.startsWith(`${normalizedData}/`)
+    ));
+  if (!normalizedTarget.startsWith(`${normalizedProductRoot}/`) && !insideExplicitSessionArea) {
     return 'Hint: Files must be written to the session plans or data folder. Use plansFolderPath or dataFolderPath from <session_state>.';
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { handleDeepLink } from '../deep-link'
+import { handleDeepLink, parseDeepLink } from '../deep-link'
 import { RPC_CHANNELS } from '../../shared/types'
 import type { EventSink } from '@craft-agent/server-core/transport'
 import type { WindowManager } from '../window-manager'
@@ -18,6 +18,18 @@ function createMockWindow(webContentsId: number) {
     },
   }
 }
+
+describe('product deep-link boundary', () => {
+  it('accepts Artist OS links only for the Artist OS scheme', () => {
+    expect(parseDeepLink('artistos://settings', 'artistos')).toMatchObject({ view: 'settings' })
+    expect(parseDeepLink('craftagents://settings', 'artistos')).toBeNull()
+  })
+
+  it('keeps Runner links on the existing Runner scheme', () => {
+    expect(parseDeepLink('craftagents://settings', 'craftagents')).toMatchObject({ view: 'settings' })
+    expect(parseDeepLink('artistos://settings', 'craftagents')).toBeNull()
+  })
+})
 
 describe('handleDeepLink routing', () => {
   it('prefers resolved target client over preferred caller client', async () => {

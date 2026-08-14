@@ -24,7 +24,7 @@ Use known Artist HQ and campaign context first. Collect only what is missing:
 ## First-pass matching
 
 ```bash
-python3 ~/.agents/skills/college-radio-matcher/match.py \
+python3 "${CRAFT_GLOBAL_SKILLS_DIR:-$HOME/.agents/skills}/college-radio-matcher/match.py" \
   --home-state CA \
   --home-city "Los Angeles" \
   --market-states OR,WA \

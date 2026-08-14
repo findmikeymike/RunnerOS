@@ -1,12 +1,12 @@
 import { mkdir, rm, writeFile, chmod } from 'node:fs/promises'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getSourceCredentialManager, type LoadedSource } from '@craft-agent/shared/sources'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 
 const YOUTUBE_RESEARCH_SOURCE_SLUG = 'youtube-research'
 
 export function getYouTubeResearchCredentialCachePath(): string {
-  return join(homedir(), '.config', 'runneros', 'youtube-research', 'credentials.json')
+  return join(RUNTIME_IDENTITY.integrationCacheRoot, 'youtube-research', 'credentials.json')
 }
 
 export async function syncYouTubeResearchCredentialCache(source: LoadedSource): Promise<void> {
@@ -19,7 +19,7 @@ export async function syncYouTubeResearchCredentialCache(source: LoadedSource): 
     return
   }
 
-  await mkdir(join(homedir(), '.config', 'runneros', 'youtube-research'), { recursive: true })
+  await mkdir(join(RUNTIME_IDENTITY.integrationCacheRoot, 'youtube-research'), { recursive: true })
   // The bundled upstream CLI reads YOUTUBE_API_KEY from its process env.
   // This cache is the bridge from RunnerOS credentials into that local wrapper;
   // it must be cleared any time the effective source credential disappears.

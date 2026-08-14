@@ -12,6 +12,11 @@
  */
 
 import type { ConfigValidationResult, ConfigFileType, ConfigValidatorConfig } from './types.ts';
+import { RUNTIME_IDENTITY } from '../../config/runtime-identity.ts';
+
+const runtimeRootPattern = RUNTIME_IDENTITY.dataRoot
+  .replace(/\\/g, '/')
+  .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
  * Patterns for detecting known config file types.
@@ -31,22 +36,22 @@ const CONFIG_FILE_PATTERNS: { pattern: RegExp; type: ConfigFileType }[] = [
  */
 const CRAFT_AGENT_CONFIG_PATTERNS = [
   // Main config
-  /\.craft-agent\/config\.json$/,
+  new RegExp(`${runtimeRootPattern}/config\\.json$`),
   // Preferences
-  /\.craft-agent\/preferences\.json$/,
+  new RegExp(`${runtimeRootPattern}/preferences\\.json$`),
   // Source configs
-  /\.craft-agent\/workspaces\/[^/]+\/sources\/[^/]+\/config\.json$/,
+  new RegExp(`${runtimeRootPattern}/workspaces/[^/]+/sources/[^/]+/config\\.json$`),
   // Permissions
-  /\.craft-agent\/workspaces\/[^/]+\/permissions\.json$/,
-  /\.craft-agent\/permissions\/[^/]+\.json$/,
+  new RegExp(`${runtimeRootPattern}/workspaces/[^/]+/permissions\\.json$`),
+  new RegExp(`${runtimeRootPattern}/permissions/[^/]+\\.json$`),
   // Theme
-  /\.craft-agent\/workspaces\/[^/]+\/theme\.json$/,
+  new RegExp(`${runtimeRootPattern}/workspaces/[^/]+/theme\\.json$`),
   // Statuses
-  /\.craft-agent\/workspaces\/[^/]+\/statuses\/config\.json$/,
+  new RegExp(`${runtimeRootPattern}/workspaces/[^/]+/statuses/config\\.json$`),
   // Labels
-  /\.craft-agent\/workspaces\/[^/]+\/labels\.json$/,
+  new RegExp(`${runtimeRootPattern}/workspaces/[^/]+/labels\\.json$`),
   // Tool icons
-  /\.craft-agent\/tool-icons\/tool-icons\.json$/,
+  new RegExp(`${runtimeRootPattern}/tool-icons/tool-icons\\.json$`),
 ];
 
 /**

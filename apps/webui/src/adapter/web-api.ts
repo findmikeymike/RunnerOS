@@ -68,9 +68,11 @@ export function createWebApi(options: WebApiOptions): {
   client: WsRpcClient
 } {
   const { serverUrl, workspaceId } = options
+  const productVariant = import.meta.env.VITE_CRAFT_PRODUCT_VARIANT === 'artist-os' ? 'artist-os' : 'runner'
 
   const client = new WsRpcClient(serverUrl, {
     workspaceId,
+    productVariant,
     autoReconnect: true,
     mode: 'remote',
     // No token — auth is via session cookie sent on WebSocket upgrade
@@ -92,7 +94,7 @@ export function createWebApi(options: WebApiOptions): {
         if (result.reason === 'dangerous') {
           toast.error(`Blocked unsafe URL (${result.detail})`)
         } else if (result.reason === 'internal-deeplink') {
-          console.warn('[openUrl] craftagents:// deep links require the desktop app')
+          console.warn(`[openUrl] ${productVariant === 'artist-os' ? 'artistos' : 'craftagents'}:// deep links require the desktop app`)
         } else {
           console.warn('[openUrl] Malformed URL:', url)
         }
