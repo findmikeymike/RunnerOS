@@ -23,6 +23,7 @@ Core Artist HQ and campaign workspace specs live here.
 - [12 Campaign Calendar And Scheduled Jobs](./12-campaign-calendar-scheduled-jobs-spec.md)
 - [13 Scheduled Work Composer And Execution](./13-scheduled-work-composer-execution-spec.md)
 - [14 State Of Play Opportunity Engine](./14-state-of-play-opportunity-engine-spec.md)
+- [15 Artist OS Runtime Isolation Plan](./15-artist-os-runtime-isolation-plan.md)
 
 Current V1 implementation notes:
 
