@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { RunnerMark } from "@/components/icons/RunnerMark"
+import { productizeRunnerText } from "@/lib/product-identity"
 import { StepFormLayout, ContinueButton } from "./primitives"
 
 interface WelcomeStepProps {
@@ -31,7 +32,7 @@ export function WelcomeStep({
           <RunnerMark className="size-10 text-accent" />
         </div>
       }
-      title={isExistingUser ? t("onboarding.welcome.updateTitle") : t("onboarding.welcome.title")}
+      title={productizeRunnerText(isExistingUser ? t("onboarding.welcome.updateTitle") : t("onboarding.welcome.title"))}
       description={
         isExistingUser
           ? t("onboarding.welcome.updateDescription")

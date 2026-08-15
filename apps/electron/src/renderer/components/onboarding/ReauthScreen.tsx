@@ -4,6 +4,7 @@ import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Spinner } from "@craft-agent/ui"
 import { StepFormLayout } from "./primitives"
+import { productizeRunnerText } from "@/lib/product-identity"
 
 interface ReauthScreenProps {
   onLogin: () => Promise<void>
@@ -50,7 +51,7 @@ export function ReauthScreen({ onLogin, onReset }: ReauthScreenProps) {
             <>
               {t("onboarding.reauth.expired")}
               <br />
-              {t("onboarding.reauth.loginAgain")}
+              {productizeRunnerText(t("onboarding.reauth.loginAgain"))}
               <br />
               <span className="text-muted-foreground/70 text-xs mt-2 block">
                 {t("onboarding.reauth.preserved")}

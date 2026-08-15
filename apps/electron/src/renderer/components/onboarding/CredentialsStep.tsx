@@ -18,6 +18,7 @@ import {
   type OAuthStatus,
 } from "../apisetup"
 import type { CustomEndpointApi } from '@config/llm-connections'
+import { productizeRunnerText } from '@/lib/product-identity'
 
 export type CredentialStatus = ApiKeyStatus | OAuthStatus
 
@@ -95,7 +96,7 @@ export function CredentialsStep({
     return (
       <StepFormLayout
         title={t("onboarding.credentials.connectChatGPT")}
-        description={t("onboarding.credentials.connectChatGPTDesc")}
+        description={productizeRunnerText(t("onboarding.credentials.connectChatGPTDesc"))}
         actions={
           <>
             <BackButton onClick={onBack} disabled={status === 'validating'} />
@@ -135,7 +136,7 @@ export function CredentialsStep({
     return (
       <StepFormLayout
         title={t("onboarding.credentials.connectGitHub")}
-        description={t("onboarding.credentials.connectGitHubDesc")}
+        description={productizeRunnerText(t("onboarding.credentials.connectGitHubDesc"))}
         actions={
           <>
             <BackButton onClick={onBack} disabled={status === 'validating'} />

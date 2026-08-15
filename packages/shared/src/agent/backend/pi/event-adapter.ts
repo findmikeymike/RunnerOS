@@ -125,6 +125,11 @@ export class PiEventAdapter extends BaseEventAdapter {
         break;
 
       case 'agent_end':
+        // A low-level Pi run can still be followed by auto-retry, compaction,
+        // or queued continuation. Wait for agent_settled before completing.
+        break;
+
+      case 'agent_settled':
         if (this.lastUsage) {
           const inputTokens = this.lastUsage.input + (this.lastUsage.cacheRead || 0);
           yield {

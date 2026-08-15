@@ -968,7 +968,7 @@ async function queryLlm(request: LLMQueryRequest): Promise<LLMQueryResult> {
             .join('');
         }
       }
-      if (event.type === 'agent_end') {
+      if (event.type === 'agent_settled') {
         completionResolve();
       }
     });
@@ -1306,14 +1306,16 @@ async function handlePrompt(msg: Extract<InboundMessage, { type: 'prompt' }>): P
           code: 'prompt_overflow_recovery_failed',
         });
         send({ type: 'event', event: { type: 'agent_end', messages: [], willRetry: false } });
+        send({ type: 'event', event: { type: 'agent_settled' } });
         return;
       }
     }
 
     debugLog(`Prompt failed: ${errorMsg}`);
     send({ type: 'error', message: errorMsg, code: 'prompt_error' });
-    // Send synthetic agent_end so the main process event queue unblocks
+    // Send the full terminal lifecycle so the main process unblocks only once settled.
     send({ type: 'event', event: { type: 'agent_end', messages: [], willRetry: false } });
+    send({ type: 'event', event: { type: 'agent_settled' } });
   }
 }
 

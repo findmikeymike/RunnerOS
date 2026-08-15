@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import { Check, CreditCard, Key, Cpu } from "lucide-react"
 import { StepFormLayout, BackButton, ContinueButton } from "./primitives"
 import type { LlmAuthType, LlmProviderType } from "@craft-agent/shared/config/llm-connections"
+import { productizeRunnerText } from "@/lib/product-identity"
 
 /** Provider segment for the segmented control */
 export type ProviderSegment = 'anthropic' | 'pi'
@@ -190,12 +191,12 @@ export function APISetupStep({
 
   const SEGMENT_LABELS: Record<ProviderSegment, string> = {
     anthropic: t("onboarding.apiSetup.claude"),
-    pi: t("onboarding.apiSetup.craftAgentsBackend"),
+    pi: productizeRunnerText(t("onboarding.apiSetup.craftAgentsBackend")),
   }
 
   const SEGMENT_DESCRIPTIONS: Record<ProviderSegment, React.ReactNode> = {
     anthropic: <>{t("onboarding.apiSetup.claudeDesc")}</>,
-    pi: <>{t("onboarding.apiSetup.piDesc")}<BetaBadge label={t("onboarding.apiSetup.beta")} /></>,
+    pi: <>{productizeRunnerText(t("onboarding.apiSetup.piDesc"))}<BetaBadge label={t("onboarding.apiSetup.beta")} /></>,
   }
 
   const API_SETUP_OPTIONS: ApiSetupOption[] = [
@@ -216,21 +217,21 @@ export function APISetupStep({
     {
       id: 'pi_chatgpt_oauth',
       name: 'GPT/Codex',
-      description: t("onboarding.apiSetup.chatGPTPlusDesc"),
+      description: productizeRunnerText(t("onboarding.apiSetup.chatGPTPlusDesc")),
       icon: API_SETUP_ICONS.pi_chatgpt_oauth,
       providerType: 'pi',
     },
     {
       id: 'pi_copilot_oauth',
       name: 'GitHub Copilot',
-      description: t("onboarding.apiSetup.githubCopilotDesc"),
+      description: productizeRunnerText(t("onboarding.apiSetup.githubCopilotDesc")),
       icon: API_SETUP_ICONS.pi_copilot_oauth,
       providerType: 'pi',
     },
     {
       id: 'pi_api_key',
       name: t("onboarding.apiSetup.apiKey"),
-      description: t("onboarding.apiSetup.apiKeyDesc"),
+      description: productizeRunnerText(t("onboarding.apiSetup.apiKeyDesc")),
       icon: API_SETUP_ICONS.pi_api_key,
       providerType: 'pi',
     },

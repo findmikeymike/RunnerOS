@@ -28,6 +28,7 @@ import {
 import type { MenuItem, MenuSection, SettingsMenuItem } from "../../shared/menu-schema"
 import { SETTINGS_ICONS } from "./icons/SettingsIcons"
 import { getDocUrl } from '@craft-agent/shared/docs/doc-links'
+import { PRODUCT_NAME } from '@/lib/product-identity'
 
 // Map of action handlers for menu items that need custom behavior
 type MenuActionHandlers = {
@@ -204,7 +205,7 @@ export function AppMenu({
       <div className="pointer-events-auto titlebar-no-drag">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <TopBarButton aria-label="Runner menu">
+          <TopBarButton aria-label={`${PRODUCT_NAME} menu`}>
             <RunnerMark className="h-4 text-accent" />
           </TopBarButton>
         </DropdownMenuTrigger>

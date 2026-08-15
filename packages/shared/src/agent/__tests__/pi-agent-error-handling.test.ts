@@ -21,6 +21,28 @@ function createConfig(): BackendConfig {
 }
 
 describe('PiAgent subprocess error handling', () => {
+  it('completes the event queue only after agent_settled', () => {
+    const agent = new PiAgent(createConfig())
+    let completionCount = 0
+    ;(agent as any).eventQueue.complete = () => {
+      completionCount++
+    }
+
+    ;(agent as any).handleLine(JSON.stringify({
+      type: 'event',
+      event: { type: 'agent_end', messages: [], willRetry: false },
+    }))
+    expect(completionCount).toBe(0)
+
+    ;(agent as any).handleLine(JSON.stringify({
+      type: 'event',
+      event: { type: 'agent_settled' },
+    }))
+    expect(completionCount).toBe(1)
+
+    agent.destroy()
+  })
+
   it('parses JSONL with terminal notification noise before the JSON object', () => {
     const agent = new PiAgent(createConfig())
 

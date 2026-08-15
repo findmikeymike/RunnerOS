@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { cn } from "@/lib/utils"
 import { Key, Monitor } from "lucide-react"
 import { RunnerMark } from "@/components/icons/RunnerMark"
+import { productizeRunnerText } from "@/lib/product-identity"
 import { StepFormLayout } from "./primitives"
 
 import claudeIcon from "@/assets/provider-icons/claude.svg"
@@ -55,13 +56,13 @@ export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps
     {
       id: 'chatgpt',
       name: t("onboarding.providerSelect.codexChatGPT"),
-      description: t("onboarding.providerSelect.codexChatGPTDesc"),
+      description: productizeRunnerText(t("onboarding.providerSelect.codexChatGPTDesc")),
       icon: PROVIDER_ICONS.chatgpt,
     },
     {
       id: 'copilot',
       name: t("onboarding.providerSelect.githubCopilot"),
-      description: t("onboarding.providerSelect.githubCopilotDesc"),
+      description: productizeRunnerText(t("onboarding.providerSelect.githubCopilotDesc")),
       icon: PROVIDER_ICONS.copilot,
     },
     {
@@ -85,7 +86,7 @@ export function ProviderSelectStep({ onSelect, onSkip }: ProviderSelectStepProps
           <RunnerMark className="size-10 text-accent" />
         </div>
       }
-      title={t("onboarding.providerSelect.title")}
+      title={productizeRunnerText(t("onboarding.providerSelect.title"))}
       description={t("onboarding.providerSelect.description")}
     >
       <div className="space-y-3">

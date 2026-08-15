@@ -9,6 +9,7 @@ import {
   type MemoryStorageOptions,
   type SaveMemoryInput,
 } from '@craft-agent/shared/memory'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 
 export interface MemorySidecarTurnInput {
   userMessage: string
@@ -295,7 +296,7 @@ export function buildMemorySidecarPrompt(input: MemorySidecarTurnInput): string 
     .map((entry) => `- ${entry.scope}${entry.agentSlug ? `:${entry.agentSlug}` : ''} | ${entry.type} | ${entry.name}: ${entry.body}`)
     .join('\n') || '(none)'
 
-  return `You are RunnerOS Memory Sidecar. Decide whether the latest turn contains one durable memory worth proposing.
+  return `You are ${RUNTIME_IDENTITY.productName} Memory Sidecar. Decide whether the latest turn contains one durable memory worth proposing.
 
 Save only stable user preferences, direct corrections, agent instructions, or reusable working context that should follow the user or active agent across sessions.
 Do not save secrets, credentials, workspace-specific project facts, one-off task details, temporary emotions, generic praise, or anything already present.

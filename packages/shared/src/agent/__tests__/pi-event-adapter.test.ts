@@ -43,10 +43,13 @@ describe('PiEventAdapter', () => {
       expect(events).toHaveLength(0);
     });
 
-    it('should emit complete for agent_end', () => {
+    it('should wait for agent_settled before emitting complete', () => {
       const events = collect(adapter.adaptEvent({ type: 'agent_end' } as any));
-      expect(events).toHaveLength(1);
-      expect(events[0]).toMatchObject({ type: 'complete' });
+      expect(events).toHaveLength(0);
+
+      const settledEvents = collect(adapter.adaptEvent({ type: 'agent_settled' } as any));
+      expect(settledEvents).toHaveLength(1);
+      expect(settledEvents[0]).toMatchObject({ type: 'complete' });
     });
   });
 

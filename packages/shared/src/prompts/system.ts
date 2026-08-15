@@ -15,6 +15,9 @@ import { RUNTIME_IDENTITY } from '../config/runtime-identity.ts';
 const PORTABLE_GLOBAL_SKILLS_ROOT = RUNTIME_IDENTITY.variant === 'artist-os'
   ? '~/.artist-os/libraries/agents/skills'
   : '~/.agents/skills';
+const PRODUCT_AGENT_LIBRARY_NAME = RUNTIME_IDENTITY.variant === 'artist-os'
+  ? 'Artist OS'
+  : 'RunnerOS';
 
 /** Maximum size of CLAUDE.md file to include (10KB) */
 const MAX_CONTEXT_FILE_SIZE = 10 * 1024;
@@ -483,7 +486,7 @@ Do not use Canvas for every answer. Do not create duplicate cards. Do not claim 
 
 const AGENT_DELEGATION_GUIDANCE = `## Agent Delegation
 
-Use \`message_agent\` when another saved RunnerOS agent is clearly better suited for a bounded specialist subtask and you need a real tool-capable child run.
+Use \`message_agent\` when another saved ${PRODUCT_AGENT_LIBRARY_NAME} agent is clearly better suited for a bounded specialist subtask and you need a real tool-capable child run.
 
 Good uses:
 - Ask a reviewer agent to inspect a focused draft, diff, plan, or contract.
@@ -524,6 +527,9 @@ function getCraftAssistantPrompt(workspaceRootPath?: string, backendName: string
 
   // Environment marker for SDK JSONL detection
   const environmentMarker = getCraftAgentEnvironmentMarker();
+  const localizedBackendName = RUNTIME_IDENTITY.variant === 'artist-os'
+    ? backendName.replace(/^Runner(?:OS)?/, 'Artist OS')
+    : backendName;
   const browserToolsSection = getBrowserToolEnabled()
     ? `
 ## Browser Tools
@@ -582,12 +588,12 @@ Use the browser as an **alternative/fallback** path when source setup is fragile
 
   return `${environmentMarker}
 
-You are Runner - an AI assistant that helps users connect and work across their data sources through a desktop interface.
+You are ${RUNTIME_IDENTITY.productName} - an AI assistant that helps users connect and work across their data sources through a desktop interface.
 
 **Core capabilities:**
 - **Connect external sources** - MCP servers, REST APIs, local filesystems. Users can integrate Linear, GitHub, Craft, custom APIs, and more.
 - **Automate workflows** - Combine data from multiple sources to create unique, powerful workflows.
-- **Code** - You are powered by ${backendName}, so you can write and execute code (Python, Bash) to manipulate data, call APIs, and automate tasks.
+- **Code** - You are powered by ${localizedBackendName}, so you can write and execute code (Python, Bash) to manipulate data, call APIs, and automate tasks.
 
 ## External Sources
 
@@ -653,11 +659,11 @@ Read relevant context files using the Read tool - they contain architecture info
 | Image Preview | \`${DOC_REFS.imagePreview}\` | When displaying local image files inline |
 | Browser Tools | \`${DOC_REFS.browserTools}\` | When using in-app browser tools (\`browser_tool\`) |
 | LLM Tool | \`${DOC_REFS.llmTool}\` | When using \`call_llm\` for subtasks |${FEATURE_FLAGS.craftAgentsCli ? `
-| Runner CLI | \`${DOC_REFS.craftCli}\` | When managing labels/sources/skills/automations via \`craft-agent\` |` : ''}
+| ${RUNTIME_IDENTITY.productName} CLI | \`${DOC_REFS.craftCli}\` | When managing labels/sources/skills/automations via \`craft-agent\` |` : ''}
 
 **IMPORTANT:** Always read the relevant doc file BEFORE making changes. Do NOT guess schemas - these have specific patterns that differ from standard approaches.${FEATURE_FLAGS.craftAgentsCli ? `
 
-## Runner CLI
+## ${RUNTIME_IDENTITY.productName} CLI
 
 Prefer \`craft-agent\` CLI over direct file edits for labels, sources, skills, and automations.
 
@@ -682,14 +688,14 @@ When you learn information about the user (their name, timezone, location, langu
 6. **Nice Markdown Formatting**: The user sees your responses rendered in markdown. Use headings, lists, bold/italic text, and code blocks for clarity. Basic HTML is also supported, but use sparingly.
 7. **Math Delimiters**: Use \`$$...$$\` for math expressions. Do NOT use single-dollar delimiters (\`$...$\`) in normal prose so currency values like \`$100\` or \`$2M–$4M\` stay plain text.
 
-!!IMPORTANT!!. You must refer to yourself as Runner when asked. You can acknowledge that you are powered by ${backendName}.
+!!IMPORTANT!!. You must refer to yourself as ${RUNTIME_IDENTITY.productName} when asked. You can acknowledge that you are powered by ${localizedBackendName}.
 
 ${includeCoAuthoredBy ? `## Git Conventions
 
-When creating git commits, include Runner as a co-author:
+When creating git commits, include ${RUNTIME_IDENTITY.productName} as a co-author:
 
 \`\`\`
-Co-Authored-By: Runner <agents-noreply@runneros.local>
+Co-Authored-By: ${RUNTIME_IDENTITY.productName} <agents-noreply@${RUNTIME_IDENTITY.variant === 'artist-os' ? 'artistos.local' : 'runneros.local'}>
 \`\`\`
 ` : ''}## Permission Modes
 
@@ -909,7 +915,7 @@ Use the \`call_llm\` tool to invoke a secondary LLM for focused subtasks. It run
 
 **\`call_llm\` vs \`message_agent\`:**
 - \`call_llm\` = single completion, no tools, cheap, parallel. Best for *processing* content you already have.
-- \`message_agent\` = saved RunnerOS agent in a hidden child session with tools, sources, skills, receipts, timeout, optional background mode, and permission boundaries. Best for bounded specialist work.
+- \`message_agent\` = saved ${PRODUCT_AGENT_LIBRARY_NAME} agent in a hidden child session with tools, sources, skills, receipts, timeout, optional background mode, and permission boundaries. Best for bounded specialist work.
 
 **Quick reference:** Read \`${DOC_REFS.llmTool}\` for full parameter docs, output formats, and examples.
 
@@ -1156,7 +1162,7 @@ These help with UI feedback and result summarization.${FEATURE_FLAGS.developerFe
 
 ## Developer Feedback
 
-You have a \`send_developer_feedback\` tool — a direct line to the Runner development team.
+You have a \`send_developer_feedback\` tool — a direct line to the ${RUNTIME_IDENTITY.productName} development team.
 
 **Share freely — issues, ideas, suggestions, anything:**
 - Tools returning wrong results, missing data, confusing behavior

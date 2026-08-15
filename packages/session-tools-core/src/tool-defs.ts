@@ -19,6 +19,9 @@ import type { ToolResult } from './types.ts';
 const PRODUCT_GLOBAL_SOURCES_HOME = process.env.CRAFT_PRODUCT_VARIANT === 'artist-os'
   ? '~/.artist-os/libraries/agents/sources'
   : '~/.agents/sources';
+const PRODUCT_AGENT_LIBRARY_NAME = process.env.CRAFT_PRODUCT_VARIANT === 'artist-os'
+  ? 'Artist OS'
+  : 'RunnerOS';
 
 // Handlers
 import { handleSubmitPlan } from './handlers/submit-plan.ts';
@@ -1158,7 +1161,7 @@ Use list_sessions to find session IDs, or use the sessionId returned by spawn_se
 
 The target session receives your message with a sender envelope containing your session ID, so it can use send_agent_message to reply.`,
 
-  message_agent: `Delegate a bounded task to a saved RunnerOS agent.
+  message_agent: `Delegate a bounded task to a saved ${PRODUCT_AGENT_LIBRARY_NAME} agent.
 
 Creates a hidden child session using the target agent's normal prompt, sources, skills, timeout, receipt, and permission boundary.
 Use background=true for longer specialist work you do not need to block on; the receipt updates when the child finishes.`,

@@ -3,6 +3,7 @@ import {
   createOutputBundle,
 } from '@craft-agent/shared/outputs'
 import type { CreateSessionOptions } from '@craft-agent/shared/protocol'
+import { RUNTIME_IDENTITY } from '@craft-agent/shared/config/runtime-identity'
 import {
   attachDeepResearchAgentMessageReceipts,
   readDeepResearchRun,
@@ -45,7 +46,7 @@ interface ActiveDeepResearchRun {
 }
 
 const DEEP_RESEARCH_SYSTEM_PROMPT = [
-  'You are RunnerOS Deep Research.',
+  `You are ${RUNTIME_IDENTITY.productName} Deep Research.`,
   'You run a real research loop, not a single lookup.',
   'Use selected MCP/API/local/browser/search tools when they are available.',
   'When a search tool such as Exa is selected, use it for discovery before synthesis.',

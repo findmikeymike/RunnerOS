@@ -40,6 +40,7 @@ import { useEffect, useRef, useState } from "react"
 import { BrowserTabStrip } from "../browser/BrowserTabStrip"
 import { BellMenu } from "../notifications/BellMenu"
 import { getDocUrl } from "@craft-agent/shared/docs/doc-links"
+import { PRODUCT_NAME } from "@/lib/product-identity"
 
 // --- Menu rendering (moved from AppMenu) ---
 
@@ -260,10 +261,10 @@ export function TopBar({
         </Tooltip>
         )}
 
-        {/* Craft Menu */}
+        {/* Product Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <TopBarButton aria-label={t("menu.craftMenu")}>
+            <TopBarButton aria-label={`${PRODUCT_NAME} menu`}>
               <Icons.Plus className="h-4 w-4 text-accent" strokeWidth={1.75} />
             </TopBarButton>
           </DropdownMenuTrigger>

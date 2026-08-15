@@ -999,7 +999,7 @@ export class PiAgent extends BaseAgent {
           });
         }
 
-        // Note: The subprocess should follow this with a synthetic agent_end event
+        // Note: The subprocess should follow this with a synthetic agent_settled event
         // which will call eventQueue.complete(). If it doesn't, handleSubprocessExit()
         // will complete the queue when the process exits.
         break;
@@ -1084,8 +1084,8 @@ export class PiAgent extends BaseAgent {
       this.eventQueue.enqueue(agentEvent);
     }
 
-    // Check for agent end (turn complete)
-    if (eventType === 'agent_end') {
+    // Pi is only terminal once retry, compaction, and queued continuation work settles.
+    if (eventType === 'agent_settled') {
       this.eventQueue.complete();
     }
   }

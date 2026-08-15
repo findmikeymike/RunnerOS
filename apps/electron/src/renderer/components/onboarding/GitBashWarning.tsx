@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { StepFormLayout, BackButton } from "./primitives"
 import type { GitBashStatus } from "../../../shared/types"
+import { productizeRunnerText } from "@/lib/product-identity"
 
 export type { GitBashStatus }
 
@@ -63,7 +64,7 @@ export function GitBashWarning({
   return (
     <StepFormLayout
       title={t("onboarding.gitBash.title")}
-      description={t("onboarding.gitBash.description")}
+      description={productizeRunnerText(t("onboarding.gitBash.description"))}
     >
       <div className="space-y-4">
         {/* Primary action: Download Git */}
