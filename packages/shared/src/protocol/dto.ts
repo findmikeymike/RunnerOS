@@ -231,6 +231,8 @@ export interface SendMessageOptions {
   badges?: ContentBadge[]
   optimisticMessageId?: string
   displayIntent?: 'canvas-visual-review' | 'agent-message-passive'
+  /** Drive a model turn without rendering this system-generated prompt. */
+  hidden?: boolean
 }
 
 // ---------------------------------------------------------------------------

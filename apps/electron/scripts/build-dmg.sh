@@ -202,7 +202,7 @@ if [ -n "$APPLE_ID" ] && [ -n "$APPLE_TEAM_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PA
     export APPLE_APP_SPECIFIC_PASSWORD="$APPLE_APP_SPECIFIC_PASSWORD"
 
     # Enable notarization in electron-builder by setting env vars
-    # The electron-builder.yml has notarize section commented out,
+    # The electron-builder.common.yml has notarize section commented out,
     # but we can enable it via environment
     export NOTARIZE=true
 fi
@@ -211,7 +211,7 @@ fi
 npx electron-builder $BUILDER_ARGS
 
 # 8. Verify the DMG was built
-# electron-builder.yml uses artifactName to output: Runner-${arch}.dmg
+# electron-builder.common.yml uses artifactName to output: Runner-${arch}.dmg
 DMG_NAME="Runner-${ARCH}.dmg"
 DMG_PATH="$ELECTRON_DIR/release/$DMG_NAME"
 

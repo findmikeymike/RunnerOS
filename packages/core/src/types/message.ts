@@ -284,6 +284,8 @@ export interface Message {
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
   displayIntent?: 'canvas-visual-review' | 'agent-message-passive';
+  // System-generated prompt that drives a turn but must not render as user text.
+  hidden?: boolean;
   // Structured metadata for agent-message notices. Avoid parsing trusted actions from text.
   agentMessage?: AgentMessageNoticeMetadata;
   /** Annotation payloads for this message */

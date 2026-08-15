@@ -25,11 +25,13 @@ cache -> Supadata -> local youtube-research when --allow-paid is passed
 
 Supadata calls consume credits and require `--allow-paid`. Default Supadata mode is `native`, which avoids AI-generated transcript charges. Use `--supadata-mode auto` or `--supadata-mode generate` only when that spend is approved.
 
-Supadata credentials come from `SUPADATA_API_KEY` or `~/.config/runneros/youtube-intelligence/credentials.json`:
+Supadata credentials come from `SUPADATA_API_KEY` or the active product cache selected by `CRAFT_INTEGRATION_CACHE_ROOT`:
 
 ```json
 { "supadataApiKey": "..." }
 ```
+
+Runner and Artist OS set `CRAFT_INTEGRATION_CACHE_ROOT` for their managed agents. Direct CLI use must set that variable, pass `--cache-dir`, or use `--no-cache`; the tool never guesses another product's cache path.
 
 ## Batch Input
 

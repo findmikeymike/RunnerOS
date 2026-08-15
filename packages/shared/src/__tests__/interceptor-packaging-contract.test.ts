@@ -10,7 +10,7 @@ function readRepoFile(relativePath: string): string {
 
 describe('interceptor packaging contract', () => {
   it('includes interceptor-request-utils.ts in all packaging manifests/scripts', () => {
-    const builderYml = readRepoFile('apps/electron/electron-builder.yml');
+    const builderYml = readRepoFile('apps/electron/electron-builder.common.yml');
     const dmgScript = readRepoFile('apps/electron/scripts/build-dmg.sh');
     const linuxScript = readRepoFile('apps/electron/scripts/build-linux.sh');
     const winScript = readRepoFile('apps/electron/scripts/build-win.ps1');

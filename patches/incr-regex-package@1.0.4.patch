@@ -1,0 +1,15 @@
+diff --git a/package.json b/package.json
+index d3cfcb156d2404651cba1d0b01248b66dddee353..57ba095ce1409eb99b2e282498b56a3b84391b8e 100644
+--- a/package.json
++++ b/package.json
+@@ -35,9 +35,7 @@
+     "mocha": "*",
+     "webpack": "^4.43.0"
+   },
+-  "dependencies": {
+-    "eslint_d": "^9.0.0"
+-  },
++  "dependencies": {},
+   "author": "Nurul Choudhury",
+   "license": "ISC",
+   "bugs": {

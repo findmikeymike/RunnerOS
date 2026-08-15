@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -35,8 +34,12 @@ function resolveBinary() {
   return null;
 }
 
-function loadRunnerOsCredentials() {
-  const cachePath = join(homedir(), '.config', 'runneros', 'youtube-research', 'credentials.json');
+function loadManagedCredentials() {
+  const cacheRoot = process.env.CRAFT_INTEGRATION_CACHE_ROOT?.trim();
+  // The host application owns credential-cache identity. Never guess a
+  // product path here: an Artist OS subprocess must not fall back to Runner.
+  if (!cacheRoot) return {};
+  const cachePath = join(resolve(cacheRoot), 'youtube-research', 'credentials.json');
   if (!existsSync(cachePath)) return {};
   try {
     const parsed = JSON.parse(readFileSync(cachePath, 'utf8'));
@@ -60,7 +63,7 @@ if (!binary) {
 }
 
 const args = process.argv.slice(2);
-const cachedCredentials = loadRunnerOsCredentials();
+const cachedCredentials = loadManagedCredentials();
 const env = { ...process.env };
 for (const [key, value] of Object.entries(cachedCredentials)) {
   if (!env[key] && typeof value === 'string' && value.trim()) {

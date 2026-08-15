@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import type { TransportConnectionState } from '../../../shared/types'
-import { formatSessionLoadFailure, shouldTreatSessionLoadFailureAsTransportFallback } from '../session-load'
+import { deriveSessionMessagesLoadState, formatSessionLoadFailure, shouldTreatSessionLoadFailureAsTransportFallback } from '../session-load'
 
 function createState(overrides?: Partial<TransportConnectionState>): TransportConnectionState {
   return {
@@ -49,5 +49,38 @@ describe('formatSessionLoadFailure', () => {
 
   it('falls back to a generic message', () => {
     expect(formatSessionLoadFailure(null)).toBe('Unknown error')
+  })
+})
+
+describe('deriveSessionMessagesLoadState', () => {
+  it('renders in-memory messages even when the loaded flag is stale', () => {
+    const state = deriveSessionMessagesLoadState({
+      session: { messages: [{ id: 'm1' }] as never[], messageCount: 1 },
+      sessionMeta: { messageCount: 1 },
+      messagesLoaded: false,
+    })
+    expect(state.messagesReady).toBe(true)
+    expect(state.messagesLoading).toBe(false)
+  })
+
+  it('detects an empty payload behind a stale loaded flag', () => {
+    const state = deriveSessionMessagesLoadState({
+      session: { messages: [], messageCount: 2, lastFinalMessageId: 'm2' },
+      sessionMeta: { messageCount: 2, lastFinalMessageId: 'm2' },
+      messagesLoaded: true,
+    })
+    expect(state.hasStaleLoadedFlag).toBe(true)
+    expect(state.messagesLoading).toBe(true)
+  })
+
+  it('shows a load error instead of an infinite spinner', () => {
+    const state = deriveSessionMessagesLoadState({
+      session: { messages: [], messageCount: 2 },
+      sessionMeta: { messageCount: 2 },
+      messagesLoaded: false,
+      loadError: 'transport timed out',
+    })
+    expect(state.messagesLoading).toBe(false)
+    expect(state.error).toBe('transport timed out')
   })
 })

@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  truncateSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -146,6 +156,62 @@ describe('Runner to Artist OS selective migration', () => {
     expect(result.exitCode).not.toBe(0);
     expect(result.stderr).toContain('embedded credentials');
     expect(existsSync(paths.artistRoot)).toBe(false);
+  });
+
+  test('refuses plaintext credential caches and environment files inside a workspace', async () => {
+    const paths = fixture();
+    const sourceDir = join(paths.workspaceRoot, 'sources', 'private-api');
+    mkdirSync(sourceDir, { recursive: true });
+    writeFileSync(join(sourceDir, '.credential-cache.json'), JSON.stringify({ value: 'runner-secret' }));
+    writeFileSync(join(paths.workspaceRoot, '.env.local'), 'PRIVATE_TOKEN=runner-secret\n');
+
+    const result = await run([
+      '--runner-root', paths.runnerRoot,
+      '--artist-root', paths.artistRoot,
+      '--workspace', 'campaign-one',
+      '--apply',
+    ]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain('.credential-cache.json');
+    expect(result.stderr).toContain('.env.local');
+    expect(existsSync(paths.artistRoot)).toBe(false);
+  });
+
+  test('streams checksum verification for large media files', async () => {
+    const paths = fixture('hq');
+    const largeMaster = join(paths.workspaceRoot, 'large-master.wav');
+    writeFileSync(largeMaster, '');
+    truncateSync(largeMaster, 32 * 1024 * 1024);
+
+    const result = await run([
+      '--runner-root', paths.runnerRoot,
+      '--artist-root', paths.artistRoot,
+      '--workspace', 'campaign-one',
+      '--apply',
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(join(paths.artistRoot, 'workspaces', 'campaign-one', 'large-master.wav'))).toBe(true);
+  });
+
+  test('removes only stale migration staging directories before apply', async () => {
+    const paths = fixture('hq');
+    const workspacesRoot = join(paths.artistRoot, 'workspaces');
+    const stale = join(workspacesRoot, 'campaign-one.migration-abandoned.tmp');
+    const recent = join(workspacesRoot, 'campaign-one.migration-active.tmp');
+    mkdirSync(stale, { recursive: true });
+    mkdirSync(recent, { recursive: true });
+    const old = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    utimesSync(stale, old, old);
+
+    const result = await run([
+      '--runner-root', paths.runnerRoot,
+      '--artist-root', paths.artistRoot,
+      '--workspace', 'campaign-one',
+      '--apply',
+    ]);
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(stale)).toBe(false);
+    expect(existsSync(recent)).toBe(true);
   });
 
   test('refuses symbolic links that could keep Artist OS attached to Runner data', async () => {

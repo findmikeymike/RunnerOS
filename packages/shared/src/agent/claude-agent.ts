@@ -1,4 +1,4 @@
-import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, createSdkMcpServer, tool, AbortError, type Query, type SDKMessage, type SDKUserMessage, type SDKAssistantMessageError, type Options } from '@anthropic-ai/claude-agent-sdk';
 import { getDefaultOptions, resetClaudeConfigCheck } from './options.ts';
 // Local type for SDK user message content blocks (text, image, document)
 // Replaces import from @anthropic-ai/sdk/resources — keeps SDK as agent-only dependency
@@ -30,6 +30,8 @@ import type { LLMQueryRequest, LLMQueryResult } from './llm-tool.ts';
 import { consumeLlmQueryMessages } from './claude-llm-query.ts';
 import { debug } from '../utils/debug.ts';
 import { guardLargeResult } from '../utils/large-response.ts';
+import { createPushableInputStream, resolveKeepBackgroundTasksAlive, type PushableInputStream } from './backend/claude/persistent-input.ts';
+import { classifyClaudeTaskNotification } from './backend/claude/task-notification.ts';
 import {
   getSessionPlansDir,
   getLastPlanFilePath,
@@ -475,6 +477,105 @@ export class ClaudeAgent extends BaseAgent {
   private lastStderrOutput: string[] = [];
   /** Pending steer message — injected via additionalContext on next PreToolUse */
   private pendingSteerMessage: string | null = null;
+  private readonly keepBackgroundTasksAlive = resolveKeepBackgroundTasksAlive();
+  private persistentInput: PushableInputStream<SDKUserMessage> | null = null;
+  private persistentIterator: AsyncIterator<SDKMessage> | null = null;
+  private persistentAbortController: AbortController | null = null;
+  private persistentConsumerActive = false;
+  private persistentGeneration = 0;
+  private activeTurnChannel: PushableInputStream<SDKMessage> | null = null;
+  private onBackgroundEvent: ((event: AgentEvent) => void) | null = null;
+
+  private teardownPersistentQuery(reason: string, expectedGeneration?: number): void {
+    if (expectedGeneration !== undefined && expectedGeneration !== this.persistentGeneration) return;
+    if (!this.persistentInput && !this.persistentIterator && !this.persistentAbortController) return;
+    debug(`[bg-lifecycle] tearing down persistent Claude query: ${reason}`, { sessionId: this.config.session?.id });
+    try { this.persistentInput?.end(); } catch { /* already ended */ }
+    try { void this.persistentIterator?.return?.(undefined); } catch { /* best effort */ }
+    try { this.persistentAbortController?.abort(); } catch { /* best effort */ }
+    try { this.activeTurnChannel?.end(); } catch { /* best effort */ }
+    this.persistentInput = null;
+    this.persistentIterator = null;
+    this.persistentAbortController = null;
+    this.activeTurnChannel = null;
+    this.persistentConsumerActive = false;
+    this.persistentGeneration += 1;
+  }
+
+  private beginPersistentTurn(prompt: SDKUserMessage, options: Options): AsyncIterable<SDKMessage> {
+    if (!this.persistentInput || !this.currentQuery) {
+      this.persistentInput = createPushableInputStream<SDKUserMessage>();
+      this.persistentAbortController = this.currentQueryAbortController;
+      this.currentQuery = query({ prompt: this.persistentInput.stream, options });
+      this.persistentIterator = this.currentQuery[Symbol.asyncIterator]();
+      const generation = ++this.persistentGeneration;
+      this.startPersistentConsumer(generation);
+    } else if (this.persistentAbortController) {
+      this.currentQueryAbortController = this.persistentAbortController;
+    }
+
+    const channel = createPushableInputStream<SDKMessage>();
+    this.activeTurnChannel = channel;
+    this.persistentInput.push(prompt);
+    return channel.stream;
+  }
+
+  private startPersistentConsumer(generation: number): void {
+    if (this.persistentConsumerActive || !this.persistentIterator) return;
+    this.persistentConsumerActive = true;
+    const iterator = this.persistentIterator;
+    void (async () => {
+      try {
+        while (true) {
+          const { done, value } = await iterator.next();
+          if (done) break;
+          const channel = this.activeTurnChannel;
+          if (channel) {
+            channel.push(value);
+            if ((value as { type?: string }).type === 'result') {
+              this.activeTurnChannel = null;
+              channel.end();
+            }
+          } else {
+            this.routeBackgroundMessage(value);
+          }
+        }
+      } catch (error) {
+        this.debug(`[bg-lifecycle] persistent consumer stopped: ${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        this.teardownPersistentQuery('consumer-exit', generation);
+      }
+    })();
+  }
+
+  private routeBackgroundMessage(message: SDKMessage): void {
+    const classification = classifyClaudeTaskNotification(message);
+    if (classification.kind === 'valid') {
+      this.onBackgroundEvent?.({
+        type: 'task_completed',
+        taskId: classification.notification.taskId,
+        status: classification.notification.status,
+        ...(classification.notification.outputFile ? { outputFile: classification.notification.outputFile } : {}),
+        ...(classification.notification.summary ? { summary: classification.notification.summary } : {}),
+      });
+      return;
+    }
+
+    const value = message as unknown as { type?: string; subtype?: string; status?: string };
+    if (classification.kind === 'missing-task-id') {
+      console.warn('[bg-lifecycle] task_notification missing task_id', {
+        type: value?.type,
+        subtype: value?.subtype,
+        status: value?.status,
+      });
+      return;
+    }
+    this.debug(`[bg-lifecycle] dropping expected between-turns message: ${value?.type}/${value?.subtype ?? ''}`);
+  }
+
+  setBackgroundEventSink(sink: ((event: AgentEvent) => void) | null): void {
+    this.onBackgroundEvent = sink;
+  }
 
   /**
    * Get the session ID for mode operations.
@@ -1366,22 +1467,36 @@ This is a branched conversation. All prior messages in this conversation are par
         debug('[chat] Injected SDK-fork branch context hint into first message');
       }
 
-      // Create the query - handle slash commands, binary attachments, or regular messages
-      if (isSlashCommand) {
+      // A streaming-input query stays alive across turns so SDK background
+      // agents are not killed when the spawning turn returns its result.
+      let turnMessageSource: AsyncIterable<SDKMessage>;
+      if (this.keepBackgroundTasksAlive && !isSlashCommand) {
+        turnMessageSource = this.beginPersistentTurn(
+          this.buildSDKUserMessage(effectiveUserMessage, attachments),
+          optionsWithAbort,
+        );
+      } else if (isSlashCommand) {
+        // Slash commands mutate SDK session state and run on their own query.
+        // Retire the persistent query first so two subprocesses never compete
+        // for the same session and abort/redirect keeps targeting live work.
+        this.teardownPersistentQuery(`slash-command:${commandName}`);
         // Send slash commands directly to SDK without context wrapping.
         // The SDK processes these as internal commands (e.g., /compact triggers compaction).
         debug(`[chat] Detected SDK slash command: ${trimmedMessage}`);
         this.currentQuery = query({ prompt: trimmedMessage, options: optionsWithAbort });
+        turnMessageSource = this.currentQuery;
       } else if (hasBinaryAttachments) {
         const sdkMessage = this.buildSDKUserMessage(effectiveUserMessage, attachments);
         async function* singleMessage(): AsyncIterable<SDKUserMessage> {
           yield sdkMessage;
         }
         this.currentQuery = query({ prompt: singleMessage(), options: optionsWithAbort });
+        turnMessageSource = this.currentQuery;
       } else {
         // Simple string prompt for text-only messages (may include text file contents)
         const prompt = this.buildTextPrompt(effectiveUserMessage, attachments);
         this.currentQuery = query({ prompt, options: optionsWithAbort });
+        turnMessageSource = this.currentQuery;
       }
 
       // Initialize event adapter for this turn
@@ -1399,7 +1514,7 @@ This is a branched conversation. All prior messages in this conversation are par
       let suppressedSessionExpiredError = false;
       let suppressedBranchCutoffError = false;
       try {
-        for await (const message of this.currentQuery) {
+        for await (const message of turnMessageSource) {
           // Track if we got any text content from assistant
           if ('type' in message && message.type === 'assistant' && 'message' in message) {
             const assistantMsg = message.message as { content?: unknown[] };
@@ -2014,7 +2129,9 @@ This is a branched conversation. All prior messages in this conversation are par
       // emit complete even on error so application knows we're done
       yield { type: 'complete' };
     } finally {
-      this.currentQuery = null;
+      if (!this.keepBackgroundTasksAlive || !this.persistentInput) {
+        this.currentQuery = null;
+      }
 
       // If a steer message was never delivered (no PreToolUse fired), notify the session
       // layer so it can re-queue the message for the next turn.
@@ -2353,6 +2470,8 @@ This is a branched conversation. All prior messages in this conversation are par
   }
 
   clearHistory(): void {
+    this.teardownPersistentQuery('clear-history');
+    this.currentQuery = null;
     // Clear session to start fresh conversation
     this.sessionId = null;
     // Clear pinned state so next chat() will capture fresh values
@@ -2412,6 +2531,7 @@ This is a branched conversation. All prior messages in this conversation are par
       this.currentQueryAbortController.abort(reason);
       this.currentQueryAbortController = null;
     }
+    this.teardownPersistentQuery(`force-abort:${reason}`);
     this.currentQuery = null;
   }
 
@@ -2524,6 +2644,7 @@ This is a branched conversation. All prior messages in this conversation are par
   destroy(): void {
     // Claude-specific cleanup first
     this.currentQueryAbortController?.abort();
+    this.teardownPersistentQuery('destroy');
     this.pendingPermissions.clear();
 
     // Clear pinned system prompt state
@@ -2556,7 +2677,9 @@ This is a branched conversation. All prior messages in this conversation are par
    * Check if currently processing a query.
    */
   isProcessing(): boolean {
-    return this.currentQuery !== null;
+    return this.keepBackgroundTasksAlive
+      ? this.activeTurnChannel !== null
+      : this.currentQuery !== null;
   }
 
   /**

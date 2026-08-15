@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-13
+last_verified: 2026-08-14
 source_of_truth: true
 ---
 
@@ -21,10 +21,12 @@ The code boundary is implemented on `codex/artist-os-runtime-isolation`:
 
 - Runner defaults remain unchanged; Artist OS mutable state resolves beneath `~/.artist-os`.
 - Desktop, server, WebUI, subprocess, protocol, port, packaging, update, and RPC identities are separate.
-- Artist OS clean startup and migration do not discover or transfer Runner credentials.
-- The automated containment gate, identity tests, cross-product RPC rejection, both renderer variants, both WebUI variants, and a live two-server isolated-home smoke pass.
+- Artist OS clean startup and migration reject known Runner credential stores, including workspace credential caches and environment files.
+- Bundled Google Ads and YouTube tools require the active product's injected integration-cache root and never guess a Runner credential path.
+- The automated containment gate now scans those bundled tools and asserts packaged protocol registration, sealed shell identity, and product-owned integration caches.
+- Identity tests, cross-product RPC rejection, both renderer variants, both WebUI variants, and a live two-server isolated-home smoke pass have passed.
 
-Release certification is not complete. A packaged macOS build currently stops in the existing Electron Builder dependency collector because `minimatch` is not found for `@eslint/eslintrc`. Clean-machine macOS/Windows/Linux, browser-account, update, and uninstall smokes remain mandatory before public release.
+Release certification is not complete. The dependency collector failure is fixed, a clean arm64 macOS package completes, the bundled Claude runtime executes, and the Artist OS bundle identity and URL scheme verify correctly. The local machine currently has no valid Developer ID signing identity, so release signing/notarization still requires a renewed or imported certificate. Clean-machine macOS/Windows/Linux, browser-account, update, and uninstall smokes remain mandatory before public release.
 
 ## Baseline Coupling Addressed
 

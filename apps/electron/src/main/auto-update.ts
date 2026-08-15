@@ -15,11 +15,11 @@
  */
 
 import { autoUpdater } from 'electron-updater'
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { platform } from 'os'
 import * as path from 'path'
 import * as fs from 'fs'
-import { mainLog } from './logger'
+import { mainLog, autoUpdateLog } from './logger'
 import { getAppVersion } from '@craft-agent/shared/version'
 import {
   getDismissedUpdateVersion,
@@ -66,6 +66,24 @@ let eventSink: EventSink | null = null
 
 // Flag to indicate update is in progress — used to prevent force exit during quitAndInstall
 let __isUpdating = false
+let beforeUpdateQuitHook: (() => void) | null = null
+let beforeUpdateInstallHook: (() => Promise<void>) | null = null
+let installQuitFailedHook: (() => void) | null = null
+
+/** Capture window state before electron-updater destroys renderer windows. */
+export function setBeforeUpdateQuitHook(fn: () => void): void {
+  beforeUpdateQuitHook = fn
+}
+
+/** Flush and release app resources before installer handoff. */
+export function setBeforeUpdateInstallHook(fn: () => Promise<void>): void {
+  beforeUpdateInstallHook = fn
+}
+
+/** Recover from a failed handoff after app resources have already been released. */
+export function setInstallQuitFailedHook(fn: () => void): void {
+  installQuitFailedHook = fn
+}
 
 /**
  * Check if an update installation is in progress.
@@ -119,25 +137,25 @@ autoUpdater.autoInstallOnAppQuit = true
 
 // Use the logger for electron-updater internal logging
 autoUpdater.logger = {
-  info: (msg: unknown) => mainLog.info('[electron-updater]', msg),
-  warn: (msg: unknown) => mainLog.warn('[electron-updater]', msg),
-  error: (msg: unknown) => mainLog.error('[electron-updater]', msg),
-  debug: (msg: unknown) => mainLog.info('[electron-updater:debug]', msg),
+  info: (msg: unknown) => autoUpdateLog.info('electron-updater', msg),
+  warn: (msg: unknown) => autoUpdateLog.warn('electron-updater', msg),
+  error: (msg: unknown) => autoUpdateLog.error('electron-updater', msg),
+  debug: (msg: unknown) => autoUpdateLog.info('electron-updater debug', msg),
 }
 
 // ─── Event handlers ───────────────────────────────────────────────────────────
 
 autoUpdater.on('checking-for-update', () => {
-  mainLog.info('[auto-update] Checking for updates...')
+  autoUpdateLog.info('Checking for updates')
 })
 
 autoUpdater.on('update-available', (info) => {
-  mainLog.info(`[auto-update] Update available: ${updateInfo.currentVersion} → ${info.version}`)
+  autoUpdateLog.info(`Update available: ${updateInfo.currentVersion} → ${info.version}`)
 
   // First, check electron-updater's internal state (most reliable)
   const internalState = checkElectronUpdaterState()
   if (internalState.ready) {
-    mainLog.info(`[auto-update] electron-updater reports download ready`)
+    autoUpdateLog.info('electron-updater reports download ready')
     updateInfo = {
       ...updateInfo,
       available: true,
@@ -152,7 +170,7 @@ autoUpdater.on('update-available', (info) => {
   // Fallback: check if file exists in cache directory
   const existing = checkForExistingDownload()
   if (existing.exists) {
-    mainLog.info(`[auto-update] Update already downloaded (file check), setting state to ready`)
+    autoUpdateLog.info('Update already downloaded by file check')
     updateInfo = {
       ...updateInfo,
       available: true,
@@ -175,7 +193,7 @@ autoUpdater.on('update-available', (info) => {
 })
 
 autoUpdater.on('update-not-available', (info) => {
-  mainLog.info(`[auto-update] Already up to date (${info.version})`)
+  autoUpdateLog.info(`Already up to date (${info.version})`)
 
   updateInfo = {
     ...updateInfo,
@@ -193,7 +211,7 @@ autoUpdater.on('download-progress', (progress) => {
 })
 
 autoUpdater.on('update-downloaded', async (info) => {
-  mainLog.info(`[auto-update] Update downloaded: v${info.version}`)
+  autoUpdateLog.info(`Update downloaded: v${info.version}`)
 
   updateInfo = {
     ...updateInfo,
@@ -210,7 +228,7 @@ autoUpdater.on('update-downloaded', async (info) => {
 })
 
 autoUpdater.on('error', (error) => {
-  mainLog.error('[auto-update] Error:', error.message)
+  autoUpdateLog.error('electron-updater error', error)
 
   updateInfo = {
     ...updateInfo,
@@ -241,7 +259,7 @@ function checkElectronUpdaterState(): { ready: boolean; version?: string } {
       }
     }
   } catch (error) {
-    mainLog.warn('[auto-update] Error checking electron-updater state:', error)
+    autoUpdateLog.warn('Error checking electron-updater state', error)
   }
   return { ready: false }
 }
@@ -302,7 +320,7 @@ function checkForExistingDownload(): { exists: boolean; version?: string } {
     mainLog.info(`[auto-update] No existing download found in cache`)
     return { exists: false }
   } catch (error) {
-    mainLog.warn('[auto-update] Error checking for existing download:', error)
+    autoUpdateLog.warn('Error checking for existing download', error)
     return { exists: false }
   }
 }
@@ -346,7 +364,7 @@ export async function checkForUpdates(options: CheckOptions = {}): Promise<Updat
       }
     }
   } catch (error) {
-    mainLog.error('[auto-update] Check failed:', error)
+    autoUpdateLog.error('Update check failed', error)
     updateInfo = {
       ...updateInfo,
       downloadState: 'error',
@@ -373,7 +391,7 @@ export async function installUpdate(): Promise<void> {
     throw new Error('No update ready to install')
   }
 
-  mainLog.info('[auto-update] Installing update and restarting...')
+  autoUpdateLog.info('Installing update and restarting')
 
   updateInfo = { ...updateInfo, downloadState: 'installing' }
   broadcastUpdateInfo()
@@ -384,15 +402,37 @@ export async function installUpdate(): Promise<void> {
   // Set flag to prevent force exit from breaking electron-updater's shutdown sequence
   __isUpdating = true
 
+  autoUpdateLog.info('installUpdate pre-quit', {
+    electronWindowCount: BrowserWindow.getAllWindows().length,
+    latestVersion: updateInfo.latestVersion,
+  })
+
+  try {
+    beforeUpdateQuitHook?.()
+  } catch (error) {
+    autoUpdateLog.error('beforeUpdateQuit hook failed', error)
+  }
+
+  try {
+    await beforeUpdateInstallHook?.()
+  } catch (error) {
+    autoUpdateLog.error('beforeUpdateInstall cleanup hook failed', error)
+  }
+
   try {
     // isSilent=false shows the installer UI on Windows if needed (fallback)
     // isForceRunAfter=true ensures the app relaunches after install
     autoUpdater.quitAndInstall(false, true)
   } catch (error) {
     __isUpdating = false
-    mainLog.error('[auto-update] quitAndInstall failed:', error)
+    autoUpdateLog.error('quitAndInstall failed', error)
     updateInfo = { ...updateInfo, downloadState: 'error' }
     broadcastUpdateInfo()
+    try {
+      installQuitFailedHook?.()
+    } catch (hookError) {
+      autoUpdateLog.error('installQuitFailed hook failed', hookError)
+    }
     throw error
   }
 }
@@ -413,7 +453,7 @@ export interface UpdateOnLaunchResult {
  * - Auto-downloads if update available
  */
 export async function checkForUpdatesOnLaunch(): Promise<UpdateOnLaunchResult> {
-  mainLog.info('[auto-update] Checking for updates on launch...')
+  autoUpdateLog.info('Checking for updates on launch')
 
   const info = await checkForUpdates({ autoDownload: true })
 
@@ -424,7 +464,7 @@ export async function checkForUpdatesOnLaunch(): Promise<UpdateOnLaunchResult> {
   // Check if this version was dismissed by user
   const dismissedVersion = getDismissedUpdateVersion()
   if (dismissedVersion === info.latestVersion) {
-    mainLog.info(`[auto-update] Update ${info.latestVersion} was dismissed, skipping notification`)
+    autoUpdateLog.info(`Update ${info.latestVersion} was dismissed, skipping notification`)
     return { action: 'skipped', reason: 'dismissed', version: info.latestVersion }
   }
 

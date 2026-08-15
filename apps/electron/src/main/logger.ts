@@ -201,6 +201,54 @@ export const messagingGatewayLog: MessagingLogger = new StructuredMessagingGatew
   component: 'root',
 })
 
+/** Always-on update log; production disables Electron's normal file transport. */
+export const autoUpdateLogPath = join(RUNTIME_IDENTITY.logsRoot, 'auto-update.log')
+const autoUpdateBackupPath = `${autoUpdateLogPath}.1`
+const AUTO_UPDATE_LOG_MAX_BYTES = 2 * 1024 * 1024
+
+function rotateAutoUpdateLogIfNeeded(nextLineBytes: number): void {
+  if (!existsSync(autoUpdateLogPath)) return
+  try {
+    if (statSync(autoUpdateLogPath).size + nextLineBytes <= AUTO_UPDATE_LOG_MAX_BYTES) return
+    if (existsSync(autoUpdateBackupPath)) rmSync(autoUpdateBackupPath, { force: true })
+    renameSync(autoUpdateLogPath, autoUpdateBackupPath)
+  } catch (error) {
+    mainLog.warn('[auto-update] failed to rotate dedicated log', normalizeLogValue(error))
+  }
+}
+
+function writeAutoUpdateLog(level: 'info' | 'warn' | 'error', message: string, meta?: unknown): void {
+  const entry = {
+    timestamp: new Date().toISOString(),
+    level,
+    scope: 'auto-update',
+    message,
+    ...(meta !== undefined ? { meta: normalizeLogValue(meta) } : {}),
+  }
+  const line = `${JSON.stringify(entry)}\n`
+  try {
+    mkdirSync(dirname(autoUpdateLogPath), { recursive: true })
+    rotateAutoUpdateLogIfNeeded(Buffer.byteLength(line))
+    appendFileSync(autoUpdateLogPath, line, 'utf8')
+  } catch (error) {
+    mainLog.warn('[auto-update] failed to write dedicated log', normalizeLogValue(error))
+  }
+
+  if (level === 'error') mainLog.error('[auto-update]', message, entry)
+  else if (level === 'warn') mainLog.warn('[auto-update]', message, entry)
+  else if (isDebugMode) mainLog.info('[auto-update]', message, entry)
+}
+
+export const autoUpdateLog = {
+  info: (message: string, meta?: unknown) => writeAutoUpdateLog('info', message, meta),
+  warn: (message: string, meta?: unknown) => writeAutoUpdateLog('warn', message, meta),
+  error: (message: string, meta?: unknown) => writeAutoUpdateLog('error', message, meta),
+}
+
+export function getAutoUpdateLogFilePath(): string {
+  return autoUpdateLogPath
+}
+
 /**
  * Get the path to the current Electron main log file.
  * Returns undefined if file logging is disabled.

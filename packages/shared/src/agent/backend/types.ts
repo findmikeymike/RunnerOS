@@ -387,6 +387,9 @@ export interface AgentBackend {
    */
   destroy(): void;
 
+  /** Receive background task events emitted while no turn generator is active. */
+  setBackgroundEventSink?(sink: ((event: AgentEvent) => void) | null): void;
+
   /**
    * Alias for destroy() for consistency.
    */

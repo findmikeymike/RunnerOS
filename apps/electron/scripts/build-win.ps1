@@ -360,9 +360,9 @@ if ($relevantProcesses) {
 }
 Write-Host ""
 
-# NOTE: bun.exe is now copied via extraResources in electron-builder.yml
+# NOTE: bun.exe is now copied via extraResources in electron-builder.common.yml
 # This avoids EBUSY errors from the npm node module collector.
-# See electron-builder.yml for details.
+# See electron-builder.common.yml for details.
 
 # Verify bun.exe is accessible (not locked by another process)
 Write-Host "  Verifying $BunExe is accessible..."

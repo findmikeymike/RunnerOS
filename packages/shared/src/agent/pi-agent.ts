@@ -1879,9 +1879,12 @@ export class PiAgent extends BaseAgent {
         `modeVersion=${promptModeDiagnostics.modeVersion} changedBy=${promptModeDiagnostics.lastChangedBy} changedAt=${promptModeDiagnostics.lastChangedAt}`
       )
 
-      // Build context parts using centralized PromptBuilder
-      const contextParts = this.promptBuilder.buildContextParts(
-        { plansFolderPath: getSessionPlansPath(this.config.workspace.rootPath, this._sessionId) },
+      // Keep only stable context in Pi's cached system prefix. Per-turn state
+      // rides the user tail so date/source changes do not destroy cache reuse.
+      const plansFolderPath = getSessionPlansPath(this.config.workspace.rootPath, this._sessionId);
+      const stableContextParts = this.promptBuilder.buildStableContextParts();
+      const volatileContextParts = this.promptBuilder.buildVolatileContextParts(
+        { plansFolderPath },
         sourceContext
       );
 
@@ -1908,18 +1911,16 @@ export class PiAgent extends BaseAgent {
         }
       }
 
-      // For Pi, context parts go into the system prompt (not the user message).
-      // Unlike Claude, other LLMs behind Pi don't know to ignore inline context
-      // blocks and will echo <session_state>, <sources>, etc. back in their response.
       const fullSystemPrompt = [
         systemPrompt,
         this.config.customSystemPrompt,
-        ...contextParts,
+        ...stableContextParts,
       ].filter(Boolean).join('\n\n');
 
-      // User message: attachments + the actual message
+      // Volatile context is intentionally adjacent to the current user turn.
       // (skill read directive is already prepended to message by BaseAgent.chat())
       const userParts = [
+        ...volatileContextParts,
         ...attachmentParts,
         message,
       ].filter(Boolean);

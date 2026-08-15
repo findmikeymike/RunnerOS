@@ -410,3 +410,34 @@ describe('message_agent activity metadata', () => {
     })
   })
 })
+
+describe('hidden messages', () => {
+  it('omits a system wake-up prompt while preserving its assistant reply', () => {
+    resetCounters()
+    const hiddenNudge: Message = {
+      ...createUserMessage('[background-task-completed] present it'),
+      hidden: true,
+    }
+    const reply = createAssistantMessage(false, false, 'turn-reply')
+
+    const turns = groupMessagesByTurn([hiddenNudge, reply])
+
+    expect(turns.some(turn => turn.type === 'user')).toBe(false)
+    expect(turns.filter(turn => turn.type === 'assistant')).toHaveLength(1)
+  })
+
+  it('still renders a real user message beside a hidden wake-up prompt', () => {
+    resetCounters()
+    const visible = createUserMessage('real user question')
+    const hidden: Message = {
+      ...createUserMessage('[background-task-completed] hidden'),
+      hidden: true,
+    }
+
+    const turns = groupMessagesByTurn([visible, hidden])
+    const userTurns = turns.filter(turn => turn.type === 'user')
+
+    expect(userTurns).toHaveLength(1)
+    expect((userTurns[0] as { message: Message }).message.content).toBe('real user question')
+  })
+})

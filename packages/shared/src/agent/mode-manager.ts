@@ -2219,11 +2219,15 @@ function getBlockReasonWithConfig(toolName: string, config: ToolCheckConfig): st
  * errorResponse() in packages/session-tools-core/src/response.ts for the
  * full explanation of the OpenAI Responses API limitation.
  *
+ * Must remain `continue: true` with Claude SDK 0.3.220+. A false value stops
+ * the full turn before the model sees why the tool was blocked, preventing it
+ * from recovering (for example, by suggesting a mode change).
+ *
  * @param reason - The reason for blocking (from shouldAllowToolInMode)
  */
 export function blockWithReason(reason: string) {
   return {
-    continue: false,
+    continue: true,
     decision: 'block' as const,
     reason: `[ERROR] ${reason}`,
   };

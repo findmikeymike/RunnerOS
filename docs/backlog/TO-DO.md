@@ -85,6 +85,7 @@ Living, amendable queue for important RunnerOS work that does not yet have a com
 
 ### Reliability And Product Truth
 
+- [ ] **Sign and notarize public macOS installers.** This does not block local development or smoke testing. Before customer distribution, restore/import a valid `Developer ID Application` identity for team `6TWTVSA34P`, rebuild Artist OS arm64/x64 packages, pass strict signature verification, notarize, staple, and verify Gatekeeper on a clean Mac.
 - [ ] **Finish the built-in agent truth audit.** Automated contracts now cover provider agents, YouTube Intelligence, Spotify Analyst/Playlist Creator, Squad Video Director, Social Publisher engagement, and Scheduled Work/HNIC. Remaining: real app launch and representative live task proof for every visible worker.
 - [ ] **Add an integration health dashboard.** Summarize source readiness, stale sessions, missing binaries, pending approvals, recent failures, and unresolved live-verification gates without exposing secrets.
 - [ ] **Complete Outputs/Finals adoption.** YouTube Intelligence requires an HQ report Output, Squad emits a Canvas-visible storyboard, scheduled agents can require Outputs, and Spotify playlist work has a receipt/output contract. Remaining: audit every meaningful agent and migrate any chat-only or obscure-file result.

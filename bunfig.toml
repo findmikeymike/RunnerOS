@@ -1,1 +1,6 @@
 preload = ["./packages/shared/src/unified-network-interceptor.ts"]
+
+# Bun 1.3 defaults to isolated installs, but this monorepo's Vite/esbuild
+# packages share runtime peers from the workspace root.
+[install]
+linker = "hoisted"

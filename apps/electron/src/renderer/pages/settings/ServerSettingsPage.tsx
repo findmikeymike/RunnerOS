@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button'
 import { Spinner } from '@craft-agent/ui'
 import type { DetailsPageMeta } from '@/lib/navigation-registry'
 import type { ServerConfig, ServerStatus } from '@craft-agent/shared/config/server-config'
+import { DEFAULT_RPC_PORT } from '@/lib/product-identity'
 
 import {
   SettingsSection,
@@ -51,7 +52,7 @@ function configToForm(config: ServerConfig): ServerFormState {
 function formToConfig(form: ServerFormState): ServerConfig {
   return {
     enabled: form.enabled,
-    port: parseInt(form.port, 10) || 9100,
+    port: parseInt(form.port, 10) || DEFAULT_RPC_PORT,
     tlsCertPath: form.tlsCertPath.trim() || undefined,
     tlsKeyPath: form.tlsKeyPath.trim() || undefined,
     token: form.token || undefined,
@@ -63,7 +64,7 @@ export default function ServerSettingsPage() {
 
   const [form, setForm] = useState<ServerFormState>({
     enabled: false,
-    port: '9100',
+    port: String(DEFAULT_RPC_PORT),
     tlsCertPath: '',
     tlsKeyPath: '',
     token: '',

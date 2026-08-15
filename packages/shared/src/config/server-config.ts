@@ -1,3 +1,5 @@
+import { RUNTIME_IDENTITY } from './runtime-identity.ts'
+
 /**
  * Server mode configuration — controls whether the Electron app
  * accepts remote connections from other machines.
@@ -9,7 +11,7 @@
 export interface ServerConfig {
   /** Whether remote server mode is active (bind 0.0.0.0 vs 127.0.0.1) */
   enabled: boolean
-  /** Fixed port to listen on (default 9100) */
+  /** Fixed port to listen on (product-specific default) */
   port: number
   /** Path to PEM certificate file (enables TLS / wss://) */
   tlsCertPath?: string
@@ -38,7 +40,13 @@ export interface ServerStatus {
   insecureWarning: boolean
 }
 
-export const DEFAULT_SERVER_CONFIG: ServerConfig = {
-  enabled: false,
-  port: 9100,
+export function createDefaultServerConfig(
+  port: number = RUNTIME_IDENTITY.defaultRpcPort,
+): ServerConfig {
+  return {
+    enabled: false,
+    port,
+  }
 }
+
+export const DEFAULT_SERVER_CONFIG: ServerConfig = createDefaultServerConfig()

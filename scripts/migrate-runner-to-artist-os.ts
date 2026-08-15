@@ -3,6 +3,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   cpSync,
+  createReadStream,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -64,7 +65,7 @@ function parseArgs(argv: string[]): Options {
         '  --runner-root <path> override Runner root',
         '  --artist-root <path> override Artist OS root',
         '',
-        'Credentials are never copied. Source data is never moved or deleted.',
+        'Known credential stores are rejected and must be reconnected. Source data is never moved or deleted.',
       ].join('\n'));
       process.exit(0);
     } else throw new Error(`Unknown argument: ${arg}`);
@@ -93,32 +94,53 @@ function resolvePortablePath(value: string): string {
   return resolve(value);
 }
 
-function hashTree(root: string): Record<string, string> {
+async function hashFile(path: string): Promise<string> {
+  const hash = createHash('sha256');
+  for await (const chunk of createReadStream(path)) hash.update(chunk);
+  return hash.digest('hex');
+}
+
+async function hashTree(root: string): Promise<Record<string, string>> {
   const hashes: Record<string, string> = {};
-  const walk = (directory: string): void => {
+  const walk = async (directory: string): Promise<void> => {
     for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const path = join(directory, entry.name);
       const key = relative(root, path).replace(/\\/g, '/');
       const stats = lstatSync(path);
-      if (stats.isDirectory()) walk(path);
+      if (stats.isDirectory()) await walk(path);
       else if (stats.isSymbolicLink()) {
         throw new Error(`Workspace migration refuses symbolic links: ${path} -> ${readlinkSync(path)}`);
       }
-      else hashes[key] = createHash('sha256').update(readFileSync(path)).digest('hex');
+      else hashes[key] = await hashFile(path);
     }
   };
-  walk(root);
+  await walk(root);
   return hashes;
 }
 
 const SENSITIVE_FILENAMES = new Set([
   '.env',
+  '.credential-cache.json',
   'auth.json',
   'credentials.enc',
   'credentials.json',
   'credentials.key',
   'token.json',
 ]);
+
+const SENSITIVE_FILENAME_PATTERNS = [
+  /^\.env\..+$/i,
+  /^(?:client[_-]?secret|service[_-]?account).*\.json$/i,
+  /^(?:id_rsa|id_dsa|id_ecdsa|id_ed25519)(?:\..+)?$/i,
+  /\.(?:p8|p12|pfx)$/i,
+  /(?:^|[._-])private[._-]?key(?:[._-]|$)/i,
+];
+
+function isSensitiveFilename(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return SENSITIVE_FILENAMES.has(normalized)
+    || SENSITIVE_FILENAME_PATTERNS.some((pattern) => pattern.test(name));
+}
 
 function hasValues(value: unknown): boolean {
   if (typeof value === 'string') return value.trim().length > 0;
@@ -161,7 +183,7 @@ function assertWorkspaceContainsNoEmbeddedCredentials(root: string): void {
         walk(path);
         continue;
       }
-      if (SENSITIVE_FILENAMES.has(entry.name.toLowerCase())) {
+      if (isSensitiveFilename(entry.name)) {
         violations.push(relativePath);
         continue;
       }
@@ -203,7 +225,13 @@ if (isWithin(options.runnerRoot, options.artistRoot) || isWithin(options.artistR
 const runnerConfigPath = join(options.runnerRoot, 'config.json');
 if (!existsSync(runnerConfigPath)) throw new Error(`Runner config not found: ${runnerConfigPath}`);
 const runnerConfig = readConfig(runnerConfigPath);
-const selected = options.workspaceIds.map((id) => {
+const selected: Array<{
+  workspace: WorkspaceRecord;
+  source: string;
+  destination: string;
+  sourceHashes: Record<string, string>;
+}> = [];
+for (const id of options.workspaceIds) {
   const workspace = runnerConfig.workspaces.find((candidate) => candidate.id === id);
   if (!workspace) throw new Error(`Workspace not found in Runner registry: ${id}`);
   if ((workspace.artistWorkspaceScope ?? 'general') === 'general' && !options.allowGeneral) {
@@ -214,14 +242,14 @@ const selected = options.workspaceIds.map((id) => {
   assertWorkspaceContainsNoEmbeddedCredentials(source);
   const destination = join(options.artistRoot, 'workspaces', workspace.id);
   if (existsSync(destination)) throw new Error(`Destination already exists; refusing to overwrite: ${destination}`);
-  return { workspace, source, destination, sourceHashes: hashTree(source) };
-});
+  selected.push({ workspace, source, destination, sourceHashes: await hashTree(source) });
+}
 
 const preview = {
   mode: options.apply ? 'apply' : 'dry-run',
   runnerRoot: options.runnerRoot,
   artistRoot: options.artistRoot,
-  credentials: 'not-copied-reconnect-required',
+  credentials: 'known-stores-rejected-reconnect-required',
   sourceDataPolicy: 'copy-only-source-remains-untouched',
   workspaces: selected.map(({ workspace, source, destination, sourceHashes }) => ({
     id: workspace.id,
@@ -237,6 +265,20 @@ const preview = {
 if (!options.apply) {
   console.log(JSON.stringify(preview, null, 2));
   process.exit(0);
+}
+
+const STALE_STAGING_AGE_MS = 24 * 60 * 60 * 1000;
+for (const item of selected) {
+  const parent = dirname(item.destination);
+  if (!existsSync(parent)) continue;
+  const prefix = `${basename(item.destination)}.migration-`;
+  for (const entry of readdirSync(parent, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !entry.name.startsWith(prefix) || !entry.name.endsWith('.tmp')) continue;
+    const path = join(parent, entry.name);
+    if (Date.now() - lstatSync(path).mtimeMs >= STALE_STAGING_AGE_MS) {
+      rmSync(path, { recursive: true, force: true });
+    }
+  }
 }
 
 const artistConfigPath = join(options.artistRoot, 'config.json');
@@ -272,7 +314,7 @@ try {
   for (const entry of staged) {
     mkdirSync(dirname(entry.path), { recursive: true });
     cpSync(entry.item.source, entry.path, { recursive: true, errorOnExist: true, force: false, dereference: false });
-    const destinationHashes = hashTree(entry.path);
+    const destinationHashes = await hashTree(entry.path);
     if (JSON.stringify(destinationHashes) !== JSON.stringify(entry.item.sourceHashes)) {
       throw new Error(`Checksum mismatch after staging workspace ${entry.item.workspace.id}. Source remains untouched.`);
     }

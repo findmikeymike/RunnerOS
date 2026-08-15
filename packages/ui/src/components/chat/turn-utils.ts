@@ -362,9 +362,12 @@ function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | un
  * means final response.
  */
 export function groupMessagesByTurn(messages: Message[]): Turn[] {
+  // Hidden system-generated messages wake the model but never become transcript
+  // turns in desktop or viewer UIs.
+  const visibleMessages = messages.filter(message => !message.hidden)
   // Sort by timestamp for correct chronological order
   // This ensures correct turn grouping even if messages are added out of order during streaming
-  const sortedMessages = [...messages].sort((a, b) => a.timestamp - b.timestamp)
+  const sortedMessages = [...visibleMessages].sort((a, b) => a.timestamp - b.timestamp)
 
   const turns: Turn[] = []
   let currentTurn: AssistantTurn | null = null

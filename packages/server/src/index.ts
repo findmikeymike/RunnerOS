@@ -57,6 +57,7 @@ process.env.CRAFT_IS_PACKAGED ??= 'false'
 process.env['CRAFT_PRODUCT_VARIANT'] = RUNTIME_IDENTITY.variant
 process.env['CRAFT_CONFIG_DIR'] = RUNTIME_IDENTITY.dataRoot
 process.env['CRAFT_GLOBAL_SKILLS_DIR'] = RUNTIME_IDENTITY.skillsDir
+process.env['CRAFT_INTEGRATION_CACHE_ROOT'] = RUNTIME_IDENTITY.integrationCacheRoot
 if (RUNTIME_IDENTITY.variant === 'artist-os') {
   process.env['SOCIAL_HOME'] = RUNTIME_IDENTITY.socialDataRoot
 }

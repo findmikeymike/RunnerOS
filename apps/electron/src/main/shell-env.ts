@@ -12,10 +12,26 @@
 import { execSync } from 'child_process'
 import { mainLog } from './logger'
 
-// Environment variables that should NOT be imported from the shell
-// VITE_* vars from dev mode would make packaged app try to load from localhost
+// Product-boundary variables must come from the launching process and the
+// sealed RuntimeIdentity in bootstrap.ts. Importing them from shell startup
+// files could silently make one product's subprocesses use the other product's
+// paths, ports, libraries, or accounts.
+const PRODUCT_BOUNDARY_ENV_VARS = new Set([
+  'CRAFT_PRODUCT_VARIANT',
+  'CRAFT_CONFIG_DIR',
+  'CRAFT_GLOBAL_SKILLS_DIR',
+  'CRAFT_INTEGRATION_CACHE_ROOT',
+  'CRAFT_DEEPLINK_SCHEME',
+  'CRAFT_APP_NAME',
+  'CRAFT_RPC_PORT',
+  'CRAFT_TRIGGER_PORT',
+  'CRAFT_TRIGGER_HOST',
+  'SOCIAL_HOME',
+])
+
+// VITE_* vars from dev mode would make packaged app try to load from localhost.
 const shouldSkipEnvVar = (key: string): boolean => {
-  return key.startsWith('VITE_')
+  return key.startsWith('VITE_') || PRODUCT_BOUNDARY_ENV_VARS.has(key)
 }
 
 /**

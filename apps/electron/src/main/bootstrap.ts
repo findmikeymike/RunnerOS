@@ -12,12 +12,12 @@ async function bootstrap(): Promise<void> {
     CRAFT_PRODUCT_VARIANT: RUNTIME_IDENTITY.variant,
     CRAFT_CONFIG_DIR: RUNTIME_IDENTITY.dataRoot,
     CRAFT_GLOBAL_SKILLS_DIR: RUNTIME_IDENTITY.skillsDir,
+    CRAFT_INTEGRATION_CACHE_ROOT: RUNTIME_IDENTITY.integrationCacheRoot,
   });
 
   if (RUNTIME_IDENTITY.variant === 'artist-os') {
     process.env['CRAFT_DEEPLINK_SCHEME'] = RUNTIME_IDENTITY.deeplinkScheme;
     process.env['CRAFT_APP_NAME'] = RUNTIME_IDENTITY.productName;
-    process.env['CRAFT_RPC_PORT'] ??= String(RUNTIME_IDENTITY.defaultRpcPort);
     process.env['CRAFT_TRIGGER_PORT'] ??= String(RUNTIME_IDENTITY.defaultTriggerPort);
     process.env['SOCIAL_HOME'] = RUNTIME_IDENTITY.socialDataRoot;
 

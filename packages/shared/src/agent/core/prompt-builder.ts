@@ -56,8 +56,8 @@ export class PromptBuilder {
   // ============================================================
 
   /**
-   * Build all context parts for a user message.
-   * Returns an array of strings that should be prepended to the user message.
+   * Build all context parts for a user message. Volatile blocks remain first so
+   * the Claude path is byte-for-byte compatible with the pre-split order.
    *
    * @param options - Context building options
    * @param sourceStateBlock - Pre-formatted source state (from SourceManager)
@@ -67,9 +67,20 @@ export class PromptBuilder {
     options: ContextBlockOptions,
     sourceStateBlock?: string
   ): string[] {
+    return [
+      ...this.buildVolatileContextParts(options, sourceStateBlock),
+      ...this.buildStableContextParts(),
+    ];
+  }
+
+  /** Per-turn context that must not invalidate Pi's cached system prefix. */
+  buildVolatileContextParts(
+    options: ContextBlockOptions,
+    sourceStateBlock?: string
+  ): string[] {
     const parts: string[] = [];
 
-    // Add date/time context first (enables prompt caching)
+    // These blocks change between turns and belong in the user-message tail.
     parts.push(getDateTimeContext());
 
     // Add session state (permission mode, plans folder path, data folder path)
@@ -88,6 +99,13 @@ export class PromptBuilder {
     if (sourceStateBlock) {
       parts.push(sourceStateBlock);
     }
+
+    return parts;
+  }
+
+  /** Session-stable context that can safely live in Pi's cached system prefix. */
+  buildStableContextParts(): string[] {
+    const parts: string[] = [];
 
     // Add workspace capabilities
     parts.push(this.formatWorkspaceCapabilities());

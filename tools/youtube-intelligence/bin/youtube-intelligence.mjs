@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -192,7 +191,11 @@ function firstExisting(paths) {
 }
 
 function defaultCacheDir() {
-  return join(homedir(), '.cache', 'runneros', 'youtube-intelligence', 'transcripts');
+  const cacheRoot = process.env.CRAFT_INTEGRATION_CACHE_ROOT?.trim();
+  if (!cacheRoot) {
+    throw new Error('CRAFT_INTEGRATION_CACHE_ROOT or --cache-dir is required for transcript cache isolation');
+  }
+  return join(resolve(cacheRoot), 'youtube-intelligence', 'transcripts');
 }
 
 function cacheFileFor(videoId, lang, cacheDir) {
@@ -230,7 +233,11 @@ function writeCachedTranscript(videoId, lang, transcript, cacheDir) {
 
 function supadataApiKey() {
   if (process.env.SUPADATA_API_KEY?.trim()) return process.env.SUPADATA_API_KEY.trim();
-  const cachePath = join(homedir(), '.config', 'runneros', 'youtube-intelligence', 'credentials.json');
+  const cacheRoot = process.env.CRAFT_INTEGRATION_CACHE_ROOT?.trim();
+  // Credential caches are product-owned. Without an explicit root, use no
+  // cached credential rather than guessing another product's legacy path.
+  if (!cacheRoot) return '';
+  const cachePath = join(resolve(cacheRoot), 'youtube-intelligence', 'credentials.json');
   if (!existsSync(cachePath)) return '';
   try {
     const parsed = JSON.parse(readFileSync(cachePath, 'utf8'));
@@ -914,14 +921,19 @@ function compile(args) {
 function doctor() {
   const research = youtubeResearchPath();
   const supadataConfigured = Boolean(supadataApiKey());
+  const integrationCacheRoot = process.env.CRAFT_INTEGRATION_CACHE_ROOT?.trim();
   jsonOut({
     ok: true,
     toolDir,
-    cacheDir: defaultCacheDir(),
+    cacheDir: integrationCacheRoot
+      ? join(resolve(integrationCacheRoot), 'youtube-intelligence', 'transcripts')
+      : null,
     supadata: {
       configured: supadataConfigured,
       env: Boolean(process.env.SUPADATA_API_KEY?.trim()),
-      configPath: join(homedir(), '.config', 'runneros', 'youtube-intelligence', 'credentials.json'),
+      configPath: integrationCacheRoot
+        ? join(resolve(integrationCacheRoot), 'youtube-intelligence', 'credentials.json')
+        : null,
     },
     youtubeResearch: {
       path: research,

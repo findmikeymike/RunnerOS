@@ -222,6 +222,10 @@ interface ChatDisplayProps {
   // Lazy loading
   /** When true, messages are still loading - show spinner in messages area */
   messagesLoading?: boolean
+  /** Message load failure shown in place of an infinite spinner. */
+  messagesLoadError?: string | null
+  messagesRetrying?: boolean
+  onRetryMessagesLoad?: () => void
   // Tutorial
   /** Disable send action (for tutorial guidance) */
   disableSend?: boolean
@@ -481,6 +485,9 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
   sessionFolderPath,
   // Lazy loading
   messagesLoading = false,
+  messagesLoadError,
+  messagesRetrying = false,
+  onRetryMessagesLoad,
   // Tutorial
   disableSend = false,
   // Search highlighting
@@ -1637,7 +1644,7 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                     transition={compactMode ? { duration: 0 } : { duration: 0.1, ease: 'easeOut' }}
                   >
                     {/* Loading/Content AnimatePresence: Handles spinner ↔ content transition */}
-                    <AnimatePresence mode={compactMode ? "sync" : "wait"} initial={false}>
+                    <AnimatePresence mode="sync" initial={false}>
                     {messagesLoading ? (
                       /* Loading State: Show spinner while messages are being lazy loaded */
                       <motion.div
@@ -1649,6 +1656,30 @@ export const ChatDisplay = React.forwardRef<ChatDisplayHandle, ChatDisplayProps>
                         className="flex items-center justify-center h-64"
                       >
                         <Spinner className="text-foreground/30" />
+                      </motion.div>
+                    ) : messagesLoadError ? (
+                      <motion.div
+                        key="load-error"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="flex h-64 items-center justify-center px-4"
+                      >
+                        <div className="max-w-sm rounded-lg border border-destructive/20 px-4 py-3 text-center">
+                          <AlertTriangle className="mx-auto mb-2 h-4 w-4 text-destructive/70" />
+                          <div className="text-sm font-medium text-destructive">Failed to load conversation</div>
+                          <p className="mt-1 break-words text-xs text-destructive/70">{messagesLoadError}</p>
+                          {onRetryMessagesLoad && (
+                            <button
+                              type="button"
+                              onClick={onRetryMessagesLoad}
+                              disabled={messagesRetrying}
+                              className="mt-3 rounded border border-destructive/20 px-2 py-0.5 text-xs text-destructive/70 hover:border-destructive/40 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {messagesRetrying ? 'Retrying…' : 'Retry'}
+                            </button>
+                          )}
+                        </div>
                       </motion.div>
                     ) : (
                     /* Turn-based Message Display - memoized to avoid re-grouping on every render */

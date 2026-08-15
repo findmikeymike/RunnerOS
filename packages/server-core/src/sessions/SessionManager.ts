@@ -7,7 +7,7 @@ import { basename, dirname, join } from 'path'
 import { existsSync } from 'fs'
 import { readFile, writeFile, mkdir, rename } from 'fs/promises'
 import { randomUUID } from 'node:crypto'
-import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary } from '@craft-agent/shared/agent'
+import { type AgentEvent, setPermissionMode, hydratePreviousPermissionMode, getPermissionModeDiagnostics, type PermissionMode, unregisterSessionScopedToolCallbacks, mergeSessionScopedToolCallbacks, AbortReason, type AuthRequest, type AuthResult, type CredentialAuthRequest, type BrowserPaneFns, generateConversationSummary, resolveKeepBackgroundTasksAlive } from '@craft-agent/shared/agent'
 import {
   resolveSessionConnection,
   createBackendFromConnection,
@@ -1656,6 +1656,7 @@ export class SessionManager implements ISessionManager {
   private initGate = new InitGate()
   // O(1) index: taskId → sessionId for background task output lookup (avoids O(n) session scan)
   private taskOutputIndex: Map<string, string> = new Map()
+  private readonly keepBackgroundTasksAlive = resolveKeepBackgroundTasksAlive()
 
   private async acquireSendMessageAdmissionLock(sessionId: string): Promise<() => void> {
     const previous = this.sendMessageAdmissionLocks.get(sessionId) ?? Promise.resolve()
@@ -5715,6 +5716,12 @@ user a clickable link to where the thing now lives.`
         sessionLog.info(msg)
       }
 
+      managed.agent.setBackgroundEventSink?.((event) => {
+        void this.processEvent(managed, event).catch((error) => {
+          sessionLog.error(`Failed to process background event for session ${managed.id}:`, error)
+        })
+      })
+
       // Unified auth callback — replaces per-backend onChatGptAuthRequired/onGithubAuthRequired
       managed.agent.onBackendAuthRequired = (reason: string) => {
         sessionLog.warn(`Backend auth required for session ${managed.id}: ${reason}`)
@@ -8794,6 +8801,7 @@ user a clickable link to where the thing now lives.`
           attachments: storedAttachments,
           badges: options?.badges,
           displayIntent: options?.displayIntent,
+          ...(options?.hidden ? { hidden: true } : {}),
         }
         managed.messages.push(userMessage)
 
@@ -8841,11 +8849,14 @@ user a clickable link to where the thing now lives.`
           attachments: storedAttachments, // Include for persistence (has thumbnailBase64)
           badges: options?.badges,  // Include content badges (sources, skills with embedded icons)
           displayIntent: options?.displayIntent,
+          ...(options?.hidden ? { hidden: true } : {}),
         }
         managed.messages.push(userMessage)
 
-        // Update lastMessageRole for badge display
-        managed.lastMessageRole = 'user'
+        // Keep an invisible system nudge out of the session-list preview.
+        if (!options?.hidden) {
+          managed.lastMessageRole = 'user'
+        }
 
         // Persist + flush before announcing — the user message must be
         // genuinely on disk before we tell the renderer "accepted", and
@@ -10601,7 +10612,8 @@ user a clickable link to where the thing now lives.`
         }, workspaceId)
         break
 
-      case 'task_completed':
+      case 'task_completed': {
+        const wasAlreadyTerminal = managed?.backgroundTaskOutputs.has(event.taskId) ?? false
         // Store output for later retrieval via getTaskOutput()
         if (managed) {
           managed.backgroundTaskOutputs.set(event.taskId, {
@@ -10629,7 +10641,18 @@ user a clickable link to where the thing now lives.`
           ...event,
           sessionId,
         }, workspaceId)
+
+        if (this.keepBackgroundTasksAlive && managed && !managed.isProcessing && !wasAlreadyTerminal) {
+          const outcome = event.status === 'completed' ? 'completed' : event.status
+          const outputHint = event.outputFile ? ` Output: ${event.outputFile}.` : ''
+          const summaryHint = event.summary ? ` Summary: ${event.summary}` : ''
+          const nudge = `<system-reminder>Background task ${event.taskId} ${outcome}.${outputHint}${summaryHint} Review the result and surface the useful outcome to the user. Do not claim success without checking the output. Do not spawn another background task; inspect this result directly.</system-reminder>`
+          void this.sendMessage(sessionId, nudge, [], [], { hidden: true }).catch((error) => {
+            sessionLog.error(`Failed to surface completed background task ${event.taskId}:`, error)
+          })
+        }
         break
+      }
 
       case 'shell_backgrounded':
         // Store the command for later process killing

@@ -1,9 +1,14 @@
-extends: ./electron-builder.yml
+extends: ./electron-builder.common.yml
 
 appId: com.findmikeymike.artistos
 productName: Artist OS
 copyright: Copyright © 2026 Artist OS
 artifactName: Artist-OS-${version}-${arch}.${ext}
+
+protocols:
+  - name: Artist OS URL
+    schemes:
+      - artistos
 
 directories:
   output: release-artist-os
