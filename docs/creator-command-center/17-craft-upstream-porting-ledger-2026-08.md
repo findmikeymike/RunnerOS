@@ -1,7 +1,7 @@
 ---
 status: current
 owner: agent
-last_verified: 2026-08-14
+last_verified: 2026-08-20
 source_of_truth: true
 upstream_baseline: craft-agents-oss v0.11.4
 ---
@@ -27,12 +27,12 @@ Audit window: Craft OSS `v0.9.0` through `v0.11.4` (April 30–August 6, 2026). 
 | Daily config backups, first snapshot per day, newest three retained | v0.10.4 | `packages/shared/src/config/storage.ts` | Config tests and startup smoke |
 | Product-specific embedded server defaults | local isolation adaptation | `packages/shared/src/config/server-config.ts`; `packages/shared/src/config/__tests__/server-config.test.ts`; `packages/server/src/index.ts`; `packages/server-core/src/bootstrap/headless-start.ts` | Runner/Artist identity tests and two-server smoke |
 | Stale lock validates executable identity, not PID alone | v0.11.3 | `packages/server-core/src/bootstrap/lock-identity.ts`; `packages/server-core/src/bootstrap/lock-identity.test.ts`; `packages/server-core/src/bootstrap/headless-start.ts` | Lock identity tests |
-| Claude Agent SDK `0.3.220` | v0.11.3 | root `package.json`; `packages/core/package.json`; `packages/shared/package.json`; `bun.lock` | Typecheck, active-chat/cancel/resume smoke required |
+| Claude Agent SDK `0.3.220` | v0.11.3 | root `package.json`; `packages/core/package.json`; `packages/shared/package.json`; `bun.lock` | Typechecks passed; live Sonnet active-chat/cancel/resume smoke passed 2026-08-20 |
 | Pi SDK `0.80.6` | v0.11.1 | root `package.json`; `packages/shared/package.json`; `packages/server-core/package.json`; `packages/pi-agent-server/package.json`; `bun.lock` | Typecheck and Pi chat/tool smoke required |
 | Pi prompt-cache stable/volatile split | v0.10.2 | `packages/shared/src/agent/core/prompt-builder.ts`; `packages/shared/src/agent/pi-agent.ts`; `packages/shared/src/agent/__tests__/prompt-builder-context-split.test.ts` | Unit tests |
 | Retryable session transcript loading | v0.9.0 | `apps/electron/src/renderer/lib/session-load.ts`; `apps/electron/src/renderer/lib/__tests__/session-load.test.ts`; `apps/electron/src/renderer/pages/ChatPage.tsx`; `apps/electron/src/renderer/components/app-shell/ChatDisplay.tsx` | Unit tests plus manual Retry smoke |
-| Background Claude agents survive turn boundaries | v0.11.0 | `packages/shared/src/agent/backend/claude/persistent-input.ts`; `packages/shared/src/agent/backend/claude/persistent-input.test.ts`; `packages/shared/src/agent/backend/claude/task-notification.ts`; `packages/shared/src/agent/claude-agent.ts`; `packages/shared/src/agent/backend/types.ts`; `packages/server-core/src/sessions/SessionManager.ts` | Stream/classifier tests plus multi-turn live smoke required |
-| Idle background completion wakes session and surfaces checked result | v0.11.0 | `packages/server-core/src/sessions/SessionManager.ts`; `packages/server-core/src/sessions/background-task-surface.test.ts`; hidden-message contract in `packages/shared/src/protocol/dto.ts` and `packages/core/src/types/message.ts`; transcript filtering in `packages/ui/src/components/chat/turn-utils.ts`; existing renderer task handling in `apps/electron/src/renderer/App.tsx`, `atoms/sessions.ts`, `components/app-shell/ActiveTasksBar.tsx` | Wake/duplicate/hidden-message regression tests plus live idle-completion smoke required |
+| Background Claude agents survive turn boundaries | v0.11.0 | `packages/shared/src/agent/backend/claude/persistent-input.ts`; `packages/shared/src/agent/backend/claude/persistent-input.test.ts`; `packages/shared/src/agent/backend/claude/task-notification.ts`; `packages/shared/src/agent/claude-agent.ts`; `packages/shared/src/agent/backend/types.ts`; `packages/server-core/src/sessions/SessionManager.ts` | Stream/classifier tests passed; live Sonnet child completed after the parent turn ended on 2026-08-20 |
+| Idle background completion wakes session and surfaces checked result | v0.11.0 | `packages/server-core/src/sessions/SessionManager.ts`; `packages/server-core/src/sessions/background-task-surface.test.ts`; hidden-message contract in `packages/shared/src/protocol/dto.ts` and `packages/core/src/types/message.ts`; transcript filtering in `packages/ui/src/components/chat/turn-utils.ts`; existing renderer task handling in `apps/electron/src/renderer/App.tsx`, `atoms/sessions.ts`, `components/app-shell/ActiveTasksBar.tsx` | Regression tests and live completion/open-child/reload smoke passed 2026-08-20 |
 | Explore-mode blocked tools return control to model | v0.11.4 compatibility fix for SDK 0.3.220 | `packages/shared/src/agent/mode-manager.ts`; `packages/shared/src/agent/__tests__/mode-manager-block.test.ts` | Unit test and Explore-mode smoke required |
 | Always-on, product-isolated updater log | v0.10.4 | `apps/electron/src/main/logger.ts`; `apps/electron/src/main/auto-update.ts` | Inspect active product's `logs/auto-update.log` |
 | Installer handoff cleanup and failed-handoff relaunch | v0.11.3 | `apps/electron/src/main/auto-update.ts`; `apps/electron/src/main/index.ts` | Packaged update smoke required |
@@ -64,6 +64,15 @@ Use these only as evidence and diff references; current files have moved and inc
 - `3808f162d` — large-response safeguards.
 - `c7c5f9d6a` — reliability gap fixes.
 - `c045559c8` — Claude native SDK release packaging.
+
+## Live Claude Proof — 2026-08-20
+
+- Connection/model: Claude Max, Sonnet 4.6. No Opus or Fable credits used.
+- Background lifecycle: a `critic` child returned `BG_CHILD_OK` after its parent turn had already completed; the parent updated to one compact finished card and opened the correct child session.
+- Transcript UX: commits `fe1c635bf` and `1813a40ce` hide receipt/session plumbing and model-only delegation protocol while preserving durable storage and resume context.
+- Active cancellation: a streaming response stopped through the shipped `Stop response` control and rendered `Response interrupted`.
+- Same-session resume: the next message in that exact session completed with `RESUME_OK`.
+- Reload: the assigned-task brief and completed output survived a renderer reload.
 
 ## Evaluated but Not Ported
 

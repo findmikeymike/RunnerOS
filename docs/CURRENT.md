@@ -1,7 +1,7 @@
 ---
 status: active
 owner: agent
-last_verified: 2026-08-04
+last_verified: 2026-08-20
 source_of_truth: true
 ---
 
@@ -9,15 +9,17 @@ source_of_truth: true
 
 ## Snapshot
 
-- Date: 2026-08-04
+- Date: 2026-08-20
 - Worktree: `/Users/michaelb.williams/RunnerOS/.worktrees/integration/creator-social-integration`
-- Branch: `codex/hq-home-compact-ui`
-- Implementation head: `fa5c7d5b feat(campaign): connect release tasks to workers`
-- Remote: 10 commits ahead of `origin/codex/creator-social-integration`; intentionally unpushed.
+- Branch: `codex/artist-os-runtime-isolation`
+- Implementation head: `1813a40ce feat: hide background agent protocol details`
+- Remote: 2 commits ahead of `origin/codex/artist-os-runtime-isolation`; intentionally unpushed.
 - Current goal: manual Electron smoke of HQ Home, Campaign Release Board routing, default workflows, and the daily social-reply automation.
 - Overall state: integrated beta. Core product foundations are built; live-provider proof, packaging, Creative Lab, Team Mode, and Windows remain.
 
 ## Recently Completed
+
+- Verified Claude Sonnet background completion after the parent turn, compact parent status, child-session opening, interruption, same-session resume, and renderer reload. Internal receipt/session plumbing and delegation protocol are now hidden from the normal transcript while remaining durably stored for runtime use.
 
 - Compacted Artist HQ Home into a focused operational dashboard backed by persisted State of Play, Spotify, YouTube Intel, Calendar, Finals, projects, workers, signals, and needs-attention data.
 - Restored the stronger campaign-style HQ header, added optional banner upload, and aligned Spotify / Intel pulse cards with matching manual Run controls.
