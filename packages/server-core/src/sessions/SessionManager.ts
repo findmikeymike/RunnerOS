@@ -6945,7 +6945,10 @@ user a clickable link to where the thing now lives.`
               prompt,
               undefined,
               undefined,
-              options?.skillSlugs?.length ? { skillSlugs: options.skillSlugs } : undefined,
+              {
+                ...(options?.skillSlugs?.length ? { skillSlugs: options.skillSlugs } : {}),
+                displayIntent: options?.displayIntent,
+              },
             ),
             abortSession: async (sessionId) => {
               const target = this.sessions.get(sessionId)

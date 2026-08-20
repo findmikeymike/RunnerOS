@@ -21,6 +21,7 @@ import { FileTypeIcon, getFileTypeLabel } from './attachment-helpers'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../tooltip'
 import { useTranslation } from 'react-i18next'
 import { BackgroundAgentNotice } from './BackgroundAgentNotice'
+import { DelegatedTaskBrief, isDelegatedAgentPrompt } from './DelegatedTaskBrief'
 
 // Fallback text icons for badges without iconDataUrl
 // Using simple characters since SVG rendering may not work in all contexts
@@ -430,6 +431,10 @@ export function UserMessageBubble({
         />
       </div>
     )
+  }
+
+  if (displayIntent === 'agent-delegation-task' || isDelegatedAgentPrompt(content)) {
+    return <DelegatedTaskBrief content={content} className={className} />
   }
 
   // Strip edit_request content from the displayed text

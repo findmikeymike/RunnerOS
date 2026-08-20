@@ -283,7 +283,7 @@ export interface Message {
   // Content badges for inline display (sources, skills)
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
-  displayIntent?: 'canvas-visual-review' | 'agent-message-passive';
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task';
   // System-generated prompt that drives a turn but must not render as user text.
   hidden?: boolean;
   // Structured metadata for agent-message notices. Avoid parsing trusted actions from text.
@@ -377,7 +377,7 @@ export interface StoredMessage {
   /** Content badges for inline display (sources, skills) */
   badges?: ContentBadge[];
   // UI-only display intent for internal/user-proxy messages that need custom rendering.
-  displayIntent?: 'canvas-visual-review' | 'agent-message-passive';
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task';
   // Structured metadata for agent-message notices.
   agentMessage?: AgentMessageNoticeMetadata;
   /** Annotations persisted at message level */

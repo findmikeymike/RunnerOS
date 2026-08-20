@@ -13,6 +13,7 @@ export { TurnCardActionsMenu, type TurnCardActionsMenuProps } from './TurnCardAc
 export { SessionViewer, type SessionViewerProps, type SessionViewerMode } from './SessionViewer'
 export { UserMessageBubble, type UserMessageBubbleProps } from './UserMessageBubble'
 export { BackgroundAgentNotice, getBackgroundAgentStatusText, type BackgroundAgentNoticeProps } from './BackgroundAgentNotice'
+export { DelegatedTaskBrief, isDelegatedAgentPrompt, parseDelegatedTaskBrief, type DelegatedTaskBriefData, type DelegatedTaskBriefProps } from './DelegatedTaskBrief'
 export { SystemMessage, type SystemMessageProps, type SystemMessageType } from './SystemMessage'
 
 // Attachment helpers

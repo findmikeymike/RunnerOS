@@ -230,7 +230,7 @@ export interface SendMessageOptions {
   skillSlugs?: string[]
   badges?: ContentBadge[]
   optimisticMessageId?: string
-  displayIntent?: 'canvas-visual-review' | 'agent-message-passive'
+  displayIntent?: 'canvas-visual-review' | 'agent-message-passive' | 'agent-delegation-task'
   /** Drive a model turn without rendering this system-generated prompt. */
   hidden?: boolean
 }

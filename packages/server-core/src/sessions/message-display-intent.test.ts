@@ -38,4 +38,19 @@ describe('message display intent', () => {
     expect(storedToMessage(stored).displayIntent).toBe('agent-message-passive');
     expect(storedToMessage(stored).agentMessage?.receiptId).toBe('receipt-1');
   });
+
+  it('persists delegated task display intent across reload conversion', () => {
+    const message: Message = {
+      id: 'msg-3',
+      role: 'user',
+      content: 'You are executing a delegated RunnerOS agent message.\n\nTask:\nReview this.',
+      timestamp: 123,
+      displayIntent: 'agent-delegation-task',
+    };
+
+    const stored = messageToStored(message);
+    expect(stored.displayIntent).toBe('agent-delegation-task');
+    expect(storedToMessage(stored).displayIntent).toBe('agent-delegation-task');
+    expect(storedToMessage(stored).content).toContain('Task:\nReview this.');
+  });
 });

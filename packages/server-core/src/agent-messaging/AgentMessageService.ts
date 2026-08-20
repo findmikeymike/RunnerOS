@@ -33,7 +33,10 @@ export interface AgentMessageRuntimeContext {
 export interface AgentMessageServiceDeps {
   createSession: (workspaceId: string, options: CreateSessionOptions) => Promise<{ id: string }>;
   resolveAgentSessionOptions: (workspaceId: string, agentSlug: string) => Promise<Partial<CreateSessionOptions>>;
-  sendMessage: (sessionId: string, prompt: string, options?: { skillSlugs?: string[] }) => Promise<void>;
+  sendMessage: (sessionId: string, prompt: string, options?: {
+    skillSlugs?: string[];
+    displayIntent?: 'agent-delegation-task';
+  }) => Promise<void>;
   abortSession: (sessionId: string) => Promise<void>;
   getLastAssistantText: (sessionId: string) => string;
   getSessionToolUseSummary: (sessionId: string) => { count: number; names: string[] };
@@ -272,7 +275,10 @@ export class AgentMessageService {
       persist();
 
       const prompt = buildDelegationPrompt(input, runtime);
-      const startSend = () => this.deps.sendMessage(child.id, prompt, { skillSlugs: input.skillSlugs });
+      const startSend = () => this.deps.sendMessage(child.id, prompt, {
+        skillSlugs: input.skillSlugs,
+        displayIntent: 'agent-delegation-task',
+      });
       const finish = (sendPromise: Promise<void>) => this.finishDelegatedTurn({
         receipt,
         input,

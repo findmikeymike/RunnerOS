@@ -53,13 +53,15 @@ describe('AgentMessageService', () => {
   test('creates hidden child session and persists succeeded receipt', async () => {
     const created: unknown[] = [];
     const sent: string[] = [];
+    const sendOptions: unknown[] = [];
     const service = new AgentMessageService(deps({
       createSession: async (_workspaceId, options) => {
         created.push(options);
         return { id: 'child-1' };
       },
-      sendMessage: async (_sessionId, prompt) => {
+      sendMessage: async (_sessionId, prompt, options) => {
         sent.push(prompt);
+        sendOptions.push(options);
       },
     }));
 
@@ -96,6 +98,7 @@ describe('AgentMessageService', () => {
     expect(sent[0]).toContain('Parent session ID: parent');
     expect(sent[0]).toContain('use send_agent_message with sessionId "parent" and deliveryMode "passive"');
     expect(sent[0]).toContain('Still return the requested final result');
+    expect(sendOptions[0]).toMatchObject({ displayIntent: 'agent-delegation-task' });
     expect(readAgentMessageReceipt(root, result.receiptId!)?.status).toBe('succeeded');
   });
 
