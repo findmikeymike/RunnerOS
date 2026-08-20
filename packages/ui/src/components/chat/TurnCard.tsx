@@ -1202,7 +1202,7 @@ function ActivityRow({ activity, onOpenDetails, isLastChild, sessionFolderPath, 
             className="ml-1 inline-flex shrink-0 items-center gap-1 rounded-[6px] border border-white/[0.08] bg-white/[0.045] px-1.5 py-0.5 text-[10px] text-white/62 transition-colors hover:bg-white/[0.075] hover:text-white/82"
           >
             <ExternalLink className="h-3 w-3" aria-hidden="true" />
-            <span>Open subagent</span>
+            <span>Open background agent</span>
           </button>
         )}
         {/* No spacer needed - both MCP/API and native tools now have flex-1 on their compound spans */}

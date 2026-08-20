@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Clock, ExternalLink } from 'lucide-react'
+import { Clock } from 'lucide-react'
 import type { StoredAttachment, ContentBadge } from '@craft-agent/core'
 import { normalizePath } from '@craft-agent/core/utils'
 import { cn } from '../../lib/utils'
@@ -20,6 +20,7 @@ import { Markdown } from '../markdown'
 import { FileTypeIcon, getFileTypeLabel } from './attachment-helpers'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../tooltip'
 import { useTranslation } from 'react-i18next'
+import { BackgroundAgentNotice } from './BackgroundAgentNotice'
 
 // Fallback text icons for badges without iconDataUrl
 // Using simple characters since SVG rendering may not work in all contexts
@@ -420,6 +421,17 @@ export function UserMessageBubble({
     ? agentMessage?.childSessionId ?? extractChildSessionId(content)
     : null
 
+  if (displayIntent === 'agent-message-passive') {
+    return (
+      <div className={cn('flex w-full justify-end', className)}>
+        <BackgroundAgentNotice
+          agentMessage={{ ...agentMessage, childSessionId: childSessionId ?? undefined }}
+          onOpen={onOpenSubagentSession}
+        />
+      </div>
+    )
+  }
+
   // Strip edit_request content from the displayed text
   // Each badge has start/end positions marking where to remove content
   let displayContent = content
@@ -538,16 +550,6 @@ export function UserMessageBubble({
           )
         }
       </div>
-      {childSessionId && onOpenSubagentSession && (
-        <button
-          type="button"
-          onClick={() => onOpenSubagentSession(childSessionId)}
-          className="inline-flex items-center gap-1.5 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2.5 py-1.5 text-xs text-white/62 transition-colors hover:bg-white/[0.075] hover:text-white/82"
-        >
-          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>Open subagent</span>
-        </button>
-      )}
     </div>
   )
 }

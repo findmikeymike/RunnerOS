@@ -50,6 +50,7 @@ import type { ThinkingLevel } from "@craft-agent/shared/agent/thinking-levels"
 import {
   TurnCard,
   UserMessageBubble,
+  BackgroundAgentNotice,
   groupMessagesByTurn,
   formatTurnAsMarkdown,
   formatActivityAsMarkdown,
@@ -2491,6 +2492,19 @@ function MessageBubble({
       )
     }
 
+    if (message.displayIntent === 'agent-message-passive') {
+      const childSessionId = message.agentMessage?.childSessionId
+        ?? extractPassiveAgentChildSessionId(message.content)
+      return (
+        <div className="flex justify-start px-3 py-1">
+          <BackgroundAgentNotice
+            agentMessage={{ ...message.agentMessage, childSessionId: childSessionId ?? undefined }}
+            onOpen={onOpenSubagentSession}
+          />
+        </div>
+      )
+    }
+
     const level = message.infoLevel || 'info'
     const config = {
       info: { icon: Info, className: 'text-muted-foreground' },
@@ -2499,9 +2513,6 @@ function MessageBubble({
       success: { icon: CheckCircle2, className: 'text-success' },
     }[level]
     const Icon = config.icon
-    const childSessionId = message.displayIntent === 'agent-message-passive'
-      ? message.agentMessage?.childSessionId ?? extractPassiveAgentChildSessionId(message.content)
-      : null
 
     return (
       <div className={cn('flex items-center gap-2 px-3 py-1 text-[13px] select-none', config.className)}>
@@ -2509,16 +2520,6 @@ function MessageBubble({
           <Icon className="w-3 h-3" />
         </div>
         <span className="whitespace-pre-wrap">{message.content}</span>
-        {childSessionId && onOpenSubagentSession && (
-          <button
-            type="button"
-            onClick={() => onOpenSubagentSession(childSessionId)}
-            className="ml-1 inline-flex items-center gap-1 rounded-[8px] border border-white/[0.08] bg-white/[0.045] px-2 py-1 text-xs text-white/62 transition-colors hover:bg-white/[0.075] hover:text-white/82"
-          >
-            <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Open subagent</span>
-          </button>
-        )}
       </div>
     )
   }

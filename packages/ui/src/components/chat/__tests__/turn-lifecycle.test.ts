@@ -441,3 +441,67 @@ describe('hidden messages', () => {
     expect((userTurns[0] as { message: Message }).message.content).toBe('real user question')
   })
 })
+
+describe('passive background-agent notices', () => {
+  it('keeps only the latest lifecycle state for the same receipt', () => {
+    resetCounters()
+    const started: Message = {
+      id: 'agent-started',
+      role: 'info',
+      content: 'Background agent "critic" started.\nreceiptId: receipt-1\nchildSessionId: child-1',
+      timestamp: 100,
+      displayIntent: 'agent-message-passive',
+      agentMessage: {
+        receiptId: 'receipt-1',
+        childSessionId: 'child-1',
+        targetAgentSlug: 'critic',
+        status: 'running',
+      },
+    }
+    const finished: Message = {
+      ...started,
+      id: 'agent-finished',
+      content: 'Background agent "critic" finished.\nreceiptId: receipt-1\nchildSessionId: child-1\nsummary: Done',
+      timestamp: 300,
+      agentMessage: { ...started.agentMessage, status: 'succeeded' },
+    }
+
+    const turns = groupMessagesByTurn([started, finished])
+    const systemTurns = turns.filter(turn => turn.type === 'system')
+
+    expect(systemTurns).toHaveLength(1)
+    expect((systemTurns[0] as { message: Message }).message.id).toBe('agent-finished')
+  })
+
+  it('does not mark the parent turn interrupted', () => {
+    resetCounters()
+    const tool: Message = {
+      id: 'tool-1',
+      role: 'tool',
+      content: '',
+      timestamp: 100,
+      toolName: 'message_agent',
+      toolUseId: 'tool-use-1',
+      toolStatus: 'completed',
+      toolResult: 'receiptId: receipt-1\nchildSessionId: child-1',
+    }
+    const notice: Message = {
+      id: 'agent-started',
+      role: 'info',
+      content: 'Background agent "critic" started.',
+      timestamp: 200,
+      displayIntent: 'agent-message-passive',
+      agentMessage: {
+        receiptId: 'receipt-1',
+        childSessionId: 'child-1',
+        targetAgentSlug: 'critic',
+        status: 'running',
+      },
+    }
+
+    const turns = groupMessagesByTurn([tool, notice])
+    const assistantTurn = turns.find(turn => turn.type === 'assistant')
+
+    expect(assistantTurn?.type === 'assistant' && assistantTurn.activities[0]?.status).toBe('completed')
+  })
+})

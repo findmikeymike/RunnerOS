@@ -364,7 +364,7 @@ function extractTodosFromActivities(activities: ActivityItem[]): TodoItem[] | un
 export function groupMessagesByTurn(messages: Message[]): Turn[] {
   // Hidden system-generated messages wake the model but never become transcript
   // turns in desktop or viewer UIs.
-  const visibleMessages = messages.filter(message => !message.hidden)
+  const visibleMessages = compactPassiveAgentNotices(messages.filter(message => !message.hidden))
   // Sort by timestamp for correct chronological order
   // This ensures correct turn grouping even if messages are added out of order during streaming
   const sortedMessages = [...visibleMessages].sort((a, b) => a.timestamp - b.timestamp)
@@ -505,6 +505,7 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
     if (message.role === 'error' || message.role === 'info' || message.role === 'warning') {
       // Flush current turn first (mark as interrupted if info message)
       const isInterruption = message.role === 'info'
+        && message.displayIntent !== 'agent-message-passive'
       // For error/warning (not info), the previous turn is complete
       if (currentTurn && !isInterruption) currentTurn.isComplete = true
       flushCurrentTurn(isInterruption)
@@ -658,6 +659,33 @@ export function groupMessagesByTurn(messages: Message[]): Turn[] {
   flushCurrentTurn()
 
   return turns
+}
+
+/**
+ * Background-agent lifecycle updates share a receipt ID. Keep only the newest
+ * update so chat shows one card that moves from running to its terminal state,
+ * while the full audit trail remains untouched in session storage.
+ */
+export function compactPassiveAgentNotices(messages: Message[]): Message[] {
+  const latestByReceipt = new Map<string, { index: number; timestamp: number }>()
+
+  messages.forEach((message, index) => {
+    const receiptId = message.displayIntent === 'agent-message-passive'
+      ? message.agentMessage?.receiptId
+      : undefined
+    if (!receiptId) return
+
+    const current = latestByReceipt.get(receiptId)
+    if (!current || message.timestamp >= current.timestamp) {
+      latestByReceipt.set(receiptId, { index, timestamp: message.timestamp })
+    }
+  })
+
+  return messages.filter((message, index) => {
+    if (message.displayIntent !== 'agent-message-passive') return true
+    const receiptId = message.agentMessage?.receiptId
+    return !receiptId || latestByReceipt.get(receiptId)?.index === index
+  })
 }
 
 /**
